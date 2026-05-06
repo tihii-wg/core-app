@@ -1,14 +1,170 @@
-import { BrowserRouter, Route, Routes } from "react-router";
-import "./styles/global.css";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { AppProvider, useApp } from "./lib/app-context";
+import { RegisterPage } from "./features/auth/RegisterPage";
+import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
+import { AppLayout } from "../src/ui/AppLayout";
 
-function App() {
+import { LoginPage } from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
+import { Orders } from "./features/orders/Orders";
+import { Clients } from "./features/clients/Clients";
+import { Employees } from "./features/employees/Employees";
+import { Inventory } from "./features/inventory/Inventory";
+import { Services } from "./features/services/Services";
+import { Invoices } from "./features/invoices/Invoices";
+import { Finance } from "./features/finance/Finance";
+import { ReportsModule } from "./features/reports/Reports";
+import { SettingsModule } from "./features/settings/Settings";
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { auth } = useApp();
+
+  if (!auth.isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <AppLayout>{children}</AppLayout>;
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { auth } = useApp();
+
+  if (auth.isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AppRoutes() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/"/>
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      {/* Public routes */}
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <LoginPage onSwitchToForgotPassword={() => alert("switchtofogotpassword")} onSwitchToRegister={() => alert("switchto register")} />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicRoute>
+            <RegisterPage onSwitchToLogin={() => alert("switchtologin")} />
+          </PublicRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPasswordPage onSwitchToLogin={() => alert("switchtologin")} />
+          </PublicRoute>
+        }
+      />
+
+      {/* Protected routes */}
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/orders"
+        element={
+          <ProtectedRoute>
+            <Orders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/clients"
+        element={
+          <ProtectedRoute>
+            <Clients />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/employees"
+        element={
+          <ProtectedRoute>
+            <Employees />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <ProtectedRoute>
+            <Inventory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/services"
+        element={
+          <ProtectedRoute>
+            <Services />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/invoices"
+        element={
+          <ProtectedRoute>
+            <Invoices />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/finance"
+        element={
+          <ProtectedRoute>
+            <Finance />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute>
+            <ReportsModule />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsModule />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AppProvider>
+      <AppRoutes />
+    </AppProvider>
+  );
+}
