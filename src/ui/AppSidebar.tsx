@@ -1,4 +1,4 @@
-import { useApp } from "../lib/app-context";
+import { useApp } from "../lib/appContext";
 import type { AppModule } from "../lib/types";
 import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Wrench, FileText, DollarSign, BarChart3, Settings, ChevronLeft, X } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -24,13 +24,13 @@ const navItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-  const  navigate  = useNavigate();
+  const navigate = useNavigate();
   const { currentModule, setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
 
   const handleNavClick = (module: AppModule) => {
     setCurrentModule(module);
     setMobileSidebarOpen(false);
-    navigate(`/${module}`)
+    navigate(`/${module}`);
   };
 
   return (

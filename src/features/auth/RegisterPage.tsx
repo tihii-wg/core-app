@@ -1,12 +1,11 @@
+import { useState } from "react";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 
-import { useState } from 'react';
-import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
-
-import { useApp } from '../../lib/app-context';
-import { Label } from '../../ui/Label';
-import { Input } from '../../ui/Input';
-import { Button } from '../../ui/Button';
-import { Spinner } from '../../ui/Spinner';
+import { useApp } from "../../lib/appContext";
+import { Label } from "../../ui/Label";
+import { Input } from "../../ui/Input";
+import { Button } from "../../ui/Button";
+import { Spinner } from "../../ui/Spinner";
 
 interface RegisterPageProps {
   onSwitchToLogin: () => void;
@@ -14,11 +13,11 @@ interface RegisterPageProps {
 
 export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
   const { register } = useApp();
-  const [companyName, setCompanyName] = useState('');
-  const [ownerName, setOwnerName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [companyName, setCompanyName] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,23 +27,23 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
     const newErrors: Record<string, string> = {};
 
     if (!companyName.trim()) {
-      newErrors.companyName = 'Company name is required';
+      newErrors.companyName = "Company name is required";
     }
     if (!ownerName.trim()) {
-      newErrors.ownerName = 'Owner name is required';
+      newErrors.ownerName = "Owner name is required";
     }
     if (!email.trim()) {
-      newErrors.email = 'Email or phone is required';
+      newErrors.email = "Email or phone is required";
     }
     if (!password) {
-      newErrors.password = 'Password is required';
+      newErrors.password = "Password is required";
     } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+      newErrors.password = "Password must be at least 6 characters";
     }
     if (!confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
+      newErrors.confirmPassword = "Please confirm your password";
     } else if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = "Passwords do not match";
     }
 
     setErrors(newErrors);
@@ -61,7 +60,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
     setIsLoading(false);
 
     if (!success) {
-      setErrors({ general: 'Registration failed. Please try again.' });
+      setErrors({ general: "Registration failed. Please try again." });
     }
   };
 
@@ -69,10 +68,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
       {/* Back button */}
       <div className="p-4">
-        <button
-          onClick={onSwitchToLogin}
-          className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]"
-        >
+        <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
           <ArrowLeft className="h-4 w-4" />
           Back to login
         </button>
@@ -108,9 +104,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
                   className="h-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
                   disabled={isLoading}
                 />
-                {errors.companyName && (
-                  <p className="text-xs text-[#f41f20]">{errors.companyName}</p>
-                )}
+                {errors.companyName && <p className="text-xs text-[#f41f20]">{errors.companyName}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -126,9 +120,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
                   className="h-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
                   disabled={isLoading}
                 />
-                {errors.ownerName && (
-                  <p className="text-xs text-[#f41f20]">{errors.ownerName}</p>
-                )}
+                {errors.ownerName && <p className="text-xs text-[#f41f20]">{errors.ownerName}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -144,9 +136,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
                   className="h-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
                   disabled={isLoading}
                 />
-                {errors.email && (
-                  <p className="text-xs text-[#f41f20]">{errors.email}</p>
-                )}
+                {errors.email && <p className="text-xs text-[#f41f20]">{errors.email}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -156,24 +146,18 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
                 <div className="relative">
                   <Input
                     id="password"
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Create a password"
                     className="h-10 pr-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
                     disabled={isLoading}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]"
-                  >
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]">
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {errors.password && (
-                  <p className="text-xs text-[#f41f20]">{errors.password}</p>
-                )}
+                {errors.password && <p className="text-xs text-[#f41f20]">{errors.password}</p>}
               </div>
 
               <div className="space-y-1.5">
@@ -183,36 +167,24 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
                 <div className="relative">
                   <Input
                     id="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
+                    type={showConfirmPassword ? "text" : "password"}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm your password"
                     className="h-10 pr-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
                     disabled={isLoading}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]"
-                  >
+                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]">
                     {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                {errors.confirmPassword && (
-                  <p className="text-xs text-[#f41f20]">{errors.confirmPassword}</p>
-                )}
+                {errors.confirmPassword && <p className="text-xs text-[#f41f20]">{errors.confirmPassword}</p>}
               </div>
 
-              {errors.general && (
-                <p className="text-sm text-[#f41f20]">{errors.general}</p>
-              )}
+              {errors.general && <p className="text-sm text-[#f41f20]">{errors.general}</p>}
 
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white"
-              >
-                {isLoading ? <Spinner className="h-4 w-4" /> : 'Create account'}
+              <Button type="submit" disabled={isLoading} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white">
+                {isLoading ? <Spinner className="h-4 w-4" /> : "Create account"}
               </Button>
             </form>
           </div>
@@ -220,11 +192,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
           {/* Login link */}
           <div className="mt-4 text-center">
             <span className="text-sm text-[#939699]">Already have an account? </span>
-            <button
-              type="button"
-              onClick={onSwitchToLogin}
-              className="text-sm text-[#1973e1] hover:underline font-medium"
-            >
+            <button type="button" onClick={onSwitchToLogin} className="text-sm text-[#1973e1] hover:underline font-medium">
               Log in
             </button>
           </div>

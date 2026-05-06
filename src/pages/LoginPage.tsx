@@ -4,17 +4,14 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Label } from "../ui/Label";
 import { Spinner } from "../ui/Spinner";
-import { useApp } from "../lib/app-context";
+import { useApp } from "../lib/appContext";
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
   onSwitchToForgotPassword: () => void;
 }
 
-export function LoginPage({
-  onSwitchToRegister,
-  onSwitchToForgotPassword,
-}: LoginPageProps) {
+export function LoginPage({ onSwitchToRegister, onSwitchToForgotPassword }: LoginPageProps) {
   const { login } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,13 +64,9 @@ export function LoginPage({
               <div className="h-10 w-10 bg-[#1973e1] rounded-md flex items-center justify-center">
                 <span className="text-white font-bold text-lg">C</span>
               </div>
-              <span className="text-2xl font-semibold text-[#282e33]">
-                Core App
-              </span>
+              <span className="text-2xl font-semibold text-[#282e33]">Core App</span>
             </div>
-            <p className="text-sm text-[#939699]">
-              Business Management Platform
-            </p>
+            <p className="text-sm text-[#939699]">Business Management Platform</p>
           </div>
 
           {/* Form */}
@@ -108,37 +101,21 @@ export function LoginPage({
                     className="h-10 pr-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
                     disabled={isLoading}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]">
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
               {error && <p className="text-sm text-[#f41f20]">{error}</p>}
 
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white"
-              >
+              <Button type="submit" disabled={isLoading} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white">
                 {isLoading ? <Spinner className="h-4 w-4" /> : "Log in"}
               </Button>
             </form>
 
             <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={onSwitchToForgotPassword}
-                className="text-sm text-[#1973e1] hover:underline"
-              >
+              <button type="button" onClick={onSwitchToForgotPassword} className="text-sm text-[#1973e1] hover:underline">
                 Forgot password?
               </button>
             </div>
@@ -146,14 +123,8 @@ export function LoginPage({
 
           {/* Register link */}
           <div className="mt-4 text-center">
-            <span className="text-sm text-[#939699]">
-              Don&apos;t have an account?{" "}
-            </span>
-            <button
-              type="button"
-              onClick={onSwitchToRegister}
-              className="text-sm text-[#1973e1] hover:underline font-medium"
-            >
+            <span className="text-sm text-[#939699]">Don&apos;t have an account? </span>
+            <button type="button" onClick={onSwitchToRegister} className="text-sm text-[#1973e1] hover:underline font-medium">
               Create account
             </button>
           </div>

@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { AppProvider, useApp } from "./lib/app-context";
+import { AppProvider, useApp } from "./lib/appContext";
 import { RegisterPage } from "./features/auth/RegisterPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { AppLayout } from "../src/ui/AppLayout";

@@ -1,28 +1,14 @@
-
-
 import { useState, useMemo } from "react";
 import { Plus, Check, AlertCircle } from "lucide-react";
 
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../ui/Select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../../ui/Dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { InvoiceStatusBadge } from "../../ui/StatusBadge";
 import { Spinner } from "../../ui/Spinner";
-import { useApp } from "../..//lib/app-context";
+import { useApp } from "../../lib/appContext";
 import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
@@ -37,8 +23,7 @@ const statusOptions = [
 ];
 
 export function Invoices() {
-  const { invoices, clients, orders, addInvoice, updateInvoiceStatus } =
-    useApp();
+  const { invoices, clients, orders, addInvoice, updateInvoiceStatus } = useApp();
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,28 +43,18 @@ export function Invoices() {
 
   // Stats
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;
-  const unpaidTotal = invoices
-    .filter((i) => i.status === "sent" || i.status === "overdue")
-    .reduce((sum, i) => sum + i.amount, 0);
+  const unpaidTotal = invoices.filter((i) => i.status === "sent" || i.status === "overdue").reduce((sum, i) => sum + i.amount, 0);
 
   // Get unpaid orders for a client
   const getClientOrders = (clientId: string) => {
-    return orders.filter(
-      (o) => o.clientId === clientId && o.paymentStatus !== "paid"
-    );
+    return orders.filter((o) => o.clientId === clientId && o.paymentStatus !== "paid");
   };
 
   // Filtered data
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
-      const matchesSearch =
-        !searchQuery ||
-        invoice.invoiceNumber
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase()) ||
-        invoice.clientName.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || invoice.status === statusFilter;
+      const matchesSearch = !searchQuery || invoice.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) || invoice.clientName.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [invoices, searchQuery, statusFilter]);
@@ -89,11 +64,7 @@ export function Invoices() {
     {
       key: "invoiceNumber",
       header: "Invoice #",
-      cell: (invoice) => (
-        <span className="font-medium text-[#1973e1]">
-          {invoice.invoiceNumber}
-        </span>
-      ),
+      cell: (invoice) => <span className="font-medium text-[#1973e1]">{invoice.invoiceNumber}</span>,
     },
     {
       key: "client",
@@ -103,20 +74,13 @@ export function Invoices() {
     {
       key: "order",
       header: "Order",
-      cell: (invoice) =>
-        invoice.orderNumber ? (
-          <span className="text-sm text-[#939699]">{invoice.orderNumber}</span>
-        ) : (
-          <span className="text-sm text-[#939699]">-</span>
-        ),
+      cell: (invoice) => (invoice.orderNumber ? <span className="text-sm text-[#939699]">{invoice.orderNumber}</span> : <span className="text-sm text-[#939699]">-</span>),
       className: "hidden sm:table-cell",
     },
     {
       key: "amount",
       header: "Amount",
-      cell: (invoice) => (
-        <span className="font-medium text-[#282e33]">${invoice.amount}</span>
-      ),
+      cell: (invoice) => <span className="font-medium text-[#282e33]">${invoice.amount}</span>,
       className: "text-right",
     },
     {
@@ -127,15 +91,7 @@ export function Invoices() {
     {
       key: "dueDate",
       header: "Due Date",
-      cell: (invoice) => (
-        <span
-          className={
-            invoice.status === "overdue" ? "text-[#f41f20]" : "text-[#939699]"
-          }
-        >
-          {invoice.dueDate}
-        </span>
-      ),
+      cell: (invoice) => <span className={invoice.status === "overdue" ? "text-[#f41f20]" : "text-[#939699]"}>{invoice.dueDate}</span>,
       className: "hidden md:table-cell",
     },
     {
@@ -206,10 +162,7 @@ export function Invoices() {
         title="Invoices"
         description={`${invoices.length} total invoices`}
         actions={
-          <Button
-            onClick={() => setCreateModalOpen(true)}
-            className="bg-[#1973e1] hover:bg-[#1565c0] text-white"
-          >
+          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
             <Plus className="h-4 w-4 mr-1" />
             Create Invoice
           </Button>
@@ -226,9 +179,7 @@ export function Invoices() {
                 <p className="font-medium text-[#f41f20]">
                   {overdueCount} Overdue Invoice{overdueCount > 1 ? "s" : ""}
                 </p>
-                <p className="text-sm text-[#f41f20]/80">
-                  Requires immediate attention
-                </p>
+                <p className="text-sm text-[#f41f20]/80">Requires immediate attention</p>
               </div>
             </div>
           )}
@@ -237,9 +188,7 @@ export function Invoices() {
               <span className="text-[#1973e1] font-bold">$</span>
             </div>
             <div>
-              <p className="font-medium text-[#282e33]">
-                ${unpaidTotal.toLocaleString()} Unpaid
-              </p>
+              <p className="font-medium text-[#282e33]">${unpaidTotal.toLocaleString()} Unpaid</p>
               <p className="text-sm text-[#939699]">Outstanding balance</p>
             </div>
           </div>
@@ -265,11 +214,7 @@ export function Invoices() {
         }}
       />
 
-      <DataTable
-        columns={columns}
-        data={filteredInvoices}
-        keyExtractor={(invoice) => invoice.id}
-      />
+      <DataTable columns={columns} data={filteredInvoices} keyExtractor={(invoice) => invoice.id} />
 
       {/* Create Invoice Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
@@ -286,9 +231,7 @@ export function Invoices() {
                   setFormData({ ...formData, clientId: value, orderId: "" });
                 }}
               >
-                <SelectTrigger
-                  className={formErrors.clientId ? "border-[#f41f20]" : ""}
-                >
+                <SelectTrigger className={formErrors.clientId ? "border-[#f41f20]" : ""}>
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
@@ -299,20 +242,13 @@ export function Invoices() {
                   ))}
                 </SelectContent>
               </Select>
-              {formErrors.clientId && (
-                <p className="text-xs text-[#f41f20]">{formErrors.clientId}</p>
-              )}
+              {formErrors.clientId && <p className="text-xs text-[#f41f20]">{formErrors.clientId}</p>}
             </div>
 
             {formData.clientId && (
               <div className="space-y-1.5">
                 <Label>Related Order (optional)</Label>
-                <Select
-                  value={formData.orderId}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, orderId: value })
-                  }
-                >
+                <Select value={formData.orderId} onValueChange={(value) => setFormData({ ...formData, orderId: value })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select order" />
                   </SelectTrigger>
@@ -335,25 +271,16 @@ export function Invoices() {
                 <Input
                   type="number"
                   value={formData.amount}
-                  onChange={(e) =>
-                    setFormData({ ...formData, amount: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   placeholder="0.00"
                   className={formErrors.amount ? "border-[#f41f20]" : ""}
                 />
-                {formErrors.amount && (
-                  <p className="text-xs text-[#f41f20]">{formErrors.amount}</p>
-                )}
+                {formErrors.amount && <p className="text-xs text-[#f41f20]">{formErrors.amount}</p>}
               </div>
 
               <div className="space-y-1.5">
                 <Label>Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value as InvoiceStatus })
-                  }
-                >
+                <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as InvoiceStatus })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -367,38 +294,17 @@ export function Invoices() {
 
             <div className="space-y-1.5">
               <Label>Due Date *</Label>
-              <Input
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) =>
-                  setFormData({ ...formData, dueDate: e.target.value })
-                }
-                className={formErrors.dueDate ? "border-[#f41f20]" : ""}
-              />
-              {formErrors.dueDate && (
-                <p className="text-xs text-[#f41f20]">{formErrors.dueDate}</p>
-              )}
+              <Input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className={formErrors.dueDate ? "border-[#f41f20]" : ""} />
+              {formErrors.dueDate && <p className="text-xs text-[#f41f20]">{formErrors.dueDate}</p>}
             </div>
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setCreateModalOpen(false)}
-              disabled={isSubmitting}
-            >
+            <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button
-              onClick={handleCreateInvoice}
-              disabled={isSubmitting}
-              className="bg-[#1973e1] hover:bg-[#1565c0] text-white"
-            >
-              {isSubmitting ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                "Create Invoice"
-              )}
+            <Button onClick={handleCreateInvoice} disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+              {isSubmitting ? <Spinner className="h-4 w-4" /> : "Create Invoice"}
             </Button>
           </div>
         </DialogContent>
