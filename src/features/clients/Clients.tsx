@@ -13,6 +13,7 @@ import { NoClients, NoSearchResults } from "../../ui/EmptyState";
 import { Spinner } from "../../ui/Spinner";
 import { useApp } from "../../lib/appContext";
 import type { Client, Order } from "../../lib/types";
+import AddNewClientDialog from "./AddNewClientDialog";
 
 export function Clients() {
   const { clients, orders, addClient } = useApp();
@@ -207,6 +208,7 @@ export function Clients() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* <AddNewClientDialog /> */}
 
       {/* Client Detail Panel */}
       <Sheet open={detailPanelOpen} onOpenChange={setDetailPanelOpen}>

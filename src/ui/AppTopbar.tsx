@@ -89,7 +89,7 @@ export function AppTopbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="hidden sm:flex items-center gap-2 h-9 px-3 text-sm text-[#282e33]">
               <Building2 className="h-4 w-4 text-[#939699]" />
-              <span className="max-w-[120px] truncate">{auth.user?.companyName}</span>
+              <span className="max-w-30 truncate">{auth.user?.companyName}</span>
               <ChevronDown className="h-4 w-4 text-[#939699]" />
             </Button>
           </DropdownMenuTrigger>

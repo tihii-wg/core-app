@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AppProvider, useApp } from "./lib/appContext";
 import { RegisterPage } from "./features/auth/RegisterPage";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
@@ -15,6 +15,7 @@ import { Invoices } from "./features/invoices/Invoices";
 import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { SettingsModule } from "./features/settings/Settings";
+import { FogotPasword } from "./services/apiAuth";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { auth } = useApp();
@@ -37,6 +38,17 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
+  const navigate = useNavigate();
+
+  function onSwitchToForgotPassword() {
+    FogotPasword();
+    navigate("/forgot-password");
+  }
+
+  function onSwitchToLogin() {
+    navigate("/login");
+  }
+
   return (
     <Routes>
       {/* Public routes */}
@@ -44,7 +56,7 @@ function AppRoutes() {
         path="/login"
         element={
           <PublicRoute>
-            <LoginPage onSwitchToForgotPassword={() => alert("switchtofogotpassword")} onSwitchToRegister={() => alert("switchto register")} />
+            <LoginPage onSwitchToForgotPassword={onSwitchToForgotPassword} onSwitchToRegister={() => alert("switchto register")} />
           </PublicRoute>
         }
       />
@@ -60,7 +72,7 @@ function AppRoutes() {
         path="/forgot-password"
         element={
           <PublicRoute>
-            <ForgotPasswordPage onSwitchToLogin={() => alert("switchtologin")} />
+            <ForgotPasswordPage onSwitchToLogin={onSwitchToLogin} />
           </PublicRoute>
         }
       />

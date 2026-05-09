@@ -6,6 +6,7 @@ import { Label } from "../ui/Label";
 import { Spinner } from "../ui/Spinner";
 import { useApp } from "../lib/appContext";
 
+
 interface LoginPageProps {
   onSwitchToRegister: () => void;
   onSwitchToForgotPassword: () => void;
