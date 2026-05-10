@@ -52,6 +52,10 @@ function AppRoutes() {
     navigate("/login");
   }
 
+  function onSwitchToRegister() {
+    navigate("/register");
+  }
+
   return (
     <Routes>
       {/* Public routes */}
@@ -59,7 +63,7 @@ function AppRoutes() {
         path="/login"
         element={
           <PublicRoute>
-            <LoginPage onSwitchToForgotPassword={onSwitchToForgotPassword} onSwitchToRegister={() => alert("switchto register")} />
+            <LoginPage onSwitchToForgotPassword={onSwitchToForgotPassword} onSwitchToRegister={onSwitchToRegister} />
           </PublicRoute>
         }
       />
@@ -67,7 +71,7 @@ function AppRoutes() {
         path="/register"
         element={
           <PublicRoute>
-            <RegisterPage onSwitchToLogin={() => alert("switchtologin")} />
+            <RegisterPage onSwitchToLogin={onSwitchToLogin} />
           </PublicRoute>
         }
       />
