@@ -3,8 +3,8 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AppProvider, useApp } from "./lib/appContext";
-import { RegisterPage } from "./features/auth/RegisterPage";
-import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
+import { RegisterPage } from "./pages/RegisterPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { AppLayout } from "../src/ui/AppLayout";
 
 import { LoginPage } from "./pages/LoginPage";

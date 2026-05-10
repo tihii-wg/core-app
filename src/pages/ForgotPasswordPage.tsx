@@ -1,29 +1,26 @@
-
-
-import { useState } from 'react';
-import { ArrowLeft, CheckCircle } from 'lucide-react';
-import { Button } from '../../ui/Button';
-import { Label } from '../../ui/Label';
-import { Input } from '../../ui/Input';
-import { Spinner } from '../../ui/Spinner';
-
+import { useState } from "react";
+import { ArrowLeft, CheckCircle } from "lucide-react";
+import { Button } from "../ui/Button";
+import { Label } from "../ui/Label";
+import { Input } from "../ui/Input";
+import { Spinner } from "../ui/Spinner";
 
 interface ForgotPasswordPageProps {
   onSwitchToLogin: () => void;
 }
 
 export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
     if (!email.trim()) {
-      setError('Email or phone is required');
+      setError("Email or phone is required");
       return;
     }
 
@@ -38,10 +35,7 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
     return (
       <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
         <div className="p-4">
-          <button
-            onClick={onSwitchToLogin}
-            className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]"
-          >
+          <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
             <ArrowLeft className="h-4 w-4" />
             Back to login
           </button>
@@ -57,11 +51,7 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
               <p className="text-sm text-[#939699] mb-6">
                 We&apos;ve sent password reset instructions to <strong>{email}</strong>
               </p>
-              <Button
-                onClick={onSwitchToLogin}
-                variant="outline"
-                className="w-full h-10 border-[#c9cbcc]"
-              >
+              <Button onClick={onSwitchToLogin} variant="outline" className="w-full h-10 border-[#c9cbcc]">
                 Back to login
               </Button>
             </div>
@@ -75,10 +65,7 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
       {/* Back button */}
       <div className="p-4">
-        <button
-          onClick={onSwitchToLogin}
-          className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]"
-        >
+        <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
           <ArrowLeft className="h-4 w-4" />
           Back to login
         </button>
@@ -100,9 +87,7 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
 
           {/* Form */}
           <div className="bg-white rounded-md border border-[#eeeeef] p-6">
-            <p className="text-sm text-[#939699] mb-4">
-              Enter your email or phone number and we&apos;ll send you instructions to reset your password.
-            </p>
+            <p className="text-sm text-[#939699] mb-4">Enter your email or phone number and we&apos;ll send you instructions to reset your password.</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-sm text-[#282e33]">
@@ -120,12 +105,8 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
                 {error && <p className="text-xs text-[#f41f20]">{error}</p>}
               </div>
 
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white"
-              >
-                {isLoading ? <Spinner className="h-4 w-4" /> : 'Send reset link'}
+              <Button type="submit" disabled={isLoading} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white">
+                {isLoading ? <Spinner className="h-4 w-4" /> : "Send reset link"}
               </Button>
             </form>
           </div>
@@ -133,11 +114,7 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
           {/* Login link */}
           <div className="mt-4 text-center">
             <span className="text-sm text-[#939699]">Remember your password? </span>
-            <button
-              type="button"
-              onClick={onSwitchToLogin}
-              className="text-sm text-[#1973e1] hover:underline font-medium"
-            >
+            <button type="button" onClick={onSwitchToLogin} className="text-sm text-[#1973e1] hover:underline font-medium">
               Log in
             </button>
           </div>
