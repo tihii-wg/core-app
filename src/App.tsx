@@ -1,3 +1,6 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AppProvider, useApp } from "./lib/appContext";
 import { RegisterPage } from "./features/auth/RegisterPage";
@@ -173,10 +176,15 @@ function AppRoutes() {
   );
 }
 
+const queryClient = new QueryClient();
+
 export default function App() {
   return (
-    <AppProvider>
-      <AppRoutes />
-    </AppProvider>
+    <QueryClientProvider client={queryClient}>
+      <AppProvider>
+        <AppRoutes />
+      </AppProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }
