@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff, Globe } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Label } from "../ui/Label";
 import { Spinner } from "../ui/Spinner";
 import { useApp } from "../lib/appContext";
-
+import { getProfiles } from "../services/apiProfiles";
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
@@ -45,6 +45,13 @@ export function LoginPage({ onSwitchToRegister, onSwitchToForgotPassword }: Logi
       setError("Invalid credentials. Please try again.");
     }
   };
+
+
+
+
+  useEffect(function () {
+    getProfiles().then((data) => console.log(data));
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
