@@ -18,7 +18,7 @@ import { Invoices } from "./features/invoices/Invoices";
 import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { SettingsModule } from "./features/settings/Settings";
-import { FogotPasword } from "./services/apiAuth";
+// import { FogotPasword } from "./services/apiAuth";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { auth } = useApp();
@@ -44,7 +44,7 @@ function AppRoutes() {
   const navigate = useNavigate();
 
   function onSwitchToForgotPassword() {
-    FogotPasword();
+    // FogotPasword();
     navigate("/forgot-password");
   }
 

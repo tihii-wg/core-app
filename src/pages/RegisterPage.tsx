@@ -28,9 +28,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
           </div>
 
           {/* Form */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-6">
-            <RegisterForm />
-          </div>
+          <RegisterForm />
+          
           {/* Login link */}
           <div className="mt-4 text-center">
             <span className="text-sm text-[#939699]">Already have an account? </span>
