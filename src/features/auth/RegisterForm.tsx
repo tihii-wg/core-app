@@ -137,7 +137,9 @@ export default function RegisterForm() {
             disabled={isSubmitting}
           />
           {errors.email && <p className="text-xs text-[#f41f20]">Email is required</p>}
-          <Label htmlFor="email" className="text-sm text-[#282e33]">
+        </div>
+        <div>
+          <Label htmlFor="phone" className="text-sm text-[#282e33]">
             Phone
           </Label>
 
@@ -152,8 +154,7 @@ export default function RegisterForm() {
             className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
             disabled={isSubmitting}
           />
-
-          {errors.email && <p className="text-xs text-[#f41f20]">Phone is required</p>}
+          {errors.phone && <p className="text-xs text-[#f41f20]">Phone is required</p>}
         </div>
 
         <div className="space-y-1.5">
