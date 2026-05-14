@@ -1,17 +1,22 @@
-import { Navigate, Outlet } from "react-router";
-import { routes } from "../../lib/routes";
-import { useAppContext } from "./useAppContext";
+import { useUser } from "../features/auth/useUser";
+import { Spinner } from "../ui/Spinner";
+import { useEffect } from "react";
+import { AppLayout } from "../ui/AppLayout";
+import { useNavigate } from "react-router-dom";
 
-export default function ProtectedRoute() {
-  const { status, session } = useAppContext();
+export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useUser();
+  const navigate = useNavigate();
 
-  if (status === "loading") {
-    return <div>Loading...</div>;
-  }
+  useEffect(
+    function () {
+      if (!isAuthenticated && !isLoading) navigate("/login", { replace: true });
+    },
+    [isAuthenticated, isLoading, navigate]
+  );
 
-  if (!session) {
-    return <Navigate to={routes.login} replace />;
-  }
+  if (isLoading) return <Spinner />;
+  if (!isAuthenticated) return null;
 
-  return <Outlet />;
+  if (isAuthenticated) return <AppLayout>{children}</AppLayout>;
 }

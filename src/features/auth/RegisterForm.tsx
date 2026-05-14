@@ -11,25 +11,25 @@ import { useSignUp } from "./useSignUp";
 type Inputs = {
   companyName: string;
   ownerName: string;
-  email?: string;
-  phone?: string;
+  email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
 };
 
 export default function RegisterForm() {
-  const signUpMutation = useSignUp();
+  const { mutateAsync, error: signUpError } = useSignUp();
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [authType, setAuthType] = useState<"email" | "phone">("email");
+  // const [authType, setAuthType] = useState<"email" | "phone">("email");
 
   const {
     handleSubmit,
     formState: { errors, isSubmitting },
     register,
     control,
-    // reset,
+    reset,
   } = useForm<Inputs>();
 
   const password = useWatch({
@@ -39,21 +39,19 @@ export default function RegisterForm() {
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
     try {
-      await signUpMutation.mutateAsync({
+      await mutateAsync({
         companyName: data.companyName,
         ownerName: data.ownerName,
         email: data.email,
+        phone: data.phone,
         password: data.password,
       });
       console.log("success");
+      reset();
     } catch (error) {
       console.log(error);
     }
   };
-  // signup(data);
-  // console.log(data);
-  // reset();
-  // };
 
   return (
     <div className="bg-white rounded-md border border-[#eeeeef] p-6">
@@ -66,6 +64,7 @@ export default function RegisterForm() {
             id="companyName"
             type="text"
             {...register("companyName", { required: true })}
+            autoFocus={true}
             placeholder="Enter company name"
             className="h-10 border-[#c9cbcc] hover:border-[#1973e1] focus:ring-[#1973e1]"
             disabled={isSubmitting}
@@ -88,7 +87,7 @@ export default function RegisterForm() {
           {errors.ownerName && <p className="text-xs text-[#f41f20]">Owner name is required</p>}
         </div>
 
-        <div className="space-y-1.5">
+        {/* <div className="space-y-1.5">
           <Label htmlFor="email" className="text-sm text-[#282e33]">
             <Button className={authType === "email" ? "hover:bg-[#c9cbcc] text-[#1973e1]" : "hover:bg-[#c9cbcc]"} type="button" variant="secondary" size="sm" onClick={() => setAuthType("email")}>
               Email
@@ -103,7 +102,7 @@ export default function RegisterForm() {
               id="email"
               type="text"
               {...register(`email`, { required: true })}
-              placeholder="Enter your email or phone"
+              placeholder="Enter your email"
               className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
               disabled={isSubmitting}
             />
@@ -111,14 +110,50 @@ export default function RegisterForm() {
             <Input
               id="phone"
               type="text"
-              {...register(`phone`, { required: true })}
-              placeholder="Enter your email or phone"
+              {...register(`phone`, {
+                required: true,
+                pattern: /^\+[1-9]\d{7,14}$/,
+              })}
+              placeholder="Enter your phone number  +373 00 000 000"
               className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
               disabled={isSubmitting}
             />
           )}
 
           {errors.email && <p className="text-xs text-[#f41f20]">Email or phone is required</p>}
+        </div> */}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-sm text-[#282e33]">
+            Email
+          </Label>
+
+          <Input
+            id="email"
+            type="text"
+            {...register(`email`, { required: true })}
+            placeholder="Enter your email"
+            className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
+            disabled={isSubmitting}
+          />
+          {errors.email && <p className="text-xs text-[#f41f20]">Email is required</p>}
+          <Label htmlFor="email" className="text-sm text-[#282e33]">
+            Phone
+          </Label>
+
+          <Input
+            id="phone"
+            type="text"
+            {...register(`phone`, {
+              required: true,
+              pattern: /^\+[1-9]\d{7,14}$/,
+            })}
+            placeholder="Enter your phone number  +373 00 000 000"
+            className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
+            disabled={isSubmitting}
+          />
+
+          {errors.email && <p className="text-xs text-[#f41f20]">Phone is required</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -170,7 +205,7 @@ export default function RegisterForm() {
           {errors.confirmPassword && <p className="text-xs text-[#f41f20]">{errors.confirmPassword.message}</p>}
         </div>
 
-        {/* {errors.general && <p className="text-sm text-[#f41f20]">{errors.general}</p>} */}
+        {signUpError && <p className="text-sm text-[#f41f20]">{`${signUpError?.message}`}</p>}
 
         <Button type="submit" disabled={isSubmitting} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white ">
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Create account"}

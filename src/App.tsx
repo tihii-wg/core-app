@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import { AppProvider, useApp } from "./lib/appContext";
+import { AppProvider} from "./lib/appContext";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
-import { AppLayout } from "../src/ui/AppLayout";
+// import { AppLayout } from "../src/ui/AppLayout";
 
 import { LoginPage } from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
@@ -18,22 +18,15 @@ import { Invoices } from "./features/invoices/Invoices";
 import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { SettingsModule } from "./features/settings/Settings";
-// import { FogotPasword } from "./services/apiAuth";
+import { useUser } from "./features/auth/useUser";
+import ProtectedRoute from "./app/ProtectedRoute";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { auth } = useApp();
 
-  if (!auth.isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <AppLayout>{children}</AppLayout>;
-}
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { auth } = useApp();
+  const { isAuthenticated } = useUser();
 
-  if (auth.isAuthenticated) {
+  if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
 

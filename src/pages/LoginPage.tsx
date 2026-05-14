@@ -5,6 +5,7 @@ import { Input } from "../ui/Input";
 import { Label } from "../ui/Label";
 import { Spinner } from "../ui/Spinner";
 import { useApp } from "../lib/appContext";
+import { useUser } from "../features/auth/useUser";
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
@@ -12,6 +13,9 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onSwitchToRegister, onSwitchToForgotPassword }: LoginPageProps) {
+  const { user ,isAuthenticated} = useUser()
+  console.log(user)
+  console.log(isAuthenticated)
   const { login } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
