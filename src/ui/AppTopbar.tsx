@@ -4,6 +4,8 @@ import { Button } from "./Button";
 import { Input } from "./Input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./DropdownMenu";
 import { useApp } from "../lib/appContext";
+import { useLogOut } from "../features/auth/useLogOut";
+import { Spinner } from "./Spinner";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -19,7 +21,8 @@ const moduleLabels: Record<string, string> = {
 };
 
 export function AppTopbar() {
-  const { auth, logout, currentModule, setMobileSidebarOpen } = useApp();
+  const { logOut, isLoading } = useLogOut();
+  const { auth, currentModule, setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
 
   const notifications = [
@@ -31,6 +34,8 @@ export function AppTopbar() {
       time: "2 hours ago",
     },
   ];
+
+  if (isLoading) return <Spinner />;
 
   return (
     <header className="h-14 bg-white border-b border-[#eeeeef] flex items-center justify-between px-4 sticky top-0 z-30">
@@ -127,7 +132,7 @@ export function AppTopbar() {
               Profile
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer text-[#f41f20] focus:text-[#f41f20]" onClick={logout}>
+            <DropdownMenuItem className="cursor-pointer text-[#f41f20] focus:text-[#f41f20]" onClick={() => logOut()}>
               <LogOut className="h-4 w-4 mr-2" />
               Log out
             </DropdownMenuItem>
