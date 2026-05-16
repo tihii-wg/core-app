@@ -6,8 +6,7 @@ export function useSignUp() {
   const navigate = useNavigate();
   return useMutation({
     mutationFn: signUp,
-    onSuccess(data) {
-      console.log(data.user_metadata);
+    onSuccess: () => {
       navigate("/dashboard", { replace: true });
     },
   });

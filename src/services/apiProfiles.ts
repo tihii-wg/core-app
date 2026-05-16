@@ -1,10 +1,12 @@
 import supabase from "./supabase";
 
-type createProfileProps = {
+export type createProfileProps = {
   id: number;
   companyName: string;
   ownerName: string;
   avatar: string;
+  email: string;
+  phone: string;
 };
 
 export async function getProfiles() {
@@ -15,11 +17,9 @@ export async function getProfiles() {
   return data;
 }
 
-export async function createProfise({ id, ownerName, avatar }: createProfileProps) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .insert([{ id, full_name: ownerName, avatar }])
-    .select();
-  if (error) throw new Error(error.message);
-  return data;
-}
+// export async function createProfile({ id, ownerName, avatar, email, phone }: createProfileProps) {
+//   const { data, error } = await supabase.from("profiles").insert([{ id, full_name: ownerName, avatar, email, phone }]);
+//   // .select();
+//   if (error) throw new Error(error.message);
+//   return data;
+// }

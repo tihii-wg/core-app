@@ -19,7 +19,6 @@ type Inputs = {
 
 export default function RegisterForm() {
   const { mutateAsync, error: signUpError } = useSignUp();
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   // const [authType, setAuthType] = useState<"email" | "phone">("email");

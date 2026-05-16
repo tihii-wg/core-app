@@ -14,6 +14,7 @@ type loginProps = {
 };
 
 export async function signUp(data: signUpProps) {
+  // 1.AUTH USER
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: data.email,
     password: data.password,
@@ -25,12 +26,55 @@ export async function signUp(data: signUpProps) {
       },
     },
   });
+
   if (authError) {
     console.log(`Auth error --${authError.message}`);
     throw new Error(authError.message);
   }
 
   const user = authData.user;
+  if (!user) throw new Error("User not found");
+
+  const { ownerName, phone, companyName } = user.user_metadata ?? {};
+
+  // 2.PROFILE
+
+  const { error: profileError } = await supabase.from("profiles").insert([
+    {
+      id: user.id,
+      full_name: ownerName,
+      email: user.email,
+      phone: phone,
+    },
+  ]);
+
+  if (profileError) throw new Error(profileError.message);
+
+  // 3.WORKSPACE
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .insert([
+      {
+        name: companyName,
+        owner_id: user.id,
+      },
+    ])
+    .select()
+    .single();
+
+  if (workspaceError) throw new Error(workspaceError.message);
+
+  // 4.WORKSPACE MEMBER
+
+  const { error: memberError } = await supabase.from("workspace_members").insert([
+    {
+      workspace_id: workspace.id,
+      user_id: user.id,
+      role: "owner",
+    },
+  ]);
+
+  if (memberError) throw new Error(memberError.message);
 
   return user;
 }
