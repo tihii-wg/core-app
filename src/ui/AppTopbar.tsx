@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useApp } from "../lib/appContext";
 import { useLogOut } from "../features/auth/useLogOut";
 import { Spinner } from "./Spinner";
+import { useWorkspaces } from "../features/workspaces/useWorkspaces";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -22,8 +23,13 @@ const moduleLabels: Record<string, string> = {
 
 export function AppTopbar() {
   const { logOut, isLoading } = useLogOut();
+  const { workspaces: data } = useWorkspaces();
   const { auth, currentModule, setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
+
+  const workspaces = (data ?? []).flatMap((item) => item.workspace ?? []);
+
+  console.log(workspaces);
 
   const notifications = [
     { id: 1, title: "New order received", time: "5 min ago" },
@@ -53,14 +59,14 @@ export function AppTopbar() {
       {/* Right section */}
       <div className="flex items-center gap-3">
         {/* Search */}
-        <div className="hidden md:block relative">
+        <div className="hidden  md:block relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#939699]" />
           <Input
             type="text"
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-64 h-9 pl-9 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1] text-sm"
+            className="w-64 h-9 pl-9 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-2  focus:ring-[#1973e1]/20 text-sm"
           />
         </div>
 
@@ -95,16 +101,21 @@ export function AppTopbar() {
             <Button variant="ghost" className="hidden sm:flex items-center gap-2 h-9 px-3 text-sm text-[#282e33]">
               <Building2 className="h-4 w-4 text-[#939699]" />
               <span className="max-w-30 truncate">{auth.user?.companyName}</span>
+              {/* {workspaces.map((w)=> )} */}
+
               <ChevronDown className="h-4 w-4 text-[#939699]" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Switch Company</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
-              <Building2 className="h-4 w-4 mr-2 text-[#939699]" />
-              {auth.user?.companyName}
-            </DropdownMenuItem>
+            {workspaces?.map((w) => (
+              <DropdownMenuItem key={w?.id} className="cursor-pointer">
+                <Building2 className="h-4 w-4 mr-2 text-[#939699]" />
+                {w?.name}
+              </DropdownMenuItem>
+            ))}
+
             <DropdownMenuItem className="cursor-pointer text-[#1973e1]">+ Add company</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

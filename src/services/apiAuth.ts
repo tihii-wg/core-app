@@ -79,6 +79,10 @@ export async function signUp(data: signUpProps) {
   return user;
 }
 
+
+
+
+
 export async function getCurrentUser() {
   const { data: session } = await supabase.auth.getSession();
 
