@@ -57,6 +57,7 @@ export async function signUp(data: signUpProps) {
       {
         name: companyName,
         owner_id: user.id,
+        type:"current"
       },
     ])
     .select()

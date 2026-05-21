@@ -5,8 +5,8 @@ import { Input } from "./Input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./DropdownMenu";
 import { useApp } from "../lib/appContext";
 import { useLogOut } from "../features/auth/useLogOut";
-import { Spinner } from "./Spinner";
-import { useWorkspaces } from "../features/workspaces/useWorkspaces";
+import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
+import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -22,14 +22,16 @@ const moduleLabels: Record<string, string> = {
 };
 
 export function AppTopbar() {
-  const { logOut, isLoading } = useLogOut();
-  const { workspaces: data } = useWorkspaces();
+  const { logOut } = useLogOut();
+  const { workspaces: data } = useGetWorkspaces();
+  const { updateWorkspace } = useSetActiveWorkspace();
   const { auth, currentModule, setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
 
   const workspaces = (data ?? []).flatMap((item) => item.workspace ?? []);
+  const currentWorkspace = workspaces.find((item) => item.type === "current");
 
-  console.log(workspaces);
+  // console.log(currentWorkspace);
 
   const notifications = [
     { id: 1, title: "New order received", time: "5 min ago" },
@@ -41,7 +43,9 @@ export function AppTopbar() {
     },
   ];
 
-  if (isLoading) return <Spinner />;
+  function updateWorkspaceHandler(id: string) {
+    updateWorkspace(id);
+  }
 
   return (
     <header className="h-14 bg-white border-b border-[#eeeeef] flex items-center justify-between px-4 sticky top-0 z-30">
@@ -100,7 +104,7 @@ export function AppTopbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="hidden sm:flex items-center gap-2 h-9 px-3 text-sm text-[#282e33]">
               <Building2 className="h-4 w-4 text-[#939699]" />
-              <span className="max-w-30 truncate">{auth.user?.companyName}</span>
+              <span className="max-w-30 truncate">{currentWorkspace?.name}</span>
               {/* {workspaces.map((w)=> )} */}
 
               <ChevronDown className="h-4 w-4 text-[#939699]" />
@@ -109,8 +113,9 @@ export function AppTopbar() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Switch Company</DropdownMenuLabel>
             <DropdownMenuSeparator />
+
             {workspaces?.map((w) => (
-              <DropdownMenuItem key={w?.id} className="cursor-pointer">
+              <DropdownMenuItem onClick={() => updateWorkspaceHandler(w.id)} key={w?.id} className="cursor-pointer">
                 <Building2 className="h-4 w-4 mr-2 text-[#939699]" />
                 {w?.name}
               </DropdownMenuItem>

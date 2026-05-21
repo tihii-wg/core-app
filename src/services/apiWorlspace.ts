@@ -1,16 +1,5 @@
+import type { WorkspaceMemberWithWorkspace } from "../lib/types";
 import supabase from "./supabase";
-
-export type Workspace = {
-  id: string;
-  name: string;
-  owner_id: string;
-};
-
-export type WorkspaceMemberWithWorkspace = {
-  role: string;
-  workspace: Workspace[];
-};
- 
 
 export async function getUserWorkspace(): Promise<WorkspaceMemberWithWorkspace[]> {
   const {
@@ -26,7 +15,8 @@ export async function getUserWorkspace(): Promise<WorkspaceMemberWithWorkspace[]
 	  workspace:workspaces (
     id,
     name,
-    owner_id
+    owner_id,
+    type
     )
 		`
     )
@@ -34,6 +24,15 @@ export async function getUserWorkspace(): Promise<WorkspaceMemberWithWorkspace[]
 
   if (error) throw new Error(error.message);
 
-  return data
-  
+  return data;
+}
+
+export async function setActiveWorkspace(id: string) {
+  const { error: error1 } = await supabase.from("workspaces").update({ type: "second" }).neq("id", id);
+
+  if (error1) throw new Error(error1.message);
+
+  const { error: error2 } = await supabase.from("workspaces").update({ type: "current" }).eq("id", id);
+
+  if (error2) throw new Error(error2.message);
 }

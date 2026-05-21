@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getUserWorkspace} from "../../services/apiWorlspace";
 
-export function useWorkspaces() {
+export function useGetWorkspaces() {
   const {
     data: workspaces,
     isLoading,
@@ -16,3 +16,4 @@ export function useWorkspaces() {
 
   return { workspaces, isLoading, error };
 }
+
