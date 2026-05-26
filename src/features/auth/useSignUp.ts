@@ -7,7 +7,9 @@ export function useSignUp() {
   return useMutation({
     mutationFn: signUp,
     onSuccess: () => {
-      navigate("/dashboard", { replace: true });
+      const locale = "en";
+
+      navigate(`/${locale}/dashboard`, { replace: true });
     },
   });
 }

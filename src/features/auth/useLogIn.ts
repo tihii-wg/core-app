@@ -14,8 +14,9 @@ export function useLogin() {
   const { mutateAsync: login, isPending: isLoading } = useMutation({
     mutationFn: ({ email, password }: LogInData) => logInApi({ email, password }),
     onSuccess: (user) => {
+      const locale = "en";
       queryClient.setQueryData(["user"], user.user);
-      navigate("/dashboard", { replace: true });
+      navigate(`/${locale}/dashboard`, { replace: true });
     },
     onError: (error) => {
       console.log("ERROR", error);

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
-import { AppProvider} from "./lib/appContext";
+import { AppProvider } from "./lib/appContext";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 // import { AppLayout } from "../src/ui/AppLayout";
@@ -21,14 +21,12 @@ import { SettingsModule } from "./features/settings/Settings";
 import { useUser } from "./features/auth/useUser";
 import ProtectedRoute from "./app/ProtectedRoute";
 
-
+export const DEFAULT_LOCALE = "en";
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useUser();
 
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (!isAuthenticated) <Navigate to={`/${DEFAULT_LOCALE}/dashboard`} replace />;
 
   return <>{children}</>;
 }
@@ -38,22 +36,22 @@ function AppRoutes() {
 
   function onSwitchToForgotPassword() {
     // FogotPasword();
-    navigate("/forgot-password");
+    navigate(`/${DEFAULT_LOCALE}/forgot-password`);
   }
 
   function onSwitchToLogin() {
-    navigate("/login");
+    navigate(`/${DEFAULT_LOCALE}/login`);
   }
 
   function onSwitchToRegister() {
-    navigate("/register");
+    navigate(`/${DEFAULT_LOCALE}/register`);
   }
 
   return (
     <Routes>
       {/* Public routes */}
       <Route
-        path="/login"
+        path="/:locale/login"
         element={
           <PublicRoute>
             <LoginPage onSwitchToForgotPassword={onSwitchToForgotPassword} onSwitchToRegister={onSwitchToRegister} />
@@ -61,7 +59,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/register"
+        path="/:locale/register"
         element={
           <PublicRoute>
             <RegisterPage onSwitchToLogin={onSwitchToLogin} />
@@ -69,7 +67,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/forgot-password"
+        path="/:locale/forgot-password"
         element={
           <PublicRoute>
             <ForgotPasswordPage onSwitchToLogin={onSwitchToLogin} />
@@ -78,8 +76,9 @@ function AppRoutes() {
       />
 
       {/* Protected routes */}
+
       <Route
-        path="/"
+        path="/:locale/dashboard"
         element={
           <ProtectedRoute>
             <Dashboard />
@@ -87,15 +86,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/orders"
+        path="/:locale/workspaces/:workspaceId/orders"
         element={
           <ProtectedRoute>
             <Orders />
@@ -103,7 +94,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/clients"
+        path="/:locale/workspaces/:workspaceId/clients"
         element={
           <ProtectedRoute>
             <Clients />
@@ -111,7 +102,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/employees"
+        path="/:locale/workspaces/:workspaceId/employees"
         element={
           <ProtectedRoute>
             <Employees />
@@ -119,7 +110,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/inventory"
+        path="/:locale/workspaces/:workspaceId/inventory"
         element={
           <ProtectedRoute>
             <Inventory />
@@ -127,7 +118,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/services"
+        path="/:locale/workspaces/:workspaceId/services"
         element={
           <ProtectedRoute>
             <Services />
@@ -135,7 +126,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/invoices"
+        path="/:locale/workspaces/:workspaceId/invoices"
         element={
           <ProtectedRoute>
             <Invoices />
@@ -143,7 +134,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/finance"
+        path="/:locale/workspaces/:workspaceId/finance"
         element={
           <ProtectedRoute>
             <Finance />
@@ -151,7 +142,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/reports"
+        path="/:locale/workspaces/:workspaceId/reports"
         element={
           <ProtectedRoute>
             <ReportsModule />
@@ -159,7 +150,7 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/settings"
+        path="/:locale/workspaces/:workspaceId/settings"
         element={
           <ProtectedRoute>
             <SettingsModule />
@@ -168,7 +159,7 @@ function AppRoutes() {
       />
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to={`/${DEFAULT_LOCALE}/login`} replace />} />
     </Routes>
   );
 }

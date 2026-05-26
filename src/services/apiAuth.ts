@@ -77,7 +77,7 @@ export async function signUp(data: signUpProps) {
 
   if (memberError) throw new Error(memberError.message);
 
-  return user;
+  return {user,workspace};
 }
 
 

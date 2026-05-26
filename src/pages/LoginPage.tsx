@@ -33,7 +33,7 @@ export function LoginPage({ onSwitchToRegister, onSwitchToForgotPassword }: Logi
             <LoginForm />
 
             <div className="mt-4 text-center">
-              <button type="button" onClick={onSwitchToForgotPassword} className="text-sm text-[#1973e1] hover:underline">
+              <button type="button" onClick={onSwitchToForgotPassword} className="text-sm cursor-pointer text-[#1973e1] hover:underline">
                 Forgot password?
               </button>
             </div>
@@ -42,7 +42,7 @@ export function LoginPage({ onSwitchToRegister, onSwitchToForgotPassword }: Logi
           {/* Register link */}
           <div className="mt-4 text-center">
             <span className="text-sm text-[#939699]">Don&apos;t have an account? </span>
-            <button type="button" onClick={onSwitchToRegister} className="text-sm text-[#1973e1] hover:underline font-medium">
+            <button type="button" onClick={onSwitchToRegister} className="text-sm text-[#1973e1] hover:underline font-medium cursor-pointer">
               Create account
             </button>
           </div>
