@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AppProvider } from "./lib/appContext";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
-// import { AppLayout } from "../src/ui/AppLayout";
 
+import { PublicRoute } from "./ui/PublicRoute";
+import ProtectedRoute from "./ui/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import { Orders } from "./features/orders/Orders";
@@ -18,145 +19,97 @@ import { Invoices } from "./features/invoices/Invoices";
 import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { SettingsModule } from "./features/settings/Settings";
-import { useUser } from "./features/auth/useUser";
-import ProtectedRoute from "./app/ProtectedRoute";
+import { AppLayout } from "./ui/AppLayout";
 
 export const DEFAULT_LOCALE = "en";
 
-function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useUser();
-
-  if (!isAuthenticated) <Navigate to={`/${DEFAULT_LOCALE}/dashboard`} replace />;
-
-  return <>{children}</>;
-}
-
 function AppRoutes() {
-  const navigate = useNavigate();
-
-  function onSwitchToForgotPassword() {
-    // FogotPasword();
-    navigate(`/${DEFAULT_LOCALE}/forgot-password`);
-  }
-
-  function onSwitchToLogin() {
-    navigate(`/${DEFAULT_LOCALE}/login`);
-  }
-
-  function onSwitchToRegister() {
-    navigate(`/${DEFAULT_LOCALE}/register`);
-  }
-
   return (
     <Routes>
       {/* Public routes */}
-      <Route
-        path="/:locale/login"
-        element={
-          <PublicRoute>
-            <LoginPage onSwitchToForgotPassword={onSwitchToForgotPassword} onSwitchToRegister={onSwitchToRegister} />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/:locale/register"
-        element={
-          <PublicRoute>
-            <RegisterPage onSwitchToLogin={onSwitchToLogin} />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/:locale/forgot-password"
-        element={
-          <PublicRoute>
-            <ForgotPasswordPage onSwitchToLogin={onSwitchToLogin} />
-          </PublicRoute>
-        }
-      />
+      <Route path="/" element={<Navigate to={`/${DEFAULT_LOCALE}/login`} replace />} />
+
+      <Route element={<PublicRoute />}>
+        <Route path="/:locale/login" element={<LoginPage />} />
+      </Route>
+
+      <Route element={<PublicRoute />}>
+        <Route path="/:locale/register" element={<RegisterPage />} />
+      </Route>
+
+      <Route element={<PublicRoute />}>
+        <Route path="/:locale/forgot-password" element={<ForgotPasswordPage />} />
+      </Route>
 
       {/* Protected routes */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/dashboard" element={<Dashboard />} />
+          <Route path="/:locale/orders" element={<Orders />} />
+          <Route path="/:locale/clients" element={<Clients />} />
+          <Route path="/:locale/employees" element={<Employees />} />
+          <Route path="/:locale/inventory" element={<Inventory />} />
+          <Route path="/:locale/services" element={<Services />} />
+          <Route path="/:locale/invoices" element={<Invoices />} />
+          <Route path="/:locale/finance" element={<Finance />} />
+          <Route path="/:locale/reports" element={<ReportsModule />} />
+          <Route path="/:locale/settings" element={<SettingsModule />} />
+        </Route>
+      </Route>
 
-      <Route
-        path="/:locale/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/orders"
-        element={
-          <ProtectedRoute>
-            <Orders />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/clients"
-        element={
-          <ProtectedRoute>
-            <Clients />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/employees"
-        element={
-          <ProtectedRoute>
-            <Employees />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/inventory"
-        element={
-          <ProtectedRoute>
-            <Inventory />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/services"
-        element={
-          <ProtectedRoute>
-            <Services />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/invoices"
-        element={
-          <ProtectedRoute>
-            <Invoices />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/finance"
-        element={
-          <ProtectedRoute>
-            <Finance />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/reports"
-        element={
-          <ProtectedRoute>
-            <ReportsModule />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/:locale/workspaces/:workspaceId/settings"
-        element={
-          <ProtectedRoute>
-            <SettingsModule />
-          </ProtectedRoute>
-        }
-      />
+      {/* <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/orders" element={<Orders />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/clients" element={<Clients />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/employees" element={<Employees />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/inventory" element={<Inventory />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/services" element={<Services />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/invoices" element={<Invoices />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/finance" element={<Finance />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/reports" element={<ReportsModule />} />
+        </Route>
+      </Route>
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AppLayout />}>
+          <Route path="/:locale/settings" element={<SettingsModule />} />
+        </Route>
+      </Route> */}
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to={`/${DEFAULT_LOCALE}/login`} replace />} />

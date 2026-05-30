@@ -7,6 +7,7 @@ import { useApp } from "../lib/appContext";
 import { useLogOut } from "../features/auth/useLogOut";
 import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
+import { useUser } from "../features/auth/useUser";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -25,13 +26,14 @@ export function AppTopbar() {
   const { logOut } = useLogOut();
   const { workspaces: data } = useGetWorkspaces();
   const { updateWorkspace } = useSetActiveWorkspace();
-  const { auth, currentModule, setMobileSidebarOpen } = useApp();
+  const { user } = useUser();
+  const { currentModule, setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const workspaces = (data ?? []).flatMap((item) => item.workspace ?? []);
-  const currentWorkspace = workspaces.find((item) => item.type === "current");
+  const userName = user.user_metadata.ownerName;
 
-  // console.log(currentWorkspace);
+  const workspaces = (data ?? []).flatMap((item) => item.workspace ?? []);
+  const currentWorkspace = workspaces?.find((item) => item.type === "current");
 
   const notifications = [
     { id: 1, title: "New order received", time: "5 min ago" },
@@ -130,7 +132,7 @@ export function AppTopbar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 h-9 px-2">
               <div className="h-8 w-8 bg-[#1973e1] rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">{auth.user?.name?.charAt(0) || "U"}</span>
+                <span className="text-white text-sm font-medium">{userName.charAt(0) || "U"}</span>
               </div>
               <ChevronDown className="h-4 w-4 text-[#939699] hidden sm:block" />
             </Button>
@@ -138,8 +140,8 @@ export function AppTopbar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="font-medium">{auth.user?.name}</span>
-                <span className="text-xs text-[#939699] font-normal">{auth.user?.email}</span>
+                <span className="font-medium">{userName}</span>
+                <span className="text-xs text-[#939699] font-normal">{user?.email}</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

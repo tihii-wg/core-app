@@ -99,51 +99,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Auth actions
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  // const login = useCallback(async (email: string, password: string): Promise<boolean> => {
+  //   // Simulate API delay
+  //   await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Mock validation - in real app, this would be an API call
-    if (email && password.length >= 6) {
-      const authState: AuthState = {
-        isAuthenticated: true,
-        user: { ...mockUser, email },
-      };
-      setAuth(authState);
-      localStorage.setItem('coreapp_auth', JSON.stringify(authState));
-      return true;
-    }
-    return false;
-  }, []);
+  //   // Mock validation - in real app, this would be an API call
+  //   if (email && password.length >= 6) {
+  //     const authState: AuthState = {
+  //       isAuthenticated: true,
+  //       user: { ...mockUser, email },
+  //     };
+  //     setAuth(authState);
+  //     localStorage.setItem('coreapp_auth', JSON.stringify(authState));
+  //     return true;
+  //   }
+  //   return false;
+  // }, []);
 
-  const logout = useCallback(() => {
-    setAuth({ isAuthenticated: false, user: null });
-    localStorage.removeItem('coreapp_auth');
-    setCurrentModule('dashboard');
-  }, []);
+  // const logout = useCallback(() => {
+  //   setAuth({ isAuthenticated: false, user: null });
+  //   localStorage.removeItem('coreapp_auth');
+  //   setCurrentModule('dashboard');
+  // }, []);
 
-  const register = useCallback(async (data: { companyName: string; ownerName: string; email: string; password: string }): Promise<boolean> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
+  // const register = useCallback(async (data: { companyName: string; ownerName: string; email: string; password: string }): Promise<boolean> => {
+  //   // Simulate API delay
+  //   await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Mock registration - in real app, this would be an API call
-    if (data.email && data.password.length >= 6 && data.companyName && data.ownerName) {
-      const authState: AuthState = {
-        isAuthenticated: true,
-        user: {
-          id: generateId('user'),
-          email: data.email,
-          name: data.ownerName,
-          companyName: data.companyName,
-          role: 'admin',
-        },
-      };
-      setAuth(authState);
-      localStorage.setItem('coreapp_auth', JSON.stringify(authState));
-      return true;
-    }
-    return false;
-  }, []);
+  //   // Mock registration - in real app, this would be an API call
+  //   if (data.email && data.password.length >= 6 && data.companyName && data.ownerName) {
+  //     const authState: AuthState = {
+  //       isAuthenticated: true,
+  //       user: {
+  //         id: generateId('user'),
+  //         email: data.email,
+  //         name: data.ownerName,
+  //         companyName: data.companyName,
+  //         role: 'admin',
+  //       },
+  //     };
+  //     setAuth(authState);
+  //     localStorage.setItem('coreapp_auth', JSON.stringify(authState));
+  //     return true;
+  //   }
+  //   return false;
+  // }, []);
 
   // Data actions
   const addClient = useCallback((clientData: Omit<Client, 'id' | 'createdAt' | 'balance'>) => {
@@ -249,9 +249,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider
       value={{
         auth,
-        login,
-        logout,
-        register,
+        // login,
+        // logout,
+        // register,
         currentModule,
         setCurrentModule,
         sidebarCollapsed,

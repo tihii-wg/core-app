@@ -3,6 +3,7 @@ import type { AppModule } from "../lib/types";
 import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Wrench, FileText, DollarSign, BarChart3, Settings, ChevronLeft, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useNavigate } from "react-router-dom";
+import { DEFAULT_LOCALE } from "../App";
 
 interface NavItem {
   module: AppModule;
@@ -30,7 +31,7 @@ export function AppSidebar() {
   const handleNavClick = (module: AppModule) => {
     setCurrentModule(module);
     setMobileSidebarOpen(false);
-    navigate(`/${module}`);
+    navigate(`/${DEFAULT_LOCALE}/${module}`);
   };
 
   return (

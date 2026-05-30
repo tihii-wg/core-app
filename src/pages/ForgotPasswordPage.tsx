@@ -4,12 +4,15 @@ import { Button } from "../ui/Button";
 import { Label } from "../ui/Label";
 import { Input } from "../ui/Input";
 import { Spinner } from "../ui/Spinner";
+import { DEFAULT_LOCALE } from "../App";
+import { useNavigate } from "react-router-dom";
 
-interface ForgotPasswordPageProps {
-  onSwitchToLogin: () => void;
-}
+// interface ForgotPasswordPageProps {
+//   onSwitchToLogin: () => void;
+// }
 
-export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps) {
+export function ForgotPasswordPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +33,10 @@ export function ForgotPasswordPage({ onSwitchToLogin }: ForgotPasswordPageProps)
     setIsLoading(false);
     setIsSubmitted(true);
   };
+
+  function onSwitchToLogin() {
+    navigate(`/${DEFAULT_LOCALE}/login`);
+  }
 
   if (isSubmitted) {
     return (

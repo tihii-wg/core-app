@@ -2,13 +2,26 @@ import { Globe } from "lucide-react";
 
 import LoginForm from "../features/auth/LoginForm";
 import Logo from "../ui/Logo";
+import { DEFAULT_LOCALE } from "../App";
+import { useNavigate } from "react-router-dom";
 
-interface LoginPageProps {
-  onSwitchToRegister: () => void;
-  onSwitchToForgotPassword: () => void;
-}
+// interface LoginPageProps {
+//   onSwitchToRegister: () => void;
+//   onSwitchToForgotPassword: () => void;
+// }
 
-export function LoginPage({ onSwitchToRegister, onSwitchToForgotPassword }: LoginPageProps) {
+export function LoginPage() {
+  const navigate = useNavigate();
+
+  function onSwitchToRegister() {
+    navigate(`/${DEFAULT_LOCALE}/register`);
+  }
+
+  function onSwitchToForgotPassword() {
+    // FogotPasword();
+    navigate(`/${DEFAULT_LOCALE}/forgot-password`);
+  }
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
       {/* Language selector */}

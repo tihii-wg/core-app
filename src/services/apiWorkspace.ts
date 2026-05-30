@@ -5,11 +5,8 @@ export async function getUserWorkspace(): Promise<WorkspaceMemberWithWorkspace[]
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const { data: session } = await supabase.auth.getSession();
 
   if (!user) throw new Error("User not found");
-
-  if (!session.session) return null;
 
   const { data, error } = await supabase
     .from("workspace_members")

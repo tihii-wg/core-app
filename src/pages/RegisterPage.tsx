@@ -2,12 +2,20 @@ import { ArrowLeft } from "lucide-react";
 
 import RegisterForm from "../features/auth/RegisterForm";
 import Logo from "../ui/Logo";
+import { DEFAULT_LOCALE } from "../App";
+import { useNavigate } from "react-router-dom";
 
-interface RegisterPageProps {
-  onSwitchToLogin: () => void;
-}
+// interface RegisterPageProps {
+//   onSwitchToLogin: () => void;
+// }
 
-export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
+export function RegisterPage() {
+  const navigate = useNavigate();
+
+  function onSwitchToLogin() {
+    navigate(`/${DEFAULT_LOCALE}/login`);
+  }
+
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
       {/* Back button */}
@@ -29,7 +37,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
 
           {/* Form */}
           <RegisterForm />
-          
+
           {/* Login link */}
           <div className="mt-4 text-center">
             <span className="text-sm text-[#939699]">Already have an account? </span>

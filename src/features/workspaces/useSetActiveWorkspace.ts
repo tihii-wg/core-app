@@ -8,7 +8,7 @@ export function useSetActiveWorkspace() {
     mutationFn: (id: string) => setActiveWorkspaceApi(id),
     onSuccess() {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
-      console.log("set type of  workspace");
+      // console.log("set type of  workspace");
     },
     onError(error) {
       console.log(error);
