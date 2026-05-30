@@ -27,6 +27,8 @@ export function AppTopbar() {
   const { workspaces: data } = useGetWorkspaces();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { user } = useUser();
+
+  
   const { currentModule, setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
 

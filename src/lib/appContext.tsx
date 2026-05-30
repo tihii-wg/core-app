@@ -83,7 +83,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
   const [services, setServices] = useState<Service[]>(mockServices);
   const [invoices, setInvoices] = useState<Invoice[]>(mockInvoices);
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const [transactions] = useState<Transaction[]>(mockTransactions);
 
   // Check for existing auth on mount
   useEffect(() => {

@@ -43,6 +43,8 @@ export function LoginPage() {
 
           {/* Form */}
           <div className="bg-white rounded-md border border-[#eeeeef] p-6">
+
+            
             <LoginForm />
 
             <div className="mt-4 text-center">
