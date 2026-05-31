@@ -65,7 +65,7 @@ export default function RegisterForm() {
             {...register("companyName", { required: true })}
             autoFocus={true}
             placeholder="Enter company name"
-            className="h-10 border-[#c9cbcc] hover:border-[#1973e1] focus:ring-[#1973e1]"
+            className={errors.companyName ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "h-10 border-[#c9cbcc] hover:border-[#1973e1] focus:ring-[#1973e1]"}
             disabled={isSubmitting}
           />
           {errors.companyName && <p className="text-xs text-[#f41f20]">Company name is required</p>}

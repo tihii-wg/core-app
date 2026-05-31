@@ -28,8 +28,9 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation()
 
-const currentNavItem = location.pathname.split("/")[2]
-console.log(currentNavItem)
+  const currentNavItem = location.pathname.split("/")[2]
+  
+  
   const {  setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
 
   const handleNavClick = (module: AppModule) => {
