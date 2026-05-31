@@ -8,6 +8,7 @@ import { useLogOut } from "../features/auth/useLogOut";
 import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 import { useUser } from "../features/auth/useUser";
+import { useLocation } from "react-router-dom";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -23,13 +24,15 @@ const moduleLabels: Record<string, string> = {
 };
 
 export function AppTopbar() {
+  const location = useLocation()
   const { logOut } = useLogOut();
   const { workspaces: data } = useGetWorkspaces();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { user } = useUser();
 
+  const currentTitle = location.pathname.split("/")[2]
   
-  const { currentModule, setMobileSidebarOpen } = useApp();
+  const { setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
 
   const userName = user.user_metadata.ownerName;
@@ -61,7 +64,7 @@ export function AppTopbar() {
         </button>
 
         {/* Page title */}
-        <h1 className="text-2xl font-semibold text-[#282e33]">{moduleLabels[currentModule]}</h1>
+        <h1 className="text-2xl font-semibold text-[#282e33]">{moduleLabels[currentTitle]}</h1>
       </div>
 
       {/* Right section */}

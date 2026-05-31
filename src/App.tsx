@@ -31,15 +31,15 @@ function AppRoutes() {
 
       <Route element={<PublicRoute />}>
         <Route path="/:locale/login" element={<LoginPage />} />
-      </Route>
-
-      <Route element={<PublicRoute />}>
         <Route path="/:locale/register" element={<RegisterPage />} />
-      </Route>
-
-      <Route element={<PublicRoute />}>
         <Route path="/:locale/forgot-password" element={<ForgotPasswordPage />} />
       </Route>
+
+      {/* <Route element={<PublicRoute />}>
+      </Route>
+
+      <Route element={<PublicRoute />}>
+      </Route> */}
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>

@@ -2,7 +2,7 @@ import { useApp } from "../lib/appContext";
 import type { AppModule } from "../lib/types";
 import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Wrench, FileText, DollarSign, BarChart3, Settings, ChevronLeft, X } from "lucide-react";
 import { cn } from "../lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate} from "react-router-dom";
 import { DEFAULT_LOCALE } from "../App";
 
 interface NavItem {
@@ -26,7 +26,11 @@ const navItems: NavItem[] = [
 
 export function AppSidebar() {
   const navigate = useNavigate();
-  const { currentModule, setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
+  const location = useLocation()
+
+const currentNavItem = location.pathname.split("/")[2]
+console.log(currentNavItem)
+  const {  setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
 
   const handleNavClick = (module: AppModule) => {
     setCurrentModule(module);
@@ -76,7 +80,7 @@ export function AppSidebar() {
               onClick={() => handleNavClick(module)}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors",
-                currentModule === module ? "bg-[#edf4fd] text-[#1973e1]" : "text-[#282e33] hover:bg-[#f1f3f5]",
+                currentNavItem === module ? "bg-[#edf4fd] text-[#1973e1]" : "text-[#282e33] hover:bg-[#f1f3f5]",
                 sidebarCollapsed && "justify-center"
               )}
             >

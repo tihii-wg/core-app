@@ -37,7 +37,7 @@ interface AppContextType {
   register: (data: { companyName: string; ownerName: string; email: string; password: string }) => Promise<boolean>;
 
   // Navigation
-  currentModule: AppModule;
+  // currentModule: AppModule;
   setCurrentModule: (module: AppModule) => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -252,7 +252,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // login,
         // logout,
         // register,
-        currentModule,
+        // currentModule,
         setCurrentModule,
         sidebarCollapsed,
         setSidebarCollapsed,
