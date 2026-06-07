@@ -5,9 +5,7 @@ import Logo from "../ui/Logo";
 import { DEFAULT_LOCALE } from "../App";
 import { useNavigate } from "react-router-dom";
 
-// interface RegisterPageProps {
-//   onSwitchToLogin: () => void;
-// }
+
 
 export function RegisterPage() {
   const navigate = useNavigate();

@@ -36,12 +36,6 @@ function AppRoutes() {
         <Route path="/:locale/forgot-password" element={<ForgotPasswordPage />} />
       </Route>
 
-      {/* <Route element={<PublicRoute />}>
-      </Route>
-
-      <Route element={<PublicRoute />}>
-      </Route> */}
-
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
@@ -58,60 +52,6 @@ function AppRoutes() {
           <Route path="/:locale/:workspaceId/settings" element={<SettingsModule />} />
         </Route>
       </Route>
-
-      {/* <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/orders" element={<Orders />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/clients" element={<Clients />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/employees" element={<Employees />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/inventory" element={<Inventory />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/services" element={<Services />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/invoices" element={<Invoices />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/finance" element={<Finance />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/reports" element={<ReportsModule />} />
-        </Route>
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route path="/:locale/settings" element={<SettingsModule />} />
-        </Route>
-      </Route> */}
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to={`/${DEFAULT_LOCALE}/login`} replace />} />

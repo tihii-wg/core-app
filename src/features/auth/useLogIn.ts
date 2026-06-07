@@ -19,7 +19,7 @@ export function useLogin() {
       navigate(`/${locale}/dashboard`, { replace: true });
     },
     onError: (error) => {
-      console.log("ERROR", error);
+      console.log("Login error", error);
     },
   });
 

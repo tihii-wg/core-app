@@ -29,7 +29,7 @@ export function AppTopbar() {
   const { workspaces: data } = useGetWorkspaces();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { user } = useUser();
-  const currentTitle = location.pathname.split("/")[2]
+  const currentTitle = location.pathname.split("/")[3]
   
   const { setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,6 +37,9 @@ export function AppTopbar() {
   const userName = user.user_metadata.ownerName;
 
   const workspaces = (data ?? []).flatMap((item) => item.workspaces ?? []);
+
+
+  
   const currentWorkspace = workspaces?.find((item) => item.type === "current");
 
   const notifications = [

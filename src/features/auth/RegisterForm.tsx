@@ -45,7 +45,6 @@ export default function RegisterForm() {
         phone: data.phone,
         password: data.password,
       });
-      console.log("success");
       reset();
     } catch (error) {
       console.log(error);
