@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '../lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { SearchX, Package, FileText, Users } from 'lucide-react';

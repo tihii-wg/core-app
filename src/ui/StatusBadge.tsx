@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '../lib/utils';
 import type { OrderStatus, PaymentStatus, InvoiceStatus } from '../lib/types';
 
