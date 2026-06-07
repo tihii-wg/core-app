@@ -8,7 +8,7 @@ export default function Dashboardredirect() {
   const { locale } = useParams();
   const { workspaces, isLoading } = useGetWorkspaces();
 
-  const currentWorkspace = workspaces?.map((w) => w.workspaces).find((w) => w.type === "current");
+  const currentWorkspace = workspaces?.flatMap((w) => w.workspaces).find((w) => w.type === "current");
 
   useEffect(
     function () {

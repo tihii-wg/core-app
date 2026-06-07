@@ -2,7 +2,7 @@ import { useApp } from "../lib/appContext";
 import type { AppModule } from "../lib/types";
 import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Wrench, FileText, DollarSign, BarChart3, Settings, ChevronLeft, X } from "lucide-react";
 import { cn } from "../lib/utils";
-import { useLocation, useNavigate} from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { DEFAULT_LOCALE } from "../App";
 
 interface NavItem {
@@ -26,17 +26,18 @@ const navItems: NavItem[] = [
 
 export function AppSidebar() {
   const navigate = useNavigate();
-  const location = useLocation()
+  const location = useLocation();
+  const currentWorkspaceId = location.pathname.split("/")[2];
 
-  const currentNavItem = location.pathname.split("/")[2]
-  
-  
-  const {  setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
+  const currentNavItem = location.pathname.split("/")[3];
+
+
+  const { setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
 
   const handleNavClick = (module: AppModule) => {
     setCurrentModule(module);
     setMobileSidebarOpen(false);
-    navigate(`/${DEFAULT_LOCALE}/${module}`);
+    navigate(`/${DEFAULT_LOCALE}/${currentWorkspaceId}/${module}`);
   };
 
   return (
