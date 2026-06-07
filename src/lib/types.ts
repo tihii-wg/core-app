@@ -137,7 +137,7 @@ export type AppModule =
   
   export type WorkspaceMemberWithWorkspace = {
     role: string;
-    workspace: Workspace[];
+    workspaces: Workspace[];
   };
 
   export type IndustryKey =
@@ -163,3 +163,13 @@ export type Company = {
   name: string | null;
   industry: IndustryKey;
 };
+
+export type AddNewClientFormData = {
+  clientName: string;
+  email: string;
+  phone: string;
+  address?: string;
+  notes?: string;
+  balance?:number
+};
+

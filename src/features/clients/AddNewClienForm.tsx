@@ -1,33 +1,27 @@
-
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Spinner } from "../../ui/Spinner";
 import { Button } from "../../ui/Button";
 import { Textarea } from "../../ui/Textarea";
 import { useForm } from "react-hook-form";
-
-type FormData = {
-  clientName: string;
-  email: string;
-  phone: string;
-  address?: string;
-  notes?: string;
-};
+import type { AddNewClientFormData } from "../../lib/types";
+import { useCreateNewClient } from "./useCreateNewClient";
 
 export default function AddNewClientForm({ setCreateModalOpen }) {
+  const { mutateAsync: createClient } = useCreateNewClient();
   const {
     register,
     reset,
     // watch,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormData>();
+  } = useForm<AddNewClientFormData>();
 
-
-  const onSubmit = (data: FormData) => {
+  const onSubmit = (data: AddNewClientFormData) => {
     console.log(data);
+    createClient(data);
     reset();
-  
+
     setCreateModalOpen(false);
   };
 

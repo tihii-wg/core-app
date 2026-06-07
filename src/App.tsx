@@ -20,6 +20,7 @@ import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { SettingsModule } from "./features/settings/Settings";
 import { AppLayout } from "./ui/AppLayout";
+import Dashboardredirect from "./ui/DashboardRedirect";
 
 export const DEFAULT_LOCALE = "en";
 
@@ -44,16 +45,17 @@ function AppRoutes() {
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/:locale/dashboard" element={<Dashboard />} />
-          <Route path="/:locale/orders" element={<Orders />} />
-          <Route path="/:locale/clients" element={<Clients />} />
-          <Route path="/:locale/employees" element={<Employees />} />
-          <Route path="/:locale/inventory" element={<Inventory />} />
-          <Route path="/:locale/services" element={<Services />} />
-          <Route path="/:locale/invoices" element={<Invoices />} />
-          <Route path="/:locale/finance" element={<Finance />} />
-          <Route path="/:locale/reports" element={<ReportsModule />} />
-          <Route path="/:locale/settings" element={<SettingsModule />} />
+          <Route path="/:locale/dashboard/" element={<Dashboardredirect />} />
+          <Route path="/:locale/:workspaceId/dashboard" element={<Dashboard />} />
+          <Route path="/:locale/:workspaceId/orders" element={<Orders />} />
+          <Route path="/:locale/:workspaceId/clients" element={<Clients />} />
+          <Route path="/:locale/:workspaceId/employees" element={<Employees />} />
+          <Route path="/:locale/:workspaceId/inventory" element={<Inventory />} />
+          <Route path="/:locale/:workspaceId/services" element={<Services />} />
+          <Route path="/:locale/:workspaceId/invoices" element={<Invoices />} />
+          <Route path="/:locale/:workspaceId/finance" element={<Finance />} />
+          <Route path="/:locale/:workspaceId/reports" element={<ReportsModule />} />
+          <Route path="/:locale/:workspaceId/settings" element={<SettingsModule />} />
         </Route>
       </Route>
 

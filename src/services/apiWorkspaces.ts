@@ -1,7 +1,7 @@
 import type { WorkspaceMemberWithWorkspace } from "../lib/types";
 import supabase from "./supabase";
 
-export async function getUserWorkspace(): Promise<WorkspaceMemberWithWorkspace[]> {
+export async function getUserWorkspaces(): Promise<WorkspaceMemberWithWorkspace[]> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -12,7 +12,7 @@ export async function getUserWorkspace(): Promise<WorkspaceMemberWithWorkspace[]
     .from("workspace_members")
     .select(
       `role,
-	  workspace:workspaces (
+	  workspaces:workspaces (
     id,
     name,
     owner_id,
@@ -32,7 +32,11 @@ export async function setActiveWorkspace(id: string) {
 
   if (error1) throw new Error(error1.message);
 
-  const { error: error2 } = await supabase.from("workspaces").update({ type: "current" }).eq("id", id);
+  const { data, error: error2 } = await supabase.from("workspaces").update({ type: "current" }).eq("id", id).select();
 
   if (error2) throw new Error(error2.message);
+
+  const workspace = data.find((w) => w.type === "current");
+
+  return workspace;
 }
