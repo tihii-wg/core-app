@@ -9,6 +9,9 @@ import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 import { useUser } from "../features/auth/useUser";
 import { useLocation } from "react-router-dom";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./Dialog";
+import AddNewWorkspaceForm from "../features/workspaces/AddNewWorkspaceForm";
+
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -24,22 +27,22 @@ const moduleLabels: Record<string, string> = {
 };
 
 export function AppTopbar() {
-  const location = useLocation()
+  const location = useLocation();
   const { logOut } = useLogOut();
   const { workspaces: data } = useGetWorkspaces();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { user } = useUser();
-  const currentTitle = location.pathname.split("/")[3]
-  
+  const currentTitle = location.pathname.split("/")[3];
+
   const { setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const userName = user.user_metadata.ownerName;
 
   const workspaces = (data ?? []).flatMap((item) => item.workspaces ?? []);
 
-
-  
   const currentWorkspace = workspaces?.find((item) => item.type === "current");
 
   const notifications = [
@@ -130,9 +133,28 @@ export function AppTopbar() {
               </DropdownMenuItem>
             ))}
 
-            <DropdownMenuItem className="cursor-pointer text-[#1973e1]">+ Add company</DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onClick={() => {
+                setCreateModalOpen(true);
+              }}
+            >
+              <span className="text-[#1973e1]">+ Add company</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/*Add company form*/}
+        <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add New Workspace</DialogTitle>
+              <DialogDescription>Fill in workspace name below</DialogDescription>
+            </DialogHeader>
+
+            <AddNewWorkspaceForm />
+          </DialogContent>
+        </Dialog>
 
         {/* User menu */}
         <DropdownMenu>

@@ -1,20 +1,16 @@
 import { useState, useMemo } from "react";
 import { Plus, Phone, Mail, MapPin } from "lucide-react";
 import { Button } from "../../ui/Button";
-// import { Input } from "../../ui/Input";
-// import { Label } from "../../ui/Label";
-// import { Textarea } from "../../ui/Textarea";
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { NoClients, NoSearchResults } from "../../ui/EmptyState";
-// import { Spinner } from "../../ui/Spinner";
 import { useApp } from "../../lib/appContext";
 import type { Client, Order } from "../../lib/types";
 import AddNewClientForm from "./AddNewClienForm";
-// import AddNewClientDialog from "./AddNewClientDialog";
 
 export function Clients() {
   const { clients, orders } = useApp();
@@ -120,7 +116,9 @@ export function Clients() {
             <DialogDescription>Fill in client details below</DialogDescription>
           </DialogHeader>
 
-          <AddNewClientForm setCreateModalOpen={setCreateModalOpen} />
+          <AddNewClientForm
+            // setCreateModalOpen={setCreateModalOpen}
+          />
         </DialogContent>
       </Dialog>
 

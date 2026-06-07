@@ -7,7 +7,9 @@ import { useForm } from "react-hook-form";
 import type { AddNewClientFormData } from "../../lib/types";
 import { useCreateNewClient } from "./useCreateNewClient";
 
-export default function AddNewClientForm({ setCreateModalOpen }) {
+export default function AddNewClientForm(
+  // { setCreateModalOpen }
+) {
   const { mutateAsync: createClient } = useCreateNewClient();
   const {
     register,
@@ -22,7 +24,7 @@ export default function AddNewClientForm({ setCreateModalOpen }) {
     createClient(data);
     reset();
 
-    setCreateModalOpen(false);
+    // setCreateModalOpen(false);
   };
 
   return (
@@ -84,7 +86,11 @@ export default function AddNewClientForm({ setCreateModalOpen }) {
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
+        <Button type="button" variant="outline"
+        //   onClick={() =>
+        //   setCreateModalOpen(false)
+        // }
+          disabled={isSubmitting}>
           Cancel
         </Button>
         <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white ">
