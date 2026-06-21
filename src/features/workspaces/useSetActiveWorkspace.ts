@@ -9,7 +9,7 @@ export function useSetActiveWorkspace() {
   const field = location.pathname.split("/");
   const queryClient = useQueryClient();
 
-  const { mutate: updateWorkspace, isPending } = useMutation({
+  const { mutateAsync: updateWorkspace, isPending } = useMutation({
     mutationFn: (id: string) => setActiveWorkspaceApi(id),
     onSuccess(data) {
       navigate(`/${locale}/${data.id}/${field[3]}`);

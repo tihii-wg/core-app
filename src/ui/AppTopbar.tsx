@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu, Search, Bell, ChevronDown, LogOut, User, Building2 } from "lucide-react";
+import { Menu, Search, Bell, ChevronDown, LogOut, User, Building2, Trash2 } from "lucide-react";
 import { Button } from "./Button";
 import { Input } from "./Input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./DropdownMenu";
@@ -11,7 +11,7 @@ import { useUser } from "../features/auth/useUser";
 import { useLocation } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./Dialog";
 import AddNewWorkspaceForm from "../features/workspaces/AddNewWorkspaceForm";
-
+import { useDeleteWorkspace } from "../features/workspaces/useDeleteWorkspace";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -32,6 +32,8 @@ export function AppTopbar() {
   const { workspaces: data } = useGetWorkspaces();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { user } = useUser();
+  const { deleteWorkspace } = useDeleteWorkspace();
+
   const currentTitle = location.pathname.split("/")[3];
 
   const { setMobileSidebarOpen } = useApp();
@@ -57,6 +59,10 @@ export function AppTopbar() {
 
   function updateWorkspaceHandler(id: string) {
     updateWorkspace(id);
+  }
+
+  function deleteWorkspaceHandler(id: string) {
+    deleteWorkspace(id);
   }
 
   return (
@@ -117,7 +123,6 @@ export function AppTopbar() {
             <Button variant="ghost" className="hidden sm:flex items-center gap-2 h-9 px-3 text-sm text-[#282e33]">
               <Building2 className="h-4 w-4 text-[#939699]" />
               <span className="max-w-30 truncate">{currentWorkspace?.name}</span>
-              {/* {workspaces.map((w)=> )} */}
 
               <ChevronDown className="h-4 w-4 text-[#939699]" />
             </Button>
@@ -127,9 +132,19 @@ export function AppTopbar() {
             <DropdownMenuSeparator />
 
             {workspaces?.map((w) => (
-              <DropdownMenuItem onClick={() => updateWorkspaceHandler(w.id)} key={w?.id} className="cursor-pointer">
+              <DropdownMenuItem key={w.id} className={`cursor-pointer ${w.type === "current" ? "text-[#1973e1] bg-[#1973e1]/10" : ""}`}>
                 <Building2 className="h-4 w-4 mr-2 text-[#939699]" />
-                {w?.name}
+                <span className="w-11" onClick={() => updateWorkspaceHandler(w.id)}>
+                  {w.name}
+                </span>
+
+                <span
+                  onClick={() => {
+                    deleteWorkspaceHandler(w.id);
+                  }}
+                >
+                  <Trash2 />
+                </span>
               </DropdownMenuItem>
             ))}
 
@@ -152,7 +167,7 @@ export function AppTopbar() {
               <DialogDescription>Fill in workspace name below</DialogDescription>
             </DialogHeader>
 
-            <AddNewWorkspaceForm />
+            <AddNewWorkspaceForm setCreateModalOpen={setCreateModalOpen} />
           </DialogContent>
         </Dialog>
 
