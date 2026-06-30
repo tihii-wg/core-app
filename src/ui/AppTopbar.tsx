@@ -12,6 +12,7 @@ import { useLocation } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./Dialog";
 import AddNewWorkspaceForm from "../features/workspaces/AddNewWorkspaceForm";
 import { useDeleteWorkspace } from "../features/workspaces/useDeleteWorkspace";
+import { useGetProfiles } from "../features/profiles/useProfiles";
 
 const moduleLabels: Record<string, string> = {
   dashboard: "Dashboard",
@@ -33,9 +34,12 @@ export function AppTopbar() {
   const { updateWorkspace } = useSetActiveWorkspace();
   const { user } = useUser();
   const { deleteWorkspace } = useDeleteWorkspace();
+  const { data: profile } = useGetProfiles();
+
+  // console.log(profile.at(0));
 
   const currentTitle = location.pathname.split("/")[3];
-
+const currentWorkspaceId = location.pathname.split("/")[2]
   const { setMobileSidebarOpen } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -45,7 +49,9 @@ export function AppTopbar() {
 
   const workspaces = (data ?? []).flatMap((item) => item.workspaces ?? []);
 
-  const currentWorkspace = workspaces?.find((item) => item.type === "current");
+  const currentWorkspace = workspaces?.find((item) => item.id === profile?.at(0).active_workspace_id);
+
+
 
   const notifications = [
     { id: 1, title: "New order received", time: "5 min ago" },
@@ -132,12 +138,12 @@ export function AppTopbar() {
             <DropdownMenuSeparator />
 
             {workspaces?.map((w) => (
-              <DropdownMenuItem key={w.id} className={`cursor-pointer ${w.type === "current" ? "text-[#1973e1] bg-[#1973e1]/10" : ""}`}>
+              <DropdownMenuItem key={w.id} className={`cursor-pointer ${w.id === currentWorkspaceId ? "text-[#1973e1] bg-[#1973e1]/10" : ""}`}>
                 <Building2 className="h-4 w-4 mr-2 text-[#939699]" />
                 <span className="w-11" onClick={() => updateWorkspaceHandler(w.id)}>
                   {w.name}
                 </span>
-
+                
                 <span
                   onClick={() => {
                     deleteWorkspaceHandler(w.id);

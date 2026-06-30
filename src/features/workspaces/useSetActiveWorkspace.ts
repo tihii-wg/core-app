@@ -12,8 +12,8 @@ export function useSetActiveWorkspace() {
   const { mutateAsync: updateWorkspace, isPending } = useMutation({
     mutationFn: (id: string) => setActiveWorkspaceApi(id),
     onSuccess(data) {
-      navigate(`/${locale}/${data.id}/${field[3]}`);
-      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      navigate(`/${locale}/${data}/${field[3]}`);
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
     },
 
     onError(error) {

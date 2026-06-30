@@ -1,9 +1,9 @@
 // Core App Types
 
-export type OrderStatus = 'new' | 'in-progress' | 'waiting-parts' | 'completed' | 'paid' | 'cancelled';
-export type PaymentStatus = 'unpaid' | 'partial' | 'paid';
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
-export type EmployeeRole = 'admin' | 'manager' | 'technician' | 'receptionist';
+export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled";
+export type PaymentStatus = "unpaid" | "partial" | "paid";
+export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
+export type EmployeeRole = "admin" | "manager" | "technician" | "receptionist";
 
 export interface User {
   id: string;
@@ -34,7 +34,7 @@ export interface Employee {
   avatar?: string;
   assignedTasks: number;
   completedTasks: number;
-  status: 'active' | 'inactive';
+  status: "active" | "inactive";
 }
 
 export interface Order {
@@ -65,7 +65,7 @@ export interface InventoryItem {
   minQuantity: number;
   purchasePrice: number;
   salePrice: number;
-  status: 'in-stock' | 'low-stock' | 'out-of-stock';
+  status: "in-stock" | "low-stock" | "out-of-stock";
 }
 
 export interface Service {
@@ -75,7 +75,7 @@ export interface Service {
   duration: number; // in minutes
   price: number;
   description: string;
-  status: 'active' | 'inactive';
+  status: "active" | "inactive";
 }
 
 export interface Invoice {
@@ -94,11 +94,11 @@ export interface Invoice {
 
 export interface Transaction {
   id: string;
-  type: 'income' | 'expense';
+  type: "income" | "expense";
   category: string;
   description: string;
   amount: number;
-  paymentMethod: 'cash' | 'card' | 'bank-transfer' | 'other';
+  paymentMethod: "cash" | "card" | "bank-transfer" | "other";
   date: string;
   relatedOrderId?: string;
   relatedInvoiceId?: string;
@@ -116,39 +116,27 @@ export interface AuthState {
   user: User | null;
 }
 
-export type AppModule = 
-  | 'dashboard'
-  | 'orders'
-  | 'clients'
-  | 'employees'
-  | 'inventory'
-  | 'services'
-  | 'invoices'
-  | 'finance'
-  | 'reports'
-  | 'settings';
+export type AppModule = "dashboard" | "orders" | "clients" | "employees" | "inventory" | "services" | "invoices" | "finance" | "reports" | "settings";
 
-  export type Workspace = {
-    id: string;
-    name: string;
-    owner_id: string;
-    type: string;
-  };
-  
-  export type WorkspaceMemberWithWorkspace = {
-    role: string;
-    workspaces: Workspace[];
-  };
+export type Workspace = {
+  id: string;
+  name: string;
+  owner_id: string;
+  deleted_at: string | null;
+};
 
-  export type IndustryKey =
-  | "restaurant"
-  | "beauty"
-  | "fitness"
-  | "medical"
-  | "retail"
-  | "professional_services"
-  | "auto_service"
-  | "electronics_repair";
+export type WorkspaceMemberWithWorkspace = {
+  role: "owner" | "manager" | "member";
+  workspaces: Workspace | null;
+};
+
+export type WorkspaceMember = {
+  user_id: string;
+  workspace_id: string;
+  role: "owner" | "manager" | "member";
+};
+
+export type IndustryKey = "restaurant" | "beauty" | "fitness" | "medical" | "retail" | "professional_services" | "auto_service" | "electronics_repair";
 
 export type Profile = {
   id: string;
@@ -170,6 +158,11 @@ export type AddNewClientFormData = {
   phone: string;
   address?: string;
   notes?: string;
-  balance?:number
+  balance?: number;
 };
 
+export type NewWorkspaceData = {
+  name: string;
+  role: string;
+  userId: string;
+};

@@ -7,6 +7,7 @@ export type createProfileProps = {
   avatar: string;
   email: string;
   phone: string;
+  activeWorkspaceId: string;
 };
 
 export async function getProfiles() {

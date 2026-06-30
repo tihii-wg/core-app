@@ -1,7 +1,7 @@
-import type { WorkspaceMemberWithWorkspace } from "../lib/types";
+import type { NewWorkspaceData, WorkspaceMemberWithWorkspace } from "../lib/types";
 import supabase from "./supabase";
 
-export async function getUserWorkspaces(): Promise<WorkspaceMemberWithWorkspace[]> {
+export async function getUserWorkspaces() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -12,15 +12,16 @@ export async function getUserWorkspaces(): Promise<WorkspaceMemberWithWorkspace[
     .from("workspace_members")
     .select(
       `role,
-	  workspaces:workspaces (
+	  workspaces!inner (
     id,
     name,
     owner_id,
-    type
+    deleted_at
     )
 		`
     )
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("workspaces.deleted_at", null);
 
   if (error) throw new Error(error.message);
 
@@ -28,20 +29,21 @@ export async function getUserWorkspaces(): Promise<WorkspaceMemberWithWorkspace[
 }
 
 export async function setActiveWorkspace(id: string) {
-  const { error: error1 } = await supabase.from("workspaces").update({ type: "inactive" }).neq("id", id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (error1) throw new Error(error1.message);
+  if (!user) throw new Error("User not found");
 
-  const { data, error: error2 } = await supabase.from("workspaces").update({ type: "current" }).eq("id", id).select();
+  const { data, error } = await supabase.from("profiles").update({ active_workspace_id: id }).eq("id", user.id).select();
+  if (error) throw new Error(error.message);
 
-  if (error2) throw new Error(error2.message);
+  const profile = data.at(0).active_workspace_id;
 
-  const workspace = data.find((w) => w.type === "current");
-
-  return workspace;
+  return profile;
 }
 
-export async function createWorkspace(newWorkspaceData) {
+export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
   // create workspace
   const { data, error } = await supabase
     .from("workspaces")
@@ -49,7 +51,6 @@ export async function createWorkspace(newWorkspaceData) {
       {
         name: newWorkspaceData.name,
         owner_id: newWorkspaceData.userId,
-        type: "second",
       },
     ])
     .select();
@@ -75,52 +76,57 @@ export async function createWorkspace(newWorkspaceData) {
 }
 
 export async function deleteWorkspace(workspaceId: string) {
-  //delete workspacew
+  //1 get user
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   if (!user) throw new Error("User not found");
 
-  const { data: workspaces, error } = await supabase
+  //2 get all not deleted workspaces
+  const { data: members, error: membersError } = await supabase
     .from("workspace_members")
     .select(
       `role,
-	  workspaces:workspaces (
-    id,
-    name,
-    owner_id,
-    type
+	  workspaces!inner(
+      id,
+      deleted_at
     )
 		`
     )
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("workspaces.deleted_at", null);
+
+  if (membersError) throw new Error(membersError.message);
+
+  if (!members) throw new Error("Workspaces not found");
+
+  if (members.length === 1) throw new Error("You cannot delete last workspace");
+
+  //3 Get profiles
+  const { data: profiles, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id);
+
+  if (profileError) throw new Error(profileError.message);
+  const profile = profiles?.[0];
+  if (!profile) throw new Error("Profile not found");
+
+  //4 If current workspace === workspaceId find next workspace and chenge current_workspace_id
+  if (profile.active_workspace_id === workspaceId) {
+    const nextWorkspace = members?.flatMap((member) => member?.workspaces).find((w) => w.id !== workspaceId);
+
+    if (!nextWorkspace) throw new Error("No workspaceAvilable");
+
+    const { data: chengeProfileData, error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id).select();
+
+    if (!chengeProfileData) throw new Error("ChengeProfile not found");
+    if (chengeProfileDataError) throw new Error(chengeProfileDataError.message);
+  }
+
+  //Delete workspace
+
+  const { data, error } = await supabase.from("workspaces").update({ deleted_at: new Date().toISOString() }).eq("id", workspaceId).select();
 
   if (error) throw new Error(error.message);
 
-  if (workspaces.length === 1) throw new Error("You cannot delete your last workspace");
-
-  const currentWorkspace = workspaces.flatMap((w) => w.workspaces).find((w) => w.type === "current");
-
-  if (currentWorkspace?.id === workspaceId) {
-    const nextCurrentWorkspace = workspaces.flatMap((w) => w.workspaces).find((w) => w.id !== workspaceId);
-
-    await supabase.from("workspaces").update({ type: "inactive" }).eq("id", workspaceId);
-
-    await supabase.from("workspaces").update({ type: "current" }).eq("id", nextCurrentWorkspace.id);
-  }
-
-  const { error: workspaceError } = await supabase.from("workspaces").delete().eq("id", workspaceId);
-
-  if (workspaceError) throw new Error(workspaceError.message);
-
-  //delete workspace member
-  const { error: memberError } = await supabase.from("workspace_members").delete().eq("workspace_id", workspaceId);
-
-  if (memberError) throw new Error(memberError.message);
-
-  // delete clients
-
-  // delele orders
-
-  return { workspaces, workspaceError, memberError };
+  return (data ?? []) as WorkspaceMemberWithWorkspace[];
 }

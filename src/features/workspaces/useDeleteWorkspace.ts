@@ -7,6 +7,7 @@ export function useDeleteWorkspace() {
     mutationFn: deleteWorkspaceApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
     },
   });
   return { deleteWorkspace, isPending };

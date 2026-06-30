@@ -6,12 +6,12 @@ import { useForm } from "react-hook-form";
 import { useUser } from "../auth/useUser";
 import { useCreateWorkspace } from "./useCreateWorkspace";
 
-export type AddNewWorlspaceFormData = {
+export type AddNewWorkspaceFormData = {
   workspaceName: string;
   role: string;
 };
 
-export default function AddNewWorkspaceForm({setCreateModalOpen}) {
+export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
   const { user } = useUser();
   const { mutateAsync } = useCreateWorkspace();
   const {
@@ -20,10 +20,9 @@ export default function AddNewWorkspaceForm({setCreateModalOpen}) {
     // watch,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<AddNewWorlspaceFormData>();
+  } = useForm<AddNewWorkspaceFormData>();
 
-  const onSubmit = (data) => {
-  
+  const onSubmit = (data: AddNewWorkspaceFormData) => {
     const newWorkspaceData = {
       name: data.workspaceName,
       role: data.role,

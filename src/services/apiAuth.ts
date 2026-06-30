@@ -38,13 +38,13 @@ export async function signUp(data: signUpProps) {
   const { ownerName, phone, companyName } = user.user_metadata ?? {};
 
   // 2.PROFILE
-
   const { error: profileError } = await supabase.from("profiles").insert([
     {
       id: user.id,
       full_name: ownerName,
       email: user.email,
       phone: phone,
+      active_workspace_id: null,
     },
   ]);
 
@@ -57,7 +57,6 @@ export async function signUp(data: signUpProps) {
       {
         name: companyName,
         owner_id: user.id,
-        type:"current"
       },
     ])
     .select()
@@ -77,12 +76,14 @@ export async function signUp(data: signUpProps) {
 
   if (memberError) throw new Error(memberError.message);
 
-  return {user,workspace};
+  //5 set active workspace
+
+  const { error: profilersError } = await supabase.from("profiles").update({ active_workspace_id: workspace.id }).eq("id", user.id).select();
+
+  if (profilersError) throw new Error(profilersError.message);
+
+  return { user, workspace };
 }
-
-
-
-
 
 export async function getCurrentUser() {
   const { data: session } = await supabase.auth.getSession();
