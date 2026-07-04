@@ -119,9 +119,8 @@ export async function deleteWorkspace(workspaceId: string) {
     if (!nextWorkspace) throw new Error("No workspaceAvilable");
     nextWorkspaceId = nextWorkspace.id;
 
-    const { data: chengeProfileData, error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id).select();
+    const {  error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id);
 
-    if (!chengeProfileData) throw new Error("ChengeProfile not found");
     if (chengeProfileDataError) throw new Error(chengeProfileDataError.message);
   }
 
@@ -131,7 +130,6 @@ export async function deleteWorkspace(workspaceId: string) {
 
   if (error) throw new Error(error.message);
 
-  // return (data ?? []) as WorkspaceMemberWithWorkspace[];
   return {
     deleteWorkspace: data,
     nextWorkspaceId,

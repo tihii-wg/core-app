@@ -13,9 +13,9 @@ export function useDeleteWorkspace() {
   const { mutateAsync: deleteWorkspace, isPending } = useMutation({
     mutationFn: deleteWorkspaceApi,
     onSuccess: ({ nextWorkspaceId }) => {
+      navigate(`/${locale}/${nextWorkspaceId}/${field[3]}`);
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
-      navigate(`/${locale}/${nextWorkspaceId}/${field[3]}`);
     },
   });
   return { deleteWorkspace, isPending };
