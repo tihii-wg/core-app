@@ -1,7 +1,7 @@
 import type { AddNewClientFormData } from "../lib/types";
 import supabase from "./supabase";
 
-export async function createClient({ clientName, email, phone, address, notes }: AddNewClientFormData) {
+export async function createClient({ workspace_id, clientName, email, phone, address, notes }: AddNewClientFormData) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -12,6 +12,7 @@ export async function createClient({ clientName, email, phone, address, notes }:
     .from("clients")
     .insert([
       {
+        workspace_id,
         name: clientName,
         email,
         phone,

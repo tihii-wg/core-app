@@ -117,7 +117,7 @@ export function Clients() {
           </DialogHeader>
 
           <AddNewClientForm
-            // setCreateModalOpen={setCreateModalOpen}
+            setCreateModalOpen={setCreateModalOpen}
           />
         </DialogContent>
       </Dialog>

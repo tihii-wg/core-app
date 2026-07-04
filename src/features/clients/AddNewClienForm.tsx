@@ -4,12 +4,12 @@ import { Spinner } from "../../ui/Spinner";
 import { Button } from "../../ui/Button";
 import { Textarea } from "../../ui/Textarea";
 import { useForm } from "react-hook-form";
-import type { AddNewClientFormData } from "../../lib/types";
+import type { AddNewClientFormData, CreateMadalProps } from "../../lib/types";
 import { useCreateNewClient } from "./useCreateNewClient";
+import { useParams } from "react-router-dom";
 
-export default function AddNewClientForm(
-  // { setCreateModalOpen }
-) {
+export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProps) {
+  const params = useParams();
   const { mutateAsync: createClient } = useCreateNewClient();
   const {
     register,
@@ -20,11 +20,11 @@ export default function AddNewClientForm(
   } = useForm<AddNewClientFormData>();
 
   const onSubmit = (data: AddNewClientFormData) => {
-    console.log(data);
-    createClient(data);
+    const newClientData = { ...data, workspace_id: params?.workspaceId };
+    createClient(newClientData);
     reset();
 
-    // setCreateModalOpen(false);
+    setCreateModalOpen(false);
   };
 
   return (
@@ -86,11 +86,14 @@ export default function AddNewClientForm(
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline"
-        //   onClick={() =>
-        //   setCreateModalOpen(false)
-        // }
-          disabled={isSubmitting}>
+        <Button
+          type="button"
+          variant="outline"
+          //   onClick={() =>
+          //   setCreateModalOpen(false)
+          // }
+          disabled={isSubmitting}
+        >
           Cancel
         </Button>
         <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white ">

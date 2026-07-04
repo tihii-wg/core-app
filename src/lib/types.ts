@@ -1,5 +1,7 @@
 // Core App Types
 
+import type React from "react";
+
 export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
@@ -153,6 +155,7 @@ export type Company = {
 };
 
 export type AddNewClientFormData = {
+  workspace_id: string;
   clientName: string;
   email: string;
   phone: string;
@@ -165,4 +168,8 @@ export type NewWorkspaceData = {
   name: string;
   role: string;
   userId: string;
+};
+
+export type CreateMadalProps = {
+  setCreateModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };

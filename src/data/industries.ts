@@ -1,4 +1,4 @@
-import type { IndustryKey } from "../types/app";
+import type { IndustryKey } from "../lib/types";
 
 export type Industry = {
   value: IndustryKey;
