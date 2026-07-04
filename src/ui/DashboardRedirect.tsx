@@ -2,14 +2,12 @@ import { useNavigate, useParams } from "react-router-dom";
 // import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { Spinner } from "./Spinner";
 import { useEffect } from "react";
-import { useGetProfiles } from "../features/profiles/useProfiles";
+import { useGetProfiles } from "../features/profiles/useGetProfiles";
 
 export default function Dashboardredirect() {
   const navigate = useNavigate();
   const { locale } = useParams();
   const { data: profile, isLoading } = useGetProfiles();
-
-
 
   useEffect(
     function () {

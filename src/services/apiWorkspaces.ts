@@ -1,4 +1,4 @@
-import type { NewWorkspaceData, WorkspaceMemberWithWorkspace } from "../lib/types";
+import type { NewWorkspaceData } from "../lib/types";
 import supabase from "./supabase";
 
 export async function getUserWorkspaces() {
@@ -111,10 +111,13 @@ export async function deleteWorkspace(workspaceId: string) {
   if (!profile) throw new Error("Profile not found");
 
   //4 If current workspace === workspaceId find next workspace and chenge current_workspace_id
+  let nextWorkspaceId: string | null = null;
+
   if (profile.active_workspace_id === workspaceId) {
     const nextWorkspace = members?.flatMap((member) => member?.workspaces).find((w) => w.id !== workspaceId);
 
     if (!nextWorkspace) throw new Error("No workspaceAvilable");
+    nextWorkspaceId = nextWorkspace.id;
 
     const { data: chengeProfileData, error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id).select();
 
@@ -128,5 +131,9 @@ export async function deleteWorkspace(workspaceId: string) {
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []) as WorkspaceMemberWithWorkspace[];
+  // return (data ?? []) as WorkspaceMemberWithWorkspace[];
+  return {
+    deleteWorkspace: data,
+    nextWorkspaceId,
+  };
 }

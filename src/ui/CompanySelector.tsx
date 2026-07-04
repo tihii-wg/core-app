@@ -2,15 +2,18 @@ import { Building2, ChevronDown, Trash2 } from "lucide-react";
 import { Button } from "./Button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./DropdownMenu";
 import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
-import { useGetProfiles } from "../features/profiles/useProfiles";
+import { useGetProfiles } from "../features/profiles/useGetProfiles";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 import { useDeleteWorkspace } from "../features/workspaces/useDeleteWorkspace";
+import { useLocation } from "react-router-dom";
 
 export default function CompanySelector({ setCreateModalOpen }) {
+  const location = useLocation();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { deleteWorkspace } = useDeleteWorkspace();
   const { workspaces: data } = useGetWorkspaces();
   const { data: profile } = useGetProfiles();
+
   const workspaces = (data ?? []).flatMap((item) => item.workspaces ?? []);
 
   const currentWorkspace = workspaces?.find((item) => item.id === profile?.at(0).active_workspace_id);
@@ -24,6 +27,8 @@ export default function CompanySelector({ setCreateModalOpen }) {
   function deleteWorkspaceHandler(id: string) {
     deleteWorkspace(id);
   }
+  // console.log(profile)
+  // console.log(currentWorkspaceId)
 
   return (
     <DropdownMenu>
