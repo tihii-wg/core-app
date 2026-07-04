@@ -146,15 +146,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // }, []);
 
   // Data actions
-  const addClient = useCallback((clientData: Omit<Client, 'id' | 'createdAt' | 'balance'>) => {
-    const newClient: Client = {
-      ...clientData,
-      id: generateId('client'),
-      createdAt: new Date().toISOString().split('T')[0],
-      balance: 0,
-    };
-    setClients(prev => [newClient, ...prev]);
-  }, []);
+  // const addClient = useCallback((clientData: Omit<Client, 'id' | 'createdAt' | 'balance'>) => {
+  //   const newClient: Client = {
+  //     ...clientData,
+  //     id: generateId('client'),
+  //     createdAt: new Date().toISOString().split('T')[0],
+  //     balance: 0,
+  //   };
+  //   setClients(prev => [newClient, ...prev]);
+  // }, []);
 
   const addOrder = useCallback((orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString().split('T')[0];
@@ -265,7 +265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         services,
         invoices,
         transactions,
-        addClient,
+        // addClient,
         addOrder,
         updateOrderStatus,
         addInventoryItem,

@@ -20,12 +20,14 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
   } = useForm<AddNewClientFormData>();
 
   const onSubmit = (data: AddNewClientFormData) => {
-    const newClientData = { ...data, workspace_id: params?.workspaceId };
+    const newClientData = {
+      ...data,
+      workspace_id: params?.workspaceId,
+    };
     createClient(newClientData);
     reset();
 
     setCreateModalOpen(false);
-
   };
 
   return (

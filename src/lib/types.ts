@@ -23,7 +23,7 @@ export interface Client {
   phone: string;
   address: string;
   balance: number;
-  createdAt: string;
+  created_at: string;
   notes?: string;
 }
 

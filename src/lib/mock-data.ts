@@ -25,7 +25,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 123-4567",
     address: "123 Oak Street, Suite 100, Boston, MA 02101",
     balance: 0,
-    createdAt: "2024-01-15",
+    created_at: "2024-01-15",
     notes: "VIP customer, prefers email communication",
   },
   {
@@ -35,7 +35,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 234-5678",
     address: "456 Pine Avenue, New York, NY 10001",
     balance: 250,
-    createdAt: "2024-02-20",
+    created_at: "2024-02-20",
   },
   {
     id: "client-3",
@@ -44,7 +44,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 345-6789",
     address: "789 Maple Drive, Chicago, IL 60601",
     balance: 0,
-    createdAt: "2024-03-05",
+    created_at: "2024-03-05",
   },
   {
     id: "client-4",
@@ -53,7 +53,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 456-7890",
     address: "321 Cedar Lane, San Francisco, CA 94102",
     balance: 175,
-    createdAt: "2024-03-18",
+    created_at: "2024-03-18",
   },
   {
     id: "client-5",
@@ -62,7 +62,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 567-8901",
     address: "654 Birch Road, Austin, TX 78701",
     balance: 0,
-    createdAt: "2024-04-02",
+    created_at: "2024-04-02",
   },
   {
     id: "client-6",
@@ -71,7 +71,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 678-9012",
     address: "987 Elm Street, Seattle, WA 98101",
     balance: 500,
-    createdAt: "2024-04-15",
+    created_at: "2024-04-15",
   },
   {
     id: "client-7",
@@ -80,7 +80,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 789-0123",
     address: "147 Willow Way, Miami, FL 33101",
     balance: 0,
-    createdAt: "2024-05-01",
+    created_at: "2024-05-01",
   },
   {
     id: "client-8",
@@ -89,7 +89,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 890-1234",
     address: "258 Spruce Court, Denver, CO 80201",
     balance: 125,
-    createdAt: "2024-05-20",
+    created_at: "2024-05-20",
   },
   {
     id: "client-9",
@@ -98,7 +98,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 901-2345",
     address: "369 Aspen Circle, Portland, OR 97201",
     balance: 0,
-    createdAt: "2024-06-08",
+    created_at: "2024-06-08",
   },
   {
     id: "client-10",
@@ -107,7 +107,7 @@ export const mockClients: Client[] = [
     phone: "+1 (555) 012-3456",
     address: "741 Redwood Boulevard, Phoenix, AZ 85001",
     balance: 75,
-    createdAt: "2024-06-25",
+    created_at: "2024-06-25",
   },
 ];
 

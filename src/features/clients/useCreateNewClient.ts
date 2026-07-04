@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createClient } from "../../services/apiClient";
+import { createClient } from "../../services/apiClients";
 import toast from "react-hot-toast";
 
 export function useCreateNewClient() {

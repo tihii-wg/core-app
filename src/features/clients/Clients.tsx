@@ -11,9 +11,13 @@ import { NoClients, NoSearchResults } from "../../ui/EmptyState";
 import { useApp } from "../../lib/appContext";
 import type { Client, Order } from "../../lib/types";
 import AddNewClientForm from "./AddNewClienForm";
+import { useGetClients } from "./useGetClients";
+import FullPage from "../../ui/FullPage";
+import { Spinner } from "../../ui/Spinner";
 
 export function Clients() {
-  const { clients, orders } = useApp();
+  const { orders,cliens} = useApp();
+  const { isLoading,clients} = useGetClients();
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,7 +67,7 @@ export function Clients() {
       header: "Orders",
       cell: (client) => {
         const clientOrders = getClientOrders(client.id);
-        return <span>{clientOrders.length}</span>;
+        return <span>{clientOrders?.length}</span>;
       },
     },
     {
@@ -75,7 +79,7 @@ export function Clients() {
     {
       key: "created",
       header: "Added",
-      cell: (client) => <span className="text-[#939699]">{client.createdAt}</span>,
+      cell: (client) => <span className="text-[#939699]">{client.created_at.split("T")[0]}</span>,
       className: "hidden md:table-cell",
     },
   ];
@@ -85,6 +89,13 @@ export function Clients() {
     setDetailPanelOpen(true);
   };
 
+  if (isLoading)
+    return (
+      <FullPage>
+        <Spinner />
+      </FullPage>
+    );
+  
   return (
     <div className="space-y-4">
       <PageHeader
@@ -116,9 +127,7 @@ export function Clients() {
             <DialogDescription>Fill in client details below</DialogDescription>
           </DialogHeader>
 
-          <AddNewClientForm
-            setCreateModalOpen={setCreateModalOpen}
-          />
+          <AddNewClientForm setCreateModalOpen={setCreateModalOpen} />
         </DialogContent>
       </Dialog>
 
