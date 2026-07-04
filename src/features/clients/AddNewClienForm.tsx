@@ -25,6 +25,7 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
     reset();
 
     setCreateModalOpen(false);
+
   };
 
   return (

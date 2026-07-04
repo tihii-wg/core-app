@@ -113,17 +113,19 @@ export async function deleteWorkspace(workspaceId: string) {
   //4 If current workspace === workspaceId find next workspace and chenge current_workspace_id
   let nextWorkspaceId: string | null = null;
 
+  nextWorkspaceId = profile.active_workspace_id;
+
   if (profile.active_workspace_id === workspaceId) {
     const nextWorkspace = members?.flatMap((member) => member?.workspaces).find((w) => w.id !== workspaceId);
 
     if (!nextWorkspace) throw new Error("No workspaceAvilable");
+
     nextWorkspaceId = nextWorkspace.id;
 
-    const {  error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id);
+    const { error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id);
 
     if (chengeProfileDataError) throw new Error(chengeProfileDataError.message);
   }
-
   //Delete workspace
 
   const { data, error } = await supabase.from("workspaces").update({ deleted_at: new Date().toISOString() }).eq("id", workspaceId).select();
