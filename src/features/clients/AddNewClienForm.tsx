@@ -14,7 +14,6 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
   const {
     register,
     reset,
-    // watch,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<AddNewClientFormData>();
@@ -23,6 +22,7 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
     const newClientData = {
       ...data,
       workspace_id: params?.workspaceId,
+      
     };
     createClient(newClientData);
     reset();

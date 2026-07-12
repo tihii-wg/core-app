@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState} from "react";
 import { Plus, Phone, Mail, MapPin } from "lucide-react";
 import { Button } from "../../ui/Button";
 
@@ -16,21 +16,21 @@ import FullPage from "../../ui/FullPage";
 import { Spinner } from "../../ui/Spinner";
 
 export function Clients() {
-  const { orders,cliens} = useApp();
-  const { isLoading,clients} = useGetClients();
+  const [searchQuery, setSearchQuery] = useState("");
+  const { orders } = useApp();
+  const { isLoading, clients } = useGetClients(searchQuery);
 
   // State
-  const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-
+  console.log(searchQuery);
   // Filtered data
-  const filteredClients = useMemo(() => {
-    if (!searchQuery) return clients;
-    const query = searchQuery.toLowerCase();
-    return clients.filter((client) => client.name.toLowerCase().includes(query) || client.email.toLowerCase().includes(query) || client.phone.includes(query));
-  }, [clients, searchQuery]);
+  // const filteredClients = useMemo(() => {
+  //   if (!searchQuery) return clients;
+  //   const query = searchQuery.toLowerCase();
+  //   return clients?.filter((client) => client.name.toLowerCase().includes(query) || client.email.toLowerCase().includes(query) || client.phone.includes(query));
+  // }, [clients, searchQuery]);
 
   // Get client orders
   const getClientOrders = (clientId: string): Order[] => {
@@ -92,15 +92,15 @@ export function Clients() {
   if (isLoading)
     return (
       <FullPage>
-        <Spinner />
+        <Spinner className="size-15 text-blue-600" />
       </FullPage>
     );
-  
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Clients"
-        description={`${clients.length} total clients`}
+        description={`${clients?.length} total clients`}
         actions={
           <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
             <Plus className="h-4 w-4 mr-1" />
@@ -113,7 +113,7 @@ export function Clients() {
 
       <DataTable
         columns={columns}
-        data={filteredClients}
+        data={clients}
         keyExtractor={(client) => client.id}
         onRowClick={handleRowClick}
         emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
@@ -139,7 +139,7 @@ export function Clients() {
           </SheetHeader>
 
           {selectedClient && (
-            <div className="mt-6 space-y-6">
+            <div className="mt-6 space-y-6 mx-4">
               {/* Contact Info */}
               <div className="space-y-3">
                 <h3 className="text-sm font-medium text-[#939699]">Contact Information</h3>
@@ -207,7 +207,7 @@ export function Clients() {
 
               {/* Timestamps */}
               <div className="text-xs text-[#939699]">
-                <p>Client since: {selectedClient.createdAt}</p>
+                <p>Client since: {selectedClient.created_at.split("T")[0]}</p>
               </div>
             </div>
           )}

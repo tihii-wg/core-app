@@ -162,6 +162,7 @@ export type AddNewClientFormData = {
   address?: string;
   notes?: string;
   balance?: number;
+  // search?: string;
 };
 
 export type NewWorkspaceData = {
@@ -171,5 +172,6 @@ export type NewWorkspaceData = {
 };
 
 export type CreateMadalProps = {
+  // search?: string;
   setCreateModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
 };

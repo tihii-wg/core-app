@@ -2,9 +2,7 @@ import { Outlet } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
 
-// interface AppLayoutProps {
-//   children: React.ReactNode;
-// }
+
 
 export function AppLayout() {
   return (
