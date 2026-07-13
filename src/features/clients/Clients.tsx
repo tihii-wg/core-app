@@ -1,4 +1,4 @@
-import { useState} from "react";
+import { useState } from "react";
 import { Plus, Phone, Mail, MapPin } from "lucide-react";
 import { Button } from "../../ui/Button";
 
@@ -12,19 +12,20 @@ import { useApp } from "../../lib/appContext";
 import type { Client, Order } from "../../lib/types";
 import AddNewClientForm from "./AddNewClienForm";
 import { useGetClients } from "./useGetClients";
-import FullPage from "../../ui/FullPage";
 import { Spinner } from "../../ui/Spinner";
+import { useDebounce } from "../../hooks/useDebounce";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const { orders } = useApp();
-  const { isLoading, clients } = useGetClients(searchQuery);
+  const debounceSearch = useDebounce(searchQuery,400)
+  const { isLoading, clients, isPending } = useGetClients(debounceSearch);
 
   // State
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  console.log(searchQuery);
+
   // Filtered data
   // const filteredClients = useMemo(() => {
   //   if (!searchQuery) return clients;
@@ -67,7 +68,7 @@ export function Clients() {
       header: "Orders",
       cell: (client) => {
         const clientOrders = getClientOrders(client.id);
-        return <span>{clientOrders?.length}</span>;
+        return <span>{clientOrders.length}</span>;
       },
     },
     {
@@ -89,18 +90,11 @@ export function Clients() {
     setDetailPanelOpen(true);
   };
 
-  if (isLoading)
-    return (
-      <FullPage>
-        <Spinner className="size-15 text-blue-600" />
-      </FullPage>
-    );
-
   return (
     <div className="space-y-4">
       <PageHeader
         title="Clients"
-        description={`${clients?.length} total clients`}
+        description={isPending ? "Loading clients..." : `${clients.length} total clients`}
         actions={
           <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
             <Plus className="h-4 w-4 mr-1" />
@@ -119,6 +113,11 @@ export function Clients() {
         emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
       />
 
+      {isLoading && (
+        <div className="flex justify-center mt-30">
+          <Spinner className="size-15 text-blue-600" />
+        </div>
+      )}
       {/* Create Client Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
@@ -176,7 +175,7 @@ export function Clients() {
                 <h3 className="text-sm font-medium text-[#939699] mb-3">Order History</h3>
                 {(() => {
                   const clientOrders = getClientOrders(selectedClient.id);
-                  if (clientOrders.length === 0) {
+                  if (clientOrders?.length === 0) {
                     return <p className="text-sm text-[#939699] py-4 text-center">No orders yet</p>;
                   }
                   return (

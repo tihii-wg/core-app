@@ -64,7 +64,7 @@ export function SearchAndFilters({
 
       {filters.map((filter) => (
         <Select key={filter.key} value={filter.value} onValueChange={filter.onChange}>
-          <SelectTrigger className="h-9 w-full sm:w-[160px] border-[#c9cbcc] text-sm">
+          <SelectTrigger className="h-9 w-full sm:w-40 border-[#c9cbcc] text-sm">
             <SelectValue placeholder={filter.label} />
           </SelectTrigger>
           <SelectContent>

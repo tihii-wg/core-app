@@ -5,6 +5,7 @@ export function useGetClients(search: string) {
   const {
     data: clients,
     isLoading,
+    isPending,
     error,
   } = useQuery({
     queryKey: ["clients", search],
@@ -14,5 +15,5 @@ export function useGetClients(search: string) {
   });
 
   if (error) throw new Error(error.message);
-  return { clients, isLoading };
+  return { clients, isLoading ,isPending};
 }

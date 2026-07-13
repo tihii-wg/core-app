@@ -56,7 +56,7 @@ export function DataTable<T>({
           <TableBody>
             {Array.from({ length: 5 }).map((_, i) => (
               <TableRow key={i} className="border-[#eeeeef]">
-                {columns.map((column) => (
+                {columns?.map((column) => (
                   <TableCell key={column.key} className={column.className}>
                     <Skeleton className="h-4 w-full" />
                   </TableCell>
@@ -69,7 +69,7 @@ export function DataTable<T>({
     );
   }
 
-  if (data.length === 0 && emptyState) {
+  if (data?.length === 0 && emptyState) {
     return (
       <div className={cn('bg-white rounded-md border border-[#eeeeef]', className)}>
         {emptyState}
@@ -93,7 +93,7 @@ export function DataTable<T>({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((item) => (
+          {data?.map((item) => (
             <TableRow
               key={keyExtractor(item)}
               onClick={() => onRowClick?.(item)}
