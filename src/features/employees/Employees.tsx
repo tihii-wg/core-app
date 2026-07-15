@@ -58,7 +58,7 @@ export function Employees() {
       header: "Name",
       cell: (emp) => (
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 bg-[#1973e1] rounded-full flex items-center justify-center flex-shrink-0">
+          <div className="h-8 w-8 bg-[#1973e1] rounded-full flex items-center justify-center shrink-0">
             <span className="text-white text-sm font-medium">{emp.name.charAt(0)}</span>
           </div>
           <div>

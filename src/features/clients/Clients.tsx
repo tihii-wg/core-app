@@ -27,6 +27,9 @@ export function Clients() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+
+
+  
   const getClientOrders = (clientId: string): Order[] => {
     return orders.filter((order) => order.clientId === clientId);
   };
