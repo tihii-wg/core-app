@@ -92,9 +92,6 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
         <Button
           type="button"
           variant="outline"
-          //   onClick={() =>
-          //   setCreateModalOpen(false)
-          // }
           disabled={isSubmitting}
         >
           Cancel

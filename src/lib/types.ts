@@ -7,6 +7,11 @@ export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
 export type EmployeeRole = "admin" | "manager" | "technician" | "receptionist";
 
+export type EmployeeRoleOption = {
+  value: EmployeeRole;
+  label: string;
+};
+
 export interface User {
   id: string;
   email: string;
@@ -163,6 +168,16 @@ export type AddNewClientFormData = {
   notes?: string;
   balance?: number;
   // search?: string;
+};
+
+export type AddNewEmployeesFormData = {
+  workspace_id?: string;
+  profile_id?: string;
+  name: string;
+  role: EmployeeRole | "";
+  status: string;
+  phone: string;
+  email: string;
 };
 
 export type NewWorkspaceData = {
