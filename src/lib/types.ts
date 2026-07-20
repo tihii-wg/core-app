@@ -180,6 +180,11 @@ export type AddNewEmployeesFormData = {
   email: string;
 };
 
+export type CreateEmployeeData = AddNewEmployeesFormData & {
+  workspace_id: string;
+  profile_id: string;
+};
+
 export type NewWorkspaceData = {
   name: string;
   role: string;

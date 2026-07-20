@@ -4,9 +4,9 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
-import type { AddNewEmployeesFormData, EmployeeRoleOption } from "../../lib/types";
-// import { useApp } from "../../lib/appContext";
+import type { AddNewEmployeesFormData, CreateEmployeeData, EmployeeRoleOption } from "../../lib/types";
 import { Controller, useForm } from "react-hook-form";
+import { useGetProfiles } from "../profiles/useGetProfiles";
 
 const roles: EmployeeRoleOption[] = [
   { value: "admin", label: "Admin" },
@@ -25,6 +25,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
     register,
     reset,
     control,
+    setError,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<AddNewEmployeesFormData>({
@@ -33,10 +34,32 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
       status: "active",
     },
   });
-  // const { addEmployee } = useApp();
+  const { data: profile } = useGetProfiles();
 
   const onSubmit = (data: AddNewEmployeesFormData) => {
-    console.log(data);
+    const currentProfile = profile[0];
+
+    if (!currentProfile) {
+      setError("root", {
+        message: "Profile not found",
+      });
+      return;
+    }
+
+    if (!currentProfile.active_workspace_id) {
+      setError("root", {
+        message: "No active workspace",
+      });
+      return;
+    }
+
+    const newEmployeeData: CreateEmployeeData = {
+      ...data,
+      workspace_id: currentProfile.active_workspace_id,
+      profile_id: currentProfile.id,
+    };
+
+    console.log(newEmployeeData);
   };
 
   function handleReset() {
@@ -140,6 +163,8 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
           </div>
         </div>
       </div>
+
+      <div className="flex justify-end gap-2">{errors.root && <p className="text-sm text-red-500 mr-auto">{errors.root.message}</p>}</div>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={handleReset} disabled={isSubmitting}>
