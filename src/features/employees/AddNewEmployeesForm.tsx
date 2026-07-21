@@ -9,6 +9,7 @@ import { Controller, useForm } from "react-hook-form";
 import { useGetProfiles } from "../profiles/useGetProfiles";
 
 const roles: EmployeeRoleOption[] = [
+  { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
   { value: "technician", label: "Technician" },
