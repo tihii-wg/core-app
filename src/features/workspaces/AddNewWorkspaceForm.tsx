@@ -70,7 +70,7 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
         </Button>
 
         <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white ">
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Client"}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Company"}
         </Button>
       </div>
     </form>

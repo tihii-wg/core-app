@@ -1,3 +1,4 @@
+// import { screen } from "@testing-library/react";
 import type { NewWorkspaceData } from "../lib/types";
 import supabase from "./supabase";
 
@@ -83,40 +84,53 @@ export async function deleteWorkspace(workspaceId: string) {
 
   if (!user) throw new Error("User not found");
 
-  //2 get all not deleted workspaces
+  //2 role must be owner
+
+  const { data: currentMember, error: currentMemberError } = await supabase.from("workspace_members").select("role").eq("workspace_id", workspaceId).eq("user_id", user.id).single();
+
+  if (currentMemberError) throw new Error(currentMemberError.message);
+
+  if (currentMember.role !== "owner") {
+    throw new Error("Only owner can delete workspace");
+  }
+
+  //3 get all not deleted workspaces
+
   const { data: members, error: membersError } = await supabase
     .from("workspace_members")
     .select(
       `role,
-	  workspaces!inner(
+    workspaces!inner(
       id,
       deleted_at
     )
-		`
+  	`
     )
     .eq("user_id", user.id)
     .is("workspaces.deleted_at", null);
+
+  const activeWorkspace = members?.flatMap((member) => member?.workspaces);
 
   if (membersError) throw new Error(membersError.message);
 
   if (!members) throw new Error("Workspaces not found");
 
-  if (members.length === 1) throw new Error("You cannot delete last workspace");
+  if (activeWorkspace.length === 1) throw new Error("You cannot delete last workspace");
 
-  //3 Get profiles
+  //4 Get profiles
+
   const { data: profiles, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id);
 
   if (profileError) throw new Error(profileError.message);
   const profile = profiles?.[0];
   if (!profile) throw new Error("Profile not found");
 
-  //4 If current workspace === workspaceId find next workspace and chenge current_workspace_id
-  let nextWorkspaceId: string | null = null;
+  //5 If current workspace === workspaceId find next workspace and chenge current_workspace_id
 
-  nextWorkspaceId = profile.active_workspace_id;
+  let nextWorkspaceId = profile.active_workspace_id;
 
   if (profile.active_workspace_id === workspaceId) {
-    const nextWorkspace = members?.flatMap((member) => member?.workspaces).find((w) => w.id !== workspaceId);
+    const nextWorkspace = activeWorkspace.find((w) => w.id !== workspaceId);
 
     if (!nextWorkspace) throw new Error("No workspaceAvilable");
 
@@ -126,7 +140,13 @@ export async function deleteWorkspace(workspaceId: string) {
 
     if (chengeProfileDataError) throw new Error(chengeProfileDataError.message);
   }
-  //Delete workspace
+  //6 Delete member
+
+  const { error: deleteMemberError } = await supabase.from("workspace_members").update({ deleted_at: new Date().toISOString() }).eq("workspace_id", workspaceId);
+
+  if (deleteMemberError) throw new Error(deleteMemberError.message);
+
+  //7 Delete workspace
 
   const { data, error } = await supabase.from("workspaces").update({ deleted_at: new Date().toISOString() }).eq("id", workspaceId).select();
 
