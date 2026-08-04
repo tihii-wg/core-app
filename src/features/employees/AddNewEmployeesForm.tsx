@@ -90,14 +90,20 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
             <Label htmlFor="email">Email *</Label>
             <Input
               id="email"
-              type="text"
+              type="email"
               autoFocus={true}
               placeholder="email@company.com"
               disabled={isSubmitting}
-              {...register("email", { required: true })}
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+                  message: "Invalid email adress",
+                },
+              })}
               className={errors.email ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
             />
-            {errors.email && <p className="text-xs text-[#f41f20]">Mail is required</p>}
+            {errors.email && <p className="text-xs text-[#f41f20]">{errors.email.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -107,10 +113,16 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
               autoFocus={true}
               placeholder="+1 (555) 000-0000"
               disabled={isSubmitting}
-              {...register("phone", { required: true })}
+              {...register("phone", {
+                required: "Phone is required",
+                pattern: {
+                  value: /^\+373\d{8}$/,
+                  message: "Phone must be in firmat +373000000",
+                },
+              })}
               className={errors.phone ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
             />
-            {errors.phone && <p className="text-xs text-[#f41f20]">Phone is requered</p>}
+            {errors.phone && <p className="text-xs text-[#f41f20]">{errors.phone.message}</p>}
           </div>
         </div>
 

@@ -18,6 +18,7 @@ import EmployeeDetailPanel from "./EmployeeDetailPanel";
 
 const roleLabels: Record<EmployeeRole, string> = {
   admin: "Admin",
+  owner:"Owner",
   manager: "Manager",
   technician: "Technician",
   receptionist: "Receptionist",
