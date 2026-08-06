@@ -7,6 +7,7 @@ import { Spinner } from "../../ui/Spinner";
 import type { AddNewEmployeesFormData, CreateEmployeeData, EmployeeRoleOption } from "../../lib/types";
 import { Controller, useForm } from "react-hook-form";
 import { useGetProfiles } from "../profiles/useGetProfiles";
+import useCreateNewEmployee from "./useCreateNewEmployee";
 
 const roles: EmployeeRoleOption[] = [
   { value: "owner", label: "Owner" },
@@ -22,6 +23,8 @@ const employeesStatuses = [
 ] as const;
 
 export default function AddNewEmployeesForm({ setCreateModalOpen }) {
+  const { mutate } = useCreateNewEmployee();
+
   const {
     register,
     reset,
@@ -59,8 +62,8 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
       workspace_id: currentProfile.active_workspace_id,
       profile_id: currentProfile.id,
     };
-
-    console.log(newEmployeeData);
+    mutate(newEmployeeData);
+    setCreateModalOpen(false);
   };
 
   function handleReset() {
