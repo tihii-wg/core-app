@@ -37,6 +37,8 @@ export function DataTable<T>({
   emptyState,
   className,
 }: DataTableProps<T>) {
+
+
   if (isLoading) {
     return (
       <div className={cn('bg-white rounded-md border border-[#eeeeef]', className)}>

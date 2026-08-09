@@ -1,4 +1,4 @@
-import type { AddNewEmployeesFormData } from "../lib/types";
+import type { AddNewEmployeesFormData, EmployeeRole } from "../lib/types";
 import supabase from "./supabase";
 
 export async function createEmployee({ role, email, name, phone, profile_id, status, workspace_id }: AddNewEmployeesFormData) {
@@ -28,7 +28,7 @@ export async function createEmployee({ role, email, name, phone, profile_id, sta
   return data;
 }
 
-export async function getEmployees(search: string) {
+export async function getEmployees(search: string, roleFilter?: EmployeeRole) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -43,13 +43,15 @@ export async function getEmployees(search: string) {
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,role.ilike.%${search}%,phone.ilike.%${search}%,status.ilike.%${search}%`);
   }
+  if (roleFilter) {
+    query = query.eq("role", roleFilter);
+  }
 
   const { data: employees, error } = await query;
 
   if (error) throw new Error(error.message);
 
-	// console.log("profile:",profile);
-	// console.log("employees:", employees)
+ 
 
   return employees;
 }

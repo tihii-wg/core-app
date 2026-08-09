@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Plus, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
@@ -6,14 +6,13 @@ import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { StatusBadge } from "../../ui/StatusBadge";
-// import { useApp } from "../../lib/appContext";
 import type { Employee, EmployeeRole } from "../../lib/types";
 import AddNewEmployeesForm from "./AddNewEmployeesForm";
 import EmployeeDetailPanel from "./EmployeeDetailPanel";
 import useGetEmployees from "./useGetEmployees";
-import { Spinner } from "../../ui/Spinner";
 import { useDebounce } from "../../hooks/useDebounce";
-import FullPageSpinner from "../../ui/FullPageDataSpinner";
+// import FullPageSpinner from "../../ui/FullPageDataSpinner";
+import { NoEmployees, NoSearchResults } from "../../ui/EmptyState";
 
 const roleLabels: Record<EmployeeRole, string> = {
   admin: "Admin",
@@ -24,25 +23,14 @@ const roleLabels: Record<EmployeeRole, string> = {
 
 export function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<EmployeeRole | "all">("all");
   const debouncesearch = useDebounce(searchQuery, 400);
-  const { employees = [], isLoading } = useGetEmployees(debouncesearch);
-  // console.log(employees);
-  // const { employees } = useApp();
+  const { employees, isLoading, isPending } = useGetEmployees(debouncesearch, roleFilter === "all" ? null : roleFilter);
 
   // State
-  const [roleFilter, setRoleFilter] = useState("all");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-
-  // Filtered data
-  // const filteredEmployees = useMemo(() => {
-  //   return employees.filter((emp) => {
-  //     const matchesSearch = !searchQuery || emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || emp.email.toLowerCase().includes(searchQuery.toLowerCase());
-  //     const matchesRole = roleFilter === "all" || emp.role === roleFilter;
-  //     return matchesSearch && matchesRole;
-  //   });
-  // }, [employees, searchQuery, roleFilter]);
 
   // Table columns
   const columns: Column<Employee>[] = [
@@ -108,12 +96,11 @@ export function Employees() {
     setSelectedEmployee(emp);
     setDetailPanelOpen(true);
   };
-
   return (
     <div className="space-y-4">
       <PageHeader
         title="Employees"
-        description={`${employees?.length} team members`}
+        description={isPending ? "Loading employees" : `${employees?.length} team members`}
         actions={
           <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
             <Plus className="h-4 w-4 mr-1" />
@@ -137,7 +124,7 @@ export function Employees() {
               { value: "receptionist", label: "Receptionist" },
             ],
             value: roleFilter,
-            onChange: setRoleFilter,
+            onChange: (value) => setRoleFilter(value as EmployeeRole | "all"),
           },
         ]}
         onClearFilters={() => {
@@ -145,13 +132,18 @@ export function Employees() {
           setRoleFilter("all");
         }}
       />
-      <DataTable columns={columns} data={employees} keyExtractor={(emp) => emp.id} onRowClick={handleRowClick} />
+      <DataTable
+        columns={columns}
+        isLoading={isLoading}
+        data={employees}
+        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoEmployees onAddClient={() => setCreateModalOpen(true)} />}
+        keyExtractor={(emp) => emp.id}
+        onRowClick={handleRowClick}
+      />
       
+    
+      {/* {isLoading && <FullPageSpinner />} */}
 
-
-      {isLoading && <FullPageSpinner />}
-      
-      
       {/* Create Employee Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">

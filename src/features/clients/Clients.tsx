@@ -13,7 +13,7 @@ import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useApp } from "../../lib/appContext";
-import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
+// import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -101,12 +101,13 @@ export function Clients() {
       <DataTable
         columns={columns}
         data={clients}
+        isLoading={isLoading}
         keyExtractor={(client) => client.id}
         onRowClick={handleRowClick}
         emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
       />
 
-      {isLoading && <FullPageDataSpinner />}
+      {/* {isLoading && <FullPageDataSpinner />} */}
 
 
       {/* Create Client Modal */}
