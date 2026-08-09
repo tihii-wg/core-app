@@ -15,5 +15,5 @@ export function useGetClients(search: string) {
   });
 
   if (error) throw new Error(error.message);
-  return { clients, isLoading ,isPending};
+  return { clients, isLoading, isPending };
 }

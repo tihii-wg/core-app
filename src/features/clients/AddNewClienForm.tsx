@@ -10,7 +10,9 @@ import { useParams } from "react-router-dom";
 
 export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProps) {
   const params = useParams();
+
   const { mutateAsync: createClient } = useCreateNewClient();
+  
   const {
     register,
     reset,

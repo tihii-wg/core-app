@@ -10,7 +10,7 @@ import { useGetProfiles } from "../profiles/useGetProfiles";
 import useCreateNewEmployee from "./useCreateNewEmployee";
 
 const roles: EmployeeRoleOption[] = [
-  { value: "owner", label: "Owner" },
+  // { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
   { value: "technician", label: "Technician" },

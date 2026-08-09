@@ -7,7 +7,6 @@ import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { NoClients, NoSearchResults } from "../../ui/EmptyState";
-// import { useApp } from "../../lib/appContext";
 import type { Client, Order } from "../../lib/types";
 import AddNewClientForm from "./AddNewClienForm";
 import { useGetClients } from "./useGetClients";
@@ -15,6 +14,7 @@ import { Spinner } from "../../ui/Spinner";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useApp } from "../../lib/appContext";
+import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,8 +28,6 @@ export function Clients() {
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-
-  
   const getClientOrders = (clientId: string): Order[] => {
     return orders.filter((order) => order.clientId === clientId);
   };
@@ -109,11 +107,9 @@ export function Clients() {
         emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
       />
 
-      {isLoading && (
-        <div className="flex justify-center mt-30">
-          <Spinner className="size-15 text-blue-600" />
-        </div>
-      )}
+      {isLoading && <FullPageDataSpinner />}
+
+      
       {/* Create Client Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">

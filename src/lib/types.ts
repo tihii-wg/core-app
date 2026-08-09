@@ -5,7 +5,7 @@ import type React from "react";
 export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled";
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
-export type EmployeeRole = "owner" | "admin" | "manager" | "technician" | "receptionist";
+export type EmployeeRole =  "admin" | "manager" | "technician" | "receptionist";
 
 export type EmployeeRoleOption = {
   value: EmployeeRole;
