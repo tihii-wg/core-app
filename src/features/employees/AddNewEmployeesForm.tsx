@@ -120,7 +120,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
                 required: "Phone is required",
                 pattern: {
                   value: /^\+373\d{8}$/,
-                  message: "Phone must be in firmat +373000000",
+                  message: "Phone must be in firmat +37300000000",
                 },
               })}
               className={errors.phone ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}

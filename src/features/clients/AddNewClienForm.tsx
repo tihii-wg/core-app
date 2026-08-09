@@ -12,7 +12,7 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
   const params = useParams();
 
   const { mutateAsync: createClient } = useCreateNewClient();
-  
+
   const {
     register,
     reset,
@@ -24,7 +24,6 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
     const newClientData = {
       ...data,
       workspace_id: params?.workspaceId,
-      
     };
     createClient(newClientData);
     reset();
@@ -69,8 +68,11 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
               id="phone"
               type="text"
               {...register("phone", {
-                required: true,
-                pattern: /^\+[1-9]\d{7,14}$/,
+                required: "Number must be in format +37300000000",
+                pattern: {
+                  value: /^\+373\d{8}$/,
+                  message: "Phone must be in firmat +37300000000",
+                },
               })}
               placeholder="+1 (555) 000-0000"
               className={errors.email ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
@@ -91,11 +93,7 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
       </div>
 
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isSubmitting}
-        >
+        <Button type="button" variant="outline" disabled={isSubmitting}>
           Cancel
         </Button>
         <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white ">

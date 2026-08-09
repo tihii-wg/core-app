@@ -10,7 +10,6 @@ import { NoClients, NoSearchResults } from "../../ui/EmptyState";
 import type { Client, Order } from "../../lib/types";
 import AddNewClientForm from "./AddNewClienForm";
 import { useGetClients } from "./useGetClients";
-import { Spinner } from "../../ui/Spinner";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useApp } from "../../lib/appContext";
@@ -109,7 +108,7 @@ export function Clients() {
 
       {isLoading && <FullPageDataSpinner />}
 
-      
+
       {/* Create Client Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
