@@ -1,11 +1,11 @@
 
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, } from 'react';
 import type {
   // User,
   Client,
   Employee,
-  Order,
+  // Order,
   InventoryItem,
   Service,
   Invoice,
@@ -16,9 +16,9 @@ import type {
   InvoiceStatus,
 } from './types';
 import {
-  mockUser,
-  mockClients,
-  mockEmployees,
+  // mockUser,
+  // mockClients,
+  // mockEmployees,
   mockOrders,
   mockInventory,
   mockServices,
@@ -69,7 +69,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   // Auth state
-  const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, user: null });
+  // const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, user: null });
 
   // Navigation state
   const [currentModule, setCurrentModule] = useState<AppModule>('dashboard');
@@ -77,8 +77,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Data state
-  const [clients, setClients] = useState<Client[]>(mockClients);
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  // const [clients, setClients] = useState<Client[]>(mockClients);
+  // const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
   const [orders, setOrders] = useState<Order[]>(mockOrders);
   const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
   const [services, setServices] = useState<Service[]>(mockServices);
@@ -86,17 +86,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [transactions] = useState<Transaction[]>(mockTransactions);
 
   // Check for existing auth on mount
-  useEffect(() => {
-    const storedAuth = localStorage.getItem('coreapp_auth');
-    if (storedAuth) {
-      try {
-        const parsed = JSON.parse(storedAuth);
-        setAuth(parsed);
-      } catch {
-        localStorage.removeItem('coreapp_auth');
-      }
-    }
-  }, []);
+  // useEffect(() => {
+  //   const storedAuth = localStorage.getItem('coreapp_auth');
+  //   if (storedAuth) {
+  //     try {
+  //       const parsed = JSON.parse(storedAuth);
+  //       setAuth(parsed);
+  //     } catch {
+  //       localStorage.removeItem('coreapp_auth');
+  //     }
+  //   }
+  // }, []);
 
   // Auth actions
   // const login = useCallback(async (email: string, password: string): Promise<boolean> => {
@@ -235,20 +235,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ));
   }, []);
 
-  const addEmployee = useCallback((employeeData: Omit<Employee, 'id' | 'assignedTasks' | 'completedTasks'>) => {
-    const newEmployee: Employee = {
-      ...employeeData,
-      id: generateId('emp'),
-      assignedTasks: 0,
-      completedTasks: 0,
-    };
-    setEmployees(prev => [newEmployee, ...prev]);
-  }, []);
+  // const addEmployee = useCallback((employeeData: Omit<Employee, 'id' | 'assignedTasks' | 'completedTasks'>) => {
+  //   const newEmployee: Employee = {
+  //     ...employeeData,
+  //     id: generateId('emp'),
+  //     assignedTasks: 0,
+  //     completedTasks: 0,
+  //   };
+  //   setEmployees(prev => [newEmployee, ...prev]);
+  // }, []);
 
   return (
     <AppContext.Provider
       value={{
-        auth,
+        // auth,
         // login,
         // logout,
         // register,
@@ -258,8 +258,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setSidebarCollapsed,
         mobileSidebarOpen,
         setMobileSidebarOpen,
-        clients,
-        employees,
+        // clients,
+        // employees,
         orders,
         inventory,
         services,
@@ -273,7 +273,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addService,
         addInvoice,
         updateInvoiceStatus,
-        addEmployee,
+        // addEmployee,
       }}
     >
       {children}

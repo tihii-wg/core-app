@@ -31,6 +31,8 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
     setCreateModalOpen(false);
   };
 
+  
+  
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4 py-4">

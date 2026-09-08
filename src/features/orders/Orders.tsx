@@ -1,22 +1,23 @@
 import { useState, useMemo } from "react";
+
 import { Plus, Calendar } from "lucide-react";
 import { Button } from "../../ui/Button";
-// import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
-// import { Textarea } from "../../ui/Textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../ui/Dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { NoOrders } from "../../ui/EmptyState";
-import { Spinner } from "../../ui/Spinner";
+// import { Spinner } from "../../ui/Spinner";
 import { useApp } from "../../lib/appContext";
 import type { Order, OrderStatus } from "../../lib/types";
 import { useGetClients } from "../clients/useGetClients";
-import AddNewOrdderForm from "../orders/AddNewOrderForm";
+import AddNewOrderForm from "../orders/AddNewOrderForm";
+import useGetEmployees from "../employees/useGetEmployees";
+import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -28,11 +29,11 @@ const statusOptions = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-const employeeFilterOptions = [
-  { value: "all", label: "All Employees" },
-  { value: "emp-3", label: "Alex Turner" },
-  { value: "emp-4", label: "Sophie Brown" },
-];
+// const employeeFilterOptions2 = [
+//   { value: "all", label: "All Employees" },
+//   { value: "emp-3", label: "Alex Turner" },
+//   { value: "emp-4", label: "Sophie Brown" },
+// ];
 
 export function Orders() {
   const { orders, updateOrderStatus } = useApp();
@@ -47,6 +48,7 @@ export function Orders() {
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  const { employees, isLoading: employeesIsLoading } = useGetEmployees();
   const { isLoading } = useGetClients(searchQuery);
 
   // Filtered data
@@ -130,6 +132,18 @@ export function Orders() {
     }
   };
 
+  if (isLoading || employeesIsLoading) {
+    return <FullPageDataSpinner />;
+  }
+
+  const employeeFilterOptions = [
+    { value: "all", label: "All Employees" },
+    ...employees.map((employee) => ({
+      value: employee.id,
+      label: employee.name,
+    })),
+  ];
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -175,6 +189,7 @@ export function Orders() {
         data={filteredOrders}
         keyExtractor={(order) => order.id}
         onRowClick={handleRowClick}
+        // isLoading={employeesIsLoading}
         emptyState={
           searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
             <div className="py-12 text-center">
@@ -185,15 +200,17 @@ export function Orders() {
           )
         }
       />
-      {isLoading && <Spinner />}
+      {/* {isLoading && <Spinner />} */}
+
       {/* Create Order Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg ">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Order</DialogTitle>
+            <DialogDescription>Fill in the information to create a new order</DialogDescription>
           </DialogHeader>
 
-          <AddNewOrdderForm setCreateModalOpen={setCreateModalOpen} searchQuery={searchQuery} />
+          <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery={searchQuery} />
         </DialogContent>
       </Dialog>
 

@@ -44,7 +44,7 @@ export interface Employee {
   status: "active" | "inactive";
 }
 
-export interface Order {
+export interface addNewOrderFormData {
   id: string;
   orderNumber: string;
   clientId: string;
@@ -60,6 +60,7 @@ export interface Order {
   paymentStatus: PaymentStatus;
   createdAt: string;
   updatedAt: string;
+  serviceName: string;
 }
 
 export interface InventoryItem {
