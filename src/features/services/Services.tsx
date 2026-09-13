@@ -1,19 +1,22 @@
 import { useState, useMemo } from "react";
 import { Plus, Clock, CheckCircle, XCircle } from "lucide-react";
 
-import { Textarea } from "../../ui/Textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+// import { Textarea } from "../../ui/Textarea";
+// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { StatusBadge } from "../../ui/StatusBadge";
-import { Spinner } from "../../ui/Spinner";
+// import { Spinner } from "../../ui/Spinner";
 import { useApp } from "../../lib/appContext";
 import type { Service } from "../..//lib/types";
 import { Button } from "../../ui/Button";
-import { Label } from "../../ui/Label";
-import { Input } from "../../ui/Input";
+// import { Label } from "../../ui/Label";
+// import { Input } from "../../ui/Input";
+import { Description } from "@radix-ui/react-dialog";
+// import AddNewOrderForm from "../orders/AddNewOrderForm";
+import AddNewServiceForm from "./AddNewServiceForm";
 
 const categoryOptions = [
   { value: "all", label: "All Categories" },
@@ -197,93 +200,16 @@ export function Services() {
       {/* Create Service Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
+          <Description className="sr-only">Manage your workspace service</Description>
           <DialogHeader>
             <DialogTitle>Add New Service</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-1.5">
-              <Label>Service Name *</Label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Screen Replacement"
-                className={formErrors.name ? "border-[#f41f20]" : ""}
-              />
-              {formErrors.name && <p className="text-xs text-[#f41f20]">{formErrors.name}</p>}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Category *</Label>
-                <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                  <SelectTrigger className={formErrors.category ? "border-[#f41f20]" : ""}>
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoryOptions.slice(1).map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {formErrors.category && <p className="text-xs text-[#f41f20]">{formErrors.category}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Status</Label>
-                <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as "active" | "inactive" })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Duration (minutes) *</Label>
-                <Input
-                  type="number"
-                  value={formData.duration}
-                  onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                  placeholder="e.g., 60"
-                  className={formErrors.duration ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.duration && <p className="text-xs text-[#f41f20]">{formErrors.duration}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Price ($) *</Label>
-                <Input
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  placeholder="0.00"
-                  className={formErrors.price ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.price && <p className="text-xs text-[#f41f20]">{formErrors.price}</p>}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Brief description of this service..." rows={3} />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateService} disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-              {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Service"}
-            </Button>
-          </div>
+          <AddNewServiceForm
+           
+         
+            setCreateModalOpen={setCreateModalOpen}
+          
+          />
         </DialogContent>
       </Dialog>
     </div>
