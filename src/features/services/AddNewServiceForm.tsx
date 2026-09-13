@@ -5,8 +5,13 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
+// import { useMutation } from "@tanstack/react-query";
+import useCreateNewService from "./useCreateNewService";
+import type { addNewServiceForm } from "../../lib/types";
 
 export default function AddNewServiceForm({ setCreateModalOpen }) {
+  const { mutate } = useCreateNewService();
+
   const {
     control,
     handleSubmit,
@@ -16,14 +21,14 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
     defaultValues: {
       serviceName: "",
       status: "active",
-      duration: "",
-      price: "",
+      // duration: "",
+      price: null,
       description: "",
     },
   });
 
-  const onSubmit = (data) => {
-    console.log(data);
+  const onSubmit = (data: addNewServiceForm) => {
+    mutate(data);
     setCreateModalOpen(false);
   };
 
@@ -84,7 +89,8 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
             <Input
               id="price"
               type="number"
-              {...register("price", { required: true })}
+              step="0.01"
+              {...register("price", { valueAsNumber: true })}
               // value={formData.price}
               // onChange={(e) => setFormData({ ...formData, price: e.target.value })}
               placeholder="0.00"

@@ -62,7 +62,12 @@ export interface addNewOrderFormData {
   updatedAt: string;
   serviceName: string;
 }
-
+export type addNewServiceForm = {
+  serviceName: string;
+  status: string;
+  price: number;
+  description?: string;
+};
 export interface InventoryItem {
   id: string;
   sku: string;

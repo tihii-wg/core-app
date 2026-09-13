@@ -17,6 +17,7 @@ import { Button } from "../../ui/Button";
 import { Description } from "@radix-ui/react-dialog";
 // import AddNewOrderForm from "../orders/AddNewOrderForm";
 import AddNewServiceForm from "./AddNewServiceForm";
+// import { useMutation } from "@tanstack/react-query";
 
 const categoryOptions = [
   { value: "all", label: "All Categories" },
@@ -28,7 +29,9 @@ const categoryOptions = [
 ];
 
 export function Services() {
-  const { services, addService } = useApp();
+  const { services } = useApp();
+
+  
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
@@ -36,16 +39,16 @@ export function Services() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "",
-    duration: "",
-    price: "",
-    description: "",
-    status: "active" as "active" | "inactive",
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // const [formData, setFormData] = useState({
+  //   name: "",
+  //   category: "",
+  //   duration: "",
+  //   price: "",
+  //   description: "",
+  //   status: "active" as "active" | "inactive",
+  // });
+  // const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  // const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Stats
   const activeServices = services.filter((s) => s.status === "active").length;
@@ -122,46 +125,46 @@ export function Services() {
     },
   ];
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = "Name is required";
-    if (!formData.category) errors.category = "Category is required";
-    if (!formData.duration || parseInt(formData.duration) <= 0) {
-      errors.duration = "Valid duration is required";
-    }
-    if (!formData.price || parseFloat(formData.price) <= 0) {
-      errors.price = "Valid price is required";
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
+  // const validateForm = () => {
+  //   const errors: Record<string, string> = {};
+  //   if (!formData.name.trim()) errors.name = "Name is required";
+  //   if (!formData.category) errors.category = "Category is required";
+  //   if (!formData.duration || parseInt(formData.duration) <= 0) {
+  //     errors.duration = "Valid duration is required";
+  //   }
+  //   if (!formData.price || parseFloat(formData.price) <= 0) {
+  //     errors.price = "Valid price is required";
+  //   }
+  //   // setFormErrors(errors);
+  //   return Object.keys(errors).length === 0;
+  // };
 
-  const handleCreateService = async () => {
-    if (!validateForm()) return;
+  // const handleCreateService = async () => {
+  //   if (!validateForm()) return;
 
-    setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+  //   // setIsSubmitting(true);
+  //   await new Promise((resolve) => setTimeout(resolve, 800));
 
-    addService({
-      name: formData.name,
-      category: formData.category,
-      duration: parseInt(formData.duration),
-      price: parseFloat(formData.price),
-      description: formData.description,
-      status: formData.status,
-    });
+  //   addService({
+  //     name: formData.name,
+  //     category: formData.category,
+  //     duration: parseInt(formData.duration),
+  //     price: parseFloat(formData.price),
+  //     description: formData.description,
+  //     status: formData.status,
+  //   });
 
-    setIsSubmitting(false);
-    setCreateModalOpen(false);
-    setFormData({
-      name: "",
-      category: "",
-      duration: "",
-      price: "",
-      description: "",
-      status: "active",
-    });
-  };
+  //   setIsSubmitting(false);
+  //   setCreateModalOpen(false);
+  //   setFormData({
+  //     name: "",
+  //     category: "",
+  //     duration: "",
+  //     price: "",
+  //     description: "",
+  //     status: "active",
+  //   });
+  // };
 
   return (
     <div className="space-y-4">
@@ -204,12 +207,7 @@ export function Services() {
           <DialogHeader>
             <DialogTitle>Add New Service</DialogTitle>
           </DialogHeader>
-          <AddNewServiceForm
-           
-         
-            setCreateModalOpen={setCreateModalOpen}
-          
-          />
+          <AddNewServiceForm setCreateModalOpen={setCreateModalOpen} />
         </DialogContent>
       </Dialog>
     </div>
