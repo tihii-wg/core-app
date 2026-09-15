@@ -29,6 +29,8 @@ export async function createEmployee({ role, email, name, phone, profile_id, sta
 }
 
 export async function getEmployees(search: string, roleFilter?: EmployeeRole) {
+
+  
   const {
     data: { user },
   } = await supabase.auth.getUser();

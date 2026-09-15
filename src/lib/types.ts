@@ -3,9 +3,14 @@
 import type React from "react";
 
 export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled";
+
 export type PaymentStatus = "unpaid" | "partial" | "paid";
+
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
-export type EmployeeRole =  "admin" | "manager" | "technician" | "receptionist";
+
+export type EmployeeRole = "admin" | "manager" | "technician" | "receptionist";
+
+export type serviceCategory = "repair" | "software" | "update" | "data" | "assesment"
 
 export type EmployeeRoleOption = {
   value: EmployeeRole;
@@ -62,7 +67,7 @@ export interface addNewOrderFormData {
   updatedAt: string;
   serviceName: string;
 }
-export type addNewServiceForm = {
+export interface addNewServiceFormData  {
   serviceName: string;
   status: string;
   price: number;
@@ -83,10 +88,10 @@ export interface InventoryItem {
 
 export interface Service {
   id: string;
-  name: string;
+  service_name: string;
   category: string;
   duration: number; // in minutes
-  price: number;
+  service_price: number;
   description: string;
   status: "active" | "inactive";
 }

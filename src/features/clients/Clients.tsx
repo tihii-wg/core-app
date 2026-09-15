@@ -7,13 +7,12 @@ import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { NoClients, NoSearchResults } from "../../ui/EmptyState";
-import type { Client, Order } from "../../lib/types";
+import type { Client} from "../../lib/types";
 import AddNewClientForm from "./AddNewClienForm";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useApp } from "../../lib/appContext";
-// import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,7 +26,7 @@ export function Clients() {
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-  const getClientOrders = (clientId: string): Order[] => {
+  const getClientOrders = (clientId: string) => {
     return orders.filter((order) => order.clientId === clientId);
   };
 

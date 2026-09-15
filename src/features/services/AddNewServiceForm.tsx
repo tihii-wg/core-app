@@ -7,7 +7,7 @@ import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
 // import { useMutation } from "@tanstack/react-query";
 import useCreateNewService from "./useCreateNewService";
-import type { addNewServiceForm } from "../../lib/types";
+import type { addNewServiceFormData } from "../../lib/types";
 
 export default function AddNewServiceForm({ setCreateModalOpen }) {
   const { mutate } = useCreateNewService();
@@ -27,7 +27,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
     },
   });
 
-  const onSubmit = (data: addNewServiceForm) => {
+  const onSubmit = (data: addNewServiceFormData) => {
     mutate(data);
     setCreateModalOpen(false);
   };
