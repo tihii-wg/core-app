@@ -10,7 +10,7 @@ export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
 
 export type EmployeeRole = "admin" | "manager" | "technician" | "receptionist";
 
-export type serviceCategory = "repair" | "software" | "update" | "data" | "assesment"
+export type serviceCategory = "repair" | "software" | "update" | "data" | "assesment";
 
 export type EmployeeRoleOption = {
   value: EmployeeRole;
@@ -37,6 +37,19 @@ export interface Client {
   notes?: string;
 }
 
+export interface Order {
+  id: string;
+  workspace_id: string;
+  client_id: string;
+  number: string;
+  device: string;
+  service: string;
+  assinged_to: string;
+  total_price: number;
+  is_paid: boolean;
+  description: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -48,6 +61,8 @@ export interface Employee {
   completedTasks: number;
   status: "active" | "inactive";
 }
+
+
 
 export interface addNewOrderFormData {
   id: string;
@@ -67,12 +82,12 @@ export interface addNewOrderFormData {
   updatedAt: string;
   serviceName: string;
 }
-export interface addNewServiceFormData  {
+export interface addNewServiceFormData {
   serviceName: string;
   status: string;
   price: number;
   description?: string;
-};
+}
 export interface InventoryItem {
   id: string;
   sku: string;

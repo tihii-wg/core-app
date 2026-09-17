@@ -1,53 +1,56 @@
 import { useState } from "react";
-import { Controller, type Control } from "react-hook-form";
-import type { addNewOrderFormData, Service } from "../../lib/types";
+import { Controller, type Control, type FieldPath, type FieldValues } from "react-hook-form";
+// import type { addNewOrderFormData, Service } from "../../lib/types";
 import { Input } from "../../ui/Input";
+import type { Service } from "../../lib/types";
 
-type Props = {
-  control: Control<addNewOrderFormData>;
+interface serviceComboboxProps<T extends FieldValues> {
   services: Service[];
-};
-export default function ServiceCombobox({ control, services }: Props) {
+  control: Control<T>;
+  name: FieldPath<T>;
+}
+export default function ServiceCombobox<T extends FieldValues>({ control, name, services }: serviceComboboxProps<T>) {
   const [open, setOpen] = useState(false);
 
   return (
     <Controller
-      name="serviceName"
+      name={name}
       control={control}
       rules={{
         required: "Service is required",
       }}
       render={({ field, fieldState }) => {
-        const filtersService = services.filter((service) => service.name.toLowerCase().includes(field.value.toLowerCase()));
+        const filtersService = services?.filter((service) => service.service_name.toLowerCase().includes(field.value.toLowerCase()));
 
-        const exactMatch = services.some((service) => service.name.toLowerCase() === field.value.trim().toLowerCase());
+        const exactMatch = services?.some((service) => service.service_name.toLowerCase() === field.value.trim().toLowerCase());
 
         return (
           <div className="relative">
             <Input
               id="service"
               value={field.value}
+              autoComplete="off"
               onChange={(e) => {
                 field.onChange(e.target.value);
                 setOpen(true);
               }}
-              onFocus={() => setOpen(true)}
+              // onFocus={() => setOpen(true)}
               placeholder="Service"
               className={fieldState.error ? "border-[#f41f20]" : "w-full rounded-md border px-3 py-2"}
             />
             {open && (
               <div className="absolute z-10 mt-1 w-full rounded-md border bg-white sgadow">
-                {filtersService.map((service) => (
+                {filtersService?.map((service) => (
                   <button
                     key={service.id}
                     type="button"
                     className="block w-full px-3 py-2 text-left hover:bg-gray-100"
                     onClick={() => {
-                      field.onChange(service.name);
+                      field.onChange(service.service_name);
                       setOpen(false);
                     }}
                   >
-                    {service.name}
+                    {service.service_name}
                   </button>
                 ))}
 

@@ -41,7 +41,7 @@ export function Services() {
   // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
   const { services, isLoading, isPending } = useGetServices(debunceSearch);
 
-  console.log(services);
+
 
   // Stats
   const activeServices = services?.filter((s) => s.status === "active").length;

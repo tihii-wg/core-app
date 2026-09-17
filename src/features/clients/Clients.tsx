@@ -122,6 +122,7 @@ export function Clients() {
       </Dialog>
 
       {/* Client Detail Panel */}
+      
       <ClientDetailPanel selectedClient={selectedClient} setDetailPanelOpen={setDetailPanelOpen} detailPanelOpen={detailPanelOpen} getClientOrders={getClientOrders} />
     </div>
   );

@@ -15,8 +15,13 @@ export default function useCreateNewService() {
       toast.success("Service created succesfully", { id: "create-service" });
     },
     onError: (error) => {
-      console.error("onError", error);
-      toast.error(error.message || "Somthing went wrong", { id: "create-service" });
+      console.log("onError", error);
+
+      if (error.message === "service with this name is already exists") {
+        toast.error("Service with this name is already exists", { id: "create-service" });
+      } else {
+        toast.error(error.message || "Somthing went wrong", { id: "create-service" });
+      }
     },
   });
 }

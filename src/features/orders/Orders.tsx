@@ -13,7 +13,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
 import { useApp } from "../../lib/appContext";
-import type { Order, OrderStatus } from "../../lib/types";
+import type {  OrderStatus,Order } from "../../lib/types";
 import { useGetClients } from "../clients/useGetClients";
 import AddNewOrderForm from "../orders/AddNewOrderForm";
 import useGetEmployees from "../employees/useGetEmployees";

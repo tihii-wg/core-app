@@ -8,9 +8,12 @@ import { Textarea } from "../../ui/Textarea";
 // import { useMutation } from "@tanstack/react-query";
 import useCreateNewService from "./useCreateNewService";
 import type { addNewServiceFormData } from "../../lib/types";
+import ServiceCombobox from "../orders/ServiceCombobox";
+import useGetServices from "./useGetServices";
 
 export default function AddNewServiceForm({ setCreateModalOpen }) {
   const { mutate } = useCreateNewService();
+  const { services } = useGetServices();
 
   const {
     control,
@@ -37,14 +40,15 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
       <div className="space-y-4 py-4">
         <div className="space-y-1.5">
           <Label htmlFor="serviceName">Service Name *</Label>
-          <Input
+          <ServiceCombobox control={control} services={services} name="serviceName" />
+          {/* <Input
             id="serviceName"
             {...register("serviceName", { required: true })}
             // value={formData.name}
             // onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Screen Replacement"
             className={errors.serviceName ? "border-[#f41f20]" : ""}
-          />
+          /> */}
           {errors.serviceName && <p className="text-xs text-[#f41f20]">Service name is required</p>}
         </div>
 

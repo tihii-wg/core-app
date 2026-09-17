@@ -2,7 +2,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetClients } from "../clients/useGetClients";
-import { useApp } from "../../lib/appContext";
+// import { useApp } from "../../lib/appContext";
 import { Textarea } from "../../ui/Textarea";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
@@ -10,9 +10,11 @@ import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm } from "react-hook-form";
 import type { addNewOrderFormData } from "../../lib/types";
 import ServiceCombobox from "./ServiceCombobox";
+import useGetServices from "../services/useGetServices";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
-  const { services } = useApp();
+  // const { services } = useApp();
+  const { services}=useGetServices()
 
   const {
     control,
@@ -79,7 +81,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
 
         <div className="space-y-1.5">
           <Label htmlFor="service">Service *</Label>
-          <ServiceCombobox control={control} services={services} />
+          <ServiceCombobox control={control} services={services} name="service"/>
         </div>
 
         <div className="space-y-1.5">
