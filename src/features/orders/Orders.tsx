@@ -204,7 +204,7 @@ export function Orders() {
 
       {/* Create Order Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] flex  flex-col">
+        <DialogContent className="max-w-lg w-full owerflow-hidden ">
           <DialogHeader>
             <DialogTitle>Create New Order</DialogTitle>
             <DialogDescription>Fill in the information to create a new order</DialogDescription>

@@ -12,8 +12,11 @@ import ServiceCombobox from "./ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
-
   const { services } = useGetServices();
+  const { clients } = useGetClients(searchQuery);
+  const { employees } = useGetEmployees();
+
+  const activeServices = services?.filter((service) => service.status === "active");
 
   const {
     control,
@@ -32,7 +35,6 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     },
   });
 
-  
   const { fields, append, remove } = useFieldArray({
     control,
     name: "services",
@@ -44,9 +46,6 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
       },
     },
   });
-
-  const { clients } = useGetClients(searchQuery);
-  const { employees } = useGetEmployees();
 
   function handleCancel() {
     setCreateModalOpen(false);
@@ -60,7 +59,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const totalPrice = fields.reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex max-h-[80vh] flex-col">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
           <Label htmlFor="clientId">Client *</Label>
@@ -98,7 +97,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
           <Label>Service *</Label>
 
           <ServiceCombobox
-            services={services}
+            services={activeServices}
             onSelect={(service) => {
               const alreadyExists = fields.some((field) => field.serviceId === service.id);
 
@@ -180,7 +179,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
         </div>
       </div>
 
-      <div className="flex shrink-0 justify-end gap-2 border-t bg-white pt-3">
+      <div className="flex w-full  shrink-0 justify-end gap-2 border-t bg-white pt-3">
         <Button variant="outline" type="button" onClick={handleCancel} disabled={isSubmitting}>
           Cancel
         </Button>
