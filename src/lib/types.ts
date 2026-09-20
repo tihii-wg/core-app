@@ -81,11 +81,20 @@ export interface addNewOrderFormData {
   serviceName: string;
 }
 export interface addNewServiceFormData {
+  serviceId?: string;
   serviceName: string;
   status: string;
   price: number | undefined;
   description?: string;
 }
+
+export type EditServiceFormData = {
+  serviceName: string;
+  status: string;
+  price: number | undefined;
+  description: string;
+};
+
 export interface InventoryItem {
   id: string;
   sku: string;
@@ -175,6 +184,8 @@ export type Profile = {
   fullName: string | null;
   preferredLanguage?: string;
 };
+
+
 
 export type OrderService = {
   serviceId: string;

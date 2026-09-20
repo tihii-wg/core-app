@@ -20,6 +20,7 @@ import { Description } from "@radix-ui/react-dialog";
 import AddNewServiceForm from "./AddNewServiceForm";
 import useGetServices from "./useGetServices";
 import { useDebounce } from "../../hooks/useDebounce";
+import EditServiceForm from "./UpdateServiceForm";
 
 // const categoryOptions = [
 //   { value: "All", label: "All Categories" },
@@ -31,17 +32,17 @@ import { useDebounce } from "../../hooks/useDebounce";
 // ];
 
 export function Services() {
-  // const { services } = useApp();
-
   const [searchQuery, setSearchQuery] = useState("");
   // const [categoryFilter, setCategoryFilter] = useState(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+
   const debunceSearch = useDebounce(searchQuery, 400);
   // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
   const { services, isLoading, isPending } = useGetServices(debunceSearch);
-
-
 
   // Stats
   const activeServices = services?.filter((s) => s.status === "active").length;
@@ -142,7 +143,16 @@ export function Services() {
         // }}
       />
 
-      <DataTable columns={columns} isLoading={isLoading} data={services} keyExtractor={(service) => service.id} />
+      <DataTable
+        columns={columns}
+        isLoading={isLoading}
+        data={services}
+        keyExtractor={(service) => service.id}
+        onRowClick={(service) => {
+          setSelectedService(service);
+          setEditModalOpen(true);
+        }}
+      />
 
       {/* Create Service Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
@@ -152,6 +162,17 @@ export function Services() {
             <DialogTitle>Add New Service</DialogTitle>
           </DialogHeader>
           <AddNewServiceForm setCreateModalOpen={setCreateModalOpen} />
+        </DialogContent>
+      </Dialog>
+
+      {/*Create Edit Service Modal*/}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-lg">
+          <Description className="sr-only">Edit workspace service</Description>
+          <DialogHeader>
+            <DialogTitle>Edit Service</DialogTitle>
+          </DialogHeader>
+          {selectedService && <EditServiceForm service={selectedService} setEditModalOpen={setEditModalOpen} />}
         </DialogContent>
       </Dialog>
     </div>

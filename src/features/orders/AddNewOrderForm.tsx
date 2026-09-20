@@ -2,7 +2,6 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetClients } from "../clients/useGetClients";
-// import { useApp } from "../../lib/appContext";
 import { Textarea } from "../../ui/Textarea";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
@@ -13,7 +12,7 @@ import ServiceCombobox from "./ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
-  // const { services } = useApp();
+
   const { services } = useGetServices();
 
   const {
@@ -32,6 +31,8 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
       deadline: "",
     },
   });
+
+  
   const { fields, append, remove } = useFieldArray({
     control,
     name: "services",

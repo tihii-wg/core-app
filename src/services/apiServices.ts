@@ -74,3 +74,48 @@ export async function getServices(search?: string, categoriesFilter?: serviceCat
 
   return services;
 }
+
+export async function updateService({ serviceName, status, price, description, serviceId }: addNewServiceFormData) {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw new Error(userError.message);
+  if (!user) throw new Error("User is not authenticated");
+
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).single();
+
+  if (profileError) throw new Error(profileError.message);
+  if (!profile.active_workspace_id) throw new Error("No active workspace selected");
+
+  const { data: existingService, error: existingServiceError } = await supabase
+    .from("services")
+    .select("id")
+    .eq("workspace_id", profile.active_workspace_id)
+    .ilike("service_name", serviceName.trim())
+    .neq("id", serviceId)
+    .maybeSingle();
+
+  if (existingServiceError) {
+    throw new Error(existingServiceError.message);
+  }
+  if (existingService) throw new Error("service with this name is already exists");
+
+  const { data: updatedService, error } = await supabase
+    .from("services")
+    .update({
+      service_name: serviceName.trim(),
+      service_price: price,
+      description: description || null,
+      status,
+    })
+    .eq("id", serviceId)
+    .eq("workspace_id", profile.active_workspace_id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return updatedService;
+}
