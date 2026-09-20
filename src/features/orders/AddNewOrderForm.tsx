@@ -20,6 +20,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     control,
     handleSubmit,
     register,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<addNewOrderFormData>({
     defaultValues: {
@@ -34,6 +35,13 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const { fields, append, remove } = useFieldArray({
     control,
     name: "services",
+    rules: {
+      required: "Service is required",
+      minLength: {
+        value: 1,
+        message: "Service is required",
+      },
+    },
   });
 
   const { clients } = useGetClients(searchQuery);
@@ -101,8 +109,10 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                 price: service.service_price ?? 0,
                 quantity: 1,
               });
+              clearErrors("services");
             }}
           />
+          {errors.services?.root?.message && <p className="text-xs text-[#f41f20]">{errors.services.root.message}</p>}
 
           {fields.length > 0 && (
             <div className="space-y-2">
