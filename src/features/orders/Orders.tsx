@@ -13,7 +13,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
 import { useApp } from "../../lib/appContext";
-import type {  OrderStatus,Order } from "../../lib/types";
+import type { OrderStatus, Order } from "../../lib/types";
 import { useGetClients } from "../clients/useGetClients";
 import AddNewOrderForm from "../orders/AddNewOrderForm";
 import useGetEmployees from "../employees/useGetEmployees";
@@ -204,13 +204,14 @@ export function Orders() {
 
       {/* Create Order Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] flex  flex-col">
           <DialogHeader>
             <DialogTitle>Create New Order</DialogTitle>
             <DialogDescription>Fill in the information to create a new order</DialogDescription>
           </DialogHeader>
-
-          <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery={searchQuery} />
+          <div className="overflow-y-auto pr-2">
+            <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery={searchQuery} />
+          </div>
         </DialogContent>
       </Dialog>
 

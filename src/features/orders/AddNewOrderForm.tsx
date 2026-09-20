@@ -7,14 +7,14 @@ import { Textarea } from "../../ui/Textarea";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useFieldArray } from "react-hook-form";
 import type { addNewOrderFormData } from "../../lib/types";
 import ServiceCombobox from "./ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   // const { services } = useApp();
-  const { services}=useGetServices()
+  const { services } = useGetServices();
 
   const {
     control,
@@ -25,11 +25,15 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     defaultValues: {
       clientId: "",
       device: "",
-      serviceName: "",
+      services: [],
       description: "",
       assignedEmployeeId: "",
       deadline: "",
     },
+  });
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "services",
   });
 
   const { clients } = useGetClients(searchQuery);
@@ -39,14 +43,16 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     setCreateModalOpen(false);
   }
 
-  const onSubmit = (data) => {
+  const onSubmit = (data: addNewOrderFormData) => {
     console.log(data);
     setCreateModalOpen(false);
   };
 
+  const totalPrice = fields.reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div className="space-y-4 py-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex max-h-[80vh] flex-col">
+      <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
           <Label htmlFor="clientId">Client *</Label>
           <Controller
@@ -80,8 +86,39 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="service">Service *</Label>
-          <ServiceCombobox control={control} services={services} name="service"/>
+          <Label>Service *</Label>
+
+          <ServiceCombobox
+            services={services}
+            onSelect={(service) => {
+              const alreadyExists = fields.some((field) => field.serviceId === service.id);
+
+              if (alreadyExists) return;
+
+              append({
+                serviceId: service.id,
+                serviceName: service.service_name,
+                price: service.service_price ?? 0,
+                quantity: 1,
+              });
+            }}
+          />
+
+          {fields.length > 0 && (
+            <div className="space-y-2">
+              {fields.map((field, index) => (
+                <div key={field.id} className="flex items-center justify-between rounded-md border p-3">
+                  <div>
+                    <p className="font-medium">{field.serviceName}</p>
+                    <p className="text-sm text-gray-500">${field.price}</p>
+                  </div>
+                  <Button type="button" variant="outline" onClick={() => remove(index)}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -126,13 +163,13 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="totalPrice">Total Price ($) *</Label>
-          <Input id="totalPrice" type="number" {...register("totalPrice")} placeholder="0.00" />
+        <div className=" flex justify-between border-t pt-3">
+          <span className="text-lg font-semibold">Total Price</span>
+          <span>${totalPrice.toFixed(2)}</span>
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex shrink-0 justify-end gap-2 border-t bg-white pt-3">
         <Button variant="outline" type="button" onClick={handleCancel} disabled={isSubmitting}>
           Cancel
         </Button>

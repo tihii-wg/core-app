@@ -19,20 +19,25 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
     control,
     handleSubmit,
     register,
+    reset,
     formState: { errors, isSubmitting },
-  } = useForm({
+  } = useForm<addNewServiceFormData>({
     defaultValues: {
       serviceName: "",
       status: "active",
       // duration: "",
-      price: null,
+      price: undefined,
       description: "",
     },
   });
 
   const onSubmit = (data: addNewServiceFormData) => {
-    mutate(data);
-    setCreateModalOpen(false);
+    mutate(data, {
+      onSuccess: () => {
+        reset();
+        setCreateModalOpen(false);
+      },
+    });
   };
 
   return (
@@ -40,7 +45,15 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
       <div className="space-y-4 py-4">
         <div className="space-y-1.5">
           <Label htmlFor="serviceName">Service Name *</Label>
-          <ServiceCombobox control={control} services={services} name="serviceName" />
+          <Controller
+            name="serviceName"
+            control={control}
+            rules={{
+              required: "Service is required",
+            }}
+            render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} />}
+          />
+
           {/* <Input
             id="serviceName"
             {...register("serviceName", { required: true })}
@@ -94,13 +107,20 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
               id="price"
               type="number"
               step="0.01"
-              {...register("price", { valueAsNumber: true })}
+              {...register("price", {
+                valueAsNumber: true,
+                required: "Price is required",
+                min: {
+                  value: 0,
+                  message: "Price cannot be negative",
+                },
+              })}
               // value={formData.price}
               // onChange={(e) => setFormData({ ...formData, price: e.target.value })}
               placeholder="0.00"
               className={errors.price ? "border-[#f41f20]" : ""}
             />
-            {errors.price && <p className="text-xs text-[#f41f20]">Price is required</p>}
+            {errors.price && <p className="text-xs text-[#f41f20]">{errors.price.message}</p>}
           </div>
         </div>
 
@@ -128,7 +148,15 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button variant="outline" type="button" disabled={isSubmitting}>
+          <Button
+            variant="outline"
+            type="button"
+            disabled={isSubmitting}
+            onClick={() => {
+              reset();
+              setCreateModalOpen(false);
+            }}
+          >
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">

@@ -62,16 +62,14 @@ export interface Employee {
   status: "active" | "inactive";
 }
 
-
-
 export interface addNewOrderFormData {
   id: string;
   orderNumber: string;
   clientId: string;
   clientName: string;
   device: string;
-  service: string;
   description: string;
+  services: OrderService[];
   status: OrderStatus;
   assignedEmployeeId: string;
   assignedEmployeeName: string;
@@ -85,7 +83,7 @@ export interface addNewOrderFormData {
 export interface addNewServiceFormData {
   serviceName: string;
   status: string;
-  price: number;
+  price: number | undefined;
   description?: string;
 }
 export interface InventoryItem {
@@ -176,6 +174,13 @@ export type Profile = {
   email: string;
   fullName: string | null;
   preferredLanguage?: string;
+};
+
+export type OrderService = {
+  serviceId: string;
+  serviceName: string;
+  price: number;
+  quantity: number;
 };
 
 export type Company = {
