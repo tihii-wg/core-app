@@ -119,3 +119,72 @@ export async function updateService({ serviceName, status, price, description, s
 
   return updatedService;
 }
+
+export async function deleteService(serviceId: string) {
+	console.log(serviceId)
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw new Error(userError.message);
+  if (!user) throw new Error("User is not authenticated");
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("active_workspace_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError) throw new Error(profileError.message);
+
+  if (!profile.active_workspace_id) {
+    throw new Error("No active workspace selected");
+  }
+
+  // Проверяем, используется ли услуга в заказах
+  const { data: orderServices, error: orderServicesError } =
+    await supabase
+      .from("order_services")
+      .select("id")
+      .eq("service_id", serviceId)
+      .limit(1);
+
+  if (orderServicesError) {
+    throw new Error(orderServicesError.message);
+  }
+
+  if (orderServices && orderServices.length > 0) {
+    throw new Error(
+      "This service is used in orders and cannot be deleted. Set it to inactive instead."
+    );
+  }
+	const { data: service, error: serviceError } = await supabase
+  .from("services")
+  .select("id, workspace_id, service_name")
+  .eq("id", serviceId)
+  .single();
+
+console.log("SERVICE BEFORE DELETE:", service);
+console.log("SERVICE ERROR:", serviceError);
+	console.log("CURRENT WORKSPACE:", profile.active_workspace_id);
+	
+
+  // Удаляем услугу только из текущего workspace
+  const { data: deletedService, error: deleteError } = await supabase
+  .from("services")
+  .delete()
+  .eq("id", serviceId)
+  .eq("workspace_id", profile.active_workspace_id)
+  // .select()
+  // .single();
+
+if (deleteError) {
+  console.error("DELETE ERROR:", deleteError);
+  throw new Error(deleteError.message);
+}
+
+console.log("DELETED:", deletedService);
+
+return deletedService;
+}

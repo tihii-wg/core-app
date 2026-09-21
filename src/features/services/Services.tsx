@@ -4,6 +4,7 @@ import {
   // Clock,
   CheckCircle,
   XCircle,
+  Trash2,
 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
@@ -21,6 +22,8 @@ import AddNewServiceForm from "./AddNewServiceForm";
 import useGetServices from "./useGetServices";
 import { useDebounce } from "../../hooks/useDebounce";
 import EditServiceForm from "./UpdateServiceForm";
+import useDeleteService from "./useDeleteService";
+import {  NoSearchResults, NoServices } from "../../ui/EmptyState";
 
 // const categoryOptions = [
 //   { value: "All", label: "All Categories" },
@@ -40,9 +43,12 @@ export function Services() {
 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
 
+  const [serviceToDelete, setServiceToDelete] = useState<Service | null>(null);
+
   const debunceSearch = useDebounce(searchQuery, 400);
   // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
   const { services, isLoading, isPending } = useGetServices(debunceSearch);
+  const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
 
   // Stats
   const activeServices = services?.filter((s) => s.status === "active").length;
@@ -109,6 +115,23 @@ export function Services() {
         </div>
       ),
     },
+    {
+      key: "actions",
+      header: "",
+      className: "w-[80px]",
+      cell: (service) => (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={(e) => {
+            e.stopPropagation();
+            setServiceToDelete(service);
+          }}
+        >
+          <Trash2 />
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -147,6 +170,7 @@ export function Services() {
         columns={columns}
         isLoading={isLoading}
         data={services}
+        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoServices onAddService={() => setCreateModalOpen(true)} />}
         keyExtractor={(service) => service.id}
         onRowClick={(service) => {
           setSelectedService(service);
@@ -173,6 +197,47 @@ export function Services() {
             <DialogTitle>Edit Service</DialogTitle>
           </DialogHeader>
           {selectedService && <EditServiceForm service={selectedService} setEditModalOpen={setEditModalOpen} />}
+        </DialogContent>
+      </Dialog>
+
+      {/*Delete sevice */}
+      <Dialog
+        open={!!serviceToDelete}
+        onOpenChange={(open) => {
+          if (!open) setServiceToDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete service?</DialogTitle>
+            <Description className="sr-only">Confirm deletion of the selected service.</Description>
+          </DialogHeader>
+
+          <p className="text-sm text-gray-500">
+            Are you sure you want to delete <strong>{serviceToDelete?.service_name}</strong>?
+          </p>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setServiceToDelete(null)}>
+              Cancel
+            </Button>
+
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!serviceToDelete) return;
+
+                deleteServiceMutation(serviceToDelete.id, {
+                  onSuccess: () => {
+                    setServiceToDelete(null);
+                  },
+                });
+              }}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

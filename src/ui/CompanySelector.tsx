@@ -27,8 +27,7 @@ export default function CompanySelector({ setCreateModalOpen }) {
   function deleteWorkspaceHandler(id: string) {
     deleteWorkspace(id);
   }
-  // console.log(profile)
-  // console.log(currentWorkspaceId)
+  
 
   return (
     <DropdownMenu>
