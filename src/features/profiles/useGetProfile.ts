@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { getProfiles } from "../../services/apiProfiles";
+import { getProfile } from "../../services/apiProfiles";
 
-export function useGetProfiles() {
+export function useGetProfile() {
   const {
     data,
     error,
     isLoading,
   } = useQuery({
     queryKey: ["profiles"],
-    queryFn: getProfiles,
+    queryFn: getProfile,
   });
   if (error) throw new Error(error.message);
 

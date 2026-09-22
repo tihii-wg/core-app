@@ -13,7 +13,7 @@ export async function createClient({ workspace_id, clientName, email, phone, add
     .insert([
       {
         workspace_id,
-        name: clientName,
+        client_name: clientName,
         email,
         phone,
         address,
@@ -28,7 +28,10 @@ export async function createClient({ workspace_id, clientName, email, phone, add
   return data;
 }
 
-export async function getClients(search:string) {
+
+
+
+export async function getClients(search: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -37,13 +40,11 @@ export async function getClients(search:string) {
   const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).single();
   if (profileError) throw new Error(profileError.message);
 
-
   let query = supabase.from("clients").select("*").eq("workspace_id", profile.active_workspace_id);
-
 
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
-}
+  }
 
   const { data: clients, error } = await query;
 

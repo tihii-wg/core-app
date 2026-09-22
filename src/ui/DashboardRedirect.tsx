@@ -21,25 +21,23 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { Spinner } from "./Spinner";
 import { useEffect } from "react";
-import { useGetProfiles } from "../features/profiles/useGetProfiles";
+import { useGetProfile } from "../features/profiles/useGetProfile";
 
 export default function Dashboardredirect() {
   const navigate = useNavigate();
   const { locale } = useParams();
-  const { data: profile, isLoading } = useGetProfiles();
+  const { data: profile, isLoading } = useGetProfile();
 
   useEffect(() => {
     if (isLoading) return;
 
-    const currentProfile = profile?.at(0);
+    const currentProfile = profile;
 
     if (!currentProfile) return;
 
     if (!currentProfile.active_workspace_id) return;
 
-    navigate(
-      `/${locale}/${currentProfile.active_workspace_id}/dashboard`
-    );
+    navigate(`/${locale}/${currentProfile.active_workspace_id}/dashboard`);
   }, [isLoading, locale, navigate, profile]);
 
   return <Spinner />;

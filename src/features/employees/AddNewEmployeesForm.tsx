@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Spinner } from "../../ui/Spinner";
 import type { AddNewEmployeesFormData, CreateEmployeeData, EmployeeRoleOption } from "../../lib/types";
 import { Controller, useForm } from "react-hook-form";
-import { useGetProfiles } from "../profiles/useGetProfiles";
+import { useGetProfile } from "../profiles/useGetProfile";
 import useCreateNewEmployee from "./useCreateNewEmployee";
 
 const roles: EmployeeRoleOption[] = [
@@ -38,7 +38,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
       status: "active",
     },
   });
-  const { data: profile } = useGetProfiles();
+  const { data: profile } = useGetProfile();
 
   const onSubmit = (data: AddNewEmployeesFormData) => {
     const currentProfile = profile[0];

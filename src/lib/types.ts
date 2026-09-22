@@ -66,10 +66,15 @@ export interface addNewOrderFormData {
   id: string;
   orderNumber: string;
   clientId: string;
-  clientName: string;
+  name: string;
   device: string;
   description: string;
-  services: OrderService[];
+  services: {
+    serviceId: string;
+    serviceName: string;
+    price: number;
+    quantity: number;
+  }[];
   status: OrderStatus;
   assignedEmployeeId: string;
   assignedEmployeeName: string;
@@ -184,8 +189,6 @@ export type Profile = {
   fullName: string | null;
   preferredLanguage?: string;
 };
-
-
 
 export type OrderService = {
   serviceId: string;
