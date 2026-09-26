@@ -95,6 +95,23 @@ async function resolveAssignedEmployeeId(workspaceId: string, assignedEmployeeId
   return profileId;
 }
 
+async function nextOrderNumber(workspaceId: string) {
+  const year = new Date().getFullYear();
+  const prefix = `ORD-${year}-`;
+
+  const { data: existingOrders, error } = await supabase.from("orders").select("number").eq("workspace_id", workspaceId).like("number", `${prefix}%`);
+
+  if (error) throw new Error(error.message);
+
+  const latest = (existingOrders ?? []).reduce((max, order) => {
+    const match = String(order.number ?? "").match(new RegExp(`^${prefix}(\\d+)$`));
+    if (!match) return max;
+    return Math.max(max, Number(match[1]));
+  }, 0);
+
+  return `${prefix}${String(latest + 1).padStart(3, "0")}`;
+}
+
 export async function createOrder(input: CreateOrderInput) {
   const workspaceId = await getActiveWorkspaceId();
   const clientId = await resolveClientId(workspaceId, input.clientId, input.clientName);
@@ -127,7 +144,7 @@ export async function createOrder(input: CreateOrderInput) {
       total_price: totalPrice,
       status: "new",
       is_paid: false,
-      number: `ORD-${Date.now()}`,
+      number: await nextOrderNumber(workspaceId),
       service_id: resolvedServices[0].id,
       service: resolvedServices.map((service) => service.name).join(", "),
     })
@@ -149,4 +166,14 @@ export async function createOrder(input: CreateOrderInput) {
   if (orderServicesError) throw new Error(orderServicesError.message);
 
   return order;
+}
+
+export async function getOrders() {
+  const workspaceId = await getActiveWorkspaceId();
+
+  const { data, error } = await supabase.from("orders").select("id, client_id, number, device, service, total_price").eq("workspace_id", workspaceId);
+
+  if (error) throw new Error(error.message);
+
+  return data ?? [];
 }

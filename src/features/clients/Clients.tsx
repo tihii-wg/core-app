@@ -12,14 +12,14 @@ import AddNewClientForm from "./AddNewClienForm";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
-import { useApp } from "../../lib/appContext";
+import { useGetOrders } from "../orders/useGetOrders";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
-  const { orders } = useApp();
   const debounceSearch = useDebounce(searchQuery, 400);
   const { isLoading, clients, isPending } = useGetClients(debounceSearch);
+  const { orders, isLoading: ordersLoading } = useGetOrders();
 
   // State
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -27,7 +27,15 @@ export function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const getClientOrders = (clientId: string) => {
-    return orders.filter((order) => order.clientId === clientId);
+    return orders
+      .filter((order) => order.client_id === clientId)
+      .map((order) => ({
+        id: order.id as string,
+        orderNumber: (order.number as string) ?? "",
+        device: (order.device as string) ?? "",
+        service: (order.service as string) ?? "",
+        totalPrice: Number(order.total_price ?? 0),
+      }));
   };
 
   // Table columns
@@ -100,7 +108,7 @@ export function Clients() {
       <DataTable
         columns={columns}
         data={clients}
-        isLoading={isLoading}
+        isLoading={isLoading || ordersLoading}
         keyExtractor={(client) => client.id}
         onRowClick={handleRowClick}
         emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}

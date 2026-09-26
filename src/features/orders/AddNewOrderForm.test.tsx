@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import AddNewOrderForm from "./AddNewOrderForm";
+
+const employeesState = vi.hoisted(() => ({
+  employees: [] as { id: string; name: string; status: string; role: string }[],
+}));
 
 vi.mock("./useCreateOrder", () => ({
   useCreateOrder: () => ({
@@ -18,7 +22,7 @@ vi.mock("../services/useGetServices", () => ({
 }));
 
 vi.mock("../employees/useGetEmployees", () => ({
-  default: () => ({ employees: [] }),
+  default: () => ({ employees: employeesState.employees }),
 }));
 
 vi.mock("../profiles/useGetProfile", () => ({
@@ -26,6 +30,14 @@ vi.mock("../profiles/useGetProfile", () => ({
 }));
 
 describe("AddNewOrderForm client validation", () => {
+  beforeEach(() => {
+    employeesState.employees = [];
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.setPointerCapture = () => {};
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.scrollIntoView = () => {};
+  });
+
   it("marks the client field when Create Order is clicked with an empty form", async () => {
     const user = userEvent.setup();
     render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
@@ -76,5 +88,19 @@ describe("AddNewOrderForm client validation", () => {
 
     expect(screen.getByText("Wheel alignment")).toBeInTheDocument();
     expect(screen.getByText("$45")).toBeInTheDocument();
+  });
+
+  it("keeps the assigned employee select controlled after a choice", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    employeesState.employees = [{ id: "emp-1", name: "Ada", status: "active", role: "technician" }];
+    const user = userEvent.setup();
+    render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: "Ada" }));
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Ada");
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain("uncontrolled");
+    consoleError.mockRestore();
   });
 });

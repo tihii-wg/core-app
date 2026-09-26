@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { Mail, MapPin, Pencil, Phone } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
-import type { Client, Order } from "../../lib/types";
+import type { Client } from "../../lib/types";
+
+export type ClientOrderSummary = {
+  id: string;
+  orderNumber: string;
+  device: string;
+  service: string;
+  totalPrice: number;
+};
 import EditClientForm from "./EditClientForm";
 
 type ClientDetailPanelProps = {
@@ -9,7 +17,7 @@ type ClientDetailPanelProps = {
   detailPanelOpen: boolean;
   setDetailPanelOpen: (open: boolean) => void;
   onClientUpdated: (client: Client) => void;
-  getClientOrders: (clientId: string) => Order[];
+  getClientOrders: (clientId: string) => ClientOrderSummary[];
 };
 
 export default function ClientDetailPanel({ selectedClient, detailPanelOpen, setDetailPanelOpen, onClientUpdated, getClientOrders }: ClientDetailPanelProps) {

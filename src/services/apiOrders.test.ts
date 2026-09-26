@@ -26,6 +26,8 @@ function query(result: { data: unknown; error: unknown }) {
     select: () => chain,
     eq: () => chain,
     ilike: () => chain,
+    like: () => Promise.resolve({ data: chain.numbers, error: null }),
+    numbers: [] as { number: string }[],
     insert: (payload: unknown) => {
       chain.inserted.push(payload);
       return chain;
@@ -135,6 +137,7 @@ describe("createOrder", () => {
         assigned_to: assignedUserId,
         service_id: "service-1",
         service: "Oil change",
+        number: `ORD-${new Date().getFullYear()}-001`,
       }),
     );
   });
@@ -203,5 +206,34 @@ describe("createOrder", () => {
         assignedEmployeeId: employeeId,
       }),
     ).rejects.toThrow("Selected employee is not linked to a user");
+  });
+
+  it("assigns the next order number for the current year", async () => {
+    const year = new Date().getFullYear();
+    const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
+    const existingService = query({ data: { id: "service-1", service_name: "Oil change" }, error: null });
+    const employees = query({ data: { id: employeeId, profile_id: assignedUserId }, error: null });
+    const orders = query({ data: { id: "order-1" }, error: null });
+    const orderServices = query({ data: null, error: null });
+    orders.numbers = [{ number: `ORD-${year}-003` }, { number: "ORD-1790453886405" }, { number: `ORD-${year - 1}-012` }];
+
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return profiles;
+      if (table === "employees") return employees;
+      if (table === "services") return existingService;
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await createOrder({
+      clientId: "client-1",
+      clientName: "Ada Lovelace",
+      device: "BMW",
+      services: [{ serviceId: "service-1", serviceName: "Oil change", price: 40, quantity: 1 }],
+      assignedEmployeeId: employeeId,
+    });
+
+    expect(orders.inserted[0]).toEqual(expect.objectContaining({ number: `ORD-${year}-004` }));
   });
 });

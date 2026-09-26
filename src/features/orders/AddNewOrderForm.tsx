@@ -249,7 +249,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                 required: "Assigned employee is required",
               }}
               render={({ field }) => (
-                <Select value={field.value || undefined} onValueChange={field.onChange}>
+                <Select value={field.value ?? ""} onValueChange={field.onChange}>
                   <SelectTrigger className={errors.assignedEmployeeId ? "border-[#f41f20]" : ""}>
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
