@@ -281,7 +281,7 @@ export function Orders() {
               <div className="border-t border-[#eeeeef] pt-4">
                 <Label className="mb-2 block">Update Status</Label>
                 <Select value={selectedOrder.status} onValueChange={handleStatusChange as (value: string) => void}>
-                  <SelectTrigger>
+                  <SelectTrigger id="order-status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

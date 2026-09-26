@@ -39,15 +39,24 @@ export interface Client {
 
 export interface Order {
   id: string;
-  workspace_id: string;
-  client_id: string;
-  number: string;
+  workspace_id?: string;
+  clientId: string;
+  clientName: string;
+  orderNumber: string;
   device: string;
+  vin: string;
   service: string;
-  assinged_to: string;
-  total_price: number;
-  is_paid: boolean;
+  services: OrderService[];
   description: string;
+  status: OrderStatus;
+  assignedEmployeeId: string;
+  assignedEmployeeName: string;
+  deadline: string;
+  totalPrice: number;
+  isPaid: boolean;
+  paymentStatus: PaymentStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Employee {
@@ -63,28 +72,33 @@ export interface Employee {
 }
 
 export interface addNewOrderFormData {
-  id: string;
-  orderNumber: string;
   clientId: string;
-  name: string;
   device: string;
+  vin: string;
   description: string;
-  services: {
-    serviceId: string;
-    serviceName: string;
-    price: number;
-    quantity: number;
-  }[];
-  status: OrderStatus;
+  services: OrderService[];
   assignedEmployeeId: string;
-  assignedEmployeeName: string;
   deadline: string;
-  totalPrice: number;
-  paymentStatus: PaymentStatus;
-  createdAt: string;
-  updatedAt: string;
-  serviceName: string;
+  status: OrderStatus;
+  isPaid: boolean;
 }
+
+export type CreateOrderInput = {
+  clientId?: string;
+  clientName: string;
+  device: string;
+  vin?: string;
+  description?: string;
+  services: OrderService[];
+  assignedEmployeeId: string;
+  deadline?: string;
+};
+
+export type UpdateOrderInput = CreateOrderInput & {
+  orderId: string;
+  status: OrderStatus;
+  isPaid: boolean;
+};
 export interface addNewServiceFormData {
   serviceId?: string;
   serviceName: string;

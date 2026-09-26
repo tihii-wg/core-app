@@ -13,7 +13,7 @@ export async function createClient({ workspace_id, clientName, email, phone, add
     .insert([
       {
         workspace_id,
-        client_name: clientName,
+        name: clientName,
         email,
         phone,
         address,

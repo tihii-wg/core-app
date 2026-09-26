@@ -8,7 +8,7 @@ import { Textarea } from "../../ui/Textarea";
 // import { useMutation } from "@tanstack/react-query";
 import useCreateNewService from "./useCreateNewService";
 import type { addNewServiceFormData } from "../../lib/types";
-import ServiceCombobox from "../orders/ServiceCombobox";
+import ServiceCombobox from "./ServiceCombobox";
 import useGetServices from "./useGetServices";
 
 export default function AddNewServiceForm({ setCreateModalOpen }) {
@@ -51,7 +51,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
             rules={{
               required: "Service is required",
             }}
-            render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} />}
+            render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} errors={errors.serviceName} />}
           />
 
           {/* <Input

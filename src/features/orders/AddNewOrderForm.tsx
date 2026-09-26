@@ -8,11 +8,11 @@ import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray } from "react-hook-form";
 import type { addNewOrderFormData } from "../../lib/types";
-import ServiceCombobox from "./ServiceCombobox";
+import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useState } from "react";
-import { useCreateNewClient } from "../clients/useCreateNewClient";
+import { useRef, useState } from "react";
+// import { useCreateNewClient } from "../clients/useCreateNewClient";
 import { useGetProfile } from "../profiles/useGetProfile";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
@@ -20,9 +20,10 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const { data: profile } = useGetProfile();
   const { clients } = useGetClients(searchQuery);
   const { employees } = useGetEmployees();
-  const { mutate: createClient } = useCreateNewClient();
+  // const { mutate: createClient } = useCreateNewClient();
   // console.log(clients);
   const [clientName, setClientName] = useState("");
+  const clientNameRef = useRef(clientName);
 
   const activeServices = services?.filter((service) => service.status === "active");
 
@@ -31,11 +32,13 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     handleSubmit,
     register,
     clearErrors,
-    formState: { errors, isSubmitting },
+    trigger,
+    formState: { errors, isSubmitting, isSubmitted },
   } = useForm<addNewOrderFormData>({
     defaultValues: {
       clientId: "",
       device: "",
+      vin: "",
       services: [],
       description: "",
       assignedEmployeeId: "",
@@ -59,6 +62,8 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     },
   });
 
+  const totalPrice = serviceField.reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
+
   function handleCancel() {
     setCreateModalOpen(false);
   }
@@ -66,64 +71,38 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const onSubmit = (data: addNewOrderFormData) => {
     console.log(data);
     console.log(clientName);
-    console.log(profile);
+    console.log(profile?.active_workspace_id);
+
     setCreateModalOpen(false);
-
-    // try {
-    //   let clientId = data.clientId;
-
-    //   // Новый клиент
-    //   if (!clientId) {
-    //     if (!clientName.trim()) {
-    //       console.error("Client is required");
-    //       return;
-    //     }
-
-    //     console.log("Creating new client:", clientName);
-
-    //     // const newClient = createClient({
-    //     //     name: clientName.trim(),
-    //     //   });
-
-    //     //   clientId = newClient.id;
-
-    //     //   console.log("New client ID:", clientId);
-    //     }
-
-    //     // console.log("Final client ID:", clientId);
-
-    //     // Здесь создаём заказ
-    //     // await createOrder({
-    //     //   ...data,
-    //     //   clientId,
-    //     // });
-
-    //     //   setCreateModalOpen(false);
-    //     } catch (error) {
-    //     //   console.error("CREATE ORDER ERROR:", error);
-    //   }
   };
-
-  const totalPrice = serviceField.reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
-          <Label htmlFor="clientId">Client *</Label>
+          <Label htmlFor="client">Client *</Label>
           <Controller
             name="clientId"
             control={control}
+            rules={{
+              validate: (clientId) => clientId.trim() !== "" || clientNameRef.current.trim() !== "" || "Client is required",
+            }}
             render={({ field }) => (
               <ClientCombobox
+                inputRef={field.ref}
+                errors={!!errors.clientId}
                 clients={clients ?? []}
                 value={clientName}
                 onChange={(value) => {
+                  clientNameRef.current = value;
                   setClientName(value);
-
                   field.onChange("");
+                  if (isSubmitted) {
+                    void trigger("clientId");
+                  }
                 }}
                 onSelect={(client) => {
+                  clientNameRef.current = client.name;
                   setClientName(client.name);
                   field.onChange(client.id);
                 }}
@@ -132,6 +111,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
           />
 
           {errors.clientId && <p className="text-xs text-[#f41f20]">{errors.clientId.message}</p>}
+
           {/* <Controller
             name="clientId"
             control={control}
@@ -163,10 +143,32 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
         </div>
 
         <div className="space-y-1.5">
-          <Label>Service *</Label>
+          <Label htmlFor="vin">VIN *</Label>
+          <Input
+            id="vin"
+            {...register("vin", {
+              required: "VIN is required",
+              setValueAs: (value: string) => value.trim().toUpperCase(),
+              pattern: {
+                value: /^[A-HJ-NPR-Z0-9]{17}$/,
+                message: "Enter a valid 17-character VIN",
+              },
+            })}
+            placeholder="17-character VIN"
+            maxLength={17}
+            autoCapitalize="characters"
+            spellCheck={false}
+            className={errors.vin ? "border-[#f41f20]" : ""}
+          />
+          {errors.vin && <p className="text-xs text-[#f41f20]">{errors.vin.message}</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="service">Service *</Label>
 
           <ServiceCombobox
             services={activeServices}
+            errors={!!errors.services?.root}
             onSelect={(service) => {
               const alreadyExists = serviceField.some((field) => field.serviceId === service.id);
 

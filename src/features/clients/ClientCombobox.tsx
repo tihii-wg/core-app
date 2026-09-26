@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import { Input } from "../../ui/Input";
 import type { Client } from "../../lib/types";
 
 type ClientComboboxProps = {
   clients: Client[];
   value: string;
+  errors?: boolean;
+  inputRef?: Ref<HTMLInputElement>;
   onChange: (value: string) => void;
   onSelect: (client: Client) => void;
 };
 
-export default function ClientCombobox({ clients, value, onChange, onSelect }: ClientComboboxProps) {
+export default function ClientCombobox({ clients, value, onChange, onSelect, errors, inputRef }: ClientComboboxProps) {
   const [open, setOpen] = useState(false);
 
   const filteredClients = clients.filter((client) => client.name?.toLowerCase().includes(value.toLowerCase()));
@@ -19,10 +21,15 @@ export default function ClientCombobox({ clients, value, onChange, onSelect }: C
   return (
     <div className="relative">
       <Input
+        ref={inputRef}
+        id="client"
+        name="client"
         value={value}
         autoComplete="off"
         placeholder="Client"
-        className="w-full rounded-md border px-3 py-2"
+        aria-invalid={errors || undefined}
+        className={`w-full rounded-md border px-3 py-2 ${errors ? "border-[#f41f20]" : ""}`}
+        // className="w-full rounded-md border px-3 py-2"
         // onFocus={() => setOpen(true)}
         onChange={(e) => {
           const newValue = e.target.value;

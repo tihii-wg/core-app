@@ -10,36 +10,50 @@ import { DashboardCard } from "../../ui/DashboardCard";
 export function Dashboard() {
   const { orders, clients, invoices, inventory, setCurrentModule } = useApp();
 
+
   // Calculate stats
-  const activeOrders = orders?.filter((o) => !["completed", "paid", "cancelled"].includes(o.status)).length;
-
-  const todayRevenue = orders?.filter((o) => o.paymentStatus === "paid").reduce((sum, o) => sum + o.totalPrice, 0);
-
-  const unpaidInvoices = invoices?.filter((inv) => inv.status === "sent" || inv.status === "overdue").length;
-
-  const lowStockItems = inventory?.filter((item) => item.status === "low-stock").length;
-
+  
+  const activeOrders =
+    orders?.filter(
+      (o) => !["completed", "paid", "cancelled"].includes(o.status)
+    ).length ?? 0;
+  
+  const todayRevenue =
+    orders
+      ?.filter((o) => o.paymentStatus === "paid")
+      .reduce((sum, o) => sum + o.totalPrice, 0) ?? 0;
+  
+  const unpaidInvoices =
+    invoices?.filter(
+      (inv) => inv.status === "sent" || inv.status === "overdue"
+    ).length ?? 0;
+  
+  const lowStockItems =
+    inventory?.filter((item) => item.status === "low-stock").length ?? 0;
+  
   // Recent orders
-  const recentOrders = orders?.slice(0, 5);
-
+  
+  const recentOrders = orders?.slice(0, 5) ?? [];
+  
   // Recent activity (mock)
-  const recentActivity = clients?.slice(0, 4).map((client, index) => ({
-    ...client,
-    action: index % 2 === 0 ? "placed an order" : "was added",
-    time: `${(index + 1) * 2} hours ago`,
-  }));
-
+  
+  const recentActivity =
+    clients?.slice(0, 4)?.map((client, index) => ({
+      ...client,
+      action: index % 2 === 0 ? "placed an order" : "was added",
+      time: `${(index + 1) * 2} hours ago`,
+    })) ?? [];
   // Order columns
   const orderColumns: Column<Order>[] = [
     {
       key: "orderNumber",
       header: "Order",
-      cell: (order) => <span className="font-medium text-[#1973e1]">{order.orderNumber}</span>,
+      cell: (order) => <span className="font-medium text-[#1973e1]">{order?.orderNumber}</span>,
     },
     {
       key: "client",
       header: "Client",
-      cell: (order) => order.clientName,
+      cell: (order) => order?.clientName,
     },
     {
       key: "device",
@@ -50,18 +64,18 @@ export function Dashboard() {
     {
       key: "status",
       header: "Status",
-      cell: (order) => <OrderStatusBadge status={order.status} />,
+      cell: (order) => <OrderStatusBadge status={order?.status} />,
     },
     {
       key: "payment",
       header: "Payment",
-      cell: (order) => <PaymentStatusBadge status={order.paymentStatus} />,
+      cell: (order) => <PaymentStatusBadge status={order?.paymentStatus} />,
       className: "hidden sm:table-cell",
     },
     {
       key: "total",
       header: "Total",
-      cell: (order) => `$${order.totalPrice}`,
+      cell: (order) => `$${order?.totalPrice}`,
       className: "text-right",
     },
   ];
@@ -120,7 +134,7 @@ export function Dashboard() {
             <h2 className="text-base font-semibold text-[#282e33] mb-4">Recent Activity</h2>
             <div className="space-y-4">
               {recentActivity?.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3">
+                <div key={activity?.id} className="flex items-start gap-3">
                   <div className="h-8 w-8 bg-[#edf4fd] rounded-full flex items-center justify-center flex-shrink-0">
                     <Users className="h-4 w-4 text-[#1973e1]" />
                   </div>
@@ -178,9 +192,9 @@ export function Dashboard() {
                 <span className="text-sm font-medium text-[#282e33]">18</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">New Clients</span>
-                <span className="text-sm font-medium text-[#282e33]">5</span>
-              </div>
+//                 <span className="text-sm text-[#939699]">New Clients</span>
+//                 <span className="text-sm font-medium text-[#282e33]">5</span>
+//               </div>
             </div>
 
             {/* Simple bar chart */}
