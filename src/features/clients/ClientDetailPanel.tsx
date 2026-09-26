@@ -1,15 +1,66 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/Sheet";
-import { Mail, MapPin, Phone } from "lucide-react";
+import { useState } from "react";
+import { Mail, MapPin, Pencil, Phone } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
+import type { Client, Order } from "../../lib/types";
+import EditClientForm from "./EditClientForm";
 
-export default function ClientDetailPanel({ selectedClient, detailPanelOpen, setDetailPanelOpen ,getClientOrders}) {
+type ClientDetailPanelProps = {
+  selectedClient: Client | null;
+  detailPanelOpen: boolean;
+  setDetailPanelOpen: (open: boolean) => void;
+  onClientUpdated: (client: Client) => void;
+  getClientOrders: (clientId: string) => Order[];
+};
+
+export default function ClientDetailPanel({ selectedClient, detailPanelOpen, setDetailPanelOpen, onClientUpdated, getClientOrders }: ClientDetailPanelProps) {
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingClientId, setEditingClientId] = useState(selectedClient?.id);
+
+  if (selectedClient?.id !== editingClientId) {
+    setEditingClientId(selectedClient?.id);
+    setIsEditing(false);
+  }
+
+  function handleOpenChange(open: boolean) {
+    setDetailPanelOpen(open);
+    if (!open) setIsEditing(false);
+  }
+
   return (
-    <Sheet open={detailPanelOpen} onOpenChange={setDetailPanelOpen}>
-      <SheetContent className="w-full sm:max-w-lg">
+    <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>{selectedClient?.name}</SheetTitle>
+          <SheetTitle className="pr-12">{selectedClient?.name}</SheetTitle>
+          {selectedClient && !isEditing && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              aria-label="Edit"
+              className="ring-offset-background focus:ring-ring absolute top-4 right-10 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+            >
+              <Pencil className="size-4" />
+            </button>
+          )}
+          <SheetDescription className="sr-only">View and edit this client's contact information, balance, and order history.</SheetDescription>
         </SheetHeader>
 
-        {selectedClient && (
+        {selectedClient && isEditing && (
+          <div className="mx-4 mt-2">
+            <EditClientForm
+              key={selectedClient.id}
+              client={selectedClient}
+              onCancel={() => setIsEditing(false)}
+              onUpdated={(client) => {
+                onClientUpdated(client);
+                setIsEditing(false);
+                setDetailPanelOpen(false);
+              }}
+            />
+          </div>
+        )}
+
+        {selectedClient && !isEditing && (
           <div className="mt-6 space-y-6 mx-4">
             {/* Contact Info */}
             <div className="space-y-3">
@@ -77,7 +128,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
 
             {/* Timestamps */}
             <div className="text-xs text-[#939699]">
-              <p>Client since: {selectedClient.created_at.split("T")[0]}</p>
+              <p>Client since: {selectedClient.created_at?.split("T")[0]}</p>
             </div>
           </div>
         )}

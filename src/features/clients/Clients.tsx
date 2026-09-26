@@ -123,7 +123,13 @@ export function Clients() {
 
       {/* Client Detail Panel */}
       
-      <ClientDetailPanel selectedClient={selectedClient} setDetailPanelOpen={setDetailPanelOpen} detailPanelOpen={detailPanelOpen} getClientOrders={getClientOrders} />
+      <ClientDetailPanel
+        selectedClient={selectedClient}
+        setDetailPanelOpen={setDetailPanelOpen}
+        detailPanelOpen={detailPanelOpen}
+        getClientOrders={getClientOrders}
+        onClientUpdated={setSelectedClient}
+      />
     </div>
   );
 }

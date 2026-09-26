@@ -229,6 +229,18 @@ export type AddNewClientFormData = {
   // search?: string;
 };
 
+export type EditClientFormData = {
+  clientName: string;
+  email: string;
+  phone: string;
+  address?: string;
+  notes?: string;
+};
+
+export type UpdateClientInput = EditClientFormData & {
+  clientId: string;
+};
+
 export type AddNewEmployeesFormData = {
   workspace_id?: string;
   profile_id?: string;
