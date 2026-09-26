@@ -45,6 +45,7 @@ export interface Order {
   orderNumber: string;
   device: string;
   vin: string;
+  carNumber: string;
   service: string;
   services: OrderService[];
   description: string;
@@ -75,6 +76,7 @@ export interface addNewOrderFormData {
   clientId: string;
   device: string;
   vin: string;
+  carNumber: string;
   description: string;
   services: OrderService[];
   assignedEmployeeId: string;
@@ -88,6 +90,7 @@ export type CreateOrderInput = {
   clientName: string;
   device: string;
   vin?: string;
+  carNumber?: string;
   description?: string;
   services: OrderService[];
   assignedEmployeeId: string;

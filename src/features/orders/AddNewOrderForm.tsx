@@ -39,6 +39,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
       clientId: "",
       device: "",
       vin: "",
+      carNumber: "",
       services: [],
       description: "",
       assignedEmployeeId: "",
@@ -143,16 +144,29 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
         </div>
 
         <div className="space-y-1.5">
+          <Label htmlFor="carNumber">Car Number *</Label>
+          <Input
+            id="carNumber"
+            {...register("carNumber", {
+              required: "Car number is required",
+              setValueAs: (value: string) => value.trim().toUpperCase(),
+            })}
+            placeholder="Car number"
+            autoCapitalize="characters"
+            spellCheck={false}
+            className={errors.carNumber ? "border-[#f41f20]" : ""}
+          />
+          {errors.carNumber && <p className="text-xs text-[#f41f20]">{errors.carNumber.message}</p>}
+        </div>
+
+        <div className="space-y-1.5">
           <Label htmlFor="vin">VIN *</Label>
           <Input
             id="vin"
             {...register("vin", {
               required: "VIN is required",
               setValueAs: (value: string) => value.trim().toUpperCase(),
-              pattern: {
-                value: /^[A-HJ-NPR-Z0-9]{17}$/,
-                message: "Enter a valid 17-character VIN",
-              },
+              validate: (value) => value.length === 17 || "VIN must contain exactly 17 characters",
             })}
             placeholder="17-character VIN"
             maxLength={17}
@@ -178,6 +192,19 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                 serviceId: service.id,
                 serviceName: service.service_name,
                 price: service.service_price ?? 0,
+                quantity: 1,
+              });
+              clearErrors("services");
+            }}
+            onCreate={(serviceName, price) => {
+              const alreadyExists = serviceField.some((field) => field.serviceName.toLowerCase() === serviceName.toLowerCase());
+
+              if (alreadyExists) return;
+
+              serviceAppend({
+                serviceId: crypto.randomUUID(),
+                serviceName,
+                price,
                 quantity: 1,
               });
               clearErrors("services");
