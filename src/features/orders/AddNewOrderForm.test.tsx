@@ -3,6 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import AddNewOrderForm from "./AddNewOrderForm";
 
+vi.mock("./useCreateOrder", () => ({
+  useCreateOrder: () => ({
+    mutateAsync: vi.fn(),
+  }),
+}));
+
 vi.mock("../clients/useGetClients", () => ({
   useGetClients: () => ({ clients: [] }),
 }));

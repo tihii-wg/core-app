@@ -93,7 +93,7 @@ export type CreateOrderInput = {
   carNumber?: string;
   description?: string;
   services: OrderService[];
-  assignedEmployeeId: string;
+  assignedEmployeeId?: string;
   deadline?: string;
 };
 

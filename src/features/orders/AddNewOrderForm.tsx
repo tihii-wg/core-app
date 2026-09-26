@@ -12,16 +12,13 @@ import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useRef, useState } from "react";
-// import { useCreateNewClient } from "../clients/useCreateNewClient";
-import { useGetProfile } from "../profiles/useGetProfile";
+import { useCreateOrder } from "./useCreateOrder";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const { services } = useGetServices();
-  const { data: profile } = useGetProfile();
   const { clients } = useGetClients(searchQuery);
   const { employees } = useGetEmployees();
-  // const { mutate: createClient } = useCreateNewClient();
-  // console.log(clients);
+  const { mutateAsync: createOrder } = useCreateOrder();
   const [clientName, setClientName] = useState("");
   const clientNameRef = useRef(clientName);
 
@@ -69,10 +66,18 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
     setCreateModalOpen(false);
   }
 
-  const onSubmit = (data: addNewOrderFormData) => {
-    console.log(data);
-    console.log(clientName);
-    console.log(profile?.active_workspace_id);
+  const onSubmit = async (data: addNewOrderFormData) => {
+    await createOrder({
+      clientId: data.clientId || undefined,
+      clientName: clientNameRef.current.trim(),
+      device: data.device,
+      vin: data.vin,
+      carNumber: data.carNumber,
+      description: data.description,
+      services: data.services,
+      assignedEmployeeId: data.assignedEmployeeId || undefined,
+      deadline: data.deadline,
+    });
 
     setCreateModalOpen(false);
   };
@@ -244,16 +249,16 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                 required: "Assigned employee is required",
               }}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select value={field.value || undefined} onValueChange={field.onChange}>
                   <SelectTrigger className={errors.assignedEmployeeId ? "border-[#f41f20]" : ""}>
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
                     {employees
-                      ?.filter((e) => e.status === "active" && e.role === "technician")
-                      .map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {emp.name}
+                      ?.filter((employee) => employee.id && employee.status === "active" && employee.role === "technician")
+                      .map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id}>
+                          {employee.name}
                         </SelectItem>
                       ))}
                   </SelectContent>
