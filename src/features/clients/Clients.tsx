@@ -28,13 +28,13 @@ export function Clients() {
 
   const getClientOrders = (clientId: string) => {
     return orders
-      .filter((order) => order.client_id === clientId)
+      .filter((order) => order.clientId === clientId)
       .map((order) => ({
-        id: order.id as string,
-        orderNumber: (order.number as string) ?? "",
-        device: (order.device as string) ?? "",
-        service: (order.service as string) ?? "",
-        totalPrice: Number(order.total_price ?? 0),
+        id: order.id,
+        orderNumber: order.orderNumber,
+        device: order.device,
+        service: order.service,
+        totalPrice: order.totalPrice,
       }));
   };
 

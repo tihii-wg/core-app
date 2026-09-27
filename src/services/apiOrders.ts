@@ -1,4 +1,4 @@
-import type { CreateOrderInput, OrderService } from "../lib/types";
+import type { CreateOrderInput, Order, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
 import { createClient } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
@@ -168,12 +168,105 @@ export async function createOrder(input: CreateOrderInput) {
   return order;
 }
 
+const orderStatuses = new Set<OrderStatus>(["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"]);
+
+function formatOrderDate(value: unknown) {
+  if (typeof value !== "string" || value.length < 10) return "";
+  return value.slice(0, 10);
+}
+
+function clientNameFromRow(clients: unknown) {
+  const client = Array.isArray(clients) ? clients[0] : clients;
+  if (client && typeof client === "object" && "name" in client && typeof client.name === "string") return client.name;
+  return "";
+}
+
+function toOrder(row: Record<string, unknown>, employees: { id: string; name: string; profile_id: string | null }[]): Order {
+  const assignedTo = typeof row.assigned_to === "string" ? row.assigned_to : "";
+  const employee = employees.find((item) => item.profile_id === assignedTo);
+  const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
+  const isPaid = Boolean(row.is_paid);
+  const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
+
+  return {
+    id: String(row.id),
+    workspace_id: typeof row.workspace_id === "string" ? row.workspace_id : undefined,
+    clientId: typeof row.client_id === "string" ? row.client_id : "",
+    clientName: clientNameFromRow(row.clients),
+    orderNumber: typeof row.number === "string" ? row.number : "",
+    device: typeof row.device === "string" ? row.device : "",
+    vin: "",
+    carNumber: typeof row.car_number === "string" ? row.car_number : "",
+    service: typeof row.service === "string" ? row.service : "",
+    services: [],
+    description: typeof row.description === "string" ? row.description : "",
+    status,
+    assignedEmployeeId: employee?.id ?? "",
+    assignedEmployeeName: employee?.name ?? "",
+    deadline: formatOrderDate(row.deadline),
+    totalPrice: Number(row.total_price ?? 0),
+    isPaid,
+    paymentStatus,
+    createdAt: formatOrderDate(row.created_at),
+    updatedAt: formatOrderDate(row.updated_at),
+  };
+}
+
 export async function getOrders() {
   const workspaceId = await getActiveWorkspaceId();
 
-  const { data, error } = await supabase.from("orders").select("id, client_id, number, device, service, total_price").eq("workspace_id", workspaceId);
+  const { data, error } = await supabase
+    .from("orders")
+    .select(orderColumns)
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  return data ?? [];
+  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
+
+  if (employeesError) throw new Error(employeesError.message);
+
+  return (data ?? []).map((row) => toOrder(row as Record<string, unknown>, employees ?? []));
+}
+
+export async function updateOrderStatus(orderId: string, status: OrderStatus) {
+  const workspaceId = await getActiveWorkspaceId();
+
+  const { error } = await supabase
+    .from("orders")
+    .update(status === "paid" ? { status, is_paid: true } : { status })
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId);
+
+  if (error) throw new Error(error.message);
+}
+
+const orderColumns = "id, workspace_id, client_id, number, device, car_number, description, status, assigned_to, deadline, total_price, is_paid, service, created_at, updated_at, clients(name)";
+
+export async function updateOrder({ orderId, device, carNumber, description, assignedEmployeeId, deadline }: UpdateOrderDetails) {
+  const workspaceId = await getActiveWorkspaceId();
+  const assignedTo = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update({
+      device: device.trim(),
+      car_number: carNumber.trim().toUpperCase(),
+      description: description.trim() || null,
+      assigned_to: assignedTo,
+      deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
+    })
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .select(orderColumns)
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
+
+  if (employeesError) throw new Error(employeesError.message);
+
+  return toOrder(data as Record<string, unknown>, employees ?? []);
 }

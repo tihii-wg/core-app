@@ -102,6 +102,18 @@ export type UpdateOrderInput = CreateOrderInput & {
   status: OrderStatus;
   isPaid: boolean;
 };
+
+export type EditOrderFormData = {
+  device: string;
+  carNumber: string;
+  description: string;
+  assignedEmployeeId: string;
+  deadline: string;
+};
+
+export type UpdateOrderDetails = EditOrderFormData & {
+  orderId: string;
+};
 export interface addNewServiceFormData {
   serviceId?: string;
   serviceName: string;

@@ -1,21 +1,18 @@
 import { useState, useMemo } from "react";
 
-import { Plus, Calendar } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
-import { Label } from "../../ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../ui/Dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
-import { useApp } from "../../lib/appContext";
+import { useGetOrders, useUpdateOrderStatus } from "./useGetOrders";
 import type { OrderStatus, Order } from "../../lib/types";
-import { useGetClients } from "../clients/useGetClients";
 import AddNewOrderForm from "../orders/AddNewOrderForm";
+import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
 import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
@@ -36,7 +33,8 @@ const statusOptions = [
 // ];
 
 export function Orders() {
-  const { orders, updateOrderStatus } = useApp();
+  const { orders, isLoading: ordersLoading } = useGetOrders();
+  const { mutate: updateStatus } = useUpdateOrderStatus();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,7 +47,6 @@ export function Orders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const { employees, isLoading: employeesIsLoading } = useGetEmployees();
-  const { isLoading } = useGetClients(searchQuery);
 
   // Filtered data
   const filteredOrders = useMemo(() => {
@@ -127,18 +124,22 @@ export function Orders() {
 
   const handleStatusChange = (newStatus: OrderStatus) => {
     if (selectedOrder) {
-      updateOrderStatus(selectedOrder.id, newStatus);
-      setSelectedOrder({ ...selectedOrder, status: newStatus });
+      updateStatus({ orderId: selectedOrder.id, status: newStatus });
+      setSelectedOrder({
+        ...selectedOrder,
+        status: newStatus,
+        ...(newStatus === "paid" ? { isPaid: true, paymentStatus: "paid" as const } : {}),
+      });
     }
   };
 
-  if (isLoading || employeesIsLoading) {
+  if (ordersLoading || employeesIsLoading) {
     return <FullPageDataSpinner />;
   }
 
   const employeeFilterOptions = [
     { value: "all", label: "All Employees" },
-    ...employees.map((employee) => ({
+    ... (employees ?? []).map((employee) => ({
       value: employee.id,
       label: employee.name,
     })),
@@ -215,95 +216,14 @@ export function Orders() {
         </DialogContent>
       </Dialog>
 
-      {/* Order Detail Panel */}
-      <Sheet open={detailPanelOpen} onOpenChange={setDetailPanelOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              {selectedOrder?.orderNumber}
-              {selectedOrder && <OrderStatusBadge status={selectedOrder.status} />}
-            </SheetTitle>
-          </SheetHeader>
-
-          {selectedOrder && (
-            <div className="mt-6 space-y-6 mx-3">
-              {/* Client Info */}
-              <div className="bg-[#f8f9fa] rounded-md p-4">
-                <h3 className="text-sm font-medium text-[#939699] mb-2">Client</h3>
-                <p className="font-medium text-[#282e33]">{selectedOrder.clientName}</p>
-              </div>
-
-              {/* Order Details */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-[#939699]">Device</p>
-                    <p className="font-medium text-[#282e33]">{selectedOrder.device}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-[#939699]">Service</p>
-                    <p className="font-medium text-[#282e33]">{selectedOrder.service}</p>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-[#939699]">Description</p>
-                  <p className="text-[#282e33]">{selectedOrder.description}</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-[#939699]">Assigned To</p>
-                    <p className="font-medium text-[#282e33]">{selectedOrder.assignedEmployeeName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-[#939699]">Deadline</p>
-                    <p className="font-medium text-[#282e33] flex items-center gap-1">
-                      <Calendar className="h-4 w-4 text-[#939699]" />
-                      {selectedOrder.deadline}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-[#939699]">Total Price</p>
-                    <p className="text-xl font-semibold text-[#282e33]">${selectedOrder.totalPrice}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-[#939699]">Payment Status</p>
-                    <PaymentStatusBadge status={selectedOrder.paymentStatus} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Update Status */}
-              <div className="border-t border-[#eeeeef] pt-4">
-                <Label className="mb-2 block">Update Status</Label>
-                <Select value={selectedOrder.status} onValueChange={handleStatusChange as (value: string) => void}>
-                  <SelectTrigger id="order-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="new">New</SelectItem>
-                    <SelectItem value="in-progress">In Progress</SelectItem>
-                    <SelectItem value="waiting-parts">Waiting Parts</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Timestamps */}
-              <div className="text-xs text-[#939699] space-y-1">
-                <p>Created: {selectedOrder.createdAt}</p>
-                <p>Updated: {selectedOrder.updatedAt}</p>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      <OrderDetailPanel
+        selectedOrder={selectedOrder}
+        detailPanelOpen={detailPanelOpen}
+        setDetailPanelOpen={setDetailPanelOpen}
+        employees={employees ?? []}
+        onOrderUpdated={setSelectedOrder}
+        onStatusChange={handleStatusChange}
+      />
     </div>
   );
 }

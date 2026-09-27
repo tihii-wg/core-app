@@ -33,9 +33,9 @@ vi.mock("../orders/useGetOrders", () => ({
   useGetOrders: () => ({
     isLoading: false,
     orders: [
-      { id: "order-1", client_id: "client-1", number: "ORD-1", device: "BMW", service: "Oil change", total_price: 40 },
-      { id: "order-2", client_id: "client-1", number: "ORD-2", device: "BMW", service: "Tires", total_price: 80 },
-      { id: "order-3", client_id: "client-9", number: "ORD-3", device: "Audi", service: "Oil change", total_price: 40 },
+      { id: "order-1", clientId: "client-1", orderNumber: "ORD-2026-001", device: "BMW", service: "Oil change", totalPrice: 40 },
+      { id: "order-2", clientId: "client-1", orderNumber: "ORD-2026-002", device: "BMW", service: "Tires", totalPrice: 80 },
+      { id: "order-3", clientId: "client-9", orderNumber: "ORD-2026-003", device: "Audi", service: "Oil change", totalPrice: 40 },
     ],
   }),
 }));

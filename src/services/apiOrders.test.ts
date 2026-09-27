@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createOrder } from "./apiOrders";
+import { createOrder, getOrders, updateOrder, updateOrderStatus } from "./apiOrders";
 
 const getUser = vi.hoisted(() => vi.fn());
 const from = vi.hoisted(() => vi.fn());
@@ -27,6 +27,8 @@ function query(result: { data: unknown; error: unknown }) {
     eq: () => chain,
     ilike: () => chain,
     like: () => Promise.resolve({ data: chain.numbers, error: null }),
+    order: () => chain,
+    update: () => chain,
     numbers: [] as { number: string }[],
     insert: (payload: unknown) => {
       chain.inserted.push(payload);
@@ -235,5 +237,187 @@ describe("createOrder", () => {
     });
 
     expect(orders.inserted[0]).toEqual(expect.objectContaining({ number: `ORD-${year}-004` }));
+  });
+});
+
+describe("getOrders", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+    from.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+  });
+
+  it("returns workspace orders with the client and assigned employee", async () => {
+    const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
+    const orders = query({
+      data: [
+        {
+          id: "order-1",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          number: "ORD-2026-003",
+          device: "BMW",
+          car_number: "ABC123",
+          description: "Noise",
+          status: "new",
+          assigned_to: "user-1",
+          deadline: "2026-10-01T00:00:00.000Z",
+          total_price: 40,
+          is_paid: false,
+          service: "Oil change",
+          created_at: "2026-09-26T10:00:00.000Z",
+          updated_at: "2026-09-26T11:00:00.000Z",
+          clients: { name: "Ada Lovelace" },
+        },
+      ],
+      error: null,
+    });
+    const employees = query({ data: [{ id: employeeId, name: "Ada Tech", profile_id: "user-1" }], error: null });
+
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return profiles;
+      if (table === "orders") return orders;
+      if (table === "employees") return employees;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(getOrders()).resolves.toEqual([
+      expect.objectContaining({
+        id: "order-1",
+        clientId: "client-1",
+        clientName: "Ada Lovelace",
+        orderNumber: "ORD-2026-003",
+        device: "BMW",
+        carNumber: "ABC123",
+        service: "Oil change",
+        status: "new",
+        assignedEmployeeId: employeeId,
+        assignedEmployeeName: "Ada Tech",
+        deadline: "2026-10-01",
+        totalPrice: 40,
+        paymentStatus: "unpaid",
+      }),
+    ]);
+  });
+});
+
+describe("updateOrder", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+    from.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+  });
+
+  it("saves edited order fields for the current workspace", async () => {
+    const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
+    const employee = { id: employeeId, name: "Ada Tech", profile_id: "user-1" };
+    const employees = query({ data: [employee], error: null });
+    employees.maybeSingle = () => Promise.resolve({ data: { id: employeeId, profile_id: "user-1" }, error: null });
+    const updates: unknown[] = [];
+    const orders = query({
+      data: {
+        id: "order-1",
+        client_id: "client-1",
+        number: "ORD-2026-003",
+        device: "Audi",
+        car_number: "XYZ789",
+        description: "Brake noise",
+        status: "new",
+        assigned_to: "user-1",
+        deadline: "2026-10-02T00:00:00.000Z",
+        total_price: 40,
+        is_paid: false,
+        service: "Oil change",
+        created_at: "2026-09-26T10:00:00.000Z",
+        updated_at: "2026-09-26T12:00:00.000Z",
+        clients: { name: "Ada Lovelace" },
+      },
+      error: null,
+    });
+    orders.update = (payload: unknown) => {
+      updates.push(payload);
+      return orders;
+    };
+
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return profiles;
+      if (table === "orders") return orders;
+      if (table === "employees") return employees;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const updated = await updateOrder({
+      orderId: "order-1",
+      device: " Audi ",
+      carNumber: " xyz789 ",
+      description: " Brake noise ",
+      assignedEmployeeId: employeeId,
+      deadline: "2026-10-02",
+    });
+
+    expect(updates[0]).toEqual({
+      device: "Audi",
+      car_number: "XYZ789",
+      description: "Brake noise",
+      assigned_to: "user-1",
+      deadline: "2026-10-02T00:00:00.000Z",
+    });
+    expect(updated).toEqual(
+      expect.objectContaining({
+        device: "Audi",
+        carNumber: "XYZ789",
+        description: "Brake noise",
+        assignedEmployeeName: "Ada Tech",
+        deadline: "2026-10-02",
+      }),
+    );
+  });
+});
+
+describe("updateOrderStatus", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+    from.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+  });
+
+  it("marks the order paid when the status changes to paid", async () => {
+    const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
+    const updates: unknown[] = [];
+    const orders = query({ data: null, error: null });
+    orders.update = (payload: unknown) => {
+      updates.push(payload);
+      return orders;
+    };
+
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return profiles;
+      if (table === "orders") return orders;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await updateOrderStatus("order-1", "paid");
+
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+  });
+
+  it("leaves payment unchanged for other statuses", async () => {
+    const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
+    const updates: unknown[] = [];
+    const orders = query({ data: null, error: null });
+    orders.update = (payload: unknown) => {
+      updates.push(payload);
+      return orders;
+    };
+
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return profiles;
+      if (table === "orders") return orders;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await updateOrderStatus("order-1", "in-progress");
+
+    expect(updates[0]).toEqual({ status: "in-progress" });
   });
 });

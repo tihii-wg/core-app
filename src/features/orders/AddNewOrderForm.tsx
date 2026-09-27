@@ -11,7 +11,7 @@ import type { addNewOrderFormData } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useRef, useState } from "react";
+import {  useState } from "react";
 import { useCreateOrder } from "./useCreateOrder";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
@@ -20,7 +20,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const { employees } = useGetEmployees();
   const { mutateAsync: createOrder } = useCreateOrder();
   const [clientName, setClientName] = useState("");
-  const clientNameRef = useRef(clientName);
+  // const clientNameRef = useRef(clientName);
 
   const activeServices = services?.filter((service) => service.status === "active");
 
@@ -69,7 +69,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const onSubmit = async (data: addNewOrderFormData) => {
     await createOrder({
       clientId: data.clientId || undefined,
-      clientName: clientNameRef.current.trim(),
+      clientName: clientName.trim(),
       device: data.device,
       vin: data.vin,
       carNumber: data.carNumber,
@@ -91,7 +91,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
             name="clientId"
             control={control}
             rules={{
-              validate: (clientId) => clientId.trim() !== "" || clientNameRef.current.trim() !== "" || "Client is required",
+              validate: (clientId) => clientId.trim() !== "" || clientName.trim() !== "" || "Client is required",
             }}
             render={({ field }) => (
               <ClientCombobox
@@ -100,7 +100,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                 clients={clients ?? []}
                 value={clientName}
                 onChange={(value) => {
-                  clientNameRef.current = value;
+                  // clientName = value;
                   setClientName(value);
                   field.onChange("");
                   if (isSubmitted) {
@@ -108,7 +108,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                   }
                 }}
                 onSelect={(client) => {
-                  clientNameRef.current = client.name;
+                  // clientName = client.name;
                   setClientName(client.name);
                   field.onChange(client.id);
                 }}
