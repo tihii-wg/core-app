@@ -11,13 +11,14 @@ import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
 import { getOrders } from "../services/apiOrders";
 import { getClients } from "../services/apiClients";
-import { clientCreatedAt, localDateKey, taskOverviewCounts, thisWeekStats } from "./dashboardStats";
+import { clientCreatedAt, isAtOrBelowMinimum, localDateKey, taskOverviewCounts, thisWeekStats } from "./dashboardStats";
+import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
 
 
 export default function Dashboard() {
 
 
-  const { orders = [], clients = [], invoices = [], inventory = [], setCurrentModule } = useApp();
+  const { orders = [], clients = [], invoices = [], setCurrentModule } = useApp();
   const { workspaceId } = useParams();
   const {
     data: workspaceOrders = [],
@@ -61,7 +62,12 @@ export default function Dashboard() {
 
   const unpaidInvoices = invoices.filter((inv) => inv.status === "sent" || inv.status === "overdue").length;
 
-  const lowStockItems = inventory.filter((item) => item.status === "low-stock").length;
+  const {
+    items: inventoryItems,
+    isLoading: inventoryLoading,
+    isError: inventoryError,
+  } = useGetInventoryItems("", "all", { field: "created_at", ascending: false });
+  const lowStockCount = inventoryItems.filter(isAtOrBelowMinimum).length;
 
   const recentOrders = workspaceOrders.slice(0, 5);
 
@@ -141,7 +147,31 @@ export default function Dashboard() {
         </div>
         <DashboardCard title="Today's Revenue" value={`$${todayRevenue.toLocaleString()}`} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
         <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
-        <DashboardCard title="Low Stock Items" value={lowStockItems} icon={Package} variant={lowStockItems > 0 ? "danger" : "default"} />
+        <div className="bg-white rounded-md border border-[#eeeeef] p-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-sm text-[#939699] font-medium">Low Stock Items</p>
+              {inventoryLoading ? (
+                <Skeleton className="h-8 w-12 mt-2" />
+              ) : inventoryError ? (
+                <>
+                  <p className="text-sm font-medium text-[#282e33] mt-2">Could not load inventory</p>
+                  <p className="text-xs text-[#939699] mt-1">Refresh the page to try again.</p>
+                </>
+              ) : lowStockCount === 0 ? (
+                <>
+                  <p className="text-sm font-medium text-[#282e33] mt-2">No low stock items</p>
+                  <p className="text-xs text-[#939699] mt-1">Items at or below their minimum will show up here.</p>
+                </>
+              ) : (
+                <p className="text-2xl font-semibold text-[#282e33] mt-1">{lowStockCount}</p>
+              )}
+            </div>
+            <div className={lowStockCount > 0 ? "p-2 rounded-md bg-[#fee7e7] text-[#f41f20]" : "p-2 rounded-md bg-[#f1f3f5] text-[#939699]"}>
+              <Package className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Quick Actions */}

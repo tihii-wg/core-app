@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDateKey, startOfWeek, taskOverviewCounts, thisWeekStats, weekDateKeys } from "./dashboardStats";
+import { calendarDateKey, isAtOrBelowMinimum, startOfWeek, taskOverviewCounts, thisWeekStats, weekDateKeys } from "./dashboardStats";
 
 const sunday = new Date(2026, 8, 27, 15, 0, 0);
 
@@ -47,6 +47,12 @@ describe("dashboard week stats", () => {
     expect(stats.isEmpty).toBe(false);
     expect(stats.days.map((day) => day.count)).toEqual([1, 0, 0, 0, 0, 0, 1]);
     expect(stats.days.map((day) => day.label)).toEqual(["M", "T", "W", "T", "F", "S", "S"]);
+  });
+
+  it("counts stock that is at or below the minimum quantity", () => {
+    expect(isAtOrBelowMinimum({ quantity: 2, minQuantity: 5 })).toBe(true);
+    expect(isAtOrBelowMinimum({ quantity: 0, minQuantity: 0 })).toBe(true);
+    expect(isAtOrBelowMinimum({ quantity: 6, minQuantity: 5 })).toBe(false);
   });
 
   it("is empty when nothing was created this week", () => {

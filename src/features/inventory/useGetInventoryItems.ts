@@ -8,7 +8,7 @@ export function useGetInventoryItems(search: string, filter: InventoryListFilter
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["inventory", workspaceId, search, filter, sort.field, sort.ascending],
-    queryFn: () => getInventoryItems(search, filter, sort),
+    queryFn: () => getInventoryItems(search, filter, sort, workspaceId),
     enabled: Boolean(workspaceId),
   });
 

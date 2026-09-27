@@ -105,11 +105,11 @@ function searchTerm(search: string | undefined) {
   return search?.replace(/[%_,().]/g, " ").trim() ?? "";
 }
 
-export async function getInventoryItems(search?: string, filter: InventoryListFilter = "all", sort: InventorySort = { field: "created_at", ascending: false }) {
-  const workspaceId = await getActiveWorkspaceId();
+export async function getInventoryItems(search?: string, filter: InventoryListFilter = "all", sort: InventorySort = { field: "created_at", ascending: false }, workspaceId?: string) {
+  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
   const column = inventorySortColumns[sort.field] ?? "created_at";
 
-  let query = supabase.from("inventory_items_with_status").select("*").eq("workspace_id", workspaceId).order(column, { ascending: sort.ascending });
+  let query = supabase.from("inventory_items_with_status").select("*").eq("workspace_id", resolvedWorkspaceId).order(column, { ascending: sort.ascending });
 
   const term = searchTerm(search);
   if (term) {

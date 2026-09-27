@@ -92,6 +92,10 @@ export function thisWeekStats(orders: WeekOrder[], clients: WeekClient[], now: D
   };
 }
 
+export function isAtOrBelowMinimum(item: { quantity: number; minQuantity: number }) {
+  return item.quantity <= item.minQuantity;
+}
+
 export function clientCreatedAt(client: unknown) {
   if (!client || typeof client !== "object" || !("created_at" in client)) return "";
   const createdAt = client.created_at;
