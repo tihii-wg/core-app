@@ -45,7 +45,7 @@ function membershipSelect(options: { industry: boolean; avatar: boolean }) {
 }
 
 function isMissingAvatarColumn(error: { code?: string; message?: string }) {
-  return error.code === "42703" && error.message?.includes("avatar_path") === true;
+  return (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("avatar_path") === true;
 }
 
 function isMissingIndustrySchema(error: { code?: string; message?: string }) {

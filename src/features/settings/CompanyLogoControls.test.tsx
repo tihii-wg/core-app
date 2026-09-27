@@ -47,7 +47,7 @@ describe("Company logo controls", () => {
   });
 
   it("offers change and remove when a logo is already saved", () => {
-    render(<CompanyLogoControls workspace={{ ...workspace, avatarPath: `workspace/${workspace.id}/logo.webp` }} />);
+    render(<CompanyLogoControls workspace={{ ...workspace, avatarPath: `${workspace.id}/logo.webp` }} />);
 
     expect(screen.getByRole("button", { name: "Change logo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove logo" })).toBeInTheDocument();

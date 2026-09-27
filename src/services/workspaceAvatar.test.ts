@@ -4,8 +4,9 @@ import { LOGO_FILE_ERROR, workspaceLogoFileError, workspaceLogoObjectPath, works
 const workspaceId = "4b8f0c3a-1111-4111-8111-111111111111";
 
 describe("workspace logo path", () => {
-  it("stores the logo under the workspace folder", () => {
-    expect(workspaceLogoStoragePath(workspaceId)).toBe(`workspace/${workspaceId}/logo.webp`);
+  it("stores only the object key inside the workspace bucket", () => {
+    expect(workspaceLogoStoragePath(workspaceId)).toBe(`${workspaceId}/logo.webp`);
+    expect(workspaceLogoObjectPath(`${workspaceId}/logo.webp`, workspaceId)).toBe(`${workspaceId}/logo.webp`);
     expect(workspaceLogoObjectPath(`workspace/${workspaceId}/logo.webp`, workspaceId)).toBe(`${workspaceId}/logo.webp`);
   });
 

@@ -1,5 +1,5 @@
--- Company logos are files in the private "workspace" bucket.
--- workspaces.avatar_path stores the path only, for example workspace/{workspace_id}/logo.webp.
+-- Bucket name is "workspace".
+-- workspaces.avatar_path stores only the object key inside that bucket: {workspace_id}/logo.webp.
 
 alter table public.workspaces
   add column if not exists avatar_path text;
@@ -11,7 +11,7 @@ alter table public.workspaces
   add constraint workspaces_avatar_path_check
   check (
     avatar_path is null
-    or avatar_path = 'workspace/' || id::text || '/logo.webp'
+    or avatar_path = id::text || '/logo.webp'
   );
 
 create or replace function public.is_workspace_member(target_workspace uuid)
@@ -108,3 +108,5 @@ create policy "Members can update workspaces they belong to"
   to authenticated
   using (public.is_workspace_member(id) and deleted_at is null)
   with check (public.is_workspace_member(id));
+
+notify pgrst, 'reload schema';
