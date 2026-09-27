@@ -14,7 +14,7 @@ import type { OrderStatus, Order } from "../../lib/types";
 import AddNewOrderForm from "../orders/AddNewOrderForm";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
-import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
+// import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -46,7 +46,7 @@ export function Orders() {
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  const { employees, isLoading: employeesIsLoading } = useGetEmployees();
+  const { employees} = useGetEmployees();
 
   // Filtered data
   const filteredOrders = useMemo(() => {
@@ -55,7 +55,8 @@ export function Orders() {
         !searchQuery ||
         order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
         order.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.device.toLowerCase().includes(searchQuery.toLowerCase());
+        order.device.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        order.vin.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === "all" || order.status === statusFilter;
       const matchesEmployee = employeeFilter === "all" || order.assignedEmployeeId === employeeFilter;
@@ -133,9 +134,9 @@ export function Orders() {
     }
   };
 
-  if (ordersLoading || employeesIsLoading) {
-    return <FullPageDataSpinner />;
-  }
+  // if (ordersLoading || employeesIsLoading) {
+  //   return <FullPageDataSpinner />;
+  // }
 
   const employeeFilterOptions = [
     { value: "all", label: "All Employees" },
@@ -162,6 +163,7 @@ export function Orders() {
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search orders..."
+
         filters={[
           {
             key: "status",
@@ -190,7 +192,7 @@ export function Orders() {
         data={filteredOrders}
         keyExtractor={(order) => order.id}
         onRowClick={handleRowClick}
-        // isLoading={employeesIsLoading}
+        isLoading={ordersLoading}
         emptyState={
           searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
             <div className="py-12 text-center">
@@ -220,7 +222,7 @@ export function Orders() {
         selectedOrder={selectedOrder}
         detailPanelOpen={detailPanelOpen}
         setDetailPanelOpen={setDetailPanelOpen}
-        employees={employees ?? []}
+        // employees={employees ?? []}
         onOrderUpdated={setSelectedOrder}
         onStatusChange={handleStatusChange}
       />

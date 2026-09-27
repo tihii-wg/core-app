@@ -13,13 +13,19 @@ vi.mock("./useUpdateOrder", () => ({
   }),
 }));
 
+vi.mock("../services/useGetServices", () => ({
+  default: () => ({
+    services: [{ id: "svc-tires", service_name: "Tires", service_price: 80, status: "active" }],
+  }),
+}));
+
 const order: Order = {
   id: "order-1",
   clientId: "client-1",
   clientName: "Ada Lovelace",
   orderNumber: "ORD-2026-003",
   device: "BMW",
-  vin: "",
+  vin: "1HGBH41JXMN109186",
   carNumber: "ABC123",
   service: "Oil change",
   services: [],
@@ -70,7 +76,7 @@ describe("OrderDetailPanel", () => {
     renderPanel();
 
     expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
-    expect(screen.getByText("View and edit this order's device, assignment, deadline, and description.")).toBeInTheDocument();
+    expect(screen.getByText("View and edit this order's VIN, services, device, assignment, and deadline.")).toBeInTheDocument();
     const editButton = screen.getByRole("button", { name: "Edit" });
     expect(editButton).toHaveTextContent("");
     expect(editButton.querySelector("svg")).toBeInTheDocument();
@@ -102,9 +108,32 @@ describe("OrderDetailPanel", () => {
         carNumber: "ABC123",
         description: "Noise",
         assignedEmployeeId: "emp-1",
+        vin: "1HGBH41JXMN109186",
       }),
     );
     expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ device: "Audi" }));
     expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("saves an edited VIN and an added service", async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({ ...order, vin: "2HGBH41JXMN109187" });
+
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const vinInput = screen.getByLabelText("VIN *");
+    await user.clear(vinInput);
+    await user.type(vinInput, "2HGBH41JXMN109187");
+    await user.click(screen.getByPlaceholderText("Service"));
+    await user.click(screen.getByRole("button", { name: "Tires" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vin: "2HGBH41JXMN109187",
+        services: [expect.objectContaining({ serviceId: "svc-tires", serviceName: "Tires", price: 80 })],
+      }),
+    );
   });
 });

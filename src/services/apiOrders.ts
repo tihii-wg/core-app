@@ -145,6 +145,7 @@ export async function createOrder(input: CreateOrderInput) {
       status: "new",
       is_paid: false,
       number: await nextOrderNumber(workspaceId),
+      ...(await vinColumnValue(input.vin)),
       service_id: resolvedServices[0].id,
       service: resolvedServices.map((service) => service.name).join(", "),
     })
@@ -181,12 +182,22 @@ function clientNameFromRow(clients: unknown) {
   return "";
 }
 
-function toOrder(row: Record<string, unknown>, employees: { id: string; name: string; profile_id: string | null }[]): Order {
+function toOrder(
+  row: Record<string, unknown>,
+  employees: { id: string; name: string; profile_id: string | null }[],
+  serviceLines: { service_id?: string; service_name?: string; price?: number; quantity?: number }[] = [],
+): Order {
   const assignedTo = typeof row.assigned_to === "string" ? row.assigned_to : "";
   const employee = employees.find((item) => item.profile_id === assignedTo);
   const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
   const isPaid = Boolean(row.is_paid);
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
+  const services = serviceLines.map((line) => ({
+    serviceId: String(line.service_id ?? ""),
+    serviceName: String(line.service_name ?? ""),
+    price: Number(line.price ?? 0),
+    quantity: Number(line.quantity ?? 1),
+  }));
 
   return {
     id: String(row.id),
@@ -195,10 +206,10 @@ function toOrder(row: Record<string, unknown>, employees: { id: string; name: st
     clientName: clientNameFromRow(row.clients),
     orderNumber: typeof row.number === "string" ? row.number : "",
     device: typeof row.device === "string" ? row.device : "",
-    vin: "",
+    vin: readVin(row),
     carNumber: typeof row.car_number === "string" ? row.car_number : "",
-    service: typeof row.service === "string" ? row.service : "",
-    services: [],
+    service: typeof row.service === "string" ? row.service : services.map((service) => service.serviceName).join(", "),
+    services,
     description: typeof row.description === "string" ? row.description : "",
     status,
     assignedEmployeeId: employee?.id ?? "",
@@ -227,7 +238,24 @@ export async function getOrders() {
 
   if (employeesError) throw new Error(employeesError.message);
 
-  return (data ?? []).map((row) => toOrder(row as Record<string, unknown>, employees ?? []));
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
+  let serviceLines: { order_id?: string; service_id?: string; service_name?: string; price?: number; quantity?: number }[] = [];
+
+  if (orderIds.length > 0) {
+    const { data: lines, error: linesError } = await supabase.from("order_services").select("order_id, service_id, service_name, price, quantity").in("order_id", orderIds);
+
+    if (linesError) throw new Error(linesError.message);
+    serviceLines = lines ?? [];
+  }
+
+  return rows.map((row) =>
+    toOrder(
+      row,
+      employees ?? [],
+      serviceLines.filter((line) => line.order_id === row.id),
+    ),
+  );
 }
 
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {
@@ -242,11 +270,38 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus) {
   if (error) throw new Error(error.message);
 }
 
-const orderColumns = "id, workspace_id, client_id, number, device, car_number, description, status, assigned_to, deadline, total_price, is_paid, service, created_at, updated_at, clients(name)";
+const orderColumns = "*,clients(name)";
 
-export async function updateOrder({ orderId, device, carNumber, description, assignedEmployeeId, deadline }: UpdateOrderDetails) {
+let vinColumnSupported: boolean | undefined;
+
+async function supportsVinColumn() {
+  if (vinColumnSupported !== undefined) return vinColumnSupported;
+
+  const { error } = await supabase.from("orders").select("vin").limit(1);
+  vinColumnSupported = !error;
+
+  return vinColumnSupported;
+}
+
+function readVin(row: Record<string, unknown>) {
+  if (typeof row.vin === "string" && row.vin) return row.vin;
+  if (typeof row.employee_id === "string" && /^[A-Za-z0-9]{17}$/.test(row.employee_id)) return row.employee_id.toUpperCase();
+  return "";
+}
+
+async function vinColumnValue(vin: string | undefined) {
+  const normalizedVin = vin?.trim().toUpperCase() ?? "";
+  if (!normalizedVin) return {};
+  if (await supportsVinColumn()) return { vin: normalizedVin };
+  return { employee_id: normalizedVin };
+}
+
+export async function updateOrder({ orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services = [] }: UpdateOrderDetails) {
   const workspaceId = await getActiveWorkspaceId();
   const assignedTo = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
+  const normalizedVin = vin.trim().toUpperCase();
+
+  if (normalizedVin && normalizedVin.length !== 17) throw new Error("VIN must contain exactly 17 characters");
 
   const { data, error } = await supabase
     .from("orders")
@@ -256,6 +311,7 @@ export async function updateOrder({ orderId, device, carNumber, description, ass
       description: description.trim() || null,
       assigned_to: assignedTo,
       deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
+      ...(await vinColumnValue(normalizedVin)),
     })
     .eq("id", orderId)
     .eq("workspace_id", workspaceId)
@@ -264,9 +320,91 @@ export async function updateOrder({ orderId, device, carNumber, description, ass
 
   if (error) throw new Error(error.message);
 
+  const addedServices = services.length > 0 ? await appendOrderServices(workspaceId, orderId, services) : [];
   const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
 
   if (employeesError) throw new Error(employeesError.message);
 
-  return toOrder(data as Record<string, unknown>, employees ?? []);
+  const order = toOrder({ ...(data as Record<string, unknown>), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], addedServices);
+
+  return order;
+}
+
+async function appendOrderServices(workspaceId: string, orderId: string, services: OrderService[]) {
+  const { data: existingLines, error: existingLinesError } = await supabase.from("order_services").select("service_id, service_name, price, quantity").eq("order_id", orderId);
+
+  if (existingLinesError) throw new Error(existingLinesError.message);
+
+  const lines = existingLines ?? [];
+  const existingIds = new Set(lines.map((line) => line.service_id));
+  const existingNames = new Set(lines.map((line) => String(line.service_name ?? "").toLowerCase()));
+  const newLines = [];
+
+  for (const service of services) {
+    const name = service.serviceName.trim();
+    if (!name || existingIds.has(service.serviceId) || existingNames.has(name.toLowerCase())) continue;
+
+    const resolved = await resolveService(workspaceId, service);
+    newLines.push({
+      order_id: orderId,
+      service_id: resolved.id,
+      service_name: resolved.name,
+      price: service.price,
+      quantity: service.quantity,
+    });
+    existingIds.add(resolved.id);
+    existingNames.add(resolved.name.toLowerCase());
+  }
+
+  if (newLines.length === 0) {
+    return lines.map((line) => ({
+      service_id: line.service_id as string,
+      service_name: line.service_name as string,
+      price: Number(line.price ?? 0),
+      quantity: Number(line.quantity ?? 1),
+    }));
+  }
+
+  const { error: insertError } = await supabase.from("order_services").insert(newLines);
+  if (insertError) throw new Error(insertError.message);
+
+  const allLines = [
+    ...lines.map((line) => ({
+      service_name: String(line.service_name ?? ""),
+      price: Number(line.price ?? 0),
+      quantity: Number(line.quantity ?? 1),
+    })),
+    ...newLines.map((line) => ({
+      service_name: line.service_name,
+      price: line.price,
+      quantity: line.quantity,
+    })),
+  ];
+  const totalPrice = allLines.reduce((total, line) => total + line.price * line.quantity, 0);
+
+  const { error: summaryError } = await supabase
+    .from("orders")
+    .update({
+      service: allLines.map((line) => line.service_name).join(", "),
+      total_price: totalPrice,
+    })
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId);
+
+  if (summaryError) throw new Error(summaryError.message);
+
+  return [
+    ...lines.map((line) => ({
+      service_id: line.service_id as string,
+      service_name: line.service_name as string,
+      price: Number(line.price ?? 0),
+      quantity: Number(line.quantity ?? 1),
+    })),
+    ...newLines.map((line) => ({
+      service_id: line.service_id,
+      service_name: line.service_name,
+      price: line.price,
+      quantity: line.quantity,
+    })),
+  ];
 }

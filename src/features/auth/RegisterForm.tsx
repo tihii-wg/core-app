@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
-import { useForm, useWatch, type SubmitHandler } from "react-hook-form";
+import { Controller, useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { useGetIndustries } from "../industries/useGetIndustries";
 import { useSignUp } from "./useSignUp";
 
 type Inputs = {
   companyName: string;
   ownerName: string;
+  industryId: string;
   email: string;
   phone: string;
   password: string;
@@ -19,6 +22,7 @@ type Inputs = {
 
 export default function RegisterForm() {
   const { mutateAsync, error: signUpError } = useSignUp();
+  const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   // const [authType, setAuthType] = useState<"email" | "phone">("email");
@@ -29,7 +33,11 @@ export default function RegisterForm() {
     register,
     control,
     reset,
-  } = useForm<Inputs>();
+  } = useForm<Inputs>({
+    defaultValues: {
+      industryId: "",
+    },
+  });
 
   const password = useWatch({
     control,
@@ -44,6 +52,7 @@ export default function RegisterForm() {
         email: data.email,
         phone: data.phone,
         password: data.password,
+        industryId: data.industryId,
       });
       reset();
     } catch (error) {
@@ -68,6 +77,33 @@ export default function RegisterForm() {
             disabled={isSubmitting}
           />
           {errors.companyName && <p className="text-xs text-[#f41f20]">Company name is required</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="industryId" className="text-sm text-[#282e33]">
+            What type of business do you run?
+          </Label>
+          <Controller
+            name="industryId"
+            control={control}
+            rules={{ required: "Business type is required" }}
+            render={({ field }) => (
+              <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting || industriesLoading}>
+                <SelectTrigger id="industryId" className={errors.industryId ? "h-10 w-full border-[#f41f20]" : "h-10 w-full border-[#c9cbcc]"}>
+                  <SelectValue placeholder={industriesLoading ? "Loading business types..." : "Business type"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {industries.map((industry) => (
+                    <SelectItem key={industry.id} value={industry.id}>
+                      {industry.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {errors.industryId && <p className="text-xs text-[#f41f20]">{errors.industryId.message}</p>}
+          {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
         </div>
 
         <div className="space-y-1.5">

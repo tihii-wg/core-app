@@ -4,21 +4,24 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
-import type { Employee, Order, OrderStatus } from "../../lib/types";
+import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
+import useGetEmployees from "../employees/useGetEmployees";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
   detailPanelOpen: boolean;
   setDetailPanelOpen: (open: boolean) => void;
-  employees: Employee[];
+  // employees: Employee[];
   onOrderUpdated: (order: Order) => void;
   onStatusChange: (status: OrderStatus) => void;
 };
 
-export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDetailPanelOpen, employees, onOrderUpdated, onStatusChange }: OrderDetailPanelProps) {
+export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDetailPanelOpen, onOrderUpdated, onStatusChange }: OrderDetailPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
+  const { employees,} = useGetEmployees();
+
 
   if (selectedOrder?.id !== editingOrderId) {
     setEditingOrderId(selectedOrder?.id);
@@ -48,7 +51,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
               <Pencil className="size-4" />
             </button>
           )}
-          <SheetDescription className="sr-only">View and edit this order's device, assignment, deadline, and description.</SheetDescription>
+          <SheetDescription className="sr-only">View and edit this order's VIN, services, device, assignment, and deadline.</SheetDescription>
         </SheetHeader>
 
         {selectedOrder && isEditing && (
@@ -96,6 +99,13 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
                   <p className="text-sm text-[#939699]">Car Number</p>
                   <p className="font-medium text-[#282e33]">{selectedOrder.carNumber}</p>
                 </div>
+                <div>
+                  <p className="text-sm text-[#939699]">VIN</p>
+                  <p className="font-medium text-[#282e33]">{selectedOrder.vin}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-[#939699]">Assigned To</p>
                   <p className="font-medium text-[#282e33]">{selectedOrder.assignedEmployeeName}</p>

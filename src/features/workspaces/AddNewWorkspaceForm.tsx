@@ -1,32 +1,41 @@
+import { Controller, useForm } from "react-hook-form";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Spinner } from "../../ui/Spinner";
 import { Button } from "../../ui/Button";
-import { useForm } from "react-hook-form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useUser } from "../auth/useUser";
+import { useGetIndustries } from "../industries/useGetIndustries";
 import { useCreateWorkspace } from "./useCreateWorkspace";
 
 export type AddNewWorkspaceFormData = {
   workspaceName: string;
   role: string;
+  industryId: string;
 };
 
 export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
   const { user } = useUser();
   const { mutateAsync } = useCreateWorkspace();
+  const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const {
     register,
     reset,
-    // watch,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<AddNewWorkspaceFormData>();
+  } = useForm<AddNewWorkspaceFormData>({
+    defaultValues: {
+      industryId: "",
+    },
+  });
 
   const onSubmit = (data: AddNewWorkspaceFormData) => {
     const newWorkspaceData = {
       name: data.workspaceName,
       role: data.role,
       userId: user.id,
+      industryId: data.industryId,
     };
     mutateAsync(newWorkspaceData);
     setCreateModalOpen(false);
@@ -47,6 +56,31 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
             disabled={isSubmitting}
           />
           {errors.workspaceName && <p className="text-xs text-[#f41f20]">Name is required</p>}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="industryId">Business type *</Label>
+          <Controller
+            name="industryId"
+            control={control}
+            rules={{ required: "Business type is required" }}
+            render={({ field }) => (
+              <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting || industriesLoading}>
+                <SelectTrigger id="industryId" className={errors.industryId ? "w-full border-[#f41f20]" : "w-full"}>
+                  <SelectValue placeholder="Business type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {industries.map((industry) => (
+                    <SelectItem key={industry.id} value={industry.id}>
+                      {industry.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {errors.industryId && <p className="text-xs text-[#f41f20]">{errors.industryId.message}</p>}
+          {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
         </div>
 
         <div className="space-y-1.5">

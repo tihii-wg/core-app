@@ -1,5 +1,6 @@
 // import { screen } from "@testing-library/react";
 import type { NewWorkspaceData } from "../lib/types";
+import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
 
 export async function getUserWorkspaces() {
@@ -9,24 +10,48 @@ export async function getUserWorkspaces() {
 
   if (!user) throw new Error("User not found");
 
-  const { data, error } = await supabase
-    .from("workspace_members")
-    .select(
-      `role,
+  const withIndustry = `role,
+	  workspaces!inner (
+    id,
+    name,
+    owner_id,
+    deleted_at,
+    industry_id,
+    industry:industries (
+      id,
+      name,
+      slug
+    )
+    )
+		`;
+
+  const withoutIndustry = `role,
 	  workspaces!inner (
     id,
     name,
     owner_id,
     deleted_at
     )
-		`
-    )
-    .eq("user_id", user.id)
-    .is("workspaces.deleted_at", null);
+		`;
+
+  const query = supabase.from("workspace_members").select(withIndustry).eq("user_id", user.id).is("workspaces.deleted_at", null);
+
+  const { data, error } = await query;
+
+  if (error && isMissingIndustrySchema(error)) {
+    const fallback = await supabase.from("workspace_members").select(withoutIndustry).eq("user_id", user.id).is("workspaces.deleted_at", null);
+
+    if (fallback.error) throw new Error(fallback.error.message);
+    return fallback.data;
+  }
 
   if (error) throw new Error(error.message);
 
   return data;
+}
+
+function isMissingIndustrySchema(error: { code?: string; message?: string }) {
+  return error.code === "PGRST205" || error.code === "PGRST200" || error.code === "42703" || error.message?.includes("industries") === true;
 }
 
 export async function setActiveWorkspace(id: string) {
@@ -46,12 +71,15 @@ export async function setActiveWorkspace(id: string) {
 
 export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
   // create workspace
+  const industryId = await resolveIndustryId(newWorkspaceData.industryId);
+
   const { data, error } = await supabase
     .from("workspaces")
     .insert([
       {
         name: newWorkspaceData.name,
         owner_id: newWorkspaceData.userId,
+        industry_id: industryId,
       },
     ])
     .select();
@@ -72,6 +100,38 @@ export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
     ])
     .select();
   if (error2) throw new Error(error2.message);
+
+  return data;
+}
+
+export async function updateWorkspaceIndustry(workspaceId: string, industryId: string) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("User not found");
+
+  const { data: member, error: memberError } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (memberError) throw new Error(memberError.message);
+  if (!member) throw new Error("You do not have access to this workspace");
+
+  const resolvedIndustryId = await resolveIndustryId(industryId);
+
+  const { data, error } = await supabase
+    .from("workspaces")
+    .update({ industry_id: resolvedIndustryId })
+    .eq("id", workspaceId)
+    .select("id, industry_id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Workspace was not updated");
 
   return data;
 }

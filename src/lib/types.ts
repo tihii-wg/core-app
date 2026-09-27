@@ -106,6 +106,7 @@ export type UpdateOrderInput = CreateOrderInput & {
 export type EditOrderFormData = {
   device: string;
   carNumber: string;
+  vin: string;
   description: string;
   assignedEmployeeId: string;
   deadline: string;
@@ -113,6 +114,7 @@ export type EditOrderFormData = {
 
 export type UpdateOrderDetails = EditOrderFormData & {
   orderId: string;
+  services: OrderService[];
 };
 export interface addNewServiceFormData {
   serviceId?: string;
@@ -197,6 +199,8 @@ export type Workspace = {
   name: string;
   owner_id: string;
   deleted_at: string | null;
+  industry_id: string | null;
+  industry: WorkspaceIndustry | null;
 };
 
 export type WorkspaceMemberWithWorkspace = {
@@ -271,10 +275,22 @@ export type CreateEmployeeData = AddNewEmployeesFormData & {
   profile_id: string;
 };
 
+export type Industry = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type WorkspaceIndustry = Pick<Industry, "id" | "name" | "slug">;
+
 export type NewWorkspaceData = {
   name: string;
   role: string;
   userId: string;
+  industryId: string;
 };
 
 export type CreateMadalProps = {

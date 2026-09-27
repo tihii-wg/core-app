@@ -29,6 +29,7 @@ function query(result: { data: unknown; error: unknown }) {
     like: () => Promise.resolve({ data: chain.numbers, error: null }),
     order: () => chain,
     update: () => chain,
+    in: () => chain,
     numbers: [] as { number: string }[],
     insert: (payload: unknown) => {
       chain.inserted.push(payload);
@@ -273,10 +274,15 @@ describe("getOrders", () => {
       error: null,
     });
     const employees = query({ data: [{ id: employeeId, name: "Ada Tech", profile_id: "user-1" }], error: null });
+    const orderServices = query({
+      data: [{ order_id: "order-1", service_id: "service-1", service_name: "Oil change", price: 40, quantity: 1 }],
+      error: null,
+    });
 
     from.mockImplementation((table: string) => {
       if (table === "profiles") return profiles;
       if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
       if (table === "employees") return employees;
       throw new Error(`Unexpected table ${table}`);
     });
@@ -290,6 +296,7 @@ describe("getOrders", () => {
         device: "BMW",
         carNumber: "ABC123",
         service: "Oil change",
+        services: [expect.objectContaining({ serviceId: "service-1", serviceName: "Oil change", price: 40 })],
         status: "new",
         assignedEmployeeId: employeeId,
         assignedEmployeeName: "Ada Tech",
@@ -371,6 +378,51 @@ describe("updateOrder", () => {
         deadline: "2026-10-02",
       }),
     );
+  });
+
+  it("stores a VIN when the orders table has no vin column", async () => {
+    const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
+    const employee = { id: employeeId, name: "Ada Tech", profile_id: "user-1" };
+    const employees = query({ data: [employee], error: null });
+    employees.maybeSingle = () => Promise.resolve({ data: { id: employeeId, profile_id: "user-1" }, error: null });
+    const updates: unknown[] = [];
+    const orders = query({
+      data: {
+        id: "order-1",
+        client_id: "client-1",
+        number: "ORD-2026-003",
+        device: "BMW",
+        employee_id: "1HGBH41JXMN109186",
+        clients: { name: "Ada Lovelace" },
+      },
+      error: null,
+    });
+    orders.limit = () => Promise.resolve({ data: null, error: { code: "42703", message: "column orders.vin does not exist" } });
+    orders.update = (payload: unknown) => {
+      updates.push(payload);
+      return orders;
+    };
+
+    from.mockImplementation((table: string) => {
+      if (table === "profiles") return profiles;
+      if (table === "employees") return employees;
+      if (table === "orders") return orders;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const updated = await updateOrder({
+      orderId: "order-1",
+      device: "BMW",
+      carNumber: "ABC123",
+      vin: "1hgbh41jxmn109186",
+      description: "",
+      assignedEmployeeId: employeeId,
+      deadline: "",
+      services: [],
+    });
+
+    expect(updates[0]).toEqual(expect.objectContaining({ employee_id: "1HGBH41JXMN109186" }));
+    expect(updated.vin).toBe("1HGBH41JXMN109186");
   });
 });
 

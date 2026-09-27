@@ -39,6 +39,10 @@ import { Separator } from "../../ui/Separator";
 import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
+import { useGetIndustries } from "../industries/useGetIndustries";
+import { useGetProfile } from "../profiles/useGetProfile";
+import { useGetWorkspaces } from "../workspaces/useGetWorkspaces";
+import { useUpdateWorkspaceIndustry } from "../workspaces/useUpdateWorkspaceIndustry";
 
 export function SettingsModule() {
   const [activeTab, setActiveTab] = useState("company");
@@ -53,6 +57,13 @@ export function SettingsModule() {
     website: "www.autocarepro.com",
     taxId: "XX-XXXXXXX",
   });
+  const [industryId, setIndustryId] = useState("");
+  const [industryError, setIndustryError] = useState("");
+  const [syncedWorkspaceId, setSyncedWorkspaceId] = useState<string | undefined>();
+  const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
+  const { workspaces: memberships } = useGetWorkspaces();
+  const { data: profile } = useGetProfile();
+  const { updateWorkspaceIndustry, isPending: isSavingIndustry } = useUpdateWorkspaceIndustry();
 
   const [notifications, setNotifications] = useState({
     emailOrders: true,
@@ -72,6 +83,15 @@ export function SettingsModule() {
     dateFormat: "MM/DD/YYYY",
     currency: "USD",
   });
+
+  const workspaces = (memberships ?? []).flatMap((item) => item.workspaces ?? []);
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === profile?.active_workspace_id);
+
+  if (currentWorkspace?.id && currentWorkspace.id !== syncedWorkspaceId) {
+    setSyncedWorkspaceId(currentWorkspace.id);
+    setIndustryId(currentWorkspace.industry_id ?? "");
+    setIndustryError("");
+  }
 
   return (
     <div className="space-y-6">
@@ -162,6 +182,31 @@ export function SettingsModule() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="businessType">Business type</Label>
+                  <Select
+                    value={industryId || undefined}
+                    onValueChange={(value) => {
+                      setIndustryId(value);
+                      setIndustryError("");
+                    }}
+                    disabled={industriesLoading || isSavingIndustry || !currentWorkspace}
+                  >
+                    <SelectTrigger id="businessType" className={industryError ? "w-full border-[#f41f20]" : "w-full"}>
+                      <SelectValue placeholder="Business type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {industries.map((industry) => (
+                        <SelectItem key={industry.id} value={industry.id}>
+                          {industry.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {industryError && <p className="text-xs text-[#f41f20]">{industryError}</p>}
+                  {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -245,7 +290,21 @@ export function SettingsModule() {
               </div>
 
               <div className="flex justify-end">
-                <Button>
+                <Button
+                  type="button"
+                  disabled={isSavingIndustry || !currentWorkspace}
+                  onClick={() => {
+                    if (!currentWorkspace?.id) return;
+                    if (!industryId) {
+                      setIndustryError("Business type is required");
+                      return;
+                    }
+                    updateWorkspaceIndustry({
+                      workspaceId: currentWorkspace.id,
+                      industryId,
+                    });
+                  }}
+                >
                   <Save className="mr-2 h-4 w-4" />
                   Save Changes
                 </Button>

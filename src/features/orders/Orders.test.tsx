@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Orders } from "./Orders";
 import type { Order } from "../../lib/types";
@@ -9,7 +10,7 @@ const order: Order = {
   clientName: "Ada Lovelace",
   orderNumber: "ORD-2026-003",
   device: "BMW",
-  vin: "",
+  vin: "1HGBH41JXMN109186",
   carNumber: "ABC123",
   service: "Oil change",
   services: [],
@@ -47,5 +48,21 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("finds an order by VIN the same way it finds one by client name", async () => {
+    const user = userEvent.setup();
+    render(<Orders />);
+
+    await user.type(screen.getByPlaceholderText("Search orders..."), "1hgb");
+    expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
+
+    await user.clear(screen.getByPlaceholderText("Search orders..."));
+    await user.type(screen.getByPlaceholderText("Search orders..."), "ada lovelace");
+    expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
+
+    await user.clear(screen.getByPlaceholderText("Search orders..."));
+    await user.type(screen.getByPlaceholderText("Search orders..."), "not-a-vin");
+    expect(screen.queryByText("ORD-2026-003")).not.toBeInTheDocument();
   });
 });

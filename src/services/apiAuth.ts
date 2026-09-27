@@ -1,4 +1,5 @@
 import supabase from "./supabase";
+import { resolveIndustryId } from "./apiIndustries";
 
 type signUpProps = {
   companyName: string;
@@ -6,6 +7,7 @@ type signUpProps = {
   email: string;
   phone?: string;
   password: string;
+  industryId: string;
 };
 
 type loginProps = {
@@ -35,6 +37,8 @@ export async function signUp(data: signUpProps) {
   const user = authData.user;
   if (!user) throw new Error("User not found");
 
+  const industryId = await resolveIndustryId(data.industryId);
+
   const { ownerName, phone, companyName } = user.user_metadata ?? {};
 
   // 2.PROFILE
@@ -57,6 +61,7 @@ export async function signUp(data: signUpProps) {
       {
         name: companyName,
         owner_id: user.id,
+        industry_id: industryId,
       },
     ])
     .select()
