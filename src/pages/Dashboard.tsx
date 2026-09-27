@@ -10,6 +10,8 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../ui/StatusBadge";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
 import { getOrders } from "../services/apiOrders";
+import { getClients } from "../services/apiClients";
+import { clientCreatedAt, localDateKey, taskOverviewCounts, thisWeekStats } from "./dashboardStats";
 
 
 export default function Dashboard() {
@@ -26,6 +28,31 @@ export default function Dashboard() {
     queryFn: () => getOrders(workspaceId),
     enabled: Boolean(workspaceId),
   });
+  const {
+    data: workspaceClients = [],
+    isLoading: clientsLoading,
+    isError: clientsError,
+  } = useQuery({
+    queryKey: ["clients", workspaceId, ""],
+    queryFn: () => getClients("", workspaceId),
+    enabled: Boolean(workspaceId),
+  });
+
+  const now = new Date();
+  const today = localDateKey(now);
+  const taskOverview = taskOverviewCounts(workspaceOrders, today);
+  const week = thisWeekStats(
+    workspaceOrders,
+    workspaceClients.map((client) => ({ createdAt: clientCreatedAt(client) })),
+    now,
+  );
+  const weekPeak = Math.max(...week.days.map((day) => day.count), 0);
+  const taskTotal = taskOverview.total;
+  const taskRows = [
+    { label: "In Progress", count: taskOverview.inProgress, color: "#f89200" },
+    { label: "Waiting Parts", count: taskOverview.waitingParts, color: "#939699" },
+    { label: "Completed Today", count: taskOverview.completedToday, color: "#099b49" },
+  ];
 
   const closedStatuses = ["completed", "paid", "cancelled"];
   const activeOrderCount = workspaceOrders.filter((order) => !closedStatuses.includes(order.status)).length;
@@ -192,66 +219,113 @@ export default function Dashboard() {
           {/* Employee Tasks */}
           <div className="bg-white rounded-md border border-[#eeeeef] p-4">
             <h2 className="text-base font-semibold text-[#282e33] mb-4">Task Overview</h2>
-            <div className="space-y-3">
-              {[
-                { label: "In Progress", count: 4, color: "#f89200" },
-                { label: "Waiting Parts", count: 2, color: "#939699" },
-                { label: "Completed Today", count: 3, color: "#099b49" },
-              ].map((task) => (
-                <div key={task.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full" style={{ backgroundColor: task.color }} />
-                    <span className="text-sm text-[#282e33]">{task.label}</span>
-                  </div>
-                  <span className="text-sm font-medium text-[#282e33]">{task.count}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Simple visual bar */}
-            <div className="mt-4 pt-4 border-t border-[#eeeeef]">
-              <div className="flex gap-1 h-2 rounded overflow-hidden">
-                <div className="bg-[#f89200]" style={{ width: "44%" }} />
-                <div className="bg-[#939699]" style={{ width: "22%" }} />
-                <div className="bg-[#099b49]" style={{ width: "34%" }} />
+            {ordersLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-2 w-full mt-4" />
               </div>
-              <p className="text-xs text-[#939699] mt-2">9 total tasks today</p>
-            </div>
+            ) : ordersError ? (
+              <>
+                <p className="text-sm font-medium text-[#282e33]">Could not load tasks</p>
+                <p className="text-xs text-[#939699] mt-1">Refresh the page to try again.</p>
+              </>
+            ) : workspaceOrders.length === 0 ? (
+              <>
+                <p className="text-sm font-medium text-[#282e33]">No tasks yet</p>
+                <p className="text-xs text-[#939699] mt-1">Open orders will show up here.</p>
+              </>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {taskRows.map((task) => (
+                    <div key={task.label} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: task.color }} />
+                        <span className="text-sm text-[#282e33]">{task.label}</span>
+                      </div>
+                      <span className="text-sm font-medium text-[#282e33]">{task.count}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 pt-4 border-t border-[#eeeeef]">
+                  <div className="flex gap-1 h-2 rounded overflow-hidden bg-[#f8f9fa]">
+                    {taskRows.map((task) => (
+                      <div
+                        key={task.label}
+                        style={{
+                          width: taskTotal === 0 ? "0%" : `${(task.count / taskTotal) * 100}%`,
+                          backgroundColor: task.color,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs text-[#939699] mt-2">
+                    {taskTotal} total {taskTotal === 1 ? "task" : "tasks"} today
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Revenue Summary */}
           <div className="bg-white rounded-md border border-[#eeeeef] p-4">
             <h2 className="text-base font-semibold text-[#282e33] mb-4">This Week</h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">Revenue</span>
-                <span className="text-sm font-medium text-[#099b49]">$3,245</span>
+            {ordersLoading || clientsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-16 w-full mt-4" />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">Orders</span>
-                <span className="text-sm font-medium text-[#282e33]">18</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">New Clients</span>
-                <span className="text-sm font-medium text-[#282e33]">5</span>
-              </div>
-            </div>
-
-            {/* Simple bar chart */}
-            <div className="mt-4 pt-4 border-t border-[#eeeeef]">
-              <div className="flex items-end justify-between gap-1 h-16">
-                {[40, 65, 45, 80, 55, 90, 70].map((height, i) => (
-                  <div key={i} className="flex-1 bg-[#edf4fd] hover:bg-[#1973e1] transition-colors rounded-sm cursor-pointer" style={{ height: `${height}%` }} />
-                ))}
-              </div>
-              <div className="flex justify-between mt-2">
-                {["M", "T", "W", "T", "F", "S", "S"].map((day, i) => (
-                  <span key={i} className="text-xs text-[#939699] flex-1 text-center">
-                    {day}
-                  </span>
-                ))}
-              </div>
-            </div>
+            ) : ordersError ? (
+              <>
+                <p className="text-sm font-medium text-[#282e33]">Could not load this week</p>
+                <p className="text-xs text-[#939699] mt-1">Refresh the page to try again.</p>
+              </>
+            ) : week.isEmpty && !clientsError ? (
+              <>
+                <p className="text-sm font-medium text-[#282e33]">No tasks yet</p>
+                <p className="text-xs text-[#939699] mt-1">Orders and clients from this week will show up here.</p>
+              </>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[#939699]">Revenue</span>
+                    <span className="text-sm font-medium text-[#099b49]">${week.revenue.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[#939699]">Orders</span>
+                    <span className="text-sm font-medium text-[#282e33]">{week.orders}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[#939699]">New Clients</span>
+                    <span className="text-sm font-medium text-[#282e33]">{clientsError ? "Could not load" : week.newClients}</span>
+                  </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-[#eeeeef]">
+                  <div className="flex items-end justify-between gap-1 h-16">
+                    {week.days.map((day) => (
+                      <div
+                        key={day.date}
+                        className="flex-1 bg-[#edf4fd] hover:bg-[#1973e1] transition-colors rounded-sm"
+                        style={{ height: weekPeak === 0 ? "0%" : `${(day.count / weekPeak) * 100}%` }}
+                        title={`${day.count} ${day.count === 1 ? "order" : "orders"}`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-2">
+                    {week.days.map((day) => (
+                      <span key={day.date} className="text-xs text-[#939699] flex-1 text-center">
+                        {day.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

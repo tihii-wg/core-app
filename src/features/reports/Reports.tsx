@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Package, Calendar, Download, FileText, PieChart, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/Card";
 import { Button } from "../../ui/Button";
@@ -7,6 +7,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { PageHeader } from "../../pages/PageHeader";
 // import { useApp } from "../../lib/app-context";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart as RechartsPieChart, Pie, Cell, Legend, AreaChart, Area } from "recharts";
+
+function ReportChart({ height, children }: { height: number; children: ReactElement }) {
+  return (
+    <div className="w-full min-w-0" style={{ height }}>
+      <ResponsiveContainer width="100%" height={height} minWidth={0} initialDimension={{ width: 480, height }}>
+        {children}
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 const monthlyRevenue = [
   { month: "Jan", revenue: 45000, orders: 120 },
@@ -161,8 +171,7 @@ export function ReportsModule() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-75">
-                  <ResponsiveContainer width="100%" height="100%">
+                <ReportChart height={300}>
                     <AreaChart data={monthlyRevenue}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
@@ -177,8 +186,7 @@ export function ReportsModule() {
                       />
                       <Area type="monotone" dataKey="revenue" stroke="#1973e1" fill="#1973e1" fillOpacity={0.1} strokeWidth={2} />
                     </AreaChart>
-                  </ResponsiveContainer>
-                </div>
+                </ReportChart>
               </CardContent>
             </Card>
 
@@ -191,8 +199,7 @@ export function ReportsModule() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-75">
-                  <ResponsiveContainer width="100%" height="100%">
+                <ReportChart height={300}>
                     <BarChart data={monthlyRevenue}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
@@ -206,8 +213,7 @@ export function ReportsModule() {
                       />
                       <Bar dataKey="orders" fill="#099b49" radius={[4, 4, 0, 0]} />
                     </BarChart>
-                  </ResponsiveContainer>
-                </div>
+                </ReportChart>
               </CardContent>
             </Card>
           </div>
@@ -221,8 +227,7 @@ export function ReportsModule() {
                 <CardTitle>Service Distribution</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-75">
-                  <ResponsiveContainer width="100%" height="100%">
+                <ReportChart height={300}>
                     <RechartsPieChart>
                       <Pie data={serviceBreakdown} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value">
                         {serviceBreakdown.map((entry, index) => (
@@ -239,8 +244,7 @@ export function ReportsModule() {
                       />
                       <Legend />
                     </RechartsPieChart>
-                  </ResponsiveContainer>
-                </div>
+                </ReportChart>
               </CardContent>
             </Card>
 
@@ -283,8 +287,7 @@ export function ReportsModule() {
               <CardTitle>Employee Performance</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-100">
-                <ResponsiveContainer width="100%" height="100%">
+              <ReportChart height={400}>
                   <BarChart data={employeePerformance} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis type="number" stroke="#6b7280" fontSize={12} />
@@ -299,8 +302,7 @@ export function ReportsModule() {
                     <Legend />
                     <Bar dataKey="completed" name="Jobs Completed" fill="#1973e1" radius={[0, 4, 4, 0]} />
                   </BarChart>
-                </ResponsiveContainer>
-              </div>
+              </ReportChart>
             </CardContent>
           </Card>
         </TabsContent>
@@ -311,8 +313,7 @@ export function ReportsModule() {
               <CardTitle>Inventory Trends</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-100">
-                <ResponsiveContainer width="100%" height="100%">
+              <ReportChart height={400}>
                   <LineChart data={inventoryTrends}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
@@ -328,8 +329,7 @@ export function ReportsModule() {
                     <Line type="monotone" dataKey="stock" name="Stock Level" stroke="#1973e1" strokeWidth={2} dot={{ fill: "#1973e1" }} />
                     <Line type="monotone" dataKey="used" name="Parts Used" stroke="#099b49" strokeWidth={2} dot={{ fill: "#099b49" }} />
                   </LineChart>
-                </ResponsiveContainer>
-              </div>
+              </ReportChart>
             </CardContent>
           </Card>
         </TabsContent>

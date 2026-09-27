@@ -31,16 +31,23 @@ export async function createClient({ workspace_id, clientName, email, phone, add
 
 
 
-export async function getClients(search: string) {
+export async function getClients(search: string, workspaceId?: string) {
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
+  if (userError) throw new Error(userError.message);
   if (!user) throw new Error("User not found");
 
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).single();
-  if (profileError) throw new Error(profileError.message);
+  let resolvedWorkspaceId = typeof workspaceId === "string" ? workspaceId : "";
+  if (!resolvedWorkspaceId) {
+    const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).maybeSingle();
+    if (profileError) throw new Error(profileError.message);
+    resolvedWorkspaceId = typeof profile?.active_workspace_id === "string" ? profile.active_workspace_id : "";
+  }
+  if (!resolvedWorkspaceId) throw new Error("No active workspace selected");
 
-  let query = supabase.from("clients").select("*").eq("workspace_id", profile.active_workspace_id);
+  let query = supabase.from("clients").select("*").eq("workspace_id", resolvedWorkspaceId);
 
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
@@ -50,7 +57,7 @@ export async function getClients(search: string) {
 
   if (error) throw new Error(error.message);
 
-  return clients;
+  return clients ?? [];
 }
 
 export async function updateClient({ clientId, clientName, email, phone, address, notes }: UpdateClientInput) {
