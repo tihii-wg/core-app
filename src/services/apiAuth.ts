@@ -131,7 +131,23 @@ export async function login({ email, password }: loginProps) {
     password,
   });
 
-  if (error) throw new Error(error.message);
+  if (error || !data.user) throw new Error("Invalid login or password");
 
-  return data;
+  const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (assuranceError) {
+    await supabase.auth.signOut();
+    throw new Error("Unable to check two-factor authentication. Please try again.");
+  }
+
+  const mfaRequired = assurance?.currentLevel === "aal1" && assurance?.nextLevel === "aal2";
+  if (!mfaRequired) return { user: data.user, mfaRequired: false, factorId: null };
+
+  const { data: factors, error: factorsError } = await supabase.auth.mfa.listFactors();
+  const factorId = factors?.totp?.[0]?.id ?? null;
+  if (factorsError || !factorId) {
+    await supabase.auth.signOut();
+    throw new Error("Unable to start two-factor verification. Please try again.");
+  }
+
+  return { user: data.user, mfaRequired: true, factorId };
 }

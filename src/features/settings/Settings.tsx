@@ -33,9 +33,9 @@ import { Avatar, AvatarFallback } from "../../ui/Avatar";
 import { Separator } from "../../ui/Separator";
 import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
-import { Input } from "../../ui/Input";
 import { ProfileSettings } from "./ProfileSettings";
 import { CompanySettings } from "./CompanySettings";
+import { SecuritySettings } from "./SecuritySettings";
 import { settingsTabFromSearch } from "./settingsTab";
 
 export function SettingsModule() {
@@ -224,60 +224,8 @@ export function SettingsModule() {
           </Card>
         </TabsContent>
 
-        {/* Security Settings */}
         <TabsContent value="security" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>
-                Update your password to keep your account secure
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" type="password" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" type="password" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input id="confirmPassword" type="password" />
-              </div>
-              <Button>Update Password</Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Two-Factor Authentication</CardTitle>
-              <CardDescription>
-                Add an extra layer of security to your account
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <p className="font-medium">Authenticator App</p>
-                  <p className="text-sm text-muted-foreground">
-                    Use an authenticator app for 2FA codes
-                  </p>
-                </div>
-                <Button variant="outline">Enable</Button>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <p className="font-medium">SMS Authentication</p>
-                  <p className="text-sm text-muted-foreground">
-                    Receive 2FA codes via SMS
-                  </p>
-                </div>
-                <Button variant="outline">Enable</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <SecuritySettings />
         </TabsContent>
 
         {/* Billing Settings */}

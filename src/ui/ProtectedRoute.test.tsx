@@ -12,6 +12,10 @@ vi.mock("../features/auth/useUser", () => ({
   useUser: () => authState,
 }));
 
+vi.mock("../features/auth/useMfa", () => ({
+  useSessionMfa: () => ({ needsMfa: false, isLoading: false }),
+}));
+
 function renderRoute() {
   return render(
     <MemoryRouter initialEntries={["/en/ws-1/orders"]}>
