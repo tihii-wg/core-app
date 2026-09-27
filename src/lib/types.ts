@@ -26,6 +26,10 @@ export interface User {
   avatar?: string;
 }
 
+export type ClientType = "individual" | "organization";
+
+export type ClientListFilter = "all" | ClientType;
+
 export interface Client {
   id: string;
   name: string;
@@ -35,6 +39,9 @@ export interface Client {
   balance: number;
   created_at: string;
   notes?: string;
+  client_type: ClientType;
+  tax_id: string | null;
+  contact_person: string | null;
 }
 
 export interface Order {
@@ -283,24 +290,35 @@ export type Company = {
   industry: IndustryKey;
 };
 
-export type AddNewClientFormData = {
+export type ClientFormValues = {
+  clientType: ClientType;
+  clientName: string;
+  taxId: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  address?: string;
+  notes?: string;
+};
+
+export type AddNewClientFormData = ClientFormValues & {
+  workspace_id: string;
+  balance?: number;
+};
+
+export type CreateClientInput = {
   workspace_id: string;
   clientName: string;
   email: string;
   phone: string;
   address?: string;
   notes?: string;
-  balance?: number;
-  // search?: string;
+  clientType?: ClientType;
+  taxId?: string | null;
+  contactPerson?: string | null;
 };
 
-export type EditClientFormData = {
-  clientName: string;
-  email: string;
-  phone: string;
-  address?: string;
-  notes?: string;
-};
+export type EditClientFormData = ClientFormValues;
 
 export type UpdateClientInput = EditClientFormData & {
   clientId: string;

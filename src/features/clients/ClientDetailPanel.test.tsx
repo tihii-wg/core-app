@@ -22,6 +22,9 @@ const client: Client = {
   balance: 0,
   created_at: "2024-07-01T10:00:00.000Z",
   notes: "Prefers morning visits",
+  client_type: "individual",
+  tax_id: null,
+  contact_person: null,
 };
 
 function renderPanel(onClientUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
@@ -44,7 +47,7 @@ describe("ClientDetailPanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByRole("heading", { name: "Ada Lovelace" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Ada Lovelace/ })).toBeInTheDocument();
     expect(screen.getByText("View and edit this client's contact information, balance, and order history.")).toBeInTheDocument();
     const editButton = screen.getByRole("button", { name: "Edit" });
     expect(editButton).toHaveTextContent("");
@@ -68,7 +71,7 @@ describe("ClientDetailPanel", () => {
     renderPanel(onClientUpdated, setDetailPanelOpen);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    const nameInput = screen.getByLabelText("Name *");
+    const nameInput = screen.getByLabelText("Full name *");
     await user.clear(nameInput);
     await user.type(nameInput, "Ada Byron");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));

@@ -54,6 +54,145 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
   return error.code === "PGRST205" || error.code === "PGRST200" || error.code === "42703" || error.message?.includes("industries") === true;
 }
 
+export type WorkspaceDetails = {
+  id: string;
+  name: string;
+  ownerId: string | null;
+  industryId: string | null;
+  industryName: string | null;
+  role: string;
+};
+
+const workspaceWithIndustry = `role,
+  workspaces!inner (
+    id,
+    name,
+    owner_id,
+    deleted_at,
+    industry_id,
+    industry:industries (
+      id,
+      name,
+      slug
+    )
+  )`;
+
+const workspaceWithoutIndustry = `role,
+  workspaces!inner (
+    id,
+    name,
+    owner_id,
+    deleted_at,
+    industry_id
+  )`;
+
+function firstRecord(value: unknown) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
+  const member = firstRecord(row);
+  if (!member || typeof member !== "object") return null;
+
+  const membership = member as Record<string, unknown>;
+  const workspace = firstRecord(membership.workspaces);
+  if (!workspace || typeof workspace !== "object") return null;
+
+  const record = workspace as Record<string, unknown>;
+  if (typeof record.id !== "string" || !record.id || record.deleted_at) return null;
+
+  const industry = firstRecord(record.industry);
+  const industryRecord = industry && typeof industry === "object" ? (industry as Record<string, unknown>) : null;
+
+  return {
+    id: record.id,
+    name: typeof record.name === "string" ? record.name : "",
+    ownerId: typeof record.owner_id === "string" ? record.owner_id : null,
+    industryId: typeof record.industry_id === "string" ? record.industry_id : null,
+    industryName: industryRecord && typeof industryRecord.name === "string" ? industryRecord.name : null,
+    role: typeof membership.role === "string" ? membership.role : "member",
+  };
+}
+
+export function workspaceUpdateFields(input: { name: string; industryId: string }) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Company name is required");
+
+  const industryId = input.industryId.trim();
+  if (!industryId) throw new Error("Business type is required");
+
+  return { name, industryId };
+}
+
+async function currentUser() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("User not found");
+  return user;
+}
+
+async function requireWorkspaceMembership(userId: string, workspaceId: string) {
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("You do not have access to this workspace");
+
+  return data;
+}
+
+export async function getWorkspace(workspaceId: string) {
+  if (!workspaceId) return null;
+
+  const user = await currentUser();
+  const request = supabase.from("workspace_members").select(workspaceWithIndustry).eq("user_id", user.id).eq("workspace_id", workspaceId).is("deleted_at", null).is("workspaces.deleted_at", null).maybeSingle();
+
+  const { data, error } = await request;
+
+  if (error && isMissingIndustrySchema(error)) {
+    const fallback = await supabase
+      .from("workspace_members")
+      .select(workspaceWithoutIndustry)
+      .eq("user_id", user.id)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .is("workspaces.deleted_at", null)
+      .maybeSingle();
+
+    if (fallback.error) throw new Error(fallback.error.message);
+    return toWorkspaceDetails(fallback.data);
+  }
+
+  if (error) throw new Error(error.message);
+  return toWorkspaceDetails(data);
+}
+
+export async function updateWorkspaceDetails(workspaceId: string, input: { name: string; industryId: string }) {
+  const fields = workspaceUpdateFields(input);
+  const user = await currentUser();
+  await requireWorkspaceMembership(user.id, workspaceId);
+
+  const resolvedIndustryId = await resolveIndustryId(fields.industryId);
+  const { data, error } = await supabase.from("workspaces").update({ name: fields.name, industry_id: resolvedIndustryId }).eq("id", workspaceId).select("id, name, industry_id").maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Workspace was not updated");
+
+  return {
+    id: String(data.id),
+    name: typeof data.name === "string" ? data.name : fields.name,
+    industryId: typeof data.industry_id === "string" ? data.industry_id : resolvedIndustryId,
+  };
+}
+
 export async function setActiveWorkspace(id: string) {
   const {
     data: { user },

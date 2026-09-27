@@ -7,7 +7,8 @@ import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { NoClients, NoSearchResults } from "../../ui/EmptyState";
-import type { Client} from "../../lib/types";
+import type { Client, ClientListFilter } from "../../lib/types";
+import { StatusBadge } from "../../ui/StatusBadge";
 import AddNewClientForm from "./AddNewClienForm";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -16,9 +17,10 @@ import { useGetOrders } from "../orders/useGetOrders";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const debounceSearch = useDebounce(searchQuery, 400);
-  const { isLoading, clients, isPending } = useGetClients(debounceSearch);
+  const { isLoading, clients = [], isPending } = useGetClients(debounceSearch, clientType);
   const { orders, isLoading: ordersLoading } = useGetOrders();
 
   // State
@@ -43,7 +45,12 @@ export function Clients() {
     {
       key: "name",
       header: "Name",
-      cell: (client) => <span className="font-medium text-[#282e33]">{client.name}</span>,
+      cell: (client) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-[#282e33]">{client.name}</span>
+          <StatusBadge variant={client.client_type === "organization" ? "info" : "muted"}>{client.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>
+        </div>
+      ),
     },
 
     {
@@ -103,7 +110,25 @@ export function Clients() {
         }
       />
 
-      <SearchAndFilters searchValue={searchQuery} onSearchChange={setSearchQuery} searchPlaceholder="Search by name, email, or phone..." />
+      <SearchAndFilters
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search by name, tax ID, contact, email, or phone..."
+        filters={[
+          {
+            key: "clientType",
+            label: "Client type",
+            value: clientType,
+            onChange: (value) => setClientType(value as ClientListFilter),
+            options: [
+              { value: "all", label: "All" },
+              { value: "individual", label: "Individuals" },
+              { value: "organization", label: "Organizations" },
+            ],
+          },
+        ]}
+        onClearFilters={() => setClientType("all")}
+      />
 
       <DataTable
         columns={columns}
@@ -111,7 +136,7 @@ export function Clients() {
         isLoading={isLoading || ordersLoading}
         keyExtractor={(client) => client.id}
         onRowClick={handleRowClick}
-        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
+        emptyState={searchQuery || clientType !== "all" ? <NoSearchResults query={searchQuery || (clientType === "organization" ? "Organizations" : "Individuals")} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
       />
 
       {/* {isLoading && <FullPageDataSpinner />} */}

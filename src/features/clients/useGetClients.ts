@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
+import type { ClientListFilter } from "../../lib/types";
 import { getClients } from "../../services/apiClients";
 
-export function useGetClients(search: string) {
+export function useGetClients(search: string, clientType: ClientListFilter = "all") {
   const { workspaceId } = useParams();
   const {
     data: clients,
@@ -10,9 +11,9 @@ export function useGetClients(search: string) {
     isPending,
     error,
   } = useQuery({
-    queryKey: ["clients", workspaceId, search],
+    queryKey: ["clients", workspaceId, search, clientType],
     queryFn: async () => {
-      return await getClients(search);
+      return await getClients(search, workspaceId, clientType);
     },
     enabled: Boolean(workspaceId),
   });

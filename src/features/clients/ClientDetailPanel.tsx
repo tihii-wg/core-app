@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Mail, MapPin, Pencil, Phone } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
+import { StatusBadge } from "../../ui/StatusBadge";
 import type { Client } from "../../lib/types";
 
 export type ClientOrderSummary = {
@@ -39,7 +40,12 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle className="pr-12">{selectedClient?.name}</SheetTitle>
+          <SheetTitle className="pr-12">
+            <span className="inline-flex items-center gap-2">
+              {selectedClient?.name}
+              {selectedClient && <StatusBadge variant={selectedClient.client_type === "organization" ? "info" : "muted"}>{selectedClient.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>}
+            </span>
+          </SheetTitle>
           {selectedClient && !isEditing && (
             <button
               type="button"
@@ -86,6 +92,18 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
                     {selectedClient.phone}
                   </a>
                 </div>
+                {selectedClient.client_type === "organization" && selectedClient.contact_person && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[#939699]">Contact</span>
+                    <span className="text-[#282e33]">{selectedClient.contact_person}</span>
+                  </div>
+                )}
+                {selectedClient.client_type === "organization" && selectedClient.tax_id && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[#939699]">Tax ID / IDNO</span>
+                    <span className="text-[#282e33]">{selectedClient.tax_id}</span>
+                  </div>
+                )}
                 {selectedClient.address && (
                   <div className="flex items-start gap-2">
                     <MapPin className="h-4 w-4 text-[#939699] mt-0.5" />

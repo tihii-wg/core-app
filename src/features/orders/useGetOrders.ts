@@ -7,7 +7,7 @@ export function useGetOrders() {
   const { workspaceId } = useParams();
   const { data: orders, isLoading, error } = useQuery({
     queryKey: ["orders", workspaceId],
-    queryFn: getOrders,
+    queryFn: () => getOrders(workspaceId),
     enabled: Boolean(workspaceId),
   });
 

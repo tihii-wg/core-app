@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
-import toast from "react-hot-toast";
+import { useSearchParams } from "react-router-dom";
 import {
   Building2,
   User,
@@ -9,12 +8,7 @@ import {
   CreditCard,
   Users,
   Palette,
-  Globe,
-  Mail,
-  Phone,
-  MapPin,
   Save,
-  Camera,
 } from "lucide-react";
 import {
   Card,
@@ -27,7 +21,6 @@ import {
 
 import { Switch } from "../../ui/Switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
-import { Textarea } from "../../ui/Textarea";
 import {
   Select,
   SelectContent,
@@ -36,44 +29,18 @@ import {
   SelectValue,
 } from "../../ui/Select";
 import { PageHeader } from "../../pages/PageHeader";
-import { Avatar, AvatarFallback, AvatarImage } from "../../ui/Avatar";
+import { Avatar, AvatarFallback } from "../../ui/Avatar";
 import { Separator } from "../../ui/Separator";
 import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
-import { useGetIndustries } from "../industries/useGetIndustries";
-import { useGetProfile } from "../profiles/useGetProfile";
-import { useGetWorkspaces } from "../workspaces/useGetWorkspaces";
-import { useUpdateWorkspaceIndustry } from "../workspaces/useUpdateWorkspaceIndustry";
-import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
-import { parseMarkupPercent } from "../inventory/markup";
+import { ProfileSettings } from "./ProfileSettings";
+import { CompanySettings } from "./CompanySettings";
+import { settingsTabFromSearch } from "./settingsTab";
 
 export function SettingsModule() {
-  const [activeTab, setActiveTab] = useState("company");
-  const [companySettings, setCompanySettings] = useState({
-    name: "AutoCare Pro",
-    email: "info@autocarepro.com",
-    phone: "(555) 123-4567",
-    address: "123 Main Street, Suite 100",
-    city: "San Francisco",
-    state: "CA",
-    zip: "94102",
-    website: "www.autocarepro.com",
-    taxId: "XX-XXXXXXX",
-  });
-  const [industryId, setIndustryId] = useState("");
-  const [industryError, setIndustryError] = useState("");
-  const [syncedWorkspaceId, setSyncedWorkspaceId] = useState<string | undefined>();
-  const [markupInput, setMarkupInput] = useState("0");
-  const [markupError, setMarkupError] = useState("");
-  const [syncedMarkupWorkspaceId, setSyncedMarkupWorkspaceId] = useState<string | undefined>();
-  const { workspaceId } = useParams();
-  const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
-  const { workspaces: memberships } = useGetWorkspaces();
-  const { data: profile } = useGetProfile();
-  const { updateWorkspaceIndustry, isPending: isSavingIndustry } = useUpdateWorkspaceIndustry();
-  const { data: savedMarkup = 0, isSuccess: markupLoaded, isLoading: markupLoading } = useGetInventoryMarkup(workspaceId);
-  const { mutateAsync: saveMarkup, isPending: isSavingMarkup } = useUpdateInventoryMarkup();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = settingsTabFromSearch(searchParams.get("tab"));
 
   const [notifications, setNotifications] = useState({
     emailOrders: true,
@@ -94,21 +61,6 @@ export function SettingsModule() {
     currency: "USD",
   });
 
-  const workspaces = (memberships ?? []).flatMap((item) => item.workspaces ?? []);
-  const currentWorkspace = workspaces.find((workspace) => workspace.id === profile?.active_workspace_id);
-
-  if (currentWorkspace?.id && currentWorkspace.id !== syncedWorkspaceId) {
-    setSyncedWorkspaceId(currentWorkspace.id);
-    setIndustryId(currentWorkspace.industry_id ?? "");
-    setIndustryError("");
-  }
-
-  if (workspaceId && markupLoaded && workspaceId !== syncedMarkupWorkspaceId) {
-    setSyncedMarkupWorkspaceId(workspaceId);
-    setMarkupInput(String(savedMarkup));
-    setMarkupError("");
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -116,7 +68,17 @@ export function SettingsModule() {
         description="Manage your business settings and preferences"
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          const next = settingsTabFromSearch(tab);
+          if (next === "company") {
+            setSearchParams({}, { replace: true });
+            return;
+          }
+          setSearchParams({ tab: next }, { replace: true });
+        }}
+      >
         <TabsList className="flex-wrap">
           <TabsTrigger value="company">
             <Building2 className="mr-2 h-4 w-4" />
@@ -148,300 +110,13 @@ export function SettingsModule() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Company Settings */}
         <TabsContent value="company" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Company Information</CardTitle>
-              <CardDescription>
-                Update your company details and contact information
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-6">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback className="bg-primary text-xl text-primary-foreground">
-                    AC
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <Button variant="outline" size="sm">
-                    <Camera className="mr-2 h-4 w-4" />
-                    Change Logo
-                  </Button>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Recommended: 200x200px, PNG or JPG
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="companyName">Company Name</Label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="companyName"
-                      value={companySettings.name}
-                      onChange={(e) =>
-                        setCompanySettings({
-                          ...companySettings,
-                          name: e.target.value,
-                        })
-                      }
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="businessType">Business type</Label>
-                  <Select
-                    value={industryId || undefined}
-                    onValueChange={(value) => {
-                      setIndustryId(value);
-                      setIndustryError("");
-                    }}
-                    disabled={industriesLoading || isSavingIndustry || !currentWorkspace}
-                  >
-                    <SelectTrigger id="businessType" className={industryError ? "w-full border-[#f41f20]" : "w-full"}>
-                      <SelectValue placeholder="Business type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {industries.map((industry) => (
-                        <SelectItem key={industry.id} value={industry.id}>
-                          {industry.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {industryError && <p className="text-xs text-[#f41f20]">{industryError}</p>}
-                  {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      value={companySettings.email}
-                      onChange={(e) =>
-                        setCompanySettings({
-                          ...companySettings,
-                          email: e.target.value,
-                        })
-                      }
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      value={companySettings.phone}
-                      onChange={(e) =>
-                        setCompanySettings({
-                          ...companySettings,
-                          phone: e.target.value,
-                        })
-                      }
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="website">Website</Label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="website"
-                      value={companySettings.website}
-                      onChange={(e) =>
-                        setCompanySettings({
-                          ...companySettings,
-                          website: e.target.value,
-                        })
-                      }
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="address">Address</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Textarea
-                      id="address"
-                      value={`${companySettings.address}\n${companySettings.city}, ${companySettings.state} ${companySettings.zip}`}
-                      className="min-h-[80px] pl-10"
-                      readOnly
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="inventoryMarkup">Inventory markup (%)</Label>
-                  <Input
-                    id="inventoryMarkup"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={markupInput}
-                    disabled={markupLoading || isSavingMarkup || !workspaceId}
-                    onChange={(event) => {
-                      setMarkupInput(event.target.value);
-                      setMarkupError("");
-                    }}
-                  />
-                  {markupError && <p className="text-xs text-[#f41f20]">{markupError}</p>}
-                  <p className="text-xs text-muted-foreground">Used to calculate an inventory item's selling price from its purchase price.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="taxId">Tax ID / EIN</Label>
-                  <Input
-                    id="taxId"
-                    value={companySettings.taxId}
-                    onChange={(e) =>
-                      setCompanySettings({
-                        ...companySettings,
-                        taxId: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  disabled={isSavingIndustry || isSavingMarkup || !workspaceId}
-                  onClick={async () => {
-                    if (!workspaceId) return;
-
-                    const markup = parseMarkupPercent(markupInput);
-                    if (markup == null) {
-                      setMarkupError(markupInput.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
-                      return;
-                    }
-
-                    setMarkupError("");
-                    try {
-                      await saveMarkup({ workspaceId, markupPercent: markup });
-                      toast.success("Markup updated");
-                    } catch {
-                      return;
-                    }
-
-                    if (!currentWorkspace?.id) return;
-                    if (!industryId) {
-                      setIndustryError("Business type is required");
-                      return;
-                    }
-                    updateWorkspaceIndustry({
-                      workspaceId: currentWorkspace.id,
-                      industryId,
-                    });
-                  }}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <CompanySettings />
         </TabsContent>
 
         {/* Profile Settings */}
         <TabsContent value="profile" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Profile</CardTitle>
-              <CardDescription>
-                Update your personal information
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-6">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src="/placeholder.svg" />
-                  <AvatarFallback className="bg-primary text-xl text-primary-foreground">
-                    JD
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <Button variant="outline" size="sm">
-                    <Camera className="mr-2 h-4 w-4" />
-                    Change Photo
-                  </Button>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Recommended: 200x200px, PNG or JPG
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue="John" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue="Doe" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="userEmail">Email</Label>
-                  <Input
-                    id="userEmail"
-                    type="email"
-                    defaultValue="john.doe@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="userPhone">Phone</Label>
-                  <Input id="userPhone" defaultValue="(555) 987-6543" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Input id="role" defaultValue="Administrator" disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Select defaultValue="management">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="management">Management</SelectItem>
-                      <SelectItem value="sales">Sales</SelectItem>
-                      <SelectItem value="service">Service</SelectItem>
-                      <SelectItem value="support">Support</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ProfileSettings />
         </TabsContent>
 
         {/* Notifications Settings */}
