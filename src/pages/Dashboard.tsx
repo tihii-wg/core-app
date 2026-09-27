@@ -1,19 +1,34 @@
 import { ClipboardList, DollarSign, FileText, Package, Plus, Users, ArrowRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useParams } from "react-router-dom";
 import { DataTable, type Column } from "../ui/DataTable";
 import type { Order } from "../lib/types";
 import { DashboardCard } from "../ui/DashboardCard";
 import { Button } from "../ui/Button";
 import { useApp } from "../lib/appContext";
 import { OrderStatusBadge, PaymentStatusBadge } from "../ui/StatusBadge";
+import { EmptyState } from "../ui/EmptyState";
+import { Skeleton } from "../ui/Skeleton";
+import { getOrders } from "../services/apiOrders";
 
 
 export default function Dashboard() {
 
 
   const { orders = [], clients = [], invoices = [], inventory = [], setCurrentModule } = useApp();
+  const { workspaceId } = useParams();
+  const {
+    data: workspaceOrders = [],
+    isLoading: ordersLoading,
+    isError: ordersError,
+  } = useQuery({
+    queryKey: ["orders", workspaceId],
+    queryFn: () => getOrders(workspaceId),
+    enabled: Boolean(workspaceId),
+  });
 
-  // Calculate stats
-  const activeOrders = orders.filter((o) => !["completed", "paid", "cancelled"].includes(o.status)).length;
+  const closedStatuses = ["completed", "paid", "cancelled"];
+  const activeOrderCount = workspaceOrders.filter((order) => !closedStatuses.includes(order.status)).length;
 
   const todayRevenue = orders.filter((o) => o.paymentStatus === "paid").reduce((sum, o) => sum + o.totalPrice, 0);
 
@@ -21,8 +36,7 @@ export default function Dashboard() {
 
   const lowStockItems = inventory.filter((item) => item.status === "low-stock").length;
 
-  // Recent orders
-  const recentOrders = orders.slice(0, 5);
+  const recentOrders = workspaceOrders.slice(0, 5);
 
   // Recent activity (mock)
   const recentActivity = clients.slice(0, 4).map((client, index) => ({
@@ -73,7 +87,31 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <DashboardCard title="Active Orders" value={activeOrders} icon={ClipboardList} variant="primary" trend={{ value: 12, label: "vs last week" }} />
+        <div className="bg-white rounded-md border border-[#eeeeef] p-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className="text-sm text-[#939699] font-medium">Active Orders</p>
+              {ordersLoading ? (
+                <Skeleton className="h-8 w-12 mt-2" />
+              ) : ordersError ? (
+                <>
+                  <p className="text-sm font-medium text-[#282e33] mt-2">Could not load orders</p>
+                  <p className="text-xs text-[#939699] mt-1">Refresh the page to try again.</p>
+                </>
+              ) : activeOrderCount === 0 ? (
+                <>
+                  <p className="text-sm font-medium text-[#282e33] mt-2">No active orders</p>
+                  <p className="text-xs text-[#939699] mt-1">Open orders will show up here.</p>
+                </>
+              ) : (
+                <p className="text-2xl font-semibold text-[#282e33] mt-1">{activeOrderCount}</p>
+              )}
+            </div>
+            <div className="p-2 rounded-md bg-[#edf4fd] text-[#1973e1]">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
         <DashboardCard title="Today's Revenue" value={`$${todayRevenue.toLocaleString()}`} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
         <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
         <DashboardCard title="Low Stock Items" value={lowStockItems} icon={Package} variant={lowStockItems > 0 ? "danger" : "default"} />
@@ -113,7 +151,20 @@ export default function Dashboard() {
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
-          <DataTable columns={orderColumns} data={recentOrders} keyExtractor={(order) => order.id} onRowClick={() => setCurrentModule("orders")} />
+          <DataTable
+            columns={orderColumns}
+            data={recentOrders}
+            keyExtractor={(order) => order.id}
+            onRowClick={() => setCurrentModule("orders")}
+            isLoading={ordersLoading}
+            emptyState={
+              <EmptyState
+                icon={ClipboardList}
+                title={ordersError ? "Could not load orders" : "No orders yet"}
+                description={ordersError ? "Refresh the page to try again." : "Orders you create will show up here."}
+              />
+            }
+          />
         </div>
 
         {/* Sidebar */}

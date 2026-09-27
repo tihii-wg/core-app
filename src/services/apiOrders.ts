@@ -223,18 +223,18 @@ function toOrder(
   };
 }
 
-export async function getOrders() {
-  const workspaceId = await getActiveWorkspaceId();
+export async function getOrders(workspaceId?: string) {
+  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
 
   const { data, error } = await supabase
     .from("orders")
     .select(orderColumns)
-    .eq("workspace_id", workspaceId)
+    .eq("workspace_id", resolvedWorkspaceId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
+  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", resolvedWorkspaceId);
 
   if (employeesError) throw new Error(employeesError.message);
 
