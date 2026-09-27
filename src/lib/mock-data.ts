@@ -2,7 +2,7 @@ import type {
   // Client,
   // Employee,
   // Order,
-  InventoryItem,
+  MockInventoryItem,
   Service,
   Invoice,
   Transaction,
@@ -381,7 +381,7 @@ export const mockOrders: Order[] = [
   },
 ];
 
-export const mockInventory: InventoryItem[] = [
+export const mockInventory: MockInventoryItem[] = [
   {
     id: "inv-1",
     sku: "SCR-IPH14-BLK",

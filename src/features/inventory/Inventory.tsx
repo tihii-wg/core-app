@@ -1,221 +1,212 @@
-import { useState, useMemo } from "react";
-import { Plus, Package, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
-import { Input } from "../../ui/Input";
-import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
-import { InventoryStatusBadge } from "../../ui/StatusBadge";
-import { NoInventory } from "../../ui/EmptyState";
-import { Spinner } from "../../ui/Spinner";
-import { useApp } from "../../lib/appContext";
-import type { InventoryItem } from "../../lib/types";
+import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
+import { EmptyState, NoInventory, NoSearchResults } from "../../ui/EmptyState";
+import { useDebounce } from "../../hooks/useDebounce";
+import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortField } from "../../lib/types";
+import { useGetInventoryItems } from "./useGetInventoryItems";
+import { useGetInventoryItem } from "./useGetInventoryItem";
+import { useCreateInventoryItem } from "./useCreateInventoryItem";
+import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
+import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
+import InventoryItemForm from "./InventoryItemForm";
+import InventoryDetailPanel from "./InventoryDetailPanel";
 
-const categoryOptions = [
-  { value: "all", label: "All Categories" },
-  { value: "Screens", label: "Screens" },
-  { value: "Batteries", label: "Batteries" },
-  { value: "Accessories", label: "Accessories" },
-  { value: "Storage", label: "Storage" },
-  { value: "Memory", label: "Memory" },
-  { value: "Tools", label: "Tools" },
-  { value: "Components", label: "Components" },
+const emptyInventoryForm = {
+  name: "",
+  sku: "",
+  description: "",
+  category: "",
+  quantity: 0,
+  minQuantity: 0,
+  unit: "pcs",
+  purchasePrice: null,
+  sellingPrice: null,
+  supplier: "",
+  location: "",
+  isActive: true,
+};
+
+const stockFilters = [
+  { value: "all", label: "All" },
+  { value: "in_stock", label: "In Stock" },
+  { value: "low_stock", label: "Low Stock" },
+  { value: "out_of_stock", label: "Out of Stock" },
+  { value: "inactive", label: "Inactive" },
 ];
 
+const sortOptions: { value: string; label: string; field: InventorySortField; ascending: boolean }[] = [
+  { value: "name.asc", label: "Name", field: "name", ascending: true },
+  { value: "sku.asc", label: "SKU", field: "sku", ascending: true },
+  { value: "quantity.desc", label: "Quantity", field: "quantity", ascending: false },
+  { value: "purchase_price.desc", label: "Purchase Price", field: "purchase_price", ascending: false },
+  { value: "selling_price.desc", label: "Selling Price", field: "selling_price", ascending: false },
+  { value: "created_at.desc", label: "Created Date", field: "created_at", ascending: false },
+  { value: "updated_at.desc", label: "Updated Date", field: "updated_at", ascending: false },
+];
+
+function formatMoney(value: number | null) {
+  if (value == null) return "—";
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function quantityClass(item: InventoryItem) {
+  if (item.stockStatus === "out_of_stock") return "text-[#f41f20] font-medium";
+  if (item.stockStatus === "low_stock") return "text-[#f89200] font-medium";
+  return "text-[#282e33]";
+}
+
 export function Inventory() {
-  const { inventory, addInventoryItem, updateInventoryQuantity } = useApp();
-
-  // State
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [adjustQuantity, setAdjustQuantity] = useState("");
+  const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
+  const [sortValue, setSortValue] = useState("created_at.desc");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
 
-  // Form state
-  const [formData, setFormData] = useState({
-    sku: "",
-    name: "",
-    category: "",
-    supplier: "",
-    quantity: "",
-    minQuantity: "",
-    purchasePrice: "",
-    salePrice: "",
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const debouncedSearch = useDebounce(searchQuery, 400);
+  const sortOption = sortOptions.find((option) => option.value === sortValue) ?? sortOptions[5];
+  const sort: InventorySort = { field: sortOption.field, ascending: sortOption.ascending };
 
-  // Stats
-  const lowStockCount = inventory.filter((i) => i.status === "low-stock").length;
-  const outOfStockCount = inventory.filter((i) => i.status === "out-of-stock").length;
+  const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
+  const detailQuery = useGetInventoryItem(detailId);
+  const editQuery = useGetInventoryItem(editId);
+  const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
+  const { mutate: updateItem, isPending: isUpdating } = useUpdateInventoryItem();
+  const { mutate: deleteItem, isPending: isDeleting } = useDeleteInventoryItem();
 
-  // Filtered data
-  const filteredInventory = useMemo(() => {
-    return inventory.filter((item) => {
-      const matchesSearch = !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.sku.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
-      return matchesSearch && matchesCategory;
-    });
-  }, [inventory, searchQuery, categoryFilter]);
+  const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all";
+  const lowStockCount = items.filter((item) => item.stockStatus === "low_stock").length;
+  const outOfStockCount = items.filter((item) => item.stockStatus === "out_of_stock").length;
 
-  // Table columns
   const columns: Column<InventoryItem>[] = [
     {
-      key: "sku",
-      header: "SKU",
-      cell: (item) => <span className="font-mono text-sm text-[#939699]">{item.sku}</span>,
-      className: "hidden sm:table-cell",
-    },
-    {
       key: "name",
-      header: "Item Name",
+      header: "Name",
       cell: (item) => (
         <div>
           <p className="font-medium text-[#282e33]">{item.name}</p>
-          <p className="text-xs text-[#939699]">{item.category}</p>
+          {!item.isActive && <StatusBadge variant="muted">Inactive</StatusBadge>}
         </div>
       ),
     },
     {
-      key: "supplier",
-      header: "Supplier",
-      cell: (item) => item.supplier,
-      className: "hidden lg:table-cell",
+      key: "sku",
+      header: "SKU",
+      cell: (item) => <span className="font-mono text-sm text-[#939699]">{item.sku || "—"}</span>,
+      className: "hidden sm:table-cell",
+    },
+    {
+      key: "category",
+      header: "Category",
+      cell: (item) => item.category || "—",
+      className: "hidden md:table-cell",
     },
     {
       key: "quantity",
-      header: "Qty",
+      header: "Quantity",
       cell: (item) => (
-        <div className="flex items-center gap-2">
-          <span className={item.quantity <= item.minQuantity ? "text-[#f41f20] font-medium" : "text-[#282e33]"}>{item.quantity}</span>
-          {item.quantity <= item.minQuantity && item.quantity > 0 && <AlertTriangle className="h-4 w-4 text-[#f89200]" />}
-        </div>
+        <span className={quantityClass(item)}>
+          {item.quantity} {item.unit}
+        </span>
       ),
     },
     {
       key: "status",
       header: "Status",
-      cell: (item) => <InventoryStatusBadge status={item.status} />,
+      cell: (item) => <InventoryStatusBadge status={item.stockStatus} />,
+    },
+    {
+      key: "unit",
+      header: "Unit",
+      cell: (item) => item.unit,
+      className: "hidden lg:table-cell",
     },
     {
       key: "purchasePrice",
-      header: "Cost",
-      cell: (item) => `$${item.purchasePrice}`,
+      header: "Purchase Price",
+      cell: (item) => formatMoney(item.purchasePrice),
       className: "hidden md:table-cell text-right",
     },
     {
-      key: "salePrice",
-      header: "Price",
-      cell: (item) => `$${item.salePrice}`,
-      className: "text-right",
+      key: "sellingPrice",
+      header: "Selling Price",
+      cell: (item) => formatMoney(item.sellingPrice),
+      className: "hidden sm:table-cell text-right",
     },
     {
       key: "actions",
-      header: "",
+      header: "Actions",
+      className: "w-[120px] text-right",
       cell: (item) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedItem(item);
-            setAdjustQuantity(item.quantity.toString());
-            setAdjustModalOpen(true);
-          }}
-          className="text-[#1973e1] hover:text-[#1565c0]"
-        >
-          Adjust
-        </Button>
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Edit ${item.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditId(item.id);
+            }}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Delete ${item.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setItemToDelete(item);
+            }}
+          >
+            <Trash2 />
+          </Button>
+        </div>
       ),
     },
   ];
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.sku.trim()) errors.sku = "SKU is required";
-    if (!formData.name.trim()) errors.name = "Name is required";
-    if (!formData.category) errors.category = "Category is required";
-    if (!formData.quantity || parseInt(formData.quantity) < 0) {
-      errors.quantity = "Valid quantity is required";
-    }
-    if (!formData.minQuantity || parseInt(formData.minQuantity) < 0) {
-      errors.minQuantity = "Valid minimum quantity is required";
-    }
-    if (!formData.purchasePrice || parseFloat(formData.purchasePrice) < 0) {
-      errors.purchasePrice = "Valid purchase price is required";
-    }
-    if (!formData.salePrice || parseFloat(formData.salePrice) < 0) {
-      errors.salePrice = "Valid sale price is required";
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleCreateItem = async () => {
-    if (!validateForm()) return;
-
-    setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    addInventoryItem({
-      sku: formData.sku,
-      name: formData.name,
-      category: formData.category,
-      supplier: formData.supplier || "Unknown",
-      quantity: parseInt(formData.quantity),
-      minQuantity: parseInt(formData.minQuantity),
-      purchasePrice: parseFloat(formData.purchasePrice),
-      salePrice: parseFloat(formData.salePrice),
-    });
-
-    setIsSubmitting(false);
-    setCreateModalOpen(false);
-    setFormData({
-      sku: "",
-      name: "",
-      category: "",
-      supplier: "",
-      quantity: "",
-      minQuantity: "",
-      purchasePrice: "",
-      salePrice: "",
-    });
-  };
-
-  const handleAdjustQuantity = async () => {
-    if (!selectedItem || !adjustQuantity) return;
-
-    const newQuantity = parseInt(adjustQuantity);
-    if (isNaN(newQuantity) || newQuantity < 0) return;
-
-    setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    updateInventoryQuantity(selectedItem.id, newQuantity);
-    setIsSubmitting(false);
-    setAdjustModalOpen(false);
-    setSelectedItem(null);
-  };
+  const editDefaults = editQuery.item
+    ? {
+        name: editQuery.item.name,
+        sku: editQuery.item.sku,
+        description: editQuery.item.description,
+        category: editQuery.item.category,
+        quantity: editQuery.item.quantity,
+        minQuantity: editQuery.item.minQuantity,
+        unit: editQuery.item.unit,
+        purchasePrice: editQuery.item.purchasePrice,
+        sellingPrice: editQuery.item.sellingPrice,
+        supplier: editQuery.item.supplier,
+        location: editQuery.item.location,
+        isActive: editQuery.item.isActive,
+      }
+    : null;
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Inventory"
-        description={`${inventory.length} items in stock`}
+        description={isLoading ? "Loading inventory..." : isError ? "Inventory could not be loaded" : `${items.length} ${items.length === 1 ? "item" : "items"}`}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+          <Button onClick={() => setCreateOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
             <Plus className="h-4 w-4 mr-1" />
             Add Item
           </Button>
         }
       />
 
-      {/* Alerts */}
-      {(lowStockCount > 0 || outOfStockCount > 0) && (
+      {!isLoading && !isError && (lowStockCount > 0 || outOfStockCount > 0) && (
         <div className="flex flex-wrap gap-2">
           {lowStockCount > 0 && (
             <div className="flex items-center gap-2 px-3 py-2 bg-[#fff4e5] text-[#f89200] rounded-md text-sm">
@@ -232,174 +223,168 @@ export function Inventory() {
         </div>
       )}
 
-      <SearchAndFilters
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder="Search by name or SKU..."
-        filters={[
-          {
-            key: "category",
-            label: "Category",
-            options: categoryOptions,
-            value: categoryFilter,
-            onChange: setCategoryFilter,
-          },
-        ]}
-        onClearFilters={() => {
-          setSearchQuery("");
-          setCategoryFilter("all");
-        }}
-      />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <SearchAndFilters
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder="Search by name, SKU, category, or supplier..."
+          filters={[
+            {
+              key: "stock",
+              label: "Stock",
+              options: stockFilters,
+              value: stockFilter,
+              onChange: (value) => setStockFilter(value as InventoryListFilter),
+            },
+          ]}
+          onClearFilters={() => {
+            setSearchQuery("");
+            setStockFilter("all");
+          }}
+        />
+        <Select value={sortValue} onValueChange={setSortValue}>
+          <SelectTrigger className="h-9 w-full sm:w-48 border-[#c9cbcc] text-sm" aria-label="Sort inventory">
+            <SelectValue placeholder="Sort" />
+          </SelectTrigger>
+          <SelectContent>
+            {sortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      <DataTable columns={columns} data={filteredInventory} keyExtractor={(item) => item.id} emptyState={<NoInventory onAddItem={() => setCreateModalOpen(true)} />} />
+      {isError ? (
+        <div className="bg-white rounded-md border border-[#eeeeef]">
+          <EmptyState icon={Package} title="Could not load inventory" description="Refresh the list to try again." action={{ label: "Try again", onClick: () => refetch() }} />
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={items}
+          isLoading={isLoading}
+          keyExtractor={(item) => item.id}
+          onRowClick={(item) => setDetailId(item.id)}
+          emptyState={hasSearchOrFilter ? <NoSearchResults query={searchQuery || stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
+        />
+      )}
 
-      {/* Create Item Modal */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add Inventory Item</DialogTitle>
+            <DialogDescription className="sr-only">Create an inventory item for the current workspace.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>SKU *</Label>
-                <Input
-                  value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
-                  placeholder="e.g., SCR-IPH15-BLK"
-                  className={formErrors.sku ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.sku && <p className="text-xs text-[#f41f20]">{formErrors.sku}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Category *</Label>
-                <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                  <SelectTrigger className={formErrors.category ? "border-[#f41f20]" : ""}>
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoryOptions.slice(1).map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {formErrors.category && <p className="text-xs text-[#f41f20]">{formErrors.category}</p>}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Item Name *</Label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., iPhone 15 Pro Screen Assembly"
-                className={formErrors.name ? "border-[#f41f20]" : ""}
-              />
-              {formErrors.name && <p className="text-xs text-[#f41f20]">{formErrors.name}</p>}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Supplier</Label>
-              <Input value={formData.supplier} onChange={(e) => setFormData({ ...formData, supplier: e.target.value })} placeholder="e.g., TechParts Direct" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Quantity *</Label>
-                <Input
-                  type="number"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                  placeholder="0"
-                  className={formErrors.quantity ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.quantity && <p className="text-xs text-[#f41f20]">{formErrors.quantity}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Min Quantity *</Label>
-                <Input
-                  type="number"
-                  value={formData.minQuantity}
-                  onChange={(e) => setFormData({ ...formData, minQuantity: e.target.value })}
-                  placeholder="0"
-                  className={formErrors.minQuantity ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.minQuantity && <p className="text-xs text-[#f41f20]">{formErrors.minQuantity}</p>}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Purchase Price ($) *</Label>
-                <Input
-                  type="number"
-                  value={formData.purchasePrice}
-                  onChange={(e) => setFormData({ ...formData, purchasePrice: e.target.value })}
-                  placeholder="0.00"
-                  className={formErrors.purchasePrice ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.purchasePrice && <p className="text-xs text-[#f41f20]">{formErrors.purchasePrice}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Sale Price ($) *</Label>
-                <Input
-                  type="number"
-                  value={formData.salePrice}
-                  onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
-                  placeholder="0.00"
-                  className={formErrors.salePrice ? "border-[#f41f20]" : ""}
-                />
-                {formErrors.salePrice && <p className="text-xs text-[#f41f20]">{formErrors.salePrice}</p>}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateItem} disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-              {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Item"}
-            </Button>
-          </div>
+          <InventoryItemForm
+            defaultValues={emptyInventoryForm}
+            submitLabel="Add Item"
+            isSubmitting={isCreating}
+            onCancel={() => setCreateOpen(false)}
+            onSubmit={(data) => {
+              createItem(data, {
+                onSuccess: () => setCreateOpen(false),
+              });
+            }}
+          />
         </DialogContent>
       </Dialog>
 
-      {/* Adjust Quantity Modal */}
-      <Dialog open={adjustModalOpen} onOpenChange={setAdjustModalOpen}>
-        <DialogContent className="max-w-sm">
+      <Dialog
+        open={Boolean(editId)}
+        onOpenChange={(open) => {
+          if (!open) setEditId(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Adjust Stock</DialogTitle>
+            <DialogTitle>Edit Inventory Item</DialogTitle>
+            <DialogDescription className="sr-only">Update the selected inventory item.</DialogDescription>
           </DialogHeader>
-          {selectedItem && (
-            <div className="space-y-4 py-4">
-              <div className="bg-[#f8f9fa] rounded-md p-3">
-                <p className="font-medium text-[#282e33]">{selectedItem.name}</p>
-                <p className="text-sm text-[#939699]">{selectedItem.sku}</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>New Quantity</Label>
-                <Input type="number" value={adjustQuantity} onChange={(e) => setAdjustQuantity(e.target.value)} placeholder="Enter new quantity" />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setAdjustModalOpen(false)} disabled={isSubmitting}>
-                  Cancel
-                </Button>
-                <Button onClick={handleAdjustQuantity} disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-                  {isSubmitting ? <Spinner className="h-4 w-4" /> : "Update"}
-                </Button>
-              </div>
-            </div>
+          {editQuery.isLoading && <p className="text-sm text-[#939699]">Loading item...</p>}
+          {editQuery.isError && (
+            <EmptyState title="Could not load inventory" description="Refresh the item to try again." action={{ label: "Try again", onClick: () => editQuery.refetch() }} />
+          )}
+          {editDefaults && editQuery.item && (
+            <InventoryItemForm
+              key={editQuery.item.id}
+              defaultValues={editDefaults}
+              submitLabel="Save Changes"
+              isSubmitting={isUpdating}
+              onCancel={() => setEditId(null)}
+              onSubmit={(data) => {
+                if (!editQuery.item) return;
+                updateItem(
+                  { id: editQuery.item.id, ...data },
+                  {
+                    onSuccess: () => setEditId(null),
+                  },
+                );
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={Boolean(itemToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setItemToDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete inventory item?</DialogTitle>
+            <DialogDescription>This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-[#939699]">
+            Delete <strong className="text-[#282e33]">{itemToDelete?.name}</strong>?
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setItemToDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={() => {
+                if (!itemToDelete) return;
+                deleteItem(itemToDelete.id, {
+                  onSuccess: () => {
+                    if (detailId === itemToDelete.id) setDetailId(null);
+                    setItemToDelete(null);
+                  },
+                });
+              }}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <InventoryDetailPanel
+        item={detailQuery.item}
+        open={Boolean(detailId)}
+        isLoading={detailQuery.isLoading}
+        isError={detailQuery.isError}
+        onOpenChange={(open) => {
+          if (!open) setDetailId(null);
+        }}
+        onRetry={() => detailQuery.refetch()}
+        onEdit={() => {
+          if (!detailId) return;
+          setEditId(detailId);
+          setDetailId(null);
+        }}
+        onDelete={() => {
+          if (!detailQuery.item) return;
+          setItemToDelete(detailQuery.item);
+          setDetailId(null);
+        }}
+      />
     </div>
   );
 }

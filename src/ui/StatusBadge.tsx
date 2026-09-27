@@ -73,11 +73,11 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
 }
 
 // Inventory status badge
-export function InventoryStatusBadge({ status }: { status: 'in-stock' | 'low-stock' | 'out-of-stock' }) {
+export function InventoryStatusBadge({ status }: { status: "in_stock" | "low_stock" | "out_of_stock" }) {
   const config: Record<string, { label: string; variant: BadgeVariant }> = {
-    'in-stock': { label: 'In Stock', variant: 'success' },
-    'low-stock': { label: 'Low Stock', variant: 'warning' },
-    'out-of-stock': { label: 'Out of Stock', variant: 'danger' },
+    in_stock: { label: "In Stock", variant: "success" },
+    low_stock: { label: "Low Stock", variant: "warning" },
+    out_of_stock: { label: "Out of Stock", variant: "danger" },
   };
 
   const { label, variant } = config[status];

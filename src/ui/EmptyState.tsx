@@ -48,7 +48,7 @@ export function NoServices({ onAddService }: { onAddService: () => void }) {
 }
 
 export function NoInventory({ onAddItem }: { onAddItem: () => void }) {
-  return <EmptyState icon={Package} title="No inventory items" description="Add items to track your inventory." action={{ label: "Add Item", onClick: onAddItem }} />;
+  return <EmptyState icon={Package} title="No inventory items yet." description="Add your first inventory item to start tracking stock." action={{ label: "Add Inventory Item", onClick: onAddItem }} />;
 }
 
 export function NoEmployees({ onAddClient }: { onAddClient: () => void }) {

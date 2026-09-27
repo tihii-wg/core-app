@@ -131,7 +131,53 @@ export type EditServiceFormData = {
   description: string;
 };
 
+export type InventoryStockStatus = "in_stock" | "low_stock" | "out_of_stock";
+
+export type InventoryListFilter = "all" | InventoryStockStatus | "inactive";
+
+export type InventorySortField = "name" | "sku" | "quantity" | "purchase_price" | "selling_price" | "created_at" | "updated_at";
+
+export type InventorySort = {
+  field: InventorySortField;
+  ascending: boolean;
+};
+
 export interface InventoryItem {
+  id: string;
+  workspaceId: string;
+  name: string;
+  sku: string;
+  description: string;
+  category: string;
+  quantity: number;
+  minQuantity: number;
+  unit: string;
+  purchasePrice: number | null;
+  sellingPrice: number | null;
+  supplier: string;
+  location: string;
+  isActive: boolean;
+  stockStatus: InventoryStockStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type InventoryItemFormData = {
+  name: string;
+  sku: string;
+  description: string;
+  category: string;
+  quantity: number;
+  minQuantity: number;
+  unit: string;
+  purchasePrice: number | null;
+  sellingPrice: number | null;
+  supplier: string;
+  location: string;
+  isActive: boolean;
+};
+
+export interface MockInventoryItem {
   id: string;
   sku: string;
   name: string;

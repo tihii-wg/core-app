@@ -6,7 +6,7 @@ import type {
   Client,
   Employee,
   // Order,
-  InventoryItem,
+  MockInventoryItem,
   Service,
   Invoice,
   Transaction,
@@ -48,7 +48,7 @@ interface AppContextType {
   clients: Client[];
   employees: Employee[];
   orders: Order[];
-  inventory: InventoryItem[];
+  inventory: MockInventoryItem[];
   services: Service[];
   invoices: Invoice[];
   transactions: Transaction[];
@@ -57,7 +57,7 @@ interface AppContextType {
   addClient: (client: Omit<Client, 'id' | 'createdAt' | 'balance'>) => void;
   addOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  addInventoryItem: (item: Omit<InventoryItem, 'id' | 'status'>) => void;
+  addInventoryItem: (item: Omit<MockInventoryItem, 'id' | 'status'>) => void;
   updateInventoryQuantity: (itemId: string, quantity: number) => void;
   addService: (service: Omit<Service, 'id'>) => void;
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => void;
@@ -80,7 +80,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // const [clients, setClients] = useState<Client[]>(mockClients);
   // const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
   const [orders, setOrders] = useState<Order[]>(mockOrders);
-  const [inventory, setInventory] = useState<InventoryItem[]>(mockInventory);
+  const [inventory, setInventory] = useState<MockInventoryItem[]>(mockInventory);
   const [services, setServices] = useState<Service[]>(mockServices);
   const [invoices, setInvoices] = useState<Invoice[]>(mockInvoices);
   const [transactions] = useState<Transaction[]>(mockTransactions);
@@ -176,14 +176,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ));
   }, []);
 
-  const addInventoryItem = useCallback((itemData: Omit<InventoryItem, 'id' | 'status'>) => {
+  const addInventoryItem = useCallback((itemData: Omit<MockInventoryItem, 'id' | 'status'>) => {
     const status = itemData.quantity === 0 
       ? 'out-of-stock' 
       : itemData.quantity < itemData.minQuantity 
         ? 'low-stock' 
         : 'in-stock';
     
-    const newItem: InventoryItem = {
+    const newItem: MockInventoryItem = {
       ...itemData,
       id: generateId('inv'),
       status,
