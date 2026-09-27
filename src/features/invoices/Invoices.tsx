@@ -23,7 +23,7 @@ const statusOptions = [
 ];
 
 export function Invoices() {
-  const { invoices, clients, orders, addInvoice, updateInvoiceStatus } = useApp();
+  const { invoices = [], clients = [], orders = [], addInvoice, updateInvoiceStatus } = useApp();
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
