@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useParams } from "react-router-dom";
 import { getOrders, updateOrderStatus } from "../../services/apiOrders";
 import type { OrderStatus } from "../../lib/types";
 
 export function useGetOrders() {
+  const { workspaceId } = useParams();
   const { data: orders, isLoading, error } = useQuery({
-    queryKey: ["orders"],
+    queryKey: ["orders", workspaceId],
     queryFn: getOrders,
+    enabled: Boolean(workspaceId),
   });
 
   if (error) throw new Error(error.message);

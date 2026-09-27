@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Toaster } from "react-hot-toast";
 
@@ -22,6 +22,9 @@ import { ReportsModule } from "./features/reports/Reports";
 import { SettingsModule } from "./features/settings/Settings";
 import { AppLayout } from "./ui/AppLayout";
 import Dashboardredirect from "./ui/DashboardRedirect";
+import { AuthSession } from "./features/auth/AuthSession";
+import { isInvalidSessionError } from "./services/apiAuth";
+import supabase from "./services/supabase";
 
 export const DEFAULT_LOCALE = "en";
 
@@ -60,12 +63,24 @@ function AppRoutes() {
   );
 }
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error) => {
+      if (isInvalidSessionError(error)) void supabase.auth.signOut();
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      if (isInvalidSessionError(error)) void supabase.auth.signOut();
+    },
+  }),
+});
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppProvider>
+        <AuthSession />
         <AppRoutes />
         <Toaster />
       </AppProvider>

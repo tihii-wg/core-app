@@ -10,7 +10,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../ui/StatusBadge";
 export default function Dashboard() {
 
 
-  const { orders, clients, invoices, inventory, setCurrentModule } = useApp();
+  const { orders = [], clients = [], invoices = [], inventory = [], setCurrentModule } = useApp();
 
   // Calculate stats
   const activeOrders = orders.filter((o) => !["completed", "paid", "cancelled"].includes(o.status)).length;
@@ -22,10 +22,10 @@ export default function Dashboard() {
   const lowStockItems = inventory.filter((item) => item.status === "low-stock").length;
 
   // Recent orders
-  const recentOrders = orders?.slice(0, 5);
+  const recentOrders = orders.slice(0, 5);
 
   // Recent activity (mock)
-  const recentActivity = clients?.slice(0, 4)?.map((client, index) => ({
+  const recentActivity = clients.slice(0, 4).map((client, index) => ({
     ...client,
     action: index % 2 === 0 ? "placed an order" : "was added",
     time: `${(index + 1) * 2} hours ago`,

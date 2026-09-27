@@ -19,13 +19,10 @@ export async function getProfile() {
   if (userError) throw new Error(userError.message);
   if (!user) throw new Error("User is not authenticated");
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("Profile not found");
 
   return data;
 }

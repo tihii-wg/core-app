@@ -15,6 +15,7 @@ export function useLogin() {
     mutationFn: ({ email, password }: LogInData) => logInApi({ email, password }),
     onSuccess: (user) => {
       const locale = "en";
+      queryClient.clear();
       queryClient.setQueryData(["user"], user.user);
       navigate(`/${locale}/dashboard`, { replace: true });
     },

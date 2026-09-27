@@ -61,12 +61,24 @@ export async function setActiveWorkspace(id: string) {
 
   if (!user) throw new Error("User not found");
 
-  const { data, error } = await supabase.from("profiles").update({ active_workspace_id: id }).eq("id", user.id).select();
+  const { data: member, error: memberError } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("workspace_id", id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (memberError) throw new Error(memberError.message);
+  if (!member) throw new Error("You do not have access to this workspace");
+
+  const { data, error } = await supabase.from("profiles").update({ active_workspace_id: id }).eq("id", user.id).select("active_workspace_id");
   if (error) throw new Error(error.message);
 
-  const profile = data.at(0).active_workspace_id;
+  const activeWorkspaceId = data?.[0]?.active_workspace_id;
+  if (!activeWorkspaceId) throw new Error("Workspace was not updated");
 
-  return profile;
+  return activeWorkspaceId;
 }
 
 export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
@@ -169,7 +181,7 @@ export async function deleteWorkspace(workspaceId: string) {
     .eq("user_id", user.id)
     .is("workspaces.deleted_at", null);
 
-  const activeWorkspace = members?.flatMap((member) => member?.workspaces);
+  const activeWorkspace = members?.flatMap((member) => member?.workspaces) ?? [];
 
   if (membersError) throw new Error(membersError.message);
 

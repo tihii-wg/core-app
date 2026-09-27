@@ -1,6 +1,16 @@
 import supabase from "./supabase";
 import { resolveIndustryId } from "./apiIndustries";
 
+export function isInvalidSessionError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const details = error as { message?: string; status?: number };
+  const message = (details.message ?? "").toLowerCase();
+  const mentionsCredential = message.includes("jwt") || message.includes("refresh token") || message.includes("session expired") || message.includes("auth session missing") || message.includes("invalid claim");
+
+  return mentionsCredential;
+}
+
 type signUpProps = {
   companyName: string;
   ownerName: string;
@@ -91,14 +101,19 @@ export async function signUp(data: signUpProps) {
 }
 
 export async function getCurrentUser() {
-  const { data: session } = await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
-  if (!session?.session) return null;
+  if (sessionError || !sessionData.session) return null;
 
   const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(error.message);
+  if (!error && data.user) return data.user;
 
-  return data?.user;
+  if (error && isInvalidSessionError(error)) {
+    await supabase.auth.signOut();
+    return null;
+  }
+
+  return sessionData.session.user;
 }
 
 export async function logOut() {

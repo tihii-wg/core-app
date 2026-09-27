@@ -10,9 +10,5 @@ export function useGetWorkspaces() {
     queryKey: ["workspaces"],
     queryFn: getUserWorkspaces,
   });
-  if (error) {
-    throw new Error(error.message);
-  }
-
   return { workspaces, isLoading, error };
 }

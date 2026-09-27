@@ -7,7 +7,7 @@ import { useLogOut } from "../features/auth/useLogOut";
 export default function UserMenu() {
   const { logOut } = useLogOut();
   const { user } = useUser();
-  const userName = user.user_metadata.ownerName;
+  const userName = user?.user_metadata?.ownerName || "User";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
