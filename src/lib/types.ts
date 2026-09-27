@@ -253,6 +253,7 @@ export type Workspace = {
   owner_id: string;
   deleted_at: string | null;
   industry_id: string | null;
+  avatar_path?: string | null;
   industry: WorkspaceIndustry | null;
 };
 

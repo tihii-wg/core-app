@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Skeleton } from "../../ui/Skeleton";
-import { Avatar, AvatarFallback } from "../../ui/Avatar";
 import { Separator } from "../../ui/Separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetIndustries } from "../industries/useGetIndustries";
@@ -16,8 +15,8 @@ import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspace } from "../workspaces/useUpdateWorkspace";
 import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
 import { parseMarkupPercent } from "../inventory/markup";
-import { profileInitials } from "../profiles/profileName";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
+import { CompanyLogoControls } from "./CompanyLogoControls";
 
 type CompanyFormValues = {
   name: string;
@@ -78,15 +77,7 @@ function CompanyForm({ workspace, savedMarkup }: { workspace: WorkspaceDetails; 
         <CardDescription>Update your company details and contact information</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="flex items-center gap-6">
-          <Avatar className="h-20 w-20">
-            <AvatarFallback className="bg-primary text-xl text-primary-foreground">{profileInitials(workspace.name || "Company")}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="font-medium text-[#282e33]">{workspace.name || "Company"}</p>
-            <p className="text-sm text-muted-foreground">{workspace.industryName || "Business type not set"}</p>
-          </div>
-        </div>
+        <CompanyLogoControls workspace={workspace} />
 
         <Separator />
 

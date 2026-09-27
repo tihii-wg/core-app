@@ -13,6 +13,7 @@ describe("workspace details", () => {
           deleted_at: null,
           industry_id: "industry-1",
           industry: { id: "industry-1", name: "Auto Repair & Service", slug: "auto_repair" },
+          avatar_path: "workspace/ws-1/logo.webp",
         },
       }),
     ).toEqual({
@@ -21,6 +22,7 @@ describe("workspace details", () => {
       ownerId: "user-1",
       industryId: "industry-1",
       industryName: "Auto Repair & Service",
+      avatarPath: "workspace/ws-1/logo.webp",
       role: "owner",
     });
   });

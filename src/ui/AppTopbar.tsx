@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { useApp } from "../lib/appContext";
-import { useLocation } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
+import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
+import { useWorkspaceAvatar } from "../features/workspaces/useWorkspaceAvatar";
+import { Skeleton } from "./Skeleton";
+import { WorkspaceAvatar } from "./WorkspaceAvatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./Dialog";
 import AddNewWorkspaceForm from "../features/workspaces/AddNewWorkspaceForm";
 import AppTopbarNotifications from "./AppTopbarNotifications";
@@ -40,6 +44,8 @@ export function AppTopbar() {
           <Menu className="h-5 w-5" />
         </button>
 
+        <WorkspacePageMark />
+
         {/* Page title */}
         <h1 className="text-2xl font-semibold text-[#282e33]">{moduleLabels[currentTitle]}</h1>
       </div>
@@ -72,4 +78,16 @@ export function AppTopbar() {
       </div>
     </header>
   );
+}
+
+function WorkspacePageMark() {
+  const { workspaceId } = useParams();
+  const { data: workspace, isLoading } = useGetWorkspace(workspaceId);
+  const { data: imageUrl, isLoading: logoLoading } = useWorkspaceAvatar(workspace?.id, workspace?.avatarPath);
+
+  if (!workspaceId) return null;
+  if (isLoading || (workspace?.avatarPath && logoLoading)) return <Skeleton className="size-8 rounded-full" />;
+  if (!workspace) return null;
+
+  return <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="sm" />;
 }

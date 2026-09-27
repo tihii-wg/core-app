@@ -3,55 +3,75 @@ import type { NewWorkspaceData } from "../lib/types";
 import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
 
+type MembershipResult = {
+  data: unknown;
+  error: { code?: string; message?: string } | null;
+};
+
+type ListedWorkspace = {
+  id: string;
+  name: string;
+  avatar_path?: string | null;
+};
+
+export type ListedWorkspaceMembership = {
+  workspaces: ListedWorkspace | ListedWorkspace[] | null;
+};
+
 export async function getUserWorkspaces() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
 
-  if (!user) throw new Error("User not found");
+  const data = await selectMembership((select) => supabase.from("workspace_members").select(select).eq("user_id", user.id).is("workspaces.deleted_at", null) as unknown as PromiseLike<MembershipResult>);
 
-  const withIndustry = `role,
-	  workspaces!inner (
-    id,
-    name,
-    owner_id,
-    deleted_at,
-    industry_id,
+  return (Array.isArray(data) ? data : []) as ListedWorkspaceMembership[];
+}
+
+function membershipSelect(options: { industry: boolean; avatar: boolean }) {
+  const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
+  if (options.avatar) fields.push("avatar_path");
+  const industry = options.industry
+    ? `,
     industry:industries (
       id,
       name,
       slug
-    )
-    )
-		`;
+    )`
+    : "";
 
-  const withoutIndustry = `role,
-	  workspaces!inner (
-    id,
-    name,
-    owner_id,
-    deleted_at
-    )
-		`;
+  return `role,
+  workspaces!inner (
+    ${fields.join(",\n    ")}${industry}
+  )`;
+}
 
-  const query = supabase.from("workspace_members").select(withIndustry).eq("user_id", user.id).is("workspaces.deleted_at", null);
-
-  const { data, error } = await query;
-
-  if (error && isMissingIndustrySchema(error)) {
-    const fallback = await supabase.from("workspace_members").select(withoutIndustry).eq("user_id", user.id).is("workspaces.deleted_at", null);
-
-    if (fallback.error) throw new Error(fallback.error.message);
-    return fallback.data;
-  }
-
-  if (error) throw new Error(error.message);
-
-  return data;
+function isMissingAvatarColumn(error: { code?: string; message?: string }) {
+  return error.code === "42703" && error.message?.includes("avatar_path") === true;
 }
 
 function isMissingIndustrySchema(error: { code?: string; message?: string }) {
+  if (error.message?.includes("avatar_path")) return false;
   return error.code === "PGRST205" || error.code === "PGRST200" || error.code === "42703" || error.message?.includes("industries") === true;
+}
+
+async function selectMembership(run: (select: string) => PromiseLike<MembershipResult>) {
+  let industry = true;
+  let avatar = true;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const { data, error } = await run(membershipSelect({ industry, avatar }));
+    if (!error) return data;
+    if (avatar && isMissingAvatarColumn(error)) {
+      avatar = false;
+      continue;
+    }
+    if (industry && isMissingIndustrySchema(error)) {
+      industry = false;
+      continue;
+    }
+    throw new Error(error.message);
+  }
+
+  throw new Error("Workspace could not be loaded");
 }
 
 export type WorkspaceDetails = {
@@ -60,31 +80,9 @@ export type WorkspaceDetails = {
   ownerId: string | null;
   industryId: string | null;
   industryName: string | null;
+  avatarPath: string | null;
   role: string;
 };
-
-const workspaceWithIndustry = `role,
-  workspaces!inner (
-    id,
-    name,
-    owner_id,
-    deleted_at,
-    industry_id,
-    industry:industries (
-      id,
-      name,
-      slug
-    )
-  )`;
-
-const workspaceWithoutIndustry = `role,
-  workspaces!inner (
-    id,
-    name,
-    owner_id,
-    deleted_at,
-    industry_id
-  )`;
 
 function firstRecord(value: unknown) {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -111,6 +109,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     ownerId: typeof record.owner_id === "string" ? record.owner_id : null,
     industryId: typeof record.industry_id === "string" ? record.industry_id : null,
     industryName: industryRecord && typeof industryRecord.name === "string" ? industryRecord.name : null,
+    avatarPath: typeof record.avatar_path === "string" && record.avatar_path ? record.avatar_path : null,
     role: typeof membership.role === "string" ? membership.role : "member",
   };
 }
@@ -153,25 +152,11 @@ export async function getWorkspace(workspaceId: string) {
   if (!workspaceId) return null;
 
   const user = await currentUser();
-  const request = supabase.from("workspace_members").select(workspaceWithIndustry).eq("user_id", user.id).eq("workspace_id", workspaceId).is("deleted_at", null).is("workspaces.deleted_at", null).maybeSingle();
+  const data = await selectMembership(
+    (select) =>
+      supabase.from("workspace_members").select(select).eq("user_id", user.id).eq("workspace_id", workspaceId).is("deleted_at", null).is("workspaces.deleted_at", null).maybeSingle() as unknown as PromiseLike<MembershipResult>,
+  );
 
-  const { data, error } = await request;
-
-  if (error && isMissingIndustrySchema(error)) {
-    const fallback = await supabase
-      .from("workspace_members")
-      .select(workspaceWithoutIndustry)
-      .eq("user_id", user.id)
-      .eq("workspace_id", workspaceId)
-      .is("deleted_at", null)
-      .is("workspaces.deleted_at", null)
-      .maybeSingle();
-
-    if (fallback.error) throw new Error(fallback.error.message);
-    return toWorkspaceDetails(fallback.data);
-  }
-
-  if (error) throw new Error(error.message);
   return toWorkspaceDetails(data);
 }
 
