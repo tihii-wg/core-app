@@ -140,13 +140,13 @@ export async function getInventoryItem(inventoryItemId: string) {
   return toInventoryItem(data as Record<string, unknown>);
 }
 
-export async function createInventoryItem(input: InventoryItemFormData) {
-  const workspaceId = await getActiveWorkspaceId();
+export async function createInventoryItem(input: InventoryItemFormData, workspaceId?: string) {
+  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
 
   const { data, error } = await supabase
     .from("inventory_items")
     .insert({
-      workspace_id: workspaceId,
+      workspace_id: resolvedWorkspaceId,
       ...itemPayload(input),
     })
     .select("*")
@@ -158,8 +158,8 @@ export async function createInventoryItem(input: InventoryItemFormData) {
   return toInventoryItem(data as Record<string, unknown>);
 }
 
-export async function updateInventoryItem({ id, ...input }: InventoryItemFormData & { id: string }) {
-  const workspaceId = await getActiveWorkspaceId();
+export async function updateInventoryItem({ id, ...input }: InventoryItemFormData & { id: string }, workspaceId?: string) {
+  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
 
   const { data, error } = await supabase
     .from("inventory_items")
@@ -168,7 +168,7 @@ export async function updateInventoryItem({ id, ...input }: InventoryItemFormDat
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .eq("workspace_id", workspaceId)
+    .eq("workspace_id", resolvedWorkspaceId)
     .select("*")
     .maybeSingle();
 
@@ -178,10 +178,10 @@ export async function updateInventoryItem({ id, ...input }: InventoryItemFormDat
   return toInventoryItem(data as Record<string, unknown>);
 }
 
-export async function deleteInventoryItem(inventoryItemId: string) {
-  const workspaceId = await getActiveWorkspaceId();
+export async function deleteInventoryItem(inventoryItemId: string, workspaceId?: string) {
+  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
 
-  const { data, error } = await supabase.from("inventory_items").delete().eq("id", inventoryItemId).eq("workspace_id", workspaceId).select("id");
+  const { data, error } = await supabase.from("inventory_items").delete().eq("id", inventoryItemId).eq("workspace_id", resolvedWorkspaceId).select("id");
 
   if (error) throw inventoryError(error, "Could not delete the inventory item. Please try again.");
   if (!data?.length) throw new Error("Inventory item was not found.");

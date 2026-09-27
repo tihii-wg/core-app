@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
 import { AlertTriangle, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -12,6 +13,7 @@ import { useDebounce } from "../../hooks/useDebounce";
 import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortField } from "../../lib/types";
 import { useGetInventoryItems } from "./useGetInventoryItems";
 import { useGetInventoryItem } from "./useGetInventoryItem";
+import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
 import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
@@ -63,6 +65,7 @@ function quantityClass(item: InventoryItem) {
 }
 
 export function Inventory() {
+  const { workspaceId } = useParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
@@ -76,6 +79,8 @@ export function Inventory() {
   const sort: InventorySort = { field: sortOption.field, ascending: sortOption.ascending };
 
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
+  const { data: markupPercent = 0, isLoading: markupLoading } = useGetInventoryMarkup(workspaceId);
+  const { mutate: saveMarkup } = useUpdateInventoryMarkup();
   const detailQuery = useGetInventoryItem(detailId);
   const editQuery = useGetInventoryItem(editId);
   const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
@@ -277,17 +282,26 @@ export function Inventory() {
             <DialogTitle>Add Inventory Item</DialogTitle>
             <DialogDescription className="sr-only">Create an inventory item for the current workspace.</DialogDescription>
           </DialogHeader>
+          {markupLoading ? (
+            <p className="text-sm text-[#939699]">Loading item...</p>
+          ) : (
           <InventoryItemForm
             defaultValues={emptyInventoryForm}
+            markupPercent={markupPercent}
             submitLabel="Add Item"
             isSubmitting={isCreating}
             onCancel={() => setCreateOpen(false)}
+            onMarkupCommit={(nextMarkup) => {
+              if (!workspaceId || nextMarkup === markupPercent) return;
+              saveMarkup({ workspaceId, markupPercent: nextMarkup });
+            }}
             onSubmit={(data) => {
               createItem(data, {
                 onSuccess: () => setCreateOpen(false),
               });
             }}
           />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -306,13 +320,18 @@ export function Inventory() {
           {editQuery.isError && (
             <EmptyState title="Could not load inventory" description="Refresh the item to try again." action={{ label: "Try again", onClick: () => editQuery.refetch() }} />
           )}
-          {editDefaults && editQuery.item && (
+          {editDefaults && editQuery.item && !markupLoading && (
             <InventoryItemForm
               key={editQuery.item.id}
               defaultValues={editDefaults}
+              markupPercent={markupPercent}
               submitLabel="Save Changes"
               isSubmitting={isUpdating}
               onCancel={() => setEditId(null)}
+              onMarkupCommit={(nextMarkup) => {
+                if (!workspaceId || nextMarkup === markupPercent) return;
+                saveMarkup({ workspaceId, markupPercent: nextMarkup });
+              }}
               onSubmit={(data) => {
                 if (!editQuery.item) return;
                 updateItem(

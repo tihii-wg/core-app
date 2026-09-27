@@ -8,7 +8,7 @@ export function useDeleteInventoryItem() {
   const { workspaceId } = useParams();
 
   return useMutation({
-    mutationFn: deleteInventoryItem,
+    mutationFn: (inventoryItemId: string) => deleteInventoryItem(inventoryItemId, workspaceId),
     onMutate: () => {
       toast.loading("Deleting inventory item", { id: "delete-inventory" });
     },

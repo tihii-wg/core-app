@@ -23,4 +23,5 @@ export function clearWorkspaceQueries(queryClient: QueryClient) {
   queryClient.removeQueries({ queryKey: ["services"] });
   queryClient.removeQueries({ queryKey: ["employees"] });
   queryClient.removeQueries({ queryKey: ["inventory"] });
+  queryClient.removeQueries({ queryKey: ["workspace-markup"] });
 }

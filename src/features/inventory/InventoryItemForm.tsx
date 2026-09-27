@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
@@ -6,13 +7,16 @@ import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import { Spinner } from "../../ui/Spinner";
 import type { InventoryItemFormData } from "../../lib/types";
+import { parseMarkupPercent, sellingPriceFromMarkup } from "./markup";
 
 type InventoryItemFormProps = {
   defaultValues: InventoryItemFormData;
+  markupPercent: number;
   submitLabel: string;
   isSubmitting: boolean;
   onSubmit: (data: InventoryItemFormData) => void;
   onCancel: () => void;
+  onMarkupCommit: (markupPercent: number) => void;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -20,16 +24,47 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-[#f41f20]">{message}</p>;
 }
 
-export default function InventoryItemForm({ defaultValues, submitLabel, isSubmitting, onSubmit, onCancel }: InventoryItemFormProps) {
+export default function InventoryItemForm({ defaultValues, markupPercent, submitLabel, isSubmitting, onSubmit, onCancel, onMarkupCommit }: InventoryItemFormProps) {
+  const [markupText, setMarkupText] = useState(String(markupPercent));
+  const [markupError, setMarkupError] = useState("");
+  const skipMarkupUpdate = useRef(true);
   const {
     control,
     register,
     handleSubmit,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<InventoryItemFormData>({ defaultValues });
 
+  useEffect(() => {
+    if (skipMarkupUpdate.current) {
+      skipMarkupUpdate.current = false;
+      return;
+    }
+
+    setMarkupText(String(markupPercent));
+    setValue("sellingPrice", sellingPriceFromMarkup(getValues("purchasePrice"), markupPercent), { shouldValidate: true });
+  }, [getValues, markupPercent, setValue]);
+
+  function applyMarkup(nextMarkup: string, purchasePrice: number | null) {
+    const parsed = parseMarkupPercent(nextMarkup);
+    if (parsed == null) return;
+    setValue("sellingPrice", sellingPriceFromMarkup(purchasePrice, parsed), { shouldValidate: true });
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form
+      onSubmit={handleSubmit((data) => {
+        const parsed = parseMarkupPercent(markupText);
+        if (parsed == null) {
+          setMarkupError(markupText.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
+          return;
+        }
+        onMarkupCommit(parsed);
+        onSubmit(data);
+      })}
+    >
       <div className="space-y-4 py-2">
         <div className="space-y-1.5">
           <Label htmlFor="inventory-name">Name *</Label>
@@ -112,6 +147,35 @@ export default function InventoryItemForm({ defaultValues, submitLabel, isSubmit
           <FieldError message={errors.unit?.message} />
         </div>
 
+        <div className="space-y-1.5">
+          <Label htmlFor="inventory-markup">Markup (%)</Label>
+          <Input
+            id="inventory-markup"
+            type="number"
+            min={0}
+            step="0.01"
+            value={markupText}
+            onChange={(event) => {
+              const nextMarkup = event.target.value;
+              setMarkupText(nextMarkup);
+              setMarkupError("");
+              applyMarkup(nextMarkup, getValues("purchasePrice"));
+            }}
+            onBlur={() => {
+              const parsed = parseMarkupPercent(markupText);
+              if (parsed == null) {
+                setMarkupError(markupText.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
+                return;
+              }
+              setMarkupError("");
+              onMarkupCommit(parsed);
+            }}
+            className={markupError ? "border-[#f41f20]" : ""}
+          />
+          <FieldError message={markupError} />
+          <p className="text-xs text-[#939699]">Selling price updates from the purchase price and this markup. You can still edit the selling price.</p>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="inventory-purchase-price">Purchase Price</Label>
@@ -128,7 +192,11 @@ export default function InventoryItemForm({ defaultValues, submitLabel, isSubmit
                   min={0}
                   step="0.01"
                   value={field.value ?? ""}
-                  onChange={(event) => field.onChange(event.target.value === "" ? null : Number(event.target.value))}
+                  onChange={(event) => {
+                    const purchasePrice = event.target.value === "" ? null : Number(event.target.value);
+                    field.onChange(purchasePrice);
+                    applyMarkup(markupText, purchasePrice);
+                  }}
                   placeholder="Optional"
                   className={errors.purchasePrice ? "border-[#f41f20]" : ""}
                 />

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   Building2,
   User,
@@ -43,6 +45,8 @@ import { useGetIndustries } from "../industries/useGetIndustries";
 import { useGetProfile } from "../profiles/useGetProfile";
 import { useGetWorkspaces } from "../workspaces/useGetWorkspaces";
 import { useUpdateWorkspaceIndustry } from "../workspaces/useUpdateWorkspaceIndustry";
+import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
+import { parseMarkupPercent } from "../inventory/markup";
 
 export function SettingsModule() {
   const [activeTab, setActiveTab] = useState("company");
@@ -60,10 +64,16 @@ export function SettingsModule() {
   const [industryId, setIndustryId] = useState("");
   const [industryError, setIndustryError] = useState("");
   const [syncedWorkspaceId, setSyncedWorkspaceId] = useState<string | undefined>();
+  const [markupInput, setMarkupInput] = useState("0");
+  const [markupError, setMarkupError] = useState("");
+  const [syncedMarkupWorkspaceId, setSyncedMarkupWorkspaceId] = useState<string | undefined>();
+  const { workspaceId } = useParams();
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const { workspaces: memberships } = useGetWorkspaces();
   const { data: profile } = useGetProfile();
   const { updateWorkspaceIndustry, isPending: isSavingIndustry } = useUpdateWorkspaceIndustry();
+  const { data: savedMarkup = 0, isSuccess: markupLoaded, isLoading: markupLoading } = useGetInventoryMarkup(workspaceId);
+  const { mutateAsync: saveMarkup, isPending: isSavingMarkup } = useUpdateInventoryMarkup();
 
   const [notifications, setNotifications] = useState({
     emailOrders: true,
@@ -91,6 +101,12 @@ export function SettingsModule() {
     setSyncedWorkspaceId(currentWorkspace.id);
     setIndustryId(currentWorkspace.industry_id ?? "");
     setIndustryError("");
+  }
+
+  if (workspaceId && markupLoaded && workspaceId !== syncedMarkupWorkspaceId) {
+    setSyncedMarkupWorkspaceId(workspaceId);
+    setMarkupInput(String(savedMarkup));
+    setMarkupError("");
   }
 
   return (
@@ -275,6 +291,24 @@ export function SettingsModule() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="inventoryMarkup">Inventory markup (%)</Label>
+                  <Input
+                    id="inventoryMarkup"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={markupInput}
+                    disabled={markupLoading || isSavingMarkup || !workspaceId}
+                    onChange={(event) => {
+                      setMarkupInput(event.target.value);
+                      setMarkupError("");
+                    }}
+                  />
+                  {markupError && <p className="text-xs text-[#f41f20]">{markupError}</p>}
+                  <p className="text-xs text-muted-foreground">Used to calculate an inventory item's selling price from its purchase price.</p>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="taxId">Tax ID / EIN</Label>
                   <Input
                     id="taxId"
@@ -292,8 +326,24 @@ export function SettingsModule() {
               <div className="flex justify-end">
                 <Button
                   type="button"
-                  disabled={isSavingIndustry || !currentWorkspace}
-                  onClick={() => {
+                  disabled={isSavingIndustry || isSavingMarkup || !workspaceId}
+                  onClick={async () => {
+                    if (!workspaceId) return;
+
+                    const markup = parseMarkupPercent(markupInput);
+                    if (markup == null) {
+                      setMarkupError(markupInput.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
+                      return;
+                    }
+
+                    setMarkupError("");
+                    try {
+                      await saveMarkup({ workspaceId, markupPercent: markup });
+                      toast.success("Markup updated");
+                    } catch {
+                      return;
+                    }
+
                     if (!currentWorkspace?.id) return;
                     if (!industryId) {
                       setIndustryError("Business type is required");

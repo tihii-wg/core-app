@@ -8,7 +8,7 @@ export function useCreateInventoryItem() {
   const { workspaceId } = useParams();
 
   return useMutation({
-    mutationFn: createInventoryItem,
+    mutationFn: (input) => createInventoryItem(input, workspaceId),
     onMutate: () => {
       toast.loading("Creating inventory item", { id: "create-inventory" });
     },
