@@ -28,19 +28,24 @@ export async function createEmployee({ role, email, name, phone, profile_id, sta
   return data;
 }
 
-export async function getEmployees(search: string, roleFilter?: EmployeeRole) {
-
-  
+export async function getEmployees(search: string, roleFilter?: EmployeeRole | null, workspaceId?: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("User not found");
 
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).single();
+  let targetWorkspaceId = workspaceId;
 
-  if (profileError) throw new Error(profileError.message);
+  if (!targetWorkspaceId) {
+    const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).single();
 
-  let query = supabase.from("employees").select("*").eq("workspace_id", profile.active_workspace_id);
+    if (profileError) throw new Error(profileError.message);
+    targetWorkspaceId = profile.active_workspace_id;
+  }
+
+  if (!targetWorkspaceId) throw new Error("No active workspace");
+
+  let query = supabase.from("employees").select("*").eq("workspace_id", targetWorkspaceId);
 
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,role.ilike.%${search}%,phone.ilike.%${search}%,status.ilike.%${search}%`);

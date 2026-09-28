@@ -45,6 +45,10 @@ import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace"
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
 import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
+import type { Employee, EmployeeRole } from "../../lib/types";
+import useGetEmployees from "../employees/useGetEmployees";
+import { profileDisplayName, profileInitials } from "../profiles/profileName";
+import { EmptyState } from "../../ui/EmptyState";
 
 export function SettingsModule() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -313,78 +317,7 @@ export function SettingsModule() {
               <Button>Invite Member</Button>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  {
-                    name: "John Doe",
-                    email: "john@example.com",
-                    role: "Admin",
-                    status: "Active",
-                  },
-                  {
-                    name: "Sarah Smith",
-                    email: "sarah@example.com",
-                    role: "Manager",
-                    status: "Active",
-                  },
-                  {
-                    name: "Mike Johnson",
-                    email: "mike@example.com",
-                    role: "Technician",
-                    status: "Active",
-                  },
-                  {
-                    name: "Emily Brown",
-                    email: "emily@example.com",
-                    role: "Sales",
-                    status: "Pending",
-                  },
-                ].map((member) => (
-                  <div
-                    key={member.email}
-                    className="flex items-center justify-between rounded-lg border p-4"
-                  >
-                    <div className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarFallback>
-                          {member.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{member.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {member.email}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          member.status === "Active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-yellow-100 text-yellow-700"
-                        }`}
-                      >
-                        {member.status}
-                      </span>
-                      <Select defaultValue={member.role.toLowerCase()}>
-                        <SelectTrigger className="w-[120px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="technician">Technician</SelectItem>
-                          <SelectItem value="sales">Sales</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <TeamMembersList />
             </CardContent>
           </Card>
         </TabsContent>
@@ -430,6 +363,86 @@ const currencyOptions = [
 function withCurrent(options: { value: string; label: string }[], current: string) {
   if (options.some((option) => option.value === current)) return options;
   return [{ value: current, label: current }, ...options];
+}
+
+const teamRoleLabels: Record<EmployeeRole, string> = {
+  admin: "Admin",
+  manager: "Manager",
+  technician: "Technician",
+  receptionist: "Receptionist",
+};
+
+export function TeamMembersList() {
+  const { employees, isLoading, error } = useGetEmployees();
+  const members = (employees ?? []) as Employee[];
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Loading team members...</p>;
+  }
+
+  if (error) {
+    const message = error instanceof Error ? error.message : "Team members could not be loaded";
+    return <p className="text-sm text-[#f41f20]">{message}</p>;
+  }
+
+  if (members.length === 0) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="No team members yet"
+        description="Team members added to this workspace will appear here."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {members.map((member) => {
+        const name = profileDisplayName(member.name, member.email);
+        const isActive = member.status === "active";
+
+        return (
+          <div
+            key={member.id}
+            className="flex items-center justify-between rounded-lg border p-4"
+          >
+            <div className="flex items-center gap-4">
+              <Avatar>
+                <AvatarFallback>{profileInitials(name)}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium">{name}</p>
+                <p className="text-sm text-muted-foreground">{member.email}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span
+                className={`rounded-full px-2 py-1 text-xs font-medium ${
+                  isActive
+                    ? "bg-green-100 text-green-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}
+              >
+                {isActive ? "Active" : "Inactive"}
+              </span>
+              <Select defaultValue={member.role}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(teamRoleLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function AppearanceSettings() {
