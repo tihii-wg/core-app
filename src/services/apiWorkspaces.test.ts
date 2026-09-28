@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toWorkspaceDetails, workspaceUpdateFields } from "./apiWorkspaces";
+import { toWorkspaceDetails, workspacePreferenceFields, workspaceUpdateFields } from "./apiWorkspaces";
 
 describe("workspace details", () => {
   it("reads the company name and business type from a membership", () => {
@@ -15,6 +15,10 @@ describe("workspace details", () => {
           industry: { id: "industry-1", name: "Auto Repair & Service", slug: "auto_repair" },
           avatar_path: "ws-1/logo.webp",
           inventory_markup: 25,
+          language: "de",
+          timezone: "Europe/Chisinau",
+          date_format: "DD.MM.YYYY",
+          currency: "MDL",
         },
       }),
     ).toEqual({
@@ -25,6 +29,10 @@ describe("workspace details", () => {
       industryName: "Auto Repair & Service",
       avatarPath: "ws-1/logo.webp",
       inventoryMarkup: 25,
+      language: "de",
+      timezone: "Europe/Chisinau",
+      dateFormat: "DD.MM.YYYY",
+      currency: "MDL",
       role: "owner",
     });
   });
@@ -32,6 +40,21 @@ describe("workspace details", () => {
   it("ignores a workspace the user cannot access", () => {
     expect(toWorkspaceDetails(null)).toBeNull();
     expect(toWorkspaceDetails({ role: "owner", workspaces: { id: "ws-1", name: "Closed", deleted_at: "2026-01-01" } })).toBeNull();
+  });
+});
+
+describe("workspace preferences", () => {
+  it("keeps the trimmed language, time zone, date format, and currency", () => {
+    expect(workspacePreferenceFields({ language: " de ", timezone: " Europe/Berlin ", dateFormat: " DD.MM.YYYY ", currency: " eur " })).toEqual({
+      language: "de",
+      timezone: "Europe/Berlin",
+      date_format: "DD.MM.YYYY",
+      currency: "eur",
+    });
+  });
+
+  it("requires every preference", () => {
+    expect(() => workspacePreferenceFields({ language: " ", timezone: "Europe/Chisinau", dateFormat: "DD.MM.YYYY", currency: "MDL" })).toThrow("Language is required");
   });
 });
 

@@ -14,6 +14,8 @@ import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortFi
 import { useGetInventoryItems } from "./useGetInventoryItems";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
 import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
@@ -53,11 +55,6 @@ const sortOptions: { value: string; label: string; field: InventorySortField; as
   { value: "updated_at.desc", label: "Updated Date", field: "updated_at", ascending: false },
 ];
 
-function formatMoney(value: number | null) {
-  if (value == null) return "—";
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function quantityClass(item: InventoryItem) {
   if (item.stockStatus === "out_of_stock") return "text-[#f41f20] font-medium";
   if (item.stockStatus === "low_stock") return "text-[#f89200] font-medium";
@@ -78,6 +75,7 @@ export function Inventory() {
   const sortOption = sortOptions.find((option) => option.value === sortValue) ?? sortOptions[5];
   const sort: InventorySort = { field: sortOption.field, ascending: sortOption.ascending };
 
+  const { data: workspace } = useGetWorkspace(workspaceId);
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
   const { data: markupPercent = 0, isLoading: markupLoading } = useGetInventoryMarkup(workspaceId);
   const { mutate: saveMarkup } = useUpdateInventoryMarkup();
@@ -137,13 +135,13 @@ export function Inventory() {
     {
       key: "purchasePrice",
       header: "Purchase Price",
-      cell: (item) => formatMoney(item.purchasePrice),
+      cell: (item) => formatWorkspaceMoney(item.purchasePrice, workspace?.currency),
       className: "hidden md:table-cell text-right",
     },
     {
       key: "sellingPrice",
       header: "Selling Price",
-      cell: (item) => formatMoney(item.sellingPrice),
+      cell: (item) => formatWorkspaceMoney(item.sellingPrice, workspace?.currency),
       className: "hidden sm:table-cell text-right",
     },
     {

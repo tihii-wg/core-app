@@ -23,6 +23,10 @@ const workspace: WorkspaceDetails = {
   industryName: null,
   avatarPath: null,
   inventoryMarkup: null,
+  language: "en",
+  timezone: "Europe/Chisinau",
+  dateFormat: "DD.MM.YYYY",
+  currency: "MDL",
   role: "owner",
 };
 

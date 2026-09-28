@@ -255,6 +255,10 @@ export type Workspace = {
   industry_id: string | null;
   avatar_path?: string | null;
   inventory_markup: number | null;
+  language?: string | null;
+  timezone?: string | null;
+  date_format?: string | null;
+  currency?: string | null;
   industry: WorkspaceIndustry | null;
 };
 
@@ -276,6 +280,7 @@ export type Profile = {
   email: string;
   fullName: string | null;
   preferredLanguage?: string;
+  theme?: "light" | "dark" | "system";
 };
 
 export type OrderService = {

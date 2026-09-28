@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { profileSettingsPath, settingsTabFromSearch } from "./settingsTab";
+import { profileSettingsPath, replaceLocale, settingsTabFromSearch } from "./settingsTab";
 
 describe("settings tabs", () => {
   it("opens the profile tab from the topbar path", () => {
@@ -8,6 +8,11 @@ describe("settings tabs", () => {
 
     expect(path).toBe("/en/ws-1/settings?tab=profile");
     expect(settingsTabFromSearch(tab)).toBe("profile");
+  });
+
+  it("switches the locale segment when the company language changes", () => {
+    expect(replaceLocale("/en/ws-1/settings", "en", "de")).toBe("/de/ws-1/settings");
+    expect(replaceLocale("/en/ws-1/settings", "en", "en")).toBe("/en/ws-1/settings");
   });
 
   it("keeps the company tab when no tab is requested", () => {

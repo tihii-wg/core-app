@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { updateWorkspaceDetails } from "../../services/apiWorkspaces";
+import { updateWorkspaceDetails, updateWorkspacePreferences, type WorkspacePreferencesInput } from "../../services/apiWorkspaces";
 
 type UpdateWorkspaceInput = {
   workspaceId: string;
@@ -25,6 +25,19 @@ export function useUpdateWorkspace() {
     },
     onError(error) {
       toast.error(error.message || "Could not update the company", { id: "update-workspace" });
+    },
+  });
+}
+
+export function useUpdateWorkspacePreferences() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workspaceId, ...preferences }: WorkspacePreferencesInput & { workspaceId: string }) => updateWorkspacePreferences(workspaceId, preferences),
+    onSuccess(workspace) {
+      if (!workspace) return;
+      queryClient.setQueryData(["workspace", workspace.id], workspace);
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
     },
   });
 }

@@ -10,6 +10,7 @@ describe("profile records", () => {
         email: "ada@example.com",
         phone: "+37361111111",
         active_workspace_id: "ws-1",
+        theme: "dark",
       }),
     ).toEqual({
       id: "user-1",
@@ -17,6 +18,7 @@ describe("profile records", () => {
       email: "ada@example.com",
       phone: "+37361111111",
       active_workspace_id: "ws-1",
+      theme: "dark",
     });
   });
 
@@ -27,6 +29,7 @@ describe("profile records", () => {
       email: null,
       phone: null,
       active_workspace_id: null,
+      theme: "system",
     });
   });
 });

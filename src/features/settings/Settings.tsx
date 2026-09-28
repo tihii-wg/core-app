@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   Building2,
   User,
@@ -36,7 +37,14 @@ import { Label } from "../../ui/Label";
 import { ProfileSettings } from "./ProfileSettings";
 import { CompanySettings } from "./CompanySettings";
 import { SecuritySettings } from "./SecuritySettings";
-import { settingsTabFromSearch } from "./settingsTab";
+import { replaceLocale, settingsTabFromSearch } from "./settingsTab";
+import { useGetProfile } from "../profiles/useGetProfile";
+import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
+import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
+import type { WorkspaceDetails } from "../../services/apiWorkspaces";
+import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 
 export function SettingsModule() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -51,14 +59,6 @@ export function SettingsModule() {
     pushAlerts: true,
     smsOrders: false,
     smsReminders: true,
-  });
-
-  const [appearance, setAppearance] = useState({
-    theme: "light",
-    language: "en",
-    timezone: "America/Los_Angeles",
-    dateFormat: "MM/DD/YYYY",
-    currency: "USD",
   });
 
   return (
@@ -389,134 +389,247 @@ export function SettingsModule() {
           </Card>
         </TabsContent>
 
-        {/* Appearance Settings */}
         <TabsContent value="appearance" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Display Preferences</CardTitle>
-              <CardDescription>
-                Customize how the application looks
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Theme</Label>
-                  <Select
-                    value={appearance.theme}
-                    onValueChange={(value) =>
-                      setAppearance({ ...appearance, theme: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="light">Light</SelectItem>
-                      <SelectItem value="dark">Dark</SelectItem>
-                      <SelectItem value="system">System</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Language</Label>
-                  <Select
-                    value={appearance.language}
-                    onValueChange={(value) =>
-                      setAppearance({ ...appearance, language: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="es">Spanish</SelectItem>
-                      <SelectItem value="fr">French</SelectItem>
-                      <SelectItem value="de">German</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Timezone</Label>
-                  <Select
-                    value={appearance.timezone}
-                    onValueChange={(value) =>
-                      setAppearance({ ...appearance, timezone: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="America/Los_Angeles">
-                        Pacific Time (PT)
-                      </SelectItem>
-                      <SelectItem value="America/Denver">
-                        Mountain Time (MT)
-                      </SelectItem>
-                      <SelectItem value="America/Chicago">
-                        Central Time (CT)
-                      </SelectItem>
-                      <SelectItem value="America/New_York">
-                        Eastern Time (ET)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Date Format</Label>
-                  <Select
-                    value={appearance.dateFormat}
-                    onValueChange={(value) =>
-                      setAppearance({ ...appearance, dateFormat: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                      <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                      <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Currency</Label>
-                  <Select
-                    value={appearance.currency}
-                    onValueChange={(value) =>
-                      setAppearance({ ...appearance, currency: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
-                      <SelectItem value="GBP">GBP (£)</SelectItem>
-                      <SelectItem value="CAD">CAD ($)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button>
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Preferences
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <AppearanceSettings />
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+const themeOptions: { value: ProfileTheme; label: string }[] = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+];
+
+const languageOptions = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+];
+
+const timezoneOptions = [
+  { value: "Europe/Chisinau", label: "Chisinau (Europe/Chisinau)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+  { value: "America/Denver", label: "Mountain Time (MT)" },
+  { value: "America/Chicago", label: "Central Time (CT)" },
+  { value: "America/New_York", label: "Eastern Time (ET)" },
+];
+
+const dateFormatOptions = ["DD.MM.YYYY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"].map((value) => ({ value, label: value }));
+
+const currencyOptions = [
+  { value: "MDL", label: "MDL (L)" },
+  { value: "USD", label: "USD ($)" },
+  { value: "EUR", label: "EUR (€)" },
+  { value: "GBP", label: "GBP (£)" },
+  { value: "CAD", label: "CAD ($)" },
+];
+
+function withCurrent(options: { value: string; label: string }[], current: string) {
+  if (options.some((option) => option.value === current)) return options;
+  return [{ value: current, label: current }, ...options];
+}
+
+function AppearanceSettings() {
+  const { workspaceId } = useParams();
+  const { data: workspace, isLoading, error, isFetched } = useGetWorkspace(workspaceId);
+  const { data: profile, isLoading: profileLoading } = useGetProfile();
+
+  if (isLoading || profileLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Display Preferences</CardTitle>
+          <CardDescription>Customize how the application looks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Loading preferences...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    const message = error instanceof Error ? error.message : "Preferences could not be loaded";
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Display Preferences</CardTitle>
+          <CardDescription>Customize how the application looks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-[#f41f20]">{message}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isFetched && !workspace) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Display Preferences</CardTitle>
+          <CardDescription>Customize how the application looks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">You can only view and edit companies you belong to.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!workspace) return null;
+
+  return <AppearanceForm key={`${workspace.id}:${profile?.theme ?? "system"}:${workspace.language}:${workspace.timezone}:${workspace.dateFormat}:${workspace.currency}`} workspace={workspace} theme={normalizeProfileTheme(profile?.theme)} />;
+}
+
+function AppearanceForm({ workspace, theme: savedTheme }: { workspace: WorkspaceDetails; theme: ProfileTheme }) {
+  const { locale = "en" } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [theme, setTheme] = useState<ProfileTheme>(savedTheme);
+  const [language, setLanguage] = useState(workspace.language ?? workspacePreferenceDefaults.language);
+  const [timezone, setTimezone] = useState(workspace.timezone ?? workspacePreferenceDefaults.timezone);
+  const [dateFormat, setDateFormat] = useState(workspace.dateFormat ?? workspacePreferenceDefaults.dateFormat);
+  const [currency, setCurrency] = useState(workspace.currency ?? workspacePreferenceDefaults.currency);
+  const { mutateAsync: saveTheme, isPending: themePending } = useUpdateProfileTheme();
+  const { mutateAsync: savePreferences, isPending: preferencesPending } = useUpdateWorkspacePreferences();
+  const isPending = themePending || preferencesPending;
+
+  async function onSave() {
+    toast.loading("Saving preferences...", { id: "appearance" });
+    const failures: string[] = [];
+
+    try {
+      await saveTheme(theme);
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : "Could not save theme");
+      applyProfileTheme(savedTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+
+    try {
+      const saved = await savePreferences({ workspaceId: workspace.id, language, timezone, dateFormat, currency });
+      const nextLanguage = saved?.language ?? language;
+      const nextPath = replaceLocale(location.pathname, locale, nextLanguage);
+      if (nextPath !== location.pathname) navigate(`${nextPath}${location.search}`, { replace: true });
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : "Could not save company preferences");
+    }
+
+    if (failures.length > 0) {
+      toast.error(failures.join(" "), { id: "appearance" });
+      return;
+    }
+
+    toast.success("Preferences saved", { id: "appearance" });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Display Preferences</CardTitle>
+        <CardDescription>Customize how the application looks</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Theme</Label>
+            <Select
+              value={theme}
+              onValueChange={(value) => {
+                const nextTheme = normalizeProfileTheme(value);
+                setTheme(nextTheme);
+                applyProfileTheme(nextTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {themeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Language</Label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {withCurrent(languageOptions, language).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Timezone</Label>
+            <Select value={timezone} onValueChange={setTimezone}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {withCurrent(timezoneOptions, timezone).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Date Format</Label>
+            <Select value={dateFormat} onValueChange={setDateFormat}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {withCurrent(dateFormatOptions, dateFormat).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Currency</Label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {withCurrent(currencyOptions, currency).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={onSave} disabled={isPending}>
+            <Save className="mr-2 h-4 w-4" />
+            Save Preferences
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

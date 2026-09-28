@@ -26,10 +26,17 @@ export async function getUserWorkspaces() {
   return (Array.isArray(data) ? data : []) as ListedWorkspaceMembership[];
 }
 
-function membershipSelect(options: { industry: boolean; avatar: boolean; markup: boolean }) {
+const preferenceColumns = ["language", "timezone", "date_format", "currency"] as const;
+
+function mentionsPreferenceColumn(message?: string) {
+  return preferenceColumns.some((column) => message?.includes(column) === true);
+}
+
+function membershipSelect(options: { industry: boolean; avatar: boolean; markup: boolean; preferences: boolean }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
   if (options.markup) fields.push("inventory_markup");
+  if (options.preferences) fields.push(...preferenceColumns);
   const industry = options.industry
     ? `,
     industry:industries (
@@ -50,8 +57,12 @@ function isMissingAvatarColumn(error: { code?: string; message?: string }) {
 }
 
 function isMissingIndustrySchema(error: { code?: string; message?: string }) {
-  if (error.message?.includes("avatar_path") || error.message?.includes("inventory_markup")) return false;
+  if (error.message?.includes("avatar_path") || error.message?.includes("inventory_markup") || mentionsPreferenceColumn(error.message)) return false;
   return error.code === "PGRST205" || error.code === "PGRST200" || error.code === "42703" || error.message?.includes("industries") === true;
+}
+
+function isMissingPreferenceColumn(error: { code?: string; message?: string }) {
+  return (error.code === "42703" || error.code === "PGRST204") && mentionsPreferenceColumn(error.message);
 }
 
 function isMissingMarkupColumn(error: { code?: string; message?: string }) {
@@ -62,10 +73,15 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let industry = true;
   let avatar = true;
   let markup = true;
+  let preferences = true;
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const { data, error } = await run(membershipSelect({ industry, avatar, markup }));
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { data, error } = await run(membershipSelect({ industry, avatar, markup, preferences }));
     if (!error) return data;
+    if (preferences && isMissingPreferenceColumn(error)) {
+      preferences = false;
+      continue;
+    }
     if (markup && isMissingMarkupColumn(error)) {
       markup = false;
       continue;
@@ -92,12 +108,20 @@ export type WorkspaceDetails = {
   industryName: string | null;
   avatarPath: string | null;
   inventoryMarkup: number | null;
+  language: string | null;
+  timezone: string | null;
+  dateFormat: string | null;
+  currency: string | null;
   role: string;
 };
 
 function firstRecord(value: unknown) {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+
+function readText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function readInventoryMarkup(value: unknown) {
@@ -128,8 +152,31 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     industryName: industryRecord && typeof industryRecord.name === "string" ? industryRecord.name : null,
     avatarPath: typeof record.avatar_path === "string" && record.avatar_path ? record.avatar_path : null,
     inventoryMarkup: readInventoryMarkup(record.inventory_markup),
+    language: readText(record.language),
+    timezone: readText(record.timezone),
+    dateFormat: readText(record.date_format),
+    currency: readText(record.currency),
     role: typeof membership.role === "string" ? membership.role : "member",
   };
+}
+
+export type WorkspacePreferencesInput = {
+  language: string;
+  timezone: string;
+  dateFormat: string;
+  currency: string;
+};
+
+export function workspacePreferenceFields(input: WorkspacePreferencesInput) {
+  const language = input.language.trim();
+  const timezone = input.timezone.trim();
+  const dateFormat = input.dateFormat.trim();
+  const currency = input.currency.trim();
+  if (!language) throw new Error("Language is required");
+  if (!timezone) throw new Error("Time zone is required");
+  if (!dateFormat) throw new Error("Date format is required");
+  if (!currency) throw new Error("Currency is required");
+  return { language, timezone, date_format: dateFormat, currency };
 }
 
 export function workspaceUpdateFields(input: { name: string; industryId: string; inventoryMarkup: number }) {
@@ -205,6 +252,19 @@ export async function updateWorkspaceDetails(workspaceId: string, input: { name:
     industryId: typeof data.industry_id === "string" ? data.industry_id : resolvedIndustryId,
     inventoryMarkup: readInventoryMarkup(data.inventory_markup) ?? fields.inventoryMarkup,
   };
+}
+
+export async function updateWorkspacePreferences(workspaceId: string, input: WorkspacePreferencesInput) {
+  const fields = workspacePreferenceFields(input);
+  const user = await currentUser();
+  await requireWorkspaceMembership(user.id, workspaceId);
+
+  const { data, error } = await supabase.from("workspaces").update(fields).eq("id", workspaceId).is("deleted_at", null).select("id").maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Workspace was not updated");
+
+  return getWorkspace(workspaceId);
 }
 
 export async function setActiveWorkspace(id: string) {

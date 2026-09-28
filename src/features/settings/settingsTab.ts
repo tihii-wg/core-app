@@ -10,3 +10,12 @@ export function settingsTabFromSearch(value: string | null): SettingsTab {
 export function profileSettingsPath(locale: string, workspaceId: string) {
   return `/${locale}/${workspaceId}/settings?tab=profile`;
 }
+
+export function replaceLocale(pathname: string, locale: string, language: string) {
+  const nextLanguage = language.trim();
+  if (!nextLanguage || nextLanguage === locale) return pathname;
+  if (pathname === `/${locale}`) return `/${nextLanguage}`;
+  const prefix = `/${locale}/`;
+  if (pathname.startsWith(prefix)) return `/${nextLanguage}/${pathname.slice(prefix.length)}`;
+  return pathname;
+}

@@ -1,8 +1,11 @@
+import { useParams } from "react-router-dom";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import { Spinner } from "../../ui/Spinner";
 import type { InventoryItem } from "../../lib/types";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
 
 type InventoryDetailPanelProps = {
   item: InventoryItem | null;
@@ -15,18 +18,6 @@ type InventoryDetailPanelProps = {
   onRetry: () => void;
 };
 
-function formatMoney(value: number | null) {
-  if (value == null) return "—";
-  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatDate(value: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -37,6 +28,9 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function InventoryDetailPanel({ item, open, isLoading, isError, onOpenChange, onEdit, onDelete, onRetry }: InventoryDetailPanelProps) {
+  const { workspaceId } = useParams();
+  const { data: workspace } = useGetWorkspace(workspaceId);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
@@ -76,12 +70,12 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
               <DetailRow label="Quantity" value={`${item.quantity} ${item.unit}`} />
               <DetailRow label="Minimum Quantity" value={String(item.minQuantity)} />
               <DetailRow label="Unit" value={item.unit || "—"} />
-              <DetailRow label="Purchase Price" value={formatMoney(item.purchasePrice)} />
-              <DetailRow label="Selling Price" value={formatMoney(item.sellingPrice)} />
+              <DetailRow label="Purchase Price" value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
+              <DetailRow label="Selling Price" value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
               <DetailRow label="Supplier" value={item.supplier || "—"} />
               <DetailRow label="Location" value={item.location || "—"} />
-              <DetailRow label="Created" value={formatDate(item.createdAt)} />
-              <DetailRow label="Updated" value={formatDate(item.updatedAt)} />
+              <DetailRow label="Created" value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
+              <DetailRow label="Updated" value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />
             </div>
 
             <div className="flex justify-end gap-2">
