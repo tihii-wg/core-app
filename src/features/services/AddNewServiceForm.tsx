@@ -10,10 +10,12 @@ import useCreateNewService from "./useCreateNewService";
 import type { addNewServiceFormData } from "../../lib/types";
 import ServiceCombobox from "./ServiceCombobox";
 import useGetServices from "./useGetServices";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 export default function AddNewServiceForm({ setCreateModalOpen }) {
   const { mutate } = useCreateNewService();
   const { services } = useGetServices();
+  const { currency } = useWorkspaceMoney();
 
   const {
     control,
@@ -102,7 +104,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="price">Price ($) *</Label>
+            <Label htmlFor="price">Price ({currency}) *</Label>
             <Input
               id="price"
               type="number"

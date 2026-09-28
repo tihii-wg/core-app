@@ -10,6 +10,7 @@ import { Spinner } from "../../ui/Spinner";
 
 import type { EditServiceFormData, Service } from "../../lib/types";
 import useUpdateService from "./useUpdateService";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type EditServiceFormProps = {
   service: Service;
@@ -18,6 +19,7 @@ type EditServiceFormProps = {
 
 export default function UpdateServiceForm({ service, setEditModalOpen }: EditServiceFormProps) {
   const { mutate } = useUpdateService();
+  const { currency } = useWorkspaceMoney();
 
   const {
     control,
@@ -98,7 +100,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="price">Price ($) *</Label>
+            <Label htmlFor="price">Price ({currency}) *</Label>
 
             <Input
               id="price"

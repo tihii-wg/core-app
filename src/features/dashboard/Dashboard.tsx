@@ -6,9 +6,11 @@ import type { Order } from "../../lib/types";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { DashboardCard } from "../../ui/DashboardCard";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 export function Dashboard() {
   const { orders, clients, invoices, inventory, setCurrentModule } = useApp();
+  const { formatMoney } = useWorkspaceMoney();
 
 
   // Calculate stats
@@ -75,7 +77,7 @@ export function Dashboard() {
     {
       key: "total",
       header: "Total",
-      cell: (order) => `$${order?.totalPrice}`,
+      cell: (order) => formatMoney(order?.totalPrice),
       className: "text-right",
     },
   ];
@@ -85,7 +87,7 @@ export function Dashboard() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardCard title="Active Orders" value={activeOrders} icon={ClipboardList} variant="primary" trend={{ value: 12, label: "vs last week" }} />
-        <DashboardCard title="Today's Revenue" value={`$${todayRevenue.toLocaleString()}`} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
+        <DashboardCard title="Today's Revenue" value={formatMoney(todayRevenue)} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
         <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
         <DashboardCard title="Low Stock Items" value={lowStockItems} icon={Package} variant={lowStockItems > 0 ? "danger" : "default"} />
       </div>
@@ -185,7 +187,7 @@ export function Dashboard() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[#939699]">Revenue</span>
-                <span className="text-sm font-medium text-[#099b49]">$3,245</span>
+                <span className="text-sm font-medium text-[#099b49]">{formatMoney(3245)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[#939699]">Orders</span>

@@ -6,6 +6,7 @@ import { DataTable, type Column } from "../../ui/DataTable";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { useApp } from "../../lib/appContext";
 import type { Transaction } from "../../lib/types";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 const paymentMethodIcons: Record<string, React.ElementType> = {
   cash: Banknote,
@@ -16,6 +17,7 @@ const paymentMethodIcons: Record<string, React.ElementType> = {
 
 export function Finance() {
   const { transactions } = useApp();
+  const { formatMoney } = useWorkspaceMoney();
 
   // Calculate summaries
   const stats = useMemo(() => {
@@ -101,7 +103,8 @@ export function Finance() {
       header: "Amount",
       cell: (txn) => (
         <span className={`font-medium ${txn.type === "income" ? "text-[#099b49]" : "text-[#f41f20]"}`}>
-          {txn.type === "income" ? "+" : "-"}${txn.amount}
+          {txn.type === "income" ? "+" : "-"}
+          {formatMoney(txn.amount)}
         </span>
       ),
       className: "text-right",
@@ -114,9 +117,9 @@ export function Finance() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <DashboardCard title="Total Revenue" value={`$${stats.income.toLocaleString()}`} icon={TrendingUp} variant="success" />
-        <DashboardCard title="Total Expenses" value={`$${stats.expenses.toLocaleString()}`} icon={TrendingDown} variant="danger" />
-        <DashboardCard title="Net Profit" value={`$${stats.profit.toLocaleString()}`} icon={DollarSign} variant={stats.profit >= 0 ? "primary" : "danger"} />
+        <DashboardCard title="Total Revenue" value={formatMoney(stats.income)} icon={TrendingUp} variant="success" />
+        <DashboardCard title="Total Expenses" value={formatMoney(stats.expenses)} icon={TrendingDown} variant="danger" />
+        <DashboardCard title="Net Profit" value={formatMoney(stats.profit)} icon={DollarSign} variant={stats.profit >= 0 ? "primary" : "danger"} />
         <DashboardCard title="Transactions" value={transactions.length} icon={CreditCard} variant="default" />
       </div>
 
@@ -150,7 +153,7 @@ export function Finance() {
                         <Icon className="h-4 w-4 text-[#939699]" />
                         <span className="text-sm text-[#282e33]">{labels[method]}</span>
                       </div>
-                      <span className="text-sm font-medium text-[#282e33]">${amount}</span>
+                      <span className="text-sm font-medium text-[#282e33]">{formatMoney(amount)}</span>
                     </div>
                     <div className="h-2 bg-[#eeeeef] rounded-full overflow-hidden">
                       <div className="h-full bg-[#1973e1] rounded-full" style={{ width: `${percentage}%` }} />
@@ -168,15 +171,15 @@ export function Finance() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[#939699]">Revenue</span>
-                <span className="text-sm font-medium text-[#099b49]">+${stats.income.toLocaleString()}</span>
+                <span className="text-sm font-medium text-[#099b49]">+{formatMoney(stats.income)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-[#939699]">Expenses</span>
-                <span className="text-sm font-medium text-[#f41f20]">-${stats.expenses.toLocaleString()}</span>
+                <span className="text-sm font-medium text-[#f41f20]">-{formatMoney(stats.expenses)}</span>
               </div>
               <div className="border-t border-[#eeeeef] pt-4 flex items-center justify-between">
                 <span className="text-sm font-medium text-[#282e33]">Net Profit</span>
-                <span className={`text-lg font-bold ${stats.profit >= 0 ? "text-[#099b49]" : "text-[#f41f20]"}`}>${stats.profit.toLocaleString()}</span>
+                <span className={`text-lg font-bold ${stats.profit >= 0 ? "text-[#099b49]" : "text-[#f41f20]"}`}>{formatMoney(stats.profit)}</span>
               </div>
               <div className="pt-2">
                 <p className="text-xs text-[#939699]">
@@ -199,7 +202,7 @@ export function Finance() {
                       <p className="text-sm text-[#282e33]">{expense.category}</p>
                       <p className="text-xs text-[#939699]">{expense.date}</p>
                     </div>
-                    <span className="text-sm font-medium text-[#f41f20]">-${expense.amount}</span>
+                    <span className="text-sm font-medium text-[#f41f20]">-{formatMoney(expense.amount)}</span>
                   </div>
                 ))}
             </div>

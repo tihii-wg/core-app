@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AddNewOrderForm from "./AddNewOrderForm";
@@ -40,7 +41,7 @@ describe("AddNewOrderForm client validation", () => {
 
   it("marks the client field when Create Order is clicked with an empty form", async () => {
     const user = userEvent.setup();
-    render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     await user.click(screen.getByRole("button", { name: "Create Order" }));
 
@@ -52,7 +53,7 @@ describe("AddNewOrderForm client validation", () => {
 
   it("clears the client warning after a name is entered", async () => {
     const user = userEvent.setup();
-    render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     await user.click(screen.getByRole("button", { name: "Create Order" }));
     expect(await screen.findByText("Client is required")).toBeInTheDocument();
@@ -64,7 +65,7 @@ describe("AddNewOrderForm client validation", () => {
 
   it("requires the VIN to contain exactly 17 characters", async () => {
     const user = userEvent.setup();
-    render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     await user.type(screen.getByLabelText("VIN *"), "ABC123");
     await user.click(screen.getByRole("button", { name: "Create Order" }));
@@ -80,21 +81,21 @@ describe("AddNewOrderForm client validation", () => {
 
   it("adds a custom service to the order", async () => {
     const user = userEvent.setup();
-    render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     await user.type(screen.getByLabelText("Service *"), "Wheel alignment");
     await user.type(screen.getByLabelText("Price"), "45");
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     expect(screen.getByText("Wheel alignment")).toBeInTheDocument();
-    expect(screen.getByText("$45")).toBeInTheDocument();
+    expect(screen.getAllByText("MDL 45.00")).toHaveLength(2);
   });
 
   it("keeps the assigned employee select controlled after a choice", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     employeesState.employees = [{ id: "emp-1", name: "Ada", status: "active", role: "technician" }];
     const user = userEvent.setup();
-    render(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     await user.click(screen.getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: "Ada" }));

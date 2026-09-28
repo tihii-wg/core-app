@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { PageHeader } from "../../pages/PageHeader";
 // import { useApp } from "../../lib/app-context";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart as RechartsPieChart, Pie, Cell, Legend, AreaChart, Area } from "recharts";
+import { formatWorkspaceMoneyCompact } from "../../lib/workspaceFormat";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
   return (
@@ -52,15 +54,14 @@ const inventoryTrends = [
 ];
 
 export function ReportsModule() {
-  // const { formatCurrency } = useApp()
+  const { currency, formatMoney } = useWorkspaceMoney();
   const [dateRange, setDateRange] = useState("last30");
   const [activeTab, setActiveTab] = useState("overview");
 
   const stats = [
     {
       title: "Total Revenue",
-      // value: formatCurrency(328000),
-      value: 328000,
+      value: formatMoney(328000),
       change: "+12.5%",
       trend: "up",
       icon: DollarSign,
@@ -81,8 +82,7 @@ export function ReportsModule() {
     },
     {
       title: "Avg Order Value",
-      // value: formatCurrency(386.34),
-      value: 386.34,
+      value: formatMoney(386.34),
       change: "-2.1%",
       trend: "down",
       icon: Activity,
@@ -175,9 +175,9 @@ export function ReportsModule() {
                     <AreaChart data={monthlyRevenue}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
-                      <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => `$${v / 1000}k`} />
+                      <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => formatWorkspaceMoneyCompact(v, currency)} />
                       <Tooltip
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
+                        formatter={(value: number) => [formatMoney(value), "Revenue"]}
                         contentStyle={{
                           backgroundColor: "#fff",
                           border: "1px solid #e5e7eb",

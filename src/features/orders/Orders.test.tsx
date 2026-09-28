@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Orders } from "./Orders";
@@ -41,7 +42,7 @@ vi.mock("./AddNewOrderForm", () => ({
 
 describe("Orders page", () => {
   it("shows orders loaded from the workspace", () => {
-    render(<Orders />);
+    renderWithQuery(<Orders />);
 
     expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
@@ -52,7 +53,7 @@ describe("Orders page", () => {
 
   it("finds an order by VIN the same way it finds one by client name", async () => {
     const user = userEvent.setup();
-    render(<Orders />);
+    renderWithQuery(<Orders />);
 
     await user.type(screen.getByPlaceholderText("Search orders..."), "1hgb");
     expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();

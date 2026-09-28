@@ -14,6 +14,7 @@ import type { OrderStatus, Order } from "../../lib/types";
 import AddNewOrderForm from "../orders/AddNewOrderForm";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 // import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 const statusOptions = [
@@ -34,6 +35,7 @@ const statusOptions = [
 
 export function Orders() {
   const { orders, isLoading: ordersLoading } = useGetOrders();
+  const { formatMoney } = useWorkspaceMoney();
   const { mutate: updateStatus } = useUpdateOrderStatus();
 
   // Filters
@@ -108,7 +110,7 @@ export function Orders() {
     {
       key: "total",
       header: "Total",
-      cell: (order) => `$${order.totalPrice}`,
+      cell: (order) => formatMoney(order.totalPrice),
       className: "text-right",
     },
     {

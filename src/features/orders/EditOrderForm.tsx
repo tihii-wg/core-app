@@ -10,6 +10,7 @@ import type { EditOrderFormData, Employee, Order, OrderService } from "../../lib
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import { useUpdateOrder } from "./useUpdateOrder";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type EditOrderFormProps = {
   order: Order;
@@ -21,6 +22,7 @@ type EditOrderFormProps = {
 export default function EditOrderForm({ order, employees, onCancel, onUpdated }: EditOrderFormProps) {
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const { services } = useGetServices();
+  const { formatMoney } = useWorkspaceMoney();
   const [addedServices, setAddedServices] = useState<OrderService[]>([]);
   const activeServices = services?.filter((service) => service.status === "active");
 
@@ -139,7 +141,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
               <div key={service.serviceId || service.serviceName} className="flex items-center justify-between rounded-md border p-3">
                 <div>
                   <p className="font-medium">{service.serviceName}</p>
-                  <p className="text-sm text-gray-500">${service.price}</p>
+                  <p className="text-sm text-gray-500">{formatMoney(service.price)}</p>
                 </div>
               </div>
             ))}
@@ -147,7 +149,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
               <div key={`${service.serviceName}-${index}`} className="flex items-center justify-between rounded-md border p-3">
                 <div>
                   <p className="font-medium">{service.serviceName}</p>
-                  <p className="text-sm text-gray-500">${service.price}</p>
+                  <p className="text-sm text-gray-500">{formatMoney(service.price)}</p>
                 </div>
                 <Button type="button" variant="outline" onClick={() => setAddedServices((current) => current.filter((_, lineIndex) => lineIndex !== index))}>
                   Remove

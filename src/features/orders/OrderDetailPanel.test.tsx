@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Employee, Order } from "../../lib/types";
@@ -55,7 +56,7 @@ const employees: Employee[] = [
 ];
 
 function renderPanel(onOrderUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
-  render(
+  renderWithQuery(
     <OrderDetailPanel
       selectedOrder={order}
       detailPanelOpen

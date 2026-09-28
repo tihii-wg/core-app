@@ -30,6 +30,15 @@ export function formatWorkspaceMoney(value: number | null, currency: string | nu
   return `${symbol}${amount}`;
 }
 
+export function formatWorkspaceMoneyCompact(value: number, currency: string | null | undefined) {
+  const code = currency?.trim() || workspacePreferenceDefaults.currency;
+  const symbol = currencySymbols[code];
+  const thousands = value / 1000;
+  const amount = Number.isInteger(thousands) ? String(thousands) : String(Math.round(thousands * 10) / 10);
+  if (!symbol || symbol === code) return `${code} ${amount}k`;
+  return `${symbol}${amount}k`;
+}
+
 export function formatWorkspaceDate(value: string, pattern: string | null | undefined, timeZone: string | null | undefined) {
   if (!value) return "—";
   const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);

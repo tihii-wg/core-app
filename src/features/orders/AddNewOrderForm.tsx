@@ -13,12 +13,14 @@ import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
 import {  useState } from "react";
 import { useCreateOrder } from "./useCreateOrder";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   const { services } = useGetServices();
   const { clients } = useGetClients(searchQuery);
   const { employees } = useGetEmployees();
   const { mutateAsync: createOrder } = useCreateOrder();
+  const { formatMoney } = useWorkspaceMoney();
   const [clientName, setClientName] = useState("");
   // const clientNameRef = useRef(clientName);
 
@@ -223,7 +225,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
                 <div key={field.id} className="flex items-center justify-between rounded-md border p-3">
                   <div>
                     <p className="font-medium">{field.serviceName}</p>
-                    <p className="text-sm text-gray-500">${field.price}</p>
+                    <p className="text-sm text-gray-500">{formatMoney(field.price)}</p>
                   </div>
                   <Button type="button" variant="outline" onClick={() => serviceRemove(index)}>
                     Remove
@@ -278,7 +280,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
 
         <div className=" flex justify-between border-t pt-3">
           <span className="text-lg font-semibold">Total Price</span>
-          <span>${totalPrice.toFixed(2)}</span>
+          <span>{formatMoney(totalPrice)}</span>
         </div>
       </div>
 

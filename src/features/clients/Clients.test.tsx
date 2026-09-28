@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
+import { renderWithQuery } from "../../tests/renderQuery";
 import { describe, expect, it, vi } from "vitest";
 import { Clients } from "./Clients";
 
@@ -42,7 +43,7 @@ vi.mock("../orders/useGetOrders", () => ({
 
 describe("Clients order counts", () => {
   it("shows how many saved orders belong to each client", () => {
-    render(<Clients />);
+    renderWithQuery(<Clients />);
 
     const adaRow = screen.getByRole("row", { name: /Ada Lovelace/ });
     const graceRow = screen.getByRole("row", { name: /Grace Hopper/ });

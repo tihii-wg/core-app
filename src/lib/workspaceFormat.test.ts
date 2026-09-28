@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { applyProfileTheme, normalizeProfileTheme } from "../services/apiProfiles";
-import { formatWorkspaceDate, formatWorkspaceMoney } from "./workspaceFormat";
+import { formatWorkspaceDate, formatWorkspaceMoney, formatWorkspaceMoneyCompact } from "./workspaceFormat";
 
 describe("workspace formatting", () => {
   it("formats money with the workspace currency", () => {
     expect(formatWorkspaceMoney(12.5, "USD")).toBe("$12.50");
     expect(formatWorkspaceMoney(12.5, "MDL")).toBe("MDL 12.50");
     expect(formatWorkspaceMoney(null, "EUR")).toBe("—");
+    expect(formatWorkspaceMoneyCompact(45000, "USD")).toBe("$45k");
+    expect(formatWorkspaceMoneyCompact(45000, "MDL")).toBe("MDL 45k");
   });
 
   it("formats a timestamp with the workspace date pattern and time zone", () => {

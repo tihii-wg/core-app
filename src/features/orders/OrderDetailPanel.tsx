@@ -7,6 +7,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import useGetEmployees from "../employees/useGetEmployees";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -21,6 +22,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
   const [isEditing, setIsEditing] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { employees,} = useGetEmployees();
+  const { formatMoney } = useWorkspaceMoney();
 
 
   if (selectedOrder?.id !== editingOrderId) {
@@ -59,7 +61,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
             <EditOrderForm
               key={selectedOrder.id}
               order={selectedOrder}
-              employees={employees}
+              employees={employees ?? []}
               onCancel={() => setIsEditing(false)}
               onUpdated={(order) => {
                 onOrderUpdated(order);
@@ -122,7 +124,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
                 </div>
                 <div>
                   <p className="text-sm text-[#939699]">Total Price</p>
-                  <p className="text-xl font-semibold text-[#282e33]">${selectedOrder.totalPrice}</p>
+                  <p className="text-xl font-semibold text-[#282e33]">{formatMoney(selectedOrder.totalPrice)}</p>
                 </div>
               </div>
 

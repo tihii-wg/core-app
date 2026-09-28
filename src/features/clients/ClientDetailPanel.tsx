@@ -12,6 +12,7 @@ export type ClientOrderSummary = {
   totalPrice: number;
 };
 import EditClientForm from "./EditClientForm";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type ClientDetailPanelProps = {
   selectedClient: Client | null;
@@ -23,6 +24,7 @@ type ClientDetailPanelProps = {
 
 export default function ClientDetailPanel({ selectedClient, detailPanelOpen, setDetailPanelOpen, onClientUpdated, getClientOrders }: ClientDetailPanelProps) {
   
+  const { formatMoney } = useWorkspaceMoney();
   const [isEditing, setIsEditing] = useState(false);
   const [editingClientId, setEditingClientId] = useState(selectedClient?.id);
 
@@ -116,7 +118,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
             {/* Balance */}
             <div className="bg-[#f8f9fa] rounded-md p-4">
               <p className="text-sm text-[#939699]">Current Balance</p>
-              <p className={`text-2xl font-semibold ${selectedClient.balance > 0 ? "text-[#f41f20]" : "text-[#282e33]"}`}>${selectedClient.balance}</p>
+              <p className={`text-2xl font-semibold ${selectedClient.balance > 0 ? "text-[#f41f20]" : "text-[#282e33]"}`}>{formatMoney(selectedClient.balance)}</p>
             </div>
 
             {/* Order History */}
@@ -137,7 +139,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
                             {order.device} - {order.service}
                           </p>
                         </div>
-                        <p className="font-medium text-[#282e33]">${order.totalPrice}</p>
+                        <p className="font-medium text-[#282e33]">{formatMoney(order.totalPrice)}</p>
                       </div>
                     ))}
                   </div>

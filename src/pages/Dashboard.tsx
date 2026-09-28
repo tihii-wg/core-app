@@ -13,6 +13,7 @@ import { getOrders } from "../services/apiOrders";
 import { getClients } from "../services/apiClients";
 import { clientCreatedAt, isAtOrBelowMinimum, localDateKey, taskOverviewCounts, thisWeekStats } from "./dashboardStats";
 import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
+import { useWorkspaceMoney } from "../features/workspaces/useWorkspaceMoney";
 
 
 export default function Dashboard() {
@@ -20,6 +21,7 @@ export default function Dashboard() {
 
   const { orders = [], clients = [], invoices = [], setCurrentModule } = useApp();
   const { workspaceId } = useParams();
+  const { formatMoney } = useWorkspaceMoney();
   const {
     data: workspaceOrders = [],
     isLoading: ordersLoading,
@@ -110,7 +112,7 @@ export default function Dashboard() {
     {
       key: "total",
       header: "Total",
-      cell: (order) => `$${order.totalPrice}`,
+      cell: (order) => formatMoney(order.totalPrice),
       className: "text-right",
     },
   ];
@@ -145,7 +147,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        <DashboardCard title="Today's Revenue" value={`$${todayRevenue.toLocaleString()}`} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
+        <DashboardCard title="Today's Revenue" value={formatMoney(todayRevenue)} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
         <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
         <div className="bg-white rounded-md border border-[#eeeeef] p-4">
           <div className="flex items-start justify-between">
@@ -324,7 +326,7 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-[#939699]">Revenue</span>
-                    <span className="text-sm font-medium text-[#099b49]">${week.revenue.toLocaleString()}</span>
+                    <span className="text-sm font-medium text-[#099b49]">{formatMoney(week.revenue)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-[#939699]">Orders</span>

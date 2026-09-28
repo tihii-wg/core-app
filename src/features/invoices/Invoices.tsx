@@ -13,6 +13,7 @@ import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -24,6 +25,7 @@ const statusOptions = [
 
 export function Invoices() {
   const { invoices = [], clients = [], orders = [], addInvoice, updateInvoiceStatus } = useApp();
+  const { currency, formatMoney } = useWorkspaceMoney();
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,7 +82,7 @@ export function Invoices() {
     {
       key: "amount",
       header: "Amount",
-      cell: (invoice) => <span className="font-medium text-[#282e33]">${invoice.amount}</span>,
+      cell: (invoice) => <span className="font-medium text-[#282e33]">{formatMoney(invoice.amount)}</span>,
       className: "text-right",
     },
     {
@@ -185,10 +187,10 @@ export function Invoices() {
           )}
           <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-md">
             <div className="h-10 w-10 bg-[#edf4fd] rounded-full flex items-center justify-center">
-              <span className="text-[#1973e1] font-bold">$</span>
+              <span className="text-[#1973e1] text-xs font-bold">{currency}</span>
             </div>
             <div>
-              <p className="font-medium text-[#282e33]">${unpaidTotal.toLocaleString()} Unpaid</p>
+              <p className="font-medium text-[#282e33]">{formatMoney(unpaidTotal)} Unpaid</p>
               <p className="text-sm text-[#939699]">Outstanding balance</p>
             </div>
           </div>
@@ -256,8 +258,7 @@ export function Invoices() {
                     <SelectItem value="">No related order</SelectItem>
                     {getClientOrders(formData.clientId).map((order) => (
                       <SelectItem key={order.id} value={order.id}>
-                        {order.orderNumber} - {order.device} ($
-                        {order.totalPrice})
+                        {order.orderNumber} - {order.device} ({formatMoney(order.totalPrice)})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -267,7 +268,7 @@ export function Invoices() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Amount ($) *</Label>
+                <Label>Amount ({currency}) *</Label>
                 <Input
                   type="number"
                   value={formData.amount}

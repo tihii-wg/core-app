@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Client } from "../../lib/types";
@@ -28,7 +29,7 @@ const client: Client = {
 };
 
 function renderPanel(onClientUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
-  render(
+  renderWithQuery(
     <ClientDetailPanel
       selectedClient={client}
       detailPanelOpen

@@ -24,6 +24,7 @@ import { useDebounce } from "../../hooks/useDebounce";
 import EditServiceForm from "./UpdateServiceForm";
 import useDeleteService from "./useDeleteService";
 import {  NoSearchResults, NoServices } from "../../ui/EmptyState";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 // const categoryOptions = [
 //   { value: "All", label: "All Categories" },
@@ -48,6 +49,7 @@ export function Services() {
   const debunceSearch = useDebounce(searchQuery, 400);
   // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
   const { services, isLoading, isPending } = useGetServices(debunceSearch);
+  const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
 
   // Stats
@@ -93,7 +95,7 @@ export function Services() {
       key: "price",
       header: "Price",
       className: "text-right w-[120px]",
-      cell: (service) => <span className="font-medium text-[#282e33]">${service.service_price}</span>,
+      cell: (service) => <span className="font-medium text-[#282e33]">{formatMoney(service.service_price)}</span>,
     },
     {
       key: "status",

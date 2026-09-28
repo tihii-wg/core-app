@@ -14,6 +14,7 @@ import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useGetOrders } from "../orders/useGetOrders";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -22,6 +23,7 @@ export function Clients() {
   const debounceSearch = useDebounce(searchQuery, 400);
   const { isLoading, clients = [], isPending } = useGetClients(debounceSearch, clientType);
   const { orders, isLoading: ordersLoading } = useGetOrders();
+  const { formatMoney } = useWorkspaceMoney();
 
   // State
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -81,7 +83,7 @@ export function Clients() {
     {
       key: "balance",
       header: "Balance",
-      cell: (client) => <span className={client.balance > 0 ? "text-[#f41f20] font-medium" : "text-[#282e33]"}>${client.balance}</span>,
+      cell: (client) => <span className={client.balance > 0 ? "text-[#f41f20] font-medium" : "text-[#282e33]"}>{formatMoney(client.balance)}</span>,
       className: "text-right",
     },
     {
