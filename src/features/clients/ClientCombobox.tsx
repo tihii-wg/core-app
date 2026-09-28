@@ -55,7 +55,7 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
           ))}
 
           {value.trim() && !exactMatch && (
-            <div className="border-t px-3 py-2 text-sm text-gray-900" onClick={() => setOpen(false)}>
+            <div className="cursor-pointer border-t px-3 py-2 text-sm text-gray-900" onClick={() => setOpen(false)}>
               New client: <strong>{value.trim()}</strong>
             </div>
           )}
