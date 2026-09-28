@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import { getWorkspaceLogoUrl, LOGO_REMOVE_ERROR, LOGO_UPLOAD_ERROR, removeWorkspaceLogo, uploadWorkspaceLogo } from "../../services/workspaceAvatar";
+import { getWorkspaceLogoUrl, LOGO_REMOVE_ERROR, LOGO_UPLOAD_ERROR, removeWorkspaceLogo, uploadWorkspaceLogo } from "./workspaceAvatar";
+
 
 export function useWorkspaceAvatar(workspaceId?: string, avatarPath?: string | null) {
   return useQuery({

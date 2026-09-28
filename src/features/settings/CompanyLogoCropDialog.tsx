@@ -3,7 +3,8 @@ import Cropper, { type Area } from "react-easy-crop";
 import toast from "react-hot-toast";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
-import { cropImageToWebp, LOGO_UPLOAD_ERROR } from "../../services/workspaceAvatar";
+import { cropImageToWebp, LOGO_UPLOAD_ERROR } from "../workspaces/workspaceAvatar";
+
 
 export function CompanyLogoCropDialog({
   imageUrl,

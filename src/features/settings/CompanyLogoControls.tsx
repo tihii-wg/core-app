@@ -5,9 +5,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "../../ui/Label";
 import { WorkspaceAvatar } from "../../ui/WorkspaceAvatar";
 import { useRemoveWorkspaceAvatar, useUploadWorkspaceAvatar, useWorkspaceAvatar } from "../workspaces/useWorkspaceAvatar";
-import { workspaceLogoFileError } from "../../services/workspaceAvatar";
+
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoCropDialog } from "./CompanyLogoCropDialog";
+import { workspaceLogoFileError } from "../workspaces/workspaceAvatar";
 
 export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails }) {
   const inputRef = useRef<HTMLInputElement>(null);

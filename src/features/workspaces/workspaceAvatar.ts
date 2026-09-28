@@ -1,4 +1,4 @@
-import supabase from "./supabase";
+import supabase from "../../services/supabase";
 
 export const WORKSPACE_LOGO_BUCKET = "workspace";
 export const WORKSPACE_LOGO_MAX_BYTES = 5 * 1024 * 1024;
