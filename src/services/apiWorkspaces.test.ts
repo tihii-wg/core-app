@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeWorkspaceLanguage, toWorkspaceDetails, workspacePreferenceFields, workspaceUpdateFields } from "./apiWorkspaces";
+import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, toWorkspaceDetails, workspacePreferenceFields, workspaceUpdateFields } from "./apiWorkspaces";
 
 describe("workspace details", () => {
   it("reads the company name and business type from a membership", () => {
@@ -56,6 +56,11 @@ describe("workspace preferences", () => {
       currency: "eur",
     });
     expect(workspacePreferenceFields({ language: "ro", timezone: "Europe/Chisinau", dateFormat: "DD.MM.YYYY", currency: "MDL" }).language).toBe("ro");
+    expect(normalizeWorkspaceDateFormat("DD/MM/YYYY")).toBe("DD.MM.YYYY");
+    expect(normalizeWorkspaceDateFormat("dd.MM.yyyy")).toBe("DD.MM.YYYY");
+    expect(normalizeWorkspaceDateFormat("MM/dd/yyyy")).toBe("MM/DD/YYYY");
+    expect(normalizeWorkspaceDateFormat("yyyy-MM-dd")).toBe("YYYY-MM-DD");
+    expect(workspacePreferenceFields({ language: "en", timezone: "Europe/Chisinau", dateFormat: "DD/MM/YYYY", currency: "MDL" }).date_format).toBe("DD.MM.YYYY");
   });
 
   it("uses English when a language is missing", () => {

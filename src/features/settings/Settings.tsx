@@ -43,7 +43,7 @@ import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
-import { normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
+import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 
 export function SettingsModule() {
@@ -417,7 +417,7 @@ const timezoneOptions = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
 ];
 
-const dateFormatOptions = ["DD.MM.YYYY", "MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"].map((value) => ({ value, label: value }));
+const dateFormatOptions = ["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"].map((value) => ({ value, label: value }));
 
 const currencyOptions = [
   { value: "MDL", label: "MDL (L)" },
@@ -492,7 +492,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
   const [theme, setTheme] = useState<ProfileTheme>(savedTheme);
   const [language, setLanguage] = useState(normalizeWorkspaceLanguage(workspace.language));
   const [timezone, setTimezone] = useState(workspace.timezone ?? workspacePreferenceDefaults.timezone);
-  const [dateFormat, setDateFormat] = useState(workspace.dateFormat ?? workspacePreferenceDefaults.dateFormat);
+  const [dateFormat, setDateFormat] = useState(normalizeWorkspaceDateFormat(workspace.dateFormat));
   const [currency, setCurrency] = useState(workspace.currency ?? workspacePreferenceDefaults.currency);
   const { mutateAsync: saveTheme, isPending: themePending } = useUpdateProfileTheme();
   const { mutateAsync: savePreferences, isPending: preferencesPending } = useUpdateWorkspacePreferences();
@@ -591,12 +591,12 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
           <div className="space-y-2">
             <Label>Date Format</Label>
-            <Select value={dateFormat} onValueChange={setDateFormat}>
+            <Select value={dateFormat} onValueChange={(value) => setDateFormat(normalizeWorkspaceDateFormat(value))}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {withCurrent(dateFormatOptions, dateFormat).map((option) => (
+                {dateFormatOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

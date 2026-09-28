@@ -177,14 +177,34 @@ export function normalizeWorkspaceLanguage(value: string | null | undefined): Wo
   return "en";
 }
 
+const workspaceDateFormats = ["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"] as const;
+
+export type WorkspaceDateFormat = (typeof workspaceDateFormats)[number];
+
+const dateFormatAliases: Record<string, WorkspaceDateFormat> = {
+  "dd.mm.yyyy": "DD.MM.YYYY",
+  "dd/mm/yyyy": "DD.MM.YYYY",
+  "mm/dd/yyyy": "MM/DD/YYYY",
+  "yyyy-mm-dd": "YYYY-MM-DD",
+};
+
+export function normalizeWorkspaceDateFormat(value: string | null | undefined): WorkspaceDateFormat {
+  const format = value?.trim() ?? "";
+  if ((workspaceDateFormats as readonly string[]).includes(format)) return format as WorkspaceDateFormat;
+  return dateFormatAliases[format.toLowerCase()] ?? "DD.MM.YYYY";
+}
+
 export function workspacePreferenceFields(input: WorkspacePreferencesInput) {
   const timezone = input.timezone.trim();
-  const dateFormat = input.dateFormat.trim();
   const currency = input.currency.trim();
   if (!timezone) throw new Error("Time zone is required");
-  if (!dateFormat) throw new Error("Date format is required");
   if (!currency) throw new Error("Currency is required");
-  return { language: normalizeWorkspaceLanguage(input.language), timezone, date_format: dateFormat, currency };
+  return {
+    language: normalizeWorkspaceLanguage(input.language),
+    timezone,
+    date_format: normalizeWorkspaceDateFormat(input.dateFormat),
+    currency,
+  };
 }
 
 export function workspaceUpdateFields(input: { name: string; industryId: string; inventoryMarkup: number }) {
@@ -314,6 +334,7 @@ export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
         owner_id: newWorkspaceData.userId,
         industry_id: industryId,
         language: normalizeWorkspaceLanguage(newWorkspaceData.language),
+        date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
       },
     ])
     .select();

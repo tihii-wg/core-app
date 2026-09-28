@@ -1,6 +1,6 @@
 import supabase from "./supabase";
 import { resolveIndustryId } from "./apiIndustries";
-import { normalizeWorkspaceLanguage } from "./apiWorkspaces";
+import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage } from "./apiWorkspaces";
 
 export function isInvalidSessionError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -74,6 +74,7 @@ export async function signUp(data: signUpProps) {
         owner_id: user.id,
         industry_id: industryId,
         language: normalizeWorkspaceLanguage("en"),
+        date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
       },
     ])
     .select()
