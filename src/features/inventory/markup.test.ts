@@ -17,5 +17,7 @@ describe("inventory markup", () => {
     expect(parseMarkupPercent("0")).toBe(0);
     expect(parseMarkupPercent("")).toBeNull();
     expect(parseMarkupPercent("-5")).toBeNull();
+    expect(parseMarkupPercent("abc")).toBeNull();
+    expect(parseMarkupPercent("1001")).toBeNull();
   });
 });

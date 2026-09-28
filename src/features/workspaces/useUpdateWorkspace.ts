@@ -6,19 +6,21 @@ type UpdateWorkspaceInput = {
   workspaceId: string;
   name: string;
   industryId: string;
+  inventoryMarkup: number;
 };
 
 export function useUpdateWorkspace() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ workspaceId, name, industryId }: UpdateWorkspaceInput) => updateWorkspaceDetails(workspaceId, { name, industryId }),
+    mutationFn: ({ workspaceId, name, industryId, inventoryMarkup }: UpdateWorkspaceInput) => updateWorkspaceDetails(workspaceId, { name, industryId, inventoryMarkup }),
     onMutate() {
       toast.loading("Saving company...", { id: "update-workspace" });
     },
     onSuccess(_data, { workspaceId }) {
       queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      queryClient.invalidateQueries({ queryKey: ["workspace-markup", workspaceId] });
       toast.success("Company updated", { id: "update-workspace" });
     },
     onError(error) {

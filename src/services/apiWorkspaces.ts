@@ -26,9 +26,10 @@ export async function getUserWorkspaces() {
   return (Array.isArray(data) ? data : []) as ListedWorkspaceMembership[];
 }
 
-function membershipSelect(options: { industry: boolean; avatar: boolean }) {
+function membershipSelect(options: { industry: boolean; avatar: boolean; markup: boolean }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
+  if (options.markup) fields.push("inventory_markup");
   const industry = options.industry
     ? `,
     industry:industries (
@@ -49,17 +50,26 @@ function isMissingAvatarColumn(error: { code?: string; message?: string }) {
 }
 
 function isMissingIndustrySchema(error: { code?: string; message?: string }) {
-  if (error.message?.includes("avatar_path")) return false;
+  if (error.message?.includes("avatar_path") || error.message?.includes("inventory_markup")) return false;
   return error.code === "PGRST205" || error.code === "PGRST200" || error.code === "42703" || error.message?.includes("industries") === true;
+}
+
+function isMissingMarkupColumn(error: { code?: string; message?: string }) {
+  return (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("inventory_markup") === true;
 }
 
 async function selectMembership(run: (select: string) => PromiseLike<MembershipResult>) {
   let industry = true;
   let avatar = true;
+  let markup = true;
 
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const { data, error } = await run(membershipSelect({ industry, avatar }));
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const { data, error } = await run(membershipSelect({ industry, avatar, markup }));
     if (!error) return data;
+    if (markup && isMissingMarkupColumn(error)) {
+      markup = false;
+      continue;
+    }
     if (avatar && isMissingAvatarColumn(error)) {
       avatar = false;
       continue;
@@ -81,12 +91,19 @@ export type WorkspaceDetails = {
   industryId: string | null;
   industryName: string | null;
   avatarPath: string | null;
+  inventoryMarkup: number | null;
   role: string;
 };
 
 function firstRecord(value: unknown) {
   if (Array.isArray(value)) return value[0] ?? null;
   return value ?? null;
+}
+
+function readInventoryMarkup(value: unknown) {
+  if (value == null || value === "") return null;
+  const markup = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(markup) ? markup : null;
 }
 
 export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
@@ -110,18 +127,24 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     industryId: typeof record.industry_id === "string" ? record.industry_id : null,
     industryName: industryRecord && typeof industryRecord.name === "string" ? industryRecord.name : null,
     avatarPath: typeof record.avatar_path === "string" && record.avatar_path ? record.avatar_path : null,
+    inventoryMarkup: readInventoryMarkup(record.inventory_markup),
     role: typeof membership.role === "string" ? membership.role : "member",
   };
 }
 
-export function workspaceUpdateFields(input: { name: string; industryId: string }) {
+export function workspaceUpdateFields(input: { name: string; industryId: string; inventoryMarkup: number }) {
   const name = input.name.trim();
   if (!name) throw new Error("Company name is required");
 
   const industryId = input.industryId.trim();
   if (!industryId) throw new Error("Business type is required");
 
-  return { name, industryId };
+  const inventoryMarkup = input.inventoryMarkup;
+  if (!Number.isFinite(inventoryMarkup)) throw new Error("Markup percentage must be a number");
+  if (inventoryMarkup < 0) throw new Error("Markup percentage cannot be negative");
+  if (inventoryMarkup > 1000) throw new Error("Markup percentage cannot be greater than 1000");
+
+  return { name, industryId, inventoryMarkup };
 }
 
 async function currentUser() {
@@ -160,13 +183,18 @@ export async function getWorkspace(workspaceId: string) {
   return toWorkspaceDetails(data);
 }
 
-export async function updateWorkspaceDetails(workspaceId: string, input: { name: string; industryId: string }) {
+export async function updateWorkspaceDetails(workspaceId: string, input: { name: string; industryId: string; inventoryMarkup: number }) {
   const fields = workspaceUpdateFields(input);
   const user = await currentUser();
   await requireWorkspaceMembership(user.id, workspaceId);
 
   const resolvedIndustryId = await resolveIndustryId(fields.industryId);
-  const { data, error } = await supabase.from("workspaces").update({ name: fields.name, industry_id: resolvedIndustryId }).eq("id", workspaceId).select("id, name, industry_id").maybeSingle();
+  const { data, error } = await supabase
+    .from("workspaces")
+    .update({ name: fields.name, industry_id: resolvedIndustryId, inventory_markup: fields.inventoryMarkup })
+    .eq("id", workspaceId)
+    .select("id, name, industry_id, inventory_markup")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Workspace was not updated");
@@ -175,6 +203,7 @@ export async function updateWorkspaceDetails(workspaceId: string, input: { name:
     id: String(data.id),
     name: typeof data.name === "string" ? data.name : fields.name,
     industryId: typeof data.industry_id === "string" ? data.industry_id : resolvedIndustryId,
+    inventoryMarkup: readInventoryMarkup(data.inventory_markup) ?? fields.inventoryMarkup,
   };
 }
 

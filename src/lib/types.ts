@@ -254,6 +254,7 @@ export type Workspace = {
   deleted_at: string | null;
   industry_id: string | null;
   avatar_path?: string | null;
+  inventory_markup: number | null;
   industry: WorkspaceIndustry | null;
 };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOGO_FILE_ERROR, workspaceLogoFileError, workspaceLogoObjectPath, workspaceLogoStoragePath } from "./workspaceAvatar";
+import { LOGO_FILE_ERROR, workspaceLogoFileError, workspaceLogoObjectPath, workspaceLogoStoragePath } from "../features/workspaces/workspaceAvatar";
 
 const workspaceId = "4b8f0c3a-1111-4111-8111-111111111111";
 

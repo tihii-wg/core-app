@@ -17,6 +17,8 @@ export function useUpdateInventoryMarkup() {
     mutationFn: ({ workspaceId, markupPercent }: { workspaceId: string; markupPercent: number }) => updateInventoryMarkup(workspaceId, markupPercent),
     onSuccess(markupPercent, { workspaceId }) {
       queryClient.setQueryData(["workspace-markup", workspaceId], markupPercent);
+      queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
     },
     onError(error) {
       toast.error(error.message || "Could not save the markup percentage.");

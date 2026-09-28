@@ -19,32 +19,29 @@ function query(result: { data: unknown; error: unknown }) {
 
 describe("inventory markup api", () => {
   beforeEach(() => {
-    const store = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        store.set(key, value);
-      },
-      removeItem: (key: string) => {
-        store.delete(key);
-      },
-      clear: () => {
-        store.clear();
-      },
-    });
     from.mockReset();
   });
 
-  it("keeps the markup after refresh when the workspace column is not available yet", async () => {
-    from.mockImplementation(() => query({ data: null, error: { code: "42703", message: "column workspaces.inventory_markup_percent does not exist" } }));
+  it("reads a whole-number markup percentage from the workspace", async () => {
+    from.mockImplementation(() => query({ data: { inventory_markup: "25" }, error: null }));
 
-    await expect(updateInventoryMarkup("ws-1", 20)).resolves.toBe(20);
-    await expect(getInventoryMarkup("ws-1")).resolves.toBe(20);
+    await expect(getInventoryMarkup("ws-1")).resolves.toBe(25);
   });
 
-  it("reads the markup stored on the workspace", async () => {
-    from.mockImplementation(() => query({ data: { inventory_markup_percent: "15" }, error: null }));
+  it("treats a missing markup as zero", async () => {
+    from.mockImplementation(() => query({ data: { inventory_markup: null }, error: null }));
 
-    await expect(getInventoryMarkup("ws-1")).resolves.toBe(15);
+    await expect(getInventoryMarkup("ws-1")).resolves.toBe(0);
+  });
+
+  it("saves the markup percentage on the workspace", async () => {
+    from.mockImplementation(() => query({ data: { inventory_markup: 25 }, error: null }));
+
+    await expect(updateInventoryMarkup("ws-1", 25)).resolves.toBe(25);
+  });
+
+  it("rejects a negative markup", async () => {
+    await expect(updateInventoryMarkup("ws-1", -1)).rejects.toThrow("Markup percentage cannot be negative");
+    expect(from).not.toHaveBeenCalled();
   });
 });

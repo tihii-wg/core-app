@@ -1,7 +1,5 @@
-import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
-import toast from "react-hot-toast";
 import { Building2, Save } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
@@ -13,14 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useGetIndustries } from "../industries/useGetIndustries";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspace } from "../workspaces/useUpdateWorkspace";
-import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
-import { parseMarkupPercent } from "../inventory/markup";
+import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoControls } from "./CompanyLogoControls";
 
 type CompanyFormValues = {
   name: string;
   industryId: string;
+  inventoryMarkup: string;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -28,43 +26,37 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-[#f41f20]">{message}</p>;
 }
 
-function CompanyForm({ workspace, savedMarkup }: { workspace: WorkspaceDetails; savedMarkup: number }) {
+function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const { mutateAsync: saveWorkspace, isPending: isSavingWorkspace } = useUpdateWorkspace();
-  const { mutateAsync: saveMarkup, isPending: isSavingMarkup } = useUpdateInventoryMarkup();
-  const [markupInput, setMarkupInput] = useState(String(savedMarkup));
-  const [markupError, setMarkupError] = useState("");
   const {
     register,
     control,
     handleSubmit,
+    setError,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<CompanyFormValues>({
     defaultValues: {
       name: workspace.name,
       industryId: workspace.industryId ?? "",
+      inventoryMarkup: workspace.inventoryMarkup == null ? "0" : String(workspace.inventoryMarkup),
     },
   });
 
-  const saving = isSavingWorkspace || isSavingMarkup || isSubmitting;
-  const markupChanged = markupInput !== String(savedMarkup);
+  const saving = isSavingWorkspace || isSubmitting;
 
   async function onSubmit(values: CompanyFormValues) {
-    const markup = parseMarkupPercent(markupInput);
-    if (markup == null) {
-      setMarkupError(markupInput.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
+    const markupMessage = markupFieldError(values.inventoryMarkup);
+    if (markupMessage) {
+      setError("inventoryMarkup", { message: markupMessage });
       return;
     }
 
-    setMarkupError("");
+    const inventoryMarkup = parseMarkupPercent(values.inventoryMarkup);
+    if (inventoryMarkup == null) return;
+
     try {
-      if (isDirty) {
-        await saveWorkspace({ workspaceId: workspace.id, name: values.name, industryId: values.industryId });
-      }
-      if (markupChanged) {
-        await saveMarkup({ workspaceId: workspace.id, markupPercent: markup });
-        if (!isDirty) toast.success("Company updated");
-      }
+      await saveWorkspace({ workspaceId: workspace.id, name: values.name, industryId: values.industryId, inventoryMarkup });
     } catch {
       return;
     }
@@ -131,21 +123,22 @@ function CompanyForm({ workspace, savedMarkup }: { workspace: WorkspaceDetails; 
                 id="inventoryMarkup"
                 type="number"
                 min={0}
+                max={1000}
                 step="0.01"
-                value={markupInput}
                 disabled={saving}
-                onChange={(event) => {
-                  setMarkupInput(event.target.value);
-                  setMarkupError("");
-                }}
+                {...register("inventoryMarkup", {
+                  required: "Markup percentage is required",
+                  validate: (value) => markupFieldError(value) ?? true,
+                })}
+                className={errors.inventoryMarkup ? "border-[#f41f20]" : ""}
               />
-              <FieldError message={markupError} />
-              <p className="text-xs text-muted-foreground">Used to calculate an inventory item's selling price from its purchase price.</p>
+              <FieldError message={errors.inventoryMarkup?.message} />
+              <p className="text-xs text-muted-foreground">Stored as a whole percentage. 25 means 25%. Maximum is 1000. Used to calculate an inventory item's selling price from its purchase price.</p>
             </div>
           </div>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={saving || (!isDirty && !markupChanged)}>
+            <Button type="submit" disabled={saving || !isDirty}>
               <Save className="mr-2 h-4 w-4" />
               {saving ? "Saving..." : "Save Changes"}
             </Button>
@@ -159,7 +152,6 @@ function CompanyForm({ workspace, savedMarkup }: { workspace: WorkspaceDetails; 
 export function CompanySettings() {
   const { workspaceId } = useParams();
   const { data: workspace, isLoading, error, refetch, isFetched } = useGetWorkspace(workspaceId);
-  const { data: savedMarkup = 0, isLoading: markupLoading, error: markupError, refetch: refetchMarkup } = useGetInventoryMarkup(workspaceId);
 
   if (!workspaceId) {
     return (
@@ -175,7 +167,7 @@ export function CompanySettings() {
     );
   }
 
-  if (isLoading || markupLoading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -191,8 +183,8 @@ export function CompanySettings() {
     );
   }
 
-  if (error || markupError) {
-    const message = error instanceof Error ? error.message : markupError instanceof Error ? markupError.message : "Company details could not be loaded";
+  if (error) {
+    const message = error instanceof Error ? error.message : "Company details could not be loaded";
     return (
       <Card>
         <CardHeader>
@@ -206,7 +198,6 @@ export function CompanySettings() {
             variant="outline"
             onClick={() => {
               void refetch();
-              void refetchMarkup();
             }}
           >
             Try again
@@ -232,5 +223,5 @@ export function CompanySettings() {
 
   if (!workspace) return null;
 
-  return <CompanyForm key={`${workspace.id}:${workspace.name}:${workspace.industryId ?? ""}:${savedMarkup}`} workspace={workspace} savedMarkup={savedMarkup} />;
+  return <CompanyForm key={`${workspace.id}:${workspace.name}:${workspace.industryId ?? ""}:${workspace.inventoryMarkup ?? ""}`} workspace={workspace} />;
 }

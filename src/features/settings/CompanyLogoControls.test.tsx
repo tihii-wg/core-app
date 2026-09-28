@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import toast from "react-hot-toast";
 import { CompanyLogoControls } from "./CompanyLogoControls";
-import { LOGO_FILE_ERROR } from "../../services/workspaceAvatar";
+import { LOGO_FILE_ERROR } from "../workspaces/workspaceAvatar";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 
 vi.mock("react-hot-toast", () => ({
@@ -22,6 +22,7 @@ const workspace: WorkspaceDetails = {
   industryId: null,
   industryName: null,
   avatarPath: null,
+  inventoryMarkup: null,
   role: "owner",
 };
 

@@ -7,7 +7,7 @@ import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import { Spinner } from "../../ui/Spinner";
 import type { InventoryItemFormData } from "../../lib/types";
-import { parseMarkupPercent, sellingPriceFromMarkup } from "./markup";
+import { parseMarkupPercent, markupFieldError, sellingPriceFromMarkup } from "./markup";
 
 type InventoryItemFormProps = {
   defaultValues: InventoryItemFormData;
@@ -56,11 +56,13 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
   return (
     <form
       onSubmit={handleSubmit((data) => {
-        const parsed = parseMarkupPercent(markupText);
-        if (parsed == null) {
-          setMarkupError(markupText.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
+        const message = markupFieldError(markupText);
+        if (message) {
+          setMarkupError(message);
           return;
         }
+        const parsed = parseMarkupPercent(markupText);
+        if (parsed == null) return;
         onMarkupCommit(parsed);
         onSubmit(data);
       })}
@@ -162,11 +164,13 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               applyMarkup(nextMarkup, getValues("purchasePrice"));
             }}
             onBlur={() => {
-              const parsed = parseMarkupPercent(markupText);
-              if (parsed == null) {
-                setMarkupError(markupText.trim() ? "Markup percentage cannot be negative" : "Markup percentage is required");
+              const message = markupFieldError(markupText);
+              if (message) {
+                setMarkupError(message);
                 return;
               }
+              const parsed = parseMarkupPercent(markupText);
+              if (parsed == null) return;
               setMarkupError("");
               onMarkupCommit(parsed);
             }}
