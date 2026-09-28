@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toWorkspaceDetails, workspacePreferenceFields, workspaceUpdateFields } from "./apiWorkspaces";
+import { normalizeWorkspaceLanguage, toWorkspaceDetails, workspacePreferenceFields, workspaceUpdateFields } from "./apiWorkspaces";
 
 describe("workspace details", () => {
   it("reads the company name and business type from a membership", () => {
@@ -44,17 +44,22 @@ describe("workspace details", () => {
 });
 
 describe("workspace preferences", () => {
-  it("keeps the trimmed language, time zone, date format, and currency", () => {
-    expect(workspacePreferenceFields({ language: " de ", timezone: " Europe/Berlin ", dateFormat: " DD.MM.YYYY ", currency: " eur " })).toEqual({
-      language: "de",
+  it("saves only en, ro, or ru", () => {
+    expect(normalizeWorkspaceLanguage("en-US")).toBe("en");
+    expect(normalizeWorkspaceLanguage("ro-RO")).toBe("ro");
+    expect(normalizeWorkspaceLanguage("ru_RU")).toBe("ru");
+    expect(normalizeWorkspaceLanguage("de")).toBe("en");
+    expect(workspacePreferenceFields({ language: " es ", timezone: " Europe/Berlin ", dateFormat: " DD.MM.YYYY ", currency: " eur " })).toEqual({
+      language: "en",
       timezone: "Europe/Berlin",
       date_format: "DD.MM.YYYY",
       currency: "eur",
     });
+    expect(workspacePreferenceFields({ language: "ro", timezone: "Europe/Chisinau", dateFormat: "DD.MM.YYYY", currency: "MDL" }).language).toBe("ro");
   });
 
-  it("requires every preference", () => {
-    expect(() => workspacePreferenceFields({ language: " ", timezone: "Europe/Chisinau", dateFormat: "DD.MM.YYYY", currency: "MDL" })).toThrow("Language is required");
+  it("uses English when a language is missing", () => {
+    expect(workspacePreferenceFields({ language: " ", timezone: "Europe/Chisinau", dateFormat: "DD.MM.YYYY", currency: "MDL" }).language).toBe("en");
   });
 });
 

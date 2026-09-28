@@ -1,3 +1,4 @@
+import { useParams } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -15,6 +16,7 @@ export type AddNewWorkspaceFormData = {
 };
 
 export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
+  const { locale } = useParams();
   const { user } = useUser();
   const { mutateAsync } = useCreateWorkspace();
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
@@ -36,6 +38,7 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
       role: data.role,
       userId: user.id,
       industryId: data.industryId,
+      language: locale,
     };
     mutateAsync(newWorkspaceData);
     setCreateModalOpen(false);

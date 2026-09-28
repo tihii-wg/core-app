@@ -167,16 +167,24 @@ export type WorkspacePreferencesInput = {
   currency: string;
 };
 
+const workspaceLanguages = ["en", "ro", "ru"] as const;
+
+export type WorkspaceLanguage = (typeof workspaceLanguages)[number];
+
+export function normalizeWorkspaceLanguage(value: string | null | undefined): WorkspaceLanguage {
+  const code = value?.trim().toLowerCase().split(/[-_]/)[0] ?? "";
+  if ((workspaceLanguages as readonly string[]).includes(code)) return code as WorkspaceLanguage;
+  return "en";
+}
+
 export function workspacePreferenceFields(input: WorkspacePreferencesInput) {
-  const language = input.language.trim();
   const timezone = input.timezone.trim();
   const dateFormat = input.dateFormat.trim();
   const currency = input.currency.trim();
-  if (!language) throw new Error("Language is required");
   if (!timezone) throw new Error("Time zone is required");
   if (!dateFormat) throw new Error("Date format is required");
   if (!currency) throw new Error("Currency is required");
-  return { language, timezone, date_format: dateFormat, currency };
+  return { language: normalizeWorkspaceLanguage(input.language), timezone, date_format: dateFormat, currency };
 }
 
 export function workspaceUpdateFields(input: { name: string; industryId: string; inventoryMarkup: number }) {
@@ -305,6 +313,7 @@ export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
         name: newWorkspaceData.name,
         owner_id: newWorkspaceData.userId,
         industry_id: industryId,
+        language: normalizeWorkspaceLanguage(newWorkspaceData.language),
       },
     ])
     .select();

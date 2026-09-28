@@ -43,7 +43,7 @@ import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
-import type { WorkspaceDetails } from "../../services/apiWorkspaces";
+import { normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 
 export function SettingsModule() {
@@ -405,9 +405,8 @@ const themeOptions: { value: ProfileTheme; label: string }[] = [
 
 const languageOptions = [
   { value: "en", label: "English" },
-  { value: "es", label: "Spanish" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
+  { value: "ro", label: "Romanian" },
+  { value: "ru", label: "Russian" },
 ];
 
 const timezoneOptions = [
@@ -491,7 +490,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState<ProfileTheme>(savedTheme);
-  const [language, setLanguage] = useState(workspace.language ?? workspacePreferenceDefaults.language);
+  const [language, setLanguage] = useState(normalizeWorkspaceLanguage(workspace.language));
   const [timezone, setTimezone] = useState(workspace.timezone ?? workspacePreferenceDefaults.timezone);
   const [dateFormat, setDateFormat] = useState(workspace.dateFormat ?? workspacePreferenceDefaults.dateFormat);
   const [currency, setCurrency] = useState(workspace.currency ?? workspacePreferenceDefaults.currency);
@@ -560,12 +559,12 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
           <div className="space-y-2">
             <Label>Language</Label>
-            <Select value={language} onValueChange={setLanguage}>
+            <Select value={language} onValueChange={(value) => setLanguage(normalizeWorkspaceLanguage(value))}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {withCurrent(languageOptions, language).map((option) => (
+                {languageOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

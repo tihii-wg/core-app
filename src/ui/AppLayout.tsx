@@ -7,6 +7,7 @@ import { useGetProfile } from "../features/profiles/useGetProfile";
 import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
 import { applyProfileTheme, normalizeProfileTheme } from "../services/apiProfiles";
 import { replaceLocale } from "../features/settings/settingsTab";
+import { normalizeWorkspaceLanguage } from "../services/apiWorkspaces";
 
 export function AppLayout() {
   const { workspaceId, locale = "en" } = useParams();
@@ -40,7 +41,7 @@ export function AppLayout() {
   }, []);
 
   useEffect(() => {
-    const language = workspace?.language?.trim();
+    const language = workspace?.language ? normalizeWorkspaceLanguage(workspace.language) : "";
     if (!canUseWorkspace || !language || !workspaceId || language === locale) return;
     const nextPath = replaceLocale(location.pathname, locale, language);
     if (nextPath === location.pathname) return;

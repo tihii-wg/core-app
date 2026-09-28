@@ -362,6 +362,7 @@ export type NewWorkspaceData = {
   role: string;
   userId: string;
   industryId: string;
+  language?: string | null;
 };
 
 export type CreateMadalProps = {
