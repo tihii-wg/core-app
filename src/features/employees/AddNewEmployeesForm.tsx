@@ -41,7 +41,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
   const { data: profile } = useGetProfile();
 
   const onSubmit = (data: AddNewEmployeesFormData) => {
-    const currentProfile = profile[0];
+    const currentProfile = profile;
 
     if (!currentProfile) {
       setError("root", {

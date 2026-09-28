@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import { getEmployees } from "../../services/apiEmployees";
 import type { EmployeeRole } from "../../lib/types";
+import { useGetProfile } from "../profiles/useGetProfile";
 
 export default function useGetEmployees(search?: string, roleFilter?: EmployeeRole | null) {
-  const { workspaceId } = useParams();
+  const { data: profile, isLoading: profileLoading, error: profileError } = useGetProfile();
+  const activeWorkspaceId = profile?.active_workspace_id ?? undefined;
   const {
     data: employees,
     error,
@@ -12,10 +13,16 @@ export default function useGetEmployees(search?: string, roleFilter?: EmployeeRo
     isPending,
     refetch,
   } = useQuery({
-    queryKey: ["employees", workspaceId, search, roleFilter],
-    queryFn: () => getEmployees(search ?? "", roleFilter, workspaceId),
-    enabled: Boolean(workspaceId),
+    queryKey: ["employees", activeWorkspaceId, search, roleFilter],
+    queryFn: () => getEmployees(search ?? "", roleFilter, activeWorkspaceId),
+    enabled: Boolean(activeWorkspaceId),
   });
 
-  return { employees, error, isLoading, isPending, refetch };
+  return {
+    employees,
+    error: profileError ?? error,
+    isLoading: profileLoading || isLoading,
+    isPending,
+    refetch,
+  };
 }

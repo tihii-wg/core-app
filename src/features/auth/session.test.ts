@@ -2,6 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { finishSignOut, isPublicAuthPath } from "./session";
 import { isInvalidSessionError } from "../../services/apiAuth";
+import { stubLocalStorage } from "../../tests/memoryStorage";
 
 describe("auth session", () => {
   it("recognizes public auth routes", () => {
@@ -25,6 +26,19 @@ describe("auth session", () => {
 
     expect(queryClient.getQueryData(["orders", "ws-a"])).toBeUndefined();
     expect(navigate).toHaveBeenCalledWith("/en/login", { replace: true });
+  });
+
+  it("clears the cached theme so the next user does not inherit it", () => {
+    const storage = stubLocalStorage();
+    storage.setItem("coreapp-theme", "dark");
+    document.documentElement.classList.add("dark");
+    window.history.pushState({}, "", "/en/ws-a/orders");
+
+    finishSignOut(new QueryClient(), vi.fn());
+
+    expect(storage.getItem("coreapp-theme")).toBeNull();
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    vi.unstubAllGlobals();
   });
 
   it("does not redirect again when logout already reached login", () => {

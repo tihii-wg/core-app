@@ -29,6 +29,35 @@ export function applyProfileTheme(theme: ProfileTheme, prefersDark: boolean) {
   document.documentElement.classList.toggle("dark", dark);
 }
 
+// Read by the inline script in index.html before the app loads; keep the key in sync.
+export const profileThemeStorageKey = "coreapp-theme";
+
+export function readCachedProfileTheme(): ProfileTheme | null {
+  try {
+    const value = window.localStorage.getItem(profileThemeStorageKey);
+    return value === "light" || value === "dark" || value === "system" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cacheProfileTheme(theme: ProfileTheme) {
+  try {
+    window.localStorage.setItem(profileThemeStorageKey, theme);
+  } catch {
+    // Storage can be unavailable (private mode); the profile query still applies the theme.
+  }
+}
+
+export function resetProfileTheme() {
+  try {
+    window.localStorage.removeItem(profileThemeStorageKey);
+  } catch {
+    // Nothing cached to clear.
+  }
+  document.documentElement.classList.remove("dark");
+}
+
 function isMissingThemeColumn(error: { code?: string; message?: string }) {
   return (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("theme") === true;
 }

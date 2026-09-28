@@ -246,6 +246,46 @@ async function requireWorkspaceMembership(userId: string, workspaceId: string) {
   return data;
 }
 
+export type WorkspaceTeamMember = {
+  userId: string;
+  role: string;
+  fullName: string | null;
+  email: string | null;
+  isCurrentUser: boolean;
+};
+
+type TeamProfileRow = { id: string; full_name: string | null; email: string | null };
+
+export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceTeamMember[]> {
+  const user = await currentUser();
+  await requireWorkspaceMembership(user.id, workspaceId);
+
+  const { data: members, error } = await supabase.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId).is("deleted_at", null);
+  if (error) throw new Error(error.message);
+
+  const rows = (members ?? []) as { user_id: string; role: string | null }[];
+  const userIds = [...new Set(rows.map((row) => row.user_id))];
+  const profilesById = new Map<string, TeamProfileRow>();
+
+  if (userIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
+    if (profilesError) throw new Error(profilesError.message);
+    for (const profile of (profiles ?? []) as TeamProfileRow[]) profilesById.set(profile.id, profile);
+  }
+
+  return rows.map((row) => {
+    const profile = profilesById.get(row.user_id);
+    const isCurrentUser = row.user_id === user.id;
+    return {
+      userId: row.user_id,
+      role: row.role ?? "member",
+      fullName: profile?.full_name ?? null,
+      email: profile?.email ?? (isCurrentUser ? (user.email ?? null) : null),
+      isCurrentUser,
+    };
+  });
+}
+
 export async function getWorkspace(workspaceId: string) {
   if (!workspaceId) return null;
 

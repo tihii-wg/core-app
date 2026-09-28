@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>core-app</title>
+    <script>
+      // Mirrors applyProfileTheme; "coreapp-theme" must match profileThemeStorageKey in src/services/apiProfiles.ts.
+      (function () {
+        try {
+          var path = window.location.pathname;
+          if (path === "/" || /\/(login|register|forgot-password)\/?$/.test(path)) return;
+          var theme = window.localStorage.getItem("coreapp-theme");
+          if (theme !== "light" && theme !== "dark" && theme !== "system") return;
+          var dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (error) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

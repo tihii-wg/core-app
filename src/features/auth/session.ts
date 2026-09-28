@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { NavigateFunction } from "react-router-dom";
+import { resetProfileTheme } from "../../services/apiProfiles";
 
 const publicAuthPath = /\/(login|register|forgot-password)\/?$/;
 
@@ -9,6 +10,7 @@ export function isPublicAuthPath(pathname: string) {
 
 export function finishSignOut(queryClient: QueryClient, navigate: NavigateFunction) {
   queryClient.clear();
+  resetProfileTheme();
 
   const pathname = window.location.pathname;
   if (isPublicAuthPath(pathname)) return;

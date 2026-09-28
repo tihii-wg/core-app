@@ -3,23 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../tests/renderQuery";
 import { TeamMembersList } from "./Settings";
 
-const employeesState = vi.hoisted(() => ({
-  current: { employees: undefined as unknown, isLoading: false, error: null as Error | null },
+const membersState = vi.hoisted(() => ({
+  current: { members: undefined as unknown, isLoading: false, error: null as Error | null },
 }));
 
-vi.mock("../employees/useGetEmployees", () => ({
-  default: () => employeesState.current,
+vi.mock("../workspaces/useGetWorkspaceMembers", () => ({
+  useGetWorkspaceMembers: () => membersState.current,
 }));
 
 describe("TeamMembersList", () => {
   beforeEach(() => {
-    employeesState.current = { employees: undefined, isLoading: false, error: null };
+    membersState.current = { members: undefined, isLoading: false, error: null };
   });
 
-  it("shows workspace employees", () => {
-    employeesState.current.employees = [
-      { id: "emp-1", name: "Ada Lovelace", email: "ada@example.com", role: "technician", status: "active" },
-      { id: "emp-2", name: "Alan Turing", email: "alan@example.com", role: "manager", status: "inactive" },
+  it("shows workspace members with their access role", () => {
+    membersState.current.members = [
+      { userId: "user-1", role: "owner", fullName: "Ada Lovelace", email: "ada@example.com", isCurrentUser: true },
+      { userId: "user-2", role: "member", fullName: null, email: null, isCurrentUser: false },
     ];
 
     renderWithQuery(<TeamMembersList />);
@@ -27,24 +27,24 @@ describe("TeamMembersList", () => {
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
     expect(screen.getByText("AL")).toBeInTheDocument();
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getByText("Alan Turing")).toBeInTheDocument();
-    expect(screen.getByText("Inactive")).toBeInTheDocument();
-    expect(screen.queryByText("John Doe")).not.toBeInTheDocument();
+    expect(screen.getByText("Owner")).toBeInTheDocument();
+    expect(screen.getByText("Workspace member")).toBeInTheDocument();
+    expect(screen.getByText("Member")).toBeInTheDocument();
+    expect(screen.getAllByText("Active")).toHaveLength(2);
   });
 
   it("shows loading, error, and empty states", () => {
-    employeesState.current.isLoading = true;
+    membersState.current.isLoading = true;
     const { unmount } = renderWithQuery(<TeamMembersList />);
     expect(screen.getByText("Loading team members...")).toBeInTheDocument();
     unmount();
 
-    employeesState.current = { employees: undefined, isLoading: false, error: new Error("permission denied") };
+    membersState.current = { members: undefined, isLoading: false, error: new Error("permission denied") };
     const errorView = renderWithQuery(<TeamMembersList />);
     expect(screen.getByText("permission denied")).toBeInTheDocument();
     errorView.unmount();
 
-    employeesState.current = { employees: [], isLoading: false, error: null };
+    membersState.current = { members: [], isLoading: false, error: null };
     renderWithQuery(<TeamMembersList />);
     expect(screen.getByText("No team members yet")).toBeInTheDocument();
   });
