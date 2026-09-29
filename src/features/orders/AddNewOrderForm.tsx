@@ -7,20 +7,23 @@ import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray } from "react-hook-form";
-import type { addNewOrderFormData } from "../../lib/types";
+import type { addNewOrderFormData, CreateMadalProps } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
 import {  useState } from "react";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { canManageServices } from "../workspaces/workspaceRoles";
 
-export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
+export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
   const { services } = useGetServices();
   const { clients } = useGetClients(searchQuery);
   const { employees } = useGetEmployees();
   const { mutateAsync: createOrder } = useCreateOrder();
   const { formatMoney } = useWorkspaceMoney();
+  const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const [clientName, setClientName] = useState("");
   // const clientNameRef = useRef(clientName);
 
@@ -69,17 +72,21 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
   }
 
   const onSubmit = async (data: addNewOrderFormData) => {
-    await createOrder({
-      clientId: data.clientId || undefined,
-      clientName: clientName.trim(),
-      device: data.device,
-      vin: data.vin,
-      carNumber: data.carNumber,
-      description: data.description,
-      services: data.services,
-      assignedEmployeeId: data.assignedEmployeeId || undefined,
-      deadline: data.deadline,
-    });
+    try {
+      await createOrder({
+        clientId: data.clientId || undefined,
+        clientName: clientName.trim(),
+        device: data.device,
+        vin: data.vin,
+        carNumber: data.carNumber,
+        description: data.description,
+        services: data.services,
+        assignedEmployeeId: data.assignedEmployeeId || undefined,
+        deadline: data.deadline,
+      });
+    } catch {
+      return;
+    }
 
     setCreateModalOpen(false);
   };
@@ -189,6 +196,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }) {
 
           <ServiceCombobox
             services={activeServices}
+            allowCreate={canCreateServices}
             errors={!!errors.services?.root}
             onSelect={(service) => {
               const alreadyExists = serviceField.some((field) => field.serviceId === service.id);

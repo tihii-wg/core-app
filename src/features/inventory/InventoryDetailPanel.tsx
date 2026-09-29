@@ -1,4 +1,3 @@
-import { useParams } from "react-router-dom";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
@@ -6,6 +5,7 @@ import { Spinner } from "../../ui/Spinner";
 import type { InventoryItem } from "../../lib/types";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 type InventoryDetailPanelProps = {
   item: InventoryItem | null;
@@ -28,7 +28,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function InventoryDetailPanel({ item, open, isLoading, isError, onOpenChange, onEdit, onDelete, onRetry }: InventoryDetailPanelProps) {
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
 
   return (

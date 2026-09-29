@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
 import { AlertTriangle, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -21,6 +20,8 @@ import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
 import InventoryItemForm from "./InventoryItemForm";
 import InventoryDetailPanel from "./InventoryDetailPanel";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { canManageWorkspace } from "../workspaces/workspaceRoles";
 
 const emptyInventoryForm = {
   name: "",
@@ -62,7 +63,7 @@ function quantityClass(item: InventoryItem) {
 }
 
 export function Inventory() {
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
@@ -79,6 +80,12 @@ export function Inventory() {
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
   const { data: markupPercent = 0, isLoading: markupLoading } = useGetInventoryMarkup(workspaceId);
   const { mutate: saveMarkup } = useUpdateInventoryMarkup();
+  // The markup is stored on the workspace, which only the owner can update.
+  const canSaveMarkup = canManageWorkspace(workspace?.role);
+  const commitMarkup = (nextMarkup: number) => {
+    if (!workspaceId || !canSaveMarkup || nextMarkup === markupPercent) return;
+    saveMarkup({ workspaceId, markupPercent: nextMarkup });
+  };
   const detailQuery = useGetInventoryItem(detailId);
   const editQuery = useGetInventoryItem(editId);
   const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
@@ -289,10 +296,7 @@ export function Inventory() {
             submitLabel="Add Item"
             isSubmitting={isCreating}
             onCancel={() => setCreateOpen(false)}
-            onMarkupCommit={(nextMarkup) => {
-              if (!workspaceId || nextMarkup === markupPercent) return;
-              saveMarkup({ workspaceId, markupPercent: nextMarkup });
-            }}
+            onMarkupCommit={commitMarkup}
             onSubmit={(data) => {
               createItem(data, {
                 onSuccess: () => setCreateOpen(false),
@@ -326,10 +330,7 @@ export function Inventory() {
               submitLabel="Save Changes"
               isSubmitting={isUpdating}
               onCancel={() => setEditId(null)}
-              onMarkupCommit={(nextMarkup) => {
-                if (!workspaceId || nextMarkup === markupPercent) return;
-                saveMarkup({ workspaceId, markupPercent: nextMarkup });
-              }}
+              onMarkupCommit={commitMarkup}
               onSubmit={(data) => {
                 if (!editQuery.item) return;
                 updateItem(

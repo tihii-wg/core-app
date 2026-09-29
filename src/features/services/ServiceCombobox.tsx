@@ -9,9 +9,10 @@ type ServiceComboboxProps = {
   onChange?: (value: string) => void;
   onCreate?: (serviceName: string, price: number) => void;
   onSelect?: (service: Service) => void;
+  allowCreate?: boolean;
 };
 
-export default function ServiceCombobox({ services, value, onChange, onCreate, onSelect, errors }: ServiceComboboxProps) {
+export default function ServiceCombobox({ services, value, onChange, onCreate, onSelect, errors, allowCreate = true }: ServiceComboboxProps) {
   const [open, setOpen] = useState(false);
   const [uncontrolledValue, setUncontrolledValue] = useState("");
   const [price, setPrice] = useState("");
@@ -49,10 +50,11 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
   const filteredServices = services?.filter((service) => service.service_name?.toLowerCase().includes(inputValue.toLowerCase()));
 
   const exactMatch = services?.some((service) => service.service_name?.toLowerCase() === inputValue.trim().toLowerCase());
+  const canCreate = allowCreate && Boolean(inputValue.trim()) && !exactMatch;
 
   function createService() {
     const serviceName = inputValue.trim();
-    if (!serviceName || exactMatch) return;
+    if (!canCreate) return;
 
     if (onCreate) {
       const parsedPrice = Number(price);
@@ -91,7 +93,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
           setOpen(true);
         }}
         onKeyDown={(e) => {
-          if (e.key !== "Enter" || !inputValue.trim() || exactMatch) return;
+          if (e.key !== "Enter" || !canCreate) return;
           e.preventDefault();
           if (onCreate) {
             priceInputRef.current?.focus();
@@ -121,7 +123,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
             </button>
           ))}
 
-          {inputValue.trim() && !exactMatch && onCreate && (
+          {canCreate && onCreate && (
             <div className="space-y-2 border-t px-3 py-2">
               <p className="text-sm">
                 Create: <strong>{inputValue.trim()}</strong>
@@ -155,7 +157,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
             </div>
           )}
 
-          {inputValue.trim() && !exactMatch && !onCreate && (
+          {canCreate && !onCreate && (
             <button type="button" className="block w-full px-3 py-2 text-left hover:bg-gray-100" onClick={createService}>
               Create: <strong>{inputValue.trim()}</strong>
             </button>

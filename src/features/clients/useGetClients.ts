@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import type { ClientListFilter } from "../../lib/types";
 import { getClients } from "../../services/apiClients";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useGetClients(search: string, clientType: ClientListFilter = "all") {
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const {
     data: clients,
     isLoading,
@@ -12,12 +12,9 @@ export function useGetClients(search: string, clientType: ClientListFilter = "al
     error,
   } = useQuery({
     queryKey: ["clients", workspaceId, search, clientType],
-    queryFn: async () => {
-      return await getClients(search, workspaceId, clientType);
-    },
+    queryFn: () => getClients(search, workspaceId, clientType),
     enabled: Boolean(workspaceId),
   });
 
-  if (error) throw new Error(error.message);
-  return { clients, isLoading, isPending };
+  return { clients, isLoading, isPending, error };
 }

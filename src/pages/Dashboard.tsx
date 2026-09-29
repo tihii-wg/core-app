@@ -1,6 +1,5 @@
 import { ClipboardList, DollarSign, FileText, Package, Plus, Users, ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import { DataTable, type Column } from "../ui/DataTable";
 import type { Order } from "../lib/types";
 import { DashboardCard } from "../ui/DashboardCard";
@@ -14,13 +13,14 @@ import { getClients } from "../services/apiClients";
 import { clientCreatedAt, isAtOrBelowMinimum, localDateKey, taskOverviewCounts, thisWeekStats } from "./dashboardStats";
 import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
 import { useWorkspaceMoney } from "../features/workspaces/useWorkspaceMoney";
+import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
 
 
 export default function Dashboard() {
 
 
   const { orders = [], clients = [], invoices = [], setCurrentModule } = useApp();
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const { formatMoney } = useWorkspaceMoney();
   const {
     data: workspaceOrders = [],

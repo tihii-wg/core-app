@@ -1,4 +1,3 @@
-import { useParams } from "react-router-dom";
 import { Controller, useForm } from "react-hook-form";
 import { Building2, Save } from "lucide-react";
 import { Button } from "../../ui/Button";
@@ -14,6 +13,8 @@ import { useUpdateWorkspace } from "../workspaces/useUpdateWorkspace";
 import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoControls } from "./CompanyLogoControls";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { canManageWorkspace } from "../workspaces/workspaceRoles";
 
 type CompanyFormValues = {
   name: string;
@@ -44,6 +45,8 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   });
 
   const saving = isSavingWorkspace || isSubmitting;
+  const canEdit = canManageWorkspace(workspace.role);
+  const locked = saving || !canEdit;
 
   async function onSubmit(values: CompanyFormValues) {
     const markupMessage = markupFieldError(values.inventoryMarkup);
@@ -85,7 +88,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                     required: "Company name is required",
                     validate: (value) => value.trim().length > 0 || "Company name is required",
                   })}
-                  disabled={saving}
+                  disabled={locked}
                   className={errors.name ? "border-[#f41f20] pl-10" : "pl-10"}
                 />
               </div>
@@ -99,7 +102,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                 control={control}
                 rules={{ required: "Business type is required" }}
                 render={({ field }) => (
-                  <Select value={field.value || undefined} onValueChange={field.onChange} disabled={saving || industriesLoading}>
+                  <Select value={field.value || undefined} onValueChange={field.onChange} disabled={locked || industriesLoading}>
                     <SelectTrigger id="businessType" className={errors.industryId ? "w-full border-[#f41f20]" : "w-full"}>
                       <SelectValue placeholder={industriesLoading ? "Loading business types..." : "Business type"} />
                     </SelectTrigger>
@@ -125,7 +128,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                 min={0}
                 max={1000}
                 step="0.01"
-                disabled={saving}
+                disabled={locked}
                 {...register("inventoryMarkup", {
                   required: "Markup percentage is required",
                   validate: (value) => markupFieldError(value) ?? true,
@@ -137,12 +140,16 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={saving || !isDirty}>
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
+          {canEdit ? (
+            <div className="flex justify-end">
+              <Button type="submit" disabled={saving || !isDirty}>
+                <Save className="mr-2 h-4 w-4" />
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Only the workspace owner can change company settings.</p>
+          )}
         </form>
       </CardContent>
     </Card>
@@ -150,7 +157,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
 }
 
 export function CompanySettings() {
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace, isLoading, error, refetch, isFetched } = useGetWorkspace(workspaceId);
 
   if (!workspaceId) {

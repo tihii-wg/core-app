@@ -9,6 +9,7 @@ import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorksp
 import { useDeleteWorkspace } from "../features/workspaces/useDeleteWorkspace";
 import { useLocation } from "react-router-dom";
 import type { CreateMadalProps } from "../lib/types";
+import { canManageWorkspace } from "../features/workspaces/workspaceRoles";
 
 export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps) {
   const location = useLocation();
@@ -20,7 +21,8 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
   const workspaces = (data ?? []).flatMap((item) => {
     const workspace = item.workspaces;
     if (!workspace) return [];
-    return Array.isArray(workspace) ? workspace : [workspace];
+    const entries = Array.isArray(workspace) ? workspace : [workspace];
+    return entries.map((entry) => ({ ...entry, canDelete: canManageWorkspace(item.role) }));
   });
 
   const currentWorkspace = workspaces?.find((item) => item.id === profile?.active_workspace_id);
@@ -56,13 +58,16 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
               {w.name}
             </span>
 
-            <span
-              onClick={() => {
-                deleteWorkspaceHandler(w.id);
-              }}
-            >
-              <Trash2 />
-            </span>
+            {w.canDelete && (
+              <span
+                aria-label={`Delete ${w.name}`}
+                onClick={() => {
+                  deleteWorkspaceHandler(w.id);
+                }}
+              >
+                <Trash2 />
+              </span>
+            )}
           </DropdownMenuItem>
         ))}
 

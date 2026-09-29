@@ -15,7 +15,7 @@ export async function updateInventoryMarkup(workspaceId: string, markupPercent: 
   const { data, error } = await supabase.from("workspaces").update({ inventory_markup: markupPercent }).eq("id", workspaceId).select("inventory_markup").maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Markup percentage was not saved");
+  if (!data) throw new Error("Only the workspace owner can change the markup percentage.");
 
   return normalizeInventoryMarkup(data.inventory_markup);
 }

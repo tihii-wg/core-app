@@ -1,44 +1,41 @@
-// import { useNavigate, useParams } from "react-router-dom";
-// // import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
-// import { Spinner } from "./Spinner";
-// import { useEffect } from "react";
-// import { useGetProfiles } from "../features/profiles/useGetProfiles";
-
-// export default function Dashboardredirect() {
-//   const navigate = useNavigate();
-//   const { locale } = useParams();
-//   const { data: profile, isLoading } = useGetProfiles();
-
-//   useEffect(
-//     function () {
-//       if (!isLoading && profile) navigate(`/${locale}/${profile.at(0).active_workspace_id}/dashboard`);
-//     },
-//     [isLoading, locale, navigate, profile]
-//   );
-
-//   return <Spinner />;
-// }
 import { useNavigate, useParams } from "react-router-dom";
 import { Spinner } from "./Spinner";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useGetProfile } from "../features/profiles/useGetProfile";
+import { listedWorkspaceIds, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
+import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 
 export default function Dashboardredirect() {
   const navigate = useNavigate();
-  const { locale } = useParams();
-  const { data: profile, isLoading } = useGetProfile();
+  const { locale = "en" } = useParams();
+  const { data: profile, isLoading: profileLoading, error: profileError } = useGetProfile();
+  const { workspaces, isLoading: workspacesLoading, error: workspacesError } = useGetWorkspaces();
+  const { updateWorkspace } = useSetActiveWorkspace();
+  const repairAttempted = useRef(false);
+
+  const memberWorkspaceIds = useMemo(() => listedWorkspaceIds(workspaces), [workspaces]);
+  const activeWorkspaceId = profile?.active_workspace_id ?? null;
+  const ready = !profileLoading && !workspacesLoading && !profileError && !workspacesError && Boolean(profile);
+  const noWorkspaces = ready && memberWorkspaceIds.length === 0;
 
   useEffect(() => {
-    if (isLoading) return;
+    if (!ready) return;
 
-    const currentProfile = profile;
+    if (activeWorkspaceId && memberWorkspaceIds.includes(activeWorkspaceId)) {
+      navigate(`/${locale}/${activeWorkspaceId}/dashboard`, { replace: true });
+      return;
+    }
 
-    if (!currentProfile) return;
+    // The saved workspace was deleted or the membership was removed: switch to one the user still belongs to.
+    const fallback = memberWorkspaceIds[0];
+    if (!fallback || repairAttempted.current) return;
+    repairAttempted.current = true;
+    void updateWorkspace(fallback).catch(() => undefined);
+  }, [ready, activeWorkspaceId, memberWorkspaceIds, locale, navigate, updateWorkspace]);
 
-    if (!currentProfile.active_workspace_id) return;
-
-    navigate(`/${locale}/${currentProfile.active_workspace_id}/dashboard`);
-  }, [isLoading, locale, navigate, profile]);
+  const error = profileError ?? workspacesError;
+  if (error) return <p className="p-6 text-sm text-[#f41f20]">{error.message}</p>;
+  if (noWorkspaces) return <p className="p-6 text-sm text-[#939699]">You are not a member of any workspace yet.</p>;
 
   return <Spinner />;
 }

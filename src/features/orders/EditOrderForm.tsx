@@ -11,6 +11,8 @@ import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { canManageServices } from "../workspaces/workspaceRoles";
 
 type EditOrderFormProps = {
   order: Order;
@@ -23,6 +25,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const { services } = useGetServices();
   const { formatMoney } = useWorkspaceMoney();
+  const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const [addedServices, setAddedServices] = useState<OrderService[]>([]);
   const activeServices = services?.filter((service) => service.status === "active");
 
@@ -47,13 +50,16 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
   );
 
   const onSubmit = async (data: EditOrderFormData) => {
-    const updatedOrder = await updateOrder({
-      orderId: order.id,
-      ...data,
-      services: [...order.services, ...addedServices],
-    });
-
-    onUpdated(updatedOrder);
+    try {
+      const updatedOrder = await updateOrder({
+        orderId: order.id,
+        ...data,
+        services: [...order.services, ...addedServices],
+      });
+      onUpdated(updatedOrder);
+    } catch {
+      return;
+    }
   };
 
   return (
@@ -106,6 +112,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
         <Label htmlFor="service">Add service</Label>
         <ServiceCombobox
           services={activeServices}
+          allowCreate={canCreateServices}
           onSelect={(service) => {
             const alreadyExists = [...order.services, ...addedServices].some((line) => line.serviceId === service.id || line.serviceName.toLowerCase() === service.service_name.toLowerCase());
             if (alreadyExists) return;

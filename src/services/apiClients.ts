@@ -55,8 +55,10 @@ function clientRecord(input: {
 export async function createClient({ workspace_id, clientName, email, phone, address, notes, clientType, taxId, contactPerson }: CreateClientInput) {
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
+  if (userError) throw new Error(userError.message);
   if (!user) throw new Error("User is not authenticated");
   if (!workspace_id) throw new Error("No active workspace selected");
 
@@ -80,23 +82,10 @@ function searchTerm(search: string) {
   return search.replace(/[%_,().]/g, " ").trim();
 }
 
-export async function getClients(search: string, workspaceId?: string, clientType: ClientListFilter = "all") {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  if (!user) throw new Error("User not found");
+export async function getClients(search: string, workspaceId: string | undefined, clientType: ClientListFilter = "all") {
+  if (!workspaceId) throw new Error("No active workspace selected");
 
-  let resolvedWorkspaceId = typeof workspaceId === "string" ? workspaceId : "";
-  if (!resolvedWorkspaceId) {
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).maybeSingle();
-    if (profileError) throw new Error(profileError.message);
-    resolvedWorkspaceId = typeof profile?.active_workspace_id === "string" ? profile.active_workspace_id : "";
-  }
-  if (!resolvedWorkspaceId) throw new Error("No active workspace selected");
-
-  let query = supabase.from("clients").select("*").eq("workspace_id", resolvedWorkspaceId);
+  let query = supabase.from("clients").select("*").eq("workspace_id", workspaceId);
 
   const term = searchTerm(search);
   if (term) {
@@ -114,33 +103,19 @@ export async function getClients(search: string, workspaceId?: string, clientTyp
   return ((clients ?? []) as Record<string, unknown>[]).map(toClient);
 }
 
-export async function updateClient({ clientId, clientName, email, phone, address, notes, clientType, taxId, contactPerson }: UpdateClientInput, workspaceId?: string) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) throw new Error(userError.message);
-  if (!user) throw new Error("User is not authenticated");
-
-  let resolvedWorkspaceId = typeof workspaceId === "string" ? workspaceId : "";
-  if (!resolvedWorkspaceId) {
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).maybeSingle();
-    if (profileError) throw new Error(profileError.message);
-    resolvedWorkspaceId = typeof profile?.active_workspace_id === "string" ? profile.active_workspace_id : "";
-  }
-  if (!resolvedWorkspaceId) throw new Error("No active workspace selected");
+export async function updateClient({ clientId, clientName, email, phone, address, notes, clientType, taxId, contactPerson }: UpdateClientInput, workspaceId: string | undefined) {
+  if (!workspaceId) throw new Error("No active workspace selected");
 
   const { data: updatedClient, error } = await supabase
     .from("clients")
     .update(clientRecord({ clientName, email, phone, address, notes, clientType, taxId, contactPerson }))
     .eq("id", clientId)
-    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("workspace_id", workspaceId)
     .select()
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!updatedClient) throw new Error("Client was not found.");
+  if (!updatedClient) throw new Error("Client was not found or you do not have permission to edit it.");
 
   return toClient(updatedClient as Record<string, unknown>);
 }

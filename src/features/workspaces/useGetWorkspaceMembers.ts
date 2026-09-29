@@ -13,6 +13,7 @@ export function useGetWorkspaceMembers() {
   });
 
   return {
+    workspaceId: activeWorkspaceId,
     members: query.data,
     error: profileError ?? query.error,
     isLoading: profileLoading || query.isLoading,

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation, useNavigate, useParams, Navigate } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
-import { useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
+import { listedWorkspaceIds, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useGetProfile } from "../features/profiles/useGetProfile";
 import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
 import { applyProfileTheme, cacheProfileTheme, normalizeProfileTheme, readCachedProfileTheme } from "../services/apiProfiles";
@@ -13,16 +13,14 @@ export function AppLayout() {
   const { workspaceId, locale = "en" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { workspaces, isLoading } = useGetWorkspaces();
+  const { workspaces, isLoading, error: workspacesError } = useGetWorkspaces();
   const { data: profile, isLoading: profileLoading } = useGetProfile();
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const memberWorkspaceIds = (workspaces ?? []).flatMap((item) => {
-    const workspace = item.workspaces as { id?: string } | { id?: string }[] | null | undefined;
-    if (!workspace) return [];
-    const entries = Array.isArray(workspace) ? workspace : [workspace];
-    return entries.flatMap((entry) => (entry.id ? [entry.id] : []));
-  });
-  const canUseWorkspace = !workspaceId || memberWorkspaceIds.length === 0 || memberWorkspaceIds.includes(workspaceId);
+  const memberWorkspaceIds = listedWorkspaceIds(workspaces);
+  const activeWorkspaceId = profile?.active_workspace_id ?? null;
+  const activeIsMember = Boolean(activeWorkspaceId && memberWorkspaceIds.includes(activeWorkspaceId));
+  const workspaceContextReady = !isLoading && !workspacesError && !profileLoading && profile !== undefined;
+  const canUseWorkspace = Boolean(workspaceId) && workspaceId === activeWorkspaceId && activeIsMember;
 
   const profileLoaded = profile !== undefined;
   const theme = profileLoaded ? normalizeProfileTheme(profile?.theme) : readCachedProfileTheme();
@@ -52,10 +50,12 @@ export function AppLayout() {
     navigate(`${nextPath}${location.search}`, { replace: true });
   }, [canUseWorkspace, workspace?.language, workspaceId, locale, location.pathname, location.search, navigate]);
 
-  if (!isLoading && !profileLoading && workspaceId && memberWorkspaceIds.length > 0 && !memberWorkspaceIds.includes(workspaceId)) {
-    const fallback = profile?.active_workspace_id;
-    if (fallback && memberWorkspaceIds.includes(fallback)) {
-      return <Navigate to={`/${locale}/${fallback}/dashboard`} replace />;
+  // The route mirrors profiles.active_workspace_id; DashboardRedirect repairs a stale active workspace.
+  if (workspaceContextReady && workspaceId && !canUseWorkspace) {
+    if (activeWorkspaceId && activeIsMember) {
+      const segments = location.pathname.split("/");
+      segments[2] = activeWorkspaceId;
+      return <Navigate to={`${segments.join("/")}${location.search}`} replace />;
     }
     return <Navigate to={`/${locale}/dashboard`} replace />;
   }

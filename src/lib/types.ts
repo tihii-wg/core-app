@@ -263,14 +263,14 @@ export type Workspace = {
 };
 
 export type WorkspaceMemberWithWorkspace = {
-  role: "owner" | "manager" | "member";
+  role: "owner" | "admin" | "manager" | "member";
   workspaces: Workspace | null;
 };
 
 export type WorkspaceMember = {
   user_id: string;
   workspace_id: string;
-  role: "owner" | "manager" | "member";
+  role: "owner" | "admin" | "manager" | "member";
 };
 
 export type IndustryKey = "restaurant" | "beauty" | "fitness" | "medical" | "retail" | "professional_services" | "auto_service" | "electronics_repair";
@@ -360,7 +360,6 @@ export type WorkspaceIndustry = Pick<Industry, "id" | "name" | "slug">;
 export type NewWorkspaceData = {
   name: string;
   role: string;
-  userId: string;
   industryId: string;
   language?: string | null;
 };

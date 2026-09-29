@@ -28,7 +28,7 @@ import supabase from "./services/supabase";
 
 export const DEFAULT_LOCALE = "en";
 
-function AppRoutes() {
+export function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}

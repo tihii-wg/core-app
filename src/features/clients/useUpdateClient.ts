@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { updateClient } from "../../services/apiClients";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useUpdateClient() {
   const queryClient = useQueryClient();
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
 
   return useMutation({
     mutationFn: (input: Parameters<typeof updateClient>[0]) => updateClient(input, workspaceId),
@@ -13,7 +13,7 @@ export function useUpdateClient() {
       toast.loading("Updating client...", { id: "update-client" });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       toast.success("Client updated successfully", { id: "update-client" });
     },
     onError: (error) => {

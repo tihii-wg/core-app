@@ -2,11 +2,7 @@ import type { AddNewEmployeesFormData, EmployeeRole } from "../lib/types";
 import supabase from "./supabase";
 
 export async function createEmployee({ role, email, name, phone, profile_id, status, workspace_id }: AddNewEmployeesFormData) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("User is not authenticated");
+  if (!workspace_id) throw new Error("No active workspace");
 
   const { data, error } = await supabase
     .from("employees")
@@ -28,27 +24,18 @@ export async function createEmployee({ role, email, name, phone, profile_id, sta
   return data;
 }
 
-export async function getEmployees(search: string, roleFilter?: EmployeeRole | null, workspaceId?: string) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("User not found");
+function searchTerm(search: string) {
+  return search.replace(/[%_,().]/g, " ").trim();
+}
 
-  let targetWorkspaceId = workspaceId;
+export async function getEmployees(search: string, roleFilter: EmployeeRole | null | undefined, workspaceId: string | undefined) {
+  if (!workspaceId) throw new Error("No active workspace");
 
-  if (!targetWorkspaceId) {
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).single();
+  let query = supabase.from("employees").select("*").eq("workspace_id", workspaceId);
 
-    if (profileError) throw new Error(profileError.message);
-    targetWorkspaceId = profile.active_workspace_id;
-  }
-
-  if (!targetWorkspaceId) throw new Error("No active workspace");
-
-  let query = supabase.from("employees").select("*").eq("workspace_id", targetWorkspaceId);
-
-  if (search) {
-    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,role.ilike.%${search}%,phone.ilike.%${search}%,status.ilike.%${search}%`);
+  const term = searchTerm(search);
+  if (term) {
+    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,role.ilike.%${term}%,phone.ilike.%${term}%,status.ilike.%${term}%`);
   }
   if (roleFilter) {
     query = query.eq("role", roleFilter);
@@ -58,7 +45,5 @@ export async function getEmployees(search: string, roleFilter?: EmployeeRole | n
 
   if (error) throw new Error(error.message);
 
- 
-
-  return employees;
+  return employees ?? [];
 }

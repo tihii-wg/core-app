@@ -9,6 +9,7 @@ import { useRemoveWorkspaceAvatar, useUploadWorkspaceAvatar, useWorkspaceAvatar 
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoCropDialog } from "./CompanyLogoCropDialog";
 import { workspaceLogoFileError } from "../workspaces/workspaceAvatar";
+import { canManageWorkspace } from "../workspaces/workspaceRoles";
 
 export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -19,6 +20,7 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
   const { mutateAsync: uploadLogo, isPending: uploading } = useUploadWorkspaceAvatar();
   const { mutateAsync: removeLogo, isPending: removing } = useRemoveWorkspaceAvatar();
   const busy = uploading || removing;
+  const canEdit = canManageWorkspace(workspace.role);
 
   function chooseFile() {
     inputRef.current?.click();
@@ -66,7 +68,7 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
       <Label>Company logo</Label>
       <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="lg" />
       {isError && <p className="text-sm text-[#f41f20]">Unable to load company logo. Please try again.</p>}
-      <div className="flex flex-wrap gap-2">
+      {canEdit && <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={chooseFile} disabled={busy}>
           {uploading ? "Uploading..." : workspace.avatarPath ? "Change logo" : "Upload logo"}
         </Button>
@@ -75,7 +77,7 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
             {removing ? "Removing..." : "Remove logo"}
           </Button>
         )}
-      </div>
+      </div>}
       <input
         ref={inputRef}
         type="file"

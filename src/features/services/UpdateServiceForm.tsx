@@ -18,7 +18,7 @@ type EditServiceFormProps = {
 };
 
 export default function UpdateServiceForm({ service, setEditModalOpen }: EditServiceFormProps) {
-  const { mutate } = useUpdateService();
+  const { mutateAsync: updateService } = useUpdateService();
   const { currency } = useWorkspaceMoney();
 
   const {
@@ -46,14 +46,11 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
   }, [service, reset]);
 
   const onSubmit = async (data: EditServiceFormData) => {
-   
-    const updatedService = {
-      serviceId: service.id,
-      ...data,
-    };
-
-    mutate(updatedService);
-
+    try {
+      await updateService({ serviceId: service.id, ...data });
+    } catch {
+      return;
+    }
     setEditModalOpen(false);
   };
 

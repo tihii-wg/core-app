@@ -11,8 +11,8 @@ export default function useCreateNewEmployee() {
     onMutate: () => {
       toast.loading("Creating employee", { id: "create-employee" });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["employees"] });
+    onSuccess: (_data, { workspace_id }) => {
+      queryClient.invalidateQueries({ queryKey: ["employees", workspace_id] });
       toast.success("Employee created succesfully", { id: "create-employee" });
     },
     onError: (error) => {

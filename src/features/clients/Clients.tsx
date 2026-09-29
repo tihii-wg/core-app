@@ -21,7 +21,7 @@ export function Clients() {
   const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const debounceSearch = useDebounce(searchQuery, 400);
-  const { isLoading, clients = [], isPending } = useGetClients(debounceSearch, clientType);
+  const { isLoading, clients = [], isPending, error: clientsError } = useGetClients(debounceSearch, clientType);
   const { orders, isLoading: ordersLoading } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
 
@@ -131,6 +131,8 @@ export function Clients() {
         ]}
         onClearFilters={() => setClientType("all")}
       />
+
+      {clientsError && <p className="text-sm text-[#f41f20]">{clientsError.message}</p>}
 
       <DataTable
         columns={columns}

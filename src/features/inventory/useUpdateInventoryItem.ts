@@ -1,14 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { updateInventoryItem } from "../../services/apiInventory";
+import type { InventoryItemFormData } from "../../lib/types";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useUpdateInventoryItem() {
   const queryClient = useQueryClient();
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
 
   return useMutation({
-    mutationFn: (input) => updateInventoryItem(input, workspaceId),
+    mutationFn: (input: InventoryItemFormData & { id: string }) => updateInventoryItem(input, workspaceId),
     onMutate: () => {
       toast.loading("Updating inventory item", { id: "update-inventory" });
     },

@@ -5,7 +5,7 @@ import { Label } from "../../ui/Label";
 import { Spinner } from "../../ui/Spinner";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
-import { useUser } from "../auth/useUser";
+import type { CreateMadalProps } from "../../lib/types";
 import { useGetIndustries } from "../industries/useGetIndustries";
 import { useCreateWorkspace } from "./useCreateWorkspace";
 
@@ -15,9 +15,8 @@ export type AddNewWorkspaceFormData = {
   industryId: string;
 };
 
-export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
+export default function AddNewWorkspaceForm({ setCreateModalOpen }: CreateMadalProps) {
   const { locale } = useParams();
-  const { user } = useUser();
   const { mutateAsync } = useCreateWorkspace();
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const {
@@ -32,15 +31,19 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
     },
   });
 
-  const onSubmit = (data: AddNewWorkspaceFormData) => {
+  const onSubmit = async (data: AddNewWorkspaceFormData) => {
     const newWorkspaceData = {
       name: data.workspaceName,
       role: data.role,
-      userId: user.id,
       industryId: data.industryId,
       language: locale,
     };
-    mutateAsync(newWorkspaceData);
+    try {
+      await mutateAsync(newWorkspaceData);
+    } catch {
+      return;
+    }
+    reset();
     setCreateModalOpen(false);
   };
 
@@ -97,10 +100,10 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }) {
         <Button
           type="button"
           variant="outline"
-          onClick={
-            () => reset()
-            // setCreateModalOpen(false)
-          }
+          onClick={() => {
+            reset();
+            setCreateModalOpen(false);
+          }}
           disabled={isSubmitting}
         >
           Cancel

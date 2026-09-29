@@ -4,7 +4,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
-import type { AddNewEmployeesFormData, CreateEmployeeData, EmployeeRoleOption } from "../../lib/types";
+import type { AddNewEmployeesFormData, CreateEmployeeData, CreateMadalProps, EmployeeRoleOption } from "../../lib/types";
 import { Controller, useForm } from "react-hook-form";
 import { useGetProfile } from "../profiles/useGetProfile";
 import useCreateNewEmployee from "./useCreateNewEmployee";
@@ -22,8 +22,8 @@ const employeesStatuses = [
   { value: "inactive", label: "Inactive" },
 ] as const;
 
-export default function AddNewEmployeesForm({ setCreateModalOpen }) {
-  const { mutate } = useCreateNewEmployee();
+export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalProps) {
+  const { mutateAsync: createEmployee } = useCreateNewEmployee();
 
   const {
     register,
@@ -40,7 +40,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
   });
   const { data: profile } = useGetProfile();
 
-  const onSubmit = (data: AddNewEmployeesFormData) => {
+  const onSubmit = async (data: AddNewEmployeesFormData) => {
     const currentProfile = profile;
 
     if (!currentProfile) {
@@ -62,7 +62,11 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }) {
       workspace_id: currentProfile.active_workspace_id,
       profile_id: currentProfile.id,
     };
-    mutate(newEmployeeData);
+    try {
+      await createEmployee(newEmployeeData);
+    } catch {
+      return;
+    }
     setCreateModalOpen(false);
   };
 

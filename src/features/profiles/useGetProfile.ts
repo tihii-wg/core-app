@@ -10,3 +10,9 @@ export function useGetProfile() {
 
   return { data, isLoading, error, refetch };
 }
+
+// UI context only: which workspace the user is working in. RLS decides what they can access.
+export function useActiveWorkspaceId() {
+  const { data, isLoading, error } = useGetProfile();
+  return { workspaceId: data?.active_workspace_id ?? undefined, isLoading, error };
+}

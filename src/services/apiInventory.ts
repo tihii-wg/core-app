@@ -13,25 +13,14 @@ const inventorySortColumns: Record<InventorySortField, string> = {
 
 const stockStatuses = new Set<InventoryStockStatus>(["in_stock", "low_stock", "out_of_stock"]);
 
-async function getActiveWorkspaceId() {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) throw new Error(userError.message);
-  if (!user) throw new Error("User is not authenticated");
-
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).maybeSingle();
-
-  if (profileError) throw new Error(profileError.message);
-  if (!profile?.active_workspace_id) throw new Error("No active workspace selected");
-
-  return profile.active_workspace_id as string;
+function requireWorkspaceId(workspaceId: string | undefined) {
+  if (!workspaceId) throw new Error("No active workspace selected");
+  return workspaceId;
 }
 
 function inventoryError(error: { code?: string; message?: string }, fallback: string) {
   if (error.code === "23505") return new Error("An inventory item with this SKU already exists.");
+  if (error.code === "42501" || error.message?.toLowerCase().includes("row-level security")) return new Error("You do not have permission to change inventory in this workspace.");
   return new Error(fallback);
 }
 
@@ -105,8 +94,8 @@ function searchTerm(search: string | undefined) {
   return search?.replace(/[%_,().]/g, " ").trim() ?? "";
 }
 
-export async function getInventoryItems(search?: string, filter: InventoryListFilter = "all", sort: InventorySort = { field: "created_at", ascending: false }, workspaceId?: string) {
-  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
+export async function getInventoryItems(search: string | undefined, filter: InventoryListFilter, sort: InventorySort, workspaceId: string | undefined) {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const column = inventorySortColumns[sort.field] ?? "created_at";
 
   let query = supabase.from("inventory_items_with_status").select("*").eq("workspace_id", resolvedWorkspaceId).order(column, { ascending: sort.ascending });
@@ -129,8 +118,8 @@ export async function getInventoryItems(search?: string, filter: InventoryListFi
   return ((data ?? []) as Record<string, unknown>[]).map(toInventoryItem);
 }
 
-export async function getInventoryItem(inventoryItemId: string) {
-  const workspaceId = await getActiveWorkspaceId();
+export async function getInventoryItem(inventoryItemId: string, targetWorkspaceId: string | undefined) {
+  const workspaceId = requireWorkspaceId(targetWorkspaceId);
 
   const { data, error } = await supabase.from("inventory_items_with_status").select("*").eq("id", inventoryItemId).eq("workspace_id", workspaceId).maybeSingle();
 
@@ -140,8 +129,8 @@ export async function getInventoryItem(inventoryItemId: string) {
   return toInventoryItem(data as Record<string, unknown>);
 }
 
-export async function createInventoryItem(input: InventoryItemFormData, workspaceId?: string) {
-  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
+export async function createInventoryItem(input: InventoryItemFormData, workspaceId: string | undefined) {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
   const { data, error } = await supabase
     .from("inventory_items")
@@ -158,8 +147,8 @@ export async function createInventoryItem(input: InventoryItemFormData, workspac
   return toInventoryItem(data as Record<string, unknown>);
 }
 
-export async function updateInventoryItem({ id, ...input }: InventoryItemFormData & { id: string }, workspaceId?: string) {
-  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
+export async function updateInventoryItem({ id, ...input }: InventoryItemFormData & { id: string }, workspaceId: string | undefined) {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
   const { data, error } = await supabase
     .from("inventory_items")
@@ -173,16 +162,16 @@ export async function updateInventoryItem({ id, ...input }: InventoryItemFormDat
     .maybeSingle();
 
   if (error) throw inventoryError(error, "Could not save the inventory item. Please try again.");
-  if (!data) throw new Error("Inventory item was not found.");
+  if (!data) throw new Error("Inventory item was not found or you do not have permission to change it.");
 
   return toInventoryItem(data as Record<string, unknown>);
 }
 
-export async function deleteInventoryItem(inventoryItemId: string, workspaceId?: string) {
-  const resolvedWorkspaceId = typeof workspaceId === "string" && workspaceId ? workspaceId : await getActiveWorkspaceId();
+export async function deleteInventoryItem(inventoryItemId: string, workspaceId: string | undefined) {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
   const { data, error } = await supabase.from("inventory_items").delete().eq("id", inventoryItemId).eq("workspace_id", resolvedWorkspaceId).select("id");
 
   if (error) throw inventoryError(error, "Could not delete the inventory item. Please try again.");
-  if (!data?.length) throw new Error("Inventory item was not found.");
+  if (!data?.length) throw new Error("Inventory item was not found or you do not have permission to delete it.");
 }

@@ -33,12 +33,15 @@ export default function EditClientForm({ client, onCancel, onUpdated }: EditClie
   });
 
   const onSubmit = async (data: ClientFormValues) => {
-    const updatedClient = await updateClient({
-      clientId: client.id,
-      ...data,
-    });
-
-    onUpdated(updatedClient);
+    try {
+      const updatedClient = await updateClient({
+        clientId: client.id,
+        ...data,
+      });
+      onUpdated(updatedClient);
+    } catch {
+      return;
+    }
   };
 
   return (

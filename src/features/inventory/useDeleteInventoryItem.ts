@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { deleteInventoryItem } from "../../services/apiInventory";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useDeleteInventoryItem() {
   const queryClient = useQueryClient();
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
 
   return useMutation({
     mutationFn: (inventoryItemId: string) => deleteInventoryItem(inventoryItemId, workspaceId),

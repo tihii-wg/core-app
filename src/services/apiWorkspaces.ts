@@ -15,13 +15,18 @@ type ListedWorkspace = {
 };
 
 export type ListedWorkspaceMembership = {
+  role?: string | null;
   workspaces: ListedWorkspace | ListedWorkspace[] | null;
 };
+
+const ownerOnlyWorkspaceMessage = "Only the workspace owner can change company settings.";
 
 export async function getUserWorkspaces() {
   const user = await currentUser();
 
-  const data = await selectMembership((select) => supabase.from("workspace_members").select(select).eq("user_id", user.id).is("workspaces.deleted_at", null) as unknown as PromiseLike<MembershipResult>);
+  const data = await selectMembership(
+    (select) => supabase.from("workspace_members").select(select).eq("user_id", user.id).is("deleted_at", null).is("workspaces.deleted_at", null) as unknown as PromiseLike<MembershipResult>,
+  );
 
   return (Array.isArray(data) ? data : []) as ListedWorkspaceMembership[];
 }
@@ -225,8 +230,10 @@ export function workspaceUpdateFields(input: { name: string; industryId: string;
 async function currentUser() {
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
 
+  if (error) throw new Error(error.message);
   if (!user) throw new Error("User not found");
   return user;
 }
@@ -249,41 +256,148 @@ async function requireWorkspaceMembership(userId: string, workspaceId: string) {
 export type WorkspaceTeamMember = {
   userId: string;
   role: string;
+  createdAt: string | null;
   fullName: string | null;
   email: string | null;
   isCurrentUser: boolean;
 };
 
-type TeamProfileRow = { id: string; full_name: string | null; email: string | null };
+type TeamProfileRow = { user_id: string; full_name: string | null; email: string | null };
+type TeamMemberRow = { user_id: string; role: string | null; created_at?: string | null; deleted_at?: string | null };
+
+const teamRoleOrder = ["owner", "admin", "manager", "member"];
+const teamMigrationMessage = "Team member management needs the latest database update (supabase/migrations/20260928200000_team_members_rls.sql).";
+
+function isMissingFunction(error: { code?: string; message?: string }) {
+  return error.code === "PGRST202" || error.code === "42883";
+}
+
+function isPermissionError(error: { code?: string; message?: string }) {
+  return error.code === "42501" || error.message?.toLowerCase().includes("row-level security") === true;
+}
+
+function teamMemberError(error: { code?: string; message?: string }, permissionMessage: string) {
+  if (isMissingFunction(error)) return new Error(teamMigrationMessage);
+  if (isPermissionError(error)) return new Error(permissionMessage);
+  return new Error(error.message ?? permissionMessage);
+}
+
+export function assignableTeamRole(role: string) {
+  const value = role.trim().toLowerCase();
+  if (value !== "admin" && value !== "manager" && value !== "member") throw new Error("Choose admin, manager, or member");
+  return value;
+}
+
+async function readTeamProfiles(workspaceId: string, userId: string) {
+  const { data, error } = await supabase.rpc("workspace_member_profiles", { target_workspace: workspaceId });
+  if (!error) return (data ?? []) as TeamProfileRow[];
+  if (!isMissingFunction(error)) throw new Error(error.message);
+
+  const { data: own, error: ownError } = await supabase.from("profiles").select("id, full_name, email").eq("id", userId).maybeSingle();
+  if (ownError) throw new Error(ownError.message);
+  return own ? [{ user_id: String(own.id), full_name: own.full_name ?? null, email: own.email ?? null }] : [];
+}
 
 export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceTeamMember[]> {
   const user = await currentUser();
   await requireWorkspaceMembership(user.id, workspaceId);
 
-  const { data: members, error } = await supabase.from("workspace_members").select("user_id, role").eq("workspace_id", workspaceId).is("deleted_at", null);
+  const [{ data: members, error }, profiles] = await Promise.all([
+    supabase.from("workspace_members").select("user_id, role, created_at").eq("workspace_id", workspaceId).is("deleted_at", null),
+    readTeamProfiles(workspaceId, user.id),
+  ]);
   if (error) throw new Error(error.message);
 
-  const rows = (members ?? []) as { user_id: string; role: string | null }[];
-  const userIds = [...new Set(rows.map((row) => row.user_id))];
-  const profilesById = new Map<string, TeamProfileRow>();
+  const profilesById = new Map(profiles.map((profile) => [profile.user_id, profile]));
+  const rank = (role: string) => {
+    const index = teamRoleOrder.indexOf(role);
+    return index === -1 ? teamRoleOrder.length : index;
+  };
 
-  if (userIds.length > 0) {
-    const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id, full_name, email").in("id", userIds);
-    if (profilesError) throw new Error(profilesError.message);
-    for (const profile of (profiles ?? []) as TeamProfileRow[]) profilesById.set(profile.id, profile);
+  return ((members ?? []) as TeamMemberRow[])
+    .map((row) => {
+      const profile = profilesById.get(row.user_id);
+      const isCurrentUser = row.user_id === user.id;
+      return {
+        userId: row.user_id,
+        role: row.role ?? "member",
+        createdAt: row.created_at ?? null,
+        fullName: profile?.full_name ?? null,
+        email: profile?.email ?? (isCurrentUser ? (user.email ?? null) : null),
+        isCurrentUser,
+      };
+    })
+    .sort((a, b) => rank(a.role) - rank(b.role) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+}
+
+export async function addWorkspaceMember(workspaceId: string, input: { email: string; role: string }) {
+  const role = assignableTeamRole(input.role);
+  const email = input.email.trim().toLowerCase();
+  if (!email) throw new Error("Email is required");
+
+  const user = await currentUser();
+  await requireWorkspaceMembership(user.id, workspaceId);
+
+  const { data: userId, error: lookupError } = await supabase.rpc("workspace_member_find_user", { target_workspace: workspaceId, member_email: email });
+  if (lookupError) throw teamMemberError(lookupError, "You do not have permission to add team members");
+  if (!userId) throw new Error("No Core App account uses this email. Ask them to sign up first.");
+  if (userId === user.id) throw new Error("You are already a member of this workspace");
+
+  const { data: existingRows, error: existingError } = await supabase.from("workspace_members").select("user_id, role, deleted_at").eq("workspace_id", workspaceId).eq("user_id", userId);
+  if (existingError) throw new Error(existingError.message);
+
+  const existing = (existingRows ?? []) as TeamMemberRow[];
+  if (existing.some((row) => !row.deleted_at)) throw new Error("This user is already a team member");
+
+  const permissionMessage = "You do not have permission to add this team member";
+
+  if (existing.length > 0) {
+    const { data, error } = await supabase
+      .from("workspace_members")
+      .update({ role, deleted_at: null })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .select("user_id")
+      .limit(1);
+    if (error) throw teamMemberError(error, permissionMessage);
+    if (!data || data.length === 0) throw new Error(permissionMessage);
+    return { userId: String(userId), role };
   }
 
-  return rows.map((row) => {
-    const profile = profilesById.get(row.user_id);
-    const isCurrentUser = row.user_id === user.id;
-    return {
-      userId: row.user_id,
-      role: row.role ?? "member",
-      fullName: profile?.full_name ?? null,
-      email: profile?.email ?? (isCurrentUser ? (user.email ?? null) : null),
-      isCurrentUser,
-    };
-  });
+  const { error } = await supabase.from("workspace_members").insert([{ workspace_id: workspaceId, user_id: userId, role }]);
+  if (error) throw teamMemberError(error, permissionMessage);
+  return { userId: String(userId), role };
+}
+
+export async function updateWorkspaceMemberRole(workspaceId: string, userId: string, nextRole: string) {
+  const role = assignableTeamRole(nextRole);
+  const permissionMessage = "You do not have permission to change this member's role";
+
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .update({ role })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .select("user_id, role");
+  if (error) throw teamMemberError(error, permissionMessage);
+  if (!data || data.length === 0) throw new Error(permissionMessage);
+  return { userId, role };
+}
+
+export async function removeWorkspaceMember(workspaceId: string, userId: string) {
+  const permissionMessage = "You do not have permission to remove this member";
+
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .select("user_id");
+  if (error) throw teamMemberError(error, permissionMessage);
+  if (!data || data.length === 0) throw new Error(permissionMessage);
+  return { userId };
 }
 
 export async function getWorkspace(workspaceId: string) {
@@ -312,7 +426,7 @@ export async function updateWorkspaceDetails(workspaceId: string, input: { name:
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Workspace was not updated");
+  if (!data) throw new Error(ownerOnlyWorkspaceMessage);
 
   return {
     id: String(data.id),
@@ -330,17 +444,13 @@ export async function updateWorkspacePreferences(workspaceId: string, input: Wor
   const { data, error } = await supabase.from("workspaces").update(fields).eq("id", workspaceId).is("deleted_at", null).select("id").maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Workspace was not updated");
+  if (!data) throw new Error(ownerOnlyWorkspaceMessage);
 
   return getWorkspace(workspaceId);
 }
 
 export async function setActiveWorkspace(id: string) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("User not found");
+  const user = await currentUser();
 
   const { data: member, error: memberError } = await supabase
     .from("workspace_members")
@@ -363,7 +473,7 @@ export async function setActiveWorkspace(id: string) {
 }
 
 export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
-  // create workspace
+  const user = await currentUser();
   const industryId = await resolveIndustryId(newWorkspaceData.industryId);
 
   const { data, error } = await supabase
@@ -371,7 +481,7 @@ export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
     .insert([
       {
         name: newWorkspaceData.name,
-        owner_id: newWorkspaceData.userId,
+        owner_id: user.id,
         industry_id: industryId,
         language: normalizeWorkspaceLanguage(newWorkspaceData.language),
         date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
@@ -389,8 +499,8 @@ export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
     .insert([
       {
         workspace_id: workspaceId[0],
-        role: newWorkspaceData.role.toLowerCase(),
-        user_id: newWorkspaceData.userId,
+        role: "owner",
+        user_id: user.id,
       },
     ])
     .select();
@@ -399,116 +509,44 @@ export async function createWorkspace(newWorkspaceData: NewWorkspaceData) {
   return data;
 }
 
-export async function updateWorkspaceIndustry(workspaceId: string, industryId: string) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("User not found");
-
-  const { data: member, error: memberError } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (memberError) throw new Error(memberError.message);
-  if (!member) throw new Error("You do not have access to this workspace");
-
-  const resolvedIndustryId = await resolveIndustryId(industryId);
-
-  const { data, error } = await supabase
-    .from("workspaces")
-    .update({ industry_id: resolvedIndustryId })
-    .eq("id", workspaceId)
-    .select("id, industry_id")
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error("Workspace was not updated");
-
-  return data;
-}
-
 export async function deleteWorkspace(workspaceId: string) {
-  //1 get user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
 
-  if (!user) throw new Error("User not found");
-
-  //2 role must be owner
-
-  const { data: currentMember, error: currentMemberError } = await supabase.from("workspace_members").select("role").eq("workspace_id", workspaceId).eq("user_id", user.id).single();
-
-  if (currentMemberError) throw new Error(currentMemberError.message);
-
-  if (currentMember.role !== "owner") {
-    throw new Error("Only owner can delete workspace");
-  }
-
-  //3 get all not deleted workspaces
-
-  const { data: members, error: membersError } = await supabase
+  const { data: memberships, error: membershipsError } = await supabase
     .from("workspace_members")
-    .select(
-      `role,
-    workspaces!inner(
-      id,
-      deleted_at
-    )
-  	`
-    )
+    .select("workspace_id, workspaces!inner(id)")
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .is("workspaces.deleted_at", null);
 
-  const activeWorkspace = members?.flatMap((member) => member?.workspaces) ?? [];
+  if (membershipsError) throw new Error(membershipsError.message);
 
-  if (membersError) throw new Error(membersError.message);
+  const workspaceIds = (memberships ?? []).map((membership) => String(membership.workspace_id));
+  if (workspaceIds.length <= 1) throw new Error("You cannot delete last workspace");
 
-  if (!members) throw new Error("Workspaces not found");
-
-  if (activeWorkspace.length === 1) throw new Error("You cannot delete last workspace");
-
-  //4 Get profiles
-
-  const { data: profiles, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id);
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).maybeSingle();
 
   if (profileError) throw new Error(profileError.message);
-  const profile = profiles?.[0];
   if (!profile) throw new Error("Profile not found");
 
-  //5 If current workspace === workspaceId find next workspace and chenge current_workspace_id
+  // Owner-only; soft-deletes the workspace and all of its memberships in one transaction.
+  const { error: softDeleteError } = await supabase.rpc("soft_delete_workspace", { target_workspace: workspaceId });
 
-  let nextWorkspaceId = profile.active_workspace_id;
-
-  if (profile.active_workspace_id === workspaceId) {
-    const nextWorkspace = activeWorkspace.find((w) => w.id !== workspaceId);
-
-    if (!nextWorkspace) throw new Error("No workspaceAvilable");
-
-    nextWorkspaceId = nextWorkspace.id;
-
-    const { error: chengeProfileDataError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspace.id }).eq("id", user.id);
-
-    if (chengeProfileDataError) throw new Error(chengeProfileDataError.message);
+  if (softDeleteError) {
+    if (isMissingFunction(softDeleteError)) throw new Error("Workspace deletion needs the latest database update (public.soft_delete_workspace).");
+    throw new Error(softDeleteError.message);
   }
-  //6 Delete member
 
-  const { error: deleteMemberError } = await supabase.from("workspace_members").update({ deleted_at: new Date().toISOString() }).eq("workspace_id", workspaceId);
+  let nextWorkspaceId: string | null = profile.active_workspace_id;
 
-  if (deleteMemberError) throw new Error(deleteMemberError.message);
+  if (nextWorkspaceId === workspaceId) {
+    nextWorkspaceId = workspaceIds.find((id) => id !== workspaceId) ?? null;
 
-  //7 Delete workspace
+    if (nextWorkspaceId) {
+      const { error: switchError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspaceId }).eq("id", user.id);
+      if (switchError) throw new Error(`The workspace was deleted, but switching to another workspace failed: ${switchError.message}`);
+    }
+  }
 
-  const { data, error } = await supabase.from("workspaces").update({ deleted_at: new Date().toISOString() }).eq("id", workspaceId).select();
-
-  if (error) throw new Error(error.message);
-
-  return {
-    deleteWorkspace: data,
-    nextWorkspaceId,
-  };
+  return { deleteWorkspace: [{ id: workspaceId }], nextWorkspaceId };
 }

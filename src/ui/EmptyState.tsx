@@ -43,8 +43,8 @@ export function NoOrders({ onCreateOrder }: { onCreateOrder: () => void }) {
 export function NoClients({ onAddClient }: { onAddClient: () => void }) {
   return <EmptyState icon={Users} title="No clients yet" description="Start building your client list by adding your first client." action={{ label: "Add Client", onClick: onAddClient }} />;
 }
-export function NoServices({ onAddService }: { onAddService: () => void }) {
-  return <EmptyState icon={Package} title="No services yet" description="Start building your service list by adding your first service." action={{ label: "Add Service", onClick: onAddService }} />;
+export function NoServices({ onAddService }: { onAddService?: () => void }) {
+  return <EmptyState icon={Package} title="No services yet" description="Start building your service list by adding your first service." action={onAddService ? { label: "Add Service", onClick: onAddService } : undefined} />;
 }
 
 export function NoInventory({ onAddItem }: { onAddItem: () => void }) {

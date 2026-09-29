@@ -6,6 +6,7 @@ import AddNewOrderForm from "./AddNewOrderForm";
 
 const employeesState = vi.hoisted(() => ({
   employees: [] as { id: string; name: string; status: string; role: string }[],
+  role: "owner" as string | null,
 }));
 
 vi.mock("./useCreateOrder", () => ({
@@ -28,11 +29,17 @@ vi.mock("../employees/useGetEmployees", () => ({
 
 vi.mock("../profiles/useGetProfile", () => ({
   useGetProfile: () => ({ data: undefined }),
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1", isLoading: false, error: null }),
+}));
+
+vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
+  useActiveWorkspaceRole: () => employeesState.role,
 }));
 
 describe("AddNewOrderForm client validation", () => {
   beforeEach(() => {
     employeesState.employees = [];
+    employeesState.role = "owner";
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.setPointerCapture = () => {};
     Element.prototype.releasePointerCapture = () => {};
@@ -89,6 +96,17 @@ describe("AddNewOrderForm client validation", () => {
 
     expect(screen.getByText("Wheel alignment")).toBeInTheDocument();
     expect(screen.getAllByText("MDL 45.00")).toHaveLength(2);
+  });
+
+  it("does not offer to create a catalogue service for view-only roles", async () => {
+    employeesState.role = "member";
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    await user.type(screen.getByLabelText("Service *"), "Wheel alignment");
+
+    expect(screen.queryByText(/Create:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
   });
 
   it("keeps the assigned employee select controlled after a choice", async () => {

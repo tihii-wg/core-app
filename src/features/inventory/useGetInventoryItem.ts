@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
 import { getInventoryItem } from "../../services/apiInventory";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useGetInventoryItem(inventoryItemId: string | null) {
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["inventory", workspaceId, inventoryItemId],
-    queryFn: () => getInventoryItem(inventoryItemId as string),
+    queryFn: () => getInventoryItem(inventoryItemId as string, workspaceId),
     enabled: Boolean(workspaceId && inventoryItemId),
   });
 

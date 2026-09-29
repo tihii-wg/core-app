@@ -30,7 +30,6 @@ import {
   SelectValue,
 } from "../../ui/Select";
 import { PageHeader } from "../../pages/PageHeader";
-import { Avatar, AvatarFallback } from "../../ui/Avatar";
 import { Separator } from "../../ui/Separator";
 import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
@@ -38,16 +37,15 @@ import { ProfileSettings } from "./ProfileSettings";
 import { CompanySettings } from "./CompanySettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { replaceLocale, settingsTabFromSearch } from "./settingsTab";
-import { useGetProfile } from "../profiles/useGetProfile";
+import { useActiveWorkspaceId, useGetProfile } from "../profiles/useGetProfile";
+import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
 import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
-import { useGetWorkspaceMembers } from "../workspaces/useGetWorkspaceMembers";
-import { profileDisplayName, profileInitials } from "../profiles/profileName";
-import { EmptyState } from "../../ui/EmptyState";
+import { TeamSettings } from "./TeamSettings";
 
 export function SettingsModule() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -305,20 +303,7 @@ export function SettingsModule() {
 
         {/* Team Settings */}
         <TabsContent value="team" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Team Members</CardTitle>
-                <CardDescription>
-                  Manage your team and their permissions
-                </CardDescription>
-              </div>
-              <Button>Invite Member</Button>
-            </CardHeader>
-            <CardContent>
-              <TeamMembersList />
-            </CardContent>
-          </Card>
+          <TeamSettings />
         </TabsContent>
 
         <TabsContent value="appearance" className="mt-6 space-y-6">
@@ -364,83 +349,8 @@ function withCurrent(options: { value: string; label: string }[], current: strin
   return [{ value: current, label: current }, ...options];
 }
 
-const teamRoleLabels: Record<string, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  manager: "Manager",
-  member: "Member",
-};
-
-export function TeamMembersList() {
-  const { members = [], isLoading, error } = useGetWorkspaceMembers();
-
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading team members...</p>;
-  }
-
-  if (error) {
-    const message = error instanceof Error ? error.message : "Team members could not be loaded";
-    return <p className="text-sm text-[#f41f20]">{message}</p>;
-  }
-
-  if (members.length === 0) {
-    return (
-      <EmptyState
-        icon={Users}
-        title="No team members yet"
-        description="Team members added to this workspace will appear here."
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {members.map((member) => {
-        const name = profileDisplayName(member.fullName, member.email ?? "Workspace member");
-
-        return (
-          <div
-            key={member.userId}
-            className="flex items-center justify-between rounded-lg border p-4"
-          >
-            <div className="flex items-center gap-4">
-              <Avatar>
-                <AvatarFallback>{profileInitials(name)}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-medium">{name}</p>
-                {member.email && <p className="text-sm text-muted-foreground">{member.email}</p>}
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
-                Active
-              </span>
-              <Select defaultValue={member.role}>
-                <SelectTrigger className="w-[120px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(teamRoleLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                  {member.role && !(member.role in teamRoleLabels) && (
-                    <SelectItem value={member.role}>{member.role}</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function AppearanceSettings() {
-  const { workspaceId } = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace, isLoading, error, isFetched } = useGetWorkspace(workspaceId);
   const { data: profile, isLoading: profileLoading } = useGetProfile();
 
@@ -504,6 +414,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
   const { mutateAsync: saveTheme, isPending: themePending } = useUpdateProfileTheme();
   const { mutateAsync: savePreferences, isPending: preferencesPending } = useUpdateWorkspacePreferences();
   const isPending = themePending || preferencesPending;
+  const canEditWorkspace = canManageWorkspace(workspace.role);
 
   async function onSave() {
     toast.loading("Saving preferences...", { id: "appearance" });
@@ -516,13 +427,15 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
       applyProfileTheme(savedTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
     }
 
-    try {
-      const saved = await savePreferences({ workspaceId: workspace.id, language, timezone, dateFormat, currency });
-      const nextLanguage = saved?.language ?? language;
-      const nextPath = replaceLocale(location.pathname, locale, nextLanguage);
-      if (nextPath !== location.pathname) navigate(`${nextPath}${location.search}`, { replace: true });
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : "Could not save company preferences");
+    if (canEditWorkspace) {
+      try {
+        const saved = await savePreferences({ workspaceId: workspace.id, language, timezone, dateFormat, currency });
+        const nextLanguage = saved?.language ?? language;
+        const nextPath = replaceLocale(location.pathname, locale, nextLanguage);
+        if (nextPath !== location.pathname) navigate(`${nextPath}${location.search}`, { replace: true });
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : "Could not save company preferences");
+      }
     }
 
     if (failures.length > 0) {
@@ -566,7 +479,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
           <div className="space-y-2">
             <Label>Language</Label>
-            <Select value={language} onValueChange={(value) => setLanguage(normalizeWorkspaceLanguage(value))}>
+            <Select value={language} onValueChange={(value) => setLanguage(normalizeWorkspaceLanguage(value))} disabled={!canEditWorkspace}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -582,7 +495,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
           <div className="space-y-2">
             <Label>Timezone</Label>
-            <Select value={timezone} onValueChange={setTimezone}>
+            <Select value={timezone} onValueChange={setTimezone} disabled={!canEditWorkspace}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -598,7 +511,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
           <div className="space-y-2">
             <Label>Date Format</Label>
-            <Select value={dateFormat} onValueChange={(value) => setDateFormat(normalizeWorkspaceDateFormat(value))}>
+            <Select value={dateFormat} onValueChange={(value) => setDateFormat(normalizeWorkspaceDateFormat(value))} disabled={!canEditWorkspace}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -614,7 +527,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
           <div className="space-y-2">
             <Label>Currency</Label>
-            <Select value={currency} onValueChange={setCurrency}>
+            <Select value={currency} onValueChange={setCurrency} disabled={!canEditWorkspace}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -628,6 +541,8 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
             </Select>
           </div>
         </div>
+
+        {!canEditWorkspace && <p className="text-sm text-muted-foreground">Language, time zone, date format, and currency apply to the whole company and can only be changed by the workspace owner.</p>}
 
         <div className="flex justify-end">
           <Button type="button" onClick={onSave} disabled={isPending}>

@@ -9,8 +9,8 @@ export function useCreateNewClient() {
     onMutate: () => {
       toast.loading("Creating Client...", { id: "create-client" });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    onSuccess: (_data, { workspace_id }) => {
+      queryClient.invalidateQueries({ queryKey: ["clients", workspace_id] });
       toast.success("Client created succesfully", { id: "create-client" });
     },
     onError: (error) => {

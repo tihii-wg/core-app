@@ -34,7 +34,7 @@ const statusOptions = [
 // ];
 
 export function Orders() {
-  const { orders, isLoading: ordersLoading } = useGetOrders();
+  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: updateStatus } = useUpdateOrderStatus();
 
@@ -126,14 +126,19 @@ export function Orders() {
   };
 
   const handleStatusChange = (newStatus: OrderStatus) => {
-    if (selectedOrder) {
-      updateStatus({ orderId: selectedOrder.id, status: newStatus });
-      setSelectedOrder({
-        ...selectedOrder,
-        status: newStatus,
-        ...(newStatus === "paid" ? { isPaid: true, paymentStatus: "paid" as const } : {}),
-      });
-    }
+    if (!selectedOrder) return;
+    const order = selectedOrder;
+    updateStatus(
+      { orderId: order.id, status: newStatus },
+      {
+        onSuccess: () =>
+          setSelectedOrder((current) =>
+            current?.id === order.id
+              ? { ...current, status: newStatus, ...(newStatus === "paid" ? { isPaid: true, paymentStatus: "paid" as const } : {}) }
+              : current,
+          ),
+      },
+    );
   };
 
   // if (ordersLoading || employeesIsLoading) {
@@ -188,6 +193,8 @@ export function Orders() {
           setEmployeeFilter("all");
         }}
       />
+
+      {ordersError && <p className="text-sm text-[#f41f20]">{ordersError.message}</p>}
 
       <DataTable
         columns={columns}

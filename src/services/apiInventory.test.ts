@@ -74,7 +74,12 @@ describe("inventory api", () => {
       throw new Error(`Unexpected table ${table}`);
     });
 
-    await expect(getInventoryItems()).resolves.toEqual([]);
+    await expect(getInventoryItems(undefined, "all", { field: "name", ascending: true }, "ws-1")).resolves.toEqual([]);
+  });
+
+  it("refuses to query without an active workspace", async () => {
+    await expect(getInventoryItems(undefined, "all", { field: "name", ascending: true }, undefined)).rejects.toThrow("No active workspace selected");
+    expect(from).not.toHaveBeenCalled();
   });
 
   it("turns a duplicate SKU into a readable error", async () => {
@@ -101,7 +106,7 @@ describe("inventory api", () => {
         supplier: "",
         location: "",
         isActive: true,
-      }),
+      }, "ws-1"),
     ).rejects.toThrow("An inventory item with this SKU already exists.");
   });
 });

@@ -25,6 +25,8 @@ import EditServiceForm from "./UpdateServiceForm";
 import useDeleteService from "./useDeleteService";
 import {  NoSearchResults, NoServices } from "../../ui/EmptyState";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { canManageServices } from "../workspaces/workspaceRoles";
 
 // const categoryOptions = [
 //   { value: "All", label: "All Categories" },
@@ -48,9 +50,10 @@ export function Services() {
 
   const debunceSearch = useDebounce(searchQuery, 400);
   // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
-  const { services, isLoading, isPending } = useGetServices(debunceSearch);
+  const { services, isLoading, isPending, error } = useGetServices(debunceSearch);
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
+  const canManage = canManageServices(useActiveWorkspaceRole());
 
   // Stats
   const activeServices = services?.filter((s) => s.status === "active").length;
@@ -117,7 +120,10 @@ export function Services() {
         </div>
       ),
     },
-    {
+  ];
+
+  if (canManage) {
+    columns.push({
       key: "actions",
       header: "",
       className: "w-[80px]",
@@ -125,6 +131,7 @@ export function Services() {
         <Button
           type="button"
           variant="outline"
+          aria-label={`Delete ${service.service_name}`}
           onClick={(e) => {
             e.stopPropagation();
             setServiceToDelete(service);
@@ -133,8 +140,8 @@ export function Services() {
           <Trash2 />
         </Button>
       ),
-    },
-  ];
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -142,10 +149,12 @@ export function Services() {
         title="Services"
         description={isPending ? "Loading services..." : `${activeServices} active services`}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-            <Plus className="h-4 w-4 mr-1" />
-            Add Service
-          </Button>
+          canManage ? (
+            <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Service
+            </Button>
+          ) : undefined
         }
       />
 
@@ -168,16 +177,22 @@ export function Services() {
         // }}
       />
 
+      {error && <p className="text-sm text-[#f41f20]">{error.message}</p>}
+
       <DataTable
         columns={columns}
         isLoading={isLoading}
         data={services}
-        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoServices onAddService={() => setCreateModalOpen(true)} />}
+        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoServices onAddService={canManage ? () => setCreateModalOpen(true) : undefined} />}
         keyExtractor={(service) => service.id}
-        onRowClick={(service) => {
-          setSelectedService(service);
-          setEditModalOpen(true);
-        }}
+        onRowClick={
+          canManage
+            ? (service) => {
+                setSelectedService(service);
+                setEditModalOpen(true);
+              }
+            : undefined
+        }
       />
 
       {/* Create Service Modal */}

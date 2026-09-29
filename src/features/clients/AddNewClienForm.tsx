@@ -1,10 +1,10 @@
 import { useForm } from "react-hook-form";
-import { useParams } from "react-router-dom";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import type { ClientFormValues, CreateMadalProps } from "../../lib/types";
 import { useCreateNewClient } from "./useCreateNewClient";
 import ClientFormFields from "./ClientFormFields";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 const emptyClient: ClientFormValues = {
   clientType: "individual",
@@ -18,7 +18,7 @@ const emptyClient: ClientFormValues = {
 };
 
 export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProps) {
-  const params = useParams();
+  const { workspaceId } = useActiveWorkspaceId();
   const { mutateAsync: createClient } = useCreateNewClient();
 
   const {
@@ -30,12 +30,14 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
   } = useForm<ClientFormValues>({ defaultValues: emptyClient });
 
   const onSubmit = async (data: ClientFormValues) => {
-    if (!params.workspaceId) throw new Error("No active workspace selected");
-
-    await createClient({
-      ...data,
-      workspace_id: params.workspaceId,
-    });
+    try {
+      await createClient({
+        ...data,
+        workspace_id: workspaceId ?? "",
+      });
+    } catch {
+      return;
+    }
     reset(emptyClient);
     setCreateModalOpen(false);
   };
