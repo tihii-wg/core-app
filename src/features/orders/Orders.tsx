@@ -15,6 +15,7 @@ import AddNewOrderForm from "../orders/AddNewOrderForm";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useCreateDialogFromNavigation } from "../../hooks/useCreateDialogFromNavigation";
 // import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 const statusOptions = [
@@ -44,7 +45,7 @@ export function Orders() {
   const [employeeFilter, setEmployeeFilter] = useState("all");
 
   // Modals
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useCreateDialogFromNavigation();
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 

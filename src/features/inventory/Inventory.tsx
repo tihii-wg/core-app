@@ -22,6 +22,7 @@ import InventoryItemForm from "./InventoryItemForm";
 import InventoryDetailPanel from "./InventoryDetailPanel";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
+import { useCreateDialogFromNavigation } from "../../hooks/useCreateDialogFromNavigation";
 
 const emptyInventoryForm = {
   name: "",
@@ -67,7 +68,7 @@ export function Inventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useCreateDialogFromNavigation();
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);

@@ -15,6 +15,7 @@ import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useCreateDialogFromNavigation } from "../../hooks/useCreateDialogFromNavigation";
 
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,7 +27,7 @@ export function Clients() {
   const { formatMoney } = useWorkspaceMoney();
 
   // State
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useCreateDialogFromNavigation();
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 

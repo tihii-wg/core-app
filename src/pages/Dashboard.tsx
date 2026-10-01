@@ -1,5 +1,6 @@
 import { ClipboardList, DollarSign, FileText, Package, Plus, Users, ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
 import { DataTable, type Column } from "../ui/DataTable";
 import type { Order } from "../lib/types";
 import { DashboardCard } from "../ui/DashboardCard";
@@ -14,6 +15,10 @@ import { clientCreatedAt, isAtOrBelowMinimum, localDateKey, taskOverviewCounts, 
 import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
 import { useWorkspaceMoney } from "../features/workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
+import { openCreateDialogState } from "../hooks/useCreateDialogFromNavigation";
+
+const quickActionClass =
+  "border-[#c9cbcc] cursor-pointer transition-all duration-200 ease-in-out hover:border-[#1973e1] hover:bg-[#1973e1] hover:text-white";
 
 
 export default function Dashboard() {
@@ -21,6 +26,9 @@ export default function Dashboard() {
 
   const { orders = [], clients = [], invoices = [], setCurrentModule } = useApp();
   const { workspaceId } = useActiveWorkspaceId();
+  const navigate = useNavigate();
+  const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
+  const openCreateDialog = (module: "orders" | "clients" | "inventory") => navigate(`/${locale}/${routeWorkspaceId}/${module}`, { state: openCreateDialogState });
   const { formatMoney } = useWorkspaceMoney();
   const {
     data: workspaceOrders = [],
@@ -180,19 +188,19 @@ export default function Dashboard() {
       <div className="bg-white rounded-md border border-[#eeeeef] p-4">
         <h2 className="text-sm font-medium text-[#939699] mb-3">Quick Actions</h2>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setCurrentModule("orders")} size="sm" className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+          <Button onClick={() => openCreateDialog("orders")} variant="outline" size="sm" className={quickActionClass}>
             <Plus className="h-4 w-4 mr-1" />
             Create Order
           </Button>
-          <Button onClick={() => setCurrentModule("clients")} variant="outline" size="sm" className="border-[#c9cbcc]">
+          <Button onClick={() => openCreateDialog("clients")} variant="outline" size="sm" className={quickActionClass}>
             <Plus className="h-4 w-4 mr-1" />
             Add Client
           </Button>
-          <Button onClick={() => setCurrentModule("inventory")} variant="outline" size="sm" className="border-[#c9cbcc]">
+          <Button onClick={() => openCreateDialog("inventory")} variant="outline" size="sm" className={quickActionClass}>
             <Plus className="h-4 w-4 mr-1" />
             Add Inventory
           </Button>
-          <Button onClick={() => setCurrentModule("invoices")} variant="outline" size="sm" className="border-[#c9cbcc]">
+          <Button onClick={() => setCurrentModule("invoices")} variant="outline" size="sm" className={quickActionClass}>
             <Plus className="h-4 w-4 mr-1" />
             Create Invoice
           </Button>
