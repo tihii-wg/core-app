@@ -1,8 +1,23 @@
 import type { AddNewEmployeesFormData, EmployeeRole } from "../lib/types";
 import supabase from "./supabase";
 
+async function requireActiveWorkspaceMember(workspaceId: string, userId: string) {
+  const { data, error } = await supabase
+    .from("workspace_members")
+    .select("user_id")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Selected user is not an active member of this workspace");
+}
+
 export async function createEmployee({ role, email, name, phone, profile_id, status, workspace_id }: AddNewEmployeesFormData) {
   if (!workspace_id) throw new Error("No active workspace");
+
+  if (profile_id) await requireActiveWorkspaceMember(workspace_id, profile_id);
 
   const { data, error } = await supabase
     .from("employees")
@@ -12,7 +27,7 @@ export async function createEmployee({ role, email, name, phone, profile_id, sta
         email,
         name,
         phone,
-        profile_id,
+        profile_id: profile_id || null,
         status,
         workspace_id,
       },

@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:supabase": "node --env-file=.env.test.local --test --test-concurrency=1 \"supabase/tests/**/*.test.mjs\""
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",

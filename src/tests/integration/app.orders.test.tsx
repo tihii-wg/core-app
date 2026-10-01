@@ -155,6 +155,44 @@ describe("orders page", () => {
     expect(within(panel).getByRole("combobox")).toHaveTextContent("New");
   });
 
+  it("offers only linked active technicians as assignees when creating an order", async () => {
+    fake.all("employees").push({ id: "employee-unlinked", workspace_id: WS.A, name: "Una Unlinked", email: "una@example.com", phone: "+37362222223", role: "technician", status: "active", profile_id: null });
+    const { user } = await openOrders();
+    await user.click(screen.getByRole("button", { name: /Create Order/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    await user.click(within(dialog).getByRole("combobox"));
+    await screen.findByRole("option", { name: "Tom Tech" });
+
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Tom Tech", "Tina Tech"]);
+    expect(within(dialog).queryByText(/No linked technicians/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the assignee required and explains when no technician is linked to a workspace user", async () => {
+    for (const employee of fake.all("employees")) if (employee.workspace_id === WS.A) employee.profile_id = null;
+    const { user } = await openOrders();
+    await user.click(screen.getByRole("button", { name: /Create Order/ }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(await within(dialog).findByText("No linked technicians. Link an active technician to a workspace user on the Employees page first.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    expect(await within(dialog).findByText("Assigned employee is required")).toBeInTheDocument();
+    expect(fake.requests.filter((request) => request.table === "orders" && request.op === "insert")).toHaveLength(0);
+  });
+
+  it("offers the current assignee and linked technicians, but not unlinked ones, when editing an order", async () => {
+    fake.all("employees").push({ id: "employee-unlinked", workspace_id: WS.A, name: "Una Unlinked", email: "una@example.com", phone: "+37362222223", role: "technician", status: "active", profile_id: null });
+    const { user } = await openOrders();
+    const panel = await openOrderPanel(user);
+    await user.click(within(panel).getByRole("button", { name: "Edit" }));
+
+    expect(within(panel).getByRole("combobox", { name: "Assigned Employee" })).toHaveTextContent("Tom Tech");
+    await user.click(within(panel).getByRole("combobox", { name: "Assigned Employee" }));
+    await screen.findByRole("option", { name: "Tina Tech" });
+
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Tom Tech", "Tina Tech"]);
+  });
+
   it("lists only orders of the active workspace", async () => {
     await openOrders();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();

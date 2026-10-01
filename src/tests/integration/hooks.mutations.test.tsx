@@ -125,7 +125,7 @@ describe("employee mutations", () => {
 
   it("a missing workspace is reported as an error toast", async () => {
     const { result } = setup(() => useCreateNewEmployee());
-    await settle(() => result.current.mutateAsync({ name: "Eve", email: "", phone: "", role: "technician", status: "active" }));
+    await settle(() => result.current.mutateAsync({ name: "Eve", email: "", phone: "", role: "technician", status: "active", profile_id: null }));
     expect(toast.error).toHaveBeenCalledWith("No active workspace", { id: "create-employee" });
   });
 });

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import AddNewOrderForm from "./AddNewOrderForm";
 
 const employeesState = vi.hoisted(() => ({
-  employees: [] as { id: string; name: string; status: string; role: string }[],
+  employees: [] as { id: string; name: string; status: string; role: string; profile_id: string | null }[],
   role: "owner" as string | null,
 }));
 
@@ -111,7 +111,7 @@ describe("AddNewOrderForm client validation", () => {
 
   it("keeps the assigned employee select controlled after a choice", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    employeesState.employees = [{ id: "emp-1", name: "Ada", status: "active", role: "technician" }];
+    employeesState.employees = [{ id: "emp-1", name: "Ada", status: "active", role: "technician", profile_id: "user-1" }];
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 

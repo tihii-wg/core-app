@@ -114,14 +114,31 @@ describe("updateClient", () => {
 describe("employees", () => {
   const employee = { name: "Nick New", email: "nick@example.com", phone: "+37363333333", role: "technician" as const, status: "active" };
 
-  it("creates an employee in the workspace", async () => {
-    const created = await createEmployee({ ...employee, workspace_id: WS.A, profile_id: USERS.member.id });
-    expect(created?.[0]).toMatchObject({ name: "Nick New", workspace_id: WS.A });
+  it("creates an unlinked employee with profile_id null", async () => {
+    const created = await createEmployee({ ...employee, workspace_id: WS.A, profile_id: null });
+    expect(created?.[0]).toMatchObject({ name: "Nick New", workspace_id: WS.A, profile_id: null });
+    expect(fake.requests.find((request) => request.table === "employees" && request.op === "insert")?.values).toMatchObject([{ profile_id: null }]);
+  });
+
+  it("links the employee to an active member of the workspace", async () => {
+    const created = await createEmployee({ ...employee, workspace_id: WS.A, profile_id: USERS.admin.id });
+    expect(row("employees", created?.[0].id)).toMatchObject({ workspace_id: WS.A, profile_id: USERS.admin.id });
+  });
+
+  it("rejects a linked user who is not an active member of the workspace and writes nothing", async () => {
+    const before = fake.all("employees").length;
+    await expect(createEmployee({ ...employee, workspace_id: WS.A, profile_id: USERS.outsider.id })).rejects.toThrow("Selected user is not an active member of this workspace");
+
+    fake.all("workspace_members").find((item) => item.workspace_id === WS.A && item.user_id === USERS.admin.id)!.deleted_at = "2026-09-01T00:00:00.000Z";
+    await expect(createEmployee({ ...employee, workspace_id: WS.A, profile_id: USERS.admin.id })).rejects.toThrow("Selected user is not an active member of this workspace");
+
+    expect(fake.all("employees")).toHaveLength(before);
+    expect(fake.requests.some((request) => request.table === "employees" && request.op === "insert")).toBe(false);
   });
 
   it("requires a workspace and is refused by RLS outside the user's workspaces", async () => {
-    await expect(createEmployee({ ...employee })).rejects.toThrow("No active workspace");
-    await expect(createEmployee({ ...employee, workspace_id: WS.C })).rejects.toThrow("row-level security");
+    await expect(createEmployee({ ...employee, profile_id: null })).rejects.toThrow("No active workspace");
+    await expect(createEmployee({ ...employee, workspace_id: WS.C, profile_id: null })).rejects.toThrow("row-level security");
   });
 
   it("lists, searches and filters employees of one workspace", async () => {

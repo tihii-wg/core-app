@@ -242,7 +242,7 @@ describe("team members", () => {
   it("explains a missing team migration", async () => {
     fake.signInAs(USERS.owner.id);
     delete fake.rpcs.workspace_member_find_user;
-    await expect(addWorkspaceMember(WS.A, { email: USERS.newbie.email, role: "member" })).rejects.toThrow(/20260928200000_team_members_rls\.sql/);
+    await expect(addWorkspaceMember(WS.A, { email: USERS.newbie.email, role: "member" })).rejects.toThrow(/20260929000300_team_member_rpcs\.sql/);
   });
 });
 

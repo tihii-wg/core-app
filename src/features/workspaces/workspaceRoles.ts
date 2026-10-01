@@ -1,4 +1,4 @@
-// Mirrors public.workspace_member_can_manage in supabase/migrations/20260928200000_team_members_rls.sql.
+// Mirrors public.workspace_member_can_manage in supabase/migrations/20260929000000_production_baseline.sql.
 export const workspaceRoles = ["owner", "admin", "manager", "member"] as const;
 export type WorkspaceRole = (typeof workspaceRoles)[number];
 

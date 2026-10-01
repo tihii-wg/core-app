@@ -266,7 +266,7 @@ type TeamProfileRow = { user_id: string; full_name: string | null; email: string
 type TeamMemberRow = { user_id: string; role: string | null; created_at?: string | null; deleted_at?: string | null };
 
 const teamRoleOrder = ["owner", "admin", "manager", "member"];
-const teamMigrationMessage = "Team member management needs the latest database update (supabase/migrations/20260928200000_team_members_rls.sql).";
+const teamMigrationMessage = "Team member management needs the latest database update (supabase/migrations/20260929000300_team_member_rpcs.sql).";
 
 function isMissingFunction(error: { code?: string; message?: string }) {
   return error.code === "PGRST202" || error.code === "42883";

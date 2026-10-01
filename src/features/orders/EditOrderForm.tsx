@@ -46,7 +46,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
   });
 
   const technicianOptions = employees.filter(
-    (employee) => employee.id && (employee.id === order.assignedEmployeeId || (employee.status === "active" && employee.role === "technician")),
+    (employee) => employee.id && (employee.id === order.assignedEmployeeId || (employee.profile_id && employee.status === "active" && employee.role === "technician")),
   );
 
   const onSubmit = async (data: EditOrderFormData) => {
@@ -193,6 +193,9 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
               </Select>
             )}
           />
+          {technicianOptions.length === 0 && (
+            <p className="text-xs text-muted-foreground">No linked technicians. Link an active technician to a workspace user on the Employees page first.</p>
+          )}
         </div>
 
         <div className="space-y-1.5">

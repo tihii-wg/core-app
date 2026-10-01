@@ -1,5 +1,5 @@
 // Core App security model for the fake Supabase client.
-// workspace_members follows supabase/migrations/20260928200000_team_members_rls.sql.
+// workspace_members follows supabase/migrations/20260929000000_production_baseline.sql.
 // The other tables follow the rules the app was hardened against (their policies are not in
 // the repo): members read/write their workspace's data, services are managed by owner/admin,
 // order_services is SELECT/INSERT only, workspaces cannot be deleted and only the owner may

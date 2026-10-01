@@ -1,8 +1,8 @@
 export default {
   locales: [
     "en",
-    "de",
-    "fr"
+    "ro",
+    "ru"
   ],
   extract: {
     input: "src/**/*.{js,jsx,ts,tsx}",

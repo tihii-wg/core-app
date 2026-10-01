@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Production schema snapshot (local reconciliation artifact, never commit)
+supabase/snapshot/production_snapshot.json
+supabase/snapshot/production_snapshot.csv

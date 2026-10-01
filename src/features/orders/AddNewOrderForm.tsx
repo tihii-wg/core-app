@@ -28,6 +28,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
   // const clientNameRef = useRef(clientName);
 
   const activeServices = services?.filter((service) => service.status === "active");
+  const technicianOptions = employees?.filter((employee) => employee.id && employee.profile_id && employee.status === "active" && employee.role === "technician") ?? [];
 
   const {
     control,
@@ -264,17 +265,18 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
-                    {employees
-                      ?.filter((employee) => employee.id && employee.status === "active" && employee.role === "technician")
-                      .map((employee) => (
-                        <SelectItem key={employee.id} value={employee.id}>
-                          {employee.name}
-                        </SelectItem>
-                      ))}
+                    {technicianOptions.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
             />
+            {employees && technicianOptions.length === 0 && (
+              <p className="text-xs text-muted-foreground">No linked technicians. Link an active technician to a workspace user on the Employees page first.</p>
+            )}
             {errors.assignedEmployeeId && <p className="text-xs text-[#f41f20]">{errors.assignedEmployeeId.message}</p>}
           </div>
 

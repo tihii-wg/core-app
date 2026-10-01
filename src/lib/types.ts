@@ -77,6 +77,7 @@ export interface Employee {
   assignedTasks: number;
   completedTasks: number;
   status: "active" | "inactive";
+  profile_id?: string | null;
 }
 
 export interface addNewOrderFormData {
@@ -333,7 +334,7 @@ export type UpdateClientInput = EditClientFormData & {
 
 export type AddNewEmployeesFormData = {
   workspace_id?: string;
-  profile_id?: string;
+  profile_id: string | null;
   name: string;
   role: EmployeeRole | "";
   status: string;
@@ -343,7 +344,7 @@ export type AddNewEmployeesFormData = {
 
 export type CreateEmployeeData = AddNewEmployeesFormData & {
   workspace_id: string;
-  profile_id: string;
+  profile_id: string | null;
 };
 
 export type Industry = {
