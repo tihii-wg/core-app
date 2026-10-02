@@ -2,18 +2,21 @@ import { useState, useMemo } from "react";
 import { Plus, Check, AlertCircle } from "lucide-react";
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { InvoiceStatusBadge } from "../../ui/StatusBadge";
 import { Spinner } from "../../ui/Spinner";
-import { useApp } from "../../lib/appContext";
 import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { DemoDataNotice } from "../demo/DemoDataNotice";
+import { useInvoiceActions, useInvoiceFormOptions, useInvoices } from "./useInvoices";
+
+const NO_ORDER = "none";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -24,7 +27,11 @@ const statusOptions = [
 ];
 
 export function Invoices() {
-  const { invoices = [], clients = [], orders = [], addInvoice, updateInvoiceStatus } = useApp();
+  const { data: invoices, isDemo } = useInvoices();
+  const {
+    data: { clients, orders },
+  } = useInvoiceFormOptions();
+  const { createInvoice, markInvoicePaid } = useInvoiceActions();
   const { currency, formatMoney } = useWorkspaceMoney();
 
   // State
@@ -35,7 +42,7 @@ export function Invoices() {
   // Form state
   const [formData, setFormData] = useState({
     clientId: "",
-    orderId: "",
+    orderId: NO_ORDER,
     amount: "",
     dueDate: "",
     status: "draft" as InvoiceStatus,
@@ -49,7 +56,7 @@ export function Invoices() {
 
   // Get unpaid orders for a client
   const getClientOrders = (clientId: string) => {
-    return orders.filter((o) => o.clientId === clientId && o.paymentStatus !== "paid");
+    return orders.filter((o) => o.clientId === clientId && !o.isPaid);
   };
 
   // Filtered data
@@ -66,23 +73,27 @@ export function Invoices() {
     {
       key: "invoiceNumber",
       header: "Invoice #",
-      cell: (invoice) => <span className="font-medium text-[#1973e1]">{invoice.invoiceNumber}</span>,
+      cell: (invoice) => <span className="font-medium text-primary tabular-nums">{invoice.invoiceNumber}</span>,
     },
     {
       key: "client",
       header: "Client",
-      cell: (invoice) => invoice.clientName,
+      cell: (invoice) => (
+        <span className="block max-w-56 truncate" title={invoice.clientName}>
+          {invoice.clientName}
+        </span>
+      ),
     },
     {
       key: "order",
       header: "Order",
-      cell: (invoice) => (invoice.orderNumber ? <span className="text-sm text-[#939699]">{invoice.orderNumber}</span> : <span className="text-sm text-[#939699]">-</span>),
-      className: "hidden sm:table-cell",
+      cell: (invoice) => (invoice.orderNumber ? <span className="text-sm text-muted-foreground">{invoice.orderNumber}</span> : <span className="text-sm text-muted-foreground">-</span>),
+      className: "hidden xl:table-cell",
     },
     {
       key: "amount",
       header: "Amount",
-      cell: (invoice) => <span className="font-medium text-[#282e33]">{formatMoney(invoice.amount)}</span>,
+      cell: (invoice) => <span className="font-medium text-foreground tabular-nums">{formatMoney(invoice.amount)}</span>,
       className: "text-right",
     },
     {
@@ -93,8 +104,8 @@ export function Invoices() {
     {
       key: "dueDate",
       header: "Due Date",
-      cell: (invoice) => <span className={invoice.status === "overdue" ? "text-[#f41f20]" : "text-[#939699]"}>{invoice.dueDate}</span>,
-      className: "hidden md:table-cell",
+      cell: (invoice) => <span className={invoice.status === "overdue" ? "text-destructive" : "text-muted-foreground"}>{invoice.dueDate}</span>,
+      className: "hidden xl:table-cell",
     },
     {
       key: "actions",
@@ -106,11 +117,11 @@ export function Invoices() {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              updateInvoiceStatus(invoice.id, "paid");
+              void markInvoicePaid(invoice.id);
             }}
-            className="text-[#099b49] hover:text-[#067d3a] hover:bg-[#e6f7ed]"
+            className="text-success hover:text-success hover:bg-success/10"
           >
-            <Check className="h-4 w-4 mr-1" />
+            <Check />
             Mark Paid
           </Button>
         ),
@@ -132,66 +143,67 @@ export function Invoices() {
     if (!validateForm()) return;
 
     setIsSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    const client = clients.find((c) => c.id === formData.clientId);
-    const order = orders.find((o) => o.id === formData.orderId);
-
-    addInvoice({
-      clientId: formData.clientId,
-      clientName: client?.name || "",
-      orderId: formData.orderId || undefined,
-      orderNumber: order?.orderNumber || undefined,
-      amount: parseFloat(formData.amount),
-      status: formData.status,
-      dueDate: formData.dueDate,
-    });
-
-    setIsSubmitting(false);
-    setCreateModalOpen(false);
-    setFormData({
-      clientId: "",
-      orderId: "",
-      amount: "",
-      dueDate: "",
-      status: "draft",
-    });
+    try {
+      await createInvoice({
+        clientId: formData.clientId,
+        orderId: formData.orderId === NO_ORDER ? undefined : formData.orderId,
+        amount: parseFloat(formData.amount),
+        status: formData.status,
+        dueDate: formData.dueDate,
+      });
+      setCreateModalOpen(false);
+      setFormData({
+        clientId: "",
+        orderId: NO_ORDER,
+        amount: "",
+        dueDate: "",
+        status: "draft",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Invoices"
-        description={`${invoices.length} total invoices`}
+        description={isDemo ? `${invoices.length} sample invoices` : `${invoices.length} total invoices`}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-            <Plus className="h-4 w-4 mr-1" />
+          <Button onClick={() => setCreateModalOpen(true)}>
+            <Plus />
             Create Invoice
           </Button>
         }
       />
 
+      {isDemo && (
+        <DemoDataNotice title="Invoices are not connected to your workspace yet">
+          These sample invoices preview the layout only. They are not your clients or orders, and anything you create here is kept in this browser session and discarded on reload.
+        </DemoDataNotice>
+      )}
+
       {/* Alerts */}
       {(overdueCount > 0 || unpaidTotal > 0) && (
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-3">
           {overdueCount > 0 && (
-            <div className="flex items-center gap-3 p-4 bg-[#fee7e7] rounded-md">
-              <AlertCircle className="h-5 w-5 text-[#f41f20]" />
+            <div role="status" className="flex items-center gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                <AlertCircle aria-hidden="true" className="size-4" />
+              </span>
               <div>
-                <p className="font-medium text-[#f41f20]">
+                <p className="text-sm font-medium text-destructive">
                   {overdueCount} Overdue Invoice{overdueCount > 1 ? "s" : ""}
                 </p>
-                <p className="text-sm text-[#f41f20]/80">Requires immediate attention</p>
+                <p className="text-[13px] text-destructive/80">Requires immediate attention</p>
               </div>
             </div>
           )}
-          <div className="flex items-center gap-3 p-4 bg-[#f8f9fa] rounded-md">
-            <div className="h-10 w-10 bg-[#edf4fd] rounded-full flex items-center justify-center">
-              <span className="text-[#1973e1] text-xs font-bold">{currency}</span>
-            </div>
-            <div>
-              <p className="font-medium text-[#282e33]">{formatMoney(unpaidTotal)} Unpaid</p>
-              <p className="text-sm text-[#939699]">Outstanding balance</p>
+          <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-xs">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-semibold text-primary">{currency}</span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-foreground tabular-nums">{formatMoney(unpaidTotal)} Unpaid</p>
+              <p className="text-[13px] text-muted-foreground">Outstanding balance</p>
             </div>
           </div>
         </div>
@@ -219,21 +231,27 @@ export function Invoices() {
       <DataTable columns={columns} data={filteredInvoices} keyExtractor={(invoice) => invoice.id} />
 
       {/* Create Invoice Modal */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+      <Dialog
+        open={createModalOpen}
+        onOpenChange={(open) => {
+          setCreateModalOpen(open);
+          if (!open) setFormErrors({});
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Create Invoice</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Client *</Label>
+              <Label htmlFor="invoice-client">Client *</Label>
               <Select
                 value={formData.clientId}
                 onValueChange={(value) => {
-                  setFormData({ ...formData, clientId: value, orderId: "" });
+                  setFormData({ ...formData, clientId: value, orderId: NO_ORDER });
                 }}
               >
-                <SelectTrigger className={formErrors.clientId ? "border-[#f41f20]" : ""}>
+                <SelectTrigger id="invoice-client" className={`w-full ${formErrors.clientId ? "border-destructive" : ""}`}>
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
@@ -244,18 +262,18 @@ export function Invoices() {
                   ))}
                 </SelectContent>
               </Select>
-              {formErrors.clientId && <p className="text-xs text-[#f41f20]">{formErrors.clientId}</p>}
+              {formErrors.clientId && <p className="text-xs text-destructive">{formErrors.clientId}</p>}
             </div>
 
             {formData.clientId && (
               <div className="space-y-1.5">
-                <Label>Related Order (optional)</Label>
+                <Label htmlFor="invoice-order">Related Order (optional)</Label>
                 <Select value={formData.orderId} onValueChange={(value) => setFormData({ ...formData, orderId: value })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="invoice-order" className="w-full">
                     <SelectValue placeholder="Select order" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No related order</SelectItem>
+                    <SelectItem value={NO_ORDER}>No related order</SelectItem>
                     {getClientOrders(formData.clientId).map((order) => (
                       <SelectItem key={order.id} value={order.id}>
                         {order.orderNumber} - {order.device} ({formatMoney(order.totalPrice)})
@@ -268,21 +286,24 @@ export function Invoices() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Amount ({currency}) *</Label>
+                <Label htmlFor="invoice-amount">Amount ({currency}) *</Label>
                 <Input
+                  id="invoice-amount"
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                   placeholder="0.00"
-                  className={formErrors.amount ? "border-[#f41f20]" : ""}
+                  className={formErrors.amount ? "border-destructive" : ""}
                 />
-                {formErrors.amount && <p className="text-xs text-[#f41f20]">{formErrors.amount}</p>}
+                {formErrors.amount && <p className="text-xs text-destructive">{formErrors.amount}</p>}
               </div>
 
               <div className="space-y-1.5">
-                <Label>Status</Label>
+                <Label htmlFor="invoice-status">Status</Label>
                 <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value as InvoiceStatus })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="invoice-status" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -294,20 +315,27 @@ export function Invoices() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Due Date *</Label>
-              <Input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className={formErrors.dueDate ? "border-[#f41f20]" : ""} />
-              {formErrors.dueDate && <p className="text-xs text-[#f41f20]">{formErrors.dueDate}</p>}
+              <Label htmlFor="invoice-due-date">Due Date *</Label>
+              <Input id="invoice-due-date" type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className={formErrors.dueDate ? "border-destructive" : ""} />
+              {formErrors.dueDate && <p className="text-xs text-destructive">{formErrors.dueDate}</p>}
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateModalOpen(false);
+                setFormErrors({});
+              }}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
-            <Button onClick={handleCreateInvoice} disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+            <Button onClick={handleCreateInvoice} disabled={isSubmitting}>
               {isSubmitting ? <Spinner className="h-4 w-4" /> : "Create Invoice"}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

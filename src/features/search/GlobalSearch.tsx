@@ -33,27 +33,27 @@ function ResultContent({ result }: { result: SearchResult }) {
 
   if (result.type === "order") {
     const { order } = result;
-    title = <span className="font-medium text-[#1973e1]">{order.orderNumber}</span>;
+    title = <span className="font-medium text-primary">{order.orderNumber}</span>;
     badge = <OrderStatusBadge status={order.status} />;
     subtitle = details([order.clientName, order.device, order.carNumber, order.vin]);
   } else if (result.type === "client") {
     const { client } = result;
-    title = <span className="font-medium text-[#282e33]">{client.name}</span>;
+    title = <span className="font-medium text-foreground">{client.name}</span>;
     badge = <ClientTypeBadge clientType={client.client_type} />;
     subtitle = details([client.phone, client.email, client.contact_person, client.tax_id]);
   } else {
     const { item } = result;
-    title = <span className="font-medium text-[#282e33]">{item.name}</span>;
+    title = <span className="font-medium text-foreground">{item.name}</span>;
     badge = <InventoryStatusBadge status={item.stockStatus} />;
     subtitle = details([item.sku, item.category, `${item.quantity} ${item.unit}`.trim()]);
   }
 
   return (
     <>
-      <span className="flex items-center justify-between gap-2">
+      <span className="flex min-w-0 items-center justify-between gap-2 [&>span:first-child]:truncate">
         {title} {badge}
       </span>
-      {subtitle && <span className="block truncate text-xs text-[#939699]">{subtitle}</span>}
+      {subtitle && <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>}
     </>
   );
 }
@@ -63,7 +63,19 @@ export default function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const search = useGlobalSearch(query);
+
+  useEffect(() => {
+    const focusOnShortcut = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", focusOnShortcut);
+    return () => document.removeEventListener("keydown", focusOnShortcut);
+  }, []);
 
   const orderDetails = useOrderDetails();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -158,9 +170,10 @@ export default function GlobalSearch() {
   let optionIndex = -1;
 
   return (
-    <div ref={containerRef} className="hidden md:block relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#939699]" />
+    <div ref={containerRef} className="relative hidden md:block">
+      <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" />
       <Input
+        ref={inputRef}
         type="text"
         role="combobox"
         aria-label="Search orders, clients and inventory"
@@ -177,21 +190,24 @@ export default function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        className="w-64 h-9 pl-9 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-2  focus:ring-[#1973e1]/20 text-sm"
+        className="h-9 w-44 border-transparent bg-muted pr-12 pl-9 text-sm shadow-none hover:border-border focus:bg-card md:w-56 lg:w-52 xl:w-72"
       />
+      <kbd aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-card px-1.5 py-px font-sans text-[10px] font-medium text-subtle-foreground lg:block">
+        ⌘K
+      </kbd>
 
       {showDropdown && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-96 max-h-[70vh] overflow-y-auto rounded-md border border-[#eeeeef] bg-white shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-2 max-h-[70vh] w-[26rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-popover shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150">
           {message && (
-            <p role="status" className="px-4 py-6 text-center text-sm text-[#939699]">
+            <p role="status" className="px-4 py-6 text-center text-sm text-muted-foreground">
               {message}
             </p>
           )}
           {showResults && (
-            <div id={listboxId} role="listbox" aria-label="Search results" className="py-2">
+            <div id={listboxId} role="listbox" aria-label="Search results" className="p-1.5">
               {visibleGroups.map((group) => (
                 <div key={group.key} role="group" aria-labelledby={`${listboxId}-${group.key}`} className="py-1">
-                  <div id={`${listboxId}-${group.key}`} className="flex items-center justify-between px-4 py-1 text-xs font-medium uppercase tracking-wide text-[#939699]">
+                  <div id={`${listboxId}-${group.key}`} className="flex items-center justify-between px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">
                     <span>{group.label}</span>
                     {group.total > group.results.length && (
                       <span className="normal-case tracking-normal">
@@ -199,7 +215,7 @@ export default function GlobalSearch() {
                       </span>
                     )}
                   </div>
-                  {group.isError && <p className="px-4 py-2 text-sm text-[#f41f20]">Could not load {group.label.toLowerCase()}.</p>}
+                  {group.isError && <p className="px-4 py-2 text-sm text-destructive">Could not load {group.label.toLowerCase()}.</p>}
                   {group.results.map((result) => {
                     optionIndex += 1;
                     const index = optionIndex;
@@ -212,7 +228,7 @@ export default function GlobalSearch() {
                         onMouseDown={(event) => event.preventDefault()}
                         onMouseEnter={() => setActiveIndex(index)}
                         onClick={() => selectResult(result)}
-                        className={`cursor-pointer px-4 py-2 text-sm ${index === active ? "bg-[#edf4fd]" : ""}`}
+                        className={`cursor-pointer rounded-md px-2.5 py-2 text-sm ${index === active ? "bg-muted" : ""}`}
                       >
                         <ResultContent result={result} />
                       </div>

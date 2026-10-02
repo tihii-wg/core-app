@@ -24,8 +24,8 @@ export function DeleteInventoryItemDialog({ item, onClose, onDeleted }: DeleteIn
           <DialogTitle>Delete inventory item?</DialogTitle>
           <DialogDescription>This action cannot be undone.</DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-[#939699]">
-          Delete <strong className="text-[#282e33]">{item?.name}</strong>?
+        <p className="text-sm text-muted-foreground">
+          Delete <strong className="text-foreground">{item?.name}</strong>?
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>

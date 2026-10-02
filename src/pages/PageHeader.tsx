@@ -1,5 +1,3 @@
-
-
 import { cn } from '../lib/utils';
 
 interface PageHeaderProps {
@@ -11,15 +9,15 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
-    <div className={cn('flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between', className)}>
-      <div>
-        <h1 className="text-xl font-semibold text-[#282e33]">{title}</h1>
+    <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
+      <div className="min-w-0">
+        <h1 className="text-[22px] leading-7 font-semibold tracking-tight text-foreground">{title}</h1>
         {description && (
-          <p className="text-sm text-[#939699] mt-0.5">{description}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       {actions && (
-        <div className="flex items-center gap-2 mt-3 sm:mt-0">
+        <div className="flex flex-wrap items-center gap-2">
           {actions}
         </div>
       )}

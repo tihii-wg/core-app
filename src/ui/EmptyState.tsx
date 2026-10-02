@@ -1,6 +1,6 @@
 import { cn } from "../lib/utils";
 import type { LucideIcon } from "lucide-react";
-import { SearchX, Package, FileText, Users } from "lucide-react";
+import { SearchX, Package, FileText, Users, AlertTriangle, RotateCw, Plus } from "lucide-react";
 import { Button } from "../ui/Button";
 
 interface EmptyStateProps {
@@ -16,15 +16,48 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon: Icon = SearchX, title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("flex flex-col items-center justify-center py-12 px-4 text-center", className)}>
-      <div className="p-3 bg-[#f1f3f5] rounded-full mb-4">
-        <Icon className="h-8 w-8 text-[#939699]" />
+    <div className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
+      <div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-card shadow-xs">
+        <Icon aria-hidden="true" className="size-5 text-muted-foreground" />
       </div>
-      <h3 className="text-base font-medium text-[#282e33]">{title}</h3>
-      {description && <p className="text-sm text-[#939699] mt-1 max-w-sm">{description}</p>}
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {description && <p className="mt-1 max-w-sm text-[13px] leading-5 text-muted-foreground">{description}</p>}
       {action && (
-        <Button onClick={action.onClick} className="mt-4 bg-[#1973e1] hover:bg-[#1565c0] text-white">
+        <Button onClick={action.onClick} size="sm" className="mt-5">
+          <Plus />
           {action.label}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+interface ErrorStateProps {
+  title?: string;
+  description?: string;
+  onRetry?: () => void;
+  isRetrying?: boolean;
+  className?: string;
+}
+
+export function ErrorState({
+  title = "Something went wrong",
+  description = "We couldn't load this data. Check your connection and try again.",
+  onRetry,
+  isRetrying,
+  className,
+}: ErrorStateProps) {
+  return (
+    <div role="alert" className={cn("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
+      <div className="mb-4 flex size-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+        <AlertTriangle aria-hidden="true" className="size-5" />
+      </div>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <p className="mt-1 max-w-sm text-[13px] leading-5 text-muted-foreground">{description}</p>
+      {onRetry && (
+        <Button variant="outline" size="sm" className="mt-5" onClick={onRetry} loading={isRetrying}>
+          {!isRetrying && <RotateCw />}
+          Try again
         </Button>
       )}
     </div>
@@ -48,9 +81,9 @@ export function NoServices({ onAddService }: { onAddService?: () => void }) {
 }
 
 export function NoInventory({ onAddItem }: { onAddItem: () => void }) {
-  return <EmptyState icon={Package} title="No inventory items yet." description="Add your first inventory item to start tracking stock." action={{ label: "Add Inventory Item", onClick: onAddItem }} />;
+  return <EmptyState icon={Package} title="No inventory items yet" description="Add your first inventory item to start tracking stock." action={{ label: "Add Inventory Item", onClick: onAddItem }} />;
 }
 
 export function NoEmployees({ onAddClient }: { onAddClient: () => void }) {
-  return <EmptyState icon={Users} title="No employes yet" description="Start building your employees list by adding your first employee." action={{ label: "Add Employee", onClick: onAddClient }} />;
+  return <EmptyState icon={Users} title="No employees yet" description="Start building your team by adding your first employee." action={{ label: "Add Employee", onClick: onAddClient }} />;
 }

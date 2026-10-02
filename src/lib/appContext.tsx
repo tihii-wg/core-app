@@ -8,12 +8,9 @@ import type {
   // Order,
   MockInventoryItem,
   Service,
-  Invoice,
-  Transaction,
   AppModule,
   AuthState,
   OrderStatus,
-  InvoiceStatus,
 } from './types';
 import {
   // mockUser,
@@ -22,11 +19,8 @@ import {
   mockOrders,
   mockInventory,
   mockServices,
-  mockInvoices,
-  mockTransactions,
   generateId,
   generateOrderNumber,
-  generateInvoiceNumber,
 } from './mock-data';
 
 interface AppContextType {
@@ -50,8 +44,6 @@ interface AppContextType {
   orders: Order[];
   inventory: MockInventoryItem[];
   services: Service[];
-  invoices: Invoice[];
-  transactions: Transaction[];
 
   // Actions
   addClient: (client: Omit<Client, 'id' | 'createdAt' | 'balance'>) => void;
@@ -60,8 +52,6 @@ interface AppContextType {
   addInventoryItem: (item: Omit<MockInventoryItem, 'id' | 'status'>) => void;
   updateInventoryQuantity: (itemId: string, quantity: number) => void;
   addService: (service: Omit<Service, 'id'>) => void;
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => void;
-  updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus) => void;
   addEmployee: (employee: Omit<Employee, 'id' | 'assignedTasks' | 'completedTasks'>) => void;
 }
 
@@ -82,8 +72,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [orders, setOrders] = useState<Order[]>(mockOrders);
   const [inventory, setInventory] = useState<MockInventoryItem[]>(mockInventory);
   const [services, setServices] = useState<Service[]>(mockServices);
-  const [invoices, setInvoices] = useState<Invoice[]>(mockInvoices);
-  const [transactions] = useState<Transaction[]>(mockTransactions);
 
   // Check for existing auth on mount
   // useEffect(() => {
@@ -213,28 +201,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setServices(prev => [newService, ...prev]);
   }, []);
 
-  const addInvoice = useCallback((invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt'>) => {
-    const newInvoice: Invoice = {
-      ...invoiceData,
-      id: generateId('inv'),
-      invoiceNumber: generateInvoiceNumber(),
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setInvoices(prev => [newInvoice, ...prev]);
-  }, []);
-
-  const updateInvoiceStatus = useCallback((invoiceId: string, status: InvoiceStatus) => {
-    setInvoices(prev => prev.map(invoice => 
-      invoice.id === invoiceId 
-        ? { 
-            ...invoice, 
-            status,
-            paidAt: status === 'paid' ? new Date().toISOString().split('T')[0] : invoice.paidAt,
-          }
-        : invoice
-    ));
-  }, []);
-
   // const addEmployee = useCallback((employeeData: Omit<Employee, 'id' | 'assignedTasks' | 'completedTasks'>) => {
   //   const newEmployee: Employee = {
   //     ...employeeData,
@@ -263,16 +229,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         orders,
         inventory,
         services,
-        invoices,
-        transactions,
         // addClient,
         addOrder,
         updateOrderStatus,
         addInventoryItem,
         updateInventoryQuantity,
         addService,
-        addInvoice,
-        updateInvoiceStatus,
         // addEmployee,
       }}
     >

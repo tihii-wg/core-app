@@ -8,6 +8,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { EmptyState } from "../../ui/EmptyState";
+import { StatusBadge } from "../../ui/StatusBadge";
 import { profileDisplayName, profileInitials } from "../profiles/profileName";
 import { useGetWorkspaceMembers } from "../workspaces/useGetWorkspaceMembers";
 import { useAddWorkspaceMember, useRemoveWorkspaceMember, useUpdateWorkspaceMemberRole } from "../workspaces/useManageWorkspaceMembers";
@@ -28,8 +29,8 @@ export function TeamSettings() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <CardTitle>Team Members</CardTitle>
           <CardDescription>Manage your team and their permissions</CardDescription>
         </div>
@@ -62,7 +63,7 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
 
   if (error) {
     const message = error instanceof Error ? error.message : "Team members could not be loaded";
-    return <p className="text-sm text-[#f41f20]">{message}</p>;
+    return <p className="text-sm text-destructive">{message}</p>;
   }
 
   if (members.length === 0) {
@@ -78,25 +79,25 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
   const assignable = assignableWorkspaceRoles(currentRole);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {members.map((member) => {
         const name = memberName(member);
         const canManage = Boolean(workspaceId) && !member.isCurrentUser && canManageWorkspaceMember(currentRole, member.role);
         const rowBusy = updatingRole && roleVariables?.userId === member.userId;
 
         return (
-          <div key={member.userId} className="flex items-center justify-between rounded-lg border p-4">
-            <div className="flex items-center gap-4">
+          <div key={member.userId} className="flex flex-col gap-3 rounded-lg border border-border p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
               <Avatar>
                 <AvatarFallback>{profileInitials(name)}</AvatarFallback>
               </Avatar>
-              <div>
-                <p className="font-medium">{name}</p>
-                {member.email && <p className="text-sm text-muted-foreground">{member.email}</p>}
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground" title={name}>{name}</p>
+                {member.email && <p className="truncate text-[13px] text-muted-foreground" title={member.email}>{member.email}</p>}
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">Active</span>
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+              <StatusBadge variant="success" dot>Active</StatusBadge>
               {canManage && workspaceId ? (
                 <>
                   <Select
@@ -122,7 +123,7 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
                   </Button>
                 </>
               ) : (
-                <span className="inline-flex h-9 w-[120px] items-center rounded-md border border-input px-3 text-sm text-muted-foreground">{workspaceRoleLabel(member.role)}</span>
+                <span className="inline-flex h-9 w-[120px] items-center rounded-md border border-border bg-muted/50 px-3 text-sm text-muted-foreground">{workspaceRoleLabel(member.role)}</span>
               )}
             </div>
           </div>
@@ -213,7 +214,7 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
               </SelectContent>
             </Select>
           </div>
-          {formError && <p className="text-sm text-[#f41f20]">{formError}</p>}
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={isPending}>
               Cancel

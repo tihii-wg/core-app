@@ -12,7 +12,7 @@ export default function ProtectedRoute() {
   if (isLoadingSession || (isAuthenticated && mfaLoading))
     return (
       <FullPage>
-        <Spinner className="size-15 text-[#1973e1] " />
+        <Spinner className="size-15 text-primary " />
       </FullPage>
     );
 

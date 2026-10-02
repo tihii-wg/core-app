@@ -58,10 +58,10 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }: CreateMadalP
             {...register("workspaceName", { required: true })}
             autoFocus={true}
             placeholder="Workspace"
-            className={errors.workspaceName ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
+            className={errors.workspaceName ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
             disabled={isSubmitting}
           />
-          {errors.workspaceName && <p className="text-xs text-[#f41f20]">Name is required</p>}
+          {errors.workspaceName && <p className="text-xs text-destructive">Name is required</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -72,7 +72,7 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }: CreateMadalP
             rules={{ required: "Business type is required" }}
             render={({ field }) => (
               <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting || industriesLoading}>
-                <SelectTrigger id="industryId" className={errors.industryId ? "w-full border-[#f41f20]" : "w-full"}>
+                <SelectTrigger id="industryId" className={errors.industryId ? "w-full border-destructive" : "w-full"}>
                   <SelectValue placeholder="Business type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -85,14 +85,14 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }: CreateMadalP
               </Select>
             )}
           />
-          {errors.industryId && <p className="text-xs text-[#f41f20]">{errors.industryId.message}</p>}
-          {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
+          {errors.industryId && <p className="text-xs text-destructive">{errors.industryId.message}</p>}
+          {industriesError && <p className="text-xs text-destructive">{industriesError.message}</p>}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="role">Role *</Label>
           <Input id="role" type="text" {...register("role", { required: true })} placeholder="Role" />
-          {errors.role && <p className="text-xs text-[#f41f20]">Role is required</p>}
+          {errors.role && <p className="text-xs text-destructive">Role is required</p>}
         </div>
       </div>
 
@@ -109,7 +109,7 @@ export default function AddNewWorkspaceForm({ setCreateModalOpen }: CreateMadalP
           Cancel
         </Button>
 
-        <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white ">
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Company"}
         </Button>
       </div>

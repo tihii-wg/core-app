@@ -24,7 +24,7 @@ type CompanyFormValues = {
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-xs text-[#f41f20]">{message}</p>;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
@@ -89,7 +89,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                     validate: (value) => value.trim().length > 0 || "Company name is required",
                   })}
                   disabled={locked}
-                  className={errors.name ? "border-[#f41f20] pl-10" : "pl-10"}
+                  className={errors.name ? "border-destructive pl-10" : "pl-10"}
                 />
               </div>
               <FieldError message={errors.name?.message} />
@@ -103,7 +103,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                 rules={{ required: "Business type is required" }}
                 render={({ field }) => (
                   <Select value={field.value || undefined} onValueChange={field.onChange} disabled={locked || industriesLoading}>
-                    <SelectTrigger id="businessType" className={errors.industryId ? "w-full border-[#f41f20]" : "w-full"}>
+                    <SelectTrigger id="businessType" className={errors.industryId ? "w-full border-destructive" : "w-full"}>
                       <SelectValue placeholder={industriesLoading ? "Loading business types..." : "Business type"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -117,7 +117,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                 )}
               />
               <FieldError message={errors.industryId?.message} />
-              {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
+              {industriesError && <p className="text-xs text-destructive">{industriesError.message}</p>}
             </div>
 
             <div className="space-y-2">
@@ -133,7 +133,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                   required: "Markup percentage is required",
                   validate: (value) => markupFieldError(value) ?? true,
                 })}
-                className={errors.inventoryMarkup ? "border-[#f41f20]" : ""}
+                className={errors.inventoryMarkup ? "border-destructive" : ""}
               />
               <FieldError message={errors.inventoryMarkup?.message} />
               <p className="text-xs text-muted-foreground">Stored as a whole percentage. 25 means 25%. Maximum is 1000. Used to calculate an inventory item's selling price from its purchase price.</p>
@@ -143,7 +143,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
           {canEdit ? (
             <div className="flex justify-end">
               <Button type="submit" disabled={saving || !isDirty}>
-                <Save className="mr-2 h-4 w-4" />
+                <Save />
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
@@ -199,7 +199,7 @@ export function CompanySettings() {
           <CardDescription>Update your company details and contact information</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-[#f41f20]">{message}</p>
+          <p className="text-sm text-destructive">{message}</p>
           <Button
             type="button"
             variant="outline"

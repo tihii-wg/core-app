@@ -95,8 +95,8 @@ export function QuickReportPage() {
   return (
     <div className="space-y-4 print:space-y-0">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <Link to={`/${locale}/${routeWorkspaceId}/reports`} className="inline-flex items-center gap-1 text-sm text-[#1973e1] hover:underline">
-          <ArrowLeft className="h-4 w-4" />
+        <Link to={`/${locale}/${routeWorkspaceId}/reports`} className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35">
+          <ArrowLeft aria-hidden="true" className="size-4" />
           Back to Reports
         </Link>
         <div className="flex flex-wrap items-center gap-2">
@@ -109,8 +109,8 @@ export function QuickReportPage() {
                 setSearchParams(next, { replace: true });
               }}
             >
-              <SelectTrigger className="w-45" aria-label="Report period">
-                <Calendar className="mr-2 h-4 w-4" />
+              <SelectTrigger className="w-44" aria-label="Report period">
+                <Calendar aria-hidden="true" className="size-4" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -123,23 +123,23 @@ export function QuickReportPage() {
             </Select>
           )}
           <Button type="button" variant="outline" onClick={() => shareLink(documentTitle, `${window.location.origin}${reportHref}`)}>
-            <Share2 className="mr-2 h-4 w-4" />
+            <Share2 />
             Share
           </Button>
           <Button type="button" variant="outline" onClick={exportCsv} disabled={!model}>
-            <Download className="mr-2 h-4 w-4" />
+            <Download />
             Export CSV
           </Button>
-          <Button type="button" onClick={() => window.print()} disabled={!model} className="bg-[#1973e1] text-white hover:bg-[#1565c0]">
-            <Printer className="mr-2 h-4 w-4" />
+          <Button type="button" onClick={() => window.print()} disabled={!model}>
+            <Printer />
             Print / PDF
           </Button>
         </div>
       </div>
-      <p className="text-xs text-[#939699] print:hidden">Shared links open only for members of this workspace. Use Print / PDF to save a copy you can send to anyone.</p>
+      <p className="text-xs text-muted-foreground print:hidden">Shared links open only for members of this workspace. Use Print / PDF to save a copy you can send to anyone.</p>
 
       {isLoading && (
-        <div className="mx-auto w-full max-w-[210mm] space-y-4 rounded-md border border-[#e5e7eb] bg-white p-10">
+        <div className="mx-auto w-full max-w-[210mm] space-y-4 rounded-lg border border-border bg-card p-10">
           <Skeleton className="h-10 w-1/2" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -147,9 +147,9 @@ export function QuickReportPage() {
       )}
 
       {isError && !isLoading && (
-        <div className="mx-auto w-full max-w-[210mm] rounded-md border border-[#e5e7eb] bg-white p-10 text-center">
-          <p className="font-medium text-[#282e33]">Could not load report data</p>
-          <p className="mt-1 text-sm text-[#939699]">Refresh the page to try again.</p>
+        <div role="alert" className="mx-auto w-full max-w-[210mm] rounded-lg border border-border bg-card p-10 text-center">
+          <p className="font-medium text-foreground">Could not load report data</p>
+          <p className="mt-1 text-sm text-muted-foreground">Refresh the page to try again.</p>
         </div>
       )}
 

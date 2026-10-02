@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
-import { NoClients, NoSearchResults } from "../../ui/EmptyState";
+import { ErrorState, NoClients, NoSearchResults } from "../../ui/EmptyState";
 import type { Client, ClientListFilter } from "../../lib/types";
 import ClientTypeBadge from "./ClientTypeBadge";
 import { AddClientDialog } from "./AddClientDialog";
@@ -22,7 +22,7 @@ export function Clients() {
   const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const debounceSearch = useDebounce(searchQuery, 400);
-  const { isLoading, clients = [], isPending, error: clientsError } = useGetClients(debounceSearch, clientType);
+  const { isLoading, clients = [], isPending, error: clientsError, refetch: refetchClients } = useGetClients(debounceSearch, clientType);
   const { orders, isLoading: ordersLoading } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
 
@@ -40,7 +40,9 @@ export function Clients() {
       key: "name",
       header: "Name",
       cell: (client) => (
-        <span className="font-medium text-[#282e33]">{client.name}</span>
+        <span className="block max-w-[12rem] truncate font-medium text-foreground xl:max-w-[14rem] 2xl:max-w-[16rem]" title={client.name}>
+          {client.name}
+        </span>
       ),
     },
     {
@@ -53,38 +55,44 @@ export function Clients() {
       key: "contact",
       header: "Contact",
       cell: (client) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-1 text-sm">
-            <Mail className="h-3 w-3 text-[#939699]" />
-            <span className="text-[#282e33]">{client.email}</span>
-          </div>
-          <div className="flex items-center gap-1 text-sm">
-            <Phone className="h-3 w-3 text-[#939699]" />
-            <span className="text-[#939699]">{client.phone}</span>
-          </div>
+        <div className="max-w-[12rem] min-w-0 space-y-0.5 xl:max-w-[13rem] 2xl:max-w-[15rem]">
+          {client.email && (
+            <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
+              <Mail aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
+              <span className="truncate text-foreground" title={client.email}>{client.email}</span>
+            </div>
+          )}
+          {client.phone && (
+            <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
+              <Phone aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
+              <span className="truncate text-muted-foreground tabular-nums">{client.phone}</span>
+            </div>
+          )}
+          {!client.email && !client.phone && <span className="text-subtle-foreground">—</span>}
         </div>
       ),
-      className: "hidden sm:table-cell",
+      className: "hidden xl:table-cell",
     },
     {
       key: "orders",
       header: "Orders",
       cell: (client) => {
         const clientOrders = getClientOrders(client.id);
-        return <span>{clientOrders.length}</span>;
+        return <span className="tabular-nums">{clientOrders.length}</span>;
       },
+      className: "text-right",
     },
     {
       key: "balance",
       header: "Balance",
-      cell: (client) => <span className={client.balance > 0 ? "text-[#f41f20] font-medium" : "text-[#282e33]"}>{formatMoney(client.balance)}</span>,
-      className: "text-right",
+      cell: (client) => <span className={client.balance > 0 ? "font-medium text-destructive tabular-nums" : "text-foreground tabular-nums"}>{formatMoney(client.balance)}</span>,
+      className: "text-right whitespace-nowrap",
     },
     {
       key: "created",
       header: "Added",
-      cell: (client) => <span className="text-[#939699]">{client.created_at.split("T")[0]}</span>,
-      className: "hidden md:table-cell",
+      cell: (client) => <span className="text-muted-foreground tabular-nums">{client.created_at.split("T")[0]}</span>,
+      className: "hidden xl:table-cell whitespace-nowrap",
     },
     {
       key: "actions",
@@ -94,7 +102,7 @@ export function Clients() {
         <div className="flex justify-end gap-1">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label={`Edit ${client.name}`}
             onClick={(event) => {
@@ -115,13 +123,13 @@ export function Clients() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Clients"
         description={isPending ? "Loading clients..." : `${clients.length} total clients`}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-            <Plus className="h-4 w-4 mr-1" />
+          <Button onClick={() => setCreateModalOpen(true)}>
+            <Plus />
             Add Client
           </Button>
         }
@@ -147,15 +155,21 @@ export function Clients() {
         onClearFilters={() => setClientType("all")}
       />
 
-      {clientsError && <p className="text-sm text-[#f41f20]">{clientsError.message}</p>}
-
       <DataTable
         columns={columns}
         data={clients}
         isLoading={isLoading || ordersLoading}
         keyExtractor={(client) => client.id}
         onRowClick={handleRowClick}
-        emptyState={searchQuery || clientType !== "all" ? <NoSearchResults query={searchQuery || (clientType === "organization" ? "Organizations" : "Individuals")} /> : <NoClients onAddClient={() => setCreateModalOpen(true)} />}
+        emptyState={
+          clientsError ? (
+            <ErrorState title="Could not load clients" description={clientsError.message} onRetry={() => refetchClients()} />
+          ) : searchQuery || clientType !== "all" ? (
+            <NoSearchResults query={searchQuery || (clientType === "organization" ? "Organizations" : "Individuals")} />
+          ) : (
+            <NoClients onAddClient={() => setCreateModalOpen(true)} />
+          )
+        }
       />
 
       {/* {isLoading && <FullPageDataSpinner />} */}

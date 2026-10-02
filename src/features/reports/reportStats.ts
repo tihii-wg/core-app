@@ -29,8 +29,8 @@ export type StockLevel = { name: string; quantity: number; minimum: number };
 
 const rangeDays: Record<Exclude<ReportRange, "thisYear">, number> = { last7: 7, last30: 30, last90: 90 };
 const completedStatuses = new Set(["completed", "paid"]);
-export const serviceColors = ["#1973e1", "#099b49", "#f89200", "#6366f1"];
-export const otherServiceColor = "#94a3b8";
+export const serviceColors = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)"];
+export const otherServiceColor = "var(--color-subtle-foreground)";
 
 function addDays(date: Date, days: number) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);

@@ -15,10 +15,10 @@ export function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
+    <div className="min-h-dvh bg-background flex flex-col">
       {/* Back button */}
       <div className="p-4">
-        <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
+        <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           Back to login
         </button>
@@ -30,7 +30,7 @@ export function RegisterPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <Logo />
-            <p className="text-sm text-[#939699]">Create your account</p>
+            <p className="text-sm text-muted-foreground">Create your account</p>
           </div>
 
           {/* Form */}
@@ -38,8 +38,8 @@ export function RegisterPage() {
 
           {/* Login link */}
           <div className="mt-4 text-center">
-            <span className="text-sm text-[#939699]">Already have an account? </span>
-            <button type="button" onClick={onSwitchToLogin} className="text-sm text-[#1973e1] hover:underline font-medium">
+            <span className="text-sm text-muted-foreground">Already have an account? </span>
+            <button type="button" onClick={onSwitchToLogin} className="text-sm text-primary hover:underline font-medium">
               Log in
             </button>
           </div>

@@ -10,11 +10,12 @@ export default function useGetServices(search?: string, categoriesFilter?: servi
     error,
     isLoading,
     isPending,
+    refetch,
   } = useQuery({
     queryKey: ["services", workspaceId, search, categoriesFilter],
     queryFn: () => getServices(workspaceId, search, categoriesFilter),
     enabled: Boolean(workspaceId),
   });
 
-  return { services: services ?? [], error, isLoading, isPending };
+  return { services: services ?? [], error, isLoading, isPending, refetch };
 }

@@ -38,9 +38,9 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
 
   return (
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2 pr-16">
+      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
+        <SheetHeader className="pr-24">
+          <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
             {selectedOrder?.orderNumber}
             {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} />}
           </SheetTitle>
@@ -49,7 +49,8 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
               type="button"
               onClick={() => setIsEditing(true)}
               aria-label="Edit"
-              className="ring-offset-background focus:ring-ring absolute top-4 right-10 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+              title="Edit order"
+              className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
             >
               <Pencil className="size-4" />
             </button>
@@ -58,7 +59,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
         </SheetHeader>
 
         {selectedOrder && isEditing && (
-          <div className="mx-4 mt-2">
+          <div className="px-5 py-5">
             <EditOrderForm
               key={selectedOrder.id}
               order={selectedOrder}
@@ -74,77 +75,54 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
         )}
 
         {selectedOrder && !isEditing && (
-          <div className="mt-6 space-y-6 mx-3">
-            <div className="bg-[#f8f9fa] rounded-md p-4 grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium text-[#939699] mb-2">Client</h3>
-                <p className="font-medium text-[#282e33]">{selectedOrder.clientName}</p>
+          <div className="space-y-5 px-5 py-5">
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
+              <div className="min-w-0">
+                <h3 className="text-xs font-medium text-muted-foreground">Client</h3>
+                <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{selectedOrder.clientName}</p>
+                <div className="mt-3">
+                  <h3 className="text-xs font-medium text-muted-foreground">Client Type</h3>
+                  <div className="mt-1">
+                    {selectedOrder.clientType ? <ClientTypeBadge clientType={selectedOrder.clientType} /> : <span className="text-subtle-foreground">—</span>}
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-[#939699] mb-2">Client Type</h3>
-                {selectedOrder.clientType ? <ClientTypeBadge clientType={selectedOrder.clientType} /> : <p className="text-[#939699]">—</p>}
+              <div className="shrink-0 text-right">
+                <h3 className="text-xs font-medium text-muted-foreground">Total Price</h3>
+                <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(selectedOrder.totalPrice)}</p>
+                <div className="mt-2">
+                  <PaymentStatusBadge status={selectedOrder.paymentStatus} />
+                </div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-[#939699]">Device</p>
-                  <p className="font-medium text-[#282e33]">{selectedOrder.device}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-[#939699]">Service</p>
-                  <p className="font-medium text-[#282e33]">{selectedOrder.service}</p>
-                </div>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+              <DetailItem label="Device" value={selectedOrder.device} />
+              <DetailItem label="Service" value={selectedOrder.service} />
+              <DetailItem label="Car Number" value={selectedOrder.carNumber} />
+              <DetailItem label="VIN" value={selectedOrder.vin} mono />
+              <DetailItem label="Assigned To" value={selectedOrder.assignedEmployeeName} />
+              <DetailItem
+                label="Deadline"
+                value={
+                  selectedOrder.deadline ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar className="size-3.5 text-subtle-foreground" />
+                      {selectedOrder.deadline}
+                    </span>
+                  ) : null
+                }
+              />
+              <div className="col-span-2">
+                <dt className="text-xs font-medium text-muted-foreground">Description</dt>
+                <dd className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground">{selectedOrder.description || <span className="text-subtle-foreground">—</span>}</dd>
               </div>
+            </dl>
 
-              <div>
-                <p className="text-sm text-[#939699]">Description</p>
-                <p className="text-[#282e33]">{selectedOrder.description}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-[#939699]">Car Number</p>
-                  <p className="font-medium text-[#282e33]">{selectedOrder.carNumber}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-[#939699]">VIN</p>
-                  <p className="font-medium text-[#282e33]">{selectedOrder.vin}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-[#939699]">Assigned To</p>
-                  <p className="font-medium text-[#282e33]">{selectedOrder.assignedEmployeeName}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-[#939699]">Deadline</p>
-                  <p className="font-medium text-[#282e33] flex items-center gap-1">
-                    <Calendar className="h-4 w-4 text-[#939699]" />
-                    {selectedOrder.deadline}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-[#939699]">Total Price</p>
-                  <p className="text-xl font-semibold text-[#282e33]">{formatMoney(selectedOrder.totalPrice)}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm text-[#939699]">Payment Status</p>
-                <PaymentStatusBadge status={selectedOrder.paymentStatus} />
-              </div>
-            </div>
-
-            <div className="border-t border-[#eeeeef] pt-4">
-              <Label className="mb-2 block">Update Status</Label>
+            <div className="border-t border-border pt-5">
+              <Label htmlFor="order-status" className="mb-2 block">Update Status</Label>
               <Select value={selectedOrder.status} onValueChange={onStatusChange as (value: string) => void}>
-                <SelectTrigger id="order-status">
+                <SelectTrigger id="order-status" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -158,7 +136,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
               </Select>
             </div>
 
-            <div className="text-xs text-[#939699] space-y-1">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-subtle-foreground tabular-nums">
               <p>Created: {selectedOrder.createdAt}</p>
               <p>Updated: {selectedOrder.updatedAt}</p>
             </div>
@@ -166,5 +144,16 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function DetailItem({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className={mono ? "mt-1 font-mono text-[13px] [overflow-wrap:anywhere] text-foreground" : "mt-1 font-medium [overflow-wrap:anywhere] text-foreground"}>
+        {value || <span className="font-normal text-subtle-foreground">—</span>}
+      </dd>
+    </div>
   );
 }

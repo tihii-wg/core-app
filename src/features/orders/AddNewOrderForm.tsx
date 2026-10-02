@@ -139,7 +139,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
             )}
           />
 
-          {errors.clientId && <p className="text-xs text-[#f41f20]">{errors.clientId.message}</p>}
+          {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>}
 
           {isNewClient && (
             <div className="space-y-4 pt-1.5">
@@ -153,7 +153,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                   rules={clientTypeRules}
                   render={({ field }) => <ClientTypeSelect id="newClientType" value={field.value} onChange={field.onChange} />}
                 />
-                {errors.newClientType && <p className="text-xs text-[#f41f20]">{errors.newClientType.message}</p>}
+                {errors.newClientType && <p className="text-xs text-destructive">{errors.newClientType.message}</p>}
               </div>
               {isNewOrganization && (
                 <div className="grid grid-cols-2 gap-4">
@@ -174,9 +174,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                     id="newClientPhone"
                     {...register("newClientPhone", { ...clientPhoneRules, shouldUnregister: true })}
                     placeholder="+37300000000"
-                    className={errors.newClientPhone ? "border-[#f41f20]" : ""}
+                    className={errors.newClientPhone ? "border-destructive" : ""}
                   />
-                  {errors.newClientPhone && <p className="text-xs text-[#f41f20]">{errors.newClientPhone.message}</p>}
+                  {errors.newClientPhone && <p className="text-xs text-destructive">{errors.newClientPhone.message}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="newClientEmail">Email *</Label>
@@ -185,9 +185,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                     type="email"
                     {...register("newClientEmail", { ...clientEmailRules, shouldUnregister: true })}
                     placeholder="email@example.com"
-                    className={errors.newClientEmail ? "border-[#f41f20]" : ""}
+                    className={errors.newClientEmail ? "border-destructive" : ""}
                   />
-                  {errors.newClientEmail && <p className="text-xs text-[#f41f20]">{errors.newClientEmail.message}</p>}
+                  {errors.newClientEmail && <p className="text-xs text-destructive">{errors.newClientEmail.message}</p>}
                 </div>
               </div>
             </div>
@@ -201,7 +201,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
             }}
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className={errors.clientId ? "border-[#f41f20]" : ""}>
+                <SelectTrigger className={errors.clientId ? "border-destructive" : ""}>
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
@@ -214,13 +214,13 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
               </Select>
             )}
           />
-          {errors.clientId && <p className="text-xs text-[#f41f20]">{errors.clientId.message}</p>} */}
+          {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>} */}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="device">Device *</Label>
-          <Input id="device" {...register("device", { required: "Car is required" })} placeholder="Car..." className={errors.device ? "border-[#f41f20]" : ""} />
-          {errors.device && <p className="text-xs text-[#f41f20]">{errors.device.message}</p>}
+          <Input id="device" {...register("device", { required: "Car is required" })} placeholder="Car..." className={errors.device ? "border-destructive" : ""} />
+          {errors.device && <p className="text-xs text-destructive">{errors.device.message}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -234,9 +234,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
             placeholder="Car number"
             autoCapitalize="characters"
             spellCheck={false}
-            className={errors.carNumber ? "border-[#f41f20]" : ""}
+            className={errors.carNumber ? "border-destructive" : ""}
           />
-          {errors.carNumber && <p className="text-xs text-[#f41f20]">{errors.carNumber.message}</p>}
+          {errors.carNumber && <p className="text-xs text-destructive">{errors.carNumber.message}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -252,9 +252,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
             maxLength={17}
             autoCapitalize="characters"
             spellCheck={false}
-            className={errors.vin ? "border-[#f41f20]" : ""}
+            className={errors.vin ? "border-destructive" : ""}
           />
-          {errors.vin && <p className="text-xs text-[#f41f20]">{errors.vin.message}</p>}
+          {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -291,7 +291,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
               clearErrors("services");
             }}
           />
-          {errors.services?.root?.message && <p className="text-xs text-[#f41f20]">{errors.services.root.message}</p>}
+          {errors.services?.root?.message && <p className="text-xs text-destructive">{errors.services.root.message}</p>}
 
           {serviceField.length > 0 && (
             <div className="space-y-2">
@@ -299,7 +299,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                 <div key={field.id} className="flex items-center justify-between rounded-md border p-3">
                   <div>
                     <p className="font-medium">{field.serviceName}</p>
-                    <p className="text-sm text-gray-500">{formatMoney(field.price)}</p>
+                    <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
                   </div>
                   <Button type="button" variant="outline" onClick={() => serviceRemove(index)}>
                     Remove
@@ -326,7 +326,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
               }}
               render={({ field }) => (
                 <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                  <SelectTrigger className={errors.assignedEmployeeId ? "border-[#f41f20]" : ""}>
+                  <SelectTrigger className={errors.assignedEmployeeId ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select" />
                   </SelectTrigger>
                   <SelectContent>
@@ -342,7 +342,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
             {employees && technicianOptions.length === 0 && (
               <p className="text-xs text-muted-foreground">No linked technicians. Link an active technician to a workspace user on the Employees page first.</p>
             )}
-            {errors.assignedEmployeeId && <p className="text-xs text-[#f41f20]">{errors.assignedEmployeeId.message}</p>}
+            {errors.assignedEmployeeId && <p className="text-xs text-destructive">{errors.assignedEmployeeId.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -359,11 +359,11 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         </div>
       </div>
 
-      <div className="flex w-full  shrink-0 justify-end gap-2 border-t bg-white pt-3">
+      <div className="flex w-full  shrink-0 justify-end gap-2 border-t bg-card pt-3">
         <Button variant="outline" type="button" onClick={handleCancel} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Create Order"}
         </Button>
       </div>

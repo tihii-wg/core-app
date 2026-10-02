@@ -67,7 +67,7 @@ export default function LoginForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="email" className="text-sm text-[#282e33]">
+        <Label htmlFor="email" className="text-sm text-foreground">
           Email
         </Label>
         <Input
@@ -81,14 +81,14 @@ export default function LoginForm() {
             },
           })}
           placeholder="Enter your email"
-          className="h-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
+          className="h-10 border-input focus:border-primary focus:ring-primary"
           disabled={isLoading}
         />
       </div>
-      {errors.email && <p className="text-sm text-[#f41f20]">{errors.email.message}</p>}
+      {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
 
       <div className="space-y-1.5">
-        <Label htmlFor="password" className="text-sm text-[#282e33]">
+        <Label htmlFor="password" className="text-sm text-foreground">
           Password
         </Label>
         <div className="relative">
@@ -103,20 +103,20 @@ export default function LoginForm() {
               },
             })}
             placeholder="Enter your password"
-            className="h-10 pr-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
+            className="h-10 pr-10 border-input focus:border-primary focus:ring-primary"
             disabled={isLoading}
           />
-          <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]" aria-label={showPassword ? "Hide password" : "Show password"}>
+          <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label={showPassword ? "Hide password" : "Show password"}>
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
       </div>
-      {errors.password && <p className="text-sm text-[#f41f20]">{errors.password.message}</p>}
+      {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
 
-      <Button type="submit" disabled={isSubmitting || isLoading} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white">
+      <Button type="submit" disabled={isSubmitting || isLoading} size="lg" className="w-full">
         {isLoading ? <Spinner className="h-4 w-4" /> : "Log in"}
       </Button>
-      {loginError && <p className="text-sm text-[#f41f20]">{loginError}</p>}
+      {loginError && <p className="text-sm text-destructive">{loginError}</p>}
     </form>
   );
 }

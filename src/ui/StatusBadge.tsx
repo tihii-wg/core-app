@@ -1,32 +1,46 @@
 import { cn } from '../lib/utils';
 import type { OrderStatus, PaymentStatus, InvoiceStatus } from '../lib/types';
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'muted';
+type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'muted' | 'violet';
 
 interface StatusBadgeProps {
   variant?: BadgeVariant;
   children: React.ReactNode;
   className?: string;
+  /** Leading status dot; on by default for status-like variants. */
+  dot?: boolean;
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-[#eeeeef] text-[#282e33]',
-  success: 'bg-[#e6f7ed] text-[#099b49]',
-  warning: 'bg-[#fff4e5] text-[#f89200]',
-  danger: 'bg-[#fee7e7] text-[#f41f20]',
-  info: 'bg-[#edf4fd] text-[#1973e1]',
-  muted: 'bg-[#f1f3f5] text-[#939699]',
+  default: 'bg-secondary text-secondary-foreground ring-border-strong/60',
+  success: 'bg-success/10 text-success ring-success/20',
+  warning: 'bg-warning/10 text-warning ring-warning/20',
+  danger: 'bg-destructive/10 text-destructive ring-destructive/20',
+  info: 'bg-info/10 text-info ring-info/20',
+  muted: 'bg-muted text-muted-foreground ring-border-strong/60',
+  violet: 'bg-chart-4/10 text-chart-4 ring-chart-4/20',
 };
 
-export function StatusBadge({ variant = 'default', children, className }: StatusBadgeProps) {
+const dotStyles: Record<BadgeVariant, string> = {
+  default: 'bg-muted-foreground',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-destructive',
+  info: 'bg-info',
+  muted: 'bg-subtle-foreground',
+  violet: 'bg-chart-4',
+};
+
+export function StatusBadge({ variant = 'default', children, className, dot = false }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2 py-0.5 text-xs font-medium rounded',
+        'inline-flex h-5.5 max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-medium leading-none ring-1 ring-inset',
         variantStyles[variant],
         className
       )}
     >
+      {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dotStyles[variant])} />}
       {children}
     </span>
   );
@@ -37,14 +51,14 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const config: Record<OrderStatus, { label: string; variant: BadgeVariant }> = {
     new: { label: 'New', variant: 'info' },
     'in-progress': { label: 'In Progress', variant: 'warning' },
-    'waiting-parts': { label: 'Waiting Parts', variant: 'muted' },
+    'waiting-parts': { label: 'Waiting Parts', variant: 'violet' },
     completed: { label: 'Completed', variant: 'success' },
     paid: { label: 'Paid', variant: 'success' },
-    cancelled: { label: 'Cancelled', variant: 'danger' },
+    cancelled: { label: 'Cancelled', variant: 'muted' },
   };
 
   const { label, variant } = config[status];
-  return <StatusBadge variant={variant}>{label}</StatusBadge>;
+  return <StatusBadge variant={variant} dot>{label}</StatusBadge>;
 }
 
 // Payment status badge
@@ -69,7 +83,7 @@ export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   };
 
   const { label, variant } = config[status];
-  return <StatusBadge variant={variant}>{label}</StatusBadge>;
+  return <StatusBadge variant={variant} dot>{label}</StatusBadge>;
 }
 
 // Inventory status badge
@@ -81,5 +95,5 @@ export function InventoryStatusBadge({ status }: { status: "in_stock" | "low_sto
   };
 
   const { label, variant } = config[status];
-  return <StatusBadge variant={variant}>{label}</StatusBadge>;
+  return <StatusBadge variant={variant} dot>{label}</StatusBadge>;
 }

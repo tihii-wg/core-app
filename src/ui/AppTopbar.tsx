@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Menu } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 import { useApp } from "../lib/appContext";
 import { useLocation, useParams } from "react-router-dom";
 import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
@@ -37,32 +37,41 @@ export function AppTopbar() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   return (
-    <header className="h-14 bg-white border-b border-[#eeeeef] flex items-center justify-between px-4 sticky top-0 z-30 print:hidden">
-      {/* Left section */}
-      <div className="flex items-center gap-4">
-        {/* Mobile menu button */}
-        <button onClick={() => setMobileSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-[#939699] hover:text-[#282e33]">
-          <Menu className="h-5 w-5" />
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 lg:px-6 print:hidden">
+      {/* Page context */}
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          aria-label="Open navigation"
+          className="-ml-1.5 inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+        >
+          <Menu className="size-5" />
         </button>
 
-        <WorkspacePageMark />
-
-        {/* Page title */}
-        <h1 className="text-2xl font-semibold text-[#282e33]">{moduleLabels[currentTitle]}</h1>
+        <div className="flex min-w-0 items-center gap-1.5 text-sm">
+          <WorkspacePageMark />
+          {moduleLabels[currentTitle] && (
+            <>
+              <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-subtle-foreground" />
+              <span aria-current="page" className="shrink-0 whitespace-nowrap font-medium text-foreground">
+                {moduleLabels[currentTitle]}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Right section */}
-      <div className="flex items-center gap-3">
-        {/* Search */}
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <GlobalSearch key={workspaceId ?? "none"} />
 
-        {/* Notifications */}
         <AppTopbarNotifications />
 
-        {/* Company selector */}
+        <div aria-hidden="true" className="mx-1 hidden h-5 w-px bg-border sm:block" />
+
         <CompanySelector setCreateModalOpen={setCreateModalOpen} />
 
-        {/*Add company form*/}
         <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
@@ -74,7 +83,6 @@ export function AppTopbar() {
           </DialogContent>
         </Dialog>
 
-        {/* User menu */}
         <UserMenu />
       </div>
     </header>
@@ -87,8 +95,13 @@ function WorkspacePageMark() {
   const { data: imageUrl, isLoading: logoLoading } = useWorkspaceAvatar(workspace?.id, workspace?.avatarPath);
 
   if (!workspaceId) return null;
-  if (isLoading || (workspace?.avatarPath && logoLoading)) return <Skeleton className="size-8 rounded-full" />;
+  if (isLoading || (workspace?.avatarPath && logoLoading)) return <Skeleton className="size-7 rounded-md" />;
   if (!workspace) return null;
 
-  return <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="sm" />;
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="sm" className="size-7 rounded-md text-[11px] *:rounded-md" />
+      <span className="hidden max-w-40 truncate text-muted-foreground xl:inline">{workspace.name}</span>
+    </span>
+  );
 }

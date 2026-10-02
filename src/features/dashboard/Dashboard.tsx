@@ -7,9 +7,11 @@ import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { DashboardCard } from "../../ui/DashboardCard";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useInvoices } from "../invoices/useInvoices";
 
 export function Dashboard() {
-  const { orders, clients, invoices, inventory, setCurrentModule } = useApp();
+  const { orders, clients, inventory, setCurrentModule } = useApp();
+  const { data: invoices } = useInvoices();
   const { formatMoney } = useWorkspaceMoney();
 
 
@@ -50,7 +52,7 @@ export function Dashboard() {
     {
       key: "orderNumber",
       header: "Order",
-      cell: (order) => <span className="font-medium text-[#1973e1]">{order?.orderNumber}</span>,
+      cell: (order) => <span className="font-medium text-primary">{order?.orderNumber}</span>,
     },
     {
       key: "client",
@@ -93,22 +95,22 @@ export function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-        <h2 className="text-sm font-medium text-[#939699] mb-3">Quick Actions</h2>
+      <div className="bg-card rounded-md border border-border p-4">
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Quick Actions</h2>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setCurrentModule("orders")} size="sm" className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+          <Button onClick={() => setCurrentModule("orders")} size="sm">
             <Plus className="h-4 w-4 mr-1" />
             Create Order
           </Button>
-          <Button onClick={() => setCurrentModule("clients")} variant="outline" size="sm" className="border-[#c9cbcc]">
+          <Button onClick={() => setCurrentModule("clients")} variant="outline" size="sm" className="border-input">
             <Plus className="h-4 w-4 mr-1" />
             Add Client
           </Button>
-          <Button onClick={() => setCurrentModule("inventory")} variant="outline" size="sm" className="border-[#c9cbcc]">
+          <Button onClick={() => setCurrentModule("inventory")} variant="outline" size="sm" className="border-input">
             <Plus className="h-4 w-4 mr-1" />
             Add Inventory
           </Button>
-          <Button onClick={() => setCurrentModule("invoices")} variant="outline" size="sm" className="border-[#c9cbcc]">
+          <Button onClick={() => setCurrentModule("invoices")} variant="outline" size="sm" className="border-input">
             <Plus className="h-4 w-4 mr-1" />
             Create Invoice
           </Button>
@@ -120,8 +122,8 @@ export function Dashboard() {
         {/* Recent Orders */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-[#282e33]">Recent Orders</h2>
-            <button onClick={() => setCurrentModule("orders")} className="text-sm text-[#1973e1] hover:underline flex items-center gap-1">
+            <h2 className="text-base font-semibold text-foreground">Recent Orders</h2>
+            <button onClick={() => setCurrentModule("orders")} className="text-sm text-primary hover:underline flex items-center gap-1">
               View all
               <ArrowRight className="h-4 w-4" />
             </button>
@@ -132,19 +134,19 @@ export function Dashboard() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Recent Activity */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-            <h2 className="text-base font-semibold text-[#282e33] mb-4">Recent Activity</h2>
+          <div className="bg-card rounded-md border border-border p-4">
+            <h2 className="text-base font-semibold text-foreground mb-4">Recent Activity</h2>
             <div className="space-y-4">
               {recentActivity?.map((activity) => (
                 <div key={activity?.id} className="flex items-start gap-3">
-                  <div className="h-8 w-8 bg-[#edf4fd] rounded-full flex items-center justify-center flex-shrink-0">
-                    <Users className="h-4 w-4 text-[#1973e1]" />
+                  <div className="h-8 w-8 bg-accent rounded-full flex items-center justify-center flex-shrink-0">
+                    <Users className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[#282e33]">
+                    <p className="text-sm text-foreground">
                       <span className="font-medium">{activity.name}</span> {activity.action}
                     </p>
-                    <p className="text-xs text-[#939699]">{activity.time}</p>
+                    <p className="text-xs text-muted-foreground">{activity.time}</p>
                   </div>
                 </div>
               ))}
@@ -152,8 +154,8 @@ export function Dashboard() {
           </div>
 
           {/* Employee Tasks */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-            <h2 className="text-base font-semibold text-[#282e33] mb-4">Task Overview</h2>
+          <div className="bg-card rounded-md border border-border p-4">
+            <h2 className="text-base font-semibold text-foreground mb-4">Task Overview</h2>
             <div className="space-y-3">
               {[
                 { label: "In Progress", count: 4, color: "#f89200" },
@@ -163,52 +165,52 @@ export function Dashboard() {
                 <div key={task.label} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full" style={{ backgroundColor: task.color }} />
-                    <span className="text-sm text-[#282e33]">{task.label}</span>
+                    <span className="text-sm text-foreground">{task.label}</span>
                   </div>
-                  <span className="text-sm font-medium text-[#282e33]">{task.count}</span>
+                  <span className="text-sm font-medium text-foreground">{task.count}</span>
                 </div>
               ))}
             </div>
 
             {/* Simple visual bar */}
-            <div className="mt-4 pt-4 border-t border-[#eeeeef]">
+            <div className="mt-4 pt-4 border-t border-border">
               <div className="flex gap-1 h-2 rounded overflow-hidden">
-                <div className="bg-[#f89200]" style={{ width: "44%" }} />
-                <div className="bg-[#939699]" style={{ width: "22%" }} />
-                <div className="bg-[#099b49]" style={{ width: "34%" }} />
+                <div className="bg-warning" style={{ width: "44%" }} />
+                <div className="bg-muted-foreground" style={{ width: "22%" }} />
+                <div className="bg-success" style={{ width: "34%" }} />
               </div>
-              <p className="text-xs text-[#939699] mt-2">9 total tasks today</p>
+              <p className="text-xs text-muted-foreground mt-2">9 total tasks today</p>
             </div>
           </div>
 
           {/* Revenue Summary */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-            <h2 className="text-base font-semibold text-[#282e33] mb-4">This Week</h2>
+          <div className="bg-card rounded-md border border-border p-4">
+            <h2 className="text-base font-semibold text-foreground mb-4">This Week</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">Revenue</span>
-                <span className="text-sm font-medium text-[#099b49]">{formatMoney(3245)}</span>
+                <span className="text-sm text-muted-foreground">Revenue</span>
+                <span className="text-sm font-medium text-success">{formatMoney(3245)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">Orders</span>
-                <span className="text-sm font-medium text-[#282e33]">18</span>
+                <span className="text-sm text-muted-foreground">Orders</span>
+                <span className="text-sm font-medium text-foreground">18</span>
               </div>
               <div className="flex items-center justify-between">
-//                 <span className="text-sm text-[#939699]">New Clients</span>
-//                 <span className="text-sm font-medium text-[#282e33]">5</span>
+//                 <span className="text-sm text-muted-foreground">New Clients</span>
+//                 <span className="text-sm font-medium text-foreground">5</span>
 //               </div>
             </div>
 
             {/* Simple bar chart */}
-            <div className="mt-4 pt-4 border-t border-[#eeeeef]">
+            <div className="mt-4 pt-4 border-t border-border">
               <div className="flex items-end justify-between gap-1 h-16">
                 {[40, 65, 45, 80, 55, 90, 70].map((height, i) => (
-                  <div key={i} className="flex-1 bg-[#edf4fd] hover:bg-[#1973e1] transition-colors rounded-sm cursor-pointer" style={{ height: `${height}%` }} />
+                  <div key={i} className="flex-1 bg-accent hover:bg-primary transition-colors rounded-sm cursor-pointer" style={{ height: `${height}%` }} />
                 ))}
               </div>
               <div className="flex justify-between mt-2">
                 {["M", "T", "W", "T", "F", "S", "S"].map((day, i) => (
-                  <span key={i} className="text-xs text-[#939699] flex-1 text-center">
+                  <span key={i} className="text-xs text-muted-foreground flex-1 text-center">
                     {day}
                   </span>
                 ))}

@@ -61,12 +61,14 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex print:block print:min-h-0 print:bg-white">
+    <div className="flex min-h-screen bg-background print:block print:min-h-0 print:bg-white">
       <AppSidebar />
-      <div className="flex-1 flex flex-col min-w-0 print:block">
+      <div className="flex min-w-0 flex-1 flex-col print:block">
         <AppTopbar />
-        <main className="flex-1 p-4 lg:p-6 overflow-auto print:overflow-visible print:p-0">
-          <Outlet />
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:overflow-visible print:p-0">
+          <div className="mx-auto w-full max-w-[1440px] min-w-0 print:max-w-none">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

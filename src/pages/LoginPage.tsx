@@ -19,10 +19,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
+    <div className="min-h-dvh bg-background flex flex-col">
       {/* Language selector */}
       <div className="flex justify-end p-4">
-        <button className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
+        <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <Globe className="h-4 w-4" />
           English
         </button>
@@ -34,17 +34,17 @@ export function LoginPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <Logo />
-            <p className="text-sm text-[#939699]">Business Management Platform</p>
+            <p className="text-sm text-muted-foreground">Business Management Platform</p>
           </div>
 
           {/* Form */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-6">
+          <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
 
             
             <LoginForm />
 
             <div className="mt-4 text-center">
-              <button type="button" onClick={onSwitchToForgotPassword} className="text-sm cursor-pointer text-[#1973e1] hover:underline">
+              <button type="button" onClick={onSwitchToForgotPassword} className="text-sm cursor-pointer text-primary hover:underline">
                 Forgot password?
               </button>
             </div>
@@ -52,8 +52,8 @@ export function LoginPage() {
 
           {/* Register link */}
           <div className="mt-4 text-center">
-            <span className="text-sm text-[#939699]">Don&apos;t have an account? </span>
-            <button type="button" onClick={onSwitchToRegister} className="text-sm text-[#1973e1] hover:underline font-medium cursor-pointer">
+            <span className="text-sm text-muted-foreground">Don&apos;t have an account? </span>
+            <button type="button" onClick={onSwitchToRegister} className="text-sm text-primary hover:underline font-medium cursor-pointer">
               Create account
             </button>
           </div>

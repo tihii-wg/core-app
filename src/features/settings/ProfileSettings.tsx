@@ -16,7 +16,7 @@ const phonePattern = /^\+[1-9]\d{7,14}$/;
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-xs text-[#f41f20]">{message}</p>;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 function ProfileForm({ profile }: { profile: ProfileRecord }) {
@@ -56,7 +56,7 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
             <AvatarFallback className="bg-primary text-xl text-primary-foreground">{profileInitials(displayName)}</AvatarFallback>
           </Avatar>
           <div>
-            <p className="font-medium text-[#282e33]">{displayName}</p>
+            <p className="font-medium text-foreground">{displayName}</p>
             <p className="text-sm text-muted-foreground">{profile.email || "No email on this profile"}</p>
           </div>
         </div>
@@ -74,7 +74,7 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
                   validate: (value) => value.trim().length > 0 || "Full name is required",
                 })}
                 disabled={saving}
-                className={errors.fullName ? "border-[#f41f20]" : ""}
+                className={errors.fullName ? "border-destructive" : ""}
               />
               <FieldError message={errors.fullName?.message} />
             </div>
@@ -94,7 +94,7 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
                 })}
                 placeholder="+37300000000"
                 disabled={saving}
-                className={errors.phone ? "border-[#f41f20]" : ""}
+                className={errors.phone ? "border-destructive" : ""}
               />
               <FieldError message={errors.phone?.message} />
             </div>
@@ -102,7 +102,7 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
 
           <div className="flex justify-end">
             <Button type="submit" disabled={saving || !isDirty}>
-              <Save className="mr-2 h-4 w-4" />
+              <Save />
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
@@ -140,7 +140,7 @@ export function ProfileSettings() {
           <CardDescription>Update your personal information</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-[#f41f20]">{message}</p>
+          <p className="text-sm text-destructive">{message}</p>
           <Button type="button" variant="outline" onClick={() => void refetch()}>
             Try again
           </Button>

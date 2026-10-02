@@ -1,15 +1,16 @@
-import { useCallback, useState, type ReactElement } from "react";
-import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Package, Calendar, Download, FileText, PieChart, Activity } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "../../ui/Card";
+import { useCallback, useState, type ElementType, type ReactElement, type ReactNode } from "react";
+import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, Wallet, Package, Calendar, Download, FileText, PieChart, Activity, ArrowUpRight } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { PageHeader } from "../../pages/PageHeader";
-// import { useApp } from "../../lib/app-context";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Legend, AreaChart, Area } from "recharts";
 import { formatWorkspaceMoneyCompact } from "../../lib/workspaceFormat";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { Skeleton } from "../../ui/Skeleton";
+import { statCardClassName, statIconVariants, statValueSizeClass } from "../../ui/statCardStyles";
+import { cn } from "../../lib/utils";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
@@ -22,6 +23,7 @@ import { employeePerformance, lowestStockLevels, percentChange, reportPeriod, re
 import { ExportReportDialog } from "./ExportReportDialog";
 import { ReportPrintRoot, type ReportPrintJob } from "./ReportPrintRoot";
 import { useReportFormatting } from "./reportFormatting";
+import { chartAxisProps, chartColors, chartGridProps, chartLegendProps, chartTooltipProps } from "./chartTheme";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
   return (
@@ -35,16 +37,28 @@ function ReportChart({ height, children }: { height: number; children: ReactElem
 
 function ReportPlaceholder({ height, title = "No data available yet", description, isLoading = false, isError = false }: { height: number; title?: string; description?: string; isLoading?: boolean; isError?: boolean }) {
   return (
-    <div className="flex w-full flex-col items-center justify-center gap-1 text-center" style={{ height }}>
+    <div className="flex w-full flex-col items-center justify-center gap-1 px-6 text-center" style={{ height }}>
       {isLoading ? (
         <Skeleton className="h-full w-full" />
       ) : (
         <>
-          <p className="font-medium text-foreground">{isError ? "Could not load report data" : title}</p>
-          <p className="text-sm text-muted-foreground">{isError ? "Refresh the page to try again." : description}</p>
+          <span className={cn("mb-2 flex size-9 items-center justify-center rounded-lg", isError ? "bg-destructive/10 text-destructive" : "bg-muted text-subtle-foreground")}>
+            <BarChart3 aria-hidden="true" className="size-4" />
+          </span>
+          <p className="text-sm font-medium text-foreground">{isError ? "Could not load report data" : title}</p>
+          <p className="max-w-xs text-[13px] text-muted-foreground">{isError ? "Refresh the page to try again." : description}</p>
         </>
       )}
     </div>
+  );
+}
+
+function ChartTitle({ icon: Icon, children }: { icon?: ElementType; children: ReactNode }) {
+  return (
+    <CardTitle className="flex items-center gap-2">
+      {Icon && <Icon aria-hidden="true" className="size-4 text-subtle-foreground" />}
+      {children}
+    </CardTitle>
   );
 }
 
@@ -95,25 +109,29 @@ export function ReportsModule() {
       title: "Total Revenue",
       value: formatMoney(summary.current.revenue),
       change: percentChange(summary.current.revenue, summary.previous.revenue),
-      icon: DollarSign,
+      icon: Wallet,
+      variant: "success" as const,
     },
     {
       title: "Total Orders",
       value: String(summary.current.orders),
       change: percentChange(summary.current.orders, summary.previous.orders),
       icon: ShoppingCart,
+      variant: "primary" as const,
     },
     {
       title: "New Clients",
       value: String(summary.current.newClients),
       change: percentChange(summary.current.newClients, summary.previous.newClients),
       icon: Users,
+      variant: "primary" as const,
     },
     {
       title: "Avg Order Value",
       value: formatMoney(summary.current.avgOrderValue),
       change: percentChange(summary.current.avgOrderValue, summary.previous.avgOrderValue),
       icon: Activity,
+      variant: "primary" as const,
     },
   ];
 
@@ -123,10 +141,10 @@ export function ReportsModule() {
         title="Reports & Analytics"
         description="Business performance insights and analytics"
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={dateRange} onValueChange={(value) => setDateRange(value as ReportRange)}>
-              <SelectTrigger className="w-45">
-                <Calendar className="mr-2 h-4 w-4" />
+              <SelectTrigger className="w-44">
+                <Calendar aria-hidden="true" className="size-4" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -137,7 +155,7 @@ export function ReportsModule() {
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={() => setExportOpen(true)}>
-              <Download className="mr-2 h-4 w-4" />
+              <Download />
               Export
             </Button>
           </div>
@@ -147,31 +165,39 @@ export function ReportsModule() {
       {printJob && <ReportPrintRoot job={printJob} formatMoney={(value) => formatMoney(value)} formatDate={formatDate} onDone={finishPrint} />}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
-          <Card key={stat.title}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <stat.icon className="h-5 w-5 text-primary" />
-                </div>
-                {statsLoading || statsError || stat.change === null ? (
-                  <span className="text-sm text-muted-foreground" title="No data for the previous period">
-                    —
-                  </span>
-                ) : (
-                  <div className={`flex items-center gap-1 text-sm font-medium ${stat.change >= 0 ? "text-green-600" : "text-red-600"}`} title="Compared with the previous period">
-                    {stat.change >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+          <div key={stat.title} className={statCardClassName}>
+            <span className={cn("absolute top-4 right-4 flex size-8 items-center justify-center rounded-md sm:top-5 sm:right-5", statIconVariants[stat.variant])}>
+              <stat.icon aria-hidden="true" className="size-4" />
+            </span>
+            {/* The value precedes its title in the DOM; the column is reversed so the title reads first visually. */}
+            <div className="flex min-w-0 flex-col-reverse">
+              {statsLoading ? (
+                <Skeleton className="mt-2 h-7 w-24" />
+              ) : (
+                <p className={cn("mt-1 truncate leading-8 font-semibold tracking-tight text-foreground tabular-nums", statValueSizeClass(stat.value))} title={stat.value}>
+                  {statsError ? "—" : stat.value}
+                </p>
+              )}
+              <p className="flex min-h-8 items-start pr-10 text-[13px] font-medium text-muted-foreground">{stat.title}</p>
+            </div>
+            <div className="mt-2 text-xs">
+              {statsLoading || statsError || stat.change === null ? (
+                <span className="text-subtle-foreground" title="No data for the previous period">
+                  —
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground" title="Compared with the previous period">
+                  <span className={cn("inline-flex items-center gap-0.5 rounded px-1 py-px font-medium tabular-nums", stat.change >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
+                    {stat.change >= 0 ? <TrendingUp aria-hidden="true" className="size-3" /> : <TrendingDown aria-hidden="true" className="size-3" />}
                     {`${stat.change >= 0 ? "+" : ""}${stat.change.toFixed(1)}%`}
-                  </div>
-                )}
-              </div>
-              <div className="mt-4">
-                {statsLoading ? <Skeleton className="h-8 w-24" /> : <p className="text-2xl font-bold text-foreground">{statsError ? "—" : stat.value}</p>}
-                <p className="text-sm text-muted-foreground">{stat.title}</p>
-              </div>
-            </CardContent>
-          </Card>
+                  </span>
+                  vs previous period
+                </span>
+              )}
+            </div>
+          </div>
         ))}
       </div>
 
@@ -179,164 +205,138 @@ export function ReportsModule() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="overview">
-            <BarChart3 className="mr-2 h-4 w-4" />
+            <BarChart3 />
             Overview
           </TabsTrigger>
           <TabsTrigger value="services">
-            <PieChart className="mr-2 h-4 w-4" />
+            <PieChart />
             Services
           </TabsTrigger>
           <TabsTrigger value="employees">
-            <Users className="mr-2 h-4 w-4" />
+            <Users />
             Employees
           </TabsTrigger>
           <TabsTrigger value="inventory">
-            <Package className="mr-2 h-4 w-4" />
+            <Package />
             Inventory
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Revenue Chart */}
+        <TabsContent value="overview" className="mt-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  {granularity} Revenue
-                </CardTitle>
+                <ChartTitle icon={TrendingUp}>{granularity} Revenue</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || summary.current.orders === 0 ? (
                   <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No orders were created in this period." />
                 ) : (
-                <ReportChart height={300}>
-                    <AreaChart data={series}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" stroke="#6b7280" fontSize={12} />
-                      <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => formatWorkspaceMoneyCompact(v, currency)} />
-                      <Tooltip
-                        formatter={(value) => [formatMoney(Number(value)), "Revenue"]}
-                        contentStyle={{
-                          backgroundColor: "#fff",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Area type="monotone" dataKey="revenue" stroke="#1973e1" fill="#1973e1" fillOpacity={0.1} strokeWidth={2} />
+                  <ReportChart height={300}>
+                    <AreaChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="report-revenue-fill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={chartColors.primary} stopOpacity={0.22} />
+                          <stop offset="100%" stopColor={chartColors.primary} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid {...chartGridProps} vertical={false} />
+                      <XAxis dataKey="label" {...chartAxisProps} />
+                      <YAxis {...chartAxisProps} axisLine={false} width={84} tickFormatter={(v) => formatWorkspaceMoneyCompact(v, currency)} />
+                      <Tooltip {...chartTooltipProps} cursor={{ stroke: "var(--color-border-strong)" }} formatter={(value) => [formatMoney(Number(value)), "Revenue"]} />
+                      <Area type="monotone" dataKey="revenue" stroke={chartColors.primary} fill="url(#report-revenue-fill)" strokeWidth={2} />
                     </AreaChart>
-                </ReportChart>
+                  </ReportChart>
                 )}
               </CardContent>
             </Card>
 
-            {/* Orders Chart */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5 text-primary" />
-                  {granularity} Orders
-                </CardTitle>
+                <ChartTitle icon={ShoppingCart}>{granularity} Orders</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || summary.current.orders === 0 ? (
                   <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No orders were created in this period." />
                 ) : (
-                <ReportChart height={300}>
-                    <BarChart data={series}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="label" stroke="#6b7280" fontSize={12} />
-                      <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#fff",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Bar dataKey="orders" name="Orders" fill="#099b49" radius={[4, 4, 0, 0]} />
+                  <ReportChart height={300}>
+                    <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid {...chartGridProps} vertical={false} />
+                      <XAxis dataKey="label" {...chartAxisProps} />
+                      <YAxis {...chartAxisProps} axisLine={false} width={40} allowDecimals={false} />
+                      <Tooltip {...chartTooltipProps} />
+                      <Bar dataKey="orders" name="Orders" fill={chartColors.success} radius={[4, 4, 0, 0]} maxBarSize={36} />
                     </BarChart>
-                </ReportChart>
+                  </ReportChart>
                 )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="services" className="mt-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Service Breakdown Pie Chart */}
+        <TabsContent value="services" className="mt-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Service Distribution</CardTitle>
+                <ChartTitle icon={PieChart}>Service Distribution</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || services.length === 0 ? (
                   <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No services were performed in this period." />
                 ) : (
-                <ReportChart height={300}>
+                  <ReportChart height={300}>
                     <RechartsPieChart>
-                      <Pie data={services} nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="count">
+                      <Pie data={services} nameKey="name" cx="50%" cy="50%" innerRadius={64} outerRadius={100} paddingAngle={2} dataKey="count" stroke="var(--color-card)" strokeWidth={2}>
                         {services.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip
-                        formatter={(value) => [Number(value), "Times performed"]}
-                        contentStyle={{
-                          backgroundColor: "#fff",
-                          border: "1px solid #e5e7eb",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Legend />
+                      <Tooltip {...chartTooltipProps} formatter={(value) => [Number(value), "Times performed"]} />
+                      <Legend {...chartLegendProps} />
                     </RechartsPieChart>
-                </ReportChart>
+                  </ReportChart>
                 )}
               </CardContent>
             </Card>
 
-            {/* Top Services List */}
             <Card>
               <CardHeader>
-                <CardTitle>Top Performing Services</CardTitle>
+                <ChartTitle icon={BarChart3}>Top Performing Services</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || services.length === 0 ? (
                   <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No services were performed in this period." />
                 ) : (
-                <div className="space-y-4">
-                  {services.map((service, index) => (
-                    <div key={service.name} className="flex items-center gap-4">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium text-white" style={{ backgroundColor: service.color }}>
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-foreground">{service.name}</p>
-                        <div className="mt-1 h-2 w-full rounded-full bg-muted">
-                          <div
-                            className="h-2 rounded-full"
-                            style={{
-                              width: `${service.percent}%`,
-                              backgroundColor: service.color,
-                            }}
-                          />
+                  <ol className="space-y-4">
+                    {services.map((service, index) => (
+                      <li key={service.name} className="flex items-center gap-3">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground tabular-nums">{index + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground" title={service.name}>{service.name}</p>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${service.percent}%`,
+                                backgroundColor: service.color,
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-sm font-medium text-muted-foreground">{service.percent}%</span>
-                    </div>
-                  ))}
-                </div>
+                        <span className="w-10 shrink-0 text-right text-[13px] font-medium text-muted-foreground tabular-nums">{service.percent}%</span>
+                      </li>
+                    ))}
+                  </ol>
                 )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="employees" className="mt-6">
+        <TabsContent value="employees" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Employee Performance</CardTitle>
+              <ChartTitle icon={Users}>Employee Performance</ChartTitle>
             </CardHeader>
             <CardContent>
               {ordersLoading || employeesLoading || ordersError || employeesError || employeeResults.length === 0 ? (
@@ -347,31 +347,25 @@ export function ReportsModule() {
                   description="No orders assigned to employees were completed in this period."
                 />
               ) : (
-              <ReportChart height={400}>
-                  <BarChart data={employeeResults} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis type="number" stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                    <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={12} width={100} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="completed" name="Jobs Completed" fill="#1973e1" radius={[0, 4, 4, 0]} />
+                <ReportChart height={400}>
+                  <BarChart data={employeeResults} layout="vertical" margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chartGridProps} horizontal={false} />
+                    <XAxis type="number" {...chartAxisProps} allowDecimals={false} />
+                    <YAxis dataKey="name" type="category" {...chartAxisProps} axisLine={false} width={120} />
+                    <Tooltip {...chartTooltipProps} />
+                    <Legend {...chartLegendProps} />
+                    <Bar dataKey="completed" name="Jobs Completed" fill={chartColors.primary} radius={[0, 4, 4, 0]} maxBarSize={28} />
                   </BarChart>
-              </ReportChart>
+                </ReportChart>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="inventory" className="mt-6 space-y-6">
+        <TabsContent value="inventory" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Inventory Trends</CardTitle>
+              <ChartTitle icon={Activity}>Inventory Trends</ChartTitle>
             </CardHeader>
             <CardContent>
               <ReportPlaceholder height={200} description="Stock history and parts usage are not recorded yet, so trends cannot be shown." />
@@ -380,28 +374,22 @@ export function ReportsModule() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Current Stock Levels</CardTitle>
-              <p className="text-sm text-muted-foreground">Active items with the lowest stock relative to their minimum. Current stock, not affected by the date range.</p>
+              <ChartTitle icon={Package}>Current Stock Levels</ChartTitle>
+              <CardDescription>Active items with the lowest stock relative to their minimum. Current stock, not affected by the date range.</CardDescription>
             </CardHeader>
             <CardContent>
               {inventoryLoading || inventoryError || stockLevels.length === 0 ? (
                 <ReportPlaceholder height={300} isLoading={inventoryLoading} isError={inventoryError} description="No active inventory items in this workspace." />
               ) : (
                 <ReportChart height={Math.max(200, stockLevels.length * 48)}>
-                  <BarChart data={stockLevels} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis type="number" stroke="#6b7280" fontSize={12} allowDecimals={false} />
-                    <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={12} width={120} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="quantity" name="In Stock" fill="#1973e1" radius={[0, 4, 4, 0]} />
-                    <Bar dataKey="minimum" name="Minimum" fill="#f89200" radius={[0, 4, 4, 0]} />
+                  <BarChart data={stockLevels} layout="vertical" margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chartGridProps} horizontal={false} />
+                    <XAxis type="number" {...chartAxisProps} allowDecimals={false} />
+                    <YAxis dataKey="name" type="category" {...chartAxisProps} axisLine={false} width={140} />
+                    <Tooltip {...chartTooltipProps} />
+                    <Legend {...chartLegendProps} />
+                    <Bar dataKey="quantity" name="In Stock" fill={chartColors.primary} radius={[0, 4, 4, 0]} maxBarSize={18} />
+                    <Bar dataKey="minimum" name="Minimum" fill={chartColors.warning} radius={[0, 4, 4, 0]} maxBarSize={18} />
                   </BarChart>
                 </ReportChart>
               )}
@@ -414,23 +402,26 @@ export function ReportsModule() {
       <Card>
         <CardHeader>
           <CardTitle>Quick Reports</CardTitle>
+          <CardDescription>Printable reports for the selected period.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {quickReportTypes.map((type) => (
-              <Button
+              <button
                 key={type}
-                variant="outline"
-                className="h-auto flex-col items-start gap-1 p-4 text-left"
+                type="button"
+                className="group flex h-full flex-col items-start gap-1 rounded-lg border border-border bg-card p-4 text-left transition-[border-color,box-shadow,background-color] duration-150 hover:border-primary/40 hover:bg-accent/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
                 onClick={() => navigate(`/${locale}/${routeWorkspaceId}/reports/${type}?range=${dateRange}`)}
               >
-                <div className="flex w-full items-center justify-between">
-                  <FileText className="h-5 w-5 text-primary" />
-                  <Download className="h-4 w-4 text-muted-foreground" />
+                <div className="mb-2 flex w-full items-center justify-between">
+                  <span className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <FileText aria-hidden="true" className="size-4" />
+                  </span>
+                  <ArrowUpRight aria-hidden="true" className="size-4 text-subtle-foreground transition-colors group-hover:text-primary" />
                 </div>
-                <p className="font-medium">{quickReports[type].title}</p>
-                <p className="text-xs text-muted-foreground">{quickReports[type].description}</p>
-              </Button>
+                <p className="text-sm font-medium text-foreground">{quickReports[type].title}</p>
+                <p className="text-xs leading-5 text-muted-foreground">{quickReports[type].description}</p>
+              </button>
             ))}
           </div>
         </CardContent>

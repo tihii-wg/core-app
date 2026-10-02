@@ -66,10 +66,10 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
             {...register("serviceName", {
               required: "Service name is required",
             })}
-            className={errors.serviceName ? "border-[#f41f20]" : ""}
+            className={errors.serviceName ? "border-destructive" : ""}
           />
 
-          {errors.serviceName && <p className="text-xs text-[#f41f20]">{errors.serviceName.message}</p>}
+          {errors.serviceName && <p className="text-xs text-destructive">{errors.serviceName.message}</p>}
         </div>
 
         {/* Status + Price */}
@@ -111,10 +111,10 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
                   message: "Price cannot be negative",
                 },
               })}
-              className={errors.price ? "border-[#f41f20]" : ""}
+              className={errors.price ? "border-destructive" : ""}
             />
 
-            {errors.price && <p className="text-xs text-[#f41f20]">{errors.price.message}</p>}
+            {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
           </div>
         </div>
 
@@ -131,7 +131,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
             Cancel
           </Button>
 
-          <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+          <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Spinner className="h-4 w-4" /> : "Save Changes"}
           </Button>
         </div>

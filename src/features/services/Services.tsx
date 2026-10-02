@@ -2,16 +2,14 @@ import { useState } from "react";
 import {
   Plus,
   // Clock,
-  CheckCircle,
-  XCircle,
   Trash2,
 } from "lucide-react";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
-// import { StatusBadge } from "../../ui/StatusBadge";
+import { StatusBadge } from "../../ui/StatusBadge";
 
 import type { Service } from "../..//lib/types";
 import { Button } from "../../ui/Button";
@@ -23,7 +21,7 @@ import useGetServices from "./useGetServices";
 import { useDebounce } from "../../hooks/useDebounce";
 import EditServiceForm from "./UpdateServiceForm";
 import useDeleteService from "./useDeleteService";
-import {  NoSearchResults, NoServices } from "../../ui/EmptyState";
+import { ErrorState, NoSearchResults, NoServices } from "../../ui/EmptyState";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
@@ -50,7 +48,7 @@ export function Services() {
 
   const debunceSearch = useDebounce(searchQuery, 400);
   // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
-  const { services, isLoading, isPending, error } = useGetServices(debunceSearch);
+  const { services, isLoading, isPending, error, refetch } = useGetServices(debunceSearch);
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
   const canManage = canManageServices(useActiveWorkspaceRole());
@@ -72,9 +70,9 @@ export function Services() {
       key: "name",
       header: "Service",
       cell: (service) => (
-        <div>
-          <p className="font-medium text-[#282e33]">{service.service_name}</p>
-          <p className="text-xs text-[#939699]">{service.description}</p>
+        <div className="max-w-[28rem] min-w-0">
+          <p className="truncate font-medium text-foreground" title={service.service_name}>{service.service_name}</p>
+          {service.description && <p className="truncate text-xs text-muted-foreground" title={service.description}>{service.description}</p>}
         </div>
       ),
     },
@@ -87,7 +85,7 @@ export function Services() {
     //   key: "duration",
     //   header: "Duration",
     //   cell: (service) => (
-    //     <div className="flex items-center gap-1 text-[#939699]">
+    //     <div className="flex items-center gap-1 text-muted-foreground">
     //       <Clock className="h-4 w-4" />
     //       <span>{formatDuration(service.duration)}</span>
     //     </div>
@@ -97,25 +95,19 @@ export function Services() {
     {
       key: "price",
       header: "Price",
-      className: "text-right w-[120px]",
-      cell: (service) => <span className="font-medium text-[#282e33]">{formatMoney(service.service_price)}</span>,
+      className: "text-right w-[140px] whitespace-nowrap",
+      cell: (service) => <span className="font-medium text-foreground tabular-nums">{formatMoney(service.service_price)}</span>,
     },
     {
       key: "status",
       header: "Status",
       className: "text-right w-[120px]",
       cell: (service) => (
-        <div className="flex justify-end gap-1">
+        <div className="flex justify-end">
           {service.status === "active" ? (
-            <>
-              <CheckCircle className="h-4 w-4 text-[#099b49]" />
-              <span className="text-sm text-[#099b49]">Active</span>
-            </>
+            <StatusBadge variant="success" dot>Active</StatusBadge>
           ) : (
-            <>
-              <XCircle className="h-4 w-4 text-[#939699]" />
-              <span className="text-sm text-[#939699]">Inactive</span>
-            </>
+            <StatusBadge variant="muted" dot>Inactive</StatusBadge>
           )}
         </div>
       ),
@@ -126,11 +118,13 @@ export function Services() {
     columns.push({
       key: "actions",
       header: "",
-      className: "w-[80px]",
+      className: "w-[64px] text-right",
       cell: (service) => (
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
+          size="icon-sm"
+          className="hover:bg-destructive/10 hover:text-destructive"
           aria-label={`Delete ${service.service_name}`}
           onClick={(e) => {
             e.stopPropagation();
@@ -144,14 +138,14 @@ export function Services() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Services"
         description={isPending ? "Loading services..." : `${activeServices} active services`}
         actions={
           canManage ? (
-            <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-              <Plus className="h-4 w-4 mr-1" />
+            <Button onClick={() => setCreateModalOpen(true)}>
+              <Plus />
               Add Service
             </Button>
           ) : undefined
@@ -177,13 +171,19 @@ export function Services() {
         // }}
       />
 
-      {error && <p className="text-sm text-[#f41f20]">{error.message}</p>}
-
       <DataTable
         columns={columns}
         isLoading={isLoading}
         data={services}
-        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoServices onAddService={canManage ? () => setCreateModalOpen(true) : undefined} />}
+        emptyState={
+          error ? (
+            <ErrorState title="Could not load services" description={error.message} onRetry={() => refetch()} />
+          ) : searchQuery ? (
+            <NoSearchResults query={searchQuery} />
+          ) : (
+            <NoServices onAddService={canManage ? () => setCreateModalOpen(true) : undefined} />
+          )
+        }
         keyExtractor={(service) => service.id}
         onRowClick={
           canManage
@@ -230,11 +230,11 @@ export function Services() {
             <Description className="sr-only">Confirm deletion of the selected service.</Description>
           </DialogHeader>
 
-          <p className="text-sm text-gray-500">
-            Are you sure you want to delete <strong>{serviceToDelete?.service_name}</strong>?
+          <p className="text-sm [overflow-wrap:anywhere] text-muted-foreground">
+            Are you sure you want to delete <strong className="font-medium text-foreground">{serviceToDelete?.service_name}</strong>?
           </p>
 
-          <div className="flex justify-end gap-2 pt-4">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setServiceToDelete(null)}>
               Cancel
             </Button>
@@ -254,7 +254,7 @@ export function Services() {
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

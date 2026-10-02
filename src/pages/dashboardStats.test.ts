@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDateKey, isAtOrBelowMinimum, startOfWeek, taskOverviewCounts, thisWeekStats, weekDateKeys } from "./dashboardStats";
+import { calendarDateKey, isAtOrBelowMinimum, outstandingPaymentStats, recentActivity, relativeDayLabel, startOfWeek, taskOverviewCounts, thisWeekStats, todayRevenueStats, weekDateKeys } from "./dashboardStats";
 
 const sunday = new Date(2026, 8, 27, 15, 0, 0);
 
@@ -61,5 +61,56 @@ describe("dashboard week stats", () => {
     expect(stats.revenue).toBe(0);
     expect(stats.orders).toBe(0);
     expect(stats.newClients).toBe(0);
+  });
+});
+
+describe("dashboard money stats", () => {
+  const order = (createdAt: string, totalPrice: number, isPaid: boolean, status = "completed") => ({ createdAt, totalPrice, isPaid, status });
+
+  it("sums today's paid orders and compares them with yesterday", () => {
+    const stats = todayRevenueStats(
+      [order("2026-09-27", 150, true), order("2026-09-27", 40, false), order("2026-09-26", 100, true), order("2026-09-20", 999, true)],
+      sunday,
+    );
+    expect(stats).toEqual({ revenue: 150, paidOrders: 1, changeVsYesterday: 50 });
+  });
+
+  it("reports no trend when yesterday had no revenue", () => {
+    const stats = todayRevenueStats([order("2026-09-27", 80, true), order("2026-09-26", 30, false)], sunday);
+    expect(stats.revenue).toBe(80);
+    expect(stats.changeVsYesterday).toBeNull();
+  });
+
+  it("counts unpaid orders as outstanding and ignores cancelled ones", () => {
+    const stats = outstandingPaymentStats([order("2026-09-01", 120, false, "new"), order("2026-09-02", 30, false, "in-progress"), order("2026-09-03", 500, false, "cancelled"), order("2026-09-04", 70, true)]);
+    expect(stats).toEqual({ amount: 150, orders: 2 });
+  });
+});
+
+describe("dashboard recent activity", () => {
+  const orders = [
+    { id: "o1", orderNumber: "ORD-1", clientName: "Ada", status: "completed", createdAt: "2026-09-20", updatedAt: "2026-09-27" },
+    { id: "o2", orderNumber: "ORD-2", clientName: "Bob", status: "new", createdAt: "2026-09-26", updatedAt: "2026-09-26" },
+  ];
+  const clients = [{ id: "c1", name: "Cleo", created_at: "2026-09-25T09:00:00" }, { id: "c2", name: "Dan", created_at: "" }];
+
+  it("lists real order and client events newest first", () => {
+    expect(recentActivity(orders, clients).map((event) => [event.kind, event.date])).toEqual([
+      ["order-updated", "2026-09-27"],
+      ["order-created", "2026-09-26"],
+      ["client-created", "2026-09-25"],
+      ["order-created", "2026-09-20"],
+    ]);
+  });
+
+  it("is empty without records and respects the limit", () => {
+    expect(recentActivity([], [])).toEqual([]);
+    expect(recentActivity(orders, clients, 2)).toHaveLength(2);
+  });
+
+  it("labels today and yesterday relative to now", () => {
+    expect(relativeDayLabel("2026-09-27", sunday)).toBe("Today");
+    expect(relativeDayLabel("2026-09-26", sunday)).toBe("Yesterday");
+    expect(relativeDayLabel("2026-09-20", sunday)).not.toBe("");
   });
 });

@@ -35,12 +35,12 @@ function PasswordField({
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       <div className="relative">
-        <Input id={id} type={visible ? "text" : "password"} autoComplete={autoComplete} disabled={disabled} className={error ? "border-[#f41f20] pr-10" : "pr-10"} {...registration} />
-        <button type="button" onClick={() => setVisible((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]" aria-label={visible ? `Hide ${label}` : `Show ${label}`}>
+        <Input id={id} type={visible ? "text" : "password"} autoComplete={autoComplete} disabled={disabled} className={error ? "border-destructive pr-10" : "pr-10"} {...registration} />
+        <button type="button" onClick={() => setVisible((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label={visible ? `Hide ${label}` : `Show ${label}`}>
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
       </div>
-      {error && <p className="text-xs text-[#f41f20]">{error}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

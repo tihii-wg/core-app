@@ -68,7 +68,7 @@ export function TwoFactorSettings() {
           <CardDescription>Protect your account with an authenticator app.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-[#f41f20]">{error instanceof Error ? error.message : "Unable to load two-factor authentication. Please try again."}</p>
+          <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Unable to load two-factor authentication. Please try again."}</p>
           <Button type="button" variant="outline" onClick={() => void refetch()}>
             Try again
           </Button>
@@ -101,7 +101,7 @@ export function TwoFactorSettings() {
             </Button>
           )}
         </div>
-        {enroll.error && <p className="text-sm text-[#f41f20]">{enroll.error.message}</p>}
+        {enroll.error && <p className="text-sm text-destructive">{enroll.error.message}</p>}
       </CardContent>
 
       <EnableMfaDialog
@@ -134,7 +134,7 @@ export function TwoFactorSettings() {
               />
             </div>
           )}
-          {disableError && <p className="text-sm text-[#f41f20]">{disableError}</p>}
+          {disableError && <p className="text-sm text-destructive">{disableError}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={confirming} onClick={() => setDisableOpen(false)}>
               Cancel

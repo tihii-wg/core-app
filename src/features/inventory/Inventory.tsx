@@ -6,7 +6,8 @@ import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
-import { EmptyState, NoInventory, NoSearchResults } from "../../ui/EmptyState";
+import { ErrorState, NoInventory, NoSearchResults } from "../../ui/EmptyState";
+import { cn } from "../../lib/utils";
 import { useDebounce } from "../../hooks/useDebounce";
 import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortField } from "../../lib/types";
 import { useGetInventoryItems } from "./useGetInventoryItems";
@@ -64,8 +65,8 @@ export function Inventory() {
       key: "name",
       header: "Name",
       cell: (item) => (
-        <div>
-          <p className="font-medium text-[#282e33]">{item.name}</p>
+        <div className="flex max-w-[13rem] min-w-0 items-center gap-2 xl:max-w-[14rem] 2xl:max-w-[18rem]">
+          <p className="truncate font-medium text-foreground" title={item.name}>{item.name}</p>
           {!item.isActive && <StatusBadge variant="muted">Inactive</StatusBadge>}
         </div>
       ),
@@ -73,23 +74,24 @@ export function Inventory() {
     {
       key: "sku",
       header: "SKU",
-      cell: (item) => <span className="font-mono text-sm text-[#939699]">{item.sku || "—"}</span>,
-      className: "hidden sm:table-cell",
+      cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || "—"}</span>,
+      className: "hidden sm:table-cell whitespace-nowrap",
     },
     {
       key: "category",
       header: "Category",
-      cell: (item) => item.category || "—",
-      className: "hidden md:table-cell",
+      cell: (item) => <span className="block max-w-[10rem] truncate text-muted-foreground" title={item.category}>{item.category || "—"}</span>,
+      className: "hidden xl:table-cell",
     },
     {
       key: "quantity",
       header: "Quantity",
       cell: (item) => (
-        <span className={quantityClass(item)}>
+        <span className={cn("tabular-nums", quantityClass(item))}>
           {item.quantity} {item.unit}
         </span>
       ),
+      className: "text-right whitespace-nowrap",
     },
     {
       key: "status",
@@ -99,20 +101,20 @@ export function Inventory() {
     {
       key: "unit",
       header: "Unit",
-      cell: (item) => item.unit,
-      className: "hidden lg:table-cell",
+      cell: (item) => <span className="text-muted-foreground">{item.unit}</span>,
+      className: "hidden 2xl:table-cell",
     },
     {
       key: "purchasePrice",
       header: "Purchase Price",
-      cell: (item) => formatWorkspaceMoney(item.purchasePrice, workspace?.currency),
-      className: "hidden md:table-cell text-right",
+      cell: (item) => <span className="tabular-nums text-muted-foreground">{formatWorkspaceMoney(item.purchasePrice, workspace?.currency)}</span>,
+      className: "hidden 2xl:table-cell text-right whitespace-nowrap",
     },
     {
       key: "sellingPrice",
       header: "Selling Price",
-      cell: (item) => formatWorkspaceMoney(item.sellingPrice, workspace?.currency),
-      className: "hidden sm:table-cell text-right",
+      cell: (item) => <span className="font-medium tabular-nums">{formatWorkspaceMoney(item.sellingPrice, workspace?.currency)}</span>,
+      className: "hidden sm:table-cell text-right whitespace-nowrap",
     },
     {
       key: "actions",
@@ -122,7 +124,7 @@ export function Inventory() {
         <div className="flex justify-end gap-1">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label={`Edit ${item.name}`}
             onClick={(event) => {
@@ -134,8 +136,9 @@ export function Inventory() {
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
+            className="hover:bg-destructive/10 hover:text-destructive"
             aria-label={`Delete ${item.name}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -150,13 +153,13 @@ export function Inventory() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Inventory"
         description={isLoading ? "Loading inventory..." : isError ? "Inventory could not be loaded" : `${items.length} ${items.length === 1 ? "item" : "items"}`}
         actions={
-          <Button onClick={() => setCreateOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-            <Plus className="h-4 w-4 mr-1" />
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
             Add Item
           </Button>
         }
@@ -165,21 +168,21 @@ export function Inventory() {
       {!isLoading && !isError && (lowStockCount > 0 || outOfStockCount > 0) && (
         <div className="flex flex-wrap gap-2">
           {lowStockCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-[#fff4e5] text-[#f89200] rounded-md text-sm">
-              <AlertTriangle className="h-4 w-4" />
+            <div className="flex items-center gap-2 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-[13px] font-medium text-warning">
+              <AlertTriangle aria-hidden="true" className="size-4" />
               {lowStockCount} items low on stock
             </div>
           )}
           {outOfStockCount > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-[#fee7e7] text-[#f41f20] rounded-md text-sm">
-              <Package className="h-4 w-4" />
+            <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-[13px] font-medium text-destructive">
+              <Package aria-hidden="true" className="size-4" />
               {outOfStockCount} items out of stock
             </div>
           )}
         </div>
       )}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <SearchAndFilters
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
@@ -199,7 +202,7 @@ export function Inventory() {
           }}
         />
         <Select value={sortValue} onValueChange={setSortValue}>
-          <SelectTrigger className="h-9 w-full sm:w-48 border-[#c9cbcc] text-sm" aria-label="Sort inventory">
+          <SelectTrigger className="h-9 w-full text-[13px] sm:w-48" aria-label="Sort inventory">
             <SelectValue placeholder="Sort" />
           </SelectTrigger>
           <SelectContent>
@@ -213,8 +216,8 @@ export function Inventory() {
       </div>
 
       {isError ? (
-        <div className="bg-white rounded-md border border-[#eeeeef]">
-          <EmptyState icon={Package} title="Could not load inventory" description="Refresh the list to try again." action={{ label: "Try again", onClick: () => refetch() }} />
+        <div className="rounded-lg border border-border bg-card shadow-xs">
+          <ErrorState title="Could not load inventory" description="Refresh the list to try again." onRetry={() => refetch()} />
         </div>
       ) : (
         <DataTable
@@ -223,6 +226,9 @@ export function Inventory() {
           isLoading={isLoading}
           keyExtractor={(item) => item.id}
           onRowClick={(item) => setDetailId(item.id)}
+          rowClassName={(item) =>
+            item.stockStatus === "out_of_stock" ? "bg-destructive/[0.035]" : item.stockStatus === "low_stock" ? "bg-warning/[0.045]" : undefined
+          }
           emptyState={hasSearchOrFilter ? <NoSearchResults query={searchQuery || stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
         />
       )}

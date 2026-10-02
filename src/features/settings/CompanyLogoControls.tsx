@@ -67,7 +67,7 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
     <div className="space-y-3">
       <Label>Company logo</Label>
       <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="lg" />
-      {isError && <p className="text-sm text-[#f41f20]">Unable to load company logo. Please try again.</p>}
+      {isError && <p className="text-sm text-destructive">Unable to load company logo. Please try again.</p>}
       {canEdit && <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={chooseFile} disabled={busy}>
           {uploading ? "Uploading..." : workspace.avatarPath ? "Change logo" : "Upload logo"}

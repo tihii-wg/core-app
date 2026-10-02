@@ -69,10 +69,10 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
         <Input
           id="edit-order-device"
           {...register("device", { required: "Car is required" })}
-          className={errors.device ? "border-[#f41f20]" : ""}
+          className={errors.device ? "border-destructive" : ""}
           disabled={isSubmitting}
         />
-        {errors.device && <p className="text-xs text-[#f41f20]">{errors.device.message}</p>}
+        {errors.device && <p className="text-xs text-destructive">{errors.device.message}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -83,10 +83,10 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
             required: "Car number is required",
             setValueAs: (value: string) => value.trim().toUpperCase(),
           })}
-          className={errors.carNumber ? "border-[#f41f20]" : ""}
+          className={errors.carNumber ? "border-destructive" : ""}
           disabled={isSubmitting}
         />
-        {errors.carNumber && <p className="text-xs text-[#f41f20]">{errors.carNumber.message}</p>}
+        {errors.carNumber && <p className="text-xs text-destructive">{errors.carNumber.message}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -102,10 +102,10 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
           maxLength={17}
           autoCapitalize="characters"
           spellCheck={false}
-          className={errors.vin ? "border-[#f41f20]" : ""}
+          className={errors.vin ? "border-destructive" : ""}
           disabled={isSubmitting}
         />
-        {errors.vin && <p className="text-xs text-[#f41f20]">{errors.vin.message}</p>}
+        {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -148,7 +148,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
               <div key={service.serviceId || service.serviceName} className="flex items-center justify-between rounded-md border p-3">
                 <div>
                   <p className="font-medium">{service.serviceName}</p>
-                  <p className="text-sm text-gray-500">{formatMoney(service.price)}</p>
+                  <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(service.price)}</p>
                 </div>
               </div>
             ))}
@@ -156,7 +156,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
               <div key={`${service.serviceName}-${index}`} className="flex items-center justify-between rounded-md border p-3">
                 <div>
                   <p className="font-medium">{service.serviceName}</p>
-                  <p className="text-sm text-gray-500">{formatMoney(service.price)}</p>
+                  <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(service.price)}</p>
                 </div>
                 <Button type="button" variant="outline" onClick={() => setAddedServices((current) => current.filter((_, lineIndex) => lineIndex !== index))}>
                   Remove
@@ -208,7 +208,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Save Changes"}
         </Button>
       </div>

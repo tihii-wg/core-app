@@ -29,7 +29,7 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
         autoComplete="off"
         placeholder="Client"
         aria-invalid={errors || undefined}
-        className={`w-full rounded-md border px-3 py-2 ${errors ? "border-[#f41f20]" : ""}`}
+        className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         // className="w-full rounded-md border px-3 py-2"
         // onFocus={() => setOpen(true)}
         onChange={(e) => {
@@ -40,12 +40,12 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
       />
 
       {open && (
-        <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-white shadow">
+        <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover shadow">
           {filteredClients.map((client) => (
             <button
               key={client.id}
               type="button"
-              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-100"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
               onClick={() => {
                 onSelect(client);
                 setOpen(false);
@@ -57,7 +57,7 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
           ))}
 
           {value.trim() && !exactMatch && (
-            <div className="cursor-pointer border-t px-3 py-2 text-sm text-gray-900" onClick={() => setOpen(false)}>
+            <div className="cursor-pointer border-t px-3 py-2 text-sm text-foreground" onClick={() => setOpen(false)}>
               New client: <strong>{value.trim()}</strong>
             </div>
           )}

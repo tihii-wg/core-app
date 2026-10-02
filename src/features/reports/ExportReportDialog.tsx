@@ -150,13 +150,13 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
     <>
       <DialogHeader>
         <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-[#1973e1]/10 p-2">
-            <FileText className="h-5 w-5 text-[#1973e1]" />
-          </div>
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <FileText aria-hidden="true" className="size-4.5" />
+          </span>
           <div className="space-y-1 text-left">
             <DialogTitle>Export report</DialogTitle>
             <DialogDescription>
-              Build a comprehensive report for <span className="font-medium text-[#282e33]">{rangeLabels[range]}</span> ({periodLabel}).
+              Build a comprehensive report for <span className="font-medium text-foreground">{rangeLabels[range]}</span> ({periodLabel}).
             </DialogDescription>
           </div>
         </div>
@@ -166,14 +166,14 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
         <div className="min-w-0 space-y-5">
           <fieldset className="space-y-2" disabled={isGenerating} aria-labelledby={sectionsHeadingId}>
             <div className="flex items-center justify-between gap-3">
-              <p id={sectionsHeadingId} className="text-sm font-semibold text-[#282e33]">
+              <p id={sectionsHeadingId} className="text-sm font-semibold text-foreground">
                 Include in report
               </p>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-[#282e33]">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                 <input
                   ref={selectAllRef}
                   type="checkbox"
-                  className="size-4 cursor-pointer accent-[#1973e1]"
+                  className="size-4 cursor-pointer accent-primary"
                   checked={allSelected}
                   onChange={() => setSelected(allSelected ? [] : exportSectionKeys)}
                 />
@@ -186,12 +186,12 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
                 return (
                   <label
                     key={key}
-                    className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${checked ? "border-[#1973e1] bg-[#1973e1]/5" : "border-[#e5e7eb] hover:bg-[#f8f9fa]"}`}
+                    className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${checked ? "border-primary/60 bg-accent/60" : "border-border hover:border-border-strong hover:bg-muted/60"} focus-within:ring-[3px] focus-within:ring-ring/30`}
                   >
-                    <input type="checkbox" className="mt-0.5 size-4 shrink-0 cursor-pointer accent-[#1973e1]" checked={checked} onChange={() => toggle(key)} />
+                    <input type="checkbox" className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary" checked={checked} onChange={() => toggle(key)} />
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium text-[#282e33]">{exportSections[key].label}</span>
-                      <span className="block text-xs text-[#939699]">{exportSections[key].description}</span>
+                      <span className="block text-sm font-medium text-foreground">{exportSections[key].label}</span>
+                      <span className="block text-xs text-muted-foreground">{exportSections[key].description}</span>
                     </span>
                   </label>
                 );
@@ -200,20 +200,20 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
           </fieldset>
 
           <fieldset className="space-y-2" disabled={isGenerating}>
-            <legend className="text-sm font-semibold text-[#282e33]">Format</legend>
+            <legend className="text-sm font-semibold text-foreground">Format</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {formats.map((option) => (
                 <label
                   key={option.value}
-                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${format === option.value ? "border-[#1973e1] bg-[#1973e1]/5" : "border-[#e5e7eb] hover:bg-[#f8f9fa]"}`}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${format === option.value ? "border-primary/60 bg-accent/60" : "border-border hover:border-border-strong hover:bg-muted/60"} focus-within:ring-[3px] focus-within:ring-ring/30`}
                 >
-                  <input type="radio" name="export-format" value={option.value} className="mt-0.5 size-4 shrink-0 cursor-pointer accent-[#1973e1]" checked={format === option.value} onChange={() => setFormat(option.value)} />
+                  <input type="radio" name="export-format" value={option.value} className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary" checked={format === option.value} onChange={() => setFormat(option.value)} />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-[#282e33]">
-                      <option.icon className="h-4 w-4 text-[#1973e1]" />
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                      <option.icon aria-hidden="true" className="size-4 text-primary" />
                       {option.label}
                     </span>
-                    <span className="block text-xs text-[#939699]">{option.description}</span>
+                    <span className="block text-xs text-muted-foreground">{option.description}</span>
                   </span>
                 </label>
               ))}
@@ -221,39 +221,39 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
           </fieldset>
         </div>
 
-        <aside aria-label="Export preview" className="min-w-0 rounded-lg border border-[#e5e7eb] bg-[#f8f9fa] p-4">
-          <h3 className="text-sm font-semibold text-[#282e33]">Report preview</h3>
+        <aside aria-label="Export preview" className="min-w-0 rounded-lg border border-border bg-muted/50 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Report preview</h3>
           <dl className="mt-3 space-y-1.5 text-xs">
             <div className="flex justify-between gap-3">
-              <dt className="text-[#939699]">Workspace</dt>
-              <dd className="truncate font-medium text-[#282e33]">{workspaceName}</dd>
+              <dt className="text-muted-foreground">Workspace</dt>
+              <dd className="truncate font-medium text-foreground">{workspaceName}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-[#939699]">Period</dt>
-              <dd className="text-right font-medium text-[#282e33]">{periodLabel}</dd>
+              <dt className="text-muted-foreground">Period</dt>
+              <dd className="text-right font-medium text-foreground">{periodLabel}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-[#939699]">Format</dt>
-              <dd className="font-medium text-[#282e33]">{format.toUpperCase()}</dd>
+              <dt className="text-muted-foreground">Format</dt>
+              <dd className="font-medium text-foreground">{format.toUpperCase()}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-[#939699]">Sections</dt>
-              <dd className="font-medium text-[#282e33]">
+              <dt className="text-muted-foreground">Sections</dt>
+              <dd className="font-medium text-foreground">
                 {ordered.length} of {exportSectionKeys.length}
               </dd>
             </div>
           </dl>
-          <div className="mt-4 border-t border-[#e5e7eb] pt-3">
+          <div className="mt-4 border-t border-border pt-3">
             {ordered.length === 0 ? (
-              <p className="text-xs text-[#939699]">Select at least one section to export.</p>
+              <p className="text-xs text-muted-foreground">Select at least one section to export.</p>
             ) : (
               <ol className="space-y-2">
                 {ordered.map((key, index) => (
                   <li key={key} className="flex gap-2 text-xs">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1973e1]/10 font-medium text-[#1973e1]">{index + 1}</span>
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">{index + 1}</span>
                     <span className="min-w-0">
-                      <span className="block font-medium text-[#282e33]">{exportSections[key].label}</span>
-                      {preview ? <span className="block text-[#939699]">{preview[key]}</span> : <Skeleton className="mt-1 h-3 w-24" />}
+                      <span className="block font-medium text-foreground">{exportSections[key].label}</span>
+                      {preview ? <span className="block text-muted-foreground">{preview[key]}</span> : <Skeleton className="mt-1 h-3 w-24" />}
                     </span>
                   </li>
                 ))}
@@ -264,8 +264,8 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       </div>
 
       {error && (
-        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
+          <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <div className="min-w-0">
             <p className="font-medium">Could not generate the report.</p>
             <p className="text-xs [overflow-wrap:anywhere]">Check your connection and try again. Details: {error}</p>
@@ -273,14 +273,14 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
         </div>
       )}
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="button" onClick={generate} disabled={isGenerating || ordered.length === 0 || !workspaceId} className="bg-[#1973e1] text-white hover:bg-[#1565c0]">
+        <Button type="button" onClick={generate} disabled={isGenerating || ordered.length === 0 || !workspaceId}>
           {isGenerating ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 aria-hidden="true" className="animate-spin" />
               Generating report...
             </>
           ) : (

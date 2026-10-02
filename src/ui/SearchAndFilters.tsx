@@ -26,26 +26,35 @@ interface SearchAndFiltersProps {
   className?: string;
 }
 export function SearchAndFilters({ searchValue, onSearchChange, searchPlaceholder = "Search...", filters = [], onClearFilters, className }: SearchAndFiltersProps) {
-  // const filterValue = filters.map((f) => f.value);
-  // console.log(filterValue);
-
   const hasActiveFilters = filters.some((f) => f.value && f.value !== "all");
 
   return (
-    <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-center", className)}>
-      <div className="relative flex-1 max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#939699]" />
-        <Input value={searchValue} onChange={(e) => onSearchChange(e.target.value)} placeholder={searchPlaceholder} className="pl-9 h-9 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]" />
+    <div className={cn("flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center", className)}>
+      <div className="relative w-full sm:max-w-xs sm:flex-1 lg:max-w-sm">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" />
+        <Input
+          type="search"
+          value={searchValue}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder.replace(/\.+$/, "")}
+          className="h-9 pr-8 pl-9 [&::-webkit-search-cancel-button]:hidden"
+        />
         {searchValue && (
-          <button onClick={() => onSearchChange("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]">
-            <X className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={() => onSearchChange("")}
+            aria-label="Clear search"
+            className="absolute right-1.5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-subtle-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-3.5" />
           </button>
         )}
       </div>
 
       {filters.map((filter) => (
         <Select key={filter.key} value={filter.value} onValueChange={filter.onChange}>
-          <SelectTrigger className="h-9 w-full sm:w-40 border-[#c9cbcc] text-sm">
+          <SelectTrigger aria-label={filter.label} className={cn("h-9 w-full text-[13px] sm:w-44", filter.value && filter.value !== "all" && "border-primary/40 bg-accent/60")}>
             <SelectValue placeholder={filter.label} />
           </SelectTrigger>
           <SelectContent>
@@ -59,9 +68,9 @@ export function SearchAndFilters({ searchValue, onSearchChange, searchPlaceholde
       ))}
 
       {hasActiveFilters && onClearFilters && (
-        <Button variant="ghost" size="sm" onClick={onClearFilters} className="text-[#939699] hover:text-[#282e33] h-9 px-3">
-          <X className="h-4 w-4 mr-1" />
-          Clear
+        <Button variant="ghost" size="sm" onClick={onClearFilters} className="h-9 self-start sm:self-auto">
+          <X />
+          Clear filters
         </Button>
       )}
     </div>

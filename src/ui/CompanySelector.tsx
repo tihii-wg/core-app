@@ -40,19 +40,18 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="hidden sm:flex items-center gap-2 h-9 px-3 text-sm text-[#282e33]">
-          <Building2 className="h-4 w-4 text-[#939699]" />
-          <span className="max-w-30 truncate">{currentWorkspace?.name}</span>
-
-          <ChevronDown className="h-4 w-4 text-[#939699]" />
+        <Button variant="ghost" title={currentWorkspace?.name} className="flex h-9 items-center gap-2 px-2 text-[13px] text-foreground sm:px-2.5">
+          <Building2 aria-hidden="true" className="text-subtle-foreground" />
+          <span className="sr-only sm:not-sr-only sm:max-w-36 sm:truncate">{currentWorkspace?.name}</span>
+          <ChevronDown aria-hidden="true" className="hidden size-3.5 text-subtle-foreground sm:block" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Switch Company</DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Switch Company</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         {workspaces?.map((w) => (
-          <DropdownMenuItem key={w.id} className={`cursor-pointer ${w.id === currentWorkspaceId ? "text-[#1973e1] bg-[#1973e1]/10" : ""}`}>
+          <DropdownMenuItem key={w.id} className={`cursor-pointer ${w.id === currentWorkspaceId ? "bg-accent font-medium text-accent-foreground" : ""}`}>
             <CompanyMark id={w.id} name={w.name} avatarPath={w.avatar_path} />
             <span className="min-w-0 flex-1 truncate" onClick={() => updateWorkspaceHandler(w.id)}>
               {w.name}
@@ -60,6 +59,7 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
 
             {w.canDelete && (
               <span
+                className="rounded p-0.5 text-subtle-foreground hover:text-destructive"
                 aria-label={`Delete ${w.name}`}
                 onClick={() => {
                   deleteWorkspaceHandler(w.id);
@@ -77,7 +77,7 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
             setCreateModalOpen(true);
           }}
         >
-          <span className="text-[#1973e1]">+ Add company</span>
+          <span className="text-primary">+ Add company</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -86,6 +86,6 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
 
 function CompanyMark({ id, name, avatarPath }: { id?: string; name?: string | null; avatarPath?: string | null }) {
   const { data: imageUrl } = useWorkspaceAvatar(id, avatarPath);
-  if (!name) return <Building2 className="h-4 w-4 text-[#939699]" />;
+  if (!name) return <Building2 className="h-4 w-4 text-muted-foreground" />;
   return <WorkspaceAvatar name={name} imageUrl={imageUrl} size="sm" />;
 }

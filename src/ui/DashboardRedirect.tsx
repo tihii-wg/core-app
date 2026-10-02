@@ -34,8 +34,8 @@ export default function Dashboardredirect() {
   }, [ready, activeWorkspaceId, memberWorkspaceIds, locale, navigate, updateWorkspace]);
 
   const error = profileError ?? workspacesError;
-  if (error) return <p className="p-6 text-sm text-[#f41f20]">{error.message}</p>;
-  if (noWorkspaces) return <p className="p-6 text-sm text-[#939699]">You are not a member of any workspace yet.</p>;
+  if (error) return <p className="p-6 text-sm text-destructive">{error.message}</p>;
+  if (noWorkspaces) return <p className="p-6 text-sm text-muted-foreground">You are not a member of any workspace yet.</p>;
 
   return <Spinner />;
 }

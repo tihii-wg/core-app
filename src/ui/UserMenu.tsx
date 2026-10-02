@@ -21,18 +21,18 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="flex items-center gap-2 h-9 px-2">
-          <div className="h-8 w-8 bg-[#1973e1] rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium">{profileInitials(userName)}</span>
-          </div>
-          <ChevronDown className="h-4 w-4 text-[#939699] hidden sm:block" />
+        <Button variant="ghost" title="Account" className="flex h-9 items-center gap-1.5 px-1.5">
+          <span className="flex size-7 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1557c9] text-[11px] font-semibold text-white ring-2 ring-background">
+            {profileInitials(userName)}
+          </span>
+          <ChevronDown className="hidden size-3.5 text-subtle-foreground sm:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
-          <div className="flex flex-col">
-            <span className="font-medium">{userName}</span>
-            <span className="text-xs text-[#939699] font-normal">{email}</span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium">{userName}</span>
+            <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -44,11 +44,11 @@ export default function UserMenu() {
             navigate(profileSettingsPath(locale, profileWorkspaceId));
           }}
         >
-          <User className="h-4 w-4 mr-2 text-[#939699]" />
+          <User className="h-4 w-4 mr-2 text-muted-foreground" />
           Profile
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="cursor-pointer text-[#f41f20] focus:text-[#f41f20]" onClick={() => logOut()}>
+        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => logOut()}>
           <LogOut className="h-4 w-4 mr-2" />
           Log out
         </DropdownMenuItem>

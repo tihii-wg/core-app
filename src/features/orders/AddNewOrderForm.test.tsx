@@ -53,7 +53,7 @@ describe("AddNewOrderForm client validation", () => {
     await user.click(screen.getByRole("button", { name: "Create Order" }));
 
     expect(await screen.findByText("Client is required")).toBeInTheDocument();
-    expect(screen.getByLabelText("Client *")).toHaveClass("border-[#f41f20]");
+    expect(screen.getByLabelText("Client *")).toHaveClass("border-destructive");
     expect(screen.getByText("Car is required")).toBeInTheDocument();
     expect(screen.getByText("Car number is required")).toBeInTheDocument();
   });

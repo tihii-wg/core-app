@@ -1,9 +1,9 @@
 import { StatusBadge } from "../../ui/StatusBadge";
 import type { ClientType } from "../../lib/types";
 
-const clientTypeDisplay: Record<ClientType, { label: string; variant: "success" | "info" }> = {
-  individual: { label: "Individual", variant: "success" },
-  organization: { label: "Organization", variant: "info" },
+const clientTypeDisplay: Record<ClientType, { label: string; variant: "default" | "violet" }> = {
+  individual: { label: "Individual", variant: "default" },
+  organization: { label: "Organization", variant: "violet" },
 };
 
 export default function ClientTypeBadge({ clientType }: { clientType: ClientType | null | undefined }) {

@@ -62,16 +62,16 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
             // value={formData.name}
             // onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Screen Replacement"
-            className={errors.serviceName ? "border-[#f41f20]" : ""}
+            className={errors.serviceName ? "border-destructive" : ""}
           /> */}
-          {errors.serviceName && <p className="text-xs text-[#f41f20]">Service name is required</p>}
+          {errors.serviceName && <p className="text-xs text-destructive">Service name is required</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           {/* <div className="space-y-1.5">
             <Label htmlFor="category">Category</Label>
             <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-              <SelectTrigger className={formErrors.category ? "border-[#f41f20]" : ""}>
+              <SelectTrigger className={formErrors.category ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
               <SelectContent>
@@ -82,7 +82,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
                 ))}
               </SelectContent>
             </Select>
-            {formErrors.category && <p className="text-xs text-[#f41f20]">{formErrors.category}</p>}
+            {formErrors.category && <p className="text-xs text-destructive">{formErrors.category}</p>}
           </div> */}
 
           <div className="space-y-1.5">
@@ -120,9 +120,9 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
               // value={formData.price}
               // onChange={(e) => setFormData({ ...formData, price: e.target.value })}
               placeholder="0.00"
-              className={errors.price ? "border-[#f41f20]" : ""}
+              className={errors.price ? "border-destructive" : ""}
             />
-            {errors.price && <p className="text-xs text-[#f41f20]">{errors.price.message}</p>}
+            {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
           </div>
         </div>
 
@@ -136,9 +136,9 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
               // value={formData.duration}
               // onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
               placeholder="e.g., 60"
-              className={formErrors.duration ? "border-[#f41f20]" : ""}
+              className={formErrors.duration ? "border-destructive" : ""}
             /> */}
-          {/* {errors.duration && <p className="text-xs text-[#f41f20]">{formErrors.duration}</p>}
+          {/* {errors.duration && <p className="text-xs text-destructive">{formErrors.duration}</p>}
           </div> */}
 
           {/* </div> */}
@@ -161,7 +161,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+          <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Service"}
           </Button>
         </div>

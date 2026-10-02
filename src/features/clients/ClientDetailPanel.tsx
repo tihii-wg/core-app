@@ -40,10 +40,10 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
 
   return (
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle className="pr-12">
-            <span className="inline-flex items-center gap-2">
+      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
+        <SheetHeader className="pr-24">
+          <SheetTitle>
+            <span className="inline-flex min-w-0 flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
               {selectedClient?.name}
               {selectedClient && <ClientTypeBadge clientType={selectedClient.client_type} />}
             </span>
@@ -53,7 +53,8 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
               type="button"
               onClick={() => setIsEditing(true)}
               aria-label="Edit"
-              className="ring-offset-background focus:ring-ring absolute top-4 right-10 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+              title="Edit client"
+              className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
             >
               <Pencil className="size-4" />
             </button>
@@ -62,7 +63,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
         </SheetHeader>
 
         {selectedClient && isEditing && (
-          <div className="mx-4 mt-2">
+          <div className="px-5 py-5">
             <EditClientForm
               key={selectedClient.id}
               client={selectedClient}
@@ -77,69 +78,69 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
         )}
 
         {selectedClient && !isEditing && (
-          <div className="mt-6 space-y-6 mx-4">
+          <div className="space-y-6 px-5 py-5">
             {/* Contact Info */}
             <div className="space-y-3">
-              <h3 className="text-sm font-medium text-[#939699]">Contact Information</h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-[#939699]" />
-                  <a href={`mailto:${selectedClient.email}`} className="text-[#1973e1] hover:underline">
+              <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Contact Information</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Mail className="size-4 shrink-0 text-subtle-foreground" />
+                  <a href={`mailto:${selectedClient.email}`} className="truncate text-primary hover:underline">
                     {selectedClient.email}
                   </a>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-[#939699]" />
-                  <a href={`tel:${selectedClient.phone}`} className="text-[#282e33]">
+                  <Phone className="size-4 shrink-0 text-subtle-foreground" />
+                  <a href={`tel:${selectedClient.phone}`} className="text-foreground tabular-nums">
                     {selectedClient.phone}
                   </a>
                 </div>
                 {selectedClient.client_type === "organization" && selectedClient.contact_person && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-[#939699]">Contact</span>
-                    <span className="text-[#282e33]">{selectedClient.contact_person}</span>
+                    <span className="text-sm text-muted-foreground">Contact</span>
+                    <span className="text-foreground">{selectedClient.contact_person}</span>
                   </div>
                 )}
                 {selectedClient.client_type === "organization" && selectedClient.tax_id && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-[#939699]">Tax ID / IDNO</span>
-                    <span className="text-[#282e33]">{selectedClient.tax_id}</span>
+                    <span className="text-sm text-muted-foreground">Tax ID / IDNO</span>
+                    <span className="text-foreground">{selectedClient.tax_id}</span>
                   </div>
                 )}
                 {selectedClient.address && (
                   <div className="flex items-start gap-2">
-                    <MapPin className="h-4 w-4 text-[#939699] mt-0.5" />
-                    <span className="text-[#282e33]">{selectedClient.address}</span>
+                    <MapPin className="mt-0.5 size-4 shrink-0 text-subtle-foreground" />
+                    <span className="[overflow-wrap:anywhere] text-foreground">{selectedClient.address}</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Balance */}
-            <div className="bg-[#f8f9fa] rounded-md p-4">
-              <p className="text-sm text-[#939699]">Current Balance</p>
-              <p className={`text-2xl font-semibold ${selectedClient.balance > 0 ? "text-[#f41f20]" : "text-[#282e33]"}`}>{formatMoney(selectedClient.balance)}</p>
+            <div className="rounded-lg border border-border bg-muted/50 p-4">
+              <p className="text-xs font-medium text-muted-foreground">Current Balance</p>
+              <p className={`mt-1 truncate text-2xl font-semibold tracking-tight tabular-nums ${selectedClient.balance > 0 ? "text-destructive" : "text-foreground"}`}>{formatMoney(selectedClient.balance)}</p>
             </div>
 
             {/* Order History */}
             <div>
-              <h3 className="text-sm font-medium text-[#939699] mb-3">Order History</h3>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Order History</h3>
               {(() => {
                 const clientOrders = getClientOrders(selectedClient.id);
                 if (clientOrders?.length === 0) {
-                  return <p className="text-sm text-[#939699] py-4 text-center">No orders yet</p>;
+                  return <p className="text-sm text-muted-foreground py-4 text-center">No orders yet</p>;
                 }
                 return (
-                  <div className="space-y-2">
+                  <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                     {clientOrders.slice(0, 5).map((order) => (
-                      <div key={order.id} className="flex items-center justify-between p-3 bg-[#f8f9fa] rounded-md">
-                        <div>
-                          <p className="font-medium text-[#282e33]">{order.orderNumber}</p>
-                          <p className="text-xs text-[#939699]">
+                      <div key={order.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground tabular-nums">{order.orderNumber}</p>
+                          <p className="truncate text-xs text-muted-foreground">
                             {order.device} - {order.service}
                           </p>
                         </div>
-                        <p className="font-medium text-[#282e33]">{formatMoney(order.totalPrice)}</p>
+                        <p className="shrink-0 text-sm font-medium text-foreground tabular-nums">{formatMoney(order.totalPrice)}</p>
                       </div>
                     ))}
                   </div>
@@ -149,13 +150,13 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
             {/* Notes */}
             {selectedClient.notes && (
               <div>
-                <h3 className="text-sm font-medium text-[#939699] mb-2">Notes</h3>
-                <p className="text-sm text-[#282e33]">{selectedClient.notes}</p>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Notes</h3>
+                <p className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{selectedClient.notes}</p>
               </div>
             )}
 
             {/* Timestamps */}
-            <div className="text-xs text-[#939699]">
+            <div className="text-xs text-muted-foreground">
               <p>Client since: {selectedClient.created_at?.split("T")[0]}</p>
             </div>
           </div>

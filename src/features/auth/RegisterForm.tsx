@@ -61,10 +61,10 @@ export default function RegisterForm() {
   };
 
   return (
-    <div className="bg-white rounded-md border border-[#eeeeef] p-6">
+    <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="companyName" className="text-sm text-[#282e33]">
+          <Label htmlFor="companyName" className="text-sm text-foreground">
             Company Name
           </Label>
           <Input
@@ -73,14 +73,14 @@ export default function RegisterForm() {
             {...register("companyName", { required: true })}
             autoFocus={true}
             placeholder="Enter company name"
-            className={errors.companyName ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "h-10 border-[#c9cbcc] hover:border-[#1973e1] focus:ring-[#1973e1]"}
+            className={errors.companyName ? "focus:border-destructive border-destructive focus:ring-0 " : "h-10 border-input hover:border-primary focus:ring-primary"}
             disabled={isSubmitting}
           />
-          {errors.companyName && <p className="text-xs text-[#f41f20]">Company name is required</p>}
+          {errors.companyName && <p className="text-xs text-destructive">Company name is required</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="industryId" className="text-sm text-[#282e33]">
+          <Label htmlFor="industryId" className="text-sm text-foreground">
             What type of business do you run?
           </Label>
           <Controller
@@ -89,7 +89,7 @@ export default function RegisterForm() {
             rules={{ required: "Business type is required" }}
             render={({ field }) => (
               <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting || industriesLoading}>
-                <SelectTrigger id="industryId" className={errors.industryId ? "h-10 w-full border-[#f41f20]" : "h-10 w-full border-[#c9cbcc]"}>
+                <SelectTrigger id="industryId" className={errors.industryId ? "h-10 w-full border-destructive" : "h-10 w-full border-input"}>
                   <SelectValue placeholder={industriesLoading ? "Loading business types..." : "Business type"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -102,12 +102,12 @@ export default function RegisterForm() {
               </Select>
             )}
           />
-          {errors.industryId && <p className="text-xs text-[#f41f20]">{errors.industryId.message}</p>}
-          {industriesError && <p className="text-xs text-[#f41f20]">{industriesError.message}</p>}
+          {errors.industryId && <p className="text-xs text-destructive">{errors.industryId.message}</p>}
+          {industriesError && <p className="text-xs text-destructive">{industriesError.message}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="ownerName" className="text-sm text-[#282e33]">
+          <Label htmlFor="ownerName" className="text-sm text-foreground">
             Owner Name
           </Label>
           <Input
@@ -115,19 +115,19 @@ export default function RegisterForm() {
             type="text"
             {...register("ownerName", { required: true })}
             placeholder="Enter your name"
-            className="h-10 border-[#c9cbcc] hover:border-[#1973e1] focus:ring-[#1973e1]"
+            className="h-10 border-input hover:border-primary focus:ring-primary"
             disabled={isSubmitting}
           />
-          {errors.ownerName && <p className="text-xs text-[#f41f20]">Owner name is required</p>}
+          {errors.ownerName && <p className="text-xs text-destructive">Owner name is required</p>}
         </div>
 
         {/* <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm text-[#282e33]">
-            <Button className={authType === "email" ? "hover:bg-[#c9cbcc] text-[#1973e1]" : "hover:bg-[#c9cbcc]"} type="button" variant="secondary" size="sm" onClick={() => setAuthType("email")}>
+          <Label htmlFor="email" className="text-sm text-foreground">
+            <Button className={authType === "email" ? "hover:bg-border-strong text-primary" : "hover:bg-border-strong"} type="button" variant="secondary" size="sm" onClick={() => setAuthType("email")}>
               Email
             </Button>{" "}
             or{" "}
-            <Button className={authType === "phone" ? "hover:bg-[#c9cbcc] text-[#1973e1]" : "hover:bg-[#c9cbcc]"} type="button" variant="secondary" size="sm" onClick={() => setAuthType("phone")}>
+            <Button className={authType === "phone" ? "hover:bg-border-strong text-primary" : "hover:bg-border-strong"} type="button" variant="secondary" size="sm" onClick={() => setAuthType("phone")}>
               Phone
             </Button>
           </Label>
@@ -137,7 +137,7 @@ export default function RegisterForm() {
               type="text"
               {...register(`email`, { required: true })}
               placeholder="Enter your email"
-              className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
+              className="h-10 border-input hover:border-primary hover:ring-primary"
               disabled={isSubmitting}
             />
           ) : (
@@ -149,16 +149,16 @@ export default function RegisterForm() {
                 pattern: /^\+[1-9]\d{7,14}$/,
               })}
               placeholder="Enter your phone number  +373 00 000 000"
-              className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
+              className="h-10 border-input hover:border-primary hover:ring-primary"
               disabled={isSubmitting}
             />
           )}
 
-          {errors.email && <p className="text-xs text-[#f41f20]">Email or phone is required</p>}
+          {errors.email && <p className="text-xs text-destructive">Email or phone is required</p>}
         </div> */}
 
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm text-[#282e33]">
+          <Label htmlFor="email" className="text-sm text-foreground">
             Email
           </Label>
 
@@ -167,13 +167,13 @@ export default function RegisterForm() {
             type="text"
             {...register(`email`, { required: true })}
             placeholder="Enter your email"
-            className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
+            className="h-10 border-input hover:border-primary hover:ring-primary"
             disabled={isSubmitting}
           />
-          {errors.email && <p className="text-xs text-[#f41f20]">Email is required</p>}
+          {errors.email && <p className="text-xs text-destructive">Email is required</p>}
         </div>
         <div>
-          <Label htmlFor="phone" className="text-sm text-[#282e33]">
+          <Label htmlFor="phone" className="text-sm text-foreground">
             Phone
           </Label>
 
@@ -185,14 +185,14 @@ export default function RegisterForm() {
               pattern: /^\+[1-9]\d{7,14}$/,
             })}
             placeholder="Enter your phone number  +373 00 000 000"
-            className="h-10 border-[#c9cbcc] hover:border-[#1973e1] hover:ring-[#1973e1]"
+            className="h-10 border-input hover:border-primary hover:ring-primary"
             disabled={isSubmitting}
           />
-          {errors.phone && <p className="text-xs text-[#f41f20]">Phone is required</p>}
+          {errors.phone && <p className="text-xs text-destructive">Phone is required</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="password" className="text-sm text-[#282e33]">
+          <Label htmlFor="password" className="text-sm text-foreground">
             Password
           </Label>
           <div className="relative">
@@ -207,18 +207,18 @@ export default function RegisterForm() {
                 },
               })}
               placeholder="Create a password"
-              className="h-10 pr-10 border-[#c9cbcc] hover:border-[#1973e1]  hover:ring-[#1973e1]"
+              className="h-10 pr-10 border-input hover:border-primary  hover:ring-primary"
               disabled={isSubmitting}
             />
-            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]">
+            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {errors.password && <p className="text-xs text-[#f41f20]">{errors.password.message}</p>}
+          {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="confirmPassword" className="text-sm text-[#282e33]">
+          <Label htmlFor="confirmPassword" className="text-sm text-foreground">
             Confirm Password
           </Label>
           <div className="relative">
@@ -230,19 +230,19 @@ export default function RegisterForm() {
                 validate: (value) => value === password || "Passwords do not match",
               })}
               placeholder="Confirm your password"
-              className="h-10 pr-10 border-[#c9cbcc] hover:border-[#1973e1] focus:ring-[#1973e1]"
+              className="h-10 pr-10 border-input hover:border-primary focus:ring-primary"
               disabled={isSubmitting}
             />
-            <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#939699] hover:text-[#282e33]">
+            <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {errors.confirmPassword && <p className="text-xs text-[#f41f20]">{errors.confirmPassword.message}</p>}
+          {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>}
         </div>
 
-        {signUpError && <p className="text-sm text-[#f41f20]">{`${signUpError?.message}`}</p>}
+        {signUpError && <p className="text-sm text-destructive">{`${signUpError?.message}`}</p>}
 
-        <Button type="submit" disabled={isSubmitting} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white ">
+        <Button type="submit" disabled={isSubmitting} size="lg" className="w-full">
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Create account"}
         </Button>
       </form>

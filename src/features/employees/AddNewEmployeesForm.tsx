@@ -98,9 +98,9 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
             autoFocus={true}
             disabled={isSubmitting}
             {...register("name", { required: true })}
-            className={errors.name ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
+            className={errors.name ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
           />
-          {errors.name && <p className="text-xs text-[#f41f20]">Name is Reqiured</p>}
+          {errors.name && <p className="text-xs text-destructive">Name is Reqiured</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -119,9 +119,9 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
                   message: "Invalid email adress",
                 },
               })}
-              className={errors.email ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
+              className={errors.email ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
             />
-            {errors.email && <p className="text-xs text-[#f41f20]">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -138,9 +138,9 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
                   message: "Phone must be in firmat +37300000000",
                 },
               })}
-              className={errors.phone ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}
+              className={errors.phone ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
             />
-            {errors.phone && <p className="text-xs text-[#f41f20]">{errors.phone.message}</p>}
+            {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
           </div>
         </div>
 
@@ -155,7 +155,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
               }}
               render={({ field }) => (
                 <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                  <SelectTrigger id="role" className={errors.role ? "focus:border-[#f41f20] border-[#f41f20] focus:ring-0 " : "hover:border-[#1973e1] focus:ring-[#1973e1]"}>
+                  <SelectTrigger id="role" className={errors.role ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}>
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -168,7 +168,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
                 </Select>
               )}
             />
-            {errors.role && <p className="text-xs text-[#f41f20]">{errors.role.message}</p>}
+            {errors.role && <p className="text-xs text-destructive">{errors.role.message}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -216,20 +216,20 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
             )}
           />
           {membersError ? (
-            <p className="text-xs text-[#f41f20]">{membersError instanceof Error ? membersError.message : "Workspace members could not be loaded"}</p>
+            <p className="text-xs text-destructive">{membersError instanceof Error ? membersError.message : "Workspace members could not be loaded"}</p>
           ) : (
             <p className="text-xs text-muted-foreground">Link the workspace account this employee signs in with. Only linked employees can be assigned to orders.</p>
           )}
         </div>
       </div>
 
-      <div className="flex justify-end gap-2">{errors.root && <p className="text-sm text-red-500 mr-auto">{errors.root.message}</p>}</div>
+      <div className="flex justify-end gap-2">{errors.root && <p className="text-sm text-destructive mr-auto">{errors.root.message}</p>}</div>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={handleReset} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Employee"}
         </Button>
       </div>

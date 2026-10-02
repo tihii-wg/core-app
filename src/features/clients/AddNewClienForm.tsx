@@ -52,7 +52,7 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
         <Button type="button" variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Client"}
         </Button>
       </div>

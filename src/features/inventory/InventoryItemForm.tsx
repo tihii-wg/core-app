@@ -21,7 +21,7 @@ type InventoryItemFormProps = {
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-xs text-[#f41f20]">{message}</p>;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 export default function InventoryItemForm({ defaultValues, markupPercent, submitLabel, isSubmitting, onSubmit, onCancel, onMarkupCommit }: InventoryItemFormProps) {
@@ -77,7 +77,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               validate: (value) => value.trim().length > 0 || "Name is required",
             })}
             placeholder="e.g., Brake pads"
-            className={errors.name ? "border-[#f41f20]" : ""}
+            className={errors.name ? "border-destructive" : ""}
           />
           <FieldError message={errors.name?.message} />
         </div>
@@ -112,7 +112,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                 min: { value: 0, message: "Quantity cannot be negative" },
                 validate: (value) => Number.isFinite(value) || "Quantity is required",
               })}
-              className={errors.quantity ? "border-[#f41f20]" : ""}
+              className={errors.quantity ? "border-destructive" : ""}
             />
             <FieldError message={errors.quantity?.message} />
           </div>
@@ -129,7 +129,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                 min: { value: 0, message: "Minimum quantity cannot be negative" },
                 validate: (value) => Number.isFinite(value) || "Minimum quantity is required",
               })}
-              className={errors.minQuantity ? "border-[#f41f20]" : ""}
+              className={errors.minQuantity ? "border-destructive" : ""}
             />
             <FieldError message={errors.minQuantity?.message} />
           </div>
@@ -144,7 +144,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               validate: (value) => value.trim().length > 0 || "Unit is required",
             })}
             placeholder="pcs"
-            className={errors.unit ? "border-[#f41f20]" : ""}
+            className={errors.unit ? "border-destructive" : ""}
           />
           <FieldError message={errors.unit?.message} />
         </div>
@@ -174,10 +174,10 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               setMarkupError("");
               onMarkupCommit(parsed);
             }}
-            className={markupError ? "border-[#f41f20]" : ""}
+            className={markupError ? "border-destructive" : ""}
           />
           <FieldError message={markupError} />
-          <p className="text-xs text-[#939699]">Selling price updates from the purchase price and this markup. You can still edit the selling price.</p>
+          <p className="text-xs text-muted-foreground">Selling price updates from the purchase price and this markup. You can still edit the selling price.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -202,7 +202,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                     applyMarkup(markupText, purchasePrice);
                   }}
                   placeholder="Optional"
-                  className={errors.purchasePrice ? "border-[#f41f20]" : ""}
+                  className={errors.purchasePrice ? "border-destructive" : ""}
                 />
               )}
             />
@@ -225,7 +225,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                   value={field.value ?? ""}
                   onChange={(event) => field.onChange(event.target.value === "" ? null : Number(event.target.value))}
                   placeholder="Optional"
-                  className={errors.sellingPrice ? "border-[#f41f20]" : ""}
+                  className={errors.sellingPrice ? "border-destructive" : ""}
                 />
               )}
             />
@@ -253,7 +253,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
+          <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Spinner className="h-4 w-4" /> : submitLabel}
           </Button>
         </div>

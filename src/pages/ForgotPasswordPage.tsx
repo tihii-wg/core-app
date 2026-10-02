@@ -4,6 +4,7 @@ import { Button } from "../ui/Button";
 import { Label } from "../ui/Label";
 import { Input } from "../ui/Input";
 import { Spinner } from "../ui/Spinner";
+import { LogoMark } from "../ui/Logo";
 import { DEFAULT_LOCALE } from "../App";
 import { useNavigate } from "react-router-dom";
 
@@ -40,9 +41,9 @@ export function ForgotPasswordPage() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
+      <div className="min-h-dvh bg-background flex flex-col">
         <div className="p-4">
-          <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
+          <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
             Back to login
           </button>
@@ -50,15 +51,15 @@ export function ForgotPasswordPage() {
 
         <div className="flex-1 flex items-center justify-center px-4 pb-16">
           <div className="w-full max-w-sm text-center">
-            <div className="bg-white rounded-md border border-[#eeeeef] p-8">
-              <div className="inline-flex items-center justify-center h-12 w-12 bg-[#e6f7ed] rounded-full mb-4">
-                <CheckCircle className="h-6 w-6 text-[#099b49]" />
+            <div className="bg-card rounded-xl border border-border p-8 shadow-sm">
+              <div className="inline-flex items-center justify-center h-12 w-12 bg-success/10 rounded-full mb-4">
+                <CheckCircle className="h-6 w-6 text-success" />
               </div>
-              <h2 className="text-lg font-semibold text-[#282e33] mb-2">Check your inbox</h2>
-              <p className="text-sm text-[#939699] mb-6">
+              <h2 className="text-lg font-semibold text-foreground mb-2">Check your inbox</h2>
+              <p className="text-sm text-muted-foreground mb-6">
                 We&apos;ve sent password reset instructions to <strong>{email}</strong>
               </p>
-              <Button onClick={onSwitchToLogin} variant="outline" className="w-full h-10 border-[#c9cbcc]">
+              <Button onClick={onSwitchToLogin} variant="outline" size="lg" className="w-full">
                 Back to login
               </Button>
             </div>
@@ -69,10 +70,10 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col">
+    <div className="min-h-dvh bg-background flex flex-col">
       {/* Back button */}
       <div className="p-4">
-        <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-[#939699] hover:text-[#282e33]">
+        <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
           Back to login
         </button>
@@ -84,20 +85,18 @@ export function ForgotPasswordPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 mb-2">
-              <div className="h-10 w-10 bg-[#1973e1] rounded-md flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <span className="text-2xl font-semibold text-[#282e33]">Core App</span>
+              <LogoMark className="size-10" />
+              <span className="text-2xl font-semibold text-foreground">Core App</span>
             </div>
-            <p className="text-sm text-[#939699]">Reset your password</p>
+            <p className="text-sm text-muted-foreground">Reset your password</p>
           </div>
 
           {/* Form */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-6">
-            <p className="text-sm text-[#939699] mb-4">Enter your email or phone number and we&apos;ll send you instructions to reset your password.</p>
+          <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+            <p className="text-sm text-muted-foreground mb-4">Enter your email or phone number and we&apos;ll send you instructions to reset your password.</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm text-[#282e33]">
+                <Label htmlFor="email" className="text-sm text-foreground">
                   Email or Phone
                 </Label>
                 <Input
@@ -106,13 +105,13 @@ export function ForgotPasswordPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email or phone"
-                  className="h-10 border-[#c9cbcc] focus:border-[#1973e1] focus:ring-[#1973e1]"
+                  className="h-10"
                   disabled={isLoading}
                 />
-                {error && <p className="text-xs text-[#f41f20]">{error}</p>}
+                {error && <p className="text-xs text-destructive">{error}</p>}
               </div>
 
-              <Button type="submit" disabled={isLoading} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white">
+              <Button type="submit" disabled={isLoading} size="lg" className="w-full">
                 {isLoading ? <Spinner className="h-4 w-4" /> : "Send reset link"}
               </Button>
             </form>
@@ -120,8 +119,8 @@ export function ForgotPasswordPage() {
 
           {/* Login link */}
           <div className="mt-4 text-center">
-            <span className="text-sm text-[#939699]">Remember your password? </span>
-            <button type="button" onClick={onSwitchToLogin} className="text-sm text-[#1973e1] hover:underline font-medium">
+            <span className="text-sm text-muted-foreground">Remember your password? </span>
+            <button type="button" onClick={onSwitchToLogin} className="text-sm text-primary hover:underline font-medium">
               Log in
             </button>
           </div>

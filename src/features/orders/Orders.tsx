@@ -6,7 +6,7 @@ import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
-import { NoOrders } from "../../ui/EmptyState";
+import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
 import { useGetOrders } from "./useGetOrders";
 import type { Order } from "../../lib/types";
@@ -36,7 +36,7 @@ const statusOptions = [
 // ];
 
 export function Orders() {
-  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
+  const { orders, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
 
@@ -73,28 +73,34 @@ export function Orders() {
     {
       key: "orderNumber",
       header: "Order #",
-      cell: (order) => <span className="font-medium text-[#1973e1]">{order.orderNumber}</span>,
+      cell: (order) => <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>,
+      className: "whitespace-nowrap",
     },
     {
       key: "client",
       header: "Client",
-      cell: (order) => order.clientName,
+      cell: (order) => (
+        <span className="block max-w-[11rem] truncate font-medium 2xl:max-w-[13rem]" title={order.clientName}>
+          {order.clientName}
+        </span>
+      ),
     },
     {
       key: "clientType",
       header: "Client Type",
       cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
+      className: "hidden 2xl:table-cell",
     },
     {
       key: "device",
       header: "Device/Service",
       cell: (order) => (
-        <div>
-          <div className="font-medium">{order.device}</div>
-          <div className="text-xs text-[#939699]">{order.service}</div>
+        <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
+          <div className="truncate" title={order.device}>{order.device}</div>
+          {order.service && <div className="truncate text-xs text-muted-foreground" title={order.service}>{order.service}</div>}
         </div>
       ),
-      className: "hidden md:table-cell",
+      className: "hidden xl:table-cell",
     },
     {
       key: "status",
@@ -104,20 +110,24 @@ export function Orders() {
     {
       key: "employee",
       header: "Assigned",
-      cell: (order) => order.assignedEmployeeName,
-      className: "hidden lg:table-cell",
+      cell: (order) => (
+        <span className="block max-w-[10rem] truncate text-muted-foreground" title={order.assignedEmployeeName}>
+          {order.assignedEmployeeName || "—"}
+        </span>
+      ),
+      className: "hidden min-[1800px]:table-cell",
     },
     {
       key: "deadline",
       header: "Deadline",
-      cell: (order) => order.deadline,
-      className: "hidden sm:table-cell",
+      cell: (order) => <span className="tabular-nums text-muted-foreground">{order.deadline || "—"}</span>,
+      className: "hidden 2xl:table-cell whitespace-nowrap",
     },
     {
       key: "total",
       header: "Total",
-      cell: (order) => formatMoney(order.totalPrice),
-      className: "text-right",
+      cell: (order) => <span className="font-medium tabular-nums">{formatMoney(order.totalPrice)}</span>,
+      className: "text-right whitespace-nowrap",
     },
     {
       key: "payment",
@@ -132,7 +142,7 @@ export function Orders() {
         <div className="flex justify-end gap-1">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label={`Edit order ${order.orderNumber}`}
             onClick={(event) => {
@@ -160,13 +170,13 @@ export function Orders() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Orders"
         description={`${orders.length} total orders`}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-            <Plus className="h-4 w-4 mr-1" />
+          <Button onClick={() => setCreateModalOpen(true)}>
+            <Plus />
             Create Order
           </Button>
         }
@@ -200,8 +210,6 @@ export function Orders() {
         }}
       />
 
-      {ordersError && <p className="text-sm text-[#f41f20]">{ordersError.message}</p>}
-
       <DataTable
         columns={columns}
         data={filteredOrders}
@@ -209,10 +217,10 @@ export function Orders() {
         onRowClick={orderDetails.openOrder}
         isLoading={ordersLoading}
         emptyState={
-          searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
-            <div className="py-12 text-center">
-              <p className="text-[#939699]">No orders match your filters</p>
-            </div>
+          ordersError ? (
+            <ErrorState title="Could not load orders" description={ordersError.message} onRetry={() => refetchOrders()} />
+          ) : searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
+            <EmptyState title="No orders match your filters" description="Try a different search term or clear the filters." />
           ) : (
             <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
           )

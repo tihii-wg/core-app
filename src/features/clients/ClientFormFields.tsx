@@ -16,7 +16,7 @@ type ClientFormFieldsProps = {
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-xs text-[#f41f20]">{message}</p>;
+  return <p className="text-xs text-destructive">{message}</p>;
 }
 
 export default function ClientFormFields({ idPrefix, control, register, errors, disabled }: ClientFormFieldsProps) {
@@ -47,7 +47,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
             validate: (value) => value.trim().length > 0 || nameError,
           })}
           placeholder={isOrganization ? "Organization name" : "Full name"}
-          className={errors.clientName ? "border-[#f41f20]" : ""}
+          className={errors.clientName ? "border-destructive" : ""}
           disabled={disabled}
         />
         <FieldError message={errors.clientName?.message} />
@@ -74,7 +74,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
             type="email"
             {...register("email", clientEmailRules)}
             placeholder="email@example.com"
-            className={errors.email ? "border-[#f41f20]" : ""}
+            className={errors.email ? "border-destructive" : ""}
             disabled={disabled}
           />
           <FieldError message={errors.email?.message} />
@@ -85,7 +85,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
             id={`${idPrefix}-phone`}
             {...register("phone", clientPhoneRules)}
             placeholder="+37300000000"
-            className={errors.phone ? "border-[#f41f20]" : ""}
+            className={errors.phone ? "border-destructive" : ""}
             disabled={disabled}
           />
           <FieldError message={errors.phone?.message} />

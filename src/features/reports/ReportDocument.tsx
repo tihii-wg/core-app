@@ -47,7 +47,7 @@ function Cell({ column, value, formatters }: { column: ReportColumn; value: stri
     return (
       <span className="inline-flex items-center justify-end gap-2">
         <span className="print-exact h-1.5 w-16 overflow-hidden rounded-full bg-[#e5e7eb]" aria-hidden="true">
-          <span className="block h-full rounded-full bg-[#1973e1]" style={{ width: `${Math.min(value, 100)}%` }} />
+          <span className="block h-full rounded-full bg-[#1a6de0]" style={{ width: `${Math.min(value, 100)}%` }} />
         </span>
         {text}
       </span>
@@ -123,9 +123,9 @@ export function ReportDocument({ title, description, workspaceName, periodLabel,
 
   return (
     <article aria-label={title} className="mx-auto w-full max-w-[210mm] rounded-md border border-[#e5e7eb] bg-white p-6 text-[#1f2933] shadow-sm sm:p-10 print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
-      <header className="print-exact flex flex-col gap-4 border-b-2 border-[#1973e1] pb-5 sm:flex-row sm:items-end sm:justify-between print:flex-row print:items-end print:justify-between">
+      <header className="print-exact flex flex-col gap-4 border-b-2 border-[#1a6de0] pb-5 sm:flex-row sm:items-end sm:justify-between print:flex-row print:items-end print:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1973e1]">{workspaceName}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#1a6de0]">{workspaceName}</p>
           <h1 className="mt-1 text-2xl font-semibold text-[#111827]">{title}</h1>
           <p className="text-sm text-[#6b7280]">{description}</p>
         </div>

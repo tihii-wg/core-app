@@ -86,7 +86,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
         value={inputValue}
         autoComplete="off"
         placeholder="Service"
-        className={`w-full rounded-md border px-3 py-2 ${errors ? "border-[#f41f20]" : ""}`}
+        className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         onFocus={() => setOpen(true)}
         onChange={(e) => {
           updateValue(e.target.value);
@@ -104,12 +104,12 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
       />
 
       {open && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border bg-white shadow">
+        <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow">
           {filteredServices?.map((service) => (
             <button
               key={service.id}
               type="button"
-              className="block w-full px-3 py-2 text-left hover:bg-gray-100"
+              className="block w-full px-3 py-2 text-left hover:bg-muted"
               onClick={() => {
                 onSelect?.(service);
                 onChange?.(service.service_name);
@@ -138,7 +138,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
                   placeholder="0.00"
                   aria-label="Price"
                   value={price}
-                  className={priceError ? "border-[#f41f20]" : ""}
+                  className={priceError ? "border-destructive" : ""}
                   onChange={(e) => {
                     setPrice(e.target.value);
                     setPriceError("");
@@ -149,16 +149,16 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
                     createService();
                   }}
                 />
-                <button type="button" className="shrink-0 rounded-md bg-[#1973e1] px-3 text-sm text-white hover:bg-[#1565c0]" onClick={createService}>
+                <button type="button" className="shrink-0 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90" onClick={createService}>
                   Add
                 </button>
               </div>
-              {priceError && <p className="text-xs text-[#f41f20]">{priceError}</p>}
+              {priceError && <p className="text-xs text-destructive">{priceError}</p>}
             </div>
           )}
 
           {canCreate && !onCreate && (
-            <button type="button" className="block w-full px-3 py-2 text-left hover:bg-gray-100" onClick={createService}>
+            <button type="button" className="block w-full px-3 py-2 text-left hover:bg-muted" onClick={createService}>
               Create: <strong>{inputValue.trim()}</strong>
             </button>
           )}

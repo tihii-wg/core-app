@@ -33,6 +33,7 @@ import { PageHeader } from "../../pages/PageHeader";
 import { Separator } from "../../ui/Separator";
 import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
+import { StatusBadge } from "../../ui/StatusBadge";
 import { ProfileSettings } from "./ProfileSettings";
 import { CompanySettings } from "./CompanySettings";
 import { SecuritySettings } from "./SecuritySettings";
@@ -80,48 +81,48 @@ export function SettingsModule() {
           setSearchParams({ tab: next }, { replace: true });
         }}
       >
-        <TabsList className="flex-wrap">
+        <TabsList>
           <TabsTrigger value="company">
-            <Building2 className="mr-2 h-4 w-4" />
+            <Building2 />
             Company
           </TabsTrigger>
           <TabsTrigger value="profile">
-            <User className="mr-2 h-4 w-4" />
+            <User />
             Profile
           </TabsTrigger>
           <TabsTrigger value="notifications">
-            <Bell className="mr-2 h-4 w-4" />
+            <Bell />
             Notifications
           </TabsTrigger>
           <TabsTrigger value="security">
-            <Shield className="mr-2 h-4 w-4" />
+            <Shield />
             Security
           </TabsTrigger>
           <TabsTrigger value="billing">
-            <CreditCard className="mr-2 h-4 w-4" />
+            <CreditCard />
             Billing
           </TabsTrigger>
           <TabsTrigger value="team">
-            <Users className="mr-2 h-4 w-4" />
+            <Users />
             Team
           </TabsTrigger>
           <TabsTrigger value="appearance">
-            <Palette className="mr-2 h-4 w-4" />
+            <Palette />
             Appearance
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="company" className="mt-6 space-y-6">
+        <TabsContent value="company" className="mt-5 space-y-5">
           <CompanySettings />
         </TabsContent>
 
         {/* Profile Settings */}
-        <TabsContent value="profile" className="mt-6 space-y-6">
+        <TabsContent value="profile" className="mt-5 space-y-5">
           <ProfileSettings />
         </TabsContent>
 
         {/* Notifications Settings */}
-        <TabsContent value="notifications" className="mt-6 space-y-6">
+        <TabsContent value="notifications" className="mt-5 space-y-5">
           <Card>
             <CardHeader>
               <CardTitle>Email Notifications</CardTitle>
@@ -129,7 +130,8 @@ export function SettingsModule() {
                 Manage your email notification preferences
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
+              <div className="divide-y divide-border rounded-lg border border-border">
               {[
                 {
                   key: "emailOrders",
@@ -149,15 +151,16 @@ export function SettingsModule() {
               ].map((item) => (
                 <div
                   key={item.key}
-                  className="flex items-center justify-between rounded-lg border p-4"
+                  className="flex items-center justify-between gap-4 px-4 py-3.5"
                 >
-                  <div>
-                    <p className="font-medium">{item.label}</p>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{item.label}</p>
+                    <p className="text-[13px] text-muted-foreground">
                       {item.description}
                     </p>
                   </div>
                   <Switch
+                    aria-label={item.label}
                     checked={
                       notifications[item.key as keyof typeof notifications]
                     }
@@ -170,6 +173,7 @@ export function SettingsModule() {
                   />
                 </div>
               ))}
+              </div>
             </CardContent>
           </Card>
 
@@ -180,7 +184,8 @@ export function SettingsModule() {
                 Manage your push notification preferences
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
+              <div className="divide-y divide-border rounded-lg border border-border">
               {[
                 {
                   key: "pushOrders",
@@ -200,15 +205,16 @@ export function SettingsModule() {
               ].map((item) => (
                 <div
                   key={item.key}
-                  className="flex items-center justify-between rounded-lg border p-4"
+                  className="flex items-center justify-between gap-4 px-4 py-3.5"
                 >
-                  <div>
-                    <p className="font-medium">{item.label}</p>
-                    <p className="text-sm text-muted-foreground">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{item.label}</p>
+                    <p className="text-[13px] text-muted-foreground">
                       {item.description}
                     </p>
                   </div>
                   <Switch
+                    aria-label={item.label}
                     checked={
                       notifications[item.key as keyof typeof notifications]
                     }
@@ -221,16 +227,17 @@ export function SettingsModule() {
                   />
                 </div>
               ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="mt-6 space-y-6">
+        <TabsContent value="security" className="mt-5 space-y-5">
           <SecuritySettings />
         </TabsContent>
 
         {/* Billing Settings */}
-        <TabsContent value="billing" className="mt-6 space-y-6">
+        <TabsContent value="billing" className="mt-5 space-y-5">
           <Card>
             <CardHeader>
               <CardTitle>Current Plan</CardTitle>
@@ -239,13 +246,13 @@ export function SettingsModule() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border bg-primary/5 p-6">
-                <div className="flex items-center justify-between">
+              <div className="rounded-lg border border-primary/20 bg-accent/50 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-xl font-bold text-foreground">
+                    <h3 className="text-lg font-semibold text-foreground">
                       Professional Plan
                     </h3>
-                    <p className="text-muted-foreground">
+                    <p className="text-[13px] text-muted-foreground">
                       $49/month, billed monthly
                     </p>
                   </div>
@@ -267,7 +274,7 @@ export function SettingsModule() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Status</p>
-                    <p className="font-medium text-green-600">Active</p>
+                    <StatusBadge variant="success" dot className="mt-0.5">Active</StatusBadge>
                   </div>
                 </div>
               </div>
@@ -282,12 +289,12 @@ export function SettingsModule() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-14 items-center justify-center rounded bg-muted">
-                    <CreditCard className="h-6 w-6" />
+                  <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded-md border border-border bg-muted">
+                    <CreditCard aria-hidden="true" className="size-5 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="font-medium">Visa ending in 4242</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm font-medium text-foreground">Visa ending in 4242</p>
+                    <p className="text-[13px] text-muted-foreground">
                       Expires 12/2025
                     </p>
                   </div>
@@ -302,11 +309,11 @@ export function SettingsModule() {
         </TabsContent>
 
         {/* Team Settings */}
-        <TabsContent value="team" className="mt-6 space-y-6">
+        <TabsContent value="team" className="mt-5 space-y-5">
           <TeamSettings />
         </TabsContent>
 
-        <TabsContent value="appearance" className="mt-6 space-y-6">
+        <TabsContent value="appearance" className="mt-5 space-y-5">
           <AppearanceSettings />
         </TabsContent>
       </Tabs>
@@ -377,7 +384,7 @@ function AppearanceSettings() {
           <CardDescription>Customize how the application looks</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-[#f41f20]">{message}</p>
+          <p className="text-sm text-destructive">{message}</p>
         </CardContent>
       </Card>
     );
@@ -455,7 +462,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label>Theme</Label>
+            <Label htmlFor="pref-theme">Theme</Label>
             <Select
               value={theme}
               onValueChange={(value) => {
@@ -464,7 +471,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
                 applyProfileTheme(nextTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger id="pref-theme" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -478,9 +485,9 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label>Language</Label>
+            <Label htmlFor="pref-language">Language</Label>
             <Select value={language} onValueChange={(value) => setLanguage(normalizeWorkspaceLanguage(value))} disabled={!canEditWorkspace}>
-              <SelectTrigger>
+              <SelectTrigger id="pref-language" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -494,9 +501,9 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label>Timezone</Label>
+            <Label htmlFor="pref-timezone">Timezone</Label>
             <Select value={timezone} onValueChange={setTimezone} disabled={!canEditWorkspace}>
-              <SelectTrigger>
+              <SelectTrigger id="pref-timezone" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -510,9 +517,9 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label>Date Format</Label>
+            <Label htmlFor="pref-date-format">Date Format</Label>
             <Select value={dateFormat} onValueChange={(value) => setDateFormat(normalizeWorkspaceDateFormat(value))} disabled={!canEditWorkspace}>
-              <SelectTrigger>
+              <SelectTrigger id="pref-date-format" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -526,9 +533,9 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label>Currency</Label>
+            <Label htmlFor="pref-currency">Currency</Label>
             <Select value={currency} onValueChange={setCurrency} disabled={!canEditWorkspace}>
-              <SelectTrigger>
+              <SelectTrigger id="pref-currency" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -544,9 +551,9 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
 
         {!canEditWorkspace && <p className="text-sm text-muted-foreground">Language, time zone, date format, and currency apply to the whole company and can only be changed by the workspace owner.</p>}
 
-        <div className="flex justify-end">
+        <div className="flex justify-end border-t border-border pt-5">
           <Button type="button" onClick={onSave} disabled={isPending}>
-            <Save className="mr-2 h-4 w-4" />
+            <Save />
             Save Preferences
           </Button>
         </div>

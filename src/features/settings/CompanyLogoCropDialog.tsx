@@ -62,7 +62,7 @@ function LogoCropper({ imageUrl, saving, onConfirm, onCancel }: { imageUrl: stri
 
   return (
     <>
-      <div className="relative h-80 overflow-hidden rounded-md bg-[#eeeeef]">
+      <div className="relative h-80 overflow-hidden rounded-md bg-muted">
         <Cropper
           image={imageUrl}
           crop={crop}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, CheckCircle, XCircle } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
@@ -12,7 +12,7 @@ import EmployeeDetailPanel from "./EmployeeDetailPanel";
 import useGetEmployees from "./useGetEmployees";
 import { useDebounce } from "../../hooks/useDebounce";
 // import FullPageSpinner from "../../ui/FullPageDataSpinner";
-import { NoEmployees, NoSearchResults } from "../../ui/EmptyState";
+import { ErrorState, NoEmployees, NoSearchResults } from "../../ui/EmptyState";
 
 const roleLabels: Record<EmployeeRole, string> = {
   admin: "Admin",
@@ -21,11 +21,18 @@ const roleLabels: Record<EmployeeRole, string> = {
   receptionist: "Receptionist",
 };
 
+const roleVariants: Record<EmployeeRole, "info" | "violet" | "default" | "warning"> = {
+  admin: "violet",
+  manager: "info",
+  technician: "default",
+  receptionist: "warning",
+};
+
 export function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<EmployeeRole | "all">("all");
   const debouncesearch = useDebounce(searchQuery, 400);
-  const { employees, isLoading, isPending } = useGetEmployees(debouncesearch, roleFilter === "all" ? null : roleFilter);
+  const { employees, isLoading, isPending, error, refetch } = useGetEmployees(debouncesearch, roleFilter === "all" ? null : roleFilter);
 
   // State
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -38,13 +45,13 @@ export function Employees() {
       key: "name",
       header: "Name",
       cell: (emp) => (
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 bg-[#1973e1] rounded-full flex items-center justify-center shrink-0">
-            <span className="text-white text-sm font-medium">{emp.name.charAt(0)}</span>
-          </div>
-          <div>
-            <p className="font-medium text-[#282e33]">{emp.name}</p>
-            <p className="text-xs text-[#939699]">{emp.email}</p>
+        <div className="flex max-w-[20rem] min-w-0 items-center gap-3">
+          <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
+            {emp.name.charAt(0)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground" title={emp.name}>{emp.name}</p>
+            {emp.email && <p className="truncate text-xs text-muted-foreground" title={emp.email}>{emp.email}</p>}
           </div>
         </div>
       ),
@@ -52,43 +59,34 @@ export function Employees() {
     {
       key: "role",
       header: "Role",
-      cell: (emp) => <StatusBadge variant="info">{roleLabels[emp.role]}</StatusBadge>,
+      cell: (emp) => <StatusBadge variant={roleVariants[emp.role] ?? "default"}>{roleLabels[emp.role]}</StatusBadge>,
     },
     {
       key: "tasks",
       header: "Tasks",
       cell: (emp) => (
-        <div className="text-sm">
-          <span className="text-[#282e33]">{emp.assignedTasks}</span>
-          <span className="text-[#939699]"> assigned</span>
+        <div className="text-[13px]">
+          <span className="font-medium text-foreground tabular-nums">{emp.assignedTasks}</span>
+          <span className="text-muted-foreground"> assigned</span>
         </div>
       ),
-      className: "hidden sm:table-cell",
+      className: "hidden sm:table-cell whitespace-nowrap",
     },
     {
       key: "completed",
       header: "Completed",
-      cell: (emp) => <span className="text-[#282e33]">{emp.completedTasks}</span>,
-      className: "hidden md:table-cell",
+      cell: (emp) => <span className="text-foreground tabular-nums">{emp.completedTasks}</span>,
+      className: "hidden md:table-cell text-right",
     },
     {
       key: "status",
       header: "Status",
-      cell: (emp) => (
-        <div className="flex items-center gap-1">
-          {emp.status === "active" ? (
-            <>
-              <CheckCircle className="h-4 w-4 text-[#099b49]" />
-              <span className="text-sm text-[#099b49]">Active</span>
-            </>
-          ) : (
-            <>
-              <XCircle className="h-4 w-4 text-[#939699]" />
-              <span className="text-sm text-[#939699]">Inactive</span>
-            </>
-          )}
-        </div>
-      ),
+      cell: (emp) =>
+        emp.status === "active" ? (
+          <StatusBadge variant="success" dot>Active</StatusBadge>
+        ) : (
+          <StatusBadge variant="muted" dot>Inactive</StatusBadge>
+        ),
     },
   ];
 
@@ -97,13 +95,13 @@ export function Employees() {
     setDetailPanelOpen(true);
   };
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Employees"
         description={isPending ? "Loading employees" : `${employees?.length} team members`}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} className="bg-[#1973e1] hover:bg-[#1565c0] text-white">
-            <Plus className="h-4 w-4 mr-1" />
+          <Button onClick={() => setCreateModalOpen(true)}>
+            <Plus />
             Add Employee
           </Button>
         }
@@ -135,8 +133,16 @@ export function Employees() {
       <DataTable
         columns={columns}
         isLoading={isLoading}
-        data={employees}
-        emptyState={searchQuery ? <NoSearchResults query={searchQuery} /> : <NoEmployees onAddClient={() => setCreateModalOpen(true)} />}
+        data={employees ?? []}
+        emptyState={
+          error ? (
+            <ErrorState title="Could not load employees" description={error.message} onRetry={() => refetch()} />
+          ) : searchQuery ? (
+            <NoSearchResults query={searchQuery} />
+          ) : (
+            <NoEmployees onAddClient={() => setCreateModalOpen(true)} />
+          )
+        }
         keyExtractor={(emp) => emp.id}
         onRowClick={handleRowClick}
       />

@@ -1,14 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, type ElementType } from "react";
 import { TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, CreditCard, Banknote, Building } from "lucide-react";
 import { PageHeader } from "../../pages/PageHeader";
 import { DashboardCard } from "../../ui/DashboardCard";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { StatusBadge } from "../../ui/StatusBadge";
-import { useApp } from "../../lib/appContext";
 import type { Transaction } from "../../lib/types";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { DemoDataNotice } from "../demo/DemoDataNotice";
+import { useFinanceTransactions } from "./useFinanceTransactions";
 
-const paymentMethodIcons: Record<string, React.ElementType> = {
+const paymentMethodIcons: Record<string, ElementType> = {
   cash: Banknote,
   card: CreditCard,
   "bank-transfer": Building,
@@ -16,7 +17,7 @@ const paymentMethodIcons: Record<string, React.ElementType> = {
 };
 
 export function Finance() {
-  const { transactions } = useApp();
+  const { data: transactions, isDemo } = useFinanceTransactions();
   const { formatMoney } = useWorkspaceMoney();
 
   // Calculate summaries
@@ -41,7 +42,7 @@ export function Finance() {
     {
       key: "date",
       header: "Date",
-      cell: (txn) => <span className="text-[#939699]">{txn.date}</span>,
+      cell: (txn) => <span className="text-muted-foreground">{txn.date}</span>,
     },
     {
       key: "type",
@@ -50,13 +51,13 @@ export function Finance() {
         <div className="flex items-center gap-2">
           {txn.type === "income" ? (
             <>
-              <ArrowUpRight className="h-4 w-4 text-[#099b49]" />
-              <span className="text-[#099b49]">Income</span>
+              <ArrowUpRight className="h-4 w-4 text-success" />
+              <span className="text-success">Income</span>
             </>
           ) : (
             <>
-              <ArrowDownRight className="h-4 w-4 text-[#f41f20]" />
-              <span className="text-[#f41f20]">Expense</span>
+              <ArrowDownRight className="h-4 w-4 text-destructive" />
+              <span className="text-destructive">Expense</span>
             </>
           )}
         </div>
@@ -72,7 +73,7 @@ export function Finance() {
       key: "description",
       header: "Description",
       cell: (txn) => (
-        <div className="max-w-xs truncate" title={txn.description}>
+        <div className="max-w-[12rem] truncate xl:max-w-xs" title={txn.description}>
           {txn.description}
         </div>
       ),
@@ -90,19 +91,19 @@ export function Finance() {
           other: "Other",
         };
         return (
-          <div className="flex items-center gap-1.5 text-[#939699]">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <Icon className="h-4 w-4" />
             <span className="text-sm">{labels[txn.paymentMethod]}</span>
           </div>
         );
       },
-      className: "hidden lg:table-cell",
+      className: "hidden xl:table-cell",
     },
     {
       key: "amount",
       header: "Amount",
       cell: (txn) => (
-        <span className={`font-medium ${txn.type === "income" ? "text-[#099b49]" : "text-[#f41f20]"}`}>
+        <span className={`font-medium tabular-nums ${txn.type === "income" ? "text-success" : "text-destructive"}`}>
           {txn.type === "income" ? "+" : "-"}
           {formatMoney(txn.amount)}
         </span>
@@ -113,10 +114,16 @@ export function Finance() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Finance" description="Revenue, expenses, and profit overview" />
+      <PageHeader title="Finance" description={isDemo ? "Layout preview with sample transactions" : "Revenue, expenses, and profit overview"} />
+
+      {isDemo && (
+        <DemoDataNotice title="Finance is not connected to your workspace yet">
+          All figures on this page are sample values for previewing the layout. They are not calculated from your orders, clients, or inventory.
+        </DemoDataNotice>
+      )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <DashboardCard title="Total Revenue" value={formatMoney(stats.income)} icon={TrendingUp} variant="success" />
         <DashboardCard title="Total Expenses" value={formatMoney(stats.expenses)} icon={TrendingDown} variant="danger" />
         <DashboardCard title="Net Profit" value={formatMoney(stats.profit)} icon={DollarSign} variant={stats.profit >= 0 ? "primary" : "danger"} />
@@ -124,18 +131,18 @@ export function Finance() {
       </div>
 
       {/* Main Content */}
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid 2xl:grid-cols-3 gap-5">
         {/* Recent Transactions */}
-        <div className="lg:col-span-2">
-          <h2 className="text-base font-semibold text-[#282e33] mb-4">Recent Transactions</h2>
+        <div className="min-w-0 2xl:col-span-2">
+          <h2 className="text-sm font-semibold text-foreground mb-3">Recent Transactions</h2>
           <DataTable columns={columns} data={transactions} keyExtractor={(txn) => txn.id} />
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-1">
           {/* Payment Method Breakdown */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-            <h3 className="text-base font-semibold text-[#282e33] mb-4">Revenue by Payment Method</h3>
+          <div className="bg-card rounded-lg border border-border p-5 shadow-xs">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Revenue by Payment Method</h3>
             <div className="space-y-4">
               {Object.entries(stats.byPaymentMethod).map(([method, amount]) => {
                 const Icon = paymentMethodIcons[method] || DollarSign;
@@ -150,15 +157,15 @@ export function Finance() {
                   <div key={method}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-[#939699]" />
-                        <span className="text-sm text-[#282e33]">{labels[method]}</span>
+                        <Icon className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm text-foreground">{labels[method]}</span>
                       </div>
-                      <span className="text-sm font-medium text-[#282e33]">{formatMoney(amount)}</span>
+                      <span className="text-sm font-medium text-foreground tabular-nums">{formatMoney(amount)}</span>
                     </div>
-                    <div className="h-2 bg-[#eeeeef] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#1973e1] rounded-full" style={{ width: `${percentage}%` }} />
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${percentage}%` }} />
                     </div>
-                    <p className="text-xs text-[#939699] mt-1">{percentage}%</p>
+                    <p className="text-xs text-muted-foreground mt-1">{percentage}%</p>
                   </div>
                 );
               })}
@@ -166,23 +173,23 @@ export function Finance() {
           </div>
 
           {/* Profit Overview */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-            <h3 className="text-base font-semibold text-[#282e33] mb-4">Profit Overview</h3>
+          <div className="bg-card rounded-lg border border-border p-5 shadow-xs">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Profit Overview</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">Revenue</span>
-                <span className="text-sm font-medium text-[#099b49]">+{formatMoney(stats.income)}</span>
+                <span className="text-sm text-muted-foreground">Revenue</span>
+                <span className="text-sm font-medium text-success">+{formatMoney(stats.income)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#939699]">Expenses</span>
-                <span className="text-sm font-medium text-[#f41f20]">-{formatMoney(stats.expenses)}</span>
+                <span className="text-sm text-muted-foreground">Expenses</span>
+                <span className="text-sm font-medium text-destructive">-{formatMoney(stats.expenses)}</span>
               </div>
-              <div className="border-t border-[#eeeeef] pt-4 flex items-center justify-between">
-                <span className="text-sm font-medium text-[#282e33]">Net Profit</span>
-                <span className={`text-lg font-bold ${stats.profit >= 0 ? "text-[#099b49]" : "text-[#f41f20]"}`}>{formatMoney(stats.profit)}</span>
+              <div className="border-t border-border pt-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-foreground">Net Profit</span>
+                <span className={`text-lg font-semibold tabular-nums ${stats.profit >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(stats.profit)}</span>
               </div>
               <div className="pt-2">
-                <p className="text-xs text-[#939699]">
+                <p className="text-xs text-muted-foreground">
                   Profit Margin: <span className="font-medium">{stats.income > 0 ? ((stats.profit / stats.income) * 100).toFixed(1) : "0"}%</span>
                 </p>
               </div>
@@ -190,8 +197,8 @@ export function Finance() {
           </div>
 
           {/* Expense Categories */}
-          <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-            <h3 className="text-base font-semibold text-[#282e33] mb-4">Top Expenses</h3>
+          <div className="bg-card rounded-lg border border-border p-5 shadow-xs">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Top Expenses</h3>
             <div className="space-y-3">
               {transactions
                 .filter((t) => t.type === "expense")
@@ -199,10 +206,10 @@ export function Finance() {
                 .map((expense) => (
                   <div key={expense.id} className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-[#282e33]">{expense.category}</p>
-                      <p className="text-xs text-[#939699]">{expense.date}</p>
+                      <p className="text-sm text-foreground">{expense.category}</p>
+                      <p className="text-xs text-muted-foreground">{expense.date}</p>
                     </div>
-                    <span className="text-sm font-medium text-[#f41f20]">-{formatMoney(expense.amount)}</span>
+                    <span className="text-sm font-medium text-destructive">-{formatMoney(expense.amount)}</span>
                   </div>
                 ))}
             </div>

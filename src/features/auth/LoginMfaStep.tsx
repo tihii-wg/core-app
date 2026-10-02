@@ -33,8 +33,8 @@ export function LoginMfaStep({ factorId, onVerified, onBack }: LoginMfaStepProps
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1">
-        <h2 className="text-base font-medium text-[#282e33]">Two-factor authentication</h2>
-        <p className="text-sm text-[#939699]">Enter the 6-digit code from your authenticator app.</p>
+        <h2 className="text-base font-medium text-foreground">Two-factor authentication</h2>
+        <p className="text-sm text-muted-foreground">Enter the 6-digit code from your authenticator app.</p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="login-mfa-code">Authentication code</Label>
@@ -48,12 +48,12 @@ export function LoginMfaStep({ factorId, onVerified, onBack }: LoginMfaStepProps
           onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
           className="h-10 tracking-[0.4em]"
         />
-        {error && <p className="text-sm text-[#f41f20]">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
-      <Button type="submit" disabled={verifying || code.length !== 6} className="w-full h-10 bg-[#1973e1] hover:bg-[#1565c0] text-white">
+      <Button type="submit" disabled={verifying || code.length !== 6} size="lg" className="w-full">
         {verifying ? "Verifying..." : "Verify"}
       </Button>
-      <button type="button" onClick={onBack} disabled={verifying} className="w-full text-sm text-[#1973e1] hover:underline">
+      <button type="button" onClick={onBack} disabled={verifying} className="w-full text-sm text-primary hover:underline">
         Back to login
       </button>
     </form>

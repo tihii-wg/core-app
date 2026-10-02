@@ -30,7 +30,7 @@ export function AddInventoryItemDialog({ open, onOpenChange }: { open: boolean; 
           <DialogDescription className="sr-only">Create an inventory item for the current workspace.</DialogDescription>
         </DialogHeader>
         {markupLoading ? (
-          <p className="text-sm text-[#939699]">Loading item...</p>
+          <p className="text-sm text-muted-foreground">Loading item...</p>
         ) : (
           <InventoryItemForm
             defaultValues={emptyInventoryForm}
