@@ -10,9 +10,11 @@ function optionalText(value: unknown) {
   return text || null;
 }
 
-export function toClient(row: Record<string, unknown>): Client {
-  const clientType: ClientType = row.client_type === "organization" ? "organization" : "individual";
+export function toClientType(value: unknown): ClientType | null {
+  return value === "individual" || value === "organization" ? value : null;
+}
 
+export function toClient(row: Record<string, unknown>): Client {
   return {
     id: textValue(row.id),
     name: textValue(row.name),
@@ -22,7 +24,7 @@ export function toClient(row: Record<string, unknown>): Client {
     balance: Number(row.balance ?? 0),
     created_at: textValue(row.created_at),
     notes: textValue(row.notes),
-    client_type: clientType,
+    client_type: toClientType(row.client_type),
     tax_id: optionalText(row.tax_id),
     contact_person: optionalText(row.contact_person),
   };

@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fake } from "../fakeSupabase";
-import { USERS, WS, seedCoreApp } from "../coreAppDb";
+import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
 import { installDomStubs, renderApp, trackUnhandledRejections } from "../appHarness";
 
 vi.mock("../../services/supabase", async () => ({ default: (await import("../fakeSupabase")).fakeClient }));
@@ -61,7 +61,7 @@ describe("dashboard quick actions", () => {
     const dialog = await openQuickAction(user, "Create Order", "Create New Order");
 
     await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
-    await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha" }));
+    await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
     await user.type(within(dialog).getByLabelText("Device *"), "Golf IV");
     await user.type(within(dialog).getByLabelText("Car Number *"), "abc123");
     await user.type(within(dialog).getByLabelText("VIN *"), VIN.toLowerCase());
@@ -140,6 +140,18 @@ describe("dashboard quick actions", () => {
     expect(location.pathname).toBe(dashboardPath);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(unhandled.rejections).toEqual([]);
+  });
+
+  it("shows the client type stored in Supabase in Recent Orders", async () => {
+    row("clients", "client-a1")!.client_type = "organization";
+    await openDashboard();
+
+    const orderRow = await screen.findByRole("row", { name: /Ada Alpha/ });
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    const clientTypeColumn = headers.indexOf("Client Type");
+    expect(clientTypeColumn).toBe(headers.indexOf("Client") + 1);
+    expect(within(orderRow).getAllByRole("cell")[clientTypeColumn]).toHaveTextContent(/^Organization$/);
+    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/^Ada Alpha$/);
   });
 
   it("Create Invoice stays on the dashboard because invoices are not backed by the database yet", async () => {

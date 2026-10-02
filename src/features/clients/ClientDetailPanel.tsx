@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Mail, MapPin, Pencil, Phone } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
-import { StatusBadge } from "../../ui/StatusBadge";
+import ClientTypeBadge from "./ClientTypeBadge";
 import type { Client } from "../../lib/types";
 
 export type ClientOrderSummary = {
@@ -45,7 +45,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
           <SheetTitle className="pr-12">
             <span className="inline-flex items-center gap-2">
               {selectedClient?.name}
-              {selectedClient && <StatusBadge variant={selectedClient.client_type === "organization" ? "info" : "success"}>{selectedClient.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>}
+              {selectedClient && <ClientTypeBadge clientType={selectedClient.client_type} />}
             </span>
           </SheetTitle>
           {selectedClient && !isEditing && (

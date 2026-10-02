@@ -1,5 +1,5 @@
 import type { CreateOrderInput, Order, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
-import { createClient } from "./apiClients";
+import { createClient, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
 
@@ -173,10 +173,12 @@ function formatOrderDate(value: unknown) {
   return value.slice(0, 10);
 }
 
-function clientNameFromRow(clients: unknown) {
-  const client = Array.isArray(clients) ? clients[0] : clients;
-  if (client && typeof client === "object" && "name" in client && typeof client.name === "string") return client.name;
-  return "";
+function clientFromRow(clients: unknown) {
+  const client: Record<string, unknown> | null = Array.isArray(clients) ? clients[0] : clients && typeof clients === "object" ? (clients as Record<string, unknown>) : null;
+  return {
+    name: typeof client?.name === "string" ? client.name : "",
+    clientType: toClientType(client?.client_type),
+  };
 }
 
 function toOrder(
@@ -189,6 +191,7 @@ function toOrder(
   const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
   const isPaid = Boolean(row.is_paid);
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
+  const client = clientFromRow(row.clients);
   const services = serviceLines.map((line) => ({
     serviceId: String(line.service_id ?? ""),
     serviceName: String(line.service_name ?? ""),
@@ -200,7 +203,8 @@ function toOrder(
     id: String(row.id),
     workspace_id: typeof row.workspace_id === "string" ? row.workspace_id : undefined,
     clientId: typeof row.client_id === "string" ? row.client_id : "",
-    clientName: clientNameFromRow(row.clients),
+    clientName: client.name,
+    clientType: client.clientType,
     orderNumber: typeof row.number === "string" ? row.number : "",
     device: typeof row.device === "string" ? row.device : "",
     vin: readVin(row),
@@ -269,7 +273,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
   if (!data || data.length === 0) throw new Error(orderPermissionMessage);
 }
 
-const orderColumns = "*,clients(name)";
+const orderColumns = "*,clients(name,client_type)";
 
 let vinColumnSupported: boolean | undefined;
 

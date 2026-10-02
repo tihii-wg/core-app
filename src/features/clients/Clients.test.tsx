@@ -48,7 +48,7 @@ describe("Clients order counts", () => {
     const adaRow = screen.getByRole("row", { name: /Ada Lovelace/ });
     const graceRow = screen.getByRole("row", { name: /Grace Hopper/ });
 
-    expect(within(adaRow).getAllByRole("cell")[2]).toHaveTextContent("2");
-    expect(within(graceRow).getAllByRole("cell")[2]).toHaveTextContent("0");
+    expect(within(adaRow).getAllByRole("cell")[3]).toHaveTextContent("2");
+    expect(within(graceRow).getAllByRole("cell")[3]).toHaveTextContent("0");
   });
 });

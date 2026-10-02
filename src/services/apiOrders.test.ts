@@ -13,7 +13,8 @@ vi.mock("./supabase", () => ({
   },
 }));
 
-vi.mock("./apiClients", () => ({
+vi.mock("./apiClients", async (importOriginal) => ({
+  toClientType: (await importOriginal<typeof import("./apiClients")>()).toClientType,
   createClient,
 }));
 

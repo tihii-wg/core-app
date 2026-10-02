@@ -28,7 +28,7 @@ type User = ReturnType<typeof renderApp>["user"];
 
 async function fillNewOrder(user: User, dialog: HTMLElement) {
   await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
-  await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha" }));
+  await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
   await user.type(within(dialog).getByLabelText("Device *"), "Golf IV");
   await user.type(within(dialog).getByLabelText("Car Number *"), "abc123");
   await user.type(within(dialog).getByLabelText("VIN *"), VIN.toLowerCase());
@@ -271,6 +271,29 @@ describe("orders page", () => {
     await screen.findByRole("option", { name: "Tina Tech" });
 
     expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Tom Tech", "Tina Tech"]);
+  });
+
+  it("shows the client type stored in Supabase in the table, the detail panel and the client picker", async () => {
+    row("clients", "client-a1")!.client_type = "organization";
+    const { user } = await openOrders();
+
+    const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    const clientTypeColumn = headers.indexOf("Client Type");
+    expect(clientTypeColumn).toBe(headers.indexOf("Client") + 1);
+    const orderRow = screen.getByRole("row", { name: /Ada Alpha/ });
+    expect(within(orderRow).getAllByRole("cell")[clientTypeColumn]).toHaveTextContent(/^Organization$/);
+    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/^Ada Alpha$/);
+
+    await user.click(screen.getByText("Ada Alpha"));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getByText("Client Type").parentElement).toHaveTextContent("Client TypeOrganization");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /Create Order/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
+    expect(await within(dialog).findByRole("button", { name: "Ada Alpha Organization" })).toBeInTheDocument();
   });
 
   it("lists only orders of the active workspace", async () => {

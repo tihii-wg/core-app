@@ -18,6 +18,7 @@ import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
 import { CreateOrderDialog } from "../features/orders/CreateOrderDialog";
 import { AddClientDialog } from "../features/clients/AddClientDialog";
 import { AddInventoryItemDialog } from "../features/inventory/AddInventoryItemDialog";
+import ClientTypeBadge from "../features/clients/ClientTypeBadge";
 
 type QuickActionDialog = "order" | "client" | "inventory";
 
@@ -105,6 +106,11 @@ export default function Dashboard() {
       key: "client",
       header: "Client",
       cell: (order) => order.clientName,
+    },
+    {
+      key: "clientType",
+      header: "Client Type",
+      cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
     },
     {
       key: "device",

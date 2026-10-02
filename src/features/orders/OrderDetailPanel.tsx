@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
+import ClientTypeBadge from "../clients/ClientTypeBadge";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
@@ -74,9 +75,15 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
 
         {selectedOrder && !isEditing && (
           <div className="mt-6 space-y-6 mx-3">
-            <div className="bg-[#f8f9fa] rounded-md p-4">
-              <h3 className="text-sm font-medium text-[#939699] mb-2">Client</h3>
-              <p className="font-medium text-[#282e33]">{selectedOrder.clientName}</p>
+            <div className="bg-[#f8f9fa] rounded-md p-4 grid grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-[#939699] mb-2">Client</h3>
+                <p className="font-medium text-[#282e33]">{selectedOrder.clientName}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-[#939699] mb-2">Client Type</h3>
+                {selectedOrder.clientType ? <ClientTypeBadge clientType={selectedOrder.clientType} /> : <p className="text-[#939699]">—</p>}
+              </div>
             </div>
 
             <div className="space-y-4">

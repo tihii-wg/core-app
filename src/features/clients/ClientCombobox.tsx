@@ -1,6 +1,7 @@
 import { useState, type Ref } from "react";
 import { Input } from "../../ui/Input";
 import type { Client } from "../../lib/types";
+import ClientTypeBadge from "./ClientTypeBadge";
 
 type ClientComboboxProps = {
   clients: Client[];
@@ -44,13 +45,14 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
             <button
               key={client.id}
               type="button"
-              className="block w-full px-3 py-2 text-left hover:bg-gray-100"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-gray-100"
               onClick={() => {
                 onSelect(client);
                 setOpen(false);
               }}
             >
-              {client.name}
+              <span>{client.name}</span>{" "}
+              <ClientTypeBadge clientType={client.client_type} />
             </button>
           ))}
 

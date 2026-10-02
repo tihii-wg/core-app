@@ -74,6 +74,20 @@ describe("clients page", () => {
     expect(unhandled.rejections).toEqual([]);
   });
 
+  it("shows each client's type from Supabase in the Client Type column and the detail panel", async () => {
+    row("clients", "client-a1")!.client_type = "organization";
+    const { user } = await openClients(USERS.member.id);
+
+    expect(screen.getByRole("columnheader", { name: "Client Type" })).toBeInTheDocument();
+    const adaRow = screen.getByRole("row", { name: /Ada Alpha/ });
+    expect(within(adaRow).getByText("Organization")).toBeInTheDocument();
+    expect(within(adaRow).queryByText("Individual")).not.toBeInTheDocument();
+
+    await user.click(screen.getByText("Ada Alpha"));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getByText("Organization")).toBeInTheDocument();
+  });
+
   it("edits a client from the row pencil button in a dialog and stays on the clients page", async () => {
     const { user, location } = await openClients(USERS.member.id);
 

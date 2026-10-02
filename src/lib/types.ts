@@ -37,7 +37,7 @@ export interface Client {
   balance: number;
   created_at: string;
   notes?: string;
-  client_type: ClientType;
+  client_type: ClientType | null;
   tax_id: string | null;
   contact_person: string | null;
 }
@@ -47,6 +47,7 @@ export interface Order {
   workspace_id?: string;
   clientId: string;
   clientName: string;
+  clientType?: ClientType | null;
   orderNumber: string;
   device: string;
   vin: string;

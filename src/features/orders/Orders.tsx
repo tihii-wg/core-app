@@ -12,6 +12,7 @@ import { useGetOrders, useUpdateOrderStatus } from "./useGetOrders";
 import type { OrderStatus, Order } from "../../lib/types";
 import { CreateOrderDialog } from "./CreateOrderDialog";
 import EditOrderForm from "./EditOrderForm";
+import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
@@ -80,6 +81,11 @@ export function Orders() {
       key: "client",
       header: "Client",
       cell: (order) => order.clientName,
+    },
+    {
+      key: "clientType",
+      header: "Client Type",
+      cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
     },
     {
       key: "device",

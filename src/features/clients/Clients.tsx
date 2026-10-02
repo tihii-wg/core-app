@@ -7,7 +7,7 @@ import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { NoClients, NoSearchResults } from "../../ui/EmptyState";
 import type { Client, ClientListFilter } from "../../lib/types";
-import { StatusBadge } from "../../ui/StatusBadge";
+import ClientTypeBadge from "./ClientTypeBadge";
 import { AddClientDialog } from "./AddClientDialog";
 import EditClientForm from "./EditClientForm";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
@@ -49,11 +49,13 @@ export function Clients() {
       key: "name",
       header: "Name",
       cell: (client) => (
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-[#282e33]">{client.name}</span>
-          <StatusBadge variant={client.client_type === "organization" ? "info" : "success"}>{client.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>
-        </div>
+        <span className="font-medium text-[#282e33]">{client.name}</span>
       ),
+    },
+    {
+      key: "clientType",
+      header: "Client Type",
+      cell: (client) => <ClientTypeBadge clientType={client.client_type} />,
     },
 
     {
