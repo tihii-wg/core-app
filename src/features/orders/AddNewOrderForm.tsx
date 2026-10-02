@@ -82,6 +82,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
       await createOrder({
         clientId: data.clientId || undefined,
         clientName: clientName.trim(),
+        clientType: data.newClientType,
         clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
         device: data.device,
