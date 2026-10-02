@@ -203,7 +203,8 @@ class FakeQuery implements PromiseLike<Result> {
   or(expression: string) {
     const group = splitTopLevel(expression).map((part) => {
       const [column, op, ...rest] = part.split(".");
-      return makeFilter(column, op, rest.join("."));
+      const value = rest.join(".");
+      return makeFilter(column, op, op === "in" ? value.replace(/^\(|\)$/g, "").split(",") : value);
     });
     this.orFilters.push(group);
     return this;

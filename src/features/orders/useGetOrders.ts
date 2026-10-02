@@ -4,12 +4,12 @@ import { getOrders, updateOrderStatus } from "../../services/apiOrders";
 import type { OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
-export function useGetOrders() {
+export function useGetOrders(search = "", { enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
   const { data: orders, isLoading, error } = useQuery({
-    queryKey: ["orders", workspaceId],
-    queryFn: () => getOrders(workspaceId),
-    enabled: Boolean(workspaceId),
+    queryKey: search ? ["orders", workspaceId, search] : ["orders", workspaceId],
+    queryFn: () => getOrders(workspaceId, search),
+    enabled: Boolean(workspaceId) && enabled,
   });
 
   return { orders: orders ?? [], isLoading, error };

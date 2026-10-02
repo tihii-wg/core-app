@@ -9,7 +9,7 @@ import { WorkspaceAvatar } from "./WorkspaceAvatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./Dialog";
 import AddNewWorkspaceForm from "../features/workspaces/AddNewWorkspaceForm";
 import AppTopbarNotifications from "./AppTopbarNotifications";
-import SearchComponent from "./SearchComponent";
+import GlobalSearch from "../features/search/GlobalSearch";
 import CompanySelector from "./CompanySelector";
 import UserMenu from "./UserMenu";
 
@@ -32,6 +32,7 @@ export function AppTopbar() {
   const currentTitle = location.pathname.split("/")[3];
 
   const { setMobileSidebarOpen } = useApp();
+  const { workspaceId } = useParams();
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
@@ -53,7 +54,7 @@ export function AppTopbar() {
       {/* Right section */}
       <div className="flex items-center gap-3">
         {/* Search */}
-        <SearchComponent />
+        <GlobalSearch key={workspaceId ?? "none"} />
 
         {/* Notifications */}
         <AppTopbarNotifications />

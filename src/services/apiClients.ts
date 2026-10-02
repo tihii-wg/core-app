@@ -1,5 +1,6 @@
 import type { Client, ClientListFilter, ClientType, CreateClientInput, UpdateClientInput } from "../lib/types";
 import supabase from "./supabase";
+import { searchTerm } from "./searchTerm";
 
 function textValue(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -80,10 +81,6 @@ export async function createClient({ workspace_id, clientName, email, phone, add
   return ((data ?? []) as Record<string, unknown>[]).map(toClient);
 }
 
-function searchTerm(search: string) {
-  return search.replace(/[%_,().]/g, " ").trim();
-}
-
 export async function getClients(search: string, workspaceId: string | undefined, clientType: ClientListFilter = "all") {
   if (!workspaceId) throw new Error("No active workspace selected");
 
@@ -91,7 +88,7 @@ export async function getClients(search: string, workspaceId: string | undefined
 
   const term = searchTerm(search);
   if (term) {
-    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,tax_id.ilike.%${term}%,contact_person.ilike.%${term}%`);
+    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,tax_id.ilike.%${term}%,contact_person.ilike.%${term}%,address.ilike.%${term}%`);
   }
 
   if (clientType === "individual" || clientType === "organization") {

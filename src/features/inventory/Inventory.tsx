@@ -2,7 +2,6 @@ import { useState } from "react";
 import { AlertTriangle, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
@@ -14,11 +13,11 @@ import { useGetInventoryItems } from "./useGetInventoryItems";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
-import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
 import InventoryDetailPanel from "./InventoryDetailPanel";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
 import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
+import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
 
 const stockFilters = [
@@ -56,8 +55,6 @@ export function Inventory() {
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
   const detailQuery = useGetInventoryItem(detailId);
-  const { mutate: deleteItem, isPending: isDeleting } = useDeleteInventoryItem();
-
   const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all";
   const lowStockCount = items.filter((item) => item.stockStatus === "low_stock").length;
   const outOfStockCount = items.filter((item) => item.stockStatus === "out_of_stock").length;
@@ -186,7 +183,7 @@ export function Inventory() {
         <SearchAndFilters
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder="Search by name, SKU, category, or supplier..."
+          searchPlaceholder="Search by name, SKU, category, supplier, or location..."
           filters={[
             {
               key: "stock",
@@ -234,43 +231,11 @@ export function Inventory() {
 
       <EditInventoryItemDialog itemId={editId} onClose={() => setEditId(null)} />
 
-      <Dialog
-        open={Boolean(itemToDelete)}
-        onOpenChange={(open) => {
-          if (!open) setItemToDelete(null);
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete inventory item?</DialogTitle>
-            <DialogDescription>This action cannot be undone.</DialogDescription>
-          </DialogHeader>
-          <p className="text-sm text-[#939699]">
-            Delete <strong className="text-[#282e33]">{itemToDelete?.name}</strong>?
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setItemToDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={isDeleting}
-              onClick={() => {
-                if (!itemToDelete) return;
-                deleteItem(itemToDelete.id, {
-                  onSuccess: () => {
-                    if (detailId === itemToDelete.id) setDetailId(null);
-                    setItemToDelete(null);
-                  },
-                });
-              }}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DeleteInventoryItemDialog
+        item={itemToDelete}
+        onClose={() => setItemToDelete(null)}
+        onDeleted={(itemId) => setDetailId((current) => (current === itemId ? null : current))}
+      />
 
       <InventoryDetailPanel
         item={detailQuery.item}

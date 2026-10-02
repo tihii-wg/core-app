@@ -133,7 +133,7 @@ describe("team members", () => {
   it.each([USERS.manager, USERS.member])("is read-only for $email", async (viewer) => {
     await openTeam(viewer.id);
     expect(screen.queryByRole("button", { name: "Invite Member" })).not.toBeInTheDocument();
-    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+    expect(within(screen.getByRole("main")).queryAllByRole("combobox")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
   });
 });

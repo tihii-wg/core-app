@@ -115,6 +115,28 @@ describe("getOrders", () => {
     expect((await getOrders(WS.A)).map((order) => order.id)).toEqual(["order-a1", "order-a0"]);
   });
 
+  it("searches order fields and the order's client, inside the workspace only", async () => {
+    fake.all("orders").push({ ...row("orders", "order-a1"), id: "order-a2", number: `ORD-${year}-002`, client_id: "client-other", device: "Golf", car_number: "XYZ999", description: "Brakes squeal", service: "Brake check" });
+    const ids = async (search: string) => (await getOrders(WS.A, search)).map((order) => order.id).sort();
+
+    expect(await ids(`ORD-${year}-002`)).toEqual(["order-a2"]);
+    expect(await ids("golf")).toEqual(["order-a2"]);
+    expect(await ids("xyz999")).toEqual(["order-a2"]);
+    expect(await ids("squeal")).toEqual(["order-a2"]);
+    expect(await ids("brake check")).toEqual(["order-a2"]);
+    expect(await ids("ada alpha")).toEqual(["order-a1"]);
+    expect(await ids("+3736111")).toEqual(["order-a1"]);
+    expect(await ids("Bob Beta")).toEqual([]);
+    expect(await ids("   ")).toEqual(["order-a1", "order-a2"]);
+  });
+
+  it("strips PostgREST syntax characters from the order search", async () => {
+    await getOrders(WS.A, "a,b).or(x");
+    const orderRequest = fake.requests.filter((request) => request.table === "orders").at(-1);
+    expect(orderRequest?.filters).toContain(`workspace_id=eq.${WS.A}`);
+    expect(orderRequest?.filters.filter((filter) => filter.includes("ilike")).join(" ")).not.toMatch(/[,()]/);
+  });
+
   it("surfaces errors from each query", async () => {
     await expect(getOrders(undefined)).rejects.toThrow("No active workspace selected");
     fake.failNext("orders", "select", { code: "PGRST000", message: "orders down" });

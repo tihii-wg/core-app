@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
+import { clientOrderSummaries } from "./clientOrders";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 export function Clients() {
@@ -31,17 +32,7 @@ export function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
-  const getClientOrders = (clientId: string) => {
-    return orders
-      .filter((order) => order.clientId === clientId)
-      .map((order) => ({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        device: order.device,
-        service: order.service,
-        totalPrice: order.totalPrice,
-      }));
-  };
+  const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
 
   // Table columns
   const columns: Column<Client>[] = [
@@ -139,7 +130,7 @@ export function Clients() {
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search by name, tax ID, contact, email, or phone..."
+        searchPlaceholder="Search by name, tax ID, contact, email, phone, or address..."
         filters={[
           {
             key: "clientType",

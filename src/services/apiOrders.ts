@@ -1,7 +1,8 @@
 import type { CreateOrderInput, Order, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
-import { createClient, toClientType } from "./apiClients";
+import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
+import { searchTerm } from "./searchTerm";
 
 const orderPermissionMessage = "Order was not found or you do not have permission to change it.";
 
@@ -224,14 +225,23 @@ function toOrder(
   };
 }
 
-export async function getOrders(workspaceId: string | undefined) {
+async function orderSearchFilter(workspaceId: string, term: string) {
+  const vinColumn = (await supportsVinColumn()) ? "vin" : "employee_id";
+  const filters = ["number", "device", "car_number", vinColumn, "service", "description"].map((column) => `${column}.ilike.%${term}%`);
+  const matchingClients = await getClients(term, workspaceId);
+  if (matchingClients.length > 0) filters.push(`client_id.in.(${matchingClients.map((client) => client.id).join(",")})`);
+  return filters.join(",");
+}
+
+export async function getOrders(workspaceId: string | undefined, search = "") {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
-  const { data, error } = await supabase
-    .from("orders")
-    .select(orderColumns)
-    .eq("workspace_id", resolvedWorkspaceId)
-    .order("created_at", { ascending: false });
+  let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
+
+  const term = searchTerm(search);
+  if (term) query = query.or(await orderSearchFilter(resolvedWorkspaceId, term));
+
+  const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 

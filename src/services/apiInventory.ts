@@ -1,5 +1,6 @@
 import type { InventoryItem, InventoryItemFormData, InventoryListFilter, InventorySort, InventorySortField, InventoryStockStatus } from "../lib/types";
 import supabase from "./supabase";
+import { searchTerm } from "./searchTerm";
 
 const inventorySortColumns: Record<InventorySortField, string> = {
   name: "name",
@@ -90,10 +91,6 @@ function itemPayload(input: InventoryItemFormData) {
   };
 }
 
-function searchTerm(search: string | undefined) {
-  return search?.replace(/[%_,().]/g, " ").trim() ?? "";
-}
-
 export async function getInventoryItems(search: string | undefined, filter: InventoryListFilter, sort: InventorySort, workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const column = inventorySortColumns[sort.field] ?? "created_at";
@@ -102,7 +99,7 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
 
   const term = searchTerm(search);
   if (term) {
-    query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%,category.ilike.%${term}%,supplier.ilike.%${term}%`);
+    query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%,category.ilike.%${term}%,supplier.ilike.%${term}%,location.ilike.%${term}%,description.ilike.%${term}%`);
   }
 
   if (filter === "inactive") {

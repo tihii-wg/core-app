@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fake } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
@@ -104,7 +104,7 @@ describe("appearance settings", () => {
   it("saves company preferences for the owner", async () => {
     const { user } = await openSettings(USERS.owner.id, "appearance");
     await screen.findByRole("button", { name: /Save Preferences/ });
-    const selects = screen.getAllByRole("combobox");
+    const selects = within(screen.getByRole("main")).getAllByRole("combobox");
     expect(selects[4]).toHaveTextContent("MDL");
     await user.click(selects[4]);
     await user.click(await screen.findByRole("option", { name: "USD ($)" }));
@@ -117,7 +117,7 @@ describe("appearance settings", () => {
   it("lets a member change only the personal theme", async () => {
     const { user } = await openSettings(USERS.member.id, "appearance");
     expect(await screen.findByText(/can only be changed by the workspace owner/)).toBeInTheDocument();
-    const selects = screen.getAllByRole("combobox");
+    const selects = within(screen.getByRole("main")).getAllByRole("combobox");
     expect(selects.slice(1).every((select) => select.hasAttribute("disabled") || select.getAttribute("data-disabled") !== null)).toBe(true);
 
     await user.click(selects[0]);
