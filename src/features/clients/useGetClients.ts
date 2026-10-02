@@ -10,11 +10,12 @@ export function useGetClients(search: string, clientType: ClientListFilter = "al
     isLoading,
     isPending,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["clients", workspaceId, search, clientType],
     queryFn: () => getClients(search, workspaceId, clientType),
     enabled: Boolean(workspaceId) && enabled,
   });
 
-  return { clients, isLoading, isPending, error };
+  return { clients, isLoading, isPending, error, refetch };
 }

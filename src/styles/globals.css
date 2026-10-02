@@ -127,3 +127,32 @@
     cursor: pointer;
   }
 }
+
+/* No @page size, so the printer's paper choice (A4, Letter, ...) is respected. */
+@media print {
+  @page {
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .print-exact {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-row-group;
+  }
+
+  body:has(> [data-report-print-root]) > :not([data-report-print-root]) {
+    display: none !important;
+  }
+}

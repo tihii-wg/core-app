@@ -6,13 +6,13 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useGetOrders(search = "", { enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
-  const { data: orders, isLoading, error } = useQuery({
+  const { data: orders, isLoading, error, refetch } = useQuery({
     queryKey: search ? ["orders", workspaceId, search] : ["orders", workspaceId],
     queryFn: () => getOrders(workspaceId, search),
     enabled: Boolean(workspaceId) && enabled,
   });
 
-  return { orders: orders ?? [], isLoading, error };
+  return { orders: orders ?? [], isLoading, error, refetch };
 }
 
 export function useUpdateOrderStatus() {

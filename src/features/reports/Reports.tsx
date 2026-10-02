@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useCallback, useState, type ReactElement } from "react";
 import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, DollarSign, Package, Calendar, Download, FileText, PieChart, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/Card";
 import { Button } from "../../ui/Button";
@@ -19,6 +19,9 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useNavigate, useParams } from "react-router-dom";
 import { quickReports, quickReportTypes } from "./quickReports";
 import { employeePerformance, lowestStockLevels, percentChange, reportPeriod, revenueSeries, serviceDistribution, summaryStats, type ReportRange } from "./reportStats";
+import { ExportReportDialog } from "./ExportReportDialog";
+import { ReportPrintRoot, type ReportPrintJob } from "./ReportPrintRoot";
+import { useReportFormatting } from "./reportFormatting";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
   return (
@@ -53,6 +56,10 @@ export function ReportsModule() {
   const { currency, formatMoney } = useWorkspaceMoney();
   const [dateRange, setDateRange] = useState<ReportRange>("last30");
   const [activeTab, setActiveTab] = useState("overview");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [printJob, setPrintJob] = useState<ReportPrintJob | null>(null);
+  const finishPrint = useCallback(() => setPrintJob(null), []);
+  const { formatDate } = useReportFormatting();
   const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
   const navigate = useNavigate();
 
@@ -129,13 +136,15 @@ export function ReportsModule() {
                 <SelectItem value="thisYear">This Year</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline">
+            <Button variant="outline" onClick={() => setExportOpen(true)}>
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
           </div>
         }
       />
+      <ExportReportDialog open={exportOpen} range={dateRange} onOpenChange={setExportOpen} onPrint={setPrintJob} />
+      {printJob && <ReportPrintRoot job={printJob} formatMoney={(value) => formatMoney(value)} formatDate={formatDate} onDone={finishPrint} />}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

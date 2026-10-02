@@ -131,21 +131,23 @@ export function ReportDocument({ title, description, workspaceName, periodLabel,
         </div>
         <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm sm:text-right print:text-right">
           <dt className="text-[#6b7280]">Period</dt>
-          <dd className="font-medium">{periodLabel}</dd>
+          <dd className="whitespace-nowrap font-medium">{periodLabel}</dd>
           <dt className="text-[#6b7280]">Generated</dt>
-          <dd className="font-medium">{generatedLabel}</dd>
+          <dd className="whitespace-nowrap font-medium">{generatedLabel}</dd>
         </dl>
       </header>
 
-      <section aria-label="Key figures" className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 print:grid-cols-3 break-inside-avoid">
-        {model.kpis.map((kpi) => (
-          <div key={kpi.label} className="min-w-0 rounded-md border border-[#e5e7eb] p-3 [overflow-wrap:anywhere]">
-            <p className="text-xs font-medium uppercase tracking-wide text-[#6b7280]">{kpi.label}</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums text-[#111827]">{formatValue(kpi.value, kpi.format, formatters)}</p>
-            {kpi.hint && <p className="mt-0.5 text-xs text-[#6b7280]">{kpi.hint}</p>}
-          </div>
-        ))}
-      </section>
+      {model.kpis.length > 0 && (
+        <section aria-label="Key figures" className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 print:grid-cols-3 break-inside-avoid">
+          {model.kpis.map((kpi) => (
+            <div key={kpi.label} className="min-w-0 rounded-md border border-[#e5e7eb] p-3 [overflow-wrap:anywhere]">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#6b7280]">{kpi.label}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-[#111827]">{formatValue(kpi.value, kpi.format, formatters)}</p>
+              {kpi.hint && <p className="mt-0.5 text-xs text-[#6b7280]">{kpi.hint}</p>}
+            </div>
+          ))}
+        </section>
+      )}
 
       {model.sections.map((section) => (
         <section key={section.title} aria-label={section.title} className="mt-8">

@@ -112,26 +112,49 @@ function stockValue(item: InventoryItem, price: number | null) {
   return price == null ? 0 : item.quantity * price;
 }
 
-export function salesReport(orders: Order[], clientCreatedDates: string[], period: ReportPeriod): QuickReportModel {
-  const periodOrders = ordersIn(orders, period.start, period.end).sort(newestFirst);
-  const billable = periodOrders.filter(isBillable);
-  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
-  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
-  const billed = sum(billable, (order) => order.totalPrice);
-  const series = seriesRows(orders, period);
-
-  const statusRows = (Object.keys(statusLabels) as OrderStatus[])
+export function ordersByStatusSection(orders: Order[], period: ReportPeriod): ReportSection {
+  const periodOrders = ordersIn(orders, period.start, period.end);
+  const rows = (Object.keys(statusLabels) as OrderStatus[])
     .map((status) => {
       const matching = periodOrders.filter((order) => order.status === status);
       return { status: statusLabels[status], orders: matching.length, value: sum(matching, (order) => order.totalPrice), share: share(matching.length, periodOrders.length) };
     })
     .filter((row) => row.orders > 0);
 
+  return {
+    kind: "table",
+    title: "Orders by status",
+    columns: [
+      { key: "status", header: "Status" },
+      { key: "orders", header: "Orders", format: "number" },
+      { key: "value", header: "Value", format: "money" },
+      { key: "share", header: "Share of orders", format: "share" },
+    ],
+    rows,
+  };
+}
+
+export function servicesSoldSection(orders: Order[], period: ReportPeriod): ReportSection {
   const services = serviceDistribution(orders, period, Number.POSITIVE_INFINITY);
   const servicesTotal = sum(services, (service) => service.count);
 
+  return {
+    kind: "table",
+    title: "Services sold",
+    description: "Service lines on orders created in this period, excluding cancelled orders.",
+    columns: [
+      { key: "service", header: "Service" },
+      { key: "count", header: "Times performed", format: "number" },
+      { key: "revenue", header: "Value", format: "money" },
+      { key: "share", header: "Share", format: "share" },
+    ],
+    rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.count, servicesTotal) })),
+  };
+}
+
+export function topClientsSection(orders: Order[], period: ReportPeriod, limit = 10): ReportSection {
   const clients = new Map<string, { client: string; orders: number; value: number; paid: number; outstanding: number }>();
-  for (const order of billable) {
+  for (const order of ordersIn(orders, period.start, period.end).filter(isBillable)) {
     const key = order.clientId || order.clientName;
     const row = clients.get(key) ?? { client: order.clientName || "—", orders: 0, value: 0, paid: 0, outstanding: 0 };
     row.orders += 1;
@@ -140,7 +163,64 @@ export function salesReport(orders: Order[], clientCreatedDates: string[], perio
     else row.outstanding += order.totalPrice;
     clients.set(key, row);
   }
-  const clientRows = [...clients.values()].sort((a, b) => b.value - a.value || a.client.localeCompare(b.client)).slice(0, 10);
+  const limited = Number.isFinite(limit);
+
+  return {
+    kind: "table",
+    title: limited ? "Top clients" : "Clients by order value",
+    description: limited ? `Up to ${limit} clients by order value in this period.` : "Clients with orders in this period, excluding cancelled orders.",
+    columns: [
+      { key: "client", header: "Client" },
+      { key: "orders", header: "Orders", format: "number" },
+      { key: "value", header: "Order value", format: "money" },
+      { key: "paid", header: "Paid", format: "money" },
+      { key: "outstanding", header: "Outstanding", format: "money" },
+    ],
+    rows: [...clients.values()].sort((a, b) => b.value - a.value || a.client.localeCompare(b.client)).slice(0, limit),
+  };
+}
+
+export function ordersListSection(orders: Order[], period: ReportPeriod): ReportSection {
+  const periodOrders = ordersIn(orders, period.start, period.end).sort(newestFirst);
+
+  return {
+    kind: "table",
+    title: "Orders",
+    columns: [
+      { key: "number", header: "Order" },
+      { key: "date", header: "Date", format: "date" },
+      { key: "client", header: "Client" },
+      { key: "status", header: "Status" },
+      { key: "payment", header: "Payment" },
+      { key: "total", header: "Total", format: "money" },
+    ],
+    rows: periodOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabels[order.status], payment: order.isPaid ? "Paid" : "Unpaid", total: order.totalPrice })),
+    totals: periodOrders.length ? { number: "Total", total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
+  };
+}
+
+export function summaryKpis(orders: Order[], clientCreatedDates: string[], period: ReportPeriod): ReportKpi[] {
+  const periodOrders = ordersIn(orders, period.start, period.end);
+  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
+  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
+  const outstandingOrders = periodOrders.filter(isOutstanding);
+
+  return [
+    { label: "Revenue collected", value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
+    { label: "Orders", value: current.orders, format: "number", hint: changeHint(current.orders, previous.orders) },
+    { label: "Total order value", value: sum(periodOrders.filter(isBillable), (order) => order.totalPrice), format: "money", hint: "Excludes cancelled orders" },
+    { label: "Outstanding", value: sum(outstandingOrders, (order) => order.totalPrice), format: "money", hint: `${outstandingOrders.length} unpaid orders` },
+    { label: "Average order value", value: current.avgOrderValue, format: "money", hint: changeHint(current.avgOrderValue, previous.avgOrderValue) },
+    { label: "New clients", value: current.newClients, format: "number", hint: changeHint(current.newClients, previous.newClients) },
+  ];
+}
+
+export function salesReport(orders: Order[], clientCreatedDates: string[], period: ReportPeriod): QuickReportModel {
+  const billable = ordersIn(orders, period.start, period.end).filter(isBillable);
+  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
+  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
+  const billed = sum(billable, (order) => order.totalPrice);
+  const series = seriesRows(orders, period);
 
   return {
     kpis: [
@@ -164,56 +244,10 @@ export function salesReport(orders: Order[], clientCreatedDates: string[], perio
         rows: series,
         totals: series.length ? { period: "Total", orders: current.orders, billed, collected: current.revenue } : undefined,
       },
-      {
-        kind: "table",
-        title: "Orders by status",
-        columns: [
-          { key: "status", header: "Status" },
-          { key: "orders", header: "Orders", format: "number" },
-          { key: "value", header: "Value", format: "money" },
-          { key: "share", header: "Share of orders", format: "share" },
-        ],
-        rows: statusRows,
-      },
-      {
-        kind: "table",
-        title: "Services sold",
-        description: "Service lines on orders created in this period, excluding cancelled orders.",
-        columns: [
-          { key: "service", header: "Service" },
-          { key: "count", header: "Times performed", format: "number" },
-          { key: "revenue", header: "Value", format: "money" },
-          { key: "share", header: "Share", format: "share" },
-        ],
-        rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.count, servicesTotal) })),
-      },
-      {
-        kind: "table",
-        title: "Top clients",
-        description: "Up to 10 clients by order value in this period.",
-        columns: [
-          { key: "client", header: "Client" },
-          { key: "orders", header: "Orders", format: "number" },
-          { key: "value", header: "Order value", format: "money" },
-          { key: "paid", header: "Paid", format: "money" },
-          { key: "outstanding", header: "Outstanding", format: "money" },
-        ],
-        rows: clientRows,
-      },
-      {
-        kind: "table",
-        title: "Orders",
-        columns: [
-          { key: "number", header: "Order" },
-          { key: "date", header: "Date", format: "date" },
-          { key: "client", header: "Client" },
-          { key: "status", header: "Status" },
-          { key: "payment", header: "Payment" },
-          { key: "total", header: "Total", format: "money" },
-        ],
-        rows: periodOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabels[order.status], payment: order.isPaid ? "Paid" : "Unpaid", total: order.totalPrice })),
-        totals: periodOrders.length ? { number: "Total", total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
-      },
+      ordersByStatusSection(orders, period),
+      servicesSoldSection(orders, period),
+      topClientsSection(orders, period),
+      ordersListSection(orders, period),
     ],
   };
 }
@@ -387,14 +421,58 @@ export function employeeReport(orders: Order[], employees: Employee[], period: R
   };
 }
 
+export function revenueByPeriodSection(orders: Order[], period: ReportPeriod): ReportSection {
+  const periodOrders = ordersIn(orders, period.start, period.end);
+  const current = periodTotals(orders, [], period.start, period.end);
+  const billed = sum(periodOrders.filter(isBillable), (order) => order.totalPrice);
+  const outstanding = sum(periodOrders.filter(isOutstanding), (order) => order.totalPrice);
+  const series = seriesRows(orders, period);
+
+  return {
+    kind: "table",
+    title: "Revenue by period",
+    columns: [
+      { key: "period", header: "Period" },
+      { key: "orders", header: "Orders", format: "number" },
+      { key: "billed", header: "Billed", format: "money" },
+      { key: "collected", header: "Collected", format: "money" },
+      { key: "outstanding", header: "Outstanding", format: "money" },
+    ],
+    rows: series,
+    totals: series.length ? { period: "Total", orders: current.orders, billed, collected: current.revenue, outstanding } : undefined,
+  };
+}
+
+export function outstandingOrdersSection(orders: Order[], period: ReportPeriod): ReportSection {
+  const outstandingOrders = ordersIn(orders, period.start, period.end).filter(isOutstanding).sort(newestFirst);
+
+  return {
+    kind: "table",
+    title: "Outstanding orders",
+    description: "Unpaid orders created in this period, excluding cancelled orders.",
+    columns: [
+      { key: "number", header: "Order" },
+      { key: "date", header: "Date", format: "date" },
+      { key: "client", header: "Client" },
+      { key: "status", header: "Status" },
+      { key: "total", header: "Amount due", format: "money" },
+    ],
+    rows: outstandingOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabels[order.status], total: order.totalPrice })),
+    totals: outstandingOrders.length ? { number: "Total", total: sum(outstandingOrders, (order) => order.totalPrice) } : undefined,
+  };
+}
+
+export const expensesUnavailable: ReportSection = { kind: "unavailable", title: "Expenses and profit", description: "Expenses are not recorded in the app yet, so costs and profit cannot be calculated." };
+
+export const invoicesUnavailable: ReportSection = { kind: "unavailable", title: "Invoices", description: "Invoices are not stored in the database yet, so invoice totals cannot be reported." };
+
 export function financialReport(orders: Order[], items: InventoryItem[], period: ReportPeriod): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
   const current = periodTotals(orders, [], period.start, period.end);
   const previous = periodTotals(orders, [], period.previousStart, period.previousEnd);
   const billed = sum(periodOrders.filter(isBillable), (order) => order.totalPrice);
-  const outstandingOrders = periodOrders.filter(isOutstanding).sort(newestFirst);
+  const outstandingOrders = periodOrders.filter(isOutstanding);
   const outstanding = sum(outstandingOrders, (order) => order.totalPrice);
-  const series = seriesRows(orders, period);
   const services = serviceDistribution(orders, period, Number.POSITIVE_INFINITY).sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name));
   const servicesRevenue = sum(services, (service) => service.revenue);
   const inventoryCost = sum(
@@ -412,19 +490,7 @@ export function financialReport(orders: Order[], items: InventoryItem[], period:
       { label: "Inventory value at cost", value: inventoryCost, format: "money", hint: "Current stock, not period-based" },
     ],
     sections: [
-      {
-        kind: "table",
-        title: "Revenue by period",
-        columns: [
-          { key: "period", header: "Period" },
-          { key: "orders", header: "Orders", format: "number" },
-          { key: "billed", header: "Billed", format: "money" },
-          { key: "collected", header: "Collected", format: "money" },
-          { key: "outstanding", header: "Outstanding", format: "money" },
-        ],
-        rows: series,
-        totals: series.length ? { period: "Total", orders: current.orders, billed, collected: current.revenue, outstanding } : undefined,
-      },
+      revenueByPeriodSection(orders, period),
       {
         kind: "table",
         title: "Revenue by service",
@@ -437,22 +503,9 @@ export function financialReport(orders: Order[], items: InventoryItem[], period:
         ],
         rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.revenue, servicesRevenue) })),
       },
-      {
-        kind: "table",
-        title: "Outstanding orders",
-        description: "Unpaid orders created in this period, excluding cancelled orders.",
-        columns: [
-          { key: "number", header: "Order" },
-          { key: "date", header: "Date", format: "date" },
-          { key: "client", header: "Client" },
-          { key: "status", header: "Status" },
-          { key: "total", header: "Amount due", format: "money" },
-        ],
-        rows: outstandingOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabels[order.status], total: order.totalPrice })),
-        totals: outstandingOrders.length ? { number: "Total", total: outstanding } : undefined,
-      },
-      { kind: "unavailable", title: "Expenses and profit", description: "Expenses are not recorded in the app yet, so costs and profit cannot be calculated." },
-      { kind: "unavailable", title: "Invoices", description: "Invoices are not stored in the database yet, so invoice totals cannot be reported." },
+      outstandingOrdersSection(orders, period),
+      expensesUnavailable,
+      invoicesUnavailable,
     ],
   };
 }
@@ -471,8 +524,9 @@ function csvCell(value: string) {
 }
 
 export function reportCsv(meta: { title: string; workspace: string; period: string; generated: string }, model: QuickReportModel) {
-  const lines: string[][] = [[meta.title], ["Workspace", meta.workspace], ["Period", meta.period], ["Generated", meta.generated], [], ["Key figures"]];
+  const lines: string[][] = [[meta.title], ["Workspace", meta.workspace], ["Period", meta.period], ["Generated", meta.generated]];
 
+  if (model.kpis.length) lines.push([], ["Key figures"]);
   for (const kpi of model.kpis) lines.push([kpi.label, csvRawValue(kpi.value, kpi.format)]);
 
   for (const section of model.sections) {
