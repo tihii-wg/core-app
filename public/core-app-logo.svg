@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="core-app-logo-gradient" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3a86f4" />
+      <stop offset="1" stop-color="#1557c9" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#core-app-logo-gradient)" />
+  <path d="M21.6 11.2a7.4 7.4 0 1 0 0 9.6" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" />
+  <circle cx="16" cy="16" r="2.3" fill="#fff" />
+</svg>
