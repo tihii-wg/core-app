@@ -154,6 +154,57 @@ describe("dashboard quick actions", () => {
     expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/^Ada Alpha$/);
   });
 
+  it("opens the order details first, then edits the order from the panel and stays on the dashboard", async () => {
+    const { user, location } = await openDashboard();
+    const orderNumber = `ORD-${new Date().getFullYear()}-001`;
+
+    await user.click(await screen.findByText("Alpha Garage car"));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getByText(orderNumber)).toBeInTheDocument();
+    expect(within(panel).getByText("Update Status")).toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Device *")).not.toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Edit" }));
+    const device = await within(panel).findByLabelText("Device *");
+    expect(device).toHaveValue("Alpha Garage car");
+    await user.clear(device);
+    await user.type(device, "Alpha van");
+    await user.type(within(panel).getByLabelText("VIN *"), VIN);
+    await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
+
+    await expectClosedOnDashboard(location);
+    expect(row("orders", "order-a1")).toMatchObject({ device: "Alpha van", vin: VIN, workspace_id: WS.A });
+    expect(await screen.findByText("Alpha van")).toBeInTheDocument();
+  });
+
+  it("returns to the order details when editing is cancelled, without saving", async () => {
+    const { user, location } = await openDashboard();
+
+    await user.click(await screen.findByText("Alpha Garage car"));
+    const panel = await screen.findByRole("dialog");
+    await user.click(within(panel).getByRole("button", { name: "Edit" }));
+    await user.clear(await within(panel).findByLabelText("Device *"));
+    await user.click(within(panel).getByRole("button", { name: "Cancel" }));
+
+    expect(within(panel).getByText("Update Status")).toBeInTheDocument();
+    expect(location.pathname).toBe(dashboardPath);
+    expect(row("orders", "order-a1")?.device).toBe("Alpha Garage car");
+    expect(fake.requests.filter((request) => request.table === "orders" && request.op === "update")).toHaveLength(0);
+  });
+
+  it("changes the order status from the dashboard's order details panel", async () => {
+    const { user, location } = await openDashboard();
+
+    await user.click(await screen.findByText("Alpha Garage car"));
+    const panel = await screen.findByRole("dialog");
+    await user.click(within(panel).getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: "Paid" }));
+
+    await waitFor(() => expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true }));
+    await waitFor(() => expect(within(panel).getByRole("combobox")).toHaveTextContent("Paid"));
+    expect(location.pathname).toBe(dashboardPath);
+  });
+
   it("Create Invoice stays on the dashboard because invoices are not backed by the database yet", async () => {
     const { user, location } = await openDashboard();
 

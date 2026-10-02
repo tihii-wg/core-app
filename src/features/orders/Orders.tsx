@@ -8,12 +8,12 @@ import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
-import { useGetOrders, useUpdateOrderStatus } from "./useGetOrders";
-import type { OrderStatus, Order } from "../../lib/types";
+import { useGetOrders } from "./useGetOrders";
+import type { Order } from "../../lib/types";
+import { useOrderDetails } from "./useOrderDetails";
 import { CreateOrderDialog } from "./CreateOrderDialog";
-import EditOrderForm from "./EditOrderForm";
+import { EditOrderDialog } from "./EditOrderDialog";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -38,7 +38,7 @@ const statusOptions = [
 export function Orders() {
   const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
-  const { mutate: updateStatus } = useUpdateOrderStatus();
+  const orderDetails = useOrderDetails();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -47,8 +47,6 @@ export function Orders() {
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [detailPanelOpen, setDetailPanelOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   const { employees} = useGetEmployees();
@@ -149,27 +147,6 @@ export function Orders() {
     },
   ];
 
-  const handleRowClick = (order: Order) => {
-    setSelectedOrder(order);
-    setDetailPanelOpen(true);
-  };
-
-  const handleStatusChange = (newStatus: OrderStatus) => {
-    if (!selectedOrder) return;
-    const order = selectedOrder;
-    updateStatus(
-      { orderId: order.id, status: newStatus },
-      {
-        onSuccess: () =>
-          setSelectedOrder((current) =>
-            current?.id === order.id
-              ? { ...current, status: newStatus, ...(newStatus === "paid" ? { isPaid: true, paymentStatus: "paid" as const } : {}) }
-              : current,
-          ),
-      },
-    );
-  };
-
   // if (ordersLoading || employeesIsLoading) {
   //   return <FullPageDataSpinner />;
   // }
@@ -229,7 +206,7 @@ export function Orders() {
         columns={columns}
         data={filteredOrders}
         keyExtractor={(order) => order.id}
-        onRowClick={handleRowClick}
+        onRowClick={orderDetails.openOrder}
         isLoading={ordersLoading}
         emptyState={
           searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
@@ -246,40 +223,13 @@ export function Orders() {
       {/* Create Order Modal */}
       <CreateOrderDialog open={createModalOpen} onOpenChange={setCreateModalOpen} searchQuery={searchQuery} />
 
-      <Dialog
-        open={Boolean(editingOrder)}
-        onOpenChange={(open) => {
-          if (!open) setEditingOrder(null);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Order {editingOrder?.orderNumber}</DialogTitle>
-            <DialogDescription className="sr-only">Update the selected order's VIN, services, device, assignment, and deadline.</DialogDescription>
-          </DialogHeader>
-          {editingOrder && (
-            <EditOrderForm
-              key={editingOrder.id}
-              order={editingOrder}
-              employees={employees ?? []}
-              onCancel={() => setEditingOrder(null)}
-              onUpdated={(order) => {
-                setSelectedOrder((current) => (current?.id === order.id ? order : current));
-                setEditingOrder(null);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <OrderDetailPanel
-        selectedOrder={selectedOrder}
-        detailPanelOpen={detailPanelOpen}
-        setDetailPanelOpen={setDetailPanelOpen}
-        // employees={employees ?? []}
-        onOrderUpdated={setSelectedOrder}
-        onStatusChange={handleStatusChange}
+      <EditOrderDialog
+        order={editingOrder}
+        onClose={() => setEditingOrder(null)}
+        onUpdated={orderDetails.syncOrder}
       />
+
+      <OrderDetailPanel {...orderDetails.panelProps} />
     </div>
   );
 }

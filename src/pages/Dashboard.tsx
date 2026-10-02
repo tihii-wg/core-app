@@ -19,6 +19,8 @@ import { CreateOrderDialog } from "../features/orders/CreateOrderDialog";
 import { AddClientDialog } from "../features/clients/AddClientDialog";
 import { AddInventoryItemDialog } from "../features/inventory/AddInventoryItemDialog";
 import ClientTypeBadge from "../features/clients/ClientTypeBadge";
+import OrderDetailPanel from "../features/orders/OrderDetailPanel";
+import { useOrderDetails } from "../features/orders/useOrderDetails";
 
 type QuickActionDialog = "order" | "client" | "inventory";
 
@@ -32,6 +34,7 @@ export default function Dashboard() {
   const { orders = [], clients = [], invoices = [], setCurrentModule } = useApp();
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
+  const orderDetails = useOrderDetails();
   const dialogProps = (dialog: QuickActionDialog) => ({
     open: openDialog === dialog,
     onOpenChange: (open: boolean) => setOpenDialog(open ? dialog : null),
@@ -222,6 +225,7 @@ export default function Dashboard() {
       <CreateOrderDialog {...dialogProps("order")} />
       <AddClientDialog {...dialogProps("client")} />
       <AddInventoryItemDialog {...dialogProps("inventory")} />
+      <OrderDetailPanel {...orderDetails.panelProps} />
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
@@ -238,7 +242,7 @@ export default function Dashboard() {
             columns={orderColumns}
             data={recentOrders}
             keyExtractor={(order) => order.id}
-            onRowClick={() => setCurrentModule("orders")}
+            onRowClick={orderDetails.openOrder}
             isLoading={ordersLoading}
             emptyState={
               <EmptyState
