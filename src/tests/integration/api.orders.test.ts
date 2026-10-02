@@ -40,8 +40,14 @@ describe("createOrder", () => {
   });
 
   it("creates a missing client with the entered phone and email, and ignores them for an existing client", async () => {
-    const created = await createOrder({ clientName: " Nina New ", clientPhone: " +37369000001 ", clientEmail: " nina@example.com ", device: "Car", services: [oilChange] }, WS.A);
-    expect(row("clients", String(created.client_id))).toMatchObject({ name: "Nina New", phone: "+37369000001", email: "nina@example.com", workspace_id: WS.A });
+    const created = await createOrder(
+      { clientName: " Nina New ", clientType: "organization", clientTaxId: " 1002600000001 ", clientContactPerson: " Ion ", clientPhone: " +37369000001 ", clientEmail: " nina@example.com ", device: "Car", services: [oilChange] },
+      WS.A,
+    );
+    expect(row("clients", String(created.client_id))).toMatchObject({ name: "Nina New", client_type: "organization", tax_id: "1002600000001", contact_person: "Ion", phone: "+37369000001", email: "nina@example.com", workspace_id: WS.A });
+
+    const walkIn = await createOrder({ clientName: "Walk In Two", clientTaxId: "999", clientContactPerson: "Nobody", clientPhone: "+37369000003", clientEmail: "walk@example.com", device: "Car", services: [oilChange] }, WS.A);
+    expect(row("clients", String(walkIn.client_id))).toMatchObject({ client_type: "individual", tax_id: null, contact_person: null });
 
     const clientsBefore = fake.all("clients").length;
     const existing = await createOrder({ clientName: "nina new", clientPhone: "+37369000002", clientEmail: "other@example.com", device: "Car", services: [oilChange] }, WS.A);

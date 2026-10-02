@@ -75,7 +75,9 @@ describe("AddNewOrderForm client validation", () => {
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Client *"), "Nina New");
+    expect(screen.getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
     await user.type(screen.getByLabelText("Phone *"), "069123456");
     await user.click(screen.getByRole("button", { name: "Create Order" }));
 
@@ -86,6 +88,28 @@ describe("AddNewOrderForm client validation", () => {
     await user.clear(screen.getByLabelText("Client *"));
     expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
     expect(screen.queryByText("Email is required")).not.toBeInTheDocument();
+  });
+
+  it("shows the organization name, IDNO and contact name fields only for a new organization", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    await user.type(screen.getByLabelText("Client *"), "Fleet SRL");
+    expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Client type *" }));
+    await user.click(await screen.findByRole("option", { name: "Organization" }));
+
+    expect(screen.getByLabelText("Organization name *")).toHaveValue("Fleet SRL");
+    expect(screen.getByLabelText("IDNO")).toBeInTheDocument();
+    expect(screen.getByLabelText("Contact name")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Client type *" }));
+    await user.click(await screen.findByRole("option", { name: "Individual" }));
+
+    expect(screen.getByLabelText("Client *")).toHaveValue("Fleet SRL");
+    expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
   });
 
   it("requires the VIN to contain exactly 17 characters", async () => {

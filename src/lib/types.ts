@@ -81,6 +81,8 @@ export interface Employee {
 export interface addNewOrderFormData {
   clientId: string;
   newClientType?: ClientType;
+  newClientTaxId?: string;
+  newClientContactPerson?: string;
   newClientEmail?: string;
   newClientPhone?: string;
   device: string;
@@ -98,6 +100,8 @@ export type CreateOrderInput = {
   clientId?: string;
   clientName: string;
   clientType?: ClientType;
+  clientTaxId?: string;
+  clientContactPerson?: string;
   clientEmail?: string;
   clientPhone?: string;
   device: string;

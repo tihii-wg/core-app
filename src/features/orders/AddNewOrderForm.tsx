@@ -16,7 +16,8 @@ import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
-import { clientEmailRules, clientPhoneRules } from "../clients/clientValidation";
+import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
+import ClientTypeSelect from "../clients/ClientTypeSelect";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
   const { services } = useGetServices();
@@ -54,6 +55,8 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
   const selectedClientId = useWatch({ control, name: "clientId" });
   const typedClientName = clientName.trim();
   const isNewClient = typedClientName !== "" && !selectedClientId && !clients?.some((client) => client.name?.toLowerCase() === typedClientName.toLowerCase());
+  const newClientType = useWatch({ control, name: "newClientType" });
+  const isNewOrganization = isNewClient && newClientType === "organization";
 
   const {
     fields: serviceField,
@@ -83,6 +86,8 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         clientId: data.clientId || undefined,
         clientName: clientName.trim(),
         clientType: data.newClientType,
+        clientTaxId: data.newClientTaxId,
+        clientContactPerson: data.newClientContactPerson,
         clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
         device: data.device,
@@ -104,7 +109,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
-          <Label htmlFor="client">Client *</Label>
+          <Label htmlFor="client">{isNewOrganization ? "Organization name *" : "Client *"}</Label>
           <Controller
             name="clientId"
             control={control}
@@ -137,27 +142,53 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           {errors.clientId && <p className="text-xs text-[#f41f20]">{errors.clientId.message}</p>}
 
           {isNewClient && (
-            <div className="grid grid-cols-2 gap-4 pt-1.5">
+            <div className="space-y-4 pt-1.5">
               <div className="space-y-1.5">
-                <Label htmlFor="newClientPhone">Phone *</Label>
-                <Input
-                  id="newClientPhone"
-                  {...register("newClientPhone", { ...clientPhoneRules, shouldUnregister: true })}
-                  placeholder="+37300000000"
-                  className={errors.newClientPhone ? "border-[#f41f20]" : ""}
+                <Label htmlFor="newClientType">Client type *</Label>
+                <Controller
+                  name="newClientType"
+                  control={control}
+                  defaultValue="individual"
+                  shouldUnregister
+                  rules={clientTypeRules}
+                  render={({ field }) => <ClientTypeSelect id="newClientType" value={field.value} onChange={field.onChange} />}
                 />
-                {errors.newClientPhone && <p className="text-xs text-[#f41f20]">{errors.newClientPhone.message}</p>}
+                {errors.newClientType && <p className="text-xs text-[#f41f20]">{errors.newClientType.message}</p>}
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="newClientEmail">Email *</Label>
-                <Input
-                  id="newClientEmail"
-                  type="email"
-                  {...register("newClientEmail", { ...clientEmailRules, shouldUnregister: true })}
-                  placeholder="email@example.com"
-                  className={errors.newClientEmail ? "border-[#f41f20]" : ""}
-                />
-                {errors.newClientEmail && <p className="text-xs text-[#f41f20]">{errors.newClientEmail.message}</p>}
+              {isNewOrganization && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newClientTaxId">IDNO</Label>
+                    <Input id="newClientTaxId" {...register("newClientTaxId", { shouldUnregister: true })} placeholder="Optional" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newClientContactPerson">Contact name</Label>
+                    <Input id="newClientContactPerson" {...register("newClientContactPerson", { shouldUnregister: true })} placeholder="Optional" />
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="newClientPhone">Phone *</Label>
+                  <Input
+                    id="newClientPhone"
+                    {...register("newClientPhone", { ...clientPhoneRules, shouldUnregister: true })}
+                    placeholder="+37300000000"
+                    className={errors.newClientPhone ? "border-[#f41f20]" : ""}
+                  />
+                  {errors.newClientPhone && <p className="text-xs text-[#f41f20]">{errors.newClientPhone.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="newClientEmail">Email *</Label>
+                  <Input
+                    id="newClientEmail"
+                    type="email"
+                    {...register("newClientEmail", { ...clientEmailRules, shouldUnregister: true })}
+                    placeholder="email@example.com"
+                    className={errors.newClientEmail ? "border-[#f41f20]" : ""}
+                  />
+                  {errors.newClientEmail && <p className="text-xs text-[#f41f20]">{errors.newClientEmail.message}</p>}
+                </div>
               </div>
             </div>
           )}

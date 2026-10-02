@@ -10,7 +10,7 @@ function requireWorkspaceId(workspaceId: string | undefined) {
   return workspaceId;
 }
 
-async function resolveClientId(workspaceId: string, { clientId, clientName, clientType, clientEmail = "", clientPhone = "" }: CreateOrderInput) {
+async function resolveClientId(workspaceId: string, { clientId, clientName, clientType, clientTaxId, clientContactPerson, clientEmail = "", clientPhone = "" }: CreateOrderInput) {
   if (clientId) return clientId;
 
   const name = clientName.trim();
@@ -24,6 +24,9 @@ async function resolveClientId(workspaceId: string, { clientId, clientName, clie
   const createdClients = await createClient({
     workspace_id: workspaceId,
     clientName: name,
+    clientType,
+    taxId: clientTaxId,
+    contactPerson: clientContactPerson,
     email: clientEmail,
     phone: clientPhone,
     address: "",

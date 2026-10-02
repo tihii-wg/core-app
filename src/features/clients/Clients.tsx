@@ -51,7 +51,7 @@ export function Clients() {
       cell: (client) => (
         <div className="flex items-center gap-2">
           <span className="font-medium text-[#282e33]">{client.name}</span>
-          <StatusBadge variant={client.client_type === "organization" ? "info" : "muted"}>{client.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>
+          <StatusBadge variant={client.client_type === "organization" ? "info" : "success"}>{client.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>
         </div>
       ),
     },

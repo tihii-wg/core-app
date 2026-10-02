@@ -45,7 +45,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
           <SheetTitle className="pr-12">
             <span className="inline-flex items-center gap-2">
               {selectedClient?.name}
-              {selectedClient && <StatusBadge variant={selectedClient.client_type === "organization" ? "info" : "muted"}>{selectedClient.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>}
+              {selectedClient && <StatusBadge variant={selectedClient.client_type === "organization" ? "info" : "success"}>{selectedClient.client_type === "organization" ? "Organization" : "Individual"}</StatusBadge>}
             </span>
           </SheetTitle>
           {selectedClient && !isEditing && (

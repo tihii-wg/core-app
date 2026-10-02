@@ -68,6 +68,11 @@ describe("orders page", () => {
     const client = within(dialog).getByPlaceholderText("Client");
     await user.clear(client);
     await user.type(client, "Nina New");
+    await user.click(within(dialog).getByRole("combobox", { name: "Client type *" }));
+    await user.click(await screen.findByRole("option", { name: "Organization" }));
+    expect(within(dialog).getByLabelText("Organization name *")).toHaveValue("Nina New");
+    await user.type(within(dialog).getByLabelText("IDNO"), "1002600000001");
+    await user.type(within(dialog).getByLabelText("Contact name"), "Ion Popescu");
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
     await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
 
@@ -76,7 +81,9 @@ describe("orders page", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     const created = fake.all("orders").find((order) => order.device === "Golf IV");
     const newClients = fake.all("clients").filter((item) => item.name === "Nina New");
-    expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, phone: "+37369000001", email: "nina@example.com" })]);
+    expect(newClients).toEqual([
+      expect.objectContaining({ workspace_id: WS.A, client_type: "organization", tax_id: "1002600000001", contact_person: "Ion Popescu", phone: "+37369000001", email: "nina@example.com" }),
+    ]);
     expect(created?.client_id).toBe(newClients[0].id);
     expect(await screen.findByText("Nina New")).toBeInTheDocument();
   });
@@ -90,6 +97,7 @@ describe("orders page", () => {
     await user.clear(client);
     await user.type(client, "ada alpha");
     expect(within(dialog).queryByLabelText("Phone *")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
     const clientsBefore = fake.all("clients").length;
 
     await user.click(within(dialog).getByRole("button", { name: "Create Order" }));

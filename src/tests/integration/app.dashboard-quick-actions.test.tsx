@@ -80,7 +80,11 @@ describe("dashboard quick actions", () => {
     const { user, location } = await openDashboard();
     const dialog = await openQuickAction(user, "Create Order", "Create New Order");
 
+    await user.click(within(dialog).getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
     await user.type(within(dialog).getByPlaceholderText("Client"), "Nina New");
+    expect(within(dialog).getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
+    expect(within(dialog).queryByLabelText("IDNO")).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
     await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
     await user.type(within(dialog).getByLabelText("Device *"), "Golf IV");
@@ -88,13 +92,11 @@ describe("dashboard quick actions", () => {
     await user.type(within(dialog).getByLabelText("VIN *"), VIN);
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: "Oil change" }));
-    await user.click(within(dialog).getByRole("combobox"));
-    await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
     await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
 
     await expectClosedOnDashboard(location);
     const newClients = fake.all("clients").filter((client) => client.name === "Nina New");
-    expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, phone: "+37369000001", email: "nina@example.com" })]);
+    expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, client_type: "individual", tax_id: null, contact_person: null, phone: "+37369000001", email: "nina@example.com" })]);
     expect(fake.all("orders").find((order) => order.device === "Golf IV")?.client_id).toBe(newClients[0].id);
   });
 
