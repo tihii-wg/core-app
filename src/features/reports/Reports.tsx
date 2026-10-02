@@ -6,9 +6,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { PageHeader } from "../../pages/PageHeader";
 // import { useApp } from "../../lib/app-context";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart as RechartsPieChart, Pie, Cell, Legend, AreaChart, Area } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Legend, AreaChart, Area } from "recharts";
 import { formatWorkspaceMoneyCompact } from "../../lib/workspaceFormat";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { Skeleton } from "../../ui/Skeleton";
+import { useGetOrders } from "../orders/useGetOrders";
+import { useGetClients } from "../clients/useGetClients";
+import useGetEmployees from "../employees/useGetEmployees";
+import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { clientCreatedAt } from "../../pages/dashboardStats";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { employeePerformance, lowestStockLevels, percentChange, reportPeriod, revenueSeries, serviceDistribution, summaryStats, type ReportRange } from "./reportStats";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
   return (
@@ -20,71 +28,80 @@ function ReportChart({ height, children }: { height: number; children: ReactElem
   );
 }
 
-const monthlyRevenue = [
-  { month: "Jan", revenue: 45000, orders: 120 },
-  { month: "Feb", revenue: 52000, orders: 135 },
-  { month: "Mar", revenue: 48000, orders: 128 },
-  { month: "Apr", revenue: 61000, orders: 156 },
-  { month: "May", revenue: 55000, orders: 142 },
-  { month: "Jun", revenue: 67000, orders: 168 },
-];
+function ReportPlaceholder({ height, title = "No data available yet", description, isLoading = false, isError = false }: { height: number; title?: string; description?: string; isLoading?: boolean; isError?: boolean }) {
+  return (
+    <div className="flex w-full flex-col items-center justify-center gap-1 text-center" style={{ height }}>
+      {isLoading ? (
+        <Skeleton className="h-full w-full" />
+      ) : (
+        <>
+          <p className="font-medium text-foreground">{isError ? "Could not load report data" : title}</p>
+          <p className="text-sm text-muted-foreground">{isError ? "Refresh the page to try again." : description}</p>
+        </>
+      )}
+    </div>
+  );
+}
 
-const serviceBreakdown = [
-  { name: "Oil Change", value: 35, color: "#1973e1" },
-  { name: "Brake Service", value: 25, color: "#099b49" },
-  { name: "Tire Rotation", value: 20, color: "#f89200" },
-  { name: "Engine Repair", value: 12, color: "#6366f1" },
-  { name: "Other", value: 8, color: "#94a3b8" },
-];
+const granularityLabels = { day: "Daily", week: "Weekly", month: "Monthly" } as const;
 
-const employeePerformance = [
-  { name: "John Smith", completed: 45, revenue: 12500 },
-  { name: "Sarah Johnson", completed: 52, revenue: 14200 },
-  { name: "Mike Davis", completed: 38, revenue: 9800 },
-  { name: "Emily Brown", completed: 41, revenue: 11300 },
-];
-
-const inventoryTrends = [
-  { month: "Jan", stock: 2500, used: 1800 },
-  { month: "Feb", stock: 2200, used: 2100 },
-  { month: "Mar", stock: 2800, used: 1900 },
-  { month: "Apr", stock: 2400, used: 2200 },
-  { month: "May", stock: 2600, used: 2000 },
-  { month: "Jun", stock: 2900, used: 2300 },
-];
+const inventorySort = { field: "name", ascending: true } as const;
 
 export function ReportsModule() {
   const { currency, formatMoney } = useWorkspaceMoney();
-  const [dateRange, setDateRange] = useState("last30");
+  const [dateRange, setDateRange] = useState<ReportRange>("last30");
   const [activeTab, setActiveTab] = useState("overview");
+
+  // Queries stay disabled (and report isLoading: false) until the active workspace is known.
+  const { workspaceId } = useActiveWorkspaceId();
+  const waitingForWorkspace = !workspaceId;
+  const { orders, isLoading: ordersQueryLoading, error: ordersError } = useGetOrders();
+  const { clients = [], isLoading: clientsQueryLoading, error: clientsError } = useGetClients("");
+  const { employees = [], isLoading: employeesQueryLoading, error: employeesError } = useGetEmployees();
+  const { items: inventoryItems, isLoading: inventoryQueryLoading, isError: inventoryError } = useGetInventoryItems("", "all", inventorySort);
+  const ordersLoading = waitingForWorkspace || ordersQueryLoading;
+  const clientsLoading = waitingForWorkspace || clientsQueryLoading;
+  const employeesLoading = waitingForWorkspace || employeesQueryLoading;
+  const inventoryLoading = waitingForWorkspace || inventoryQueryLoading;
+
+  const period = reportPeriod(dateRange, new Date());
+  const summary = summaryStats(
+    orders,
+    clients.map((client) => clientCreatedAt(client)),
+    period,
+  );
+  const series = revenueSeries(orders, period);
+  const services = serviceDistribution(orders, period);
+  const employeeResults = employeePerformance(orders, employees, period);
+  const stockLevels = lowestStockLevels(inventoryItems);
+  const granularity = granularityLabels[period.granularity];
+
+  const statsLoading = ordersLoading || clientsLoading;
+  const statsError = Boolean(ordersError || clientsError);
 
   const stats = [
     {
       title: "Total Revenue",
-      value: formatMoney(328000),
-      change: "+12.5%",
-      trend: "up",
+      value: formatMoney(summary.current.revenue),
+      change: percentChange(summary.current.revenue, summary.previous.revenue),
       icon: DollarSign,
     },
     {
       title: "Total Orders",
-      value: "849",
-      change: "+8.2%",
-      trend: "up",
+      value: String(summary.current.orders),
+      change: percentChange(summary.current.orders, summary.previous.orders),
       icon: ShoppingCart,
     },
     {
       title: "New Clients",
-      value: "156",
-      change: "+15.3%",
-      trend: "up",
+      value: String(summary.current.newClients),
+      change: percentChange(summary.current.newClients, summary.previous.newClients),
       icon: Users,
     },
     {
       title: "Avg Order Value",
-      value: formatMoney(386.34),
-      change: "-2.1%",
-      trend: "down",
+      value: formatMoney(summary.current.avgOrderValue),
+      change: percentChange(summary.current.avgOrderValue, summary.previous.avgOrderValue),
       icon: Activity,
     },
   ];
@@ -96,7 +113,7 @@ export function ReportsModule() {
         description="Business performance insights and analytics"
         actions={
           <div className="flex items-center gap-3">
-            <Select value={dateRange} onValueChange={setDateRange}>
+            <Select value={dateRange} onValueChange={(value) => setDateRange(value as ReportRange)}>
               <SelectTrigger className="w-45">
                 <Calendar className="mr-2 h-4 w-4" />
                 <SelectValue />
@@ -125,13 +142,19 @@ export function ReportsModule() {
                 <div className="rounded-lg bg-primary/10 p-2">
                   <stat.icon className="h-5 w-5 text-primary" />
                 </div>
-                <div className={`flex items-center gap-1 text-sm font-medium ${stat.trend === "up" ? "text-green-600" : "text-red-600"}`}>
-                  {stat.trend === "up" ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {stat.change}
-                </div>
+                {statsLoading || statsError || stat.change === null ? (
+                  <span className="text-sm text-muted-foreground" title="No data for the previous period">
+                    —
+                  </span>
+                ) : (
+                  <div className={`flex items-center gap-1 text-sm font-medium ${stat.change >= 0 ? "text-green-600" : "text-red-600"}`} title="Compared with the previous period">
+                    {stat.change >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    {`${stat.change >= 0 ? "+" : ""}${stat.change.toFixed(1)}%`}
+                  </div>
+                )}
               </div>
               <div className="mt-4">
-                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                {statsLoading ? <Skeleton className="h-8 w-24" /> : <p className="text-2xl font-bold text-foreground">{statsError ? "—" : stat.value}</p>}
                 <p className="text-sm text-muted-foreground">{stat.title}</p>
               </div>
             </CardContent>
@@ -167,17 +190,20 @@ export function ReportsModule() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-primary" />
-                  Monthly Revenue
+                  {granularity} Revenue
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {ordersLoading || ordersError || summary.current.orders === 0 ? (
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No orders were created in this period." />
+                ) : (
                 <ReportChart height={300}>
-                    <AreaChart data={monthlyRevenue}>
+                    <AreaChart data={series}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
+                      <XAxis dataKey="label" stroke="#6b7280" fontSize={12} />
                       <YAxis stroke="#6b7280" fontSize={12} tickFormatter={(v) => formatWorkspaceMoneyCompact(v, currency)} />
                       <Tooltip
-                        formatter={(value: number) => [formatMoney(value), "Revenue"]}
+                        formatter={(value) => [formatMoney(Number(value)), "Revenue"]}
                         contentStyle={{
                           backgroundColor: "#fff",
                           border: "1px solid #e5e7eb",
@@ -187,6 +213,7 @@ export function ReportsModule() {
                       <Area type="monotone" dataKey="revenue" stroke="#1973e1" fill="#1973e1" fillOpacity={0.1} strokeWidth={2} />
                     </AreaChart>
                 </ReportChart>
+                )}
               </CardContent>
             </Card>
 
@@ -195,15 +222,18 @@ export function ReportsModule() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ShoppingCart className="h-5 w-5 text-primary" />
-                  Monthly Orders
+                  {granularity} Orders
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {ordersLoading || ordersError || summary.current.orders === 0 ? (
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No orders were created in this period." />
+                ) : (
                 <ReportChart height={300}>
-                    <BarChart data={monthlyRevenue}>
+                    <BarChart data={series}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
-                      <YAxis stroke="#6b7280" fontSize={12} />
+                      <XAxis dataKey="label" stroke="#6b7280" fontSize={12} />
+                      <YAxis stroke="#6b7280" fontSize={12} allowDecimals={false} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: "#fff",
@@ -211,9 +241,10 @@ export function ReportsModule() {
                           borderRadius: "8px",
                         }}
                       />
-                      <Bar dataKey="orders" fill="#099b49" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="orders" name="Orders" fill="#099b49" radius={[4, 4, 0, 0]} />
                     </BarChart>
                 </ReportChart>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -227,15 +258,18 @@ export function ReportsModule() {
                 <CardTitle>Service Distribution</CardTitle>
               </CardHeader>
               <CardContent>
+                {ordersLoading || ordersError || services.length === 0 ? (
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No services were performed in this period." />
+                ) : (
                 <ReportChart height={300}>
                     <RechartsPieChart>
-                      <Pie data={serviceBreakdown} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value">
-                        {serviceBreakdown.map((entry, index) => (
+                      <Pie data={services} nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="count">
+                        {services.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: number) => [`${value}%`, "Percentage"]}
+                        formatter={(value) => [Number(value), "Times performed"]}
                         contentStyle={{
                           backgroundColor: "#fff",
                           border: "1px solid #e5e7eb",
@@ -245,6 +279,7 @@ export function ReportsModule() {
                       <Legend />
                     </RechartsPieChart>
                 </ReportChart>
+                )}
               </CardContent>
             </Card>
 
@@ -254,8 +289,11 @@ export function ReportsModule() {
                 <CardTitle>Top Performing Services</CardTitle>
               </CardHeader>
               <CardContent>
+                {ordersLoading || ordersError || services.length === 0 ? (
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No services were performed in this period." />
+                ) : (
                 <div className="space-y-4">
-                  {serviceBreakdown.map((service, index) => (
+                  {services.map((service, index) => (
                     <div key={service.name} className="flex items-center gap-4">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium text-white" style={{ backgroundColor: service.color }}>
                         {index + 1}
@@ -266,16 +304,17 @@ export function ReportsModule() {
                           <div
                             className="h-2 rounded-full"
                             style={{
-                              width: `${service.value}%`,
+                              width: `${service.percent}%`,
                               backgroundColor: service.color,
                             }}
                           />
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-muted-foreground">{service.value}%</span>
+                      <span className="text-sm font-medium text-muted-foreground">{service.percent}%</span>
                     </div>
                   ))}
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -287,10 +326,18 @@ export function ReportsModule() {
               <CardTitle>Employee Performance</CardTitle>
             </CardHeader>
             <CardContent>
+              {ordersLoading || employeesLoading || ordersError || employeesError || employeeResults.length === 0 ? (
+                <ReportPlaceholder
+                  height={400}
+                  isLoading={ordersLoading || employeesLoading}
+                  isError={Boolean(ordersError || employeesError)}
+                  description="No orders assigned to employees were completed in this period."
+                />
+              ) : (
               <ReportChart height={400}>
-                  <BarChart data={employeePerformance} layout="vertical">
+                  <BarChart data={employeeResults} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis type="number" stroke="#6b7280" fontSize={12} />
+                    <XAxis type="number" stroke="#6b7280" fontSize={12} allowDecimals={false} />
                     <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={12} width={100} />
                     <Tooltip
                       contentStyle={{
@@ -303,21 +350,35 @@ export function ReportsModule() {
                     <Bar dataKey="completed" name="Jobs Completed" fill="#1973e1" radius={[0, 4, 4, 0]} />
                   </BarChart>
               </ReportChart>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="inventory" className="mt-6">
+        <TabsContent value="inventory" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Inventory Trends</CardTitle>
             </CardHeader>
             <CardContent>
-              <ReportChart height={400}>
-                  <LineChart data={inventoryTrends}>
+              <ReportPlaceholder height={200} description="Stock history and parts usage are not recorded yet, so trends cannot be shown." />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Stock Levels</CardTitle>
+              <p className="text-sm text-muted-foreground">Active items with the lowest stock relative to their minimum. Current stock, not affected by the date range.</p>
+            </CardHeader>
+            <CardContent>
+              {inventoryLoading || inventoryError || stockLevels.length === 0 ? (
+                <ReportPlaceholder height={300} isLoading={inventoryLoading} isError={inventoryError} description="No active inventory items in this workspace." />
+              ) : (
+                <ReportChart height={Math.max(200, stockLevels.length * 48)}>
+                  <BarChart data={stockLevels} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="month" stroke="#6b7280" fontSize={12} />
-                    <YAxis stroke="#6b7280" fontSize={12} />
+                    <XAxis type="number" stroke="#6b7280" fontSize={12} allowDecimals={false} />
+                    <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={12} width={120} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "#fff",
@@ -326,10 +387,11 @@ export function ReportsModule() {
                       }}
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="stock" name="Stock Level" stroke="#1973e1" strokeWidth={2} dot={{ fill: "#1973e1" }} />
-                    <Line type="monotone" dataKey="used" name="Parts Used" stroke="#099b49" strokeWidth={2} dot={{ fill: "#099b49" }} />
-                  </LineChart>
-              </ReportChart>
+                    <Bar dataKey="quantity" name="In Stock" fill="#1973e1" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="minimum" name="Minimum" fill="#f89200" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ReportChart>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
