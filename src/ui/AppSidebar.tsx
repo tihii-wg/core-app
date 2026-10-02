@@ -43,12 +43,12 @@ export function AppSidebar() {
   return (
     <>
       {/* Mobile overlay */}
-      {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setMobileSidebarOpen(false)} />}
+      {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden print:hidden" onClick={() => setMobileSidebarOpen(false)} />}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full bg-white border-r border-[#eeeeef] z-50 transition-all duration-200",
+          "fixed top-0 left-0 h-full bg-white border-r border-[#eeeeef] z-50 transition-all duration-200 print:hidden",
           "lg:relative lg:z-auto",
           sidebarCollapsed ? "w-18" : "w-60",
           mobileSidebarOpen ? "translate-x-0 " : "-translate-x-full lg:translate-x-0"

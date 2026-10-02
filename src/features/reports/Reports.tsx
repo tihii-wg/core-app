@@ -16,6 +16,8 @@ import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { clientCreatedAt } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useNavigate, useParams } from "react-router-dom";
+import { quickReports, quickReportTypes } from "./quickReports";
 import { employeePerformance, lowestStockLevels, percentChange, reportPeriod, revenueSeries, serviceDistribution, summaryStats, type ReportRange } from "./reportStats";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
@@ -51,6 +53,8 @@ export function ReportsModule() {
   const { currency, formatMoney } = useWorkspaceMoney();
   const [dateRange, setDateRange] = useState<ReportRange>("last30");
   const [activeTab, setActiveTab] = useState("overview");
+  const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
+  const navigate = useNavigate();
 
   // Queries stay disabled (and report isLoading: false) until the active workspace is known.
   const { workspaceId } = useActiveWorkspaceId();
@@ -404,19 +408,19 @@ export function ReportsModule() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { title: "Sales Report", description: "Detailed sales analytics" },
-              { title: "Inventory Report", description: "Stock levels and usage" },
-              { title: "Employee Report", description: "Performance metrics" },
-              { title: "Financial Report", description: "Revenue and expenses" },
-            ].map((report) => (
-              <Button key={report.title} variant="outline" className="h-auto flex-col items-start gap-1 p-4 text-left">
+            {quickReportTypes.map((type) => (
+              <Button
+                key={type}
+                variant="outline"
+                className="h-auto flex-col items-start gap-1 p-4 text-left"
+                onClick={() => navigate(`/${locale}/${routeWorkspaceId}/reports/${type}?range=${dateRange}`)}
+              >
                 <div className="flex w-full items-center justify-between">
                   <FileText className="h-5 w-5 text-primary" />
                   <Download className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <p className="font-medium">{report.title}</p>
-                <p className="text-xs text-muted-foreground">{report.description}</p>
+                <p className="font-medium">{quickReports[type].title}</p>
+                <p className="text-xs text-muted-foreground">{quickReports[type].description}</p>
               </Button>
             ))}
           </div>

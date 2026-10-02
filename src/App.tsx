@@ -19,6 +19,7 @@ import { Services } from "./features/services/Services";
 import { Invoices } from "./features/invoices/Invoices";
 import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
+import { QuickReportPage } from "./features/reports/QuickReportPage";
 import { SettingsModule } from "./features/settings/Settings";
 import { AppLayout } from "./ui/AppLayout";
 import Dashboardredirect from "./ui/DashboardRedirect";
@@ -53,6 +54,7 @@ export function AppRoutes() {
           <Route path="/:locale/:workspaceId/invoices" element={<Invoices />} />
           <Route path="/:locale/:workspaceId/finance" element={<Finance />} />
           <Route path="/:locale/:workspaceId/reports" element={<ReportsModule />} />
+          <Route path="/:locale/:workspaceId/reports/:reportType" element={<QuickReportPage />} />
           <Route path="/:locale/:workspaceId/settings" element={<SettingsModule />} />
         </Route>
       </Route>

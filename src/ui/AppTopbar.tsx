@@ -37,7 +37,7 @@ export function AppTopbar() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   return (
-    <header className="h-14 bg-white border-b border-[#eeeeef] flex items-center justify-between px-4 sticky top-0 z-30">
+    <header className="h-14 bg-white border-b border-[#eeeeef] flex items-center justify-between px-4 sticky top-0 z-30 print:hidden">
       {/* Left section */}
       <div className="flex items-center gap-4">
         {/* Mobile menu button */}

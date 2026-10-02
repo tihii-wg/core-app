@@ -19,7 +19,7 @@ export type PeriodTotals = {
   avgOrderValue: number;
 };
 
-export type SeriesPoint = { key: string; label: string; revenue: number; orders: number };
+export type SeriesPoint = { key: string; label: string; revenue: number; orders: number; billed: number; outstanding: number };
 
 export type ServiceSlice = { name: string; count: number; revenue: number; percent: number; color: string };
 
@@ -45,7 +45,7 @@ function inRange(dateKey: string, start: string, end: string) {
   return dateKey !== "" && dateKey >= start && dateKey <= end;
 }
 
-function ordersIn(orders: Order[], start: string, end: string) {
+export function ordersIn(orders: Order[], start: string, end: string) {
   return orders.filter((order) => inRange(order.createdAt, start, end));
 }
 
@@ -119,7 +119,7 @@ export function revenueSeries(orders: Order[], period: ReportPeriod): SeriesPoin
 
   for (let day = fromDateKey(period.start); localDateKey(day) <= period.end; day = addDays(day, 1)) {
     const key = bucketKey(localDateKey(day), period.granularity);
-    if (!points.has(key)) points.set(key, { key, label: bucketLabel(key, period.granularity), revenue: 0, orders: 0 });
+    if (!points.has(key)) points.set(key, { key, label: bucketLabel(key, period.granularity), revenue: 0, orders: 0, billed: 0, outstanding: 0 });
   }
 
   for (const order of ordersIn(orders, period.start, period.end)) {
@@ -127,6 +127,9 @@ export function revenueSeries(orders: Order[], period: ReportPeriod): SeriesPoin
     if (!point) continue;
     point.orders += 1;
     if (order.isPaid) point.revenue += order.totalPrice;
+    if (order.status === "cancelled") continue;
+    point.billed += order.totalPrice;
+    if (!order.isPaid) point.outstanding += order.totalPrice;
   }
 
   return [...points.values()];
