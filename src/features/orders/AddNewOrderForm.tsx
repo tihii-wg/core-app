@@ -6,7 +6,7 @@ import { Textarea } from "../../ui/Textarea";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
-import { Controller, useForm, useFieldArray } from "react-hook-form";
+import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, CreateMadalProps } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
@@ -16,6 +16,7 @@ import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
+import { clientEmailRules, clientPhoneRules } from "../clients/clientValidation";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
   const { services } = useGetServices();
@@ -50,6 +51,10 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
     },
   });
 
+  const selectedClientId = useWatch({ control, name: "clientId" });
+  const typedClientName = clientName.trim();
+  const isNewClient = typedClientName !== "" && !selectedClientId && !clients?.some((client) => client.name?.toLowerCase() === typedClientName.toLowerCase());
+
   const {
     fields: serviceField,
     append: serviceAppend,
@@ -77,6 +82,8 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
       await createOrder({
         clientId: data.clientId || undefined,
         clientName: clientName.trim(),
+        clientEmail: data.newClientEmail,
+        clientPhone: data.newClientPhone,
         device: data.device,
         vin: data.vin,
         carNumber: data.carNumber,
@@ -127,6 +134,32 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           />
 
           {errors.clientId && <p className="text-xs text-[#f41f20]">{errors.clientId.message}</p>}
+
+          {isNewClient && (
+            <div className="grid grid-cols-2 gap-4 pt-1.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="newClientPhone">Phone *</Label>
+                <Input
+                  id="newClientPhone"
+                  {...register("newClientPhone", { ...clientPhoneRules, shouldUnregister: true })}
+                  placeholder="+37300000000"
+                  className={errors.newClientPhone ? "border-[#f41f20]" : ""}
+                />
+                {errors.newClientPhone && <p className="text-xs text-[#f41f20]">{errors.newClientPhone.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="newClientEmail">Email *</Label>
+                <Input
+                  id="newClientEmail"
+                  type="email"
+                  {...register("newClientEmail", { ...clientEmailRules, shouldUnregister: true })}
+                  placeholder="email@example.com"
+                  className={errors.newClientEmail ? "border-[#f41f20]" : ""}
+                />
+                {errors.newClientEmail && <p className="text-xs text-[#f41f20]">{errors.newClientEmail.message}</p>}
+              </div>
+            </div>
+          )}
 
           {/* <Controller
             name="clientId"

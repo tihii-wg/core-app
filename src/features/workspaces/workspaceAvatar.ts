@@ -78,12 +78,12 @@ export async function uploadWorkspaceLogo(workspaceId: string, file: Blob) {
   const workspace = await resolveLogoWorkspace(workspaceId);
   const path = workspaceLogoStoragePath(workspace.id);
 
-  console.info("[WorkspaceLogo] Upload", {
-    workspaceId: workspace.id,
-    activeWorkspaceId: workspace.activeWorkspaceId,
-    bucket: WORKSPACE_LOGO_BUCKET,
-    path,
-  });
+  // console.info("[WorkspaceLogo] Upload", {
+  //   workspaceId: workspace.id,
+  //   activeWorkspaceId: workspace.activeWorkspaceId,
+  //   bucket: WORKSPACE_LOGO_BUCKET,
+  //   path,
+  // });
 
   const { error: uploadError } = await supabase.storage.from(WORKSPACE_LOGO_BUCKET).upload(path, file, {
     upsert: true,

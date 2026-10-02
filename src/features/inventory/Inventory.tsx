@@ -12,32 +12,15 @@ import { useDebounce } from "../../hooks/useDebounce";
 import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortField } from "../../lib/types";
 import { useGetInventoryItems } from "./useGetInventoryItems";
 import { useGetInventoryItem } from "./useGetInventoryItem";
-import { useGetInventoryMarkup, useUpdateInventoryMarkup } from "../workspaces/useInventoryMarkup";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
-import { useCreateInventoryItem } from "./useCreateInventoryItem";
 import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
 import InventoryItemForm from "./InventoryItemForm";
 import InventoryDetailPanel from "./InventoryDetailPanel";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { canManageWorkspace } from "../workspaces/workspaceRoles";
-import { useCreateDialogFromNavigation } from "../../hooks/useCreateDialogFromNavigation";
-
-const emptyInventoryForm = {
-  name: "",
-  sku: "",
-  description: "",
-  category: "",
-  quantity: 0,
-  minQuantity: 0,
-  unit: "pcs",
-  purchasePrice: null,
-  sellingPrice: null,
-  supplier: "",
-  location: "",
-  isActive: true,
-};
+import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
+import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
 
 const stockFilters = [
   { value: "all", label: "All" },
@@ -68,7 +51,7 @@ export function Inventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
-  const [createOpen, setCreateOpen] = useCreateDialogFromNavigation();
+  const [createOpen, setCreateOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
@@ -79,17 +62,9 @@ export function Inventory() {
 
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
-  const { data: markupPercent = 0, isLoading: markupLoading } = useGetInventoryMarkup(workspaceId);
-  const { mutate: saveMarkup } = useUpdateInventoryMarkup();
-  // The markup is stored on the workspace, which only the owner can update.
-  const canSaveMarkup = canManageWorkspace(workspace?.role);
-  const commitMarkup = (nextMarkup: number) => {
-    if (!workspaceId || !canSaveMarkup || nextMarkup === markupPercent) return;
-    saveMarkup({ workspaceId, markupPercent: nextMarkup });
-  };
+  const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const detailQuery = useGetInventoryItem(detailId);
   const editQuery = useGetInventoryItem(editId);
-  const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
   const { mutate: updateItem, isPending: isUpdating } = useUpdateInventoryItem();
   const { mutate: deleteItem, isPending: isDeleting } = useDeleteInventoryItem();
 
@@ -282,31 +257,7 @@ export function Inventory() {
         />
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add Inventory Item</DialogTitle>
-            <DialogDescription className="sr-only">Create an inventory item for the current workspace.</DialogDescription>
-          </DialogHeader>
-          {markupLoading ? (
-            <p className="text-sm text-[#939699]">Loading item...</p>
-          ) : (
-          <InventoryItemForm
-            defaultValues={emptyInventoryForm}
-            markupPercent={markupPercent}
-            submitLabel="Add Item"
-            isSubmitting={isCreating}
-            onCancel={() => setCreateOpen(false)}
-            onMarkupCommit={commitMarkup}
-            onSubmit={(data) => {
-              createItem(data, {
-                onSuccess: () => setCreateOpen(false),
-              });
-            }}
-          />
-          )}
-        </DialogContent>
-      </Dialog>
+      <AddInventoryItemDialog open={createOpen} onOpenChange={setCreateOpen} />
 
       <Dialog
         open={Boolean(editId)}

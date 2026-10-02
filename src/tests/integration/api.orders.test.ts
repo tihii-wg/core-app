@@ -39,6 +39,17 @@ describe("createOrder", () => {
     expect(row("clients", String(created.client_id))).toMatchObject({ name: "Walk In", workspace_id: WS.A });
   });
 
+  it("creates a missing client with the entered phone and email, and ignores them for an existing client", async () => {
+    const created = await createOrder({ clientName: " Nina New ", clientPhone: " +37369000001 ", clientEmail: " nina@example.com ", device: "Car", services: [oilChange] }, WS.A);
+    expect(row("clients", String(created.client_id))).toMatchObject({ name: "Nina New", phone: "+37369000001", email: "nina@example.com", workspace_id: WS.A });
+
+    const clientsBefore = fake.all("clients").length;
+    const existing = await createOrder({ clientName: "nina new", clientPhone: "+37369000002", clientEmail: "other@example.com", device: "Car", services: [oilChange] }, WS.A);
+    expect(existing.client_id).toBe(created.client_id);
+    expect(fake.all("clients")).toHaveLength(clientsBefore);
+    expect(row("clients", String(created.client_id))).toMatchObject({ phone: "+37369000001", email: "nina@example.com" });
+  });
+
   it("resolves a service by name inside the workspace and ignores a service id from another workspace", async () => {
     const order = await createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [{ serviceId: "service-c1", serviceName: "oil change", price: 40, quantity: 1 }] }, WS.A);
     expect(linesOf(String(order.id))[0]).toMatchObject({ service_id: "service-a1", service_name: "Oil change" });

@@ -1,7 +1,5 @@
 // Core App Types
 
-import type React from "react";
-
 export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled";
 
 export type PaymentStatus = "unpaid" | "partial" | "paid";
@@ -82,6 +80,9 @@ export interface Employee {
 
 export interface addNewOrderFormData {
   clientId: string;
+  newClientType?: ClientType;
+  newClientEmail?: string;
+  newClientPhone?: string;
   device: string;
   vin: string;
   carNumber: string;
@@ -96,6 +97,9 @@ export interface addNewOrderFormData {
 export type CreateOrderInput = {
   clientId?: string;
   clientName: string;
+  clientType?: ClientType;
+  clientEmail?: string;
+  clientPhone?: string;
   device: string;
   vin?: string;
   carNumber?: string;
@@ -367,5 +371,5 @@ export type NewWorkspaceData = {
 
 export type CreateMadalProps = {
   // search?: string;
-  setCreateModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setCreateModalOpen: (open: boolean) => void;
 };

@@ -70,6 +70,24 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.queryByText("Client is required")).not.toBeInTheDocument();
   });
 
+  it("asks for the phone and email of a new client with the client form's validation", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Client *"), "Nina New");
+    await user.type(screen.getByLabelText("Phone *"), "069123456");
+    await user.click(screen.getByRole("button", { name: "Create Order" }));
+
+    expect(await screen.findByText("Phone must be in format +37300000000")).toBeInTheDocument();
+    expect(screen.getByText("Email is required")).toBeInTheDocument();
+    expect(screen.queryByText("Client is required")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Client *"));
+    expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
+    expect(screen.queryByText("Email is required")).not.toBeInTheDocument();
+  });
+
   it("requires the VIN to contain exactly 17 characters", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);

@@ -74,6 +74,41 @@ describe("clients page", () => {
     expect(unhandled.rejections).toEqual([]);
   });
 
+  it("edits a client from the row pencil button in a dialog and stays on the clients page", async () => {
+    const { user, location } = await openClients(USERS.member.id);
+
+    await user.click(screen.getByRole("button", { name: "Edit Ada Alpha" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Edit Client")).toBeInTheDocument();
+    const name = within(dialog).getByLabelText("Full name *");
+    expect(name).toHaveValue("Ada Alpha");
+    await user.clear(name);
+    await user.type(name, "Ada Lovelace");
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(row("clients", "client-a1")).toMatchObject({ name: "Ada Lovelace", workspace_id: WS.A });
+    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
+    expect(location.pathname).toBe(`/en/${WS.A}/clients`);
+  });
+
+  it("keeps the pencil edit dialog open with the error when the update is rejected", async () => {
+    const { user } = await openClients(USERS.member.id);
+    await user.click(screen.getByRole("button", { name: "Edit Ada Alpha" }));
+    const dialog = await screen.findByRole("dialog");
+    const name = within(dialog).getByLabelText("Full name *");
+    await user.clear(name);
+    await user.type(name, "Ada Lovelace");
+    fake.failNext("clients", "update", { code: "42501", message: "permission denied for table clients" });
+
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+
+    expect(await screen.findByText("permission denied for table clients")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Full name *")).toHaveValue("Ada Lovelace");
+    expect(row("clients", "client-a1")?.name).toBe("Ada Alpha");
+  });
+
   it("edits a client from the detail panel", async () => {
     const { user } = await openClients(USERS.member.id);
     await user.click(screen.getByText("Ada Alpha"));

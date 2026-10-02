@@ -1,11 +1,10 @@
 import { Controller, useWatch, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Textarea } from "../../ui/Textarea";
 import type { ClientFormValues } from "../../lib/types";
-
-const phonePattern = /^\+373\d{8}$/;
+import { clientEmailRules, clientPhoneRules, clientTypeRules } from "./clientValidation";
+import ClientTypeSelect from "./ClientTypeSelect";
 
 type ClientFormFieldsProps = {
   idPrefix: string;
@@ -33,18 +32,8 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
         <Controller
           name="clientType"
           control={control}
-          rules={{ required: "Client type is required" }}
-          render={({ field }) => (
-            <Select value={field.value || "individual"} onValueChange={field.onChange} disabled={disabled}>
-              <SelectTrigger id={`${idPrefix}-type`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="individual">Individual</SelectItem>
-                <SelectItem value="organization">Organization</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
+          rules={clientTypeRules}
+          render={({ field }) => <ClientTypeSelect id={`${idPrefix}-type`} value={field.value} onChange={field.onChange} disabled={disabled} />}
         />
         <FieldError message={errors.clientType?.message} />
       </div>
@@ -83,7 +72,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
           <Input
             id={`${idPrefix}-email`}
             type="email"
-            {...register("email", { required: "Email is required" })}
+            {...register("email", clientEmailRules)}
             placeholder="email@example.com"
             className={errors.email ? "border-[#f41f20]" : ""}
             disabled={disabled}
@@ -94,13 +83,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
           <Label htmlFor={`${idPrefix}-phone`}>Phone *</Label>
           <Input
             id={`${idPrefix}-phone`}
-            {...register("phone", {
-              required: "Phone is required",
-              pattern: {
-                value: phonePattern,
-                message: "Phone must be in format +37300000000",
-              },
-            })}
+            {...register("phone", clientPhoneRules)}
             placeholder="+37300000000"
             className={errors.phone ? "border-[#f41f20]" : ""}
             disabled={disabled}

@@ -1,8 +1,7 @@
 import { useState, useMemo } from "react";
 
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
@@ -11,11 +10,12 @@ import { NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
 import { useGetOrders, useUpdateOrderStatus } from "./useGetOrders";
 import type { OrderStatus, Order } from "../../lib/types";
-import AddNewOrderForm from "../orders/AddNewOrderForm";
+import { CreateOrderDialog } from "./CreateOrderDialog";
+import EditOrderForm from "./EditOrderForm";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { useCreateDialogFromNavigation } from "../../hooks/useCreateDialogFromNavigation";
 // import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 const statusOptions = [
@@ -45,9 +45,10 @@ export function Orders() {
   const [employeeFilter, setEmployeeFilter] = useState("all");
 
   // Modals
-  const [createModalOpen, setCreateModalOpen] = useCreateDialogFromNavigation();
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   const { employees} = useGetEmployees();
 
@@ -118,6 +119,27 @@ export function Orders() {
       key: "payment",
       header: "Payment",
       cell: (order) => <PaymentStatusBadge status={order.paymentStatus} />,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      className: "w-[80px] text-right",
+      cell: (order) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Edit order ${order.orderNumber}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditingOrder(order);
+            }}
+          >
+            <Pencil />
+          </Button>
+        </div>
+      ),
     },
   ];
 
@@ -216,15 +238,31 @@ export function Orders() {
       {/* {isLoading && <Spinner />} */}
 
       {/* Create Order Modal */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg w-full owerflow-hidden ">
+      <CreateOrderDialog open={createModalOpen} onOpenChange={setCreateModalOpen} searchQuery={searchQuery} />
+
+      <Dialog
+        open={Boolean(editingOrder)}
+        onOpenChange={(open) => {
+          if (!open) setEditingOrder(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create New Order</DialogTitle>
-            <DialogDescription>Fill in the information to create a new order</DialogDescription>
+            <DialogTitle>Edit Order {editingOrder?.orderNumber}</DialogTitle>
+            <DialogDescription className="sr-only">Update the selected order's VIN, services, device, assignment, and deadline.</DialogDescription>
           </DialogHeader>
-          <div className="overflow-y-auto pr-2">
-            <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery={searchQuery} />
-          </div>
+          {editingOrder && (
+            <EditOrderForm
+              key={editingOrder.id}
+              order={editingOrder}
+              employees={employees ?? []}
+              onCancel={() => setEditingOrder(null)}
+              onUpdated={(order) => {
+                setSelectedOrder((current) => (current?.id === order.id ? order : current));
+                setEditingOrder(null);
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

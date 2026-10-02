@@ -1,22 +1,21 @@
 import { useState } from "react";
-import { Plus, Phone, Mail } from "lucide-react";
+import { Plus, Phone, Mail, Pencil } from "lucide-react";
 import { Button } from "../../ui/Button";
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { NoClients, NoSearchResults } from "../../ui/EmptyState";
 import type { Client, ClientListFilter } from "../../lib/types";
 import { StatusBadge } from "../../ui/StatusBadge";
-import AddNewClientForm from "./AddNewClienForm";
+import { AddClientDialog } from "./AddClientDialog";
+import EditClientForm from "./EditClientForm";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { useCreateDialogFromNavigation } from "../../hooks/useCreateDialogFromNavigation";
-
 export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [clientType, setClientType] = useState<ClientListFilter>("all");
@@ -27,9 +26,10 @@ export function Clients() {
   const { formatMoney } = useWorkspaceMoney();
 
   // State
-  const [createModalOpen, setCreateModalOpen] = useCreateDialogFromNavigation();
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   const getClientOrders = (clientId: string) => {
     return orders
@@ -93,6 +93,27 @@ export function Clients() {
       cell: (client) => <span className="text-[#939699]">{client.created_at.split("T")[0]}</span>,
       className: "hidden md:table-cell",
     },
+    {
+      key: "actions",
+      header: "Actions",
+      className: "w-[80px] text-right",
+      cell: (client) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Edit ${client.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditingClient(client);
+            }}
+          >
+            <Pencil />
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   const handleRowClick = (client: Client) => {
@@ -148,14 +169,30 @@ export function Clients() {
 
 
       {/* Create Client Modal */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add New Client</DialogTitle>
-            <DialogDescription>Fill in client details below</DialogDescription>
-          </DialogHeader>
+      <AddClientDialog open={createModalOpen} onOpenChange={setCreateModalOpen} />
 
-          <AddNewClientForm setCreateModalOpen={setCreateModalOpen} />
+      <Dialog
+        open={Boolean(editingClient)}
+        onOpenChange={(open) => {
+          if (!open) setEditingClient(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+            <DialogDescription className="sr-only">Update the selected client's details.</DialogDescription>
+          </DialogHeader>
+          {editingClient && (
+            <EditClientForm
+              key={editingClient.id}
+              client={editingClient}
+              onCancel={() => setEditingClient(null)}
+              onUpdated={(client) => {
+                setSelectedClient((current) => (current?.id === client.id ? client : current));
+                setEditingClient(null);
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

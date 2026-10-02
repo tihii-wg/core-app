@@ -10,7 +10,7 @@ function requireWorkspaceId(workspaceId: string | undefined) {
   return workspaceId;
 }
 
-async function resolveClientId(workspaceId: string, clientId: string | undefined, clientName: string) {
+async function resolveClientId(workspaceId: string, { clientId, clientName, clientEmail = "", clientPhone = "" }: CreateOrderInput) {
   if (clientId) return clientId;
 
   const name = clientName.trim();
@@ -24,8 +24,8 @@ async function resolveClientId(workspaceId: string, clientId: string | undefined
   const createdClients = await createClient({
     workspace_id: workspaceId,
     clientName: name,
-    email: "",
-    phone: "",
+    email: clientEmail,
+    phone: clientPhone,
     address: "",
     notes: "",
   });
@@ -121,7 +121,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   }
 
   const assignedTo = await resolveAssignedEmployeeId(targetWorkspaceId, input.assignedEmployeeId);
-  const clientId = await resolveClientId(targetWorkspaceId, input.clientId, input.clientName);
+  const clientId = await resolveClientId(targetWorkspaceId, input);
 
   const totalPrice = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
 

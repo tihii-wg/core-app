@@ -60,6 +60,45 @@ describe("orders page", () => {
     expect(await screen.findByText("Golf IV")).toBeInTheDocument();
   });
 
+  it("creates a new client with phone and email from the order form and links it to the order", async () => {
+    const { user } = await openOrders();
+    await user.click(screen.getByRole("button", { name: /Create Order/ }));
+    const dialog = await screen.findByRole("dialog");
+    await fillNewOrder(user, dialog);
+    const client = within(dialog).getByPlaceholderText("Client");
+    await user.clear(client);
+    await user.type(client, "Nina New");
+    await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
+    await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
+
+    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const created = fake.all("orders").find((order) => order.device === "Golf IV");
+    const newClients = fake.all("clients").filter((item) => item.name === "Nina New");
+    expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, phone: "+37369000001", email: "nina@example.com" })]);
+    expect(created?.client_id).toBe(newClients[0].id);
+    expect(await screen.findByText("Nina New")).toBeInTheDocument();
+  });
+
+  it("does not ask for contact details or create a client when the typed name matches an existing client", async () => {
+    const { user } = await openOrders();
+    await user.click(screen.getByRole("button", { name: /Create Order/ }));
+    const dialog = await screen.findByRole("dialog");
+    await fillNewOrder(user, dialog);
+    const client = within(dialog).getByPlaceholderText("Client");
+    await user.clear(client);
+    await user.type(client, "ada alpha");
+    expect(within(dialog).queryByLabelText("Phone *")).not.toBeInTheDocument();
+    const clientsBefore = fake.all("clients").length;
+
+    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fake.all("orders").find((order) => order.device === "Golf IV")?.client_id).toBe("client-a1");
+    expect(fake.all("clients")).toHaveLength(clientsBefore);
+  });
+
   it("validates the required fields without calling Supabase", async () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
@@ -113,6 +152,39 @@ describe("orders page", () => {
     expect(fake.all("order_services").filter((line) => line.order_id === "order-a1").map((line) => line.service_name)).toEqual(["Oil change", "Brake check"]);
     expect(await screen.findByText("Alpha van")).toBeInTheDocument();
     expect(screen.getByText("Oil change, Brake check")).toBeInTheDocument();
+  });
+
+  it("edits an order from the row pencil button in a dialog and stays on the orders page", async () => {
+    const { user, location } = await openOrders();
+    const orderNumber = `ORD-${new Date().getFullYear()}-001`;
+
+    await user.click(screen.getByRole("button", { name: `Edit order ${orderNumber}` }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(`Edit Order ${orderNumber}`)).toBeInTheDocument();
+    const device = within(dialog).getByLabelText("Device *");
+    expect(device).toHaveValue("Alpha Garage car");
+    await user.clear(device);
+    await user.type(device, "Alpha van");
+    await user.type(within(dialog).getByLabelText("VIN *"), VIN);
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(row("orders", "order-a1")).toMatchObject({ device: "Alpha van", vin: VIN, workspace_id: WS.A });
+    expect(await screen.findByText("Alpha van")).toBeInTheDocument();
+    expect(location.pathname).toBe(`/en/${WS.A}/orders`);
+  });
+
+  it("closes the pencil edit dialog on cancel without saving or opening the detail panel", async () => {
+    const { user } = await openOrders();
+    await user.click(screen.getByRole("button", { name: `Edit order ORD-${new Date().getFullYear()}-001` }));
+    const dialog = await screen.findByRole("dialog");
+    await user.clear(within(dialog).getByLabelText("Device *"));
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(row("orders", "order-a1")?.device).toBe("Alpha Garage car");
+    expect(fake.requests.filter((request) => request.table === "orders" && request.op === "update")).toHaveLength(0);
   });
 
   it("keeps the edit form open when the update is rejected", async () => {
