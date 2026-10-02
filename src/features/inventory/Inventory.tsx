@@ -14,13 +14,12 @@ import { useGetInventoryItems } from "./useGetInventoryItems";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
-import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
-import InventoryItemForm from "./InventoryItemForm";
 import InventoryDetailPanel from "./InventoryDetailPanel";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
-import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
+import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
+import { quantityClass } from "./inventoryDisplay";
 
 const stockFilters = [
   { value: "all", label: "All" },
@@ -40,12 +39,6 @@ const sortOptions: { value: string; label: string; field: InventorySortField; as
   { value: "updated_at.desc", label: "Updated Date", field: "updated_at", ascending: false },
 ];
 
-function quantityClass(item: InventoryItem) {
-  if (item.stockStatus === "out_of_stock") return "text-[#f41f20] font-medium";
-  if (item.stockStatus === "low_stock") return "text-[#f89200] font-medium";
-  return "text-[#282e33]";
-}
-
 export function Inventory() {
   const { workspaceId } = useActiveWorkspaceId();
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,10 +55,7 @@ export function Inventory() {
 
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
-  const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const detailQuery = useGetInventoryItem(detailId);
-  const editQuery = useGetInventoryItem(editId);
-  const { mutate: updateItem, isPending: isUpdating } = useUpdateInventoryItem();
   const { mutate: deleteItem, isPending: isDeleting } = useDeleteInventoryItem();
 
   const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all";
@@ -162,23 +152,6 @@ export function Inventory() {
     },
   ];
 
-  const editDefaults = editQuery.item
-    ? {
-        name: editQuery.item.name,
-        sku: editQuery.item.sku,
-        description: editQuery.item.description,
-        category: editQuery.item.category,
-        quantity: editQuery.item.quantity,
-        minQuantity: editQuery.item.minQuantity,
-        unit: editQuery.item.unit,
-        purchasePrice: editQuery.item.purchasePrice,
-        sellingPrice: editQuery.item.sellingPrice,
-        supplier: editQuery.item.supplier,
-        location: editQuery.item.location,
-        isActive: editQuery.item.isActive,
-      }
-    : null;
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -259,43 +232,7 @@ export function Inventory() {
 
       <AddInventoryItemDialog open={createOpen} onOpenChange={setCreateOpen} />
 
-      <Dialog
-        open={Boolean(editId)}
-        onOpenChange={(open) => {
-          if (!open) setEditId(null);
-        }}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit Inventory Item</DialogTitle>
-            <DialogDescription className="sr-only">Update the selected inventory item.</DialogDescription>
-          </DialogHeader>
-          {editQuery.isLoading && <p className="text-sm text-[#939699]">Loading item...</p>}
-          {editQuery.isError && (
-            <EmptyState title="Could not load inventory" description="Refresh the item to try again." action={{ label: "Try again", onClick: () => editQuery.refetch() }} />
-          )}
-          {editDefaults && editQuery.item && !markupLoading && (
-            <InventoryItemForm
-              key={editQuery.item.id}
-              defaultValues={editDefaults}
-              markupPercent={markupPercent}
-              submitLabel="Save Changes"
-              isSubmitting={isUpdating}
-              onCancel={() => setEditId(null)}
-              onMarkupCommit={commitMarkup}
-              onSubmit={(data) => {
-                if (!editQuery.item) return;
-                updateItem(
-                  { id: editQuery.item.id, ...data },
-                  {
-                    onSuccess: () => setEditId(null),
-                  },
-                );
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <EditInventoryItemDialog itemId={editId} onClose={() => setEditId(null)} />
 
       <Dialog
         open={Boolean(itemToDelete)}

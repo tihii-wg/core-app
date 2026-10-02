@@ -1,12 +1,13 @@
-import { ClipboardList, DollarSign, FileText, Package, Plus, Users, ArrowRight } from "lucide-react";
+import { ClipboardList, DollarSign, FileText, Package, Pencil, Plus, Users, ArrowLeft, ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
 import { DataTable, type Column } from "../ui/DataTable";
-import type { Order } from "../lib/types";
+import type { InventoryItem, Order } from "../lib/types";
 import { DashboardCard } from "../ui/DashboardCard";
 import { Button } from "../ui/Button";
 import { useApp } from "../lib/appContext";
-import { OrderStatusBadge, PaymentStatusBadge } from "../ui/StatusBadge";
+import { InventoryStatusBadge, OrderStatusBadge, PaymentStatusBadge } from "../ui/StatusBadge";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
 import { getOrders } from "../services/apiOrders";
@@ -21,6 +22,8 @@ import { AddInventoryItemDialog } from "../features/inventory/AddInventoryItemDi
 import ClientTypeBadge from "../features/clients/ClientTypeBadge";
 import OrderDetailPanel from "../features/orders/OrderDetailPanel";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
+import { EditInventoryItemDialog } from "../features/inventory/EditInventoryItemDialog";
+import { quantityClass } from "../features/inventory/inventoryDisplay";
 
 type QuickActionDialog = "order" | "client" | "inventory";
 
@@ -35,7 +38,11 @@ export default function Dashboard() {
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
   const orderDetails = useOrderDetails();
-  const [showActiveOrders, setShowActiveOrders] = useState(false);
+  const [listView, setListView] = useState<"recent" | "active" | "lowStock">("recent");
+  const showActiveOrders = listView === "active";
+  const showLowStock = listView === "lowStock";
+  const [editInventoryId, setEditInventoryId] = useState<string | null>(null);
+  const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
   const dialogProps = (dialog: QuickActionDialog) => ({
     open: openDialog === dialog,
     onOpenChange: (open: boolean) => setOpenDialog(open ? dialog : null),
@@ -89,7 +96,8 @@ export default function Dashboard() {
     isLoading: inventoryLoading,
     isError: inventoryError,
   } = useGetInventoryItems("", "all", { field: "created_at", ascending: false });
-  const lowStockCount = inventoryItems.filter(isAtOrBelowMinimum).length;
+  const lowStockItems = inventoryItems.filter(isAtOrBelowMinimum);
+  const lowStockCount = lowStockItems.length;
 
   const listedOrders = showActiveOrders ? activeOrders : workspaceOrders.slice(0, 5);
 
@@ -142,6 +150,61 @@ export default function Dashboard() {
     },
   ];
 
+  const lowStockColumns: Column<InventoryItem>[] = [
+    {
+      key: "name",
+      header: "Name",
+      cell: (item) => <span className="font-medium text-[#282e33]">{item.name}</span>,
+    },
+    {
+      key: "sku",
+      header: "SKU",
+      cell: (item) => <span className="font-mono text-sm text-[#939699]">{item.sku || "—"}</span>,
+      className: "hidden sm:table-cell",
+    },
+    {
+      key: "quantity",
+      header: "Quantity",
+      cell: (item) => (
+        <span className={quantityClass(item)}>
+          {item.quantity} {item.unit}
+        </span>
+      ),
+    },
+    {
+      key: "minQuantity",
+      header: "Minimum",
+      cell: (item) => `${item.minQuantity} ${item.unit}`,
+      className: "hidden sm:table-cell",
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (item) => <InventoryStatusBadge status={item.stockStatus} />,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      className: "w-[80px] text-right",
+      cell: (item) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={`Edit ${item.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditInventoryId(item.id);
+            }}
+          >
+            <Pencil />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
 
   return (
     <div className="space-y-6">
@@ -150,7 +213,7 @@ export default function Dashboard() {
         <button
           type="button"
           aria-pressed={showActiveOrders}
-          onClick={() => setShowActiveOrders((current) => !current)}
+          onClick={() => setListView((current) => (current === "active" ? "recent" : "active"))}
           className="bg-white rounded-md border border-[#eeeeef] p-4 text-left cursor-pointer transition-colors duration-200 hover:border-[#1973e1]"
         >
           <span className="flex items-start justify-between">
@@ -179,31 +242,48 @@ export default function Dashboard() {
         </button>
         <DashboardCard title="Today's Revenue" value={formatMoney(todayRevenue)} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
         <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
-        <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-[#939699] font-medium">Low Stock Items</p>
-              {inventoryLoading ? (
-                <Skeleton className="h-8 w-12 mt-2" />
-              ) : inventoryError ? (
-                <>
-                  <p className="text-sm font-medium text-[#282e33] mt-2">Could not load inventory</p>
-                  <p className="text-xs text-[#939699] mt-1">Refresh the page to try again.</p>
-                </>
-              ) : lowStockCount === 0 ? (
-                <>
-                  <p className="text-sm font-medium text-[#282e33] mt-2">No low stock items</p>
-                  <p className="text-xs text-[#939699] mt-1">Items at or below their minimum will show up here.</p>
-                </>
-              ) : (
-                <p className="text-2xl font-semibold text-[#282e33] mt-1">{lowStockCount}</p>
-              )}
-            </div>
-            <div className={lowStockCount > 0 ? "p-2 rounded-md bg-[#fee7e7] text-[#f41f20]" : "p-2 rounded-md bg-[#f1f3f5] text-[#939699]"}>
-              <Package className="h-5 w-5" />
-            </div>
-          </div>
-        </div>
+        <button
+          type="button"
+          aria-pressed={showLowStock}
+          onClick={() => setListView((current) => (current === "lowStock" ? "recent" : "lowStock"))}
+          className="bg-white rounded-md border border-[#eeeeef] p-4 text-left cursor-pointer transition-colors duration-200 hover:border-[#1973e1]"
+        >
+          {showLowStock ? (
+            <span className="flex items-start justify-between">
+              <span className="flex-1">
+                <span className="block text-sm text-[#939699] font-medium">Back</span>
+                <span className="block text-sm font-medium text-[#282e33] mt-2">Show Recent Orders</span>
+              </span>
+              <span className="p-2 rounded-md bg-[#edf4fd] text-[#1973e1]">
+                <ArrowLeft className="h-5 w-5" />
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-start justify-between">
+              <span className="flex-1">
+                <span className="block text-sm text-[#939699] font-medium">Low Stock Items</span>
+                {inventoryLoading ? (
+                  <Skeleton className="h-8 w-12 mt-2" />
+                ) : inventoryError ? (
+                  <>
+                    <span className="block text-sm font-medium text-[#282e33] mt-2">Could not load inventory</span>
+                    <span className="block text-xs text-[#939699] mt-1">Refresh the page to try again.</span>
+                  </>
+                ) : lowStockCount === 0 ? (
+                  <>
+                    <span className="block text-sm font-medium text-[#282e33] mt-2">No low stock items</span>
+                    <span className="block text-xs text-[#939699] mt-1">Items at or below their minimum will show up here.</span>
+                  </>
+                ) : (
+                  <span className="block text-2xl font-semibold text-[#282e33] mt-1">{lowStockCount}</span>
+                )}
+              </span>
+              <span className={lowStockCount > 0 ? "p-2 rounded-md bg-[#fee7e7] text-[#f41f20]" : "p-2 rounded-md bg-[#f1f3f5] text-[#939699]"}>
+                <Package className="h-5 w-5" />
+              </span>
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Quick Actions */}
@@ -233,35 +313,62 @@ export default function Dashboard() {
       <AddClientDialog {...dialogProps("client")} />
       <AddInventoryItemDialog {...dialogProps("inventory")} />
       <OrderDetailPanel {...orderDetails.panelProps} />
+      <EditInventoryItemDialog itemId={editInventoryId} onClose={() => setEditInventoryId(null)} />
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Recent / Active Orders */}
-        <div className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-[#282e33]">{showActiveOrders ? "Active Orders" : "Recent Orders"}</h2>
-            <button onClick={() => setCurrentModule("orders")} className="text-sm text-[#1973e1] hover:underline flex items-center gap-1">
-              View all
-              <ArrowRight className="h-4 w-4" />
-            </button>
+        {/* Recent / Active Orders, or Low Stock Items */}
+        {showLowStock ? (
+          <div className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-[#282e33]">Low Stock Items</h2>
+              <Link to={`/${locale}/${routeWorkspaceId}/inventory`} className="text-sm text-[#1973e1] hover:underline flex items-center gap-1">
+                View all
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <DataTable
+              columns={lowStockColumns}
+              data={lowStockItems}
+              keyExtractor={(item) => item.id}
+              onRowClick={(item) => setEditInventoryId(item.id)}
+              isLoading={inventoryLoading}
+              emptyState={
+                inventoryError ? (
+                  <EmptyState icon={Package} title="Could not load inventory" description="Refresh the page to try again." />
+                ) : (
+                  <EmptyState icon={Package} title="No low stock items" description="Items at or below their minimum will show up here." />
+                )
+              }
+            />
           </div>
-          <DataTable
-            columns={orderColumns}
-            data={listedOrders}
-            keyExtractor={(order) => order.id}
-            onRowClick={orderDetails.openOrder}
-            isLoading={ordersLoading}
-            emptyState={
-              ordersError ? (
-                <EmptyState icon={ClipboardList} title="Could not load orders" description="Refresh the page to try again." />
-              ) : showActiveOrders ? (
-                <EmptyState icon={ClipboardList} title="No active orders" description="Open orders will show up here." />
-              ) : (
-                <EmptyState icon={ClipboardList} title="No orders yet" description="Orders you create will show up here." />
-              )
-            }
-          />
-        </div>
+        ) : (
+          <div className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-[#282e33]">{showActiveOrders ? "Active Orders" : "Recent Orders"}</h2>
+              <Link to={`/${locale}/${routeWorkspaceId}/orders`} className="text-sm text-[#1973e1] hover:underline flex items-center gap-1">
+                View all
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <DataTable
+              columns={orderColumns}
+              data={listedOrders}
+              keyExtractor={(order) => order.id}
+              onRowClick={orderDetails.openOrder}
+              isLoading={ordersLoading}
+              emptyState={
+                ordersError ? (
+                  <EmptyState icon={ClipboardList} title="Could not load orders" description="Refresh the page to try again." />
+                ) : showActiveOrders ? (
+                  <EmptyState icon={ClipboardList} title="No active orders" description="Open orders will show up here." />
+                ) : (
+                  <EmptyState icon={ClipboardList} title="No orders yet" description="Orders you create will show up here." />
+                )
+              }
+            />
+          </div>
+        )}
 
         {/* Sidebar */}
         <div className="space-y-6">

@@ -244,6 +244,80 @@ describe("dashboard quick actions", () => {
     expect(screen.queryByText("Alpha Garage car")).not.toBeInTheDocument();
   });
 
+  it("replaces Recent Orders with low-stock items from the Low Stock Items card and restores them with Back", async () => {
+    fake.all("inventory_items").push({ ...row("inventory_items", "item-a1")!, id: "item-a-healthy", name: "Alpha oil filter", sku: "AP-2", quantity: 20 });
+    const { user, location } = await openDashboard();
+
+    const card = await screen.findByRole("button", { name: /^Low Stock Items\s*1$/ });
+    expect(card).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(card);
+
+    expect(screen.getByRole("heading", { name: "Low Stock Items" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Recent Orders" })).not.toBeInTheDocument();
+    expect(screen.getByText("Alpha brake pads")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha oil filter")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alpha Garage car")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Low Stock Items/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Back/ })).toHaveAttribute("aria-pressed", "true");
+    expect(location.pathname).toBe(dashboardPath);
+
+    await user.click(screen.getByRole("button", { name: /^Back/ }));
+
+    expect(screen.getByRole("heading", { name: "Recent Orders" })).toBeInTheDocument();
+    expect(screen.getByText("Alpha Garage car")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha brake pads")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Back/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Low Stock Items\s*1$/ })).toHaveAttribute("aria-pressed", "false");
+    expect(location.pathname).toBe(dashboardPath);
+  });
+
+  it("edits a low-stock item from the dashboard with the inventory edit form", async () => {
+    const { user, location } = await openDashboard();
+    await user.click(await screen.findByRole("button", { name: /^Low Stock Items\s*1$/ }));
+
+    await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit Inventory Item" });
+    const quantity = await within(dialog).findByLabelText("Quantity *");
+    await user.clear(quantity);
+    await user.type(quantity, "30");
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(row("inventory_items", "item-a1")?.quantity).toBe(30);
+    expect(await screen.findByText("No low stock items")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha brake pads")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Low Stock Items" })).toBeInTheDocument();
+    expect(location.pathname).toBe(dashboardPath);
+  });
+
+  it("keeps the low-stock edit dialog open when the update is rejected", async () => {
+    const { user } = await openDashboard();
+    await user.click(await screen.findByRole("button", { name: /^Low Stock Items\s*1$/ }));
+    await user.click(screen.getByText("Alpha brake pads"));
+
+    const dialog = await screen.findByRole("dialog", { name: "Edit Inventory Item" });
+    const quantity = await within(dialog).findByLabelText("Quantity *");
+    await user.clear(quantity);
+    await user.type(quantity, "30");
+    fake.failNext("inventory_items", "update", { code: "42501", message: 'new row violates row-level security policy for table "inventory_items"' });
+    await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
+
+    expect(await screen.findByText("You do not have permission to change inventory in this workspace.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(row("inventory_items", "item-a1")?.quantity).toBe(2);
+  });
+
+  it("navigates to the Orders page from View all", async () => {
+    const { user, location } = await openDashboard();
+
+    await user.click(screen.getByRole("link", { name: "View all" }));
+
+    await waitFor(() => expect(location.pathname).toBe(`/en/${WS.A}/orders`));
+    expect(await screen.findByPlaceholderText("Search orders...")).toBeInTheDocument();
+    expect(screen.queryByText("Quick Actions")).not.toBeInTheDocument();
+  });
+
   it("Create Invoice stays on the dashboard because invoices are not backed by the database yet", async () => {
     const { user, location } = await openDashboard();
 
