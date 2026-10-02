@@ -205,6 +205,45 @@ describe("dashboard quick actions", () => {
     expect(location.pathname).toBe(dashboardPath);
   });
 
+  it("toggles Recent Orders to Active Orders from the Active Orders card and back", async () => {
+    fake.all("orders").push({ ...row("orders", "order-a1")!, id: "order-a-closed", number: `ORD-${new Date().getFullYear()}-002`, device: "Closed car", status: "completed" });
+    const { user, location } = await openDashboard();
+
+    const card = await screen.findByRole("button", { name: /^Active Orders\s*1$/ });
+    expect(card).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("heading", { name: "Recent Orders" })).toBeInTheDocument();
+    expect(await screen.findByText("Closed car")).toBeInTheDocument();
+    expect(screen.getByText("Alpha Garage car")).toBeInTheDocument();
+
+    await user.click(card);
+
+    expect(screen.getByRole("button", { name: /^All Orders\s*2$/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Active Orders" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Recent Orders" })).not.toBeInTheDocument();
+    expect(screen.getByText("Alpha Garage car")).toBeInTheDocument();
+    expect(screen.queryByText("Closed car")).not.toBeInTheDocument();
+    expect(location.pathname).toBe(dashboardPath);
+
+    await user.click(screen.getByRole("button", { name: /^All Orders/ }));
+
+    expect(screen.getByRole("button", { name: /^Active Orders\s*1$/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("heading", { name: "Recent Orders" })).toBeInTheDocument();
+    expect(screen.getByText("Closed car")).toBeInTheDocument();
+    expect(screen.getByText("Alpha Garage car")).toBeInTheDocument();
+    expect(location.pathname).toBe(dashboardPath);
+  });
+
+  it("explains when there are no active orders", async () => {
+    row("orders", "order-a1")!.status = "completed";
+    const { user } = await openDashboard();
+
+    await user.click(await screen.findByRole("button", { name: /^Active Orders/ }));
+
+    expect(screen.getByRole("heading", { name: "Active Orders" })).toBeInTheDocument();
+    expect(screen.getByText("No active orders")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha Garage car")).not.toBeInTheDocument();
+  });
+
   it("Create Invoice stays on the dashboard because invoices are not backed by the database yet", async () => {
     const { user, location } = await openDashboard();
 

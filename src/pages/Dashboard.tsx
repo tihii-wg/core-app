@@ -35,6 +35,7 @@ export default function Dashboard() {
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
   const orderDetails = useOrderDetails();
+  const [showActiveOrders, setShowActiveOrders] = useState(false);
   const dialogProps = (dialog: QuickActionDialog) => ({
     open: openDialog === dialog,
     onOpenChange: (open: boolean) => setOpenDialog(open ? dialog : null),
@@ -76,7 +77,8 @@ export default function Dashboard() {
   ];
 
   const closedStatuses = ["completed", "paid", "cancelled"];
-  const activeOrderCount = workspaceOrders.filter((order) => !closedStatuses.includes(order.status)).length;
+  const activeOrders = workspaceOrders.filter((order) => !closedStatuses.includes(order.status));
+  const orderCardCount = showActiveOrders ? workspaceOrders.length : activeOrders.length;
 
   const todayRevenue = orders.filter((o) => o.paymentStatus === "paid").reduce((sum, o) => sum + o.totalPrice, 0);
 
@@ -89,7 +91,7 @@ export default function Dashboard() {
   } = useGetInventoryItems("", "all", { field: "created_at", ascending: false });
   const lowStockCount = inventoryItems.filter(isAtOrBelowMinimum).length;
 
-  const recentOrders = workspaceOrders.slice(0, 5);
+  const listedOrders = showActiveOrders ? activeOrders : workspaceOrders.slice(0, 5);
 
   // Recent activity (mock)
   const recentActivity = clients.slice(0, 4).map((client, index) => ({
@@ -145,31 +147,36 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-md border border-[#eeeeef] p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className="text-sm text-[#939699] font-medium">Active Orders</p>
+        <button
+          type="button"
+          aria-pressed={showActiveOrders}
+          onClick={() => setShowActiveOrders((current) => !current)}
+          className="bg-white rounded-md border border-[#eeeeef] p-4 text-left cursor-pointer transition-colors duration-200 hover:border-[#1973e1]"
+        >
+          <span className="flex items-start justify-between">
+            <span className="flex-1">
+              <span className="block text-sm text-[#939699] font-medium">{showActiveOrders ? "All Orders" : "Active Orders"}</span>
               {ordersLoading ? (
                 <Skeleton className="h-8 w-12 mt-2" />
               ) : ordersError ? (
                 <>
-                  <p className="text-sm font-medium text-[#282e33] mt-2">Could not load orders</p>
-                  <p className="text-xs text-[#939699] mt-1">Refresh the page to try again.</p>
+                  <span className="block text-sm font-medium text-[#282e33] mt-2">Could not load orders</span>
+                  <span className="block text-xs text-[#939699] mt-1">Refresh the page to try again.</span>
                 </>
-              ) : activeOrderCount === 0 ? (
+              ) : orderCardCount === 0 ? (
                 <>
-                  <p className="text-sm font-medium text-[#282e33] mt-2">No active orders</p>
-                  <p className="text-xs text-[#939699] mt-1">Open orders will show up here.</p>
+                  <span className="block text-sm font-medium text-[#282e33] mt-2">{showActiveOrders ? "No orders yet" : "No active orders"}</span>
+                  <span className="block text-xs text-[#939699] mt-1">{showActiveOrders ? "Orders you create will show up here." : "Open orders will show up here."}</span>
                 </>
               ) : (
-                <p className="text-2xl font-semibold text-[#282e33] mt-1">{activeOrderCount}</p>
+                <span className="block text-2xl font-semibold text-[#282e33] mt-1">{orderCardCount}</span>
               )}
-            </div>
-            <div className="p-2 rounded-md bg-[#edf4fd] text-[#1973e1]">
+            </span>
+            <span className="p-2 rounded-md bg-[#edf4fd] text-[#1973e1]">
               <ClipboardList className="h-5 w-5" />
-            </div>
-          </div>
-        </div>
+            </span>
+          </span>
+        </button>
         <DashboardCard title="Today's Revenue" value={formatMoney(todayRevenue)} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
         <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
         <div className="bg-white rounded-md border border-[#eeeeef] p-4">
@@ -229,10 +236,10 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Recent Orders */}
+        {/* Recent / Active Orders */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-[#282e33]">Recent Orders</h2>
+            <h2 className="text-base font-semibold text-[#282e33]">{showActiveOrders ? "Active Orders" : "Recent Orders"}</h2>
             <button onClick={() => setCurrentModule("orders")} className="text-sm text-[#1973e1] hover:underline flex items-center gap-1">
               View all
               <ArrowRight className="h-4 w-4" />
@@ -240,16 +247,18 @@ export default function Dashboard() {
           </div>
           <DataTable
             columns={orderColumns}
-            data={recentOrders}
+            data={listedOrders}
             keyExtractor={(order) => order.id}
             onRowClick={orderDetails.openOrder}
             isLoading={ordersLoading}
             emptyState={
-              <EmptyState
-                icon={ClipboardList}
-                title={ordersError ? "Could not load orders" : "No orders yet"}
-                description={ordersError ? "Refresh the page to try again." : "Orders you create will show up here."}
-              />
+              ordersError ? (
+                <EmptyState icon={ClipboardList} title="Could not load orders" description="Refresh the page to try again." />
+              ) : showActiveOrders ? (
+                <EmptyState icon={ClipboardList} title="No active orders" description="Open orders will show up here." />
+              ) : (
+                <EmptyState icon={ClipboardList} title="No orders yet" description="Orders you create will show up here." />
+              )
             }
           />
         </div>
