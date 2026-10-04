@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createInvoiceFromOrder, getInvoices, InvoicesUnavailableError } from "../../services/apiInvoices";
+import { createInvoiceFromOrder, getInvoices, InvoicesUnavailableError, updateInvoiceStatus } from "../../services/apiInvoices";
 import { createOrder, updateOrder, updateOrderStatus } from "../../services/apiOrders";
 import { fake, fakeClient } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp, setDatabaseClock } from "../coreAppDb";
@@ -317,5 +317,37 @@ describe("getInvoices", () => {
     expect((await getInvoices(WS.B)).map((invoice) => invoice.invoiceNumber)).toEqual(["INV-2026-001"]);
     fake.signInAs(USERS.outsider.id);
     expect(await getInvoices(WS.A)).toEqual([]);
+  });
+});
+
+describe("updateInvoiceStatus", () => {
+  it("marks an invoice sent, then paid with the payment time, then unpaid again", async () => {
+    at("2026-10-04T09:00:00Z");
+    const invoice = await invoiceNewOrder();
+
+    expect(await updateInvoiceStatus(invoice.id, "sent", WS.A)).toMatchObject({ invoiceNumber: "INV-2026-001", status: "sent" });
+    expect(row("invoices", invoice.id)).toMatchObject({ status: "sent", paid_at: null });
+
+    at("2026-10-06T12:30:00Z");
+    expect(await updateInvoiceStatus(invoice.id, "paid", WS.A)).toMatchObject({ status: "paid", paidAt: "2026-10-06" });
+    expect(row("invoices", invoice.id)).toMatchObject({ status: "paid", paid_at: "2026-10-06T12:30:00.000Z" });
+
+    expect(await updateInvoiceStatus(invoice.id, "sent", WS.A)).toMatchObject({ status: "sent" });
+    expect(row("invoices", invoice.id)).toMatchObject({ status: "sent", paid_at: null });
+    expect(row("invoices", invoice.id)).toMatchObject({ number: "INV-2026-001", total: 40 });
+  });
+
+  it("cannot change an invoice of another workspace", async () => {
+    const invoice = await invoiceNewOrder();
+
+    await expect(updateInvoiceStatus(invoice.id, "paid", WS.B)).rejects.toThrow("Invoice was not found or you do not have permission to change it.");
+    fake.signInAs(USERS.outsider.id);
+    await expect(updateInvoiceStatus(invoice.id, "paid", WS.A)).rejects.toThrow("Invoice was not found or you do not have permission to change it.");
+    expect(row("invoices", invoice.id)).toMatchObject({ status: "draft", paid_at: null });
+  });
+
+  it("requires an active workspace", async () => {
+    await expect(updateInvoiceStatus("any", "paid", undefined)).rejects.toThrow("No active workspace selected");
+    expect(fake.requests.filter((request) => request.table === "invoices" && request.op === "update")).toHaveLength(0);
   });
 });

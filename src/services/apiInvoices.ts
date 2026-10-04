@@ -93,6 +93,22 @@ export async function getInvoices(workspaceId: string | undefined) {
   return ((data ?? []) as Record<string, unknown>[]).filter((row) => !text(row.number).startsWith(pendingNumberPrefix)).map(toInvoice);
 }
 
+/** Moves an invoice to another status; paid_at is set when it becomes paid and cleared otherwise. */
+export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStatus, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({ status, paid_at: status === "paid" ? new Date().toISOString() : null })
+    .eq("id", invoiceId)
+    .eq("workspace_id", targetWorkspaceId)
+    .select(invoiceColumns)
+    .maybeSingle();
+
+  if (error) throw toInvoiceError(error);
+  if (!data) throw new Error(invoicePermissionMessage);
+  return toInvoice(data as Record<string, unknown>);
+}
+
 // The database replaces 'INV-NEXT' with the next 'INV-YYYY-NNN' of the workspace: the year of the
 // stored created_at in the workspace time zone and a per-year counter that never goes back, so the
 // number of a deleted invoice is not issued again

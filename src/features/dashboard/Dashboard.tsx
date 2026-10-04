@@ -7,11 +7,11 @@ import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { DashboardCard } from "../../ui/DashboardCard";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { useInvoices } from "../invoices/useInvoices";
+import { useGetInvoices } from "../invoices/useGetInvoices";
 
 export function Dashboard() {
   const { orders, clients, inventory, setCurrentModule } = useApp();
-  const { data: invoices } = useInvoices();
+  const { invoices } = useGetInvoices();
   const { formatMoney } = useWorkspaceMoney();
 
 
