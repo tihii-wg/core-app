@@ -348,7 +348,7 @@ async function supportsVinColumn() {
   return vinColumnSupported;
 }
 
-function readVin(row: Record<string, unknown>) {
+export function readVin(row: Record<string, unknown>) {
   if (typeof row.vin === "string" && row.vin) return row.vin;
   if (typeof row.employee_id === "string" && /^[A-Za-z0-9]{17}$/.test(row.employee_id)) return row.employee_id.toUpperCase();
   return "";

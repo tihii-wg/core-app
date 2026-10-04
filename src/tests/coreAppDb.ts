@@ -5,6 +5,13 @@
 // order_services is SELECT/INSERT/DELETE for members of the order's workspace (no UPDATE,
 // supabase/migrations/20260929000500_order_services_member_delete.sql), workspaces cannot be deleted and only the owner may
 // update them, owner_id is immutable, profiles are own-row only.
+// invoices / invoice_items follow supabase/migrations/20261004010000_invoices.sql and
+// 20261004020000_invoice_number_counters.sql and 20261004030000_protect_invoice_created_at.sql:
+// member access per workspace, one invoice per order, created_at stamped by the database on insert,
+// numbers unique per workspace and issued only by the database ('INV-PENDING-…' on insert, then
+// 'INV-NEXT' -> the next number of the workspace's per-year counter, which never goes back), and
+// invoice_items SELECT/INSERT only (rows go with the invoice). Counters live in
+// invoice_number_counters, a table the client cannot reach.
 import { fake, permissionDenied, type PgError, type PolicyCtx, type Row } from "./fakeSupabase";
 
 export const USERS = {
@@ -26,6 +33,40 @@ export const INDUSTRY_ID = "99999999-9999-4999-8999-999999999999";
 export const PASSWORD = "password123";
 
 const roleRank: Record<string, number> = { owner: 0, admin: 1, manager: 2, member: 3 };
+
+const deviceClock = () => new Date().toISOString();
+let databaseNow = deviceClock;
+
+/** Sets the database's now() (stamped on new invoices) apart from the device clock; null follows the device again. */
+export function setDatabaseClock(instant: string | null) {
+  databaseNow = instant ? () => instant : deviceClock;
+}
+
+function yearOf(timestamp: unknown, timeZone: string) {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric" }).format(new Date(String(timestamp))));
+}
+
+/** Mirrors public.protect_invoice_identity issuing 'INV-NEXT'. */
+function issueInvoiceNumber(invoice: Row, ctx: PolicyCtx) {
+  const zone = String(ctx.fake.all("workspaces").find((row) => row.id === invoice.workspace_id)?.timezone ?? "").trim() || "Europe/Chisinau";
+  let year: number;
+  try {
+    year = yearOf(invoice.created_at, zone);
+  } catch {
+    year = yearOf(invoice.created_at, "Europe/Chisinau");
+  }
+  const counters = ctx.fake.all("invoice_number_counters");
+  let counter = counters.find((row) => row.workspace_id === invoice.workspace_id && row.year === year);
+  if (!counter) {
+    counter = { workspace_id: invoice.workspace_id, year, last_number: 0 };
+    counters.push(counter);
+  }
+  for (;;) {
+    counter.last_number = Number(counter.last_number) + 1;
+    const number = `INV-${year}-${String(counter.last_number).padStart(3, "0")}`;
+    if (!ctx.fake.all("invoices").some((row) => row.workspace_id === invoice.workspace_id && row.number === number)) return number;
+  }
+}
 
 /** Mirrors public.workspace_member_role(uuid): the caller's role in an active workspace, or null. */
 export function roleIn(workspaceId: unknown, ctx: PolicyCtx) {
@@ -89,8 +130,12 @@ export function installSecurityModel() {
     services: (row) => ({ category: null, ...row }),
     orders: (row) => ({ updated_at: row.created_at, ...row }),
     inventory_items: (row) => ({ updated_at: row.created_at, ...row }),
+    invoices: (row) => ({ status: "draft", due_date: null, paid_at: null, updated_at: row.created_at, ...row }),
   };
-  fake.uniques = { inventory_items: [["workspace_id", "sku"]] };
+  fake.uniques = {
+    inventory_items: [["workspace_id", "sku"]],
+    invoices: [["workspace_id", "number"], ["order_id"]],
+  };
 
   fake.policies = {
     industries: { select: (row) => row.is_active !== false },
@@ -129,6 +174,11 @@ export function installSecurityModel() {
       insert: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
       delete: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
     },
+    invoices: memberTable,
+    invoice_items: {
+      select: (row, ctx) => isMember(ctx.fake.all("invoices").find((invoice) => invoice.id === row.invoice_id)?.workspace_id, ctx),
+      insert: (row, ctx) => isMember(ctx.fake.all("invoices").find((invoice) => invoice.id === row.invoice_id)?.workspace_id, ctx),
+    },
   };
 
   fake.grants = {
@@ -136,6 +186,8 @@ export function installSecurityModel() {
     profiles: { delete: false },
     workspace_members: { insert: ["workspace_id", "user_id", "role"], update: ["role", "deleted_at"], delete: false },
     order_services: { update: false },
+    invoice_items: { update: false, delete: false },
+    invoice_number_counters: { select: false, insert: false, update: false, delete: false },
   };
 
   fake.triggers = {
@@ -154,6 +206,26 @@ export function installSecurityModel() {
         return null;
       }
       if (oldRow?.role === "owner") return error("The workspace owner cannot be removed through team management");
+      return null;
+    },
+    invoices: (op, oldRow, newRow, ctx) => {
+      if (op === "INSERT" && newRow) {
+        if (!String(newRow.number).startsWith("INV-PENDING-")) return error("Invoice numbers are assigned by the database");
+        newRow.created_at = databaseNow();
+        return null;
+      }
+      if (op === "DELETE") {
+        ctx.fake.tables.invoice_items = ctx.fake.all("invoice_items").filter((item) => item.invoice_id !== oldRow?.id);
+        return null;
+      }
+      if (!oldRow || !newRow) return null;
+      if (newRow.workspace_id !== oldRow.workspace_id) return error("workspace_id cannot be changed");
+      if (newRow.order_id !== oldRow.order_id) return error("order_id cannot be changed");
+      if (newRow.created_at !== oldRow.created_at) return error("created_at cannot be changed");
+      if (newRow.number !== oldRow.number) {
+        if (!String(oldRow.number).startsWith("INV-PENDING-") || newRow.number !== "INV-NEXT") return error("An invoice number cannot be changed");
+        newRow.number = issueInvoiceNumber(newRow, ctx);
+      }
       return null;
     },
   };
@@ -241,6 +313,7 @@ const activeWorkspace: Record<string, string | null> = {
 /** Resets the fake and loads three isolated workspaces (A, B owned by Olga; C by an outsider). */
 export function seedCoreApp() {
   fake.reset();
+  setDatabaseClock(null);
   installSecurityModel();
 
   fake.all("industries").push({ id: INDUSTRY_ID, name: "Auto Repair & Service", slug: "auto_repair", description: null, is_active: true, created_at: "2026-01-01T00:00:00.000Z" });

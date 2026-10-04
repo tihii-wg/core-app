@@ -233,6 +233,27 @@ export interface Invoice {
   paidAt?: string;
 }
 
+/** A copy of one order_services line, frozen on the invoice when it is created. */
+export type InvoiceItem = {
+  id: string;
+  serviceId: string | null;
+  serviceName: string;
+  price: number;
+  quantity: number;
+};
+
+/** A saved invoice with the order details and lines it copied when it was created. */
+export interface InvoiceDocument extends Invoice {
+  workspaceId: string;
+  device: string;
+  carNumber: string;
+  vin: string;
+  description: string;
+  subtotal: number;
+  total: number;
+  items: InvoiceItem[];
+}
+
 export interface Transaction {
   id: string;
   type: "income" | "expense";

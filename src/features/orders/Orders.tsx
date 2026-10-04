@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
@@ -17,6 +17,9 @@ import ClientTypeBadge from "../clients/ClientTypeBadge";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useGetInvoices } from "../invoices/useGetInvoices";
+import { useCreateInvoice } from "../invoices/useCreateInvoice";
+import { OrderActionsMenu } from "./OrderActionsMenu";
 // import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
 const statusOptions = [
@@ -50,6 +53,15 @@ export function Orders() {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   const { employees} = useGetEmployees();
+
+  const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
+  const createInvoice = useCreateInvoice();
+  const invoiceNumberByOrder = useMemo(() => new Map(invoices.flatMap((invoice) => (invoice.orderId ? [[invoice.orderId, invoice.invoiceNumber] as const] : []))), [invoices]);
+
+  const handleCreateInvoice = (order: Order) => {
+    if (createInvoice.isPending) return;
+    createInvoice.mutate(order.id);
+  };
 
   // Filtered data
   const filteredOrders = useMemo(() => {
@@ -140,18 +152,14 @@ export function Orders() {
       className: "w-[80px] text-right",
       cell: (order) => (
         <div className="flex justify-end gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Edit order ${order.orderNumber}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setEditingOrder(order);
-            }}
-          >
-            <Pencil />
-          </Button>
+          <OrderActionsMenu
+            order={order}
+            invoiceNumber={invoiceNumberByOrder.get(order.id)}
+            invoicesUnavailable={invoicesUnavailable}
+            isCreatingInvoice={createInvoice.isPending}
+            onEdit={setEditingOrder}
+            onCreateInvoice={handleCreateInvoice}
+          />
         </div>
       ),
     },

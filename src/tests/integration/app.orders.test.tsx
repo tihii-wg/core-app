@@ -222,11 +222,13 @@ describe("orders page", () => {
     expect(fake.all("order_services").filter((line) => line.order_id === "order-a1")).toHaveLength(1);
   });
 
-  it("edits an order from the row pencil button in a dialog and stays on the orders page", async () => {
+  it("edits an order from the row actions menu in a dialog and stays on the orders page", async () => {
     const { user, location } = await openOrders();
     const orderNumber = `ORD-${new Date().getFullYear()}-001`;
 
-    await user.click(screen.getByRole("button", { name: `Edit order ${orderNumber}` }));
+    await user.click(screen.getByRole("button", { name: `Actions for order ${orderNumber}` }));
+    await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(`Edit Order ${orderNumber}`)).toBeInTheDocument();
     const device = within(dialog).getByLabelText("Device *");
@@ -242,10 +244,12 @@ describe("orders page", () => {
     expect(location.pathname).toBe(`/en/${WS.A}/orders`);
   });
 
-  it("closes the pencil edit dialog on cancel without saving or opening the detail panel", async () => {
+  it("closes the menu's edit dialog on cancel without saving or opening the detail panel", async () => {
     const { user } = await openOrders();
-    await user.click(screen.getByRole("button", { name: `Edit order ORD-${new Date().getFullYear()}-001` }));
+    await user.click(screen.getByRole("button", { name: `Actions for order ORD-${new Date().getFullYear()}-001` }));
+    await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog");
+    expect(screen.getAllByRole("dialog")).toEqual([dialog]);
     await user.clear(within(dialog).getByLabelText("Device *"));
 
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -253,6 +257,52 @@ describe("orders page", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(row("orders", "order-a1")?.device).toBe("Alpha Garage car");
     expect(fake.requests.filter((request) => request.table === "orders" && request.op === "update")).toHaveLength(0);
+  });
+
+  it("creates an invoice from the row actions menu, then shows it instead of offering another one", async () => {
+    const { user } = await openOrders();
+    const orderNumber = `ORD-${new Date().getFullYear()}-001`;
+    const actions = screen.getByRole("button", { name: `Actions for order ${orderNumber}` });
+
+    await user.click(actions);
+    await user.click(await screen.findByRole("menuitem", { name: "Create Invoice" }));
+
+    const invoiceNumber = `INV-${new Date().getFullYear()}-001`;
+    expect(await screen.findByText(`Invoice ${invoiceNumber} created`)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(fake.all("invoices")).toEqual([expect.objectContaining({ workspace_id: WS.A, order_id: "order-a1", client_id: "client-a1", client_name: "Ada Alpha", order_number: orderNumber, number: invoiceNumber, total: 40 })]);
+    expect(fake.all("invoice_items")).toEqual([expect.objectContaining({ service_id: "service-a1", service_name: "Oil change", price: 40, quantity: 1 })]);
+
+    await user.click(actions);
+    expect(await screen.findByRole("menuitem", { name: `Invoice ${invoiceNumber} already created` })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("menuitem", { name: "Create Invoice" })).not.toBeInTheDocument();
+    expect(fake.requests.filter((request) => request.table === "invoices" && request.op === "insert")).toHaveLength(1);
+  });
+
+  it("reports a rejected invoice creation and keeps offering Create Invoice", async () => {
+    const { user } = await openOrders();
+    const actions = screen.getByRole("button", { name: `Actions for order ORD-${new Date().getFullYear()}-001` });
+    fake.failNext("invoices", "insert", { code: "42501", message: 'new row violates row-level security policy for table "invoices"' });
+
+    await user.click(actions);
+    await user.click(await screen.findByRole("menuitem", { name: "Create Invoice" }));
+
+    expect(await screen.findByText('new row violates row-level security policy for table "invoices"')).toBeInTheDocument();
+    expect(fake.all("invoices")).toEqual([]);
+    await user.click(actions);
+    expect(await screen.findByRole("menuitem", { name: "Create Invoice" })).not.toHaveAttribute("aria-disabled");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(unhandled.rejections).toEqual([]);
+  });
+
+  it("explains in the menu that invoices are unavailable when the database has no invoices table", async () => {
+    fake.failNext("invoices", "select", { code: "PGRST205", message: "Could not find the table 'public.invoices' in the schema cache" });
+    const { user } = await openOrders();
+
+    await user.click(screen.getByRole("button", { name: `Actions for order ORD-${new Date().getFullYear()}-001` }));
+
+    expect(await screen.findByRole("menuitem", { name: "Invoices are not set up yet" })).toHaveAttribute("aria-disabled", "true");
+    expect(fake.requests.filter((request) => request.table === "invoices" && request.op === "insert")).toHaveLength(0);
   });
 
   it("keeps the edit form open when the update is rejected", async () => {
