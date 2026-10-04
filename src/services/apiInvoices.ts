@@ -93,6 +93,20 @@ export async function getInvoices(workspaceId: string | undefined) {
   return ((data ?? []) as Record<string, unknown>[]).filter((row) => !text(row.number).startsWith(pendingNumberPrefix)).map(toInvoice);
 }
 
+/** One invoice of the workspace with the lines it copied from its order. */
+export async function getInvoice(invoiceId: string, workspaceId: string | undefined): Promise<InvoiceDocument> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.from("invoices").select(invoiceColumns).eq("id", invoiceId).eq("workspace_id", targetWorkspaceId).maybeSingle();
+
+  if (error) throw toInvoiceError(error);
+  if (!data) throw new Error("Invoice was not found in this workspace.");
+
+  const { data: items, error: itemsError } = await supabase.from("invoice_items").select(invoiceItemColumns).eq("invoice_id", invoiceId).order("position", { ascending: true });
+  if (itemsError) throw toInvoiceError(itemsError);
+
+  return toInvoiceDocument(data as Record<string, unknown>, (items ?? []) as Record<string, unknown>[]);
+}
+
 /** Moves an invoice to another status; paid_at is set when it becomes paid and cleared otherwise. */
 export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStatus, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);

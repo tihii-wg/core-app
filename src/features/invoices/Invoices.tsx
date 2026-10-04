@@ -15,6 +15,7 @@ import { useGetInvoices } from "./useGetInvoices";
 import { useUpdateInvoiceStatus } from "./useUpdateInvoiceStatus";
 import { CreateInvoiceDialog } from "./CreateInvoiceDialog";
 import { InvoiceActionsMenu } from "./InvoiceActionsMenu";
+import { InvoiceDetailPanel } from "./InvoiceDetailPanel";
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -33,6 +34,7 @@ export function Invoices() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;
   const unpaidTotal = invoices.filter((i) => i.status === "sent" || i.status === "overdue").reduce((sum, i) => sum + i.amount, 0);
@@ -176,6 +178,7 @@ export function Invoices() {
         columns={columns}
         data={filteredInvoices}
         keyExtractor={(invoice) => invoice.id}
+        onRowClick={(invoice) => setOpenInvoiceId(invoice.id)}
         isLoading={isLoading}
         emptyState={
           isUnavailable ? (
@@ -191,6 +194,8 @@ export function Invoices() {
       />
 
       <CreateInvoiceDialog open={createModalOpen} onOpenChange={setCreateModalOpen} orders={invoiceableOrders} />
+
+      <InvoiceDetailPanel invoiceId={openInvoiceId} onClose={() => setOpenInvoiceId(null)} isUpdating={updateStatus.isPending} onStatusChange={handleStatusChange} />
     </div>
   );
 }

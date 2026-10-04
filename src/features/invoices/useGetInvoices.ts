@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getInvoices, InvoicesUnavailableError } from "../../services/apiInvoices";
+import { getInvoice, getInvoices, InvoicesUnavailableError } from "../../services/apiInvoices";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useGetInvoices({ enabled = true }: { enabled?: boolean } = {}) {
@@ -12,4 +12,16 @@ export function useGetInvoices({ enabled = true }: { enabled?: boolean } = {}) {
   });
 
   return { invoices: invoices ?? [], isLoading, error, refetch, isUnavailable: error instanceof InvoicesUnavailableError };
+}
+
+/** Kept under ["invoices", workspaceId] so invoice mutations refresh the open invoice too. */
+export function useGetInvoice(invoiceId: string | null) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const { data: invoice, isLoading, error } = useQuery({
+    queryKey: ["invoices", workspaceId, invoiceId],
+    queryFn: () => getInvoice(invoiceId!, workspaceId),
+    enabled: Boolean(workspaceId && invoiceId),
+  });
+
+  return { invoice, isLoading, error };
 }

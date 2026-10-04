@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createInvoiceFromOrder, getInvoices, InvoicesUnavailableError, updateInvoiceStatus } from "../../services/apiInvoices";
+import { createInvoiceFromOrder, getInvoice, getInvoices, InvoicesUnavailableError, updateInvoiceStatus } from "../../services/apiInvoices";
 import { createOrder, updateOrder, updateOrderStatus } from "../../services/apiOrders";
 import { fake, fakeClient } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp, setDatabaseClock } from "../coreAppDb";
@@ -317,6 +317,32 @@ describe("getInvoices", () => {
     expect((await getInvoices(WS.B)).map((invoice) => invoice.invoiceNumber)).toEqual(["INV-2026-001"]);
     fake.signInAs(USERS.outsider.id);
     expect(await getInvoices(WS.A)).toEqual([]);
+  });
+});
+
+describe("getInvoice", () => {
+  it("returns the invoice with its copied lines in order", async () => {
+    at("2026-10-04T09:00:00Z");
+    const created = await invoiceNewOrder({ ...inA, services: [oilChange, brakeCheck] });
+
+    expect(await getInvoice(created.id, WS.A)).toMatchObject({
+      invoiceNumber: "INV-2026-001",
+      clientName: "Ada Alpha",
+      device: "Car",
+      total: 90,
+      items: [
+        { serviceName: "Oil change", price: 40, quantity: 1 },
+        { serviceName: "Brake check", price: 25, quantity: 2 },
+      ],
+    });
+  });
+
+  it("does not return an invoice of another workspace", async () => {
+    const created = await invoiceNewOrder();
+
+    await expect(getInvoice(created.id, WS.B)).rejects.toThrow("Invoice was not found in this workspace.");
+    fake.signInAs(USERS.outsider.id);
+    await expect(getInvoice(created.id, WS.A)).rejects.toThrow("Invoice was not found in this workspace.");
   });
 });
 

@@ -108,6 +108,26 @@ describe("invoices page", () => {
     expect(row("invoices", invoice.id)).toMatchObject({ status: "sent", paid_at: null });
   });
 
+  it("opens an invoice from its row with the billed services and marks it paid from the panel", async () => {
+    const invoice = await seedInvoice();
+    const { user } = openInvoices();
+
+    await user.click(await within(await screen.findByRole("table")).findByText("Ada Alpha"));
+    const panel = await screen.findByRole("dialog");
+
+    expect(await within(panel).findByText("Oil change")).toBeInTheDocument();
+    expect(within(panel).getByText(invoiceNumber)).toBeInTheDocument();
+    expect(within(panel).getByText(orderNumber)).toBeInTheDocument();
+    expect(within(panel).getByText("Alpha Garage car")).toBeInTheDocument();
+    expect(within(panel).getByText("Draft")).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Mark as paid" }));
+
+    expect(await within(panel).findByText("Paid")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Mark as unpaid" })).toBeInTheDocument();
+    expect(row("invoices", invoice.id)).toMatchObject({ status: "paid" });
+  });
+
   it("explains that invoices are not set up when the database has no invoices table", async () => {
     fake.failNext("invoices", "select", { code: "PGRST205", message: "Could not find the table 'public.invoices' in the schema cache" });
     openInvoices();
