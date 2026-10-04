@@ -366,7 +366,6 @@ describe("updateOrder", () => {
       assignedEmployeeId: employeeId,
       deadline: "2026-10-02",
       vin: "",
-      services: [],
     }, "ws-1");
 
     expect(updates[0]).toEqual({
@@ -423,7 +422,6 @@ describe("updateOrder", () => {
       description: "",
       assignedEmployeeId: employeeId,
       deadline: "",
-      services: [],
     }, "ws-1");
 
     expect(updates[0]).toEqual(expect.objectContaining({ employee_id: "1HGBH41JXMN109186" }));

@@ -182,11 +182,11 @@ function clientFromRow(clients: unknown) {
   };
 }
 
-function toOrder(
-  row: Record<string, unknown>,
-  employees: { id: string; name: string; profile_id: string | null }[],
-  serviceLines: { service_id?: string; service_name?: string; price?: number; quantity?: number }[] = [],
-): Order {
+type OrderServiceLine = { id?: string; order_id?: string; service_id?: string; service_name?: string; price?: number; quantity?: number };
+
+const orderServiceColumns = "id, order_id, service_id, service_name, price, quantity";
+
+function toOrder(row: Record<string, unknown>, employees: { id: string; name: string; profile_id: string | null }[], serviceLines: OrderServiceLine[] = []): Order {
   const assignedTo = typeof row.assigned_to === "string" ? row.assigned_to : "";
   const employee = employees.find((item) => item.profile_id === assignedTo);
   const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
@@ -194,6 +194,7 @@ function toOrder(
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
   const client = clientFromRow(row.clients);
   const services = serviceLines.map((line) => ({
+    ...(line.id ? { id: String(line.id) } : {}),
     serviceId: String(line.service_id ?? ""),
     serviceName: String(line.service_name ?? ""),
     price: Number(line.price ?? 0),
@@ -251,10 +252,10 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
 
   const rows = (data ?? []) as Record<string, unknown>[];
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
-  let serviceLines: { order_id?: string; service_id?: string; service_name?: string; price?: number; quantity?: number }[] = [];
+  let serviceLines: OrderServiceLine[] = [];
 
   if (orderIds.length > 0) {
-    const { data: lines, error: linesError } = await supabase.from("order_services").select("order_id, service_id, service_name, price, quantity").in("order_id", orderIds);
+    const { data: lines, error: linesError } = await supabase.from("order_services").select(orderServiceColumns).in("order_id", orderIds).order("created_at", { ascending: true });
 
     if (linesError) throw new Error(linesError.message);
     serviceLines = lines ?? [];
@@ -309,8 +310,9 @@ async function vinColumnValue(vin: string | undefined) {
   return { employee_id: normalizedVin };
 }
 
-export async function updateOrder({ orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services = [] }: UpdateOrderDetails, targetWorkspaceId: string | undefined) {
+export async function updateOrder({ orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services }: UpdateOrderDetails, targetWorkspaceId: string | undefined) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  if (services && services.length === 0) throw new Error("Service is required");
   const assignedTo = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = vin.trim().toUpperCase();
 
@@ -334,31 +336,53 @@ export async function updateOrder({ orderId, device, carNumber, vin = "", descri
   if (error) throw new Error(error.message);
   if (!data) throw new Error(orderPermissionMessage);
 
-  const { lines: addedServices, summary } = services.length > 0 ? await appendOrderServices(workspaceId, orderId, services) : { lines: [], summary: null };
+  const { lines, summary } = services ? await syncOrderServices(workspaceId, orderId, services) : { lines: [], summary: null };
   const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
 
   if (employeesError) throw new Error(employeesError.message);
 
-  const order = toOrder({ ...(data as Record<string, unknown>), ...summary, ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], addedServices);
+  const order = toOrder({ ...(data as Record<string, unknown>), ...summary, ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines);
 
   return order;
 }
 
-async function appendOrderServices(workspaceId: string, orderId: string, services: OrderService[]) {
-  const { data: existingLines, error: existingLinesError } = await supabase.from("order_services").select("service_id, service_name, price, quantity").eq("order_id", orderId);
+function isSameService(line: OrderServiceLine, service: OrderService) {
+  return line.service_id === service.serviceId || String(line.service_name ?? "").toLowerCase() === service.serviceName.trim().toLowerCase();
+}
+
+// Makes the order's lines exactly match `services`: saved lines are matched by id, removed ones are
+// deleted (the global service stays), unsaved ones are inserted once. Not atomic: new lines are
+// inserted before removed ones are deleted, and saving the same form again converges.
+async function syncOrderServices(workspaceId: string, orderId: string, services: OrderService[]) {
+  const { data: existingLines, error: existingLinesError } = await supabase.from("order_services").select(orderServiceColumns).eq("order_id", orderId).order("created_at", { ascending: true });
 
   if (existingLinesError) throw new Error(existingLinesError.message);
 
-  const lines = existingLines ?? [];
-  const existingIds = new Set(lines.map((line) => line.service_id));
-  const existingNames = new Set(lines.map((line) => String(line.service_name ?? "").toLowerCase()));
-  const newLines = [];
+  const unclaimed: OrderServiceLine[] = [...(existingLines ?? [])];
+  const kept: OrderServiceLine[] = [];
+  const unsaved: OrderService[] = [];
 
   for (const service of services) {
-    const name = service.serviceName.trim();
-    if (!name || existingIds.has(service.serviceId) || existingNames.has(name.toLowerCase())) continue;
+    const index = service.id ? unclaimed.findIndex((line) => line.id === service.id) : -1;
+    if (index >= 0) kept.push(...unclaimed.splice(index, 1));
+    else unsaved.push(service);
+  }
+
+  const newLines: { order_id: string; service_id: string; service_name: string; price: number; quantity: number }[] = [];
+
+  for (const service of unsaved) {
+    if (!service.serviceName.trim()) continue;
+
+    const identical = unclaimed.findIndex((line) => isSameService(line, service) && Number(line.price) === service.price && Number(line.quantity) === service.quantity);
+    if (identical >= 0) {
+      kept.push(...unclaimed.splice(identical, 1));
+      continue;
+    }
+    if ([...kept, ...newLines].some((line) => isSameService(line, service))) continue;
 
     const resolved = await resolveService(workspaceId, service);
+    if ([...kept, ...newLines].some((line) => line.service_id === resolved.id)) continue;
+
     newLines.push({
       order_id: orderId,
       service_id: resolved.id,
@@ -366,40 +390,30 @@ async function appendOrderServices(workspaceId: string, orderId: string, service
       price: service.price,
       quantity: service.quantity,
     });
-    existingIds.add(resolved.id);
-    existingNames.add(resolved.name.toLowerCase());
   }
 
-  if (newLines.length === 0) {
-    return {
-      summary: null,
-      lines: lines.map((line) => ({
-        service_id: line.service_id as string,
-        service_name: line.service_name as string,
-        price: Number(line.price ?? 0),
-        quantity: Number(line.quantity ?? 1),
-      })),
-    };
+  const removedIds = unclaimed.map((line) => String(line.id));
+  let inserted: OrderServiceLine[] = [];
+
+  if (newLines.length > 0) {
+    const { data: insertedLines, error: insertError } = await supabase.from("order_services").insert(newLines).select(orderServiceColumns);
+    if (insertError) throw new Error(insertError.message);
+    inserted = insertedLines ?? [];
   }
 
-  const { error: insertError } = await supabase.from("order_services").insert(newLines);
-  if (insertError) throw new Error(insertError.message);
+  if (removedIds.length > 0) {
+    const { data: deletedLines, error: deleteError } = await supabase.from("order_services").delete().eq("order_id", orderId).in("id", removedIds).select("id");
+    if (deleteError) throw new Error(deleteError.message);
+    if (!deletedLines || deletedLines.length !== removedIds.length) throw new Error(orderPermissionMessage);
+  }
 
-  const allLines = [
-    ...lines.map((line) => ({
-      service_name: String(line.service_name ?? ""),
-      price: Number(line.price ?? 0),
-      quantity: Number(line.quantity ?? 1),
-    })),
-    ...newLines.map((line) => ({
-      service_name: line.service_name,
-      price: line.price,
-      quantity: line.quantity,
-    })),
-  ];
+  const lines = [...kept, ...inserted];
+  if (newLines.length === 0 && removedIds.length === 0) return { lines, summary: null };
+
   const summary = {
-    service: allLines.map((line) => line.service_name).join(", "),
-    total_price: allLines.reduce((total, line) => total + line.price * line.quantity, 0),
+    service: lines.map((line) => String(line.service_name ?? "")).join(", "),
+    service_id: lines[0]?.service_id ?? null,
+    total_price: lines.reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0),
   };
 
   const { data: updatedRows, error: summaryError } = await supabase.from("orders").update(summary).eq("id", orderId).eq("workspace_id", workspaceId).select("id");
@@ -407,21 +421,5 @@ async function appendOrderServices(workspaceId: string, orderId: string, service
   if (summaryError) throw new Error(summaryError.message);
   if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage);
 
-  return {
-    summary,
-    lines: [
-      ...lines.map((line) => ({
-        service_id: line.service_id as string,
-        service_name: line.service_name as string,
-        price: Number(line.price ?? 0),
-        quantity: Number(line.quantity ?? 1),
-      })),
-      ...newLines.map((line) => ({
-        service_id: line.service_id,
-        service_name: line.service_name,
-        price: line.price,
-        quantity: line.quantity,
-      })),
-    ],
-  };
+  return { lines, summary };
 }

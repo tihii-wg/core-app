@@ -23,9 +23,9 @@ describe("fake Supabase security model", () => {
     expect(data).toEqual([]);
   });
 
-  it("refuses DELETE on workspace_members, workspaces and order_services at the grant level", async () => {
+  it("refuses DELETE on workspace_members and workspaces at the grant level", async () => {
     fake.signInAs(USERS.owner.id);
-    for (const table of ["workspace_members", "workspaces", "order_services"]) {
+    for (const table of ["workspace_members", "workspaces"]) {
       const { error } = await db.from(table).delete().eq("id", "anything");
       expect(error).toMatchObject({ code: "42501", message: `permission denied for table ${table}` });
     }
@@ -48,10 +48,25 @@ describe("fake Supabase security model", () => {
     expect(promote.error?.code).toBe("42501");
   });
 
-  it("keeps order_services append-only and owner_id immutable", async () => {
+  it("refuses UPDATE on order_services and keeps owner_id immutable", async () => {
     fake.signInAs(USERS.owner.id);
     expect((await db.from("order_services").update({ price: 1 }).eq("order_id", "order-a1")).error?.message).toBe("permission denied for table order_services");
     expect((await db.from("workspaces").update({ owner_id: USERS.admin.id }).eq("id", WS.A)).error?.code).toBe("42501");
+  });
+
+  it("lets only members of the order's workspace delete its order_services lines", async () => {
+    fake.signInAs(USERS.outsider.id);
+    const foreign = await db.from("order_services").delete().eq("id", "line-a1").select("id");
+    expect(foreign).toMatchObject({ data: [], error: null });
+
+    fake.signInAs(USERS.member.id);
+    const otherWorkspace = await db.from("order_services").delete().eq("id", "line-c1").select("id");
+    expect(otherWorkspace).toMatchObject({ data: [], error: null });
+    const own = await db.from("order_services").delete().eq("id", "line-a1").select("id");
+    expect(own.data).toEqual([{ id: "line-a1" }]);
+
+    expect(fake.all("order_services").map((line) => line.id).sort()).toEqual(["line-b1", "line-c1"]);
+    expect(fake.all("services").some((service) => service.id === "service-a1")).toBe(true);
   });
 
   it("allows only owners and admins to write services", async () => {

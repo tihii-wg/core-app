@@ -29,7 +29,7 @@ const order: Order = {
   vin: "1HGBH41JXMN109186",
   carNumber: "ABC123",
   service: "Oil change",
-  services: [],
+  services: [{ id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 }],
   description: "Noise",
   status: "new",
   assignedEmployeeId: "emp-1",
@@ -133,7 +133,10 @@ describe("OrderDetailPanel", () => {
     expect(mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         vin: "2HGBH41JXMN109187",
-        services: [expect.objectContaining({ serviceId: "svc-tires", serviceName: "Tires", price: 80 })],
+        services: [
+          { id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 },
+          expect.objectContaining({ serviceId: "svc-tires", serviceName: "Tires", price: 80 }),
+        ],
       }),
     );
   });

@@ -103,7 +103,7 @@ describe("getOrders", () => {
   it("maps orders of one workspace with client name, lines and assigned employee", async () => {
     const [order] = await getOrders(WS.A);
     expect(order).toMatchObject({ id: "order-a1", clientName: "Ada Alpha", orderNumber: `ORD-${year}-001`, assignedEmployeeName: "Tom Tech", assignedEmployeeId: "employee-a1", totalPrice: 40, paymentStatus: "unpaid" });
-    expect(order.services).toEqual([{ serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }]);
+    expect(order.services).toEqual([{ id: "line-a1", serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }]);
   });
 
   it("returns an empty list for a workspace the user cannot read", async () => {
@@ -169,7 +169,9 @@ describe("updateOrderStatus", () => {
 });
 
 describe("updateOrder", () => {
-  const details = { orderId: "order-a1", device: " Passat ", carNumber: " ab 001 ", vin: "", description: " Rattle ", assignedEmployeeId: "employee-a2", deadline: `${year}-12-24`, services: [] };
+  const details = { orderId: "order-a1", device: " Passat ", carNumber: " ab 001 ", vin: "", description: " Rattle ", assignedEmployeeId: "employee-a2", deadline: `${year}-12-24` };
+  const savedOilChange = { ...oilChange, id: "line-a1" };
+  const brakeCheck = { serviceId: "service-a2", serviceName: "Brake check", price: 25, quantity: 1 };
 
   it("updates details, reassigns the employee and keeps workspace_id out of the payload", async () => {
     const order = await updateOrder(details, WS.A);
@@ -190,8 +192,61 @@ describe("updateOrder", () => {
 
   it("returns the existing lines when no new service is added", async () => {
     const order = await updateOrder({ ...details, services: [oilChange] }, WS.A);
-    expect(order).toMatchObject({ totalPrice: 40, services: [oilChange] });
+    expect(order).toMatchObject({ totalPrice: 40, services: [savedOilChange] });
     expect(linesOf("order-a1")).toHaveLength(1);
+  });
+
+  it("leaves saved lines untouched when nothing changed", async () => {
+    await updateOrder({ ...details, services: [savedOilChange] }, WS.A);
+
+    expect(linesOf("order-a1")).toEqual([expect.objectContaining({ id: "line-a1", service_id: "service-a1", price: 40, quantity: 1 })]);
+    expect(fake.requests.filter((item) => item.table === "order_services" && (item.op === "insert" || item.op === "delete"))).toHaveLength(0);
+    expect(fake.requests.filter((item) => item.table === "orders" && item.op === "update")).toHaveLength(1);
+  });
+
+  it("deletes a removed saved line, keeps the global service and recalculates the order", async () => {
+    await updateOrder({ ...details, services: [savedOilChange, brakeCheck] }, WS.A);
+    const brakeLine = linesOf("order-a1").find((line) => line.service_id === "service-a2")!;
+
+    const order = await updateOrder({ ...details, services: [{ ...brakeCheck, id: String(brakeLine.id) }] }, WS.A);
+
+    expect(linesOf("order-a1").map((line) => line.id)).toEqual([brakeLine.id]);
+    expect(row("services", "service-a1")).toBeDefined();
+    expect(row("orders", "order-a1")).toMatchObject({ total_price: 25, service: "Brake check", service_id: "service-a2" });
+    expect(order).toMatchObject({ totalPrice: 25, service: "Brake check", services: [{ ...brakeCheck, id: brakeLine.id }] });
+    expect((await getOrders(WS.A)).find((item) => item.id === "order-a1")?.services).toEqual([{ ...brakeCheck, id: brakeLine.id }]);
+  });
+
+  it("replaces a removed saved line with a new one so the lines match the form exactly", async () => {
+    const order = await updateOrder({ ...details, services: [brakeCheck] }, WS.A);
+
+    expect(linesOf("order-a1").map((line) => [line.service_name, line.price, line.quantity])).toEqual([["Brake check", 25, 1]]);
+    expect(row("orders", "order-a1")).toMatchObject({ total_price: 25, service: "Brake check" });
+    expect(order.services).toEqual([expect.objectContaining({ ...brakeCheck, id: expect.any(String) })]);
+  });
+
+  it("never inserts the same service twice", async () => {
+    await updateOrder({ ...details, services: [savedOilChange, oilChange, { ...oilChange, serviceId: "", serviceName: "OIL CHANGE" }, brakeCheck, { ...brakeCheck, serviceId: "" }] }, WS.A);
+    expect(linesOf("order-a1").map((line) => line.service_name)).toEqual(["Oil change", "Brake check"]);
+  });
+
+  it("refuses to save an order without services", async () => {
+    await expect(updateOrder({ ...details, services: [] }, WS.A)).rejects.toThrow("Service is required");
+    expect(linesOf("order-a1")).toHaveLength(1);
+    expect(fake.requests.filter((item) => item.op !== "select")).toHaveLength(0);
+  });
+
+  it("ignores a line id from another order instead of touching it", async () => {
+    await updateOrder({ ...details, services: [savedOilChange, { ...brakeCheck, id: "line-c1" }] }, WS.A);
+
+    expect(fake.all("order_services").find((line) => line.id === "line-c1")).toMatchObject({ order_id: "order-c1" });
+    expect(linesOf("order-a1").map((line) => line.service_name)).toEqual(["Oil change", "Brake check"]);
+    expect(linesOf("order-a1").some((line) => line.id === "line-c1")).toBe(false);
+  });
+
+  it("surfaces an error when deleting a line is rejected", async () => {
+    fake.failNext("order_services", "delete", { code: "42501", message: "permission denied for table order_services" });
+    await expect(updateOrder({ ...details, services: [brakeCheck] }, WS.A)).rejects.toThrow("permission denied for table order_services");
   });
 
   it("validates the VIN length", async () => {

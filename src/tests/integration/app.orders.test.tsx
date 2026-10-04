@@ -162,6 +162,66 @@ describe("orders page", () => {
     expect(screen.getByText("Oil change, Brake check")).toBeInTheDocument();
   });
 
+  it("removes a saved service, adds another, updates the total immediately and saves exactly the shown services", async () => {
+    row("services", "service-a2")!.status = "active";
+    const { user } = await openOrders();
+    const panel = await openOrderPanel(user);
+    await user.click(within(panel).getByRole("button", { name: "Edit" }));
+    await user.type(within(panel).getByLabelText("VIN *"), VIN);
+    const total = () => within(panel).getByText("Total Price").nextElementSibling?.textContent ?? "";
+    expect(total()).toMatch(/40/);
+
+    await user.click(within(panel).getByRole("button", { name: "Remove Oil change" }));
+    expect(within(panel).queryByText("Oil change")).not.toBeInTheDocument();
+    expect(total()).not.toMatch(/40/);
+
+    await user.click(within(panel).getByPlaceholderText("Service"));
+    await user.click(await within(panel).findByRole("button", { name: "Brake check" }));
+    expect(total()).toMatch(/25/);
+    await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fake.all("order_services").filter((line) => line.order_id === "order-a1").map((line) => line.service_name)).toEqual(["Brake check"]);
+    expect(row("orders", "order-a1")).toMatchObject({ total_price: 25, service: "Brake check" });
+    expect(row("services", "service-a1")).toBeDefined();
+
+    const reopened = await openOrderPanel(user);
+    await user.click(within(reopened).getByRole("button", { name: "Edit" }));
+    expect(within(reopened).getByRole("button", { name: "Remove Brake check" })).toBeInTheDocument();
+    expect(within(reopened).queryByRole("button", { name: "Remove Oil change" })).not.toBeInTheDocument();
+  });
+
+  it("drops a service added and removed before saving without writing it", async () => {
+    row("services", "service-a2")!.status = "active";
+    const { user } = await openOrders();
+    const panel = await openOrderPanel(user);
+    await user.click(within(panel).getByRole("button", { name: "Edit" }));
+    await user.type(within(panel).getByLabelText("VIN *"), VIN);
+
+    await user.click(within(panel).getByPlaceholderText("Service"));
+    await user.click(await within(panel).findByRole("button", { name: "Brake check" }));
+    await user.click(within(panel).getByRole("button", { name: "Remove Brake check" }));
+    await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fake.all("order_services").filter((line) => line.order_id === "order-a1")).toEqual([expect.objectContaining({ id: "line-a1", service_name: "Oil change" })]);
+    expect(fake.requests.filter((request) => request.table === "order_services" && (request.op === "insert" || request.op === "delete"))).toHaveLength(0);
+  });
+
+  it("requires at least one service when editing", async () => {
+    const { user } = await openOrders();
+    const panel = await openOrderPanel(user);
+    await user.click(within(panel).getByRole("button", { name: "Edit" }));
+    await user.type(within(panel).getByLabelText("VIN *"), VIN);
+
+    await user.click(within(panel).getByRole("button", { name: "Remove Oil change" }));
+    await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
+
+    expect(await within(panel).findByText("Service is required")).toBeInTheDocument();
+    expect(fake.requests.filter((request) => ["orders", "order_services"].includes(request.table) && request.op !== "select")).toHaveLength(0);
+    expect(fake.all("order_services").filter((line) => line.order_id === "order-a1")).toHaveLength(1);
+  });
+
   it("edits an order from the row pencil button in a dialog and stays on the orders page", async () => {
     const { user, location } = await openOrders();
     const orderNumber = `ORD-${new Date().getFullYear()}-001`;

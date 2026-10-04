@@ -127,11 +127,13 @@ export type EditOrderFormData = {
   description: string;
   assignedEmployeeId: string;
   deadline: string;
+  services: OrderService[];
 };
 
-export type UpdateOrderDetails = EditOrderFormData & {
+export type UpdateOrderDetails = Omit<EditOrderFormData, "services"> & {
   orderId: string;
-  services: OrderService[];
+  /** The order's complete final service list; omit to leave the saved lines untouched. */
+  services?: OrderService[];
 };
 export interface addNewServiceFormData {
   serviceId?: string;
@@ -294,6 +296,8 @@ export type Profile = {
 };
 
 export type OrderService = {
+  /** order_services.id; absent for a line that has not been saved yet. */
+  id?: string;
   serviceId: string;
   serviceName: string;
   price: number;

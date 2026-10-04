@@ -2,7 +2,8 @@
 // workspace_members follows supabase/migrations/20260929000000_production_baseline.sql.
 // The other tables follow the rules the app was hardened against (their policies are not in
 // the repo): members read/write their workspace's data, services are managed by owner/admin,
-// order_services is SELECT/INSERT only, workspaces cannot be deleted and only the owner may
+// order_services is SELECT/INSERT/DELETE for members of the order's workspace (no UPDATE,
+// supabase/migrations/20260929000500_order_services_member_delete.sql), workspaces cannot be deleted and only the owner may
 // update them, owner_id is immutable, profiles are own-row only.
 import { fake, permissionDenied, type PgError, type PolicyCtx, type Row } from "./fakeSupabase";
 
@@ -126,6 +127,7 @@ export function installSecurityModel() {
     order_services: {
       select: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
       insert: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
+      delete: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
     },
   };
 
@@ -133,7 +135,7 @@ export function installSecurityModel() {
     workspaces: { delete: false },
     profiles: { delete: false },
     workspace_members: { insert: ["workspace_id", "user_id", "role"], update: ["role", "deleted_at"], delete: false },
-    order_services: { update: false, delete: false },
+    order_services: { update: false },
   };
 
   fake.triggers = {
@@ -301,7 +303,7 @@ export function seedCoreApp() {
       created_at: `${year}-02-10T10:00:00.000Z`,
       updated_at: `${year}-02-10T10:00:00.000Z`,
     });
-    fake.all("order_services").push({ id: `line-${letter}1`, order_id: `order-${letter}1`, service_id: service.id, service_name: service.service_name, price: service.service_price, quantity: 1 });
+    fake.all("order_services").push({ id: `line-${letter}1`, order_id: `order-${letter}1`, service_id: service.id, service_name: service.service_name, price: service.service_price, quantity: 1, created_at: `${year}-02-10T10:00:00.000Z` });
   }
 }
 

@@ -1,12 +1,11 @@
-import { Controller, useForm } from "react-hook-form";
-import { useState } from "react";
+import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
-import type { EditOrderFormData, Employee, Order, OrderService } from "../../lib/types";
+import type { EditOrderFormData, Employee, Order } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import { useUpdateOrder } from "./useUpdateOrder";
@@ -26,13 +25,13 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
   const { services } = useGetServices();
   const { formatMoney } = useWorkspaceMoney();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
-  const [addedServices, setAddedServices] = useState<OrderService[]>([]);
   const activeServices = services?.filter((service) => service.status === "active");
 
   const {
     control,
     register,
     handleSubmit,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<EditOrderFormData>({
     defaultValues: {
@@ -42,8 +41,33 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
       description: order.description,
       assignedEmployeeId: order.assignedEmployeeId,
       deadline: order.deadline,
+      services: order.services,
     },
   });
+
+  const {
+    fields: serviceFields,
+    append: serviceAppend,
+    remove: serviceRemove,
+  } = useFieldArray({
+    control,
+    name: "services",
+    keyName: "fieldKey",
+    rules: {
+      required: "Service is required",
+      minLength: {
+        value: 1,
+        message: "Service is required",
+      },
+    },
+  });
+
+  const watchedServices = useWatch({ control, name: "services" });
+  const totalPrice = (watchedServices ?? []).reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
+
+  function hasService(serviceId: string | null, serviceName: string) {
+    return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
+  }
 
   const technicianOptions = employees.filter(
     (employee) => employee.id && (employee.id === order.assignedEmployeeId || (employee.profile_id && employee.status === "active" && employee.role === "technician")),
@@ -54,7 +78,6 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
       const updatedOrder = await updateOrder({
         orderId: order.id,
         ...data,
-        services: [...order.services, ...addedServices],
       });
       onUpdated(updatedOrder);
     } catch {
@@ -113,52 +136,40 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
         <ServiceCombobox
           services={activeServices}
           allowCreate={canCreateServices}
+          errors={!!errors.services?.root}
           onSelect={(service) => {
-            const alreadyExists = [...order.services, ...addedServices].some((line) => line.serviceId === service.id || line.serviceName.toLowerCase() === service.service_name.toLowerCase());
-            if (alreadyExists) return;
+            if (hasService(service.id, service.service_name)) return;
 
-            setAddedServices((current) => [
-              ...current,
-              {
-                serviceId: service.id,
-                serviceName: service.service_name,
-                price: service.service_price ?? 0,
-                quantity: 1,
-              },
-            ]);
+            serviceAppend({
+              serviceId: service.id,
+              serviceName: service.service_name,
+              price: service.service_price ?? 0,
+              quantity: 1,
+            });
+            clearErrors("services");
           }}
           onCreate={(serviceName, price) => {
-            const alreadyExists = [...order.services, ...addedServices].some((line) => line.serviceName.toLowerCase() === serviceName.toLowerCase());
-            if (alreadyExists) return;
+            if (hasService(null, serviceName)) return;
 
-            setAddedServices((current) => [
-              ...current,
-              {
-                serviceId: crypto.randomUUID(),
-                serviceName,
-                price,
-                quantity: 1,
-              },
-            ]);
+            serviceAppend({
+              serviceId: crypto.randomUUID(),
+              serviceName,
+              price,
+              quantity: 1,
+            });
+            clearErrors("services");
           }}
         />
-        {[...order.services, ...addedServices].length > 0 && (
+        {errors.services?.root?.message && <p className="text-xs text-destructive">{errors.services.root.message}</p>}
+        {serviceFields.length > 0 && (
           <div className="space-y-2">
-            {order.services.map((service) => (
-              <div key={service.serviceId || service.serviceName} className="flex items-center justify-between rounded-md border p-3">
+            {serviceFields.map((field, index) => (
+              <div key={field.fieldKey} className="flex items-center justify-between rounded-md border p-3">
                 <div>
-                  <p className="font-medium">{service.serviceName}</p>
-                  <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(service.price)}</p>
+                  <p className="font-medium">{field.serviceName}</p>
+                  <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
                 </div>
-              </div>
-            ))}
-            {addedServices.map((service, index) => (
-              <div key={`${service.serviceName}-${index}`} className="flex items-center justify-between rounded-md border p-3">
-                <div>
-                  <p className="font-medium">{service.serviceName}</p>
-                  <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(service.price)}</p>
-                </div>
-                <Button type="button" variant="outline" onClick={() => setAddedServices((current) => current.filter((_, lineIndex) => lineIndex !== index))}>
+                <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={`Remove ${field.serviceName}`}>
                   Remove
                 </Button>
               </div>
@@ -202,6 +213,11 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
           <Label htmlFor="edit-order-deadline">Deadline</Label>
           <Input id="edit-order-deadline" type="date" {...register("deadline")} disabled={isSubmitting} />
         </div>
+      </div>
+
+      <div className="flex justify-between border-t pt-3">
+        <span className="text-lg font-semibold">Total Price</span>
+        <span className="tabular-nums">{formatMoney(totalPrice)}</span>
       </div>
 
       <div className="flex justify-end gap-2">
