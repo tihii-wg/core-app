@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createOrder, getOrders, updateOrder, updateOrderStatus } from "./apiOrders";
+import { createOrder, getOrders, updateOrder, updateOrderStatus, yearInTimeZone } from "./apiOrders";
 
 const getUser = vi.hoisted(() => vi.fn());
 const from = vi.hoisted(() => vi.fn());
@@ -52,6 +52,8 @@ function query(result: { data: unknown; error: unknown }) {
 
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const assignedUserId = "user-1";
+const insertedOrder = { id: "order-1", number: "ORD-PENDING-1", created_at: "2026-10-04T09:00:00+00:00" };
+const chisinau = () => query({ data: { timezone: "Europe/Chisinau" }, error: null });
 
 describe("createOrder", () => {
   beforeEach(() => {
@@ -67,12 +69,13 @@ describe("createOrder", () => {
     const clients = query({ data: [], error: null });
     const serviceById = query({ data: null, error: null });
     const serviceByName = query({ data: [], error: null });
-    const orders = query({ data: { id: "order-1" }, error: null });
+    const orders = query({ data: insertedOrder, error: null });
     const orderServices = query({ data: null, error: null });
     const employees = query({ data: { id: employeeId, profile_id: assignedUserId }, error: null });
     const serviceQueries = [serviceById, serviceByName];
 
     from.mockImplementation((table: string) => {
+      if (table === "workspaces") return chisinau();
       if (table === "clients") return clients;
       if (table === "employees") return employees;
       if (table === "services") return serviceQueries.shift();
@@ -114,10 +117,11 @@ describe("createOrder", () => {
   it("reuses an existing client and service", async () => {
     const existingService = query({ data: { id: "service-1", service_name: "Oil change" }, error: null });
     const employees = query({ data: { id: employeeId, profile_id: assignedUserId }, error: null });
-    const orders = query({ data: { id: "order-1" }, error: null });
+    const orders = query({ data: insertedOrder, error: null });
     const orderServices = query({ data: null, error: null });
 
     from.mockImplementation((table: string) => {
+      if (table === "workspaces") return chisinau();
       if (table === "employees") return employees;
       if (table === "services") return existingService;
       if (table === "orders") return orders;
@@ -141,17 +145,19 @@ describe("createOrder", () => {
         assigned_to: assignedUserId,
         service_id: "service-1",
         service: "Oil change",
-        number: `ORD-${new Date().getFullYear()}-001`,
+        number: expect.stringMatching(/^ORD-PENDING-/),
       }),
     );
+    expect(orders.updated).toEqual([{ number: "ORD-2026-001" }]);
   });
 
   it("stores null when no employee is selected", async () => {
     const existingService = query({ data: { id: "service-1", service_name: "Oil change" }, error: null });
-    const orders = query({ data: { id: "order-1" }, error: null });
+    const orders = query({ data: insertedOrder, error: null });
     const orderServices = query({ data: null, error: null });
 
     from.mockImplementation((table: string) => {
+      if (table === "workspaces") return chisinau();
       if (table === "services") return existingService;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
@@ -222,15 +228,15 @@ describe("createOrder", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("assigns the next order number for the current year", async () => {
-    const year = new Date().getFullYear();
+  it("numbers the order from the created_at the database stored, in the workspace time zone", async () => {
     const existingService = query({ data: { id: "service-1", service_name: "Oil change" }, error: null });
     const employees = query({ data: { id: employeeId, profile_id: assignedUserId }, error: null });
-    const orders = query({ data: { id: "order-1" }, error: null });
+    const orders = query({ data: { ...insertedOrder, created_at: "2026-12-31T22:30:00+00:00" }, error: null });
     const orderServices = query({ data: null, error: null });
-    orders.numbers = [{ number: `ORD-${year}-003` }, { number: "ORD-1790453886405" }, { number: `ORD-${year - 1}-012` }];
+    orders.numbers = [{ number: "ORD-2027-003" }, { number: "ORD-1790453886405" }, { number: "ORD-2026-012" }];
 
     from.mockImplementation((table: string) => {
+      if (table === "workspaces") return chisinau();
       if (table === "employees") return employees;
       if (table === "services") return existingService;
       if (table === "orders") return orders;
@@ -246,7 +252,24 @@ describe("createOrder", () => {
       assignedEmployeeId: employeeId,
     }, "ws-1");
 
-    expect(orders.inserted[0]).toEqual(expect.objectContaining({ number: `ORD-${year}-004` }));
+    expect(orders.inserted[0]).not.toHaveProperty("created_at");
+    expect(orders.updated).toEqual([{ number: "ORD-2027-004" }]);
+  });
+});
+
+describe("yearInTimeZone", () => {
+  it("reads the calendar year in the given zone, independent of the machine zone", () => {
+    expect(yearInTimeZone("2026-12-31T21:59:59Z", "Europe/Chisinau")).toBe(2026);
+    expect(yearInTimeZone("2026-12-31T22:00:00Z", "Europe/Chisinau")).toBe(2027);
+    expect(yearInTimeZone("2026-12-31T22:00:00Z", "UTC")).toBe(2026);
+    expect(yearInTimeZone("2026-12-31T12:00:00Z", "Pacific/Kiritimati")).toBe(2027);
+    expect(yearInTimeZone("2026-12-31T12:00:00Z", "Pacific/Pago_Pago")).toBe(2026);
+  });
+
+  it("falls back to Europe/Chisinau when the zone is missing, blank or invalid", () => {
+    for (const zone of [null, undefined, "", "  ", "Not/AZone"]) {
+      expect(yearInTimeZone("2026-12-31T22:30:00Z", zone)).toBe(2027);
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOrder, getOrders, updateOrder, updateOrderStatus } from "../../services/apiOrders";
 import { fake } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
@@ -96,6 +96,136 @@ describe("createOrder", () => {
   it("surfaces an error from the order_services insert", async () => {
     fake.failNext("order_services", "insert", { code: "42501", message: "permission denied for table order_services" });
     await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [oilChange] }, WS.A)).rejects.toThrow("permission denied for table order_services");
+  });
+});
+
+describe("order numbers", () => {
+  const inA = { clientId: "client-a1", clientName: "", device: "Car", services: [oilChange] };
+  const inB = { clientId: "client-b1", clientName: "", device: "Car", services: [{ serviceId: "service-b1", serviceName: "Beta wash", price: 15, quantity: 1 }] };
+  const duplicateNumber = { code: "23505", message: 'duplicate key value violates unique constraint "orders_number_key"' };
+
+  function at(instant: string) {
+    vi.setSystemTime(new Date(instant));
+  }
+
+  function setTimeZone(workspaceId: string, timezone: string) {
+    row("workspaces", workspaceId)!.timezone = timezone;
+  }
+
+  function numbersIn(workspaceId: string) {
+    return fake.all("orders").filter((order) => order.workspace_id === workspaceId).map((order) => String(order.number));
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    fake.signInAs(USERS.owner.id);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("numbers the first two orders of 2026 ORD-2026-001 and -002 and the first order of 2027 ORD-2027-001", async () => {
+    fake.tables.orders = fake.all("orders").filter((order) => order.workspace_id !== WS.A);
+
+    at("2026-10-04T09:00:00Z");
+    const first = await createOrder(inA, WS.A);
+    const second = await createOrder(inA, WS.A);
+    at("2027-01-01T10:00:00Z");
+    const nextYear = await createOrder(inA, WS.A);
+
+    expect([first, second, nextYear].map((order) => [order.number, order.created_at])).toEqual([
+      ["ORD-2026-001", "2026-10-04T09:00:00.000Z"],
+      ["ORD-2026-002", "2026-10-04T09:00:00.000Z"],
+      ["ORD-2027-001", "2027-01-01T10:00:00.000Z"],
+    ]);
+  });
+
+  it("takes the year from the created_at the database stored, not from the device clock", async () => {
+    const withDefaults = fake.defaults.orders ?? ((order) => order);
+    fake.defaults.orders = (order) => withDefaults({ ...order, created_at: "2030-12-31T22:00:03.000Z" });
+    at("2030-12-31T21:59:59Z");
+
+    expect(await createOrder(inA, WS.A)).toMatchObject({ number: "ORD-2031-001", created_at: "2030-12-31T22:00:03.000Z" });
+  });
+
+  it("uses the workspace time zone around New Year and falls back to Europe/Chisinau", async () => {
+    at("2030-12-31T21:59:59Z");
+    expect((await createOrder(inA, WS.A)).number).toBe("ORD-2030-001");
+    at("2030-12-31T22:00:00Z");
+    expect((await createOrder(inA, WS.A)).number).toBe("ORD-2031-001");
+    setTimeZone(WS.B, "UTC");
+    expect((await createOrder(inB, WS.B)).number).toBe("ORD-2030-001");
+
+    at("2032-12-31T12:00:00Z");
+    setTimeZone(WS.A, "Pacific/Kiritimati");
+    setTimeZone(WS.B, "Pacific/Pago_Pago");
+    expect((await createOrder(inA, WS.A)).number).toBe("ORD-2033-001");
+    expect((await createOrder(inB, WS.B)).number).toBe("ORD-2032-001");
+
+    at("2034-12-31T22:30:00Z");
+    setTimeZone(WS.A, "Not/AZone");
+    setTimeZone(WS.B, "");
+    expect((await createOrder(inA, WS.A)).number).toBe("ORD-2035-001");
+    expect((await createOrder(inB, WS.B)).number).toBe("ORD-2035-001");
+  });
+
+  it("continues each workspace's own sequence from its existing numbers and leaves existing numbers unchanged", async () => {
+    fake.all("orders").push(
+      { ...row("orders", "order-a1"), id: "order-a7", number: "ORD-2030-007" },
+      { ...row("orders", "order-a1"), id: "order-a-prev", number: "ORD-2029-012" },
+      { ...row("orders", "order-a1"), id: "order-a-legacy", number: "ORD-1790453886405" },
+      { ...row("orders", "order-b1"), id: "order-b41", number: "ORD-2030-041" },
+    );
+    const before = { A: numbersIn(WS.A), B: numbersIn(WS.B) };
+
+    at("2030-06-15T09:00:00Z");
+    expect((await createOrder(inA, WS.A)).number).toBe("ORD-2030-008");
+    expect((await createOrder(inB, WS.B)).number).toBe("ORD-2030-042");
+
+    expect(numbersIn(WS.A)).toEqual([...before.A, "ORD-2030-008"]);
+    expect(numbersIn(WS.B)).toEqual([...before.B, "ORD-2030-042"]);
+  });
+
+  it("never changes the number when the order is edited or shown in a later year", async () => {
+    at("2030-12-31T21:30:00Z");
+    const order = await createOrder(inA, WS.A);
+    expect(order.number).toBe("ORD-2030-001");
+
+    at("2031-01-01T10:00:00Z");
+    await updateOrder({ orderId: String(order.id), device: "Renamed", carNumber: "NEW001", vin: "", description: "Edited", assignedEmployeeId: "", deadline: "", services: [oilChange] }, WS.A);
+    await updateOrderStatus(String(order.id), "completed", WS.A);
+
+    expect(row("orders", String(order.id))).toMatchObject({ number: "ORD-2030-001", device: "Renamed", status: "completed" });
+    const shown = await getOrders(WS.A);
+    expect(shown.find((item) => item.id === order.id)?.orderNumber).toBe("ORD-2030-001");
+    expect(shown.find((item) => item.id === "order-a1")?.orderNumber).toBe(`ORD-${year}-001`);
+  });
+
+  it("moves on to the next number when the chosen one was taken in the meantime", async () => {
+    at("2030-06-15T09:00:00Z");
+    fake.failNext("orders", "update", duplicateNumber);
+
+    expect((await createOrder(inA, WS.A)).number).toBe("ORD-2030-002");
+  });
+
+  it("removes the new order and reports an error when no number can be assigned", async () => {
+    at("2030-06-15T09:00:00Z");
+    const ordersBefore = fake.all("orders").length;
+    const linesBefore = fake.all("order_services").length;
+    fake.failNext("orders", "update", duplicateNumber, 5);
+
+    await expect(createOrder(inA, WS.A)).rejects.toThrow("Could not assign an order number. Please try again.");
+    expect(fake.all("orders")).toHaveLength(ordersBefore);
+    expect(fake.all("order_services")).toHaveLength(linesBefore);
+  });
+
+  it("never leaves a temporary number on a created order", async () => {
+    at("2030-06-15T09:00:00Z");
+    await createOrder(inA, WS.A);
+    await createOrder(inB, WS.B);
+
+    expect(fake.all("orders").filter((order) => String(order.number).startsWith("ORD-PENDING-"))).toEqual([]);
   });
 });
 

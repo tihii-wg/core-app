@@ -92,21 +92,63 @@ async function resolveAssignedEmployeeId(workspaceId: string, assignedEmployeeId
   return profileId;
 }
 
-async function nextOrderNumber(workspaceId: string) {
-  const year = new Date().getFullYear();
-  const prefix = `ORD-${year}-`;
+const defaultOrderTimeZone = "Europe/Chisinau";
+const orderNumberAttempts = 5;
 
+/** Calendar year of `timestamp` in `timeZone`; Europe/Chisinau when the zone is missing or invalid. */
+export function yearInTimeZone(timestamp: string, timeZone: string | null | undefined) {
+  const year = (zone: string) => Number(new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric" }).format(new Date(timestamp)));
+  try {
+    return year(timeZone?.trim() || defaultOrderTimeZone);
+  } catch {
+    return year(defaultOrderTimeZone);
+  }
+}
+
+async function workspaceTimeZone(workspaceId: string) {
+  const { data, error } = await supabase.from("workspaces").select("timezone").eq("id", workspaceId).maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return typeof data?.timezone === "string" ? data.timezone : null;
+}
+
+async function latestOrderSequence(workspaceId: string, prefix: string) {
   const { data: existingOrders, error } = await supabase.from("orders").select("number").eq("workspace_id", workspaceId).like("number", `${prefix}%`);
 
   if (error) throw new Error(error.message);
 
-  const latest = (existingOrders ?? []).reduce((max, order) => {
+  return (existingOrders ?? []).reduce((max, order) => {
     const match = String(order.number ?? "").match(new RegExp(`^${prefix}(\\d+)$`));
     if (!match) return max;
     return Math.max(max, Number(match[1]));
   }, 0);
+}
 
-  return `${prefix}${String(latest + 1).padStart(3, "0")}`;
+// The year comes from the created_at the database stored for this order, so the order is numbered
+// after it is inserted. orders.number is unique, so a number taken in the meantime is retried.
+async function assignOrderNumber(workspaceId: string, order: Record<string, unknown>, timeZone: string | null) {
+  const prefix = `ORD-${yearInTimeZone(String(order.created_at), timeZone)}-`;
+  let sequence = 0;
+
+  for (let attempt = 0; attempt < orderNumberAttempts; attempt += 1) {
+    sequence = Math.max(sequence, await latestOrderSequence(workspaceId, prefix)) + 1;
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ number: `${prefix}${String(sequence).padStart(3, "0")}` })
+      .eq("id", order.id)
+      .eq("workspace_id", workspaceId)
+      .eq("number", order.number)
+      .select()
+      .maybeSingle();
+
+    if (!error) {
+      if (!data) throw new Error(orderPermissionMessage);
+      return data as Record<string, unknown>;
+    }
+    if (error.code !== "23505") throw new Error(error.message);
+  }
+
+  throw new Error("Could not assign an order number. Please try again.");
 }
 
 // Not atomic: services and a new client may already exist if a later insert is rejected.
@@ -128,8 +170,9 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   const clientId = await resolveClientId(targetWorkspaceId, input);
 
   const totalPrice = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
+  const timeZone = await workspaceTimeZone(targetWorkspaceId);
 
-  const { data: order, error: orderError } = await supabase
+  const { data: insertedOrder, error: orderError } = await supabase
     .from("orders")
     .insert({
       workspace_id: targetWorkspaceId,
@@ -142,7 +185,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       total_price: totalPrice,
       status: "new",
       is_paid: false,
-      number: await nextOrderNumber(targetWorkspaceId),
+      number: `ORD-PENDING-${crypto.randomUUID()}`,
       ...(await vinColumnValue(input.vin)),
       service_id: resolvedServices[0].id,
       service: resolvedServices.map((service) => service.name).join(", "),
@@ -151,6 +194,14 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     .single();
 
   if (orderError) throw new Error(orderError.message);
+
+  let order: Record<string, unknown>;
+  try {
+    order = await assignOrderNumber(targetWorkspaceId, insertedOrder, timeZone);
+  } catch (error) {
+    await supabase.from("orders").delete().eq("id", insertedOrder.id).eq("workspace_id", targetWorkspaceId);
+    throw error;
+  }
 
   const { error: orderServicesError } = await supabase.from("order_services").insert(
     resolvedServices.map((service) => ({
