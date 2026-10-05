@@ -1,8 +1,9 @@
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import type { User } from "@supabase/supabase-js";
 import { login as logInApi } from "../../services/apiAuth";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../../services/apiProfiles";
+import { languageFromPath } from "../../i18n/languages";
 
 type LogInData = {
   email: string;
@@ -12,12 +13,13 @@ type LogInData = {
 export function useLogin() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const language = languageFromPath(useLocation().pathname);
 
   async function finishLogin(user: User) {
     queryClient.clear();
     queryClient.setQueryData(["user"], user);
     await queryClient.prefetchQuery({ queryKey: ["profiles"], queryFn: getProfile, retry: false });
-    navigate("/en/dashboard", { replace: true });
+    navigate(`/${language}/dashboard`, { replace: true });
   }
 
   const { mutateAsync: login, isPending: isLoading } = useMutation({

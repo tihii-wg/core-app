@@ -1,0 +1,93 @@
+import type en from "../en/invoices";
+import type { Messages } from "../../types";
+
+const invoices: Messages<typeof en> = {
+  title: "Счета",
+  totalCount_one: "Всего {{count}} счёт",
+  totalCount_few: "Всего {{count}} счёта",
+  totalCount_many: "Всего {{count}} счетов",
+  totalCount_other: "Всего {{count}} счёта",
+  notSetUp: "Ещё не настроено",
+  createInvoice: "Создать счёт",
+  searchPlaceholder: "Поиск счетов...",
+  allStatuses: "Все статусы",
+  summary: {
+    overdueCount_one: "{{count}} просроченный счёт",
+    overdueCount_few: "{{count}} просроченных счёта",
+    overdueCount_many: "{{count}} просроченных счетов",
+    overdueCount_other: "{{count}} просроченного счёта",
+    requiresAttention: "Требует немедленного внимания",
+    unpaidAmount: "Не оплачено: {{amount}}",
+    outstandingBalance: "Задолженность",
+  },
+  columns: {
+    number: "№ счёта",
+    client: "Клиент",
+    order: "Заказ",
+    created: "Создан",
+    amount: "Сумма",
+    dueDate: "Срок оплаты",
+  },
+  empty: {
+    unavailableTitle: "Счета ещё не настроены",
+    loadErrorTitle: "Не удалось загрузить счета",
+    filteredTitle: "Нет счетов, соответствующих фильтрам",
+    filteredDescription: "Попробуйте другой запрос или сбросьте фильтры.",
+    title: "Счетов пока нет",
+    description: "Создайте счёт по заказу, чтобы выставить оплату за его услуги.",
+  },
+  create: {
+    description: "Счёт копирует клиента, данные и услуги заказа в их текущем виде.",
+    noOrders: "Для каждого заказа с услугами уже выставлен счёт.",
+    orderLabel: "Заказ *",
+    orderPlaceholder: "Выберите заказ",
+  },
+  actions: {
+    menuLabel: "Действия со счётом {{number}}",
+    markSent: "Отметить как отправленный",
+    markUnpaid: "Отметить как неоплаченный",
+    markPaid: "Отметить как оплаченный",
+  },
+  detail: {
+    fallbackTitle: "Счёт",
+    srDescription: "Данные счёта, услуги в нём и статус оплаты.",
+    loadErrorTitle: "Не удалось загрузить этот счёт",
+    billTo: "Плательщик",
+    order: "Заказ",
+    created: "Создан",
+    device: "Устройство",
+    carNumber: "Госномер",
+    vin: "VIN",
+    paidOn: "Оплачен",
+    dueDate: "Срок оплаты",
+    description: "Описание",
+    items: {
+      service: "Услуга",
+      quantity: "Кол-во",
+      price: "Цена",
+      amount: "Сумма",
+    },
+  },
+  toast: {
+    creating: "Создание счёта...",
+    created: "Счёт {{number}} создан",
+    statusChanged: {
+      draft: "Счёт {{number}} отмечен как черновик",
+      sent: "Счёт {{number}} отмечен как отправленный",
+      paid: "Счёт {{number}} отмечен как оплаченный",
+      overdue: "Счёт {{number}} отмечен как просроченный",
+    },
+    statusFailed: "Не удалось изменить статус счёта",
+  },
+  errors: {
+    unavailable: "Счета ещё не настроены в этой базе данных. Сначала нужно применить миграцию для счетов.",
+    noPermission: "Счёт не найден, или у вас нет прав на его изменение.",
+    notFound: "Счёт не найден в этом рабочем пространстве.",
+    orderNotFound: "Заказ не найден в этом рабочем пространстве.",
+    orderHasNoServices: "В этом заказе нет услуг для выставления счёта.",
+    alreadyInvoiced: "Для этого заказа уже существует счёт {{number}}.",
+    alreadyInvoicedUnknown: "Для этого заказа уже существует счёт.",
+  },
+};
+
+export default invoices;

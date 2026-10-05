@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -21,25 +22,20 @@ import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
 
-const stockFilters = [
-  { value: "all", label: "All" },
-  { value: "in_stock", label: "In Stock" },
-  { value: "low_stock", label: "Low Stock" },
-  { value: "out_of_stock", label: "Out of Stock" },
-  { value: "inactive", label: "Inactive" },
-];
+type SortLabelKey = "name" | "sku" | "quantity" | "purchasePrice" | "sellingPrice" | "createdAt" | "updatedAt";
 
-const sortOptions: { value: string; label: string; field: InventorySortField; ascending: boolean }[] = [
-  { value: "name.asc", label: "Name", field: "name", ascending: true },
-  { value: "sku.asc", label: "SKU", field: "sku", ascending: true },
-  { value: "quantity.desc", label: "Quantity", field: "quantity", ascending: false },
-  { value: "purchase_price.desc", label: "Purchase Price", field: "purchase_price", ascending: false },
-  { value: "selling_price.desc", label: "Selling Price", field: "selling_price", ascending: false },
-  { value: "created_at.desc", label: "Created Date", field: "created_at", ascending: false },
-  { value: "updated_at.desc", label: "Updated Date", field: "updated_at", ascending: false },
+const sortOptions: { value: string; labelKey: SortLabelKey; field: InventorySortField; ascending: boolean }[] = [
+  { value: "name.asc", labelKey: "name", field: "name", ascending: true },
+  { value: "sku.asc", labelKey: "sku", field: "sku", ascending: true },
+  { value: "quantity.desc", labelKey: "quantity", field: "quantity", ascending: false },
+  { value: "purchase_price.desc", labelKey: "purchasePrice", field: "purchase_price", ascending: false },
+  { value: "selling_price.desc", labelKey: "sellingPrice", field: "selling_price", ascending: false },
+  { value: "created_at.desc", labelKey: "createdAt", field: "created_at", ascending: false },
+  { value: "updated_at.desc", labelKey: "updatedAt", field: "updated_at", ascending: false },
 ];
 
 export function Inventory() {
+  const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
@@ -60,32 +56,40 @@ export function Inventory() {
   const lowStockCount = items.filter((item) => item.stockStatus === "low_stock").length;
   const outOfStockCount = items.filter((item) => item.stockStatus === "out_of_stock").length;
 
+  const stockFilters = [
+    { value: "all", label: t("common.all") },
+    { value: "in_stock", label: t("status.inventory.in_stock") },
+    { value: "low_stock", label: t("status.inventory.low_stock") },
+    { value: "out_of_stock", label: t("status.inventory.out_of_stock") },
+    { value: "inactive", label: t("inventory.inactive") },
+  ];
+
   const columns: Column<InventoryItem>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("inventory.fields.name"),
       cell: (item) => (
         <div className="flex max-w-[13rem] min-w-0 items-center gap-2 xl:max-w-[14rem] 2xl:max-w-[18rem]">
           <p className="truncate font-medium text-foreground" title={item.name}>{item.name}</p>
-          {!item.isActive && <StatusBadge variant="muted">Inactive</StatusBadge>}
+          {!item.isActive && <StatusBadge variant="muted">{t("inventory.inactive")}</StatusBadge>}
         </div>
       ),
     },
     {
       key: "sku",
-      header: "SKU",
+      header: t("inventory.fields.sku"),
       cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || "—"}</span>,
       className: "hidden sm:table-cell whitespace-nowrap",
     },
     {
       key: "category",
-      header: "Category",
+      header: t("inventory.fields.category"),
       cell: (item) => <span className="block max-w-[10rem] truncate text-muted-foreground" title={item.category}>{item.category || "—"}</span>,
       className: "hidden xl:table-cell",
     },
     {
       key: "quantity",
-      header: "Quantity",
+      header: t("inventory.fields.quantity"),
       cell: (item) => (
         <span className={cn("tabular-nums", quantityClass(item))}>
           {item.quantity} {item.unit}
@@ -95,30 +99,30 @@ export function Inventory() {
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (item) => <InventoryStatusBadge status={item.stockStatus} />,
     },
     {
       key: "unit",
-      header: "Unit",
+      header: t("inventory.fields.unit"),
       cell: (item) => <span className="text-muted-foreground">{item.unit}</span>,
       className: "hidden 2xl:table-cell",
     },
     {
       key: "purchasePrice",
-      header: "Purchase Price",
+      header: t("inventory.fields.purchasePrice"),
       cell: (item) => <span className="tabular-nums text-muted-foreground">{formatWorkspaceMoney(item.purchasePrice, workspace?.currency)}</span>,
       className: "hidden 2xl:table-cell text-right whitespace-nowrap",
     },
     {
       key: "sellingPrice",
-      header: "Selling Price",
+      header: t("inventory.fields.sellingPrice"),
       cell: (item) => <span className="font-medium tabular-nums">{formatWorkspaceMoney(item.sellingPrice, workspace?.currency)}</span>,
       className: "hidden sm:table-cell text-right whitespace-nowrap",
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       className: "w-[120px] text-right",
       cell: (item) => (
         <div className="flex justify-end gap-1">
@@ -126,7 +130,7 @@ export function Inventory() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`Edit ${item.name}`}
+            aria-label={t("inventory.editAriaLabel", { name: item.name })}
             onClick={(event) => {
               event.stopPropagation();
               setEditId(item.id);
@@ -139,7 +143,7 @@ export function Inventory() {
             variant="ghost"
             size="icon-sm"
             className="hover:bg-destructive/10 hover:text-destructive"
-            aria-label={`Delete ${item.name}`}
+            aria-label={t("inventory.deleteAriaLabel", { name: item.name })}
             onClick={(event) => {
               event.stopPropagation();
               setItemToDelete(item);
@@ -155,12 +159,12 @@ export function Inventory() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Inventory"
-        description={isLoading ? "Loading inventory..." : isError ? "Inventory could not be loaded" : `${items.length} ${items.length === 1 ? "item" : "items"}`}
+        title={t("inventory.title")}
+        description={isLoading ? t("inventory.loading") : isError ? t("inventory.loadFailedSummary") : t("inventory.itemCount", { count: items.length })}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus />
-            Add Item
+            {t("inventory.addItem")}
           </Button>
         }
       />
@@ -170,13 +174,13 @@ export function Inventory() {
           {lowStockCount > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-[13px] font-medium text-warning">
               <AlertTriangle aria-hidden="true" className="size-4" />
-              {lowStockCount} items low on stock
+              {t("inventory.lowStockCount", { count: lowStockCount })}
             </div>
           )}
           {outOfStockCount > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-[13px] font-medium text-destructive">
               <Package aria-hidden="true" className="size-4" />
-              {outOfStockCount} items out of stock
+              {t("inventory.outOfStockCount", { count: outOfStockCount })}
             </div>
           )}
         </div>
@@ -186,11 +190,11 @@ export function Inventory() {
         <SearchAndFilters
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder="Search by name, SKU, category, supplier, or location..."
+          searchPlaceholder={t("inventory.searchPlaceholder")}
           filters={[
             {
               key: "stock",
-              label: "Stock",
+              label: t("inventory.filters.stock"),
               options: stockFilters,
               value: stockFilter,
               onChange: (value) => setStockFilter(value as InventoryListFilter),
@@ -202,13 +206,13 @@ export function Inventory() {
           }}
         />
         <Select value={sortValue} onValueChange={setSortValue}>
-          <SelectTrigger className="h-9 w-full text-[13px] sm:w-48" aria-label="Sort inventory">
-            <SelectValue placeholder="Sort" />
+          <SelectTrigger className="h-9 w-full text-[13px] sm:w-48" aria-label={t("inventory.sort.ariaLabel")}>
+            <SelectValue placeholder={t("inventory.sort.placeholder")} />
           </SelectTrigger>
           <SelectContent>
             {sortOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
-                {option.label}
+                {t(`inventory.sort.${option.labelKey}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -217,7 +221,7 @@ export function Inventory() {
 
       {isError ? (
         <div className="rounded-lg border border-border bg-card shadow-xs">
-          <ErrorState title="Could not load inventory" description="Refresh the list to try again." onRetry={() => refetch()} />
+          <ErrorState title={t("inventory.loadError.title")} description={t("inventory.loadError.listDescription")} onRetry={() => refetch()} />
         </div>
       ) : (
         <DataTable

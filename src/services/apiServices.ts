@@ -1,13 +1,13 @@
 import type { addNewServiceFormData, Service, serviceCategory } from "../lib/types";
+import i18n from "../i18n";
 import supabase from "./supabase";
 
 type SupabaseError = { code?: string; message?: string };
 
 const serviceSelect = "*";
-const duplicateServiceMessage = "service with this name is already exists";
 
 function requireWorkspaceId(workspaceId: string | undefined) {
-  if (!workspaceId) throw new Error("No active workspace selected");
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
   return workspaceId;
 }
 
@@ -26,7 +26,7 @@ async function assertUniqueServiceName(workspaceId: string, serviceName: string,
 
   const { data, error } = await query.limit(1);
   if (error) throw new Error(error.message);
-  if (data && data.length > 0) throw new Error(duplicateServiceMessage);
+  if (data && data.length > 0) throw new Error(i18n.t("services.errors.duplicateName"));
 }
 
 export async function createService({ serviceName, status, price, description }: addNewServiceFormData, workspaceId: string | undefined) {
@@ -47,8 +47,9 @@ export async function createService({ serviceName, status, price, description }:
     ])
     .select(serviceSelect);
 
-  if (error) throw serviceError(error, "You do not have permission to create services in this workspace.");
-  if (!data || data.length === 0) throw new Error("You do not have permission to create services in this workspace.");
+  const permissionMessage = i18n.t("services.errors.createPermission");
+  if (error) throw serviceError(error, permissionMessage);
+  if (!data || data.length === 0) throw new Error(permissionMessage);
 
   return data as Service[];
 }
@@ -75,7 +76,7 @@ export async function getServices(workspaceId: string | undefined, search?: stri
 
 export async function updateService({ serviceName, status, price, description, serviceId }: addNewServiceFormData, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  if (!serviceId) throw new Error("Service was not found.");
+  if (!serviceId) throw new Error(i18n.t("services.errors.notFound"));
   const name = serviceName.trim();
   await assertUniqueServiceName(targetWorkspaceId, name, serviceId);
 
@@ -92,7 +93,7 @@ export async function updateService({ serviceName, status, price, description, s
     .select(serviceSelect)
     .maybeSingle();
 
-  const permissionMessage = "You do not have permission to edit this service.";
+  const permissionMessage = i18n.t("services.errors.editPermission");
   if (error) throw serviceError(error, permissionMessage);
   if (!data) throw new Error(permissionMessage);
 
@@ -106,12 +107,12 @@ export async function deleteService(serviceId: string, workspaceId: string | und
 
   if (orderServicesError) throw new Error(orderServicesError.message);
   if (orderServices && orderServices.length > 0) {
-    throw new Error("This service is used in orders and cannot be deleted. Set it to inactive instead.");
+    throw new Error(i18n.t("services.errors.usedInOrders"));
   }
 
   const { data, error } = await supabase.from("services").delete().eq("id", serviceId).eq("workspace_id", targetWorkspaceId).select("id");
 
-  const permissionMessage = "You do not have permission to delete this service.";
+  const permissionMessage = i18n.t("services.errors.deletePermission");
   if (error) throw serviceError(error, permissionMessage);
   if (!data || data.length === 0) throw new Error(permissionMessage);
 

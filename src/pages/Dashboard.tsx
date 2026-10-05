@@ -1,6 +1,7 @@
 import { ClipboardList, Package, Pencil, Plus, UserPlus, ArrowLeft, ArrowRight, FileText, RefreshCw, Activity } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { DataTable, type Column } from "../ui/DataTable";
 import type { InventoryItem, Order } from "../lib/types";
@@ -36,6 +37,7 @@ import { EditInventoryItemDialog } from "../features/inventory/EditInventoryItem
 import { quantityClass } from "../features/inventory/inventoryDisplay";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
 import { cn } from "../lib/utils";
+import { currentIntlLocale } from "../i18n";
 
 type QuickActionDialog = "order" | "client" | "inventory";
 
@@ -76,6 +78,7 @@ function PanelSkeleton({ rows = 3 }: { rows?: number }) {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { setCurrentModule } = useApp();
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
@@ -122,9 +125,9 @@ export default function Dashboard() {
   const weekPeak = Math.max(...week.days.map((day) => day.count), 0);
   const taskTotal = taskOverview.total;
   const taskRows = [
-    { label: "In Progress", count: taskOverview.inProgress, color: "bg-warning" },
-    { label: "Waiting Parts", count: taskOverview.waitingParts, color: "bg-chart-4" },
-    { label: "Completed Today", count: taskOverview.completedToday, color: "bg-success" },
+    { key: "inProgress", label: t("status.order.in-progress"), count: taskOverview.inProgress, color: "bg-warning" },
+    { key: "waitingParts", label: t("status.order.waiting-parts"), count: taskOverview.waitingParts, color: "bg-chart-4" },
+    { key: "completedToday", label: t("dashboard.tasks.completedToday"), count: taskOverview.completedToday, color: "bg-success" },
   ];
 
   const closedStatuses = ["completed", "paid", "cancelled"];
@@ -152,41 +155,41 @@ export default function Dashboard() {
   const orderColumns: Column<Order>[] = [
     {
       key: "orderNumber",
-      header: "Order",
+      header: t("dashboard.columns.order"),
       cell: (order) => <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>,
       className: "whitespace-nowrap",
     },
     {
       key: "client",
-      header: "Client",
+      header: t("dashboard.columns.client"),
       cell: (order) => <span className="block max-w-[10rem] truncate xl:max-w-[14rem]" title={order.clientName}>{order.clientName}</span>,
     },
     {
       key: "clientType",
-      header: "Client Type",
+      header: t("dashboard.columns.clientType"),
       cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
       className: "hidden xl:table-cell",
     },
     {
       key: "device",
-      header: "Device",
+      header: t("dashboard.columns.device"),
       cell: (order) => <span className="block max-w-[12rem] truncate text-muted-foreground" title={order.device}>{order.device}</span>,
       className: "hidden 2xl:table-cell",
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (order) => <OrderStatusBadge status={order.status} />,
     },
     {
       key: "payment",
-      header: "Payment",
+      header: t("dashboard.columns.payment"),
       cell: (order) => <PaymentStatusBadge status={order.paymentStatus} />,
       className: "hidden sm:table-cell",
     },
     {
       key: "total",
-      header: "Total",
+      header: t("common.total"),
       cell: (order) => <span className="font-medium tabular-nums">{formatMoney(order.totalPrice)}</span>,
       className: "text-right whitespace-nowrap",
     },
@@ -195,18 +198,18 @@ export default function Dashboard() {
   const lowStockColumns: Column<InventoryItem>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("dashboard.columns.name"),
       cell: (item) => <span className="block max-w-[16rem] truncate font-medium text-foreground" title={item.name}>{item.name}</span>,
     },
     {
       key: "sku",
-      header: "SKU",
+      header: t("dashboard.columns.sku"),
       cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || "—"}</span>,
       className: "hidden sm:table-cell",
     },
     {
       key: "quantity",
-      header: "Quantity",
+      header: t("dashboard.columns.quantity"),
       cell: (item) => (
         <span className={cn("tabular-nums", quantityClass(item))}>
           {item.quantity} {item.unit}
@@ -216,18 +219,18 @@ export default function Dashboard() {
     },
     {
       key: "minQuantity",
-      header: "Minimum",
+      header: t("dashboard.columns.minimum"),
       cell: (item) => <span className="tabular-nums text-muted-foreground">{`${item.minQuantity} ${item.unit}`}</span>,
       className: "hidden sm:table-cell text-right",
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (item) => <InventoryStatusBadge status={item.stockStatus} />,
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       className: "w-[80px] text-right",
       cell: (item) => (
         <div className="flex justify-end gap-1">
@@ -235,7 +238,7 @@ export default function Dashboard() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`Edit ${item.name}`}
+            aria-label={t("dashboard.editItem", { name: item.name })}
             onClick={(event) => {
               event.stopPropagation();
               setEditInventoryId(item.id);
@@ -249,33 +252,35 @@ export default function Dashboard() {
   ];
 
   const quickActions = [
-    { label: "Create Order", icon: ClipboardList, onClick: () => setOpenDialog("order") },
-    { label: "Add Client", icon: UserPlus, onClick: () => setOpenDialog("client") },
-    { label: "Add Inventory", icon: Package, onClick: () => setOpenDialog("inventory") },
-    { label: "Create Invoice", icon: FileText, onClick: () => setCurrentModule("invoices") },
+    { key: "order", label: t("dashboard.quickActions.createOrder"), icon: ClipboardList, onClick: () => setOpenDialog("order") },
+    { key: "client", label: t("dashboard.quickActions.addClient"), icon: UserPlus, onClick: () => setOpenDialog("client") },
+    { key: "inventory", label: t("dashboard.quickActions.addInventory"), icon: Package, onClick: () => setOpenDialog("inventory") },
+    { key: "invoice", label: t("dashboard.quickActions.createInvoice"), icon: FileText, onClick: () => setCurrentModule("invoices") },
   ];
+
+  const refreshHint = t("dashboard.errors.refreshHint");
 
   const viewAllLink = (to: string) => (
     <Link to={to} className="inline-flex items-center gap-1 rounded-sm text-[13px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35">
-      View all
+      {t("dashboard.viewAll")}
       <ArrowRight className="size-3.5" />
     </Link>
   );
 
   const ordersErrorState = (
     <div className="flex flex-col items-center px-6 py-12 text-center" role="alert">
-      <p className="text-sm font-semibold text-foreground">Could not load orders</p>
-      <p className="mt-1 text-[13px] text-muted-foreground">Refresh the page to try again.</p>
+      <p className="text-sm font-semibold text-foreground">{t("dashboard.errors.orders")}</p>
+      <p className="mt-1 text-[13px] text-muted-foreground">{refreshHint}</p>
       <Button variant="outline" size="sm" className="mt-4" onClick={() => refetchOrders()} loading={ordersRefetching}>
         {!ordersRefetching && <RefreshCw />}
-        Retry
+        {t("dashboard.retry")}
       </Button>
     </div>
   );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Dashboard" description={now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} />
+      <PageHeader title={t("dashboard.title")} description={now.toLocaleDateString(currentIntlLocale(), { weekday: "long", month: "long", day: "numeric" })} />
 
       {/* Key figures */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -287,18 +292,18 @@ export default function Dashboard() {
         >
           <span className="flex items-start justify-between gap-3">
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-medium text-muted-foreground">{showActiveOrders ? "All Orders" : "Active Orders"}</span>
+              <span className="block text-[13px] font-medium text-muted-foreground">{showActiveOrders ? t("dashboard.stats.allOrders") : t("dashboard.stats.activeOrders")}</span>
               {ordersLoading ? (
                 <Skeleton className="mt-2 h-7 w-12" />
               ) : ordersError ? (
                 <>
-                  <span className="mt-2 block text-sm font-medium text-foreground">Could not load orders</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">Refresh the page to try again.</span>
+                  <span className="mt-2 block text-sm font-medium text-foreground">{t("dashboard.errors.orders")}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{refreshHint}</span>
                 </>
               ) : orderCardCount === 0 ? (
                 <>
-                  <span className="mt-2 block text-sm font-medium text-foreground">{showActiveOrders ? "No orders yet" : "No active orders"}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{showActiveOrders ? "Orders you create will show up here." : "Open orders will show up here."}</span>
+                  <span className="mt-2 block text-sm font-medium text-foreground">{showActiveOrders ? t("dashboard.empty.noOrders") : t("dashboard.empty.noActiveOrders")}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{showActiveOrders ? t("dashboard.empty.noOrdersHint") : t("dashboard.empty.openOrdersHint")}</span>
                 </>
               ) : (
                 <span className="mt-1 block text-2xl leading-8 font-semibold tracking-tight text-foreground tabular-nums">{orderCardCount}</span>
@@ -321,8 +326,8 @@ export default function Dashboard() {
           {showLowStock ? (
             <span className="flex items-start justify-between gap-3">
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-muted-foreground">Back</span>
-                <span className="mt-2 block text-sm font-medium text-foreground">Show Recent Orders</span>
+                <span className="block text-[13px] font-medium text-muted-foreground">{t("common.back")}</span>
+                <span className="mt-2 block text-sm font-medium text-foreground">{t("dashboard.stats.showRecentOrders")}</span>
               </span>
               <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md", statIconVariants.primary)}>
                 <ArrowLeft aria-hidden="true" className="size-4" />
@@ -331,18 +336,18 @@ export default function Dashboard() {
           ) : (
             <span className="flex items-start justify-between gap-3">
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-muted-foreground">Low Stock Items</span>
+                <span className="block text-[13px] font-medium text-muted-foreground">{t("dashboard.stats.lowStockItems")}</span>
                 {inventoryLoading ? (
                   <Skeleton className="mt-2 h-7 w-12" />
                 ) : inventoryError ? (
                   <>
-                    <span className="mt-2 block text-sm font-medium text-foreground">Could not load inventory</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">Refresh the page to try again.</span>
+                    <span className="mt-2 block text-sm font-medium text-foreground">{t("dashboard.errors.inventory")}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{refreshHint}</span>
                   </>
                 ) : lowStockCount === 0 ? (
                   <>
-                    <span className="mt-2 block text-sm font-medium text-foreground">No low stock items</span>
-                    <span className="mt-1 block text-xs text-muted-foreground">Items at or below their minimum will show up here.</span>
+                    <span className="mt-2 block text-sm font-medium text-foreground">{t("dashboard.empty.noLowStock")}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">{t("dashboard.empty.lowStockHint")}</span>
                   </>
                 ) : (
                   <span className="mt-1 block text-2xl leading-8 font-semibold tracking-tight text-destructive tabular-nums">{lowStockCount}</span>
@@ -359,11 +364,11 @@ export default function Dashboard() {
       {/* Quick Actions */}
       <section aria-labelledby="dashboard-quick-actions" className="rounded-lg border border-border bg-card p-4 shadow-xs">
         <h2 id="dashboard-quick-actions" className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
-          Quick Actions
+          {t("dashboard.quickActions.title")}
         </h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {quickActions.map(({ label, icon: Icon, onClick }) => (
-            <Button key={label} onClick={onClick} variant="outline" className="h-10 justify-start gap-2.5 px-3 font-medium">
+          {quickActions.map(({ key, label, icon: Icon, onClick }) => (
+            <Button key={key} onClick={onClick} variant="outline" className="h-10 justify-start gap-2.5 px-3 font-medium">
               <span className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
                 <Icon aria-hidden="true" className="size-3.5" />
               </span>
@@ -384,7 +389,7 @@ export default function Dashboard() {
         {showLowStock ? (
           <div className="min-w-0">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold text-foreground">Low Stock Items</h2>
+              <h2 className="text-[15px] font-semibold text-foreground">{t("dashboard.lists.lowStockItems")}</h2>
               {viewAllLink(`/${locale}/${routeWorkspaceId}/inventory`)}
             </div>
             <DataTable
@@ -395,9 +400,9 @@ export default function Dashboard() {
               isLoading={inventoryLoading}
               emptyState={
                 inventoryError ? (
-                  <EmptyState icon={Package} title="Could not load inventory" description="Refresh the page to try again." />
+                  <EmptyState icon={Package} title={t("dashboard.errors.inventory")} description={refreshHint} />
                 ) : (
-                  <EmptyState icon={Package} title="No low stock items" description="Items at or below their minimum will show up here." />
+                  <EmptyState icon={Package} title={t("dashboard.empty.noLowStock")} description={t("dashboard.empty.lowStockHint")} />
                 )
               }
             />
@@ -405,7 +410,7 @@ export default function Dashboard() {
         ) : (
           <div className="min-w-0">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold text-foreground">{showActiveOrders ? "Active Orders" : "Recent Orders"}</h2>
+              <h2 className="text-[15px] font-semibold text-foreground">{showActiveOrders ? t("dashboard.lists.activeOrders") : t("dashboard.lists.recentOrders")}</h2>
               {viewAllLink(`/${locale}/${routeWorkspaceId}/orders`)}
             </div>
             <DataTable
@@ -418,9 +423,9 @@ export default function Dashboard() {
                 ordersError ? (
                   ordersErrorState
                 ) : showActiveOrders ? (
-                  <EmptyState icon={ClipboardList} title="No active orders" description="Open orders will show up here." />
+                  <EmptyState icon={ClipboardList} title={t("dashboard.empty.noActiveOrders")} description={t("dashboard.empty.openOrdersHint")} />
                 ) : (
-                  <EmptyState icon={ClipboardList} title="No orders yet" description="Orders you create will show up here." />
+                  <EmptyState icon={ClipboardList} title={t("dashboard.empty.noOrders")} description={t("dashboard.empty.noOrdersHint")} />
                 )
               }
             />
@@ -428,16 +433,16 @@ export default function Dashboard() {
         )}
 
         <div className="grid min-w-0 items-start gap-6 md:grid-cols-2 xl:grid-cols-3">
-          <Panel title="Recent Activity" className="md:col-span-2 xl:col-span-1">
+          <Panel title={t("dashboard.activity.title")} className="md:col-span-2 xl:col-span-1">
             {ordersLoading || clientsLoading ? (
               <PanelSkeleton rows={4} />
             ) : ordersError && clientsError ? (
-              <PanelMessage title="Could not load activity" description="Refresh the page to try again." />
+              <PanelMessage title={t("dashboard.errors.activity")} description={refreshHint} />
             ) : activity.length === 0 ? (
               <div className="flex flex-col items-center py-4 text-center">
                 <Activity aria-hidden="true" className="size-5 text-subtle-foreground" />
-                <p className="mt-2 text-[13px] font-medium text-foreground">No recent activity yet</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">New orders and clients will show up here.</p>
+                <p className="mt-2 text-[13px] font-medium text-foreground">{t("dashboard.activity.empty")}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{t("dashboard.activity.emptyHint")}</p>
               </div>
             ) : (
               <ol className="-mx-2 space-y-0.5">
@@ -451,19 +456,25 @@ export default function Dashboard() {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] text-foreground">
                           {event.kind === "order-created" && (
-                            <>
-                              New order <span className="font-medium tabular-nums">{event.orderNumber}</span>
-                            </>
+                            <Trans
+                              i18nKey="dashboard.activity.orderCreated"
+                              values={{ orderNumber: event.orderNumber }}
+                              components={{ highlight: <span className="font-medium tabular-nums" /> }}
+                            />
                           )}
                           {event.kind === "order-updated" && (
-                            <>
-                              <span className="font-medium tabular-nums">{event.orderNumber}</span> updated
-                            </>
+                            <Trans
+                              i18nKey="dashboard.activity.orderUpdated"
+                              values={{ orderNumber: event.orderNumber }}
+                              components={{ highlight: <span className="font-medium tabular-nums" /> }}
+                            />
                           )}
                           {event.kind === "client-created" && (
-                            <>
-                              New client <span className="font-medium">{event.clientName}</span>
-                            </>
+                            <Trans
+                              i18nKey="dashboard.activity.clientCreated"
+                              values={{ clientName: event.clientName }}
+                              components={{ highlight: <span className="font-medium" /> }}
+                            />
                           )}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
@@ -493,18 +504,18 @@ export default function Dashboard() {
             )}
           </Panel>
 
-          <Panel title="Task Overview">
+          <Panel title={t("dashboard.tasks.title")}>
             {ordersLoading ? (
               <PanelSkeleton />
             ) : ordersError ? (
-              <PanelMessage title="Could not load tasks" description="Refresh the page to try again." />
+              <PanelMessage title={t("dashboard.errors.tasks")} description={refreshHint} />
             ) : workspaceOrders.length === 0 ? (
-              <PanelMessage title="No tasks yet" description="Open orders will show up here." />
+              <PanelMessage title={t("dashboard.tasks.empty")} description={t("dashboard.empty.openOrdersHint")} />
             ) : (
               <>
                 <div className="space-y-2.5">
                   {taskRows.map((task) => (
-                    <div key={task.label} className="flex items-center justify-between">
+                    <div key={task.key} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span aria-hidden="true" className={cn("size-2 rounded-full", task.color)} />
                         <span className="text-[13px] text-foreground">{task.label}</span>
@@ -517,41 +528,39 @@ export default function Dashboard() {
                   <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-muted">
                     {taskRows.map((task) => (
                       <div
-                        key={task.label}
+                        key={task.key}
                         className={cn("h-full first:rounded-l-full last:rounded-r-full", task.color)}
                         style={{ width: taskTotal === 0 ? "0%" : `${(task.count / taskTotal) * 100}%` }}
                       />
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {taskTotal} total {taskTotal === 1 ? "task" : "tasks"} today
-                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("dashboard.tasks.totalToday", { count: taskTotal })}</p>
                 </div>
               </>
             )}
           </Panel>
 
-          <Panel title="This Week">
+          <Panel title={t("dashboard.week.title")}>
             {ordersLoading || clientsLoading ? (
               <PanelSkeleton />
             ) : ordersError ? (
-              <PanelMessage title="Could not load this week" description="Refresh the page to try again." />
+              <PanelMessage title={t("dashboard.errors.week")} description={refreshHint} />
             ) : week.isEmpty && !clientsError ? (
-              <PanelMessage title="No tasks yet" description="Orders and clients from this week will show up here." />
+              <PanelMessage title={t("dashboard.tasks.empty")} description={t("dashboard.week.emptyHint")} />
             ) : (
               <>
                 <dl className="space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-[13px] text-muted-foreground">Revenue</dt>
+                    <dt className="text-[13px] text-muted-foreground">{t("dashboard.week.revenue")}</dt>
                     <dd className="truncate text-[13px] font-semibold text-success tabular-nums">{formatMoney(week.revenue)}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-[13px] text-muted-foreground">Orders</dt>
+                    <dt className="text-[13px] text-muted-foreground">{t("dashboard.week.orders")}</dt>
                     <dd className="text-[13px] font-medium text-foreground tabular-nums">{week.orders}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-[13px] text-muted-foreground">New Clients</dt>
-                    <dd className="text-[13px] font-medium text-foreground tabular-nums">{clientsError ? "Could not load" : week.newClients}</dd>
+                    <dt className="text-[13px] text-muted-foreground">{t("dashboard.week.newClients")}</dt>
+                    <dd className="text-[13px] font-medium text-foreground tabular-nums">{clientsError ? t("dashboard.errors.generic") : week.newClients}</dd>
                   </div>
                 </dl>
                 <div className="mt-4 border-t border-border pt-4">
@@ -561,7 +570,7 @@ export default function Dashboard() {
                         key={day.date}
                         className={cn("min-h-[3px] flex-1 rounded-sm transition-colors", day.date === today ? "bg-primary" : "bg-primary/20 hover:bg-primary/40")}
                         style={{ height: weekPeak === 0 ? "0%" : `${(day.count / weekPeak) * 100}%` }}
-                        title={`${day.count} ${day.count === 1 ? "order" : "orders"}`}
+                        title={t("dashboard.week.ordersCount", { count: day.count })}
                       />
                     ))}
                   </div>

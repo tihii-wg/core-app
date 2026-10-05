@@ -1,3 +1,4 @@
+import i18n, { currentIntlLocale } from "../../i18n";
 import type { Client, Employee, InventoryItem, Order } from "../../lib/types";
 import { calendarDateKey, clientCreatedAt } from "../../pages/dashboardStats";
 import { ordersIn, serviceDistribution, type ReportPeriod } from "./reportStats";
@@ -23,25 +24,33 @@ export type ExportData = { orders: Order[]; clients: Client[]; employees: Employ
 
 type DataNeeds = { orders: boolean; clients: boolean; employees: boolean; inventory: boolean };
 
-type ExportSectionDefinition = { label: string; shortLabel: string; description: string; needs: Partial<DataNeeds> };
-
-export const exportSections: Record<ExportSectionKey, ExportSectionDefinition> = {
-  summary: { label: "Summary / key metrics", shortLabel: "key metrics", description: "Revenue, orders, average order value and new clients", needs: { orders: true, clients: true } },
-  revenue: { label: "Revenue / financial data", shortLabel: "revenue", description: "Revenue by period, outstanding orders", needs: { orders: true } },
-  orders: { label: "Orders", shortLabel: "orders", description: "Orders by status and the full order list", needs: { orders: true } },
-  services: { label: "Services", shortLabel: "services", description: "Services performed and their value", needs: { orders: true } },
-  clients: { label: "Clients", shortLabel: "clients", description: "New clients and clients by order value", needs: { orders: true, clients: true } },
-  employees: { label: "Employees", shortLabel: "employees", description: "Performance by employee and overdue orders", needs: { orders: true, employees: true } },
-  inventory: { label: "Inventory", shortLabel: "inventory", description: "Current stock, items needing attention", needs: { inventory: true } },
+const exportSectionNeeds: Record<ExportSectionKey, Partial<DataNeeds>> = {
+  summary: { orders: true, clients: true },
+  revenue: { orders: true },
+  orders: { orders: true },
+  services: { orders: true },
+  clients: { orders: true, clients: true },
+  employees: { orders: true, employees: true },
+  inventory: { inventory: true },
 };
 
-export const exportSectionKeys = Object.keys(exportSections) as ExportSectionKey[];
+export const exportSectionKeys = Object.keys(exportSectionNeeds) as ExportSectionKey[];
 
-export const comprehensiveReportTitle = "Business Report";
+export function exportSectionLabel(key: ExportSectionKey) {
+  return i18n.t(`reports.exportSections.${key}.label`);
+}
+
+export function exportSectionDescription(key: ExportSectionKey) {
+  return i18n.t(`reports.exportSections.${key}.description`);
+}
+
+export function comprehensiveReportTitle() {
+  return i18n.t("reports.comprehensive.title");
+}
 
 export function exportNeeds(selected: ExportSectionKey[]): DataNeeds {
   const needs: DataNeeds = { orders: false, clients: false, employees: false, inventory: false };
-  for (const key of selected) Object.assign(needs, exportSections[key].needs);
+  for (const key of selected) Object.assign(needs, exportSectionNeeds[key]);
   return needs;
 }
 
@@ -50,12 +59,10 @@ export function usesPeriod(selected: ExportSectionKey[]) {
 }
 
 export function comprehensiveReportDescription(selected: ExportSectionKey[]) {
-  const labels = exportSectionKeys.filter((key) => selected.includes(key)).map((key) => exportSections[key].shortLabel);
-  const list = labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : labels.join("");
-  return list ? `${list[0].toUpperCase()}${list.slice(1)}` : "";
+  const labels = exportSectionKeys.filter((key) => selected.includes(key)).map((key) => i18n.t(`reports.exportSections.${key}.shortLabel`));
+  const list = labels.length > 1 ? i18n.t("reports.comprehensive.listLast", { items: labels.slice(0, -1).join(i18n.t("reports.comprehensive.listSeparator")), last: labels[labels.length - 1] }) : labels.join("");
+  return list ? `${list[0].toLocaleUpperCase(currentIntlLocale())}${list.slice(1)}` : "";
 }
-
-const clientTypeLabels = { individual: "Individual", organization: "Organization" } as const;
 
 function newClients(clients: Client[], period: ReportPeriod) {
   return clients.filter((client) => {
@@ -70,7 +77,7 @@ function newClientsSection(clients: Client[], period: ReportPeriod): ReportSecti
     .map((client) => ({
       name: client.name,
       contact: client.contact_person,
-      type: client.client_type ? clientTypeLabels[client.client_type] : null,
+      type: client.client_type ? i18n.t(`reports.values.clientTypes.${client.client_type}`) : null,
       phone: client.phone,
       email: client.email,
       added: calendarDateKey(clientCreatedAt(client)),
@@ -78,25 +85,24 @@ function newClientsSection(clients: Client[], period: ReportPeriod): ReportSecti
 
   return {
     kind: "table",
-    title: "New clients",
-    description: "Clients added in this period.",
+    title: i18n.t("reports.sections.newClients.title"),
+    description: i18n.t("reports.sections.newClients.description"),
     columns: [
-      { key: "name", header: "Client", secondary: [{ key: "contact", header: "Contact person" }] },
-      { key: "type", header: "Type" },
-      { key: "phone", header: "Phone", secondary: [{ key: "email", header: "Email" }] },
-      { key: "added", header: "Added", format: "date" },
+      { key: "name", header: i18n.t("reports.columns.client"), secondary: [{ key: "contact", header: i18n.t("reports.columns.contactPerson") }] },
+      { key: "type", header: i18n.t("reports.columns.type") },
+      { key: "phone", header: i18n.t("reports.columns.phone"), secondary: [{ key: "email", header: i18n.t("reports.columns.email") }] },
+      { key: "added", header: i18n.t("reports.columns.added"), format: "date" },
     ],
     rows,
   };
 }
 
-const currentStockNote = "Current stock, not affected by the report period.";
-
 export function comprehensiveReport(data: ExportData, selected: ExportSectionKey[], period: ReportPeriod, today: string): QuickReportModel {
   const include = new Set(selected);
   const sections: ReportSection[] = [];
+  const currentStockNote = i18n.t("reports.sections.currentStockNote");
 
-  if (include.has("revenue")) sections.push(revenueByPeriodSection(data.orders, period), outstandingOrdersSection(data.orders, period), expensesUnavailable, invoicesUnavailable);
+  if (include.has("revenue")) sections.push(revenueByPeriodSection(data.orders, period), outstandingOrdersSection(data.orders, period), expensesUnavailable(), invoicesUnavailable());
   if (include.has("orders")) sections.push(ordersByStatusSection(data.orders, period), ordersListSection(data.orders, period));
   if (include.has("services")) sections.push(servicesSoldSection(data.orders, period));
   if (include.has("clients")) sections.push(newClientsSection(data.clients, period), topClientsSection(data.orders, period, Number.POSITIVE_INFINITY));
@@ -111,8 +117,8 @@ export function comprehensiveReport(data: ExportData, selected: ExportSectionKey
   };
 }
 
-function plural(count: number, singular: string, pluralForm = `${singular}s`) {
-  return `${count.toLocaleString()} ${count === 1 ? singular : pluralForm}`;
+function countText(count: number) {
+  return count.toLocaleString(currentIntlLocale());
 }
 
 export function exportPreview(data: ExportData, period: ReportPeriod, formatMoney: (value: number) => string): Record<ExportSectionKey, string> {
@@ -125,13 +131,18 @@ export function exportPreview(data: ExportData, period: ReportPeriod, formatMone
   const activeItems = data.items.filter((item) => item.isActive);
   const attention = activeItems.filter((item) => item.stockStatus !== "in_stock").length;
 
+  const services = serviceDistribution(data.orders, period, Number.POSITIVE_INFINITY).length;
+
   return {
-    summary: `${formatMoney(collected)} collected from ${plural(periodOrders.length, "order")}`,
-    revenue: `${formatMoney(billed)} billed, ${plural(unpaid, "unpaid order")}`,
-    orders: plural(periodOrders.length, "order"),
-    services: plural(serviceDistribution(data.orders, period, Number.POSITIVE_INFINITY).length, "service"),
-    clients: `${plural(clientsWithOrders, "client")} with orders, ${newClients(data.clients, period).length.toLocaleString()} new`,
-    employees: plural(data.employees.length, "employee"),
-    inventory: `${plural(activeItems.length, "active item")}, ${attention.toLocaleString()} ${attention === 1 ? "needs" : "need"} attention`,
+    summary: i18n.t("reports.preview.summary", { count: periodOrders.length, countText: countText(periodOrders.length), amount: formatMoney(collected) }),
+    revenue: i18n.t("reports.preview.revenue", { count: unpaid, countText: countText(unpaid), amount: formatMoney(billed) }),
+    orders: i18n.t("reports.preview.orders", { count: periodOrders.length, countText: countText(periodOrders.length) }),
+    services: i18n.t("reports.preview.services", { count: services, countText: countText(services) }),
+    clients: i18n.t("reports.preview.clients", { count: clientsWithOrders, countText: countText(clientsWithOrders), newCount: countText(newClients(data.clients, period).length) }),
+    employees: i18n.t("reports.preview.employees", { count: data.employees.length, countText: countText(data.employees.length) }),
+    inventory: i18n.t("reports.preview.inventory", {
+      activeItems: i18n.t("reports.preview.activeItems", { count: activeItems.length, countText: countText(activeItems.length) }),
+      attention: i18n.t("reports.preview.needAttention", { count: attention, countText: countText(attention) }),
+    }),
   };
 }

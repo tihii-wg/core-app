@@ -1,4 +1,5 @@
 import { Controller, useWatch, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
@@ -20,19 +21,20 @@ function FieldError({ message }: { message?: string }) {
 }
 
 export default function ClientFormFields({ idPrefix, control, register, errors, disabled }: ClientFormFieldsProps) {
+  const { t } = useTranslation();
   const clientType = useWatch({ control, name: "clientType" }) ?? "individual";
   const isOrganization = clientType === "organization";
-  const nameLabel = isOrganization ? "Organization name *" : "Full name *";
-  const nameError = isOrganization ? "Organization name is required" : "Full name is required";
+  const nameLabel = isOrganization ? t("clients.form.organizationNameLabel") : t("clients.form.fullNameLabel");
+  const nameError = isOrganization ? t("clients.validation.organizationNameRequired") : t("clients.validation.fullNameRequired");
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-type`}>Client type *</Label>
+        <Label htmlFor={`${idPrefix}-type`}>{t("clients.form.typeLabel")}</Label>
         <Controller
           name="clientType"
           control={control}
-          rules={clientTypeRules}
+          rules={clientTypeRules()}
           render={({ field }) => <ClientTypeSelect id={`${idPrefix}-type`} value={field.value} onChange={field.onChange} disabled={disabled} />}
         />
         <FieldError message={errors.clientType?.message} />
@@ -46,7 +48,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
             required: nameError,
             validate: (value) => value.trim().length > 0 || nameError,
           })}
-          placeholder={isOrganization ? "Organization name" : "Full name"}
+          placeholder={isOrganization ? t("clients.form.organizationNamePlaceholder") : t("clients.form.fullNamePlaceholder")}
           className={errors.clientName ? "border-destructive" : ""}
           disabled={disabled}
         />
@@ -56,23 +58,23 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
       {isOrganization && (
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-tax-id`}>Tax ID / IDNO</Label>
-            <Input id={`${idPrefix}-tax-id`} {...register("taxId")} placeholder="Optional" disabled={disabled} />
+            <Label htmlFor={`${idPrefix}-tax-id`}>{t("clients.form.taxIdLabel")}</Label>
+            <Input id={`${idPrefix}-tax-id`} {...register("taxId")} placeholder={t("common.optional")} disabled={disabled} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-contact`}>Contact person</Label>
-            <Input id={`${idPrefix}-contact`} {...register("contactPerson")} placeholder="Optional" disabled={disabled} />
+            <Label htmlFor={`${idPrefix}-contact`}>{t("clients.form.contactPersonLabel")}</Label>
+            <Input id={`${idPrefix}-contact`} {...register("contactPerson")} placeholder={t("common.optional")} disabled={disabled} />
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-email`}>Email *</Label>
+          <Label htmlFor={`${idPrefix}-email`}>{t("clients.form.emailLabel")}</Label>
           <Input
             id={`${idPrefix}-email`}
             type="email"
-            {...register("email", clientEmailRules)}
+            {...register("email", clientEmailRules())}
             placeholder="email@example.com"
             className={errors.email ? "border-destructive" : ""}
             disabled={disabled}
@@ -80,10 +82,10 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
           <FieldError message={errors.email?.message} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-phone`}>Phone *</Label>
+          <Label htmlFor={`${idPrefix}-phone`}>{t("clients.form.phoneLabel")}</Label>
           <Input
             id={`${idPrefix}-phone`}
-            {...register("phone", clientPhoneRules)}
+            {...register("phone", clientPhoneRules())}
             placeholder="+37300000000"
             className={errors.phone ? "border-destructive" : ""}
             disabled={disabled}
@@ -93,13 +95,13 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-address`}>Address</Label>
-        <Input id={`${idPrefix}-address`} {...register("address")} placeholder="Street address, city, state" disabled={disabled} />
+        <Label htmlFor={`${idPrefix}-address`}>{t("clients.form.addressLabel")}</Label>
+        <Input id={`${idPrefix}-address`} {...register("address")} placeholder={t("clients.form.addressPlaceholder")} disabled={disabled} />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-notes`}>Notes</Label>
-        <Textarea id={`${idPrefix}-notes`} {...register("notes")} placeholder="Additional notes about this client..." rows={3} disabled={disabled} />
+        <Label htmlFor={`${idPrefix}-notes`}>{t("clients.form.notesLabel")}</Label>
+        <Textarea id={`${idPrefix}-notes`} {...register("notes")} placeholder={t("clients.form.notesPlaceholder")} rows={3} disabled={disabled} />
       </div>
     </div>
   );

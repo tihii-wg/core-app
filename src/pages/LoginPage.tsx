@@ -1,31 +1,47 @@
 import { Globe } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import LoginForm from "../features/auth/LoginForm";
 import Logo from "../ui/Logo";
-import { DEFAULT_LOCALE } from "../App";
-import { useNavigate } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/Select";
+import { isAppLanguage, languageFromPath, languageNames, supportedLanguages } from "../i18n/languages";
+import { useLocation, useNavigate } from "react-router-dom";
 
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
+  const language = languageFromPath(useLocation().pathname);
 
   function onSwitchToRegister() {
-    navigate(`/${DEFAULT_LOCALE}/register`);
+    navigate(`/${language}/register`);
   }
 
   function onSwitchToForgotPassword() {
-    // FogotPasword();
-    navigate(`/${DEFAULT_LOCALE}/forgot-password`);
+    navigate(`/${language}/forgot-password`);
+  }
+
+  function onChangeLanguage(value: string) {
+    if (isAppLanguage(value) && value !== language) navigate(`/${value}/login`, { replace: true });
   }
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
       {/* Language selector */}
       <div className="flex justify-end p-4">
-        <button className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <Globe className="h-4 w-4" />
-          English
-        </button>
+        <Select value={language} onValueChange={onChangeLanguage}>
+          <SelectTrigger size="sm" aria-label={t("auth.languageLabel")} className="gap-2 border-none bg-transparent px-0 text-sm text-muted-foreground shadow-none hover:text-foreground">
+            <Globe className="h-4 w-4" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="end">
+            {supportedLanguages.map((code) => (
+              <SelectItem key={code} value={code} lang={code}>
+                {languageNames[code]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Login form */}
@@ -34,7 +50,7 @@ export function LoginPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <Logo />
-            <p className="text-sm text-muted-foreground">Business Management Platform</p>
+            <p className="text-sm text-muted-foreground">{t("auth.login.tagline")}</p>
           </div>
 
           {/* Form */}
@@ -45,16 +61,16 @@ export function LoginPage() {
 
             <div className="mt-4 text-center">
               <button type="button" onClick={onSwitchToForgotPassword} className="text-sm cursor-pointer text-primary hover:underline">
-                Forgot password?
+                {t("auth.login.forgotPassword")}
               </button>
             </div>
           </div>
 
           {/* Register link */}
           <div className="mt-4 text-center">
-            <span className="text-sm text-muted-foreground">Don&apos;t have an account? </span>
+            <span className="text-sm text-muted-foreground">{t("auth.login.noAccount")} </span>
             <button type="button" onClick={onSwitchToRegister} className="text-sm text-primary hover:underline font-medium cursor-pointer">
-              Create account
+              {t("auth.login.createAccount")}
             </button>
           </div>
         </div>

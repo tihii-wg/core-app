@@ -1,8 +1,10 @@
 import { Mail, Phone } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { StatusBadge } from "../../ui/StatusBadge";
 
 export default function EmployeeDetailPanel({ detailPanelOpen, setDetailPanelOpen, selectedEmployee,roleLabels }) {
+  const { t } = useTranslation();
   return (
     <Sheet open={detailPanelOpen} onOpenChange={setDetailPanelOpen}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
@@ -20,12 +22,12 @@ export default function EmployeeDetailPanel({ detailPanelOpen, setDetailPanelOpe
             {/* Role & Status */}
             <div className="flex items-center gap-2">
               <StatusBadge variant="info">{roleLabels[selectedEmployee.role]}</StatusBadge>
-              {selectedEmployee.status === "active" ? <StatusBadge variant="success">Active</StatusBadge> : <StatusBadge variant="muted">Inactive</StatusBadge>}
+              {selectedEmployee.status === "active" ? <StatusBadge variant="success">{t("employees.statuses.active")}</StatusBadge> : <StatusBadge variant="muted">{t("employees.statuses.inactive")}</StatusBadge>}
             </div>
 
             {/* Contact Info */}
             <div className="space-y-3">
-              <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Contact Information</h3>
+              <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("employees.detail.contactInformation")}</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex min-w-0 items-center gap-2">
                   <Mail className="size-4 shrink-0 text-subtle-foreground" />
@@ -43,21 +45,21 @@ export default function EmployeeDetailPanel({ detailPanelOpen, setDetailPanelOpe
             {/* Task Stats */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-border bg-muted/50 p-4">
-                <p className="text-xs font-medium text-muted-foreground">Assigned Tasks</p>
+                <p className="text-xs font-medium text-muted-foreground">{t("employees.detail.assignedTasks")}</p>
                 <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground tabular-nums">{selectedEmployee.assignedTasks}</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/50 p-4">
-                <p className="text-xs font-medium text-muted-foreground">Completed Tasks</p>
+                <p className="text-xs font-medium text-muted-foreground">{t("employees.detail.completedTasks")}</p>
                 <p className="mt-1 text-2xl font-semibold tracking-tight text-success tabular-nums">{selectedEmployee.completedTasks}</p>
               </div>
             </div>
 
             {/* Workload visualization */}
             <div>
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Current Workload</h3>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("employees.detail.currentWorkload")}</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">Active tasks</span>
+                  <span className="text-foreground">{t("employees.detail.activeTasks")}</span>
                   <span className="font-medium">{selectedEmployee.assignedTasks}</span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -68,7 +70,7 @@ export default function EmployeeDetailPanel({ detailPanelOpen, setDetailPanelOpe
                     }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">{selectedEmployee.assignedTasks > 10 ? "Heavy workload" : selectedEmployee.assignedTasks > 5 ? "Moderate workload" : "Light workload"}</p>
+                <p className="text-xs text-muted-foreground">{selectedEmployee.assignedTasks > 10 ? t("employees.detail.heavyWorkload") : selectedEmployee.assignedTasks > 5 ? t("employees.detail.moderateWorkload") : t("employees.detail.lightWorkload")}</p>
               </div>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import type { Service } from "../../lib/types";
 
@@ -13,6 +14,7 @@ type ServiceComboboxProps = {
 };
 
 export default function ServiceCombobox({ services, value, onChange, onCreate, onSelect, errors, allowCreate = true }: ServiceComboboxProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [uncontrolledValue, setUncontrolledValue] = useState("");
   const [price, setPrice] = useState("");
@@ -59,11 +61,11 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
     if (onCreate) {
       const parsedPrice = Number(price);
       if (price.trim() === "" || Number.isNaN(parsedPrice)) {
-        setPriceError("Price is required");
+        setPriceError(t("services.form.priceRequired"));
         return;
       }
       if (parsedPrice < 0) {
-        setPriceError("Price cannot be negative");
+        setPriceError(t("services.form.priceNegative"));
         return;
       }
 
@@ -85,7 +87,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
         name="service"
         value={inputValue}
         autoComplete="off"
-        placeholder="Service"
+        placeholder={t("services.combobox.placeholder")}
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         onFocus={() => setOpen(true)}
         onChange={(e) => {
@@ -126,7 +128,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
           {canCreate && onCreate && (
             <div className="space-y-2 border-t px-3 py-2">
               <p className="text-sm">
-                Create: <strong>{inputValue.trim()}</strong>
+                <Trans i18nKey="services.combobox.create" values={{ name: inputValue.trim() }} components={{ strong: <strong /> }} />
               </p>
               <div className="flex gap-2">
                 <Input
@@ -136,7 +138,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
                   step="0.01"
                   inputMode="decimal"
                   placeholder="0.00"
-                  aria-label="Price"
+                  aria-label={t("services.combobox.priceAriaLabel")}
                   value={price}
                   className={priceError ? "border-destructive" : ""}
                   onChange={(e) => {
@@ -150,7 +152,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
                   }}
                 />
                 <button type="button" className="shrink-0 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90" onClick={createService}>
-                  Add
+                  {t("common.add")}
                 </button>
               </div>
               {priceError && <p className="text-xs text-destructive">{priceError}</p>}
@@ -159,7 +161,7 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
 
           {canCreate && !onCreate && (
             <button type="button" className="block w-full px-3 py-2 text-left hover:bg-muted" onClick={createService}>
-              Create: <strong>{inputValue.trim()}</strong>
+              <Trans i18nKey="services.combobox.create" values={{ name: inputValue.trim() }} components={{ strong: <strong /> }} />
             </button>
           )}
         </div>

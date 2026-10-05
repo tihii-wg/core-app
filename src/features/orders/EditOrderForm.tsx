@@ -1,4 +1,5 @@
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -21,6 +22,7 @@ type EditOrderFormProps = {
 };
 
 export default function EditOrderForm({ order, employees, onCancel, onUpdated }: EditOrderFormProps) {
+  const { t } = useTranslation();
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const { services } = useGetServices();
   const { formatMoney } = useWorkspaceMoney();
@@ -54,10 +56,10 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
     name: "services",
     keyName: "fieldKey",
     rules: {
-      required: "Service is required",
+      required: t("orders.validation.serviceRequired"),
       minLength: {
         value: 1,
-        message: "Service is required",
+        message: t("orders.validation.serviceRequired"),
       },
     },
   });
@@ -88,10 +90,10 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="edit-order-device">Device *</Label>
+        <Label htmlFor="edit-order-device">{t("orders.form.deviceLabel")}</Label>
         <Input
           id="edit-order-device"
-          {...register("device", { required: "Car is required" })}
+          {...register("device", { required: t("orders.validation.deviceRequired") })}
           className={errors.device ? "border-destructive" : ""}
           disabled={isSubmitting}
         />
@@ -99,11 +101,11 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="edit-order-car-number">Car Number *</Label>
+        <Label htmlFor="edit-order-car-number">{t("orders.form.carNumberLabel")}</Label>
         <Input
           id="edit-order-car-number"
           {...register("carNumber", {
-            required: "Car number is required",
+            required: t("orders.validation.carNumberRequired"),
             setValueAs: (value: string) => value.trim().toUpperCase(),
           })}
           className={errors.carNumber ? "border-destructive" : ""}
@@ -113,15 +115,15 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="edit-order-vin">VIN *</Label>
+        <Label htmlFor="edit-order-vin">{t("orders.form.vinLabel")}</Label>
         <Input
           id="edit-order-vin"
           {...register("vin", {
-            required: "VIN is required",
+            required: t("orders.validation.vinRequired"),
             setValueAs: (value: string) => value.trim().toUpperCase(),
-            validate: (value) => value.length === 17 || "VIN must contain exactly 17 characters",
+            validate: (value) => value.length === 17 || t("orders.validation.vinLength"),
           })}
-          placeholder="17-character VIN"
+          placeholder={t("orders.form.vinPlaceholder")}
           maxLength={17}
           autoCapitalize="characters"
           spellCheck={false}
@@ -132,7 +134,7 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="service">Add service</Label>
+        <Label htmlFor="service">{t("orders.form.addServiceLabel")}</Label>
         <ServiceCombobox
           services={activeServices}
           allowCreate={canCreateServices}
@@ -169,8 +171,8 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
                   <p className="font-medium">{field.serviceName}</p>
                   <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
                 </div>
-                <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={`Remove ${field.serviceName}`}>
-                  Remove
+                <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={t("orders.form.removeService", { name: field.serviceName })}>
+                  {t("orders.form.remove")}
                 </Button>
               </div>
             ))}
@@ -179,20 +181,20 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="edit-order-description">Description</Label>
+        <Label htmlFor="edit-order-description">{t("orders.form.descriptionLabel")}</Label>
         <Textarea id="edit-order-description" {...register("description")} rows={3} disabled={isSubmitting} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="edit-order-employee">Assigned Employee</Label>
+          <Label htmlFor="edit-order-employee">{t("orders.form.assignedEmployeeLabel")}</Label>
           <Controller
             name="assignedEmployeeId"
             control={control}
             render={({ field }) => (
               <Select value={field.value ?? ""} onValueChange={field.onChange}>
                 <SelectTrigger id="edit-order-employee">
-                  <SelectValue placeholder="Select" />
+                  <SelectValue placeholder={t("orders.form.selectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {technicianOptions.map((employee) => (
@@ -205,27 +207,27 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
             )}
           />
           {technicianOptions.length === 0 && (
-            <p className="text-xs text-muted-foreground">No linked technicians. Link an active technician to a workspace user on the Employees page first.</p>
+            <p className="text-xs text-muted-foreground">{t("orders.form.noLinkedTechnicians")}</p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="edit-order-deadline">Deadline</Label>
+          <Label htmlFor="edit-order-deadline">{t("orders.form.deadlineLabel")}</Label>
           <Input id="edit-order-deadline" type="date" {...register("deadline")} disabled={isSubmitting} />
         </div>
       </div>
 
       <div className="flex justify-between border-t pt-3">
-        <span className="text-lg font-semibold">Total Price</span>
+        <span className="text-lg font-semibold">{t("orders.form.totalPrice")}</span>
         <span className="tabular-nums">{formatMoney(totalPrice)}</span>
       </div>
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Save Changes"}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("common.saveChanges")}
         </Button>
       </div>
     </form>

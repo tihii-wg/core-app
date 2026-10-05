@@ -10,6 +10,8 @@ import { useMfaStatus, useSessionMfa } from "./useMfa";
 import { LoginMfaStep } from "./LoginMfaStep";
 import { useForm } from "react-hook-form";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { passwordMinimum } from "../../services/authMessages";
 
 type LoginValues = {
   email: string;
@@ -17,6 +19,7 @@ type LoginValues = {
 };
 
 export default function LoginForm() {
+  const { t } = useTranslation();
   const { login, isLoading, finishLogin } = useLogin();
   const { logOut } = useLogOut();
   const { isAuthenticated } = useUser();
@@ -45,7 +48,7 @@ export default function LoginForm() {
       }
       reset();
     } catch (caught) {
-      setLoginError(caught instanceof Error && caught.message ? caught.message : "Invalid login or password");
+      setLoginError(caught instanceof Error && caught.message ? caught.message : t("auth.errors.invalidCredentials"));
     }
   }
 
@@ -68,19 +71,19 @@ export default function LoginForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="email" className="text-sm text-foreground">
-          Email
+          {t("auth.fields.email")}
         </Label>
         <Input
           id="email"
           type="text"
           {...register("email", {
-            required: "Email is required",
+            required: t("auth.validation.emailRequired"),
             pattern: {
               value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: "Invalid email format",
+              message: t("auth.validation.emailInvalid"),
             },
           })}
-          placeholder="Enter your email"
+          placeholder={t("auth.fields.emailPlaceholder")}
           className="h-10 border-input focus:border-primary focus:ring-primary"
           disabled={isLoading}
         />
@@ -89,24 +92,24 @@ export default function LoginForm() {
 
       <div className="space-y-1.5">
         <Label htmlFor="password" className="text-sm text-foreground">
-          Password
+          {t("auth.fields.password")}
         </Label>
         <div className="relative">
           <Input
             id="password"
             type={showPassword ? "text" : "password"}
             {...register("password", {
-              required: "Password is required",
+              required: t("auth.validation.passwordRequired"),
               minLength: {
-                value: 6,
-                message: "Password must be at least 6 characters",
+                value: passwordMinimum,
+                message: t("auth.validation.passwordMinLength", { count: passwordMinimum }),
               },
             })}
-            placeholder="Enter your password"
+            placeholder={t("auth.login.passwordPlaceholder")}
             className="h-10 pr-10 border-input focus:border-primary focus:ring-primary"
             disabled={isLoading}
           />
-          <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label={showPassword ? "Hide password" : "Show password"}>
+          <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" aria-label={showPassword ? t("auth.fields.hidePassword") : t("auth.fields.showPassword")}>
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
@@ -114,7 +117,7 @@ export default function LoginForm() {
       {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
 
       <Button type="submit" disabled={isSubmitting || isLoading} size="lg" className="w-full">
-        {isLoading ? <Spinner className="h-4 w-4" /> : "Log in"}
+        {isLoading ? <Spinner className="h-4 w-4" /> : t("auth.login.submit")}
       </Button>
       {loginError && <p className="text-sm text-destructive">{loginError}</p>}
     </form>

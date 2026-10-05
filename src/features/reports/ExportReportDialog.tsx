@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { Trans, useTranslation } from "react-i18next";
 import { AlertCircle, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
@@ -11,17 +12,17 @@ import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { reportPeriod, type ReportRange } from "./reportStats";
 import { reportCsv } from "./quickReports";
-import { comprehensiveReport, comprehensiveReportDescription, comprehensiveReportTitle, exportNeeds, exportPreview, exportSectionKeys, exportSections, usesPeriod, type ExportSectionKey } from "./comprehensiveReport";
-import { downloadCsv, rangeLabels, useReportFormatting } from "./reportFormatting";
+import { comprehensiveReport, comprehensiveReportDescription, comprehensiveReportTitle, exportNeeds, exportPreview, exportSectionDescription, exportSectionKeys, exportSectionLabel, usesPeriod, type ExportSectionKey } from "./comprehensiveReport";
+import { downloadCsv, rangeLabel, useReportFormatting } from "./reportFormatting";
 import type { ReportPrintJob } from "./ReportPrintRoot";
 
 type ExportFormat = "pdf" | "csv";
 
 const inventorySort = { field: "name", ascending: true } as const;
 
-const formats: { value: ExportFormat; label: string; description: string; icon: typeof FileText }[] = [
-  { value: "pdf", label: "PDF", description: "Print-ready document. Choose “Save as PDF” in the print dialog.", icon: FileText },
-  { value: "csv", label: "CSV", description: "Spreadsheet file with one table per section.", icon: FileSpreadsheet },
+const formats: { value: ExportFormat; icon: typeof FileText }[] = [
+  { value: "pdf", icon: FileText },
+  { value: "csv", icon: FileSpreadsheet },
 ];
 
 type ExportReportDialogProps = {
@@ -67,6 +68,7 @@ type ExportReportFormProps = {
 };
 
 function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormProps) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<ExportSectionKey[]>(exportSectionKeys);
   const [format, setFormat] = useState<ExportFormat>("pdf");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -84,7 +86,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
   const allSelected = selected.length === exportSectionKeys.length;
   const ordered = exportSectionKeys.filter((key) => selected.includes(key));
   const period = reportPeriod(range, new Date());
-  const periodLabel = usesPeriod(ordered) || ordered.length === 0 ? `${formatDate(period.start)} – ${formatDate(period.end)}` : `As of ${formatDate(period.end)}`;
+  const periodLabel = usesPeriod(ordered) || ordered.length === 0 ? `${formatDate(period.start)} – ${formatDate(period.end)}` : t("reports.asOf", { date: formatDate(period.end) });
   const previewLoading = !workspaceId || ordersQuery.isLoading || clientsQuery.isLoading || employeesQuery.isLoading || inventoryQuery.isLoading;
   const preview = previewLoading ? null : exportPreview({ orders: ordersQuery.orders, clients: clientsQuery.clients ?? [], employees: employeesQuery.employees ?? [], items: inventoryQuery.items }, period, formatMoney);
 
@@ -120,29 +122,30 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       const today = localDateKey(generatedAt);
       const model = comprehensiveReport({ orders, clients, employees, items }, ordered, exportPeriod, today);
       const withPeriod = usesPeriod(ordered);
-      const exportPeriodLabel = withPeriod ? `${formatDate(exportPeriod.start)} – ${formatDate(exportPeriod.end)}` : `As of ${formatDate(today)}`;
+      const exportPeriodLabel = withPeriod ? `${formatDate(exportPeriod.start)} – ${formatDate(exportPeriod.end)}` : t("reports.asOf", { date: formatDate(today) });
       const generatedLabel = formatDateTime(generatedAt);
+      const title = comprehensiveReportTitle();
 
       if (format === "csv") {
-        const csv = reportCsv({ title: comprehensiveReportTitle, workspace: workspaceName, period: exportPeriodLabel, generated: generatedLabel }, model);
+        const csv = reportCsv({ title, workspace: workspaceName, period: exportPeriodLabel, generated: generatedLabel }, model);
         downloadCsv(`business-report_${withPeriod ? `${exportPeriod.start}_${exportPeriod.end}` : today}.csv`, csv);
-        toast.success("Report exported", { id: "export-report" });
+        toast.success(t("reports.toast.exported"), { id: "export-report" });
       } else {
         onPrint({
-          title: comprehensiveReportTitle,
+          title,
           description: comprehensiveReportDescription(ordered),
           workspaceName,
           periodLabel: exportPeriodLabel,
           generatedLabel,
           model,
-          documentTitle: `${comprehensiveReportTitle} – ${workspaceName} – ${exportPeriodLabel}`,
+          documentTitle: `${title} – ${workspaceName} – ${exportPeriodLabel}`,
         });
       }
       setIsGenerating(false);
       onClose();
     } catch (cause) {
       setIsGenerating(false);
-      if (isOpen.current) setError(cause instanceof Error && cause.message ? cause.message : "Unknown error");
+      if (isOpen.current) setError(cause instanceof Error && cause.message ? cause.message : t("reports.exportDialog.unknownError"));
     }
   };
 
@@ -154,9 +157,9 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
             <FileText aria-hidden="true" className="size-4.5" />
           </span>
           <div className="space-y-1 text-left">
-            <DialogTitle>Export report</DialogTitle>
+            <DialogTitle>{t("reports.exportDialog.title")}</DialogTitle>
             <DialogDescription>
-              Build a comprehensive report for <span className="font-medium text-foreground">{rangeLabels[range]}</span> ({periodLabel}).
+              <Trans i18nKey="reports.exportDialog.description" values={{ range: rangeLabel(range), period: periodLabel }} components={{ range: <span className="font-medium text-foreground" /> }} />
             </DialogDescription>
           </div>
         </div>
@@ -167,7 +170,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
           <fieldset className="space-y-2" disabled={isGenerating} aria-labelledby={sectionsHeadingId}>
             <div className="flex items-center justify-between gap-3">
               <p id={sectionsHeadingId} className="text-sm font-semibold text-foreground">
-                Include in report
+                {t("reports.exportDialog.includeInReport")}
               </p>
               <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
                 <input
@@ -177,7 +180,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
                   checked={allSelected}
                   onChange={() => setSelected(allSelected ? [] : exportSectionKeys)}
                 />
-                Select all
+                {t("reports.exportDialog.selectAll")}
               </label>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -190,8 +193,8 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
                   >
                     <input type="checkbox" className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary" checked={checked} onChange={() => toggle(key)} />
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium text-foreground">{exportSections[key].label}</span>
-                      <span className="block text-xs text-muted-foreground">{exportSections[key].description}</span>
+                      <span className="block text-sm font-medium text-foreground">{exportSectionLabel(key)}</span>
+                      <span className="block text-xs text-muted-foreground">{exportSectionDescription(key)}</span>
                     </span>
                   </label>
                 );
@@ -200,7 +203,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
           </fieldset>
 
           <fieldset className="space-y-2" disabled={isGenerating}>
-            <legend className="text-sm font-semibold text-foreground">Format</legend>
+            <legend className="text-sm font-semibold text-foreground">{t("reports.exportDialog.format")}</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {formats.map((option) => (
                 <label
@@ -211,9 +214,9 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                       <option.icon aria-hidden="true" className="size-4 text-primary" />
-                      {option.label}
+                      {t(`reports.exportDialog.formats.${option.value}.label`)}
                     </span>
-                    <span className="block text-xs text-muted-foreground">{option.description}</span>
+                    <span className="block text-xs text-muted-foreground">{t(`reports.exportDialog.formats.${option.value}.description`)}</span>
                   </span>
                 </label>
               ))}
@@ -221,38 +224,38 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
           </fieldset>
         </div>
 
-        <aside aria-label="Export preview" className="min-w-0 rounded-lg border border-border bg-muted/50 p-4">
-          <h3 className="text-sm font-semibold text-foreground">Report preview</h3>
+        <aside aria-label={t("reports.exportDialog.previewLabel")} className="min-w-0 rounded-lg border border-border bg-muted/50 p-4">
+          <h3 className="text-sm font-semibold text-foreground">{t("reports.exportDialog.previewTitle")}</h3>
           <dl className="mt-3 space-y-1.5 text-xs">
             <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Workspace</dt>
+              <dt className="text-muted-foreground">{t("reports.exportDialog.workspace")}</dt>
               <dd className="truncate font-medium text-foreground">{workspaceName}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Period</dt>
+              <dt className="text-muted-foreground">{t("reports.exportDialog.period")}</dt>
               <dd className="text-right font-medium text-foreground">{periodLabel}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Format</dt>
+              <dt className="text-muted-foreground">{t("reports.exportDialog.format")}</dt>
               <dd className="font-medium text-foreground">{format.toUpperCase()}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Sections</dt>
+              <dt className="text-muted-foreground">{t("reports.exportDialog.sections")}</dt>
               <dd className="font-medium text-foreground">
-                {ordered.length} of {exportSectionKeys.length}
+                {t("reports.exportDialog.sectionsCount", { selected: ordered.length, total: exportSectionKeys.length })}
               </dd>
             </div>
           </dl>
           <div className="mt-4 border-t border-border pt-3">
             {ordered.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Select at least one section to export.</p>
+              <p className="text-xs text-muted-foreground">{t("reports.exportDialog.selectAtLeastOne")}</p>
             ) : (
               <ol className="space-y-2">
                 {ordered.map((key, index) => (
                   <li key={key} className="flex gap-2 text-xs">
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">{index + 1}</span>
                     <span className="min-w-0">
-                      <span className="block font-medium text-foreground">{exportSections[key].label}</span>
+                      <span className="block font-medium text-foreground">{exportSectionLabel(key)}</span>
                       {preview ? <span className="block text-muted-foreground">{preview[key]}</span> : <Skeleton className="mt-1 h-3 w-24" />}
                     </span>
                   </li>
@@ -267,24 +270,24 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
         <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <div className="min-w-0">
-            <p className="font-medium">Could not generate the report.</p>
-            <p className="text-xs [overflow-wrap:anywhere]">Check your connection and try again. Details: {error}</p>
+            <p className="font-medium">{t("reports.exportDialog.errorTitle")}</p>
+            <p className="text-xs [overflow-wrap:anywhere]">{t("reports.exportDialog.errorDetails", { error })}</p>
           </div>
         </div>
       )}
 
       <div className="flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={onClose}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="button" onClick={generate} disabled={isGenerating || ordered.length === 0 || !workspaceId}>
           {isGenerating ? (
             <>
               <Loader2 aria-hidden="true" className="animate-spin" />
-              Generating report...
+              {t("reports.exportDialog.generating")}
             </>
           ) : (
-            `Export ${format.toUpperCase()}`
+            t("reports.exportDialog.exportAs", { format: format.toUpperCase() })
           )}
         </Button>
       </div>

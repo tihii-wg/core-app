@@ -1,4 +1,5 @@
 import { ClipboardList, DollarSign, FileText, Package, Plus, Users, ArrowRight } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 
 import { useApp } from "../../lib/appContext";
@@ -8,8 +9,11 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { DashboardCard } from "../../ui/DashboardCard";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
+import { currentIntlLocale } from "../../i18n";
+import { weekDateKeys } from "../../pages/dashboardStats";
 
 export function Dashboard() {
+  const { t } = useTranslation();
   const { orders, clients, inventory, setCurrentModule } = useApp();
   const { invoices } = useGetInvoices();
   const { formatMoney } = useWorkspaceMoney();
@@ -44,41 +48,44 @@ export function Dashboard() {
   const recentActivity =
     clients?.slice(0, 4)?.map((client, index) => ({
       ...client,
-      action: index % 2 === 0 ? "placed an order" : "was added",
-      time: `${(index + 1) * 2} hours ago`,
+      actionKey: index % 2 === 0 ? ("dashboard.legacy.placedOrder" as const) : ("dashboard.legacy.wasAdded" as const),
+      time: t("dashboard.legacy.hoursAgo", { count: (index + 1) * 2 }),
     })) ?? [];
+  const weekdayFormat = new Intl.DateTimeFormat(currentIntlLocale(), { weekday: "narrow" });
+  const weekdayLabels = weekDateKeys(new Date()).map((date) => weekdayFormat.format(new Date(`${date}T00:00:00`)));
+
   // Order columns
   const orderColumns: Column<Order>[] = [
     {
       key: "orderNumber",
-      header: "Order",
+      header: t("dashboard.columns.order"),
       cell: (order) => <span className="font-medium text-primary">{order?.orderNumber}</span>,
     },
     {
       key: "client",
-      header: "Client",
+      header: t("dashboard.columns.client"),
       cell: (order) => order?.clientName,
     },
     {
       key: "device",
-      header: "Device",
+      header: t("dashboard.columns.device"),
       cell: (order) => order.device,
       className: "hidden md:table-cell",
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (order) => <OrderStatusBadge status={order?.status} />,
     },
     {
       key: "payment",
-      header: "Payment",
+      header: t("dashboard.columns.payment"),
       cell: (order) => <PaymentStatusBadge status={order?.paymentStatus} />,
       className: "hidden sm:table-cell",
     },
     {
       key: "total",
-      header: "Total",
+      header: t("common.total"),
       cell: (order) => formatMoney(order?.totalPrice),
       className: "text-right",
     },
@@ -88,31 +95,31 @@ export function Dashboard() {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <DashboardCard title="Active Orders" value={activeOrders} icon={ClipboardList} variant="primary" trend={{ value: 12, label: "vs last week" }} />
-        <DashboardCard title="Today's Revenue" value={formatMoney(todayRevenue)} icon={DollarSign} variant="success" trend={{ value: 8, label: "vs yesterday" }} />
-        <DashboardCard title="Unpaid Invoices" value={unpaidInvoices} icon={FileText} variant="warning" />
-        <DashboardCard title="Low Stock Items" value={lowStockItems} icon={Package} variant={lowStockItems > 0 ? "danger" : "default"} />
+        <DashboardCard title={t("dashboard.stats.activeOrders")} value={activeOrders} icon={ClipboardList} variant="primary" trend={{ value: 12, label: t("dashboard.legacy.vsLastWeek") }} />
+        <DashboardCard title={t("dashboard.legacy.todaysRevenue")} value={formatMoney(todayRevenue)} icon={DollarSign} variant="success" trend={{ value: 8, label: t("dashboard.stats.vsYesterday") }} />
+        <DashboardCard title={t("dashboard.legacy.unpaidInvoices")} value={unpaidInvoices} icon={FileText} variant="warning" />
+        <DashboardCard title={t("dashboard.stats.lowStockItems")} value={lowStockItems} icon={Package} variant={lowStockItems > 0 ? "danger" : "default"} />
       </div>
 
       {/* Quick Actions */}
       <div className="bg-card rounded-md border border-border p-4">
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">Quick Actions</h2>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">{t("dashboard.quickActions.title")}</h2>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setCurrentModule("orders")} size="sm">
             <Plus className="h-4 w-4 mr-1" />
-            Create Order
+            {t("dashboard.quickActions.createOrder")}
           </Button>
           <Button onClick={() => setCurrentModule("clients")} variant="outline" size="sm" className="border-input">
             <Plus className="h-4 w-4 mr-1" />
-            Add Client
+            {t("dashboard.quickActions.addClient")}
           </Button>
           <Button onClick={() => setCurrentModule("inventory")} variant="outline" size="sm" className="border-input">
             <Plus className="h-4 w-4 mr-1" />
-            Add Inventory
+            {t("dashboard.quickActions.addInventory")}
           </Button>
           <Button onClick={() => setCurrentModule("invoices")} variant="outline" size="sm" className="border-input">
             <Plus className="h-4 w-4 mr-1" />
-            Create Invoice
+            {t("dashboard.quickActions.createInvoice")}
           </Button>
         </div>
       </div>
@@ -122,9 +129,9 @@ export function Dashboard() {
         {/* Recent Orders */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">Recent Orders</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("dashboard.lists.recentOrders")}</h2>
             <button onClick={() => setCurrentModule("orders")} className="text-sm text-primary hover:underline flex items-center gap-1">
-              View all
+              {t("dashboard.viewAll")}
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -135,7 +142,7 @@ export function Dashboard() {
         <div className="space-y-6">
           {/* Recent Activity */}
           <div className="bg-card rounded-md border border-border p-4">
-            <h2 className="text-base font-semibold text-foreground mb-4">Recent Activity</h2>
+            <h2 className="text-base font-semibold text-foreground mb-4">{t("dashboard.activity.title")}</h2>
             <div className="space-y-4">
               {recentActivity?.map((activity) => (
                 <div key={activity?.id} className="flex items-start gap-3">
@@ -144,7 +151,7 @@ export function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground">
-                      <span className="font-medium">{activity.name}</span> {activity.action}
+                      <Trans i18nKey={activity.actionKey} values={{ name: activity.name }} components={{ highlight: <span className="font-medium" /> }} />
                     </p>
                     <p className="text-xs text-muted-foreground">{activity.time}</p>
                   </div>
@@ -155,12 +162,12 @@ export function Dashboard() {
 
           {/* Employee Tasks */}
           <div className="bg-card rounded-md border border-border p-4">
-            <h2 className="text-base font-semibold text-foreground mb-4">Task Overview</h2>
+            <h2 className="text-base font-semibold text-foreground mb-4">{t("dashboard.tasks.title")}</h2>
             <div className="space-y-3">
               {[
-                { label: "In Progress", count: 4, color: "#f89200" },
-                { label: "Waiting Parts", count: 2, color: "#939699" },
-                { label: "Completed Today", count: 3, color: "#099b49" },
+                { label: t("status.order.in-progress"), count: 4, color: "#f89200" },
+                { label: t("status.order.waiting-parts"), count: 2, color: "#939699" },
+                { label: t("dashboard.tasks.completedToday"), count: 3, color: "#099b49" },
               ].map((task) => (
                 <div key={task.label} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -179,24 +186,24 @@ export function Dashboard() {
                 <div className="bg-muted-foreground" style={{ width: "22%" }} />
                 <div className="bg-success" style={{ width: "34%" }} />
               </div>
-              <p className="text-xs text-muted-foreground mt-2">9 total tasks today</p>
+              <p className="text-xs text-muted-foreground mt-2">{t("dashboard.tasks.totalToday", { count: 9 })}</p>
             </div>
           </div>
 
           {/* Revenue Summary */}
           <div className="bg-card rounded-md border border-border p-4">
-            <h2 className="text-base font-semibold text-foreground mb-4">This Week</h2>
+            <h2 className="text-base font-semibold text-foreground mb-4">{t("dashboard.week.title")}</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Revenue</span>
+                <span className="text-sm text-muted-foreground">{t("dashboard.week.revenue")}</span>
                 <span className="text-sm font-medium text-success">{formatMoney(3245)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Orders</span>
+                <span className="text-sm text-muted-foreground">{t("dashboard.week.orders")}</span>
                 <span className="text-sm font-medium text-foreground">18</span>
               </div>
               <div className="flex items-center justify-between">
-//                 <span className="text-sm text-muted-foreground">New Clients</span>
+//                 <span className="text-sm text-muted-foreground">{t("dashboard.week.newClients")}</span>
 //                 <span className="text-sm font-medium text-foreground">5</span>
 //               </div>
             </div>
@@ -209,7 +216,7 @@ export function Dashboard() {
                 ))}
               </div>
               <div className="flex justify-between mt-2">
-                {["M", "T", "W", "T", "F", "S", "S"].map((day, i) => (
+                {weekdayLabels.map((day, i) => (
                   <span key={i} className="text-xs text-muted-foreground flex-1 text-center">
                     {day}
                   </span>

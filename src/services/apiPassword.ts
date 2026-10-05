@@ -1,4 +1,5 @@
 import supabase from "./supabase";
+import i18n from "../i18n";
 import { passwordChangeMessage, passwordMinimum } from "./authMessages";
 
 type PasswordChangeInput = {
@@ -21,11 +22,11 @@ async function assertCurrentPassword(email: string, password: string) {
       body: JSON.stringify({ email, password }),
     });
   } catch {
-    throw new Error("Unable to change password. Please try again.");
+    throw new Error(i18n.t("auth.password.errors.changeFailed"));
   }
 
-  if (response.status === 400) throw new Error("Current password is incorrect.");
-  if (!response.ok) throw new Error("Unable to change password. Please try again.");
+  if (response.status === 400) throw new Error(i18n.t("auth.password.errors.currentIncorrect"));
+  if (!response.ok) throw new Error(i18n.t("auth.password.errors.changeFailed"));
 }
 
 export async function changePassword({ currentPassword, newPassword }: PasswordChangeInput) {
@@ -36,7 +37,7 @@ export async function changePassword({ currentPassword, newPassword }: PasswordC
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user?.email) throw new Error("Your session has expired. Please sign in again.");
+  if (userError || !user?.email) throw new Error(i18n.t("auth.errors.sessionExpired"));
 
   await assertCurrentPassword(user.email, currentPassword);
 

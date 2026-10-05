@@ -1,3 +1,6 @@
+import { useTranslation } from "react-i18next";
+
 export default function Account() {
-  return <div>account</div>;
+  const { t } = useTranslation();
+  return <div>{t("auth.placeholders.account")}</div>;
 }

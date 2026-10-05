@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import type { Order } from "../../lib/types";
 import useGetEmployees from "../employees/useGetEmployees";
@@ -10,6 +11,7 @@ type EditOrderDialogProps = {
 };
 
 export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogProps) {
+  const { t } = useTranslation();
   const { employees } = useGetEmployees();
 
   return (
@@ -21,8 +23,8 @@ export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogPr
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit Order {order?.orderNumber}</DialogTitle>
-          <DialogDescription className="sr-only">Update the selected order's VIN, services, device, assignment, and deadline.</DialogDescription>
+          <DialogTitle>{t("orders.editDialog.title", { number: order?.orderNumber ?? "" })}</DialogTitle>
+          <DialogDescription className="sr-only">{t("orders.editDialog.description")}</DialogDescription>
         </DialogHeader>
         {order && (
           <EditOrderForm

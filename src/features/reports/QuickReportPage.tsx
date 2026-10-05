@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useHref, useLocation, useParams, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
+import i18n from "../../i18n";
 import { ArrowLeft, Calendar, Download, Printer, Share2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
@@ -10,10 +12,10 @@ import { useGetOrders } from "../orders/useGetOrders";
 import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import { reportPeriod, type ReportRange } from "./reportStats";
-import { employeeReport, financialReport, inventoryReport, isQuickReportType, quickReports, reportCsv, salesReport, toReportRange, type QuickReportModel, type QuickReportType } from "./quickReports";
+import { reportPeriod } from "./reportStats";
+import { employeeReport, financialReport, inventoryReport, isQuickReportType, quickReportDescription, quickReportTitle, quickReports, reportCsv, salesReport, toReportRange, type QuickReportModel, type QuickReportType } from "./quickReports";
 import { ReportDocument } from "./ReportDocument";
-import { downloadCsv, rangeLabels, useReportFormatting } from "./reportFormatting";
+import { downloadCsv, rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
 
 const inventorySort = { field: "name", ascending: true } as const;
 
@@ -22,19 +24,20 @@ async function shareLink(title: string, url: string) {
     try {
       await navigator.share({ title, url });
     } catch (error) {
-      if ((error as Error).name !== "AbortError") toast.error("Could not share the report link");
+      if ((error as Error).name !== "AbortError") toast.error(i18n.t("reports.toast.shareFailed"));
     }
     return;
   }
   try {
     await navigator.clipboard.writeText(url);
-    toast.success("Report link copied");
+    toast.success(i18n.t("reports.toast.linkCopied"));
   } catch {
-    toast.error("Could not copy the report link");
+    toast.error(i18n.t("reports.toast.copyFailed"));
   }
 }
 
 export function QuickReportPage() {
+  const { t } = useTranslation();
   const { locale = "en", workspaceId: routeWorkspaceId, reportType } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [generatedAt] = useState(() => new Date());
@@ -43,6 +46,7 @@ export function QuickReportPage() {
 
   const type: QuickReportType = isQuickReportType(reportType) ? reportType : "sales";
   const definition = quickReports[type];
+  const title = quickReportTitle(type);
   const range = toReportRange(searchParams.get("range"));
 
   const { workspaceId, workspaceName, formatMoney, formatDate, formatDateTime } = useReportFormatting();
@@ -53,7 +57,7 @@ export function QuickReportPage() {
 
   const today = localDateKey(generatedAt);
   const period = reportPeriod(range, generatedAt);
-  const periodLabel = definition.usesPeriod ? `${formatDate(period.start)} – ${formatDate(period.end)}` : `As of ${formatDate(today)}`;
+  const periodLabel = definition.usesPeriod ? `${formatDate(period.start)} – ${formatDate(period.end)}` : t("reports.asOf", { date: formatDate(today) });
   const generatedLabel = formatDateTime(generatedAt);
 
   const needed = [
@@ -73,7 +77,7 @@ export function QuickReportPage() {
     else model = financialReport(ordersQuery.orders, inventoryQuery.items, period);
   }
 
-  const documentTitle = `${definition.title} – ${workspaceName} – ${periodLabel}`;
+  const documentTitle = `${title} – ${workspaceName} – ${periodLabel}`;
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -87,7 +91,7 @@ export function QuickReportPage() {
 
   const exportCsv = () => {
     if (!model) return;
-    const csv = reportCsv({ title: definition.title, workspace: workspaceName, period: periodLabel, generated: generatedLabel }, model);
+    const csv = reportCsv({ title, workspace: workspaceName, period: periodLabel, generated: generatedLabel }, model);
     const suffix = definition.usesPeriod ? `${period.start}_${period.end}` : today;
     downloadCsv(`${type}-report_${suffix}.csv`, csv);
   };
@@ -97,7 +101,7 @@ export function QuickReportPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <Link to={`/${locale}/${routeWorkspaceId}/reports`} className="inline-flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35">
           <ArrowLeft aria-hidden="true" className="size-4" />
-          Back to Reports
+          {t("reports.quickPage.backToReports")}
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           {definition.usesPeriod && (
@@ -109,14 +113,14 @@ export function QuickReportPage() {
                 setSearchParams(next, { replace: true });
               }}
             >
-              <SelectTrigger className="w-44" aria-label="Report period">
+              <SelectTrigger className="w-44" aria-label={t("reports.quickPage.periodLabel")}>
                 <Calendar aria-hidden="true" className="size-4" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(rangeLabels) as ReportRange[]).map((value) => (
+                {reportRanges.map((value) => (
                   <SelectItem key={value} value={value}>
-                    {rangeLabels[value]}
+                    {rangeLabel(value)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -124,19 +128,19 @@ export function QuickReportPage() {
           )}
           <Button type="button" variant="outline" onClick={() => shareLink(documentTitle, `${window.location.origin}${reportHref}`)}>
             <Share2 />
-            Share
+            {t("reports.quickPage.share")}
           </Button>
           <Button type="button" variant="outline" onClick={exportCsv} disabled={!model}>
             <Download />
-            Export CSV
+            {t("reports.quickPage.exportCsv")}
           </Button>
           <Button type="button" onClick={() => window.print()} disabled={!model}>
             <Printer />
-            Print / PDF
+            {t("reports.quickPage.print")}
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground print:hidden">Shared links open only for members of this workspace. Use Print / PDF to save a copy you can send to anyone.</p>
+      <p className="text-xs text-muted-foreground print:hidden">{t("reports.quickPage.shareNotice")}</p>
 
       {isLoading && (
         <div className="mx-auto w-full max-w-[210mm] space-y-4 rounded-lg border border-border bg-card p-10">
@@ -148,15 +152,15 @@ export function QuickReportPage() {
 
       {isError && !isLoading && (
         <div role="alert" className="mx-auto w-full max-w-[210mm] rounded-lg border border-border bg-card p-10 text-center">
-          <p className="font-medium text-foreground">Could not load report data</p>
-          <p className="mt-1 text-sm text-muted-foreground">Refresh the page to try again.</p>
+          <p className="font-medium text-foreground">{t("reports.charts.loadError")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("reports.charts.loadErrorHint")}</p>
         </div>
       )}
 
       {model && (
         <ReportDocument
-          title={definition.title}
-          description={definition.description}
+          title={title}
+          description={quickReportDescription(type)}
           workspaceName={workspaceName}
           periodLabel={periodLabel}
           generatedLabel={generatedLabel}

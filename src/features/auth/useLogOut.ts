@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { logOut as logOutApi } from "../../services/apiAuth";
 import { finishSignOut } from "./session";
+import i18n from "../../i18n";
 
 export function useLogOut() {
   const queryClient = useQueryClient();
@@ -14,7 +15,7 @@ export function useLogOut() {
       finishSignOut(queryClient, navigate);
     },
     onError: (error) => {
-      toast.error("Could not log out. Please try again.");
+      toast.error(i18n.t("auth.errors.logoutFailed"));
       if (import.meta.env.DEV) console.error(error);
     },
   });

@@ -1,4 +1,5 @@
 import supabase from "./supabase";
+import i18n from "../i18n";
 import { mfaVerifyMessage } from "./authMessages";
 
 const authenticatorName = "Core App Authenticator";
@@ -21,7 +22,7 @@ export type TotpEnrollment = {
 
 export async function getMfaAssurance(): Promise<MfaAssurance> {
   const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (error) throw new Error("Unable to check two-factor authentication. Please try again.");
+  if (error) throw new Error(i18n.t("auth.mfa.errors.checkFailed"));
 
   return {
     currentLevel: data?.currentLevel ?? null,
@@ -31,7 +32,7 @@ export async function getMfaAssurance(): Promise<MfaAssurance> {
 
 export async function getMfaStatus(): Promise<MfaStatus> {
   const { data, error } = await supabase.auth.mfa.listFactors();
-  if (error) throw new Error("Unable to load two-factor authentication. Please try again.");
+  if (error) throw new Error(i18n.t("auth.mfa.errors.loadFailed"));
 
   const verified = data?.totp?.[0] ?? null;
   const assurance = await getMfaAssurance();
@@ -58,7 +59,7 @@ async function removeUnverifiedTotpFactors() {
 
 export async function enrollTotp(): Promise<TotpEnrollment> {
   const status = await getMfaStatus();
-  if (status.enabled) throw new Error("Two-factor authentication is already enabled.");
+  if (status.enabled) throw new Error(i18n.t("auth.mfa.errors.alreadyEnabled"));
 
   await removeUnverifiedTotpFactors();
 
@@ -67,7 +68,7 @@ export async function enrollTotp(): Promise<TotpEnrollment> {
     friendlyName: authenticatorName,
   });
 
-  if (error || !data?.totp) throw new Error("Unable to start two-factor setup. Please try again.");
+  if (error || !data?.totp) throw new Error(i18n.t("auth.mfa.errors.setupFailed"));
 
   return {
     factorId: data.id,
@@ -78,12 +79,12 @@ export async function enrollTotp(): Promise<TotpEnrollment> {
 
 export async function cancelTotpEnrollment(factorId: string) {
   const { error } = await supabase.auth.mfa.unenroll({ factorId });
-  if (error) throw new Error("Unable to cancel two-factor setup. Please try again.");
+  if (error) throw new Error(i18n.t("auth.mfa.errors.cancelSetupFailed"));
 }
 
 export async function verifyTotp(factorId: string, code: string) {
   const normalized = code.replace(/\s/g, "");
-  if (!/^\d{6}$/.test(normalized)) throw new Error("Invalid verification code.");
+  if (!/^\d{6}$/.test(normalized)) throw new Error(i18n.t("auth.mfa.errors.invalidCode"));
 
   const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
   if (challengeError || !challenge) throw new Error(mfaVerifyMessage(challengeError?.message ?? "expired"));
@@ -100,5 +101,5 @@ export async function verifyTotp(factorId: string, code: string) {
 
 export async function disableTotp(factorId: string) {
   const { error } = await supabase.auth.mfa.unenroll({ factorId });
-  if (error) throw new Error("Unable to disable two-factor authentication. Please try again.");
+  if (error) throw new Error(i18n.t("auth.mfa.errors.disableFailed"));
 }

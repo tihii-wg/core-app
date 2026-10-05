@@ -1,8 +1,9 @@
-const weekdayLabels = ["M", "T", "W", "T", "F", "S", "S"] as const;
+import i18n, { currentIntlLocale } from "../i18n";
 
 export type WeekDayStat = {
   date: string;
-  label: (typeof weekdayLabels)[number];
+  /** Narrow weekday name in the UI language, e.g. "M" in English. */
+  label: string;
   count: number;
 };
 
@@ -75,9 +76,10 @@ export function thisWeekStats(orders: WeekOrder[], clients: WeekClient[], now: D
   const dates = weekDateKeys(now);
   const daysInWeek = new Set(dates);
   const weekOrders = orders.filter((order) => daysInWeek.has(order.createdAt));
-  const days: WeekDayStat[] = dates.map((date, index) => ({
+  const weekday = new Intl.DateTimeFormat(currentIntlLocale(), { weekday: "narrow" });
+  const days: WeekDayStat[] = dates.map((date) => ({
     date,
-    label: weekdayLabels[index],
+    label: weekday.format(new Date(`${date}T00:00:00`)),
     count: weekOrders.filter((order) => order.createdAt === date).length,
   }));
   const newClients = clients.filter((client) => daysInWeek.has(calendarDateKey(client.createdAt))).length;
@@ -167,12 +169,17 @@ export function recentActivity(orders: ActivityOrder[], clients: ActivityClient[
 
 export function relativeDayLabel(dateKey: string, now: Date) {
   const today = localDateKey(now);
-  if (dateKey === today) return "Today";
-  if (dateKey === localDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return "Yesterday";
+  if (dateKey === today) return i18n.t("dashboard.activity.today");
+  if (dateKey === localDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))) return i18n.t("dashboard.activity.yesterday");
+  const date = dateFromKey(dateKey);
+  if (!date) return "";
+  return date.toLocaleDateString(currentIntlLocale(), date.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
+function dateFromKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
-  if (!year || !month || !day) return "";
-  const date = new Date(year, month - 1, day);
-  return date.toLocaleDateString(undefined, year === now.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
 }
 
 export function isAtOrBelowMinimum(item: { quantity: number; minQuantity: number }) {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
@@ -14,13 +15,6 @@ import { useDebounce } from "../../hooks/useDebounce";
 // import FullPageSpinner from "../../ui/FullPageDataSpinner";
 import { ErrorState, NoEmployees, NoSearchResults } from "../../ui/EmptyState";
 
-const roleLabels: Record<EmployeeRole, string> = {
-  admin: "Admin",
-  manager: "Manager",
-  technician: "Technician",
-  receptionist: "Receptionist",
-};
-
 const roleVariants: Record<EmployeeRole, "info" | "violet" | "default" | "warning"> = {
   admin: "violet",
   manager: "info",
@@ -29,6 +23,13 @@ const roleVariants: Record<EmployeeRole, "info" | "violet" | "default" | "warnin
 };
 
 export function Employees() {
+  const { t } = useTranslation();
+  const roleLabels: Record<EmployeeRole, string> = {
+    admin: t("employees.roles.admin"),
+    manager: t("employees.roles.manager"),
+    technician: t("employees.roles.technician"),
+    receptionist: t("employees.roles.receptionist"),
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<EmployeeRole | "all">("all");
   const debouncesearch = useDebounce(searchQuery, 400);
@@ -43,7 +44,7 @@ export function Employees() {
   const columns: Column<Employee>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("employees.columns.name"),
       cell: (emp) => (
         <div className="flex max-w-[20rem] min-w-0 items-center gap-3">
           <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13px] font-semibold text-primary">
@@ -58,34 +59,37 @@ export function Employees() {
     },
     {
       key: "role",
-      header: "Role",
+      header: t("employees.columns.role"),
       cell: (emp) => <StatusBadge variant={roleVariants[emp.role] ?? "default"}>{roleLabels[emp.role]}</StatusBadge>,
     },
     {
       key: "tasks",
-      header: "Tasks",
+      header: t("employees.columns.tasks"),
       cell: (emp) => (
         <div className="text-[13px]">
-          <span className="font-medium text-foreground tabular-nums">{emp.assignedTasks}</span>
-          <span className="text-muted-foreground"> assigned</span>
+          <Trans
+            i18nKey="employees.tasksAssigned"
+            values={{ value: emp.assignedTasks }}
+            components={{ value: <span className="font-medium text-foreground tabular-nums" />, muted: <span className="text-muted-foreground" /> }}
+          />
         </div>
       ),
       className: "hidden sm:table-cell whitespace-nowrap",
     },
     {
       key: "completed",
-      header: "Completed",
+      header: t("employees.columns.completed"),
       cell: (emp) => <span className="text-foreground tabular-nums">{emp.completedTasks}</span>,
       className: "hidden md:table-cell text-right",
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (emp) =>
         emp.status === "active" ? (
-          <StatusBadge variant="success" dot>Active</StatusBadge>
+          <StatusBadge variant="success" dot>{t("employees.statuses.active")}</StatusBadge>
         ) : (
-          <StatusBadge variant="muted" dot>Inactive</StatusBadge>
+          <StatusBadge variant="muted" dot>{t("employees.statuses.inactive")}</StatusBadge>
         ),
     },
   ];
@@ -97,29 +101,29 @@ export function Employees() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Employees"
-        description={isPending ? "Loading employees" : `${employees?.length} team members`}
+        title={t("employees.title")}
+        description={isPending ? t("employees.loading") : t("employees.memberCount", { count: employees?.length ?? 0 })}
         actions={
           <Button onClick={() => setCreateModalOpen(true)}>
             <Plus />
-            Add Employee
+            {t("employees.addEmployee")}
           </Button>
         }
       />
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search employees..."
+        searchPlaceholder={t("employees.searchPlaceholder")}
         filters={[
           {
             key: "role",
-            label: "Role",
+            label: t("employees.filters.role"),
             options: [
-              { value: "all", label: "All Roles" },
-              { value: "admin", label: "Admin" },
-              { value: "manager", label: "Manager" },
-              { value: "technician", label: "Technician" },
-              { value: "receptionist", label: "Receptionist" },
+              { value: "all", label: t("employees.filters.allRoles") },
+              { value: "admin", label: roleLabels.admin },
+              { value: "manager", label: roleLabels.manager },
+              { value: "technician", label: roleLabels.technician },
+              { value: "receptionist", label: roleLabels.receptionist },
             ],
             value: roleFilter,
             onChange: (value) => setRoleFilter(value as EmployeeRole | "all"),
@@ -136,7 +140,7 @@ export function Employees() {
         data={employees ?? []}
         emptyState={
           error ? (
-            <ErrorState title="Could not load employees" description={error.message} onRetry={() => refetch()} />
+            <ErrorState title={t("employees.loadError")} description={error.message} onRetry={() => refetch()} />
           ) : searchQuery ? (
             <NoSearchResults query={searchQuery} />
           ) : (
@@ -154,8 +158,8 @@ export function Employees() {
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add New Employee</DialogTitle>
-            <DialogDescription>Fill in the employee information below.</DialogDescription>
+            <DialogTitle>{t("employees.dialogs.createTitle")}</DialogTitle>
+            <DialogDescription>{t("employees.dialogs.createDescription")}</DialogDescription>
           </DialogHeader>
           <AddNewEmployeesForm setCreateModalOpen={setCreateModalOpen} />
         </DialogContent>

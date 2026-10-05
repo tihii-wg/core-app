@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -12,6 +13,7 @@ type LoginMfaStepProps = {
 };
 
 export function LoginMfaStep({ factorId, onVerified, onBack }: LoginMfaStepProps) {
+  const { t } = useTranslation();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [verifying, setVerifying] = useState(false);
@@ -25,7 +27,7 @@ export function LoginMfaStep({ factorId, onVerified, onBack }: LoginMfaStepProps
       const user = await verifyTotp(factorId, code);
       onVerified(user);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Invalid verification code.");
+      setError(caught instanceof Error ? caught.message : t("auth.mfa.errors.invalidCode"));
       setVerifying(false);
     }
   }
@@ -33,11 +35,11 @@ export function LoginMfaStep({ factorId, onVerified, onBack }: LoginMfaStepProps
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1">
-        <h2 className="text-base font-medium text-foreground">Two-factor authentication</h2>
-        <p className="text-sm text-muted-foreground">Enter the 6-digit code from your authenticator app.</p>
+        <h2 className="text-base font-medium text-foreground">{t("auth.mfa.title")}</h2>
+        <p className="text-sm text-muted-foreground">{t("auth.mfa.description")}</p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="login-mfa-code">Authentication code</Label>
+        <Label htmlFor="login-mfa-code">{t("auth.mfa.codeLabel")}</Label>
         <Input
           id="login-mfa-code"
           inputMode="numeric"
@@ -51,10 +53,10 @@ export function LoginMfaStep({ factorId, onVerified, onBack }: LoginMfaStepProps
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
       <Button type="submit" disabled={verifying || code.length !== 6} size="lg" className="w-full">
-        {verifying ? "Verifying..." : "Verify"}
+        {verifying ? t("auth.mfa.verifying") : t("auth.mfa.verify")}
       </Button>
       <button type="button" onClick={onBack} disabled={verifying} className="w-full text-sm text-primary hover:underline">
-        Back to login
+        {t("auth.backToLogin")}
       </button>
     </form>
   );

@@ -1,6 +1,7 @@
 import { cn } from '../lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Skeleton } from './Skeleton';
+import { currentIntlLocale } from '../i18n';
 import { statCardClassName, statIconVariants, statValueSizeClass, statValueTitle } from './statCardStyles';
 
 interface DashboardCardProps {
@@ -24,7 +25,7 @@ export function TrendBadge({ value, label }: { value: number; label: string }) {
     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
       <span className={cn('rounded px-1 py-px font-medium tabular-nums', up ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive')}>
         {up ? '+' : ''}
-        {value.toFixed(1)}%
+        {new Intl.NumberFormat(currentIntlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(value)}%
       </span>
       {label}
     </span>

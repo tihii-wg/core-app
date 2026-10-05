@@ -3,47 +3,49 @@ import type { AppModule } from "../lib/types";
 import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Wrench, FileText, Wallet, BarChart3, Settings, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
-import { DEFAULT_LOCALE } from "../App";
+import { useTranslation } from "react-i18next";
+import { languageFromPath } from "../i18n/languages";
 import { LogoMark } from "./Logo";
 
 interface NavItem {
   module: AppModule;
-  label: string;
+  labelKey: `nav.modules.${AppModule}`;
   icon: React.ElementType;
   /** Module still runs on sample data; shown as a visual hint next to the label. */
   demo?: boolean;
 }
 
 interface NavGroup {
-  label?: string;
+  labelKey?: `nav.groups.${"operations" | "people" | "finance"}`;
   items: NavItem[];
 }
 
 const navGroups: NavGroup[] = [
-  { items: [{ module: "dashboard", label: "Dashboard", icon: LayoutDashboard }] },
+  { items: [{ module: "dashboard", labelKey: "nav.modules.dashboard", icon: LayoutDashboard }] },
   {
-    label: "Operations",
+    labelKey: "nav.groups.operations",
     items: [
-      { module: "orders", label: "Orders", icon: ClipboardList },
-      { module: "clients", label: "Clients", icon: Users },
-      { module: "services", label: "Services", icon: Wrench },
-      { module: "inventory", label: "Inventory", icon: Package },
+      { module: "orders", labelKey: "nav.modules.orders", icon: ClipboardList },
+      { module: "clients", labelKey: "nav.modules.clients", icon: Users },
+      { module: "services", labelKey: "nav.modules.services", icon: Wrench },
+      { module: "inventory", labelKey: "nav.modules.inventory", icon: Package },
     ],
   },
-  { label: "People", items: [{ module: "employees", label: "Employees", icon: UserCog }] },
+  { labelKey: "nav.groups.people", items: [{ module: "employees", labelKey: "nav.modules.employees", icon: UserCog }] },
   {
-    label: "Finance",
+    labelKey: "nav.groups.finance",
     items: [
-      { module: "invoices", label: "Invoices", icon: FileText },
-      { module: "finance", label: "Finance", icon: Wallet, demo: true },
-      { module: "reports", label: "Reports", icon: BarChart3 },
+      { module: "invoices", labelKey: "nav.modules.invoices", icon: FileText },
+      { module: "finance", labelKey: "nav.modules.finance", icon: Wallet, demo: true },
+      { module: "reports", labelKey: "nav.modules.reports", icon: BarChart3 },
     ],
   },
 ];
 
-const settingsItem: NavItem = { module: "settings", label: "Settings", icon: Settings };
+const settingsItem: NavItem = { module: "settings", labelKey: "nav.modules.settings", icon: Settings };
 
 export function AppSidebar() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const currentWorkspaceId = location.pathname.split("/")[2];
@@ -55,14 +57,15 @@ export function AppSidebar() {
   const handleNavClick = (module: AppModule) => {
     setCurrentModule(module);
     setMobileSidebarOpen(false);
-    navigate(`/${DEFAULT_LOCALE}/${currentWorkspaceId}/${module}`);
+    navigate(`/${languageFromPath(location.pathname)}/${currentWorkspaceId}/${module}`);
   };
 
   // The collapsed rail only applies on desktop; the mobile drawer always shows labels.
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
 
-  const renderItem = ({ module, label, icon: Icon, demo }: NavItem) => {
+  const renderItem = ({ module, labelKey, icon: Icon, demo }: NavItem) => {
     const active = currentNavItem === module;
+    const label = t(labelKey);
     return (
       <li key={module}>
         <button
@@ -86,7 +89,7 @@ export function AppSidebar() {
           {!collapsed && <span className="truncate">{label}</span>}
           {!collapsed && demo && (
             <span aria-hidden="true" className="ml-auto rounded px-1.5 py-px text-[10px] font-medium text-info ring-1 ring-info/25 ring-inset">
-              Demo
+              {t("nav.sidebar.demo")}
             </span>
           )}
         </button>
@@ -115,26 +118,26 @@ export function AppSidebar() {
         {/* Brand */}
         <div className={cn("flex h-14 shrink-0 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}>
           <LogoMark className="size-7" />
-          {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">Core App</span>}
+          {!collapsed && <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">{t("common.appName")}</span>}
 
           <button
             type="button"
             onClick={() => setMobileSidebarOpen(false)}
-            aria-label="Close navigation"
+            aria-label={t("nav.sidebar.closeNavigation")}
             className="ml-auto inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground lg:hidden"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        <nav aria-label="Main" className="flex-1 overflow-y-auto px-3 pb-3">
+        <nav aria-label={t("nav.sidebar.mainLabel")} className="flex-1 overflow-y-auto px-3 pb-3">
           {navGroups.map((group, index) => (
-            <div key={group.label ?? index} className={cn(index > 0 && "mt-5")}>
-              {group.label &&
+            <div key={group.labelKey ?? index} className={cn(index > 0 && "mt-5")}>
+              {group.labelKey &&
                 (collapsed ? (
                   <div aria-hidden="true" className="mx-auto mb-2 h-px w-6 bg-sidebar-border" />
                 ) : (
-                  <p className="mb-1 px-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">{group.label}</p>
+                  <p className="mb-1 px-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t(group.labelKey)}</p>
                 ))}
               <ul className="space-y-0.5">{group.items.map(renderItem)}</ul>
             </div>
@@ -146,15 +149,15 @@ export function AppSidebar() {
           <button
             type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? t("nav.sidebar.expandSidebar") : t("nav.sidebar.collapseSidebar")}
+            title={sidebarCollapsed ? t("nav.sidebar.expandSidebar") : t("nav.sidebar.collapseSidebar")}
             className={cn(
               "hidden h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-subtle-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex",
               collapsed && "justify-center px-0"
             )}
           >
             {sidebarCollapsed ? <PanelLeftOpen className="size-4 shrink-0" /> : <PanelLeftClose className="size-4 shrink-0" />}
-            {!collapsed && <span>Collapse</span>}
+            {!collapsed && <span>{t("nav.sidebar.collapse")}</span>}
           </button>
         </div>
       </aside>

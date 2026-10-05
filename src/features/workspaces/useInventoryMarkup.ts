@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import i18n from "../../i18n";
 import { getInventoryMarkup, updateInventoryMarkup } from "../../services/apiInventoryMarkup";
 
 export function useGetInventoryMarkup(workspaceId?: string) {
@@ -21,7 +22,7 @@ export function useUpdateInventoryMarkup() {
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
     },
     onError(error) {
-      toast.error(error.message || "Could not save the markup percentage.");
+      toast.error(error.message || i18n.t("settings.company.toast.markupSaveFailed"));
     },
   });
 }

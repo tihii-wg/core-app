@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
@@ -18,6 +19,7 @@ type EditServiceFormProps = {
 };
 
 export default function UpdateServiceForm({ service, setEditModalOpen }: EditServiceFormProps) {
+  const { t } = useTranslation();
   const { mutateAsync: updateService } = useUpdateService();
   const { currency } = useWorkspaceMoney();
 
@@ -59,12 +61,12 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
       <div className="space-y-4 py-4">
         {/* Service name */}
         <div className="space-y-1.5">
-          <Label htmlFor="serviceName">Service Name</Label>
+          <Label htmlFor="serviceName">{t("services.form.serviceNameLabel")}</Label>
 
           <Input
             id="serviceName"
             {...register("serviceName", {
-              required: "Service name is required",
+              required: t("services.form.serviceNameRequired"),
             })}
             className={errors.serviceName ? "border-destructive" : ""}
           />
@@ -75,7 +77,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
         {/* Status + Price */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label>Status</Label>
+            <Label>{t("common.status")}</Label>
 
             <Controller
               name="status"
@@ -87,9 +89,9 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
                   </SelectTrigger>
 
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="active">{t("services.statuses.active")}</SelectItem>
 
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="inactive">{t("services.statuses.inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -97,7 +99,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="price">Price ({currency}) *</Label>
+            <Label htmlFor="price">{t("services.form.priceLabel", { currency })}</Label>
 
             <Input
               id="price"
@@ -105,10 +107,10 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
               step="0.01"
               {...register("price", {
                 valueAsNumber: true,
-                required: "Price is required",
+                required: t("services.form.priceRequired"),
                 min: {
                   value: 0,
-                  message: "Price cannot be negative",
+                  message: t("services.form.priceNegative"),
                 },
               })}
               className={errors.price ? "border-destructive" : ""}
@@ -120,7 +122,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
 
         {/* Description */}
         <div className="space-y-1.5">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
 
           <Textarea id="description" {...register("description")} rows={3} />
         </div>
@@ -128,11 +130,11 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
         {/* Buttons */}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setEditModalOpen(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
 
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? <Spinner className="h-4 w-4" /> : "Save Changes"}
+            {isSubmitting ? <Spinner className="h-4 w-4" /> : t("common.saveChanges")}
           </Button>
         </div>
       </div>

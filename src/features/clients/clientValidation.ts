@@ -1,11 +1,13 @@
-export const clientTypeRules = { required: "Client type is required" };
+import i18n from "../../i18n";
 
-export const clientEmailRules = { required: "Email is required" };
+export const clientTypeRules = () => ({ required: i18n.t("clients.validation.typeRequired") });
 
-export const clientPhoneRules = {
-  required: "Phone is required",
+export const clientEmailRules = () => ({ required: i18n.t("clients.validation.emailRequired") });
+
+export const clientPhoneRules = () => ({
+  required: i18n.t("clients.validation.phoneRequired"),
   pattern: {
     value: /^\+373\d{8}$/,
-    message: "Phone must be in format +37300000000",
+    message: i18n.t("clients.validation.phoneFormat"),
   },
-};
+});

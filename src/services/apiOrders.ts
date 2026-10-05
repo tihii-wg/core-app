@@ -3,11 +3,12 @@ import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
+import i18n from "../i18n";
 
-const orderPermissionMessage = "Order was not found or you do not have permission to change it.";
+const orderPermissionMessage = () => i18n.t("orders.errors.notFoundOrForbidden");
 
 function requireWorkspaceId(workspaceId: string | undefined) {
-  if (!workspaceId) throw new Error("No active workspace selected");
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
   return workspaceId;
 }
 
@@ -15,7 +16,7 @@ async function resolveClientId(workspaceId: string, { clientId, clientName, clie
   if (clientId) return clientId;
 
   const name = clientName.trim();
-  if (!name) throw new Error("Client is required");
+  if (!name) throw new Error(i18n.t("orders.validation.clientRequired"));
 
   const { data: existingClients, error: existingClientError } = await supabase.from("clients").select("id").eq("workspace_id", workspaceId).ilike("name", name).limit(1);
 
@@ -35,7 +36,7 @@ async function resolveClientId(workspaceId: string, { clientId, clientName, clie
   });
 
   const createdClientId = createdClients?.[0]?.id;
-  if (!createdClientId) throw new Error("Client was not created");
+  if (!createdClientId) throw new Error(i18n.t("orders.errors.clientNotCreated"));
 
   return createdClientId as string;
 }
@@ -72,7 +73,7 @@ async function resolveService(workspaceId: string, service: OrderService) {
   );
 
   const createdService = createdServices?.[0];
-  if (!createdService?.id) throw new Error("Service was not created");
+  if (!createdService?.id) throw new Error(i18n.t("orders.errors.serviceNotCreated"));
 
   return { id: createdService.id as string, name: createdService.service_name as string };
 }
@@ -84,10 +85,10 @@ async function resolveAssignedEmployeeId(workspaceId: string, assignedEmployeeId
   const { data: employee, error } = await supabase.from("employees").select("id, profile_id").eq("id", selectedId).eq("workspace_id", workspaceId).maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!employee?.id) throw new Error("Selected employee was not found in this workspace");
+  if (!employee?.id) throw new Error(i18n.t("orders.errors.employeeNotFound"));
 
   const profileId = typeof employee.profile_id === "string" ? employee.profile_id.trim() : "";
-  if (!profileId) throw new Error("Selected employee is not linked to a user");
+  if (!profileId) throw new Error(i18n.t("orders.errors.employeeNotLinked"));
 
   return profileId;
 }
@@ -142,19 +143,19 @@ async function assignOrderNumber(workspaceId: string, order: Record<string, unkn
       .maybeSingle();
 
     if (!error) {
-      if (!data) throw new Error(orderPermissionMessage);
+      if (!data) throw new Error(orderPermissionMessage());
       return data as Record<string, unknown>;
     }
     if (error.code !== "23505") throw new Error(error.message);
   }
 
-  throw new Error("Could not assign an order number. Please try again.");
+  throw new Error(i18n.t("orders.errors.orderNumberFailed"));
 }
 
 // Not atomic: services and a new client may already exist if a later insert is rejected.
 export async function createOrder(input: CreateOrderInput, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  if (input.services.length === 0) throw new Error("Service is required");
+  if (input.services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
 
   const resolvedServices = [];
   for (const service of input.services) {
@@ -332,7 +333,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
     .select("id");
 
   if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error(orderPermissionMessage);
+  if (!data || data.length === 0) throw new Error(orderPermissionMessage());
 }
 
 const orderColumns = "*,clients(name,client_type)";
@@ -363,11 +364,11 @@ async function vinColumnValue(vin: string | undefined) {
 
 export async function updateOrder({ orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services }: UpdateOrderDetails, targetWorkspaceId: string | undefined) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
-  if (services && services.length === 0) throw new Error("Service is required");
+  if (services && services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
   const assignedTo = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = vin.trim().toUpperCase();
 
-  if (normalizedVin && normalizedVin.length !== 17) throw new Error("VIN must contain exactly 17 characters");
+  if (normalizedVin && normalizedVin.length !== 17) throw new Error(i18n.t("orders.validation.vinLength"));
 
   const { data, error } = await supabase
     .from("orders")
@@ -385,7 +386,7 @@ export async function updateOrder({ orderId, device, carNumber, vin = "", descri
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error(orderPermissionMessage);
+  if (!data) throw new Error(orderPermissionMessage());
 
   const { lines, summary } = services ? await syncOrderServices(workspaceId, orderId, services) : { lines: [], summary: null };
   const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
@@ -455,7 +456,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   if (removedIds.length > 0) {
     const { data: deletedLines, error: deleteError } = await supabase.from("order_services").delete().eq("order_id", orderId).in("id", removedIds).select("id");
     if (deleteError) throw new Error(deleteError.message);
-    if (!deletedLines || deletedLines.length !== removedIds.length) throw new Error(orderPermissionMessage);
+    if (!deletedLines || deletedLines.length !== removedIds.length) throw new Error(orderPermissionMessage());
   }
 
   const lines = [...kept, ...inserted];
@@ -470,7 +471,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   const { data: updatedRows, error: summaryError } = await supabase.from("orders").update(summary).eq("id", orderId).eq("workspace_id", workspaceId).select("id");
 
   if (summaryError) throw new Error(summaryError.message);
-  if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage);
+  if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage());
 
   return { lines, summary };
 }

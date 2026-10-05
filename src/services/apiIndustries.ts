@@ -1,4 +1,5 @@
 import type { Industry } from "../lib/types";
+import i18n from "../i18n";
 import supabase from "./supabase";
 
 const industryCatalog: Array<Pick<Industry, "name" | "slug">> = [
@@ -46,7 +47,7 @@ export async function resolveIndustryId(industryId: string) {
 
   const { data, error } = await supabase.from("industries").select("id").eq("slug", industryId).maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data?.id) throw new Error("Selected business type was not found");
+  if (!data?.id) throw new Error(i18n.t("workspaces.errors.industryNotFound"));
 
   return data.id;
 }

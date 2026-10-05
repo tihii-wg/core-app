@@ -1,4 +1,5 @@
 import { Search, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Input } from "./Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./Select";
 import { Button } from "./Button";
@@ -25,7 +26,9 @@ interface SearchAndFiltersProps {
   onClearFilters?: () => void;
   className?: string;
 }
-export function SearchAndFilters({ searchValue, onSearchChange, searchPlaceholder = "Search...", filters = [], onClearFilters, className }: SearchAndFiltersProps) {
+export function SearchAndFilters({ searchValue, onSearchChange, searchPlaceholder: placeholder, filters = [], onClearFilters, className }: SearchAndFiltersProps) {
+  const { t } = useTranslation();
+  const searchPlaceholder = placeholder ?? t("common.searchPlaceholder");
   const hasActiveFilters = filters.some((f) => f.value && f.value !== "all");
 
   return (
@@ -44,7 +47,7 @@ export function SearchAndFilters({ searchValue, onSearchChange, searchPlaceholde
           <button
             type="button"
             onClick={() => onSearchChange("")}
-            aria-label="Clear search"
+            aria-label={t("common.clearSearch")}
             className="absolute right-1.5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-subtle-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="size-3.5" />
@@ -70,7 +73,7 @@ export function SearchAndFilters({ searchValue, onSearchChange, searchPlaceholde
       {hasActiveFilters && onClearFilters && (
         <Button variant="ghost" size="sm" onClick={onClearFilters} className="h-9 self-start sm:self-auto">
           <X />
-          Clear filters
+          {t("common.clearFilters")}
         </Button>
       )}
     </div>

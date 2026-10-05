@@ -1,13 +1,14 @@
+import { useTranslation } from "react-i18next";
 import { StatusBadge } from "../../ui/StatusBadge";
 import type { ClientType } from "../../lib/types";
 
-const clientTypeDisplay: Record<ClientType, { label: string; variant: "default" | "violet" }> = {
-  individual: { label: "Individual", variant: "default" },
-  organization: { label: "Organization", variant: "violet" },
+const clientTypeVariant: Record<ClientType, "default" | "violet"> = {
+  individual: "default",
+  organization: "violet",
 };
 
 export default function ClientTypeBadge({ clientType }: { clientType: ClientType | null | undefined }) {
+  const { t } = useTranslation();
   if (!clientType) return null;
-  const { label, variant } = clientTypeDisplay[clientType];
-  return <StatusBadge variant={variant}>{label}</StatusBadge>;
+  return <StatusBadge variant={clientTypeVariant[clientType]}>{t(`clients.types.${clientType}`)}</StatusBadge>;
 }

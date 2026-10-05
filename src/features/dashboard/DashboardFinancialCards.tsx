@@ -1,11 +1,11 @@
 import { Clock3, Wallet } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { DashboardCard, TrendBadge } from "../../ui/DashboardCard";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useDashboardFinancials } from "./useDashboardFinancials";
 
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
 export function DashboardFinancialCards({ now }: { now: Date }) {
+  const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const financials = useDashboardFinancials(now);
   const { isError, isLoading } = financials;
@@ -13,38 +13,38 @@ export function DashboardFinancialCards({ now }: { now: Date }) {
   return (
     <>
       <DashboardCard
-        title="Revenue Today"
+        title={t("dashboard.stats.revenueToday")}
         value={isError ? "—" : formatMoney(financials.revenueToday)}
         icon={Wallet}
         variant="success"
         isLoading={isLoading}
         footer={
           isError ? (
-            "Could not load orders"
+            t("dashboard.errors.orders")
           ) : financials.revenueChangeVsYesterday !== null ? (
-            <TrendBadge value={financials.revenueChangeVsYesterday} label="vs yesterday" />
+            <TrendBadge value={financials.revenueChangeVsYesterday} label={t("dashboard.stats.vsYesterday")} />
           ) : financials.paidOrdersToday > 0 ? (
-            `${plural(financials.paidOrdersToday, "paid order")} today`
+            t("dashboard.stats.paidOrdersToday", { count: financials.paidOrdersToday })
           ) : (
-            "No paid orders today yet"
+            t("dashboard.stats.noPaidOrdersToday")
           )
         }
       />
 
       <DashboardCard
-        title="Outstanding Payments"
+        title={t("dashboard.stats.outstandingPayments")}
         value={isError ? "—" : formatMoney(financials.outstandingAmount)}
         icon={Clock3}
         variant={financials.unpaidOrders > 0 ? "warning" : "default"}
         isLoading={isLoading}
         footer={
           isError
-            ? "Could not load orders"
+            ? t("dashboard.errors.orders")
             : financials.unpaidOrders > 0
-              ? plural(financials.unpaidOrders, "unpaid order")
+              ? t("dashboard.stats.unpaidOrders", { count: financials.unpaidOrders })
               : financials.hasOrders
-                ? "All orders are paid"
-                : "No orders yet"
+                ? t("dashboard.stats.allOrdersPaid")
+                : t("dashboard.empty.noOrders")
         }
       />
     </>

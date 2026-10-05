@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Mail, MapPin, Pencil, Phone } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import ClientTypeBadge from "./ClientTypeBadge";
@@ -23,7 +24,7 @@ type ClientDetailPanelProps = {
 };
 
 export default function ClientDetailPanel({ selectedClient, detailPanelOpen, setDetailPanelOpen, onClientUpdated, getClientOrders }: ClientDetailPanelProps) {
-  
+  const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const [isEditing, setIsEditing] = useState(false);
   const [editingClientId, setEditingClientId] = useState(selectedClient?.id);
@@ -52,14 +53,14 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              aria-label="Edit"
-              title="Edit client"
+              aria-label={t("common.edit")}
+              title={t("clients.detail.editTitle")}
               className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
             >
               <Pencil className="size-4" />
             </button>
           )}
-          <SheetDescription className="sr-only">View and edit this client's contact information, balance, and order history.</SheetDescription>
+          <SheetDescription className="sr-only">{t("clients.detail.srDescription")}</SheetDescription>
         </SheetHeader>
 
         {selectedClient && isEditing && (
@@ -81,7 +82,7 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
           <div className="space-y-6 px-5 py-5">
             {/* Contact Info */}
             <div className="space-y-3">
-              <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Contact Information</h3>
+              <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.contactInformation")}</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex min-w-0 items-center gap-2">
                   <Mail className="size-4 shrink-0 text-subtle-foreground" />
@@ -97,13 +98,13 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
                 </div>
                 {selectedClient.client_type === "organization" && selectedClient.contact_person && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Contact</span>
+                    <span className="text-sm text-muted-foreground">{t("clients.detail.contact")}</span>
                     <span className="text-foreground">{selectedClient.contact_person}</span>
                   </div>
                 )}
                 {selectedClient.client_type === "organization" && selectedClient.tax_id && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Tax ID / IDNO</span>
+                    <span className="text-sm text-muted-foreground">{t("clients.detail.taxId")}</span>
                     <span className="text-foreground">{selectedClient.tax_id}</span>
                   </div>
                 )}
@@ -118,17 +119,17 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
 
             {/* Balance */}
             <div className="rounded-lg border border-border bg-muted/50 p-4">
-              <p className="text-xs font-medium text-muted-foreground">Current Balance</p>
+              <p className="text-xs font-medium text-muted-foreground">{t("clients.detail.currentBalance")}</p>
               <p className={`mt-1 truncate text-2xl font-semibold tracking-tight tabular-nums ${selectedClient.balance > 0 ? "text-destructive" : "text-foreground"}`}>{formatMoney(selectedClient.balance)}</p>
             </div>
 
             {/* Order History */}
             <div>
-              <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Order History</h3>
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.orderHistory")}</h3>
               {(() => {
                 const clientOrders = getClientOrders(selectedClient.id);
                 if (clientOrders?.length === 0) {
-                  return <p className="text-sm text-muted-foreground py-4 text-center">No orders yet</p>;
+                  return <p className="text-sm text-muted-foreground py-4 text-center">{t("clients.detail.noOrders")}</p>;
                 }
                 return (
                   <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
@@ -150,14 +151,14 @@ export default function ClientDetailPanel({ selectedClient, detailPanelOpen, set
             {/* Notes */}
             {selectedClient.notes && (
               <div>
-                <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">Notes</h3>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.notes")}</h3>
                 <p className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{selectedClient.notes}</p>
               </div>
             )}
 
             {/* Timestamps */}
             <div className="text-xs text-muted-foreground">
-              <p>Client since: {selectedClient.created_at?.split("T")[0]}</p>
+              <p>{t("clients.detail.clientSince", { date: selectedClient.created_at?.split("T")[0] })}</p>
             </div>
           </div>
         )}

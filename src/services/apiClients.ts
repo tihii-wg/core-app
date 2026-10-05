@@ -1,4 +1,5 @@
 import type { Client, ClientListFilter, ClientType, CreateClientInput, UpdateClientInput } from "../lib/types";
+import i18n from "../i18n";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
 
@@ -62,8 +63,8 @@ export async function createClient({ workspace_id, clientName, email, phone, add
   } = await supabase.auth.getUser();
 
   if (userError) throw new Error(userError.message);
-  if (!user) throw new Error("User is not authenticated");
-  if (!workspace_id) throw new Error("No active workspace selected");
+  if (!user) throw new Error(i18n.t("clients.errors.notAuthenticated"));
+  if (!workspace_id) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
 
   const { data, error } = await supabase
     .from("clients")
@@ -82,7 +83,7 @@ export async function createClient({ workspace_id, clientName, email, phone, add
 }
 
 export async function getClients(search: string, workspaceId: string | undefined, clientType: ClientListFilter = "all") {
-  if (!workspaceId) throw new Error("No active workspace selected");
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
 
   let query = supabase.from("clients").select("*").eq("workspace_id", workspaceId);
 
@@ -103,7 +104,7 @@ export async function getClients(search: string, workspaceId: string | undefined
 }
 
 export async function updateClient({ clientId, clientName, email, phone, address, notes, clientType, taxId, contactPerson }: UpdateClientInput, workspaceId: string | undefined) {
-  if (!workspaceId) throw new Error("No active workspace selected");
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
 
   const { data: updatedClient, error } = await supabase
     .from("clients")
@@ -114,7 +115,7 @@ export async function updateClient({ clientId, clientName, email, phone, address
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!updatedClient) throw new Error("Client was not found or you do not have permission to edit it.");
+  if (!updatedClient) throw new Error(i18n.t("clients.errors.notFoundOrForbidden"));
 
   return toClient(updatedClient as Record<string, unknown>);
 }

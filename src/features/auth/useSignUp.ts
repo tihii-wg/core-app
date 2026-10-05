@@ -1,15 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
 import { signUp } from "../../services/apiAuth";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { languageFromPath } from "../../i18n/languages";
 
 export function useSignUp() {
   const navigate = useNavigate();
+  const language = languageFromPath(useLocation().pathname);
   return useMutation({
     mutationFn: signUp,
     onSuccess: () => {
-      const locale = "en";
-
-      navigate(`/${locale}/dashboard`, { replace: true });
+      navigate(`/${language}/dashboard`, { replace: true });
     },
   });
 }

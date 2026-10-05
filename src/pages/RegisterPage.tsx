@@ -1,17 +1,20 @@
 import { ArrowLeft } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import RegisterForm from "../features/auth/RegisterForm";
 import Logo from "../ui/Logo";
-import { DEFAULT_LOCALE } from "../App";
-import { useNavigate } from "react-router-dom";
+import { languageFromPath } from "../i18n/languages";
+import { useLocation, useNavigate } from "react-router-dom";
 
 
 
 export function RegisterPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
+  const language = languageFromPath(useLocation().pathname);
 
   function onSwitchToLogin() {
-    navigate(`/${DEFAULT_LOCALE}/login`);
+    navigate(`/${language}/login`);
   }
 
   return (
@@ -20,7 +23,7 @@ export function RegisterPage() {
       <div className="p-4">
         <button onClick={onSwitchToLogin} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
-          Back to login
+          {t("auth.backToLogin")}
         </button>
       </div>
 
@@ -30,7 +33,7 @@ export function RegisterPage() {
           {/* Logo */}
           <div className="text-center mb-8">
             <Logo />
-            <p className="text-sm text-muted-foreground">Create your account</p>
+            <p className="text-sm text-muted-foreground">{t("auth.register.tagline")}</p>
           </div>
 
           {/* Form */}
@@ -38,9 +41,9 @@ export function RegisterPage() {
 
           {/* Login link */}
           <div className="mt-4 text-center">
-            <span className="text-sm text-muted-foreground">Already have an account? </span>
+            <span className="text-sm text-muted-foreground">{t("auth.register.haveAccount")} </span>
             <button type="button" onClick={onSwitchToLogin} className="text-sm text-primary hover:underline font-medium">
-              Log in
+              {t("auth.logIn")}
             </button>
           </div>
         </div>

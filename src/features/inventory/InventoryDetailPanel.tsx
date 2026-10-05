@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
@@ -28,6 +29,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function InventoryDetailPanel({ item, open, isLoading, isError, onOpenChange, onEdit, onDelete, onRetry }: InventoryDetailPanelProps) {
+  const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
 
@@ -35,8 +37,8 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle className="[overflow-wrap:anywhere]">{item?.name ?? "Inventory item"}</SheetTitle>
-          <SheetDescription className="sr-only">Inventory item details, stock status, and pricing.</SheetDescription>
+          <SheetTitle className="[overflow-wrap:anywhere]">{item?.name ?? t("inventory.detail.fallbackTitle")}</SheetTitle>
+          <SheetDescription className="sr-only">{t("inventory.detail.description")}</SheetDescription>
         </SheetHeader>
 
         {isLoading && (
@@ -47,43 +49,43 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
 
         {isError && !isLoading && (
           <div role="alert" className="space-y-3 px-5 py-6">
-            <p className="text-sm text-foreground">Could not load this inventory item.</p>
+            <p className="text-sm text-foreground">{t("inventory.detail.loadError")}</p>
             <Button type="button" variant="outline" onClick={onRetry}>
-              Try again
+              {t("common.retry")}
             </Button>
           </div>
         )}
 
-        {!isLoading && !isError && !item && open && <p className="px-5 py-6 text-sm text-muted-foreground">Inventory item was not found.</p>}
+        {!isLoading && !isError && !item && open && <p className="px-5 py-6 text-sm text-muted-foreground">{t("inventory.detail.notFound")}</p>}
 
         {item && !isLoading && (
           <div className="space-y-5 px-5 py-5">
             <div className="flex flex-wrap items-center gap-2">
               <InventoryStatusBadge status={item.stockStatus} />
-              {item.isActive ? <StatusBadge variant="success">Active</StatusBadge> : <StatusBadge variant="muted">Inactive</StatusBadge>}
+              {item.isActive ? <StatusBadge variant="success">{t("inventory.active")}</StatusBadge> : <StatusBadge variant="muted">{t("inventory.inactive")}</StatusBadge>}
             </div>
 
             <div className="divide-y divide-border border-y border-border">
-              <DetailRow label="SKU" value={item.sku || "—"} />
-              <DetailRow label="Category" value={item.category || "—"} />
-              <DetailRow label="Description" value={item.description || "—"} />
-              <DetailRow label="Quantity" value={`${item.quantity} ${item.unit}`} />
-              <DetailRow label="Minimum Quantity" value={String(item.minQuantity)} />
-              <DetailRow label="Unit" value={item.unit || "—"} />
-              <DetailRow label="Purchase Price" value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
-              <DetailRow label="Selling Price" value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
-              <DetailRow label="Supplier" value={item.supplier || "—"} />
-              <DetailRow label="Location" value={item.location || "—"} />
-              <DetailRow label="Created" value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
-              <DetailRow label="Updated" value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />
+              <DetailRow label={t("inventory.fields.sku")} value={item.sku || "—"} />
+              <DetailRow label={t("inventory.fields.category")} value={item.category || "—"} />
+              <DetailRow label={t("inventory.fields.description")} value={item.description || "—"} />
+              <DetailRow label={t("inventory.fields.quantity")} value={`${item.quantity} ${item.unit}`} />
+              <DetailRow label={t("inventory.fields.minQuantity")} value={String(item.minQuantity)} />
+              <DetailRow label={t("inventory.fields.unit")} value={item.unit || "—"} />
+              <DetailRow label={t("inventory.fields.purchasePrice")} value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
+              <DetailRow label={t("inventory.fields.sellingPrice")} value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
+              <DetailRow label={t("inventory.fields.supplier")} value={item.supplier || "—"} />
+              <DetailRow label={t("inventory.fields.location")} value={item.location || "—"} />
+              <DetailRow label={t("inventory.fields.created")} value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
+              <DetailRow label={t("inventory.fields.updated")} value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />
             </div>
 
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={onEdit}>
-                Edit
+                {t("common.edit")}
               </Button>
               <Button type="button" variant="destructive" onClick={onDelete}>
-                Delete
+                {t("common.delete")}
               </Button>
             </div>
           </div>

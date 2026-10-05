@@ -1,3 +1,4 @@
+import i18n, { currentIntlLocale } from "../../i18n";
 import type { Employee, InventoryItem, Order } from "../../lib/types";
 import { calendarDateKey, localDateKey, startOfWeek } from "../../pages/dashboardStats";
 
@@ -110,8 +111,8 @@ function bucketKey(dateKey: string, granularity: ReportGranularity) {
 }
 
 function bucketLabel(key: string, granularity: ReportGranularity) {
-  if (granularity === "month") return fromDateKey(`${key}-01`).toLocaleDateString("en", { month: "short" });
-  return fromDateKey(key).toLocaleDateString("en", { month: "short", day: "numeric" });
+  if (granularity === "month") return fromDateKey(`${key}-01`).toLocaleDateString(currentIntlLocale(), { month: "short" });
+  return fromDateKey(key).toLocaleDateString(currentIntlLocale(), { month: "short", day: "numeric" });
 }
 
 export function revenueSeries(orders: Order[], period: ReportPeriod): SeriesPoint[] {
@@ -160,7 +161,7 @@ export function serviceDistribution(orders: Order[], period: ReportPeriod, maxSl
   const slices = top.map((service, index) => ({ ...service, color: serviceColors[index % serviceColors.length] }));
   if (rest.length > 0) {
     slices.push({
-      name: "Other",
+      name: i18n.t("reports.charts.otherServices"),
       count: rest.reduce((sum, service) => sum + service.count, 0),
       revenue: rest.reduce((sum, service) => sum + service.revenue, 0),
       color: otherServiceColor,

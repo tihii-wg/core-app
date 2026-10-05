@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/utils';
 import type { OrderStatus, PaymentStatus, InvoiceStatus } from '../lib/types';
 
@@ -46,54 +47,38 @@ export function StatusBadge({ variant = 'default', children, className, dot = fa
   );
 }
 
-// Order status badge
+const orderVariants: Record<OrderStatus, BadgeVariant> = {
+  new: 'info',
+  'in-progress': 'warning',
+  'waiting-parts': 'violet',
+  completed: 'success',
+  paid: 'success',
+  cancelled: 'muted',
+};
+
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const config: Record<OrderStatus, { label: string; variant: BadgeVariant }> = {
-    new: { label: 'New', variant: 'info' },
-    'in-progress': { label: 'In Progress', variant: 'warning' },
-    'waiting-parts': { label: 'Waiting Parts', variant: 'violet' },
-    completed: { label: 'Completed', variant: 'success' },
-    paid: { label: 'Paid', variant: 'success' },
-    cancelled: { label: 'Cancelled', variant: 'muted' },
-  };
-
-  const { label, variant } = config[status];
-  return <StatusBadge variant={variant} dot>{label}</StatusBadge>;
+  const { t } = useTranslation();
+  return <StatusBadge variant={orderVariants[status]} dot>{t(`status.order.${status}`)}</StatusBadge>;
 }
 
-// Payment status badge
+const paymentVariants: Record<PaymentStatus, BadgeVariant> = { unpaid: 'danger', partial: 'warning', paid: 'success' };
+
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
-  const config: Record<PaymentStatus, { label: string; variant: BadgeVariant }> = {
-    unpaid: { label: 'Unpaid', variant: 'danger' },
-    partial: { label: 'Partial', variant: 'warning' },
-    paid: { label: 'Paid', variant: 'success' },
-  };
-
-  const { label, variant } = config[status];
-  return <StatusBadge variant={variant}>{label}</StatusBadge>;
+  const { t } = useTranslation();
+  return <StatusBadge variant={paymentVariants[status]}>{t(`status.payment.${status}`)}</StatusBadge>;
 }
 
-// Invoice status badge
+const invoiceVariants: Record<InvoiceStatus, BadgeVariant> = { draft: 'muted', sent: 'info', paid: 'success', overdue: 'danger' };
+
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
-  const config: Record<InvoiceStatus, { label: string; variant: BadgeVariant }> = {
-    draft: { label: 'Draft', variant: 'muted' },
-    sent: { label: 'Sent', variant: 'info' },
-    paid: { label: 'Paid', variant: 'success' },
-    overdue: { label: 'Overdue', variant: 'danger' },
-  };
-
-  const { label, variant } = config[status];
-  return <StatusBadge variant={variant} dot>{label}</StatusBadge>;
+  const { t } = useTranslation();
+  return <StatusBadge variant={invoiceVariants[status]} dot>{t(`status.invoice.${status}`)}</StatusBadge>;
 }
 
-// Inventory status badge
-export function InventoryStatusBadge({ status }: { status: "in_stock" | "low_stock" | "out_of_stock" }) {
-  const config: Record<string, { label: string; variant: BadgeVariant }> = {
-    in_stock: { label: "In Stock", variant: "success" },
-    low_stock: { label: "Low Stock", variant: "warning" },
-    out_of_stock: { label: "Out of Stock", variant: "danger" },
-  };
+type InventoryStatus = "in_stock" | "low_stock" | "out_of_stock";
+const inventoryVariants: Record<InventoryStatus, BadgeVariant> = { in_stock: "success", low_stock: "warning", out_of_stock: "danger" };
 
-  const { label, variant } = config[status];
-  return <StatusBadge variant={variant} dot>{label}</StatusBadge>;
+export function InventoryStatusBadge({ status }: { status: InventoryStatus }) {
+  const { t } = useTranslation();
+  return <StatusBadge variant={inventoryVariants[status]} dot>{t(`status.inventory.${status}`)}</StatusBadge>;
 }

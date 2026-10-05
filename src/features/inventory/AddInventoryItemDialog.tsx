@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import InventoryItemForm from "./InventoryItemForm";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
@@ -10,7 +11,6 @@ const emptyInventoryForm = {
   category: "",
   quantity: 0,
   minQuantity: 0,
-  unit: "pcs",
   purchasePrice: null,
   sellingPrice: null,
   supplier: "",
@@ -19,6 +19,7 @@ const emptyInventoryForm = {
 };
 
 export function AddInventoryItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation();
   const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
 
@@ -26,16 +27,16 @@ export function AddInventoryItemDialog({ open, onOpenChange }: { open: boolean; 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add Inventory Item</DialogTitle>
-          <DialogDescription className="sr-only">Create an inventory item for the current workspace.</DialogDescription>
+          <DialogTitle>{t("inventory.dialogs.addTitle")}</DialogTitle>
+          <DialogDescription className="sr-only">{t("inventory.dialogs.addDescription")}</DialogDescription>
         </DialogHeader>
         {markupLoading ? (
-          <p className="text-sm text-muted-foreground">Loading item...</p>
+          <p className="text-sm text-muted-foreground">{t("inventory.dialogs.loadingItem")}</p>
         ) : (
           <InventoryItemForm
-            defaultValues={emptyInventoryForm}
+            defaultValues={{ ...emptyInventoryForm, unit: t("inventory.form.defaultUnit") }}
             markupPercent={markupPercent}
-            submitLabel="Add Item"
+            submitLabel={t("inventory.addItem")}
             isSubmitting={isCreating}
             onCancel={() => onOpenChange(false)}
             onMarkupCommit={commitMarkup}

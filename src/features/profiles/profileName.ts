@@ -1,5 +1,7 @@
+import i18n from "../../i18n";
+
 export function profileDisplayName(fullName: string | null | undefined, fallback?: string | null) {
-  return fullName?.trim() || fallback?.trim() || "User";
+  return fullName?.trim() || fallback?.trim() || i18n.t("settings.profile.defaultName");
 }
 
 export function profileInitials(name: string) {

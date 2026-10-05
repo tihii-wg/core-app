@@ -1,3 +1,5 @@
+import { currentIntlLocale } from "../i18n";
+
 export const workspacePreferenceDefaults = {
   language: "en",
   timezone: "Europe/Chisinau",
@@ -23,7 +25,7 @@ function applyDatePattern(day: string, month: string, year: string, pattern: str
 export function formatWorkspaceMoney(value: number | null, currency: string | null | undefined) {
   if (value == null) return "—";
   const code = currency?.trim() || workspacePreferenceDefaults.currency;
-  const amount = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const amount = value.toLocaleString(currentIntlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const symbol = currencySymbols[code];
   if (!symbol) return `${amount} ${code}`;
   if (symbol === code) return `${code} ${amount}`;
@@ -34,7 +36,7 @@ export function formatWorkspaceMoneyCompact(value: number, currency: string | nu
   const code = currency?.trim() || workspacePreferenceDefaults.currency;
   const symbol = currencySymbols[code];
   const thousands = value / 1000;
-  const amount = Number.isInteger(thousands) ? String(thousands) : String(Math.round(thousands * 10) / 10);
+  const amount = (Number.isInteger(thousands) ? thousands : Math.round(thousands * 10) / 10).toLocaleString(currentIntlLocale());
   if (!symbol || symbol === code) return `${code} ${amount}k`;
   return `${symbol}${amount}k`;
 }

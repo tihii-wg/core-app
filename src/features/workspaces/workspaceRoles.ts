@@ -1,16 +1,19 @@
+import i18n from "../../i18n";
+
 // Mirrors public.workspace_member_can_manage in supabase/migrations/20260929000000_production_baseline.sql.
 export const workspaceRoles = ["owner", "admin", "manager", "member"] as const;
 export type WorkspaceRole = (typeof workspaceRoles)[number];
 
-export const workspaceRoleLabels: Record<WorkspaceRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  manager: "Manager",
-  member: "Member",
-};
+const workspaceRoleLabelKeys = {
+  owner: "team.roles.owner",
+  admin: "team.roles.admin",
+  manager: "team.roles.manager",
+  member: "team.roles.member",
+} as const satisfies Record<WorkspaceRole, string>;
 
 export function workspaceRoleLabel(role: string) {
-  return workspaceRoleLabels[role as WorkspaceRole] ?? role;
+  const key = workspaceRoleLabelKeys[role as WorkspaceRole];
+  return key ? i18n.t(key) : role;
 }
 
 export function assignableWorkspaceRoles(actorRole: string | null | undefined): WorkspaceRole[] {

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createEmployee } from "../../services/apiEmployees";
 import toast from "react-hot-toast";
+import i18n from "../../i18n";
 
 
 
@@ -9,14 +10,14 @@ export default function useCreateNewEmployee() {
   return useMutation({
     mutationFn: createEmployee,
     onMutate: () => {
-      toast.loading("Creating employee", { id: "create-employee" });
+      toast.loading(i18n.t("employees.toast.creating"), { id: "create-employee" });
     },
     onSuccess: (_data, { workspace_id }) => {
       queryClient.invalidateQueries({ queryKey: ["employees", workspace_id] });
-      toast.success("Employee created succesfully", { id: "create-employee" });
+      toast.success(i18n.t("employees.toast.created"), { id: "create-employee" });
     },
     onError: (error) => {
-      toast.error(error.message || "Somthing went wrong", { id: "create-employee" });
+      toast.error(error.message || i18n.t("employees.toast.genericError"), { id: "create-employee" });
     },
   });
 }

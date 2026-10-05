@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Plus,
   // Clock,
@@ -36,6 +37,7 @@ import { canManageServices } from "../workspaces/workspaceRoles";
 // ];
 
 export function Services() {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   // const [categoryFilter, setCategoryFilter] = useState(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -68,7 +70,7 @@ export function Services() {
   const columns: Column<Service>[] = [
     {
       key: "name",
-      header: "Service",
+      header: t("services.columns.service"),
       cell: (service) => (
         <div className="max-w-[28rem] min-w-0">
           <p className="truncate font-medium text-foreground" title={service.service_name}>{service.service_name}</p>
@@ -94,20 +96,20 @@ export function Services() {
     // },
     {
       key: "price",
-      header: "Price",
+      header: t("services.columns.price"),
       className: "text-right w-[140px] whitespace-nowrap",
       cell: (service) => <span className="font-medium text-foreground tabular-nums">{formatMoney(service.service_price)}</span>,
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       className: "text-right w-[120px]",
       cell: (service) => (
         <div className="flex justify-end">
           {service.status === "active" ? (
-            <StatusBadge variant="success" dot>Active</StatusBadge>
+            <StatusBadge variant="success" dot>{t("services.statuses.active")}</StatusBadge>
           ) : (
-            <StatusBadge variant="muted" dot>Inactive</StatusBadge>
+            <StatusBadge variant="muted" dot>{t("services.statuses.inactive")}</StatusBadge>
           )}
         </div>
       ),
@@ -125,7 +127,7 @@ export function Services() {
           variant="ghost"
           size="icon-sm"
           className="hover:bg-destructive/10 hover:text-destructive"
-          aria-label={`Delete ${service.service_name}`}
+          aria-label={t("services.deleteAriaLabel", { name: service.service_name })}
           onClick={(e) => {
             e.stopPropagation();
             setServiceToDelete(service);
@@ -140,13 +142,13 @@ export function Services() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Services"
-        description={isPending ? "Loading services..." : `${activeServices} active services`}
+        title={t("services.title")}
+        description={isPending ? t("services.loading") : t("services.activeCount", { count: activeServices })}
         actions={
           canManage ? (
             <Button onClick={() => setCreateModalOpen(true)}>
               <Plus />
-              Add Service
+              {t("services.addService")}
             </Button>
           ) : undefined
         }
@@ -155,7 +157,7 @@ export function Services() {
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search services..."
+        searchPlaceholder={t("services.searchPlaceholder")}
         // filters={[
         //   {
         //     key: "category",
@@ -177,7 +179,7 @@ export function Services() {
         data={services}
         emptyState={
           error ? (
-            <ErrorState title="Could not load services" description={error.message} onRetry={() => refetch()} />
+            <ErrorState title={t("services.loadError")} description={error.message} onRetry={() => refetch()} />
           ) : searchQuery ? (
             <NoSearchResults query={searchQuery} />
           ) : (
@@ -198,9 +200,9 @@ export function Services() {
       {/* Create Service Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
-          <Description className="sr-only">Manage your workspace service</Description>
+          <Description className="sr-only">{t("services.dialogs.createDescription")}</Description>
           <DialogHeader>
-            <DialogTitle>Add New Service</DialogTitle>
+            <DialogTitle>{t("services.dialogs.createTitle")}</DialogTitle>
           </DialogHeader>
           <AddNewServiceForm setCreateModalOpen={setCreateModalOpen} />
         </DialogContent>
@@ -209,9 +211,9 @@ export function Services() {
       {/*Create Edit Service Modal*/}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-lg">
-          <Description className="sr-only">Edit workspace service</Description>
+          <Description className="sr-only">{t("services.dialogs.editDescription")}</Description>
           <DialogHeader>
-            <DialogTitle>Edit Service</DialogTitle>
+            <DialogTitle>{t("services.dialogs.editTitle")}</DialogTitle>
           </DialogHeader>
           {selectedService && <EditServiceForm service={selectedService} setEditModalOpen={setEditModalOpen} />}
         </DialogContent>
@@ -226,17 +228,21 @@ export function Services() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete service?</DialogTitle>
-            <Description className="sr-only">Confirm deletion of the selected service.</Description>
+            <DialogTitle>{t("services.dialogs.deleteTitle")}</DialogTitle>
+            <Description className="sr-only">{t("services.dialogs.deleteDescription")}</Description>
           </DialogHeader>
 
           <p className="text-sm [overflow-wrap:anywhere] text-muted-foreground">
-            Are you sure you want to delete <strong className="font-medium text-foreground">{serviceToDelete?.service_name}</strong>?
+            <Trans
+              i18nKey="services.dialogs.deleteConfirm"
+              values={{ name: serviceToDelete?.service_name }}
+              components={{ strong: <strong className="font-medium text-foreground" /> }}
+            />
           </p>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setServiceToDelete(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
 
             <Button
@@ -252,7 +258,7 @@ export function Services() {
               }}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting ? t("common.deleting") : t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

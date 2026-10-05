@@ -1,5 +1,6 @@
 import { useMemo, type ElementType } from "react";
 import { TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, CreditCard, Banknote, Building } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { PageHeader } from "../../pages/PageHeader";
 import { DashboardCard } from "../../ui/DashboardCard";
 import { DataTable, type Column } from "../../ui/DataTable";
@@ -17,6 +18,7 @@ const paymentMethodIcons: Record<string, ElementType> = {
 };
 
 export function Finance() {
+  const { t } = useTranslation();
   const { data: transactions, isDemo } = useFinanceTransactions();
   const { formatMoney } = useWorkspaceMoney();
 
@@ -41,23 +43,23 @@ export function Finance() {
   const columns: Column<Transaction>[] = [
     {
       key: "date",
-      header: "Date",
+      header: t("finance.transactions.columns.date"),
       cell: (txn) => <span className="text-muted-foreground">{txn.date}</span>,
     },
     {
       key: "type",
-      header: "Type",
+      header: t("finance.transactions.columns.type"),
       cell: (txn) => (
         <div className="flex items-center gap-2">
           {txn.type === "income" ? (
             <>
               <ArrowUpRight className="h-4 w-4 text-success" />
-              <span className="text-success">Income</span>
+              <span className="text-success">{t("finance.transactions.types.income")}</span>
             </>
           ) : (
             <>
               <ArrowDownRight className="h-4 w-4 text-destructive" />
-              <span className="text-destructive">Expense</span>
+              <span className="text-destructive">{t("finance.transactions.types.expense")}</span>
             </>
           )}
         </div>
@@ -65,13 +67,13 @@ export function Finance() {
     },
     {
       key: "category",
-      header: "Category",
+      header: t("finance.transactions.columns.category"),
       cell: (txn) => <StatusBadge variant="default">{txn.category}</StatusBadge>,
       className: "hidden sm:table-cell",
     },
     {
       key: "description",
-      header: "Description",
+      header: t("finance.transactions.columns.description"),
       cell: (txn) => (
         <div className="max-w-[12rem] truncate xl:max-w-xs" title={txn.description}>
           {txn.description}
@@ -81,19 +83,13 @@ export function Finance() {
     },
     {
       key: "paymentMethod",
-      header: "Method",
+      header: t("finance.transactions.columns.method"),
       cell: (txn) => {
         const Icon = paymentMethodIcons[txn.paymentMethod] || DollarSign;
-        const labels: Record<string, string> = {
-          cash: "Cash",
-          card: "Card",
-          "bank-transfer": "Bank",
-          other: "Other",
-        };
         return (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Icon className="h-4 w-4" />
-            <span className="text-sm">{labels[txn.paymentMethod]}</span>
+            <span className="text-sm">{t(`finance.paymentMethods.short.${txn.paymentMethod}`)}</span>
           </div>
         );
       },
@@ -101,7 +97,7 @@ export function Finance() {
     },
     {
       key: "amount",
-      header: "Amount",
+      header: t("finance.transactions.columns.amount"),
       cell: (txn) => (
         <span className={`font-medium tabular-nums ${txn.type === "income" ? "text-success" : "text-destructive"}`}>
           {txn.type === "income" ? "+" : "-"}
@@ -114,27 +110,25 @@ export function Finance() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Finance" description={isDemo ? "Layout preview with sample transactions" : "Revenue, expenses, and profit overview"} />
+      <PageHeader title={t("finance.title")} description={isDemo ? t("finance.demoDescription") : t("finance.description")} />
 
       {isDemo && (
-        <DemoDataNotice title="Finance is not connected to your workspace yet">
-          All figures on this page are sample values for previewing the layout. They are not calculated from your orders, clients, or inventory.
-        </DemoDataNotice>
+        <DemoDataNotice title={t("finance.demoNotice.title")}>{t("finance.demoNotice.body")}</DemoDataNotice>
       )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <DashboardCard title="Total Revenue" value={formatMoney(stats.income)} icon={TrendingUp} variant="success" />
-        <DashboardCard title="Total Expenses" value={formatMoney(stats.expenses)} icon={TrendingDown} variant="danger" />
-        <DashboardCard title="Net Profit" value={formatMoney(stats.profit)} icon={DollarSign} variant={stats.profit >= 0 ? "primary" : "danger"} />
-        <DashboardCard title="Transactions" value={transactions.length} icon={CreditCard} variant="default" />
+        <DashboardCard title={t("finance.stats.totalRevenue")} value={formatMoney(stats.income)} icon={TrendingUp} variant="success" />
+        <DashboardCard title={t("finance.stats.totalExpenses")} value={formatMoney(stats.expenses)} icon={TrendingDown} variant="danger" />
+        <DashboardCard title={t("finance.stats.netProfit")} value={formatMoney(stats.profit)} icon={DollarSign} variant={stats.profit >= 0 ? "primary" : "danger"} />
+        <DashboardCard title={t("finance.stats.transactions")} value={transactions.length} icon={CreditCard} variant="default" />
       </div>
 
       {/* Main Content */}
       <div className="grid 2xl:grid-cols-3 gap-5">
         {/* Recent Transactions */}
         <div className="min-w-0 2xl:col-span-2">
-          <h2 className="text-sm font-semibold text-foreground mb-3">Recent Transactions</h2>
+          <h2 className="text-sm font-semibold text-foreground mb-3">{t("finance.transactions.title")}</h2>
           <DataTable columns={columns} data={transactions} keyExtractor={(txn) => txn.id} />
         </div>
 
@@ -142,23 +136,17 @@ export function Finance() {
         <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-1">
           {/* Payment Method Breakdown */}
           <div className="bg-card rounded-lg border border-border p-5 shadow-xs">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Revenue by Payment Method</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-4">{t("finance.revenueByPaymentMethod")}</h3>
             <div className="space-y-4">
               {Object.entries(stats.byPaymentMethod).map(([method, amount]) => {
                 const Icon = paymentMethodIcons[method] || DollarSign;
-                const labels: Record<string, string> = {
-                  cash: "Cash",
-                  card: "Card",
-                  "bank-transfer": "Bank Transfer",
-                  other: "Other",
-                };
                 const percentage = stats.income > 0 ? ((amount / stats.income) * 100).toFixed(1) : "0";
                 return (
                   <div key={method}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm text-foreground">{labels[method]}</span>
+                        <span className="text-sm text-foreground">{t(`finance.paymentMethods.full.${method as Transaction["paymentMethod"]}`)}</span>
                       </div>
                       <span className="text-sm font-medium text-foreground tabular-nums">{formatMoney(amount)}</span>
                     </div>
@@ -174,23 +162,23 @@ export function Finance() {
 
           {/* Profit Overview */}
           <div className="bg-card rounded-lg border border-border p-5 shadow-xs">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Profit Overview</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-4">{t("finance.profitOverview.title")}</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Revenue</span>
+                <span className="text-sm text-muted-foreground">{t("finance.profitOverview.revenue")}</span>
                 <span className="text-sm font-medium text-success">+{formatMoney(stats.income)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Expenses</span>
+                <span className="text-sm text-muted-foreground">{t("finance.profitOverview.expenses")}</span>
                 <span className="text-sm font-medium text-destructive">-{formatMoney(stats.expenses)}</span>
               </div>
               <div className="border-t border-border pt-4 flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">Net Profit</span>
+                <span className="text-sm font-medium text-foreground">{t("finance.profitOverview.netProfit")}</span>
                 <span className={`text-lg font-semibold tabular-nums ${stats.profit >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(stats.profit)}</span>
               </div>
               <div className="pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Profit Margin: <span className="font-medium">{stats.income > 0 ? ((stats.profit / stats.income) * 100).toFixed(1) : "0"}%</span>
+                  <Trans i18nKey="finance.profitOverview.margin" values={{ value: stats.income > 0 ? ((stats.profit / stats.income) * 100).toFixed(1) : "0" }} components={{ value: <span className="font-medium" /> }} />
                 </p>
               </div>
             </div>
@@ -198,7 +186,7 @@ export function Finance() {
 
           {/* Expense Categories */}
           <div className="bg-card rounded-lg border border-border p-5 shadow-xs">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Top Expenses</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-4">{t("finance.topExpenses")}</h3>
             <div className="space-y-3">
               {transactions
                 .filter((t) => t.type === "expense")

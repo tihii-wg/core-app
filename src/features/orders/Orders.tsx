@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
@@ -9,7 +10,7 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
 // import { Spinner } from "../../ui/Spinner";
 import { useGetOrders } from "./useGetOrders";
-import type { Order } from "../../lib/types";
+import type { Order, OrderStatus } from "../../lib/types";
 import { useOrderDetails } from "./useOrderDetails";
 import { CreateOrderDialog } from "./CreateOrderDialog";
 import { EditOrderDialog } from "./EditOrderDialog";
@@ -22,15 +23,7 @@ import { useCreateInvoice } from "../invoices/useCreateInvoice";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 // import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
 
-const statusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "new", label: "New" },
-  { value: "in-progress", label: "In Progress" },
-  { value: "waiting-parts", label: "Waiting Parts" },
-  { value: "completed", label: "Completed" },
-  { value: "paid", label: "Paid" },
-  { value: "cancelled", label: "Cancelled" },
-];
+const orderStatuses: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
 
 // const employeeFilterOptions2 = [
 //   { value: "all", label: "All Employees" },
@@ -39,6 +32,7 @@ const statusOptions = [
 // ];
 
 export function Orders() {
+  const { t } = useTranslation();
   const { orders, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
@@ -84,13 +78,13 @@ export function Orders() {
   const columns: Column<Order>[] = [
     {
       key: "orderNumber",
-      header: "Order #",
+      header: t("orders.table.orderNumber"),
       cell: (order) => <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>,
       className: "whitespace-nowrap",
     },
     {
       key: "client",
-      header: "Client",
+      header: t("orders.table.client"),
       cell: (order) => (
         <span className="block max-w-[11rem] truncate font-medium 2xl:max-w-[13rem]" title={order.clientName}>
           {order.clientName}
@@ -99,13 +93,13 @@ export function Orders() {
     },
     {
       key: "clientType",
-      header: "Client Type",
+      header: t("orders.table.clientType"),
       cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
       className: "hidden 2xl:table-cell",
     },
     {
       key: "device",
-      header: "Device/Service",
+      header: t("orders.table.deviceService"),
       cell: (order) => (
         <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
           <div className="truncate" title={order.device}>{order.device}</div>
@@ -116,12 +110,12 @@ export function Orders() {
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (order) => <OrderStatusBadge status={order.status} />,
     },
     {
       key: "employee",
-      header: "Assigned",
+      header: t("orders.table.assigned"),
       cell: (order) => (
         <span className="block max-w-[10rem] truncate text-muted-foreground" title={order.assignedEmployeeName}>
           {order.assignedEmployeeName || "—"}
@@ -131,24 +125,24 @@ export function Orders() {
     },
     {
       key: "deadline",
-      header: "Deadline",
+      header: t("orders.table.deadline"),
       cell: (order) => <span className="tabular-nums text-muted-foreground">{order.deadline || "—"}</span>,
       className: "hidden 2xl:table-cell whitespace-nowrap",
     },
     {
       key: "total",
-      header: "Total",
+      header: t("common.total"),
       cell: (order) => <span className="font-medium tabular-nums">{formatMoney(order.totalPrice)}</span>,
       className: "text-right whitespace-nowrap",
     },
     {
       key: "payment",
-      header: "Payment",
+      header: t("orders.table.payment"),
       cell: (order) => <PaymentStatusBadge status={order.paymentStatus} />,
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       className: "w-[80px] text-right",
       cell: (order) => (
         <div className="flex justify-end gap-1">
@@ -169,8 +163,10 @@ export function Orders() {
   //   return <FullPageDataSpinner />;
   // }
 
+  const statusOptions = [{ value: "all", label: t("orders.filters.allStatuses") }, ...orderStatuses.map((status) => ({ value: status, label: t(`status.order.${status}`) }))];
+
   const employeeFilterOptions = [
-    { value: "all", label: "All Employees" },
+    { value: "all", label: t("orders.filters.allEmployees") },
     ... (employees ?? []).map((employee) => ({
       value: employee.id,
       label: employee.name,
@@ -180,12 +176,12 @@ export function Orders() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Orders"
-        description={`${orders.length} total orders`}
+        title={t("orders.title")}
+        description={t("orders.totalCount", { count: orders.length })}
         actions={
           <Button onClick={() => setCreateModalOpen(true)}>
             <Plus />
-            Create Order
+            {t("orders.createOrder")}
           </Button>
         }
       />
@@ -193,19 +189,19 @@ export function Orders() {
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search orders..."
+        searchPlaceholder={t("orders.searchPlaceholder")}
 
         filters={[
           {
             key: "status",
-            label: "Status",
+            label: t("common.status"),
             options: statusOptions,
             value: statusFilter,
             onChange: setStatusFilter,
           },
           {
             key: "employee",
-            label: "Employee",
+            label: t("orders.filters.employee"),
             options: employeeFilterOptions,
             value: employeeFilter,
             onChange: setEmployeeFilter,
@@ -226,9 +222,9 @@ export function Orders() {
         isLoading={ordersLoading}
         emptyState={
           ordersError ? (
-            <ErrorState title="Could not load orders" description={ordersError.message} onRetry={() => refetchOrders()} />
+            <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
           ) : searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
-            <EmptyState title="No orders match your filters" description="Try a different search term or clear the filters." />
+            <EmptyState title={t("orders.empty.noMatchesTitle")} description={t("orders.empty.noMatchesDescription")} />
           ) : (
             <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
           )

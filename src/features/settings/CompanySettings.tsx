@@ -1,4 +1,5 @@
 import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Building2, Save } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
@@ -8,6 +9,7 @@ import { Skeleton } from "../../ui/Skeleton";
 import { Separator } from "../../ui/Separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetIndustries } from "../industries/useGetIndustries";
+import { industryName } from "../industries/industryName";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspace } from "../workspaces/useUpdateWorkspace";
 import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
@@ -28,6 +30,7 @@ function FieldError({ message }: { message?: string }) {
 }
 
 function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
+  const { t } = useTranslation();
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const { mutateAsync: saveWorkspace, isPending: isSavingWorkspace } = useUpdateWorkspace();
   const {
@@ -68,8 +71,8 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Company Information</CardTitle>
-        <CardDescription>Update your company details and contact information</CardDescription>
+        <CardTitle>{t("settings.company.title")}</CardTitle>
+        <CardDescription>{t("settings.company.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <CompanyLogoControls workspace={workspace} />
@@ -79,14 +82,14 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="companyName">Company name</Label>
+              <Label htmlFor="companyName">{t("settings.company.nameLabel")}</Label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="companyName"
                   {...register("name", {
-                    required: "Company name is required",
-                    validate: (value) => value.trim().length > 0 || "Company name is required",
+                    required: t("settings.company.validation.nameRequired"),
+                    validate: (value) => value.trim().length > 0 || t("settings.company.validation.nameRequired"),
                   })}
                   disabled={locked}
                   className={errors.name ? "border-destructive pl-10" : "pl-10"}
@@ -96,20 +99,20 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="businessType">Business type</Label>
+              <Label htmlFor="businessType">{t("settings.company.businessTypeLabel")}</Label>
               <Controller
                 name="industryId"
                 control={control}
-                rules={{ required: "Business type is required" }}
+                rules={{ required: t("settings.company.validation.businessTypeRequired") }}
                 render={({ field }) => (
                   <Select value={field.value || undefined} onValueChange={field.onChange} disabled={locked || industriesLoading}>
                     <SelectTrigger id="businessType" className={errors.industryId ? "w-full border-destructive" : "w-full"}>
-                      <SelectValue placeholder={industriesLoading ? "Loading business types..." : "Business type"} />
+                      <SelectValue placeholder={industriesLoading ? t("settings.company.businessTypeLoading") : t("settings.company.businessTypeLabel")} />
                     </SelectTrigger>
                     <SelectContent>
                       {industries.map((industry) => (
                         <SelectItem key={industry.id} value={industry.id}>
-                          {industry.name}
+                          {industryName(industry)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -121,7 +124,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="inventoryMarkup">Inventory markup (%)</Label>
+              <Label htmlFor="inventoryMarkup">{t("settings.company.markupLabel")}</Label>
               <Input
                 id="inventoryMarkup"
                 type="number"
@@ -130,13 +133,13 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                 step="0.01"
                 disabled={locked}
                 {...register("inventoryMarkup", {
-                  required: "Markup percentage is required",
+                  required: t("settings.company.validation.markupRequired"),
                   validate: (value) => markupFieldError(value) ?? true,
                 })}
                 className={errors.inventoryMarkup ? "border-destructive" : ""}
               />
               <FieldError message={errors.inventoryMarkup?.message} />
-              <p className="text-xs text-muted-foreground">Stored as a whole percentage. 25 means 25%. Maximum is 1000. Used to calculate an inventory item's selling price from its purchase price.</p>
+              <p className="text-xs text-muted-foreground">{t("settings.company.markupHint")}</p>
             </div>
           </div>
 
@@ -144,11 +147,11 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
             <div className="flex justify-end">
               <Button type="submit" disabled={saving || !isDirty}>
                 <Save />
-                {saving ? "Saving..." : "Save Changes"}
+                {saving ? t("common.saving") : t("common.saveChanges")}
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Only the workspace owner can change company settings.</p>
+            <p className="text-sm text-muted-foreground">{t("settings.company.ownerOnly")}</p>
           )}
         </form>
       </CardContent>
@@ -157,6 +160,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
 }
 
 export function CompanySettings() {
+  const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace, isLoading, error, refetch, isFetched } = useGetWorkspace(workspaceId);
 
@@ -164,11 +168,11 @@ export function CompanySettings() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Company Information</CardTitle>
-          <CardDescription>Update your company details and contact information</CardDescription>
+          <CardTitle>{t("settings.company.title")}</CardTitle>
+          <CardDescription>{t("settings.company.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Choose a company before editing its details.</p>
+          <p className="text-sm text-muted-foreground">{t("settings.company.chooseCompany")}</p>
         </CardContent>
       </Card>
     );
@@ -178,8 +182,8 @@ export function CompanySettings() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Company Information</CardTitle>
-          <CardDescription>Update your company details and contact information</CardDescription>
+          <CardTitle>{t("settings.company.title")}</CardTitle>
+          <CardDescription>{t("settings.company.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-20 w-20 rounded-full" />
@@ -191,12 +195,12 @@ export function CompanySettings() {
   }
 
   if (error) {
-    const message = error instanceof Error ? error.message : "Company details could not be loaded";
+    const message = error instanceof Error ? error.message : t("settings.company.loadFailed");
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Company Information</CardTitle>
-          <CardDescription>Update your company details and contact information</CardDescription>
+          <CardTitle>{t("settings.company.title")}</CardTitle>
+          <CardDescription>{t("settings.company.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-destructive">{message}</p>
@@ -207,7 +211,7 @@ export function CompanySettings() {
               void refetch();
             }}
           >
-            Try again
+            {t("common.retry")}
           </Button>
         </CardContent>
       </Card>
@@ -218,11 +222,11 @@ export function CompanySettings() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Company Information</CardTitle>
-          <CardDescription>Update your company details and contact information</CardDescription>
+          <CardTitle>{t("settings.company.title")}</CardTitle>
+          <CardDescription>{t("settings.company.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">You can only view and edit companies you belong to.</p>
+          <p className="text-sm text-muted-foreground">{t("settings.company.notMember")}</p>
         </CardContent>
       </Card>
     );

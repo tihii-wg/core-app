@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
@@ -20,6 +21,7 @@ function FieldError({ message }: { message?: string }) {
 }
 
 function ProfileForm({ profile }: { profile: ProfileRecord }) {
+  const { t } = useTranslation();
   const { mutateAsync, isPending } = useUpdateProfile();
   const {
     register,
@@ -47,8 +49,8 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Personal Profile</CardTitle>
-        <CardDescription>Update your personal information</CardDescription>
+        <CardTitle>{t("settings.profile.title")}</CardTitle>
+        <CardDescription>{t("settings.profile.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex items-center gap-6">
@@ -57,7 +59,7 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
           </Avatar>
           <div>
             <p className="font-medium text-foreground">{displayName}</p>
-            <p className="text-sm text-muted-foreground">{profile.email || "No email on this profile"}</p>
+            <p className="text-sm text-muted-foreground">{profile.email || t("settings.profile.noEmail")}</p>
           </div>
         </div>
 
@@ -66,12 +68,12 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="profile-full-name">Full name</Label>
+              <Label htmlFor="profile-full-name">{t("settings.profile.fullNameLabel")}</Label>
               <Input
                 id="profile-full-name"
                 {...register("fullName", {
-                  required: "Full name is required",
-                  validate: (value) => value.trim().length > 0 || "Full name is required",
+                  required: t("settings.profile.validation.fullNameRequired"),
+                  validate: (value) => value.trim().length > 0 || t("settings.profile.validation.fullNameRequired"),
                 })}
                 disabled={saving}
                 className={errors.fullName ? "border-destructive" : ""}
@@ -80,17 +82,17 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-email">Email</Label>
+              <Label htmlFor="profile-email">{t("settings.profile.emailLabel")}</Label>
               <Input id="profile-email" type="email" value={profile.email ?? ""} readOnly />
-              <p className="text-xs text-muted-foreground">Email is your login address and cannot be changed here.</p>
+              <p className="text-xs text-muted-foreground">{t("settings.profile.emailHint")}</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-phone">Phone</Label>
+              <Label htmlFor="profile-phone">{t("settings.profile.phoneLabel")}</Label>
               <Input
                 id="profile-phone"
                 {...register("phone", {
-                  validate: (value) => !value.trim() || phonePattern.test(value.trim()) || "Phone must be in international format, such as +37300000000",
+                  validate: (value) => !value.trim() || phonePattern.test(value.trim()) || t("settings.profile.validation.phoneFormat"),
                 })}
                 placeholder="+37300000000"
                 disabled={saving}
@@ -103,7 +105,7 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
           <div className="flex justify-end">
             <Button type="submit" disabled={saving || !isDirty}>
               <Save />
-              {saving ? "Saving..." : "Save Changes"}
+              {saving ? t("common.saving") : t("common.saveChanges")}
             </Button>
           </div>
         </form>
@@ -113,14 +115,15 @@ function ProfileForm({ profile }: { profile: ProfileRecord }) {
 }
 
 export function ProfileSettings() {
+  const { t } = useTranslation();
   const { data: profile, isLoading, error, refetch } = useGetProfile();
 
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Personal Profile</CardTitle>
-          <CardDescription>Update your personal information</CardDescription>
+          <CardTitle>{t("settings.profile.title")}</CardTitle>
+          <CardDescription>{t("settings.profile.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-20 w-20 rounded-full" />
@@ -132,17 +135,17 @@ export function ProfileSettings() {
   }
 
   if (error) {
-    const message = error instanceof Error ? error.message : "Profile could not be loaded";
+    const message = error instanceof Error ? error.message : t("settings.profile.loadFailed");
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Personal Profile</CardTitle>
-          <CardDescription>Update your personal information</CardDescription>
+          <CardTitle>{t("settings.profile.title")}</CardTitle>
+          <CardDescription>{t("settings.profile.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-destructive">{message}</p>
           <Button type="button" variant="outline" onClick={() => void refetch()}>
-            Try again
+            {t("common.retry")}
           </Button>
         </CardContent>
       </Card>
@@ -153,11 +156,11 @@ export function ProfileSettings() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Personal Profile</CardTitle>
-          <CardDescription>Update your personal information</CardDescription>
+          <CardTitle>{t("settings.profile.title")}</CardTitle>
+          <CardDescription>{t("settings.profile.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No profile record exists for this account. A profile is created when the account is registered.</p>
+          <p className="text-sm text-muted-foreground">{t("settings.profile.missing")}</p>
         </CardContent>
       </Card>
     );

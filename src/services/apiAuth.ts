@@ -1,4 +1,5 @@
 import supabase from "./supabase";
+import i18n, { currentLanguage } from "../i18n";
 import { resolveIndustryId } from "./apiIndustries";
 import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage } from "./apiWorkspaces";
 
@@ -46,7 +47,7 @@ export async function signUp(data: signUpProps) {
   }
 
   const user = authData.user;
-  if (!user) throw new Error("User not found");
+  if (!user) throw new Error(i18n.t("auth.errors.userNotFound"));
 
   const industryId = await resolveIndustryId(data.industryId);
 
@@ -73,7 +74,7 @@ export async function signUp(data: signUpProps) {
         name: companyName,
         owner_id: user.id,
         industry_id: industryId,
-        language: normalizeWorkspaceLanguage("en"),
+        language: normalizeWorkspaceLanguage(currentLanguage()),
         date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
       },
     ])
@@ -134,12 +135,12 @@ export async function login({ email, password }: loginProps) {
     password,
   });
 
-  if (error || !data.user) throw new Error("Invalid login or password");
+  if (error || !data.user) throw new Error(i18n.t("auth.errors.invalidCredentials"));
 
   const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (assuranceError) {
     await supabase.auth.signOut();
-    throw new Error("Unable to check two-factor authentication. Please try again.");
+    throw new Error(i18n.t("auth.mfa.errors.checkFailed"));
   }
 
   const mfaRequired = assurance?.currentLevel === "aal1" && assurance?.nextLevel === "aal2";
@@ -149,7 +150,7 @@ export async function login({ email, password }: loginProps) {
   const factorId = factors?.totp?.[0]?.id ?? null;
   if (factorsError || !factorId) {
     await supabase.auth.signOut();
-    throw new Error("Unable to start two-factor verification. Please try again.");
+    throw new Error(i18n.t("auth.mfa.errors.startVerificationFailed"));
   }
 
   return { user: data.user, mfaRequired: true, factorId };

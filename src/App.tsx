@@ -26,10 +26,13 @@ import Dashboardredirect from "./ui/DashboardRedirect";
 import { AuthSession } from "./features/auth/AuthSession";
 import { isInvalidSessionError } from "./services/apiAuth";
 import supabase from "./services/supabase";
+import { useUrlLanguage } from "./i18n/useUrlLanguage";
 
 export const DEFAULT_LOCALE = "en";
 
 export function AppRoutes() {
+  useUrlLanguage();
+
   return (
     <Routes>
       {/* Public routes */}

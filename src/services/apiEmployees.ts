@@ -1,4 +1,5 @@
 import type { AddNewEmployeesFormData, EmployeeRole } from "../lib/types";
+import i18n from "../i18n";
 import supabase from "./supabase";
 
 async function requireActiveWorkspaceMember(workspaceId: string, userId: string) {
@@ -11,11 +12,11 @@ async function requireActiveWorkspaceMember(workspaceId: string, userId: string)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Selected user is not an active member of this workspace");
+  if (!data) throw new Error(i18n.t("employees.errors.notActiveMember"));
 }
 
 export async function createEmployee({ role, email, name, phone, profile_id, status, workspace_id }: AddNewEmployeesFormData) {
-  if (!workspace_id) throw new Error("No active workspace");
+  if (!workspace_id) throw new Error(i18n.t("employees.errors.noActiveWorkspace"));
 
   if (profile_id) await requireActiveWorkspaceMember(workspace_id, profile_id);
 
@@ -44,7 +45,7 @@ function searchTerm(search: string) {
 }
 
 export async function getEmployees(search: string, roleFilter: EmployeeRole | null | undefined, workspaceId: string | undefined) {
-  if (!workspaceId) throw new Error("No active workspace");
+  if (!workspaceId) throw new Error(i18n.t("employees.errors.noActiveWorkspace"));
 
   let query = supabase.from("employees").select("*").eq("workspace_id", workspaceId);
 

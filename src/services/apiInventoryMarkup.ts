@@ -1,3 +1,4 @@
+import i18n from "../i18n";
 import supabase from "./supabase";
 
 const maxInventoryMarkup = 1000;
@@ -15,15 +16,15 @@ export async function updateInventoryMarkup(workspaceId: string, markupPercent: 
   const { data, error } = await supabase.from("workspaces").update({ inventory_markup: markupPercent }).eq("id", workspaceId).select("inventory_markup").maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Only the workspace owner can change the markup percentage.");
+  if (!data) throw new Error(i18n.t("inventory.markup.ownerOnly"));
 
   return normalizeInventoryMarkup(data.inventory_markup);
 }
 
 export function assertInventoryMarkup(markupPercent: number) {
-  if (!Number.isFinite(markupPercent)) throw new Error("Markup percentage must be a number");
-  if (markupPercent < 0) throw new Error("Markup percentage cannot be negative");
-  if (markupPercent > maxInventoryMarkup) throw new Error("Markup percentage cannot be greater than 1000");
+  if (!Number.isFinite(markupPercent)) throw new Error(i18n.t("inventory.markup.notNumber"));
+  if (markupPercent < 0) throw new Error(i18n.t("inventory.markup.negative"));
+  if (markupPercent > maxInventoryMarkup) throw new Error(i18n.t("inventory.markup.tooHigh", { max: maxInventoryMarkup }));
 }
 
 function normalizeInventoryMarkup(value: unknown) {

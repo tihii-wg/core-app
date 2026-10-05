@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Plus, AlertCircle, FileText, FileX2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
@@ -10,22 +11,14 @@ import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { Button } from "../../ui/Button";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetOrders } from "../orders/useGetOrders";
-import { invoicesUnavailableMessage } from "../../services/apiInvoices";
 import { useGetInvoices } from "./useGetInvoices";
 import { useUpdateInvoiceStatus } from "./useUpdateInvoiceStatus";
 import { CreateInvoiceDialog } from "./CreateInvoiceDialog";
 import { InvoiceActionsMenu } from "./InvoiceActionsMenu";
 import { InvoiceDetailPanel } from "./InvoiceDetailPanel";
 
-const statusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "draft", label: "Draft" },
-  { value: "sent", label: "Sent" },
-  { value: "paid", label: "Paid" },
-  { value: "overdue", label: "Overdue" },
-];
-
 export function Invoices() {
+  const { t } = useTranslation();
   const { invoices, isLoading, error, refetch, isUnavailable } = useGetInvoices();
   const { orders } = useGetOrders("", { enabled: !isUnavailable });
   const updateStatus = useUpdateInvoiceStatus();
@@ -61,13 +54,13 @@ export function Invoices() {
   const columns: Column<Invoice>[] = [
     {
       key: "invoiceNumber",
-      header: "Invoice #",
+      header: t("invoices.columns.number"),
       cell: (invoice) => <span className="font-medium text-primary tabular-nums">{invoice.invoiceNumber}</span>,
       className: "whitespace-nowrap",
     },
     {
       key: "client",
-      header: "Client",
+      header: t("invoices.columns.client"),
       cell: (invoice) => (
         <span className="block max-w-56 truncate" title={invoice.clientName}>
           {invoice.clientName || "—"}
@@ -76,36 +69,36 @@ export function Invoices() {
     },
     {
       key: "order",
-      header: "Order",
+      header: t("invoices.columns.order"),
       cell: (invoice) => <span className="text-sm text-muted-foreground tabular-nums">{invoice.orderNumber || "—"}</span>,
       className: "hidden xl:table-cell whitespace-nowrap",
     },
     {
       key: "created",
-      header: "Created",
+      header: t("invoices.columns.created"),
       cell: (invoice) => <span className="text-muted-foreground tabular-nums">{invoice.createdAt}</span>,
       className: "hidden lg:table-cell whitespace-nowrap",
     },
     {
       key: "amount",
-      header: "Amount",
+      header: t("invoices.columns.amount"),
       cell: (invoice) => <span className="font-medium text-foreground tabular-nums">{formatMoney(invoice.amount)}</span>,
       className: "text-right whitespace-nowrap",
     },
     {
       key: "status",
-      header: "Status",
+      header: t("common.status"),
       cell: (invoice) => <InvoiceStatusBadge status={invoice.status} />,
     },
     {
       key: "dueDate",
-      header: "Due Date",
+      header: t("invoices.columns.dueDate"),
       cell: (invoice) => <span className={invoice.status === "overdue" ? "text-destructive tabular-nums" : "text-muted-foreground tabular-nums"}>{invoice.dueDate || "—"}</span>,
       className: "hidden xl:table-cell whitespace-nowrap",
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       className: "w-[80px] text-right",
       cell: (invoice) => (
         <div className="flex justify-end">
@@ -115,17 +108,25 @@ export function Invoices() {
     },
   ];
 
+  const statusOptions = [
+    { value: "all", label: t("invoices.allStatuses") },
+    { value: "draft", label: t("status.invoice.draft") },
+    { value: "sent", label: t("status.invoice.sent") },
+    { value: "paid", label: t("status.invoice.paid") },
+    { value: "overdue", label: t("status.invoice.overdue") },
+  ];
+
   const isFiltered = searchQuery !== "" || statusFilter !== "all";
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Invoices"
-        description={isUnavailable ? "Not set up yet" : `${invoices.length} total invoices`}
+        title={t("invoices.title")}
+        description={isUnavailable ? t("invoices.notSetUp") : t("invoices.totalCount", { count: invoices.length })}
         actions={
           <Button onClick={() => setCreateModalOpen(true)} disabled={isUnavailable || isLoading}>
             <Plus />
-            Create Invoice
+            {t("invoices.createInvoice")}
           </Button>
         }
       />
@@ -139,17 +140,17 @@ export function Invoices() {
               </span>
               <div>
                 <p className="text-sm font-medium text-destructive">
-                  {overdueCount} Overdue Invoice{overdueCount > 1 ? "s" : ""}
+                  {t("invoices.summary.overdueCount", { count: overdueCount })}
                 </p>
-                <p className="text-[13px] text-destructive/80">Requires immediate attention</p>
+                <p className="text-[13px] text-destructive/80">{t("invoices.summary.requiresAttention")}</p>
               </div>
             </div>
           )}
           <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-xs">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-semibold text-primary">{currency}</span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground tabular-nums">{formatMoney(unpaidTotal)} Unpaid</p>
-              <p className="text-[13px] text-muted-foreground">Outstanding balance</p>
+              <p className="truncate text-sm font-medium text-foreground tabular-nums">{t("invoices.summary.unpaidAmount", { amount: formatMoney(unpaidTotal) })}</p>
+              <p className="text-[13px] text-muted-foreground">{t("invoices.summary.outstandingBalance")}</p>
             </div>
           </div>
         </div>
@@ -158,11 +159,11 @@ export function Invoices() {
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search invoices..."
+        searchPlaceholder={t("invoices.searchPlaceholder")}
         filters={[
           {
             key: "status",
-            label: "Status",
+            label: t("common.status"),
             options: statusOptions,
             value: statusFilter,
             onChange: setStatusFilter,
@@ -182,13 +183,13 @@ export function Invoices() {
         isLoading={isLoading}
         emptyState={
           isUnavailable ? (
-            <EmptyState icon={FileX2} title="Invoices are not set up yet" description={invoicesUnavailableMessage} />
+            <EmptyState icon={FileX2} title={t("invoices.empty.unavailableTitle")} description={t("invoices.errors.unavailable")} />
           ) : error ? (
-            <ErrorState title="Could not load invoices" description={error.message} onRetry={() => refetch()} />
+            <ErrorState title={t("invoices.empty.loadErrorTitle")} description={error.message} onRetry={() => refetch()} />
           ) : isFiltered ? (
-            <EmptyState title="No invoices match your filters" description="Try a different search term or clear the filters." />
+            <EmptyState title={t("invoices.empty.filteredTitle")} description={t("invoices.empty.filteredDescription")} />
           ) : (
-            <EmptyState icon={FileText} title="No invoices yet" description="Create an invoice from an order to bill its services." action={{ label: "Create Invoice", onClick: () => setCreateModalOpen(true) }} />
+            <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={{ label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) }} />
           )
         }
       />

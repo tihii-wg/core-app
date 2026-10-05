@@ -1,3 +1,4 @@
+import i18n from "../../i18n";
 import type { Employee, InventoryItem, Order, OrderStatus } from "../../lib/types";
 import { ordersIn, percentChange, periodTotals, revenueSeries, serviceDistribution, type ReportPeriod, type ReportRange } from "./reportStats";
 
@@ -19,40 +20,38 @@ export type ReportKpi = { label: string; value: number | null; format: ReportFor
 export type QuickReportModel = { kpis: ReportKpi[]; sections: ReportSection[] };
 
 export type QuickReportDefinition = {
-  title: string;
-  description: string;
   usesPeriod: boolean;
   needs: { orders: boolean; clients: boolean; employees: boolean; inventory: boolean };
 };
 
 export const quickReports: Record<QuickReportType, QuickReportDefinition> = {
   sales: {
-    title: "Sales Report",
-    description: "Detailed sales analytics",
     usesPeriod: true,
     needs: { orders: true, clients: true, employees: false, inventory: false },
   },
   inventory: {
-    title: "Inventory Report",
-    description: "Stock levels and usage",
     usesPeriod: false,
     needs: { orders: false, clients: false, employees: false, inventory: true },
   },
   employees: {
-    title: "Employee Report",
-    description: "Performance metrics",
     usesPeriod: true,
     needs: { orders: true, clients: false, employees: true, inventory: false },
   },
   financial: {
-    title: "Financial Report",
-    description: "Revenue and expenses",
     usesPeriod: true,
     needs: { orders: true, clients: false, employees: false, inventory: true },
   },
 };
 
 export const quickReportTypes = Object.keys(quickReports) as QuickReportType[];
+
+export function quickReportTitle(type: QuickReportType) {
+  return i18n.t(`reports.quick.${type}.title`);
+}
+
+export function quickReportDescription(type: QuickReportType) {
+  return i18n.t(`reports.quick.${type}.description`);
+}
 
 export function isQuickReportType(value: string | undefined): value is QuickReportType {
   return Boolean(value && value in quickReports);
@@ -64,16 +63,26 @@ export function toReportRange(value: string | null): ReportRange {
   return reportRanges.includes(value as ReportRange) ? (value as ReportRange) : "last30";
 }
 
-const statusLabels: Record<OrderStatus, string> = {
-  new: "New",
-  "in-progress": "In Progress",
-  "waiting-parts": "Waiting Parts",
-  completed: "Completed",
-  paid: "Paid",
-  cancelled: "Cancelled",
-};
+const orderStatuses: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
 
-const stockStatusLabels = { in_stock: "In Stock", low_stock: "Low Stock", out_of_stock: "Out of Stock" } as const;
+function statusLabel(status: OrderStatus) {
+  return i18n.t(`status.order.${status}`);
+}
+
+function stockStatusLabel(status: InventoryItem["stockStatus"]) {
+  return i18n.t(`status.inventory.${status}`);
+}
+
+const employeeRoles = new Set(["admin", "manager", "technician", "receptionist"] as const);
+const employeeStatuses = new Set(["active", "inactive"] as const);
+
+function employeeRoleLabel(role: string) {
+  return employeeRoles.has(role as Employee["role"]) ? i18n.t(`reports.values.employeeRoles.${role as Employee["role"]}`) : capitalize(role);
+}
+
+function employeeStatusLabel(status: string) {
+  return employeeStatuses.has(status as Employee["status"]) ? i18n.t(`reports.values.employeeStatuses.${status as Employee["status"]}`) : capitalize(status);
+}
 
 const closedStatuses = new Set<OrderStatus>(["completed", "paid", "cancelled"]);
 const completedStatuses = new Set<OrderStatus>(["completed", "paid"]);
@@ -88,8 +97,12 @@ function share(part: number, whole: number) {
 
 function changeHint(current: number, previous: number) {
   const change = percentChange(current, previous);
-  if (change === null) return "No data for the previous period";
-  return `${change >= 0 ? "+" : ""}${change.toFixed(1)}% vs previous period`;
+  if (change === null) return i18n.t("reports.hints.noPreviousData");
+  return i18n.t("reports.hints.changeVsPrevious", { change: `${change >= 0 ? "+" : ""}${change.toFixed(1)}%` });
+}
+
+function totalLabel() {
+  return i18n.t("common.total");
 }
 
 function capitalize(value: string) {
@@ -114,21 +127,21 @@ function stockValue(item: InventoryItem, price: number | null) {
 
 export function ordersByStatusSection(orders: Order[], period: ReportPeriod): ReportSection {
   const periodOrders = ordersIn(orders, period.start, period.end);
-  const rows = (Object.keys(statusLabels) as OrderStatus[])
+  const rows = orderStatuses
     .map((status) => {
       const matching = periodOrders.filter((order) => order.status === status);
-      return { status: statusLabels[status], orders: matching.length, value: sum(matching, (order) => order.totalPrice), share: share(matching.length, periodOrders.length) };
+      return { status: statusLabel(status), orders: matching.length, value: sum(matching, (order) => order.totalPrice), share: share(matching.length, periodOrders.length) };
     })
     .filter((row) => row.orders > 0);
 
   return {
     kind: "table",
-    title: "Orders by status",
+    title: i18n.t("reports.sections.ordersByStatus.title"),
     columns: [
-      { key: "status", header: "Status" },
-      { key: "orders", header: "Orders", format: "number" },
-      { key: "value", header: "Value", format: "money" },
-      { key: "share", header: "Share of orders", format: "share" },
+      { key: "status", header: i18n.t("reports.columns.status") },
+      { key: "orders", header: i18n.t("reports.columns.orders"), format: "number" },
+      { key: "value", header: i18n.t("reports.columns.value"), format: "money" },
+      { key: "share", header: i18n.t("reports.columns.shareOfOrders"), format: "share" },
     ],
     rows,
   };
@@ -140,13 +153,13 @@ export function servicesSoldSection(orders: Order[], period: ReportPeriod): Repo
 
   return {
     kind: "table",
-    title: "Services sold",
-    description: "Service lines on orders created in this period, excluding cancelled orders.",
+    title: i18n.t("reports.sections.servicesSold.title"),
+    description: i18n.t("reports.sections.servicesSold.description"),
     columns: [
-      { key: "service", header: "Service" },
-      { key: "count", header: "Times performed", format: "number" },
-      { key: "revenue", header: "Value", format: "money" },
-      { key: "share", header: "Share", format: "share" },
+      { key: "service", header: i18n.t("reports.columns.service") },
+      { key: "count", header: i18n.t("reports.columns.timesPerformed"), format: "number" },
+      { key: "revenue", header: i18n.t("reports.columns.value"), format: "money" },
+      { key: "share", header: i18n.t("reports.columns.share"), format: "share" },
     ],
     rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.count, servicesTotal) })),
   };
@@ -167,14 +180,14 @@ export function topClientsSection(orders: Order[], period: ReportPeriod, limit =
 
   return {
     kind: "table",
-    title: limited ? "Top clients" : "Clients by order value",
-    description: limited ? `Up to ${limit} clients by order value in this period.` : "Clients with orders in this period, excluding cancelled orders.",
+    title: limited ? i18n.t("reports.sections.topClients.title") : i18n.t("reports.sections.clientsByValue.title"),
+    description: limited ? i18n.t("reports.sections.topClients.description", { count: limit }) : i18n.t("reports.sections.clientsByValue.description"),
     columns: [
-      { key: "client", header: "Client" },
-      { key: "orders", header: "Orders", format: "number" },
-      { key: "value", header: "Order value", format: "money" },
-      { key: "paid", header: "Paid", format: "money" },
-      { key: "outstanding", header: "Outstanding", format: "money" },
+      { key: "client", header: i18n.t("reports.columns.client") },
+      { key: "orders", header: i18n.t("reports.columns.orders"), format: "number" },
+      { key: "value", header: i18n.t("reports.columns.orderValue"), format: "money" },
+      { key: "paid", header: i18n.t("reports.columns.paid"), format: "money" },
+      { key: "outstanding", header: i18n.t("reports.columns.outstanding"), format: "money" },
     ],
     rows: [...clients.values()].sort((a, b) => b.value - a.value || a.client.localeCompare(b.client)).slice(0, limit),
   };
@@ -185,17 +198,17 @@ export function ordersListSection(orders: Order[], period: ReportPeriod): Report
 
   return {
     kind: "table",
-    title: "Orders",
+    title: i18n.t("reports.sections.orders.title"),
     columns: [
-      { key: "number", header: "Order" },
-      { key: "date", header: "Date", format: "date" },
-      { key: "client", header: "Client" },
-      { key: "status", header: "Status" },
-      { key: "payment", header: "Payment" },
-      { key: "total", header: "Total", format: "money" },
+      { key: "number", header: i18n.t("reports.columns.order") },
+      { key: "date", header: i18n.t("reports.columns.date"), format: "date" },
+      { key: "client", header: i18n.t("reports.columns.client") },
+      { key: "status", header: i18n.t("reports.columns.status") },
+      { key: "payment", header: i18n.t("reports.columns.payment") },
+      { key: "total", header: i18n.t("reports.columns.total"), format: "money" },
     ],
-    rows: periodOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabels[order.status], payment: order.isPaid ? "Paid" : "Unpaid", total: order.totalPrice })),
-    totals: periodOrders.length ? { number: "Total", total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
+    rows: periodOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabel(order.status), payment: order.isPaid ? i18n.t("status.payment.paid") : i18n.t("status.payment.unpaid"), total: order.totalPrice })),
+    totals: periodOrders.length ? { number: totalLabel(), total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
   };
 }
 
@@ -206,12 +219,12 @@ export function summaryKpis(orders: Order[], clientCreatedDates: string[], perio
   const outstandingOrders = periodOrders.filter(isOutstanding);
 
   return [
-    { label: "Revenue collected", value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
-    { label: "Orders", value: current.orders, format: "number", hint: changeHint(current.orders, previous.orders) },
-    { label: "Total order value", value: sum(periodOrders.filter(isBillable), (order) => order.totalPrice), format: "money", hint: "Excludes cancelled orders" },
-    { label: "Outstanding", value: sum(outstandingOrders, (order) => order.totalPrice), format: "money", hint: `${outstandingOrders.length} unpaid orders` },
-    { label: "Average order value", value: current.avgOrderValue, format: "money", hint: changeHint(current.avgOrderValue, previous.avgOrderValue) },
-    { label: "New clients", value: current.newClients, format: "number", hint: changeHint(current.newClients, previous.newClients) },
+    { label: i18n.t("reports.kpis.revenueCollected"), value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
+    { label: i18n.t("reports.kpis.orders"), value: current.orders, format: "number", hint: changeHint(current.orders, previous.orders) },
+    { label: i18n.t("reports.kpis.totalOrderValue"), value: sum(periodOrders.filter(isBillable), (order) => order.totalPrice), format: "money", hint: i18n.t("reports.hints.excludesCancelled") },
+    { label: i18n.t("reports.kpis.outstanding"), value: sum(outstandingOrders, (order) => order.totalPrice), format: "money", hint: i18n.t("reports.hints.unpaidOrders", { count: outstandingOrders.length }) },
+    { label: i18n.t("reports.kpis.averageOrderValue"), value: current.avgOrderValue, format: "money", hint: changeHint(current.avgOrderValue, previous.avgOrderValue) },
+    { label: i18n.t("reports.kpis.newClients"), value: current.newClients, format: "number", hint: changeHint(current.newClients, previous.newClients) },
   ];
 }
 
@@ -224,25 +237,25 @@ export function salesReport(orders: Order[], clientCreatedDates: string[], perio
 
   return {
     kpis: [
-      { label: "Orders", value: current.orders, format: "number", hint: changeHint(current.orders, previous.orders) },
-      { label: "Total order value", value: billed, format: "money", hint: "Excludes cancelled orders" },
-      { label: "Revenue collected", value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
-      { label: "Average order value", value: current.avgOrderValue, format: "money" },
-      { label: "New clients", value: current.newClients, format: "number", hint: changeHint(current.newClients, previous.newClients) },
-      { label: "Collection rate", value: share(current.revenue, billed), format: "percent", hint: "Revenue collected / order value" },
+      { label: i18n.t("reports.kpis.orders"), value: current.orders, format: "number", hint: changeHint(current.orders, previous.orders) },
+      { label: i18n.t("reports.kpis.totalOrderValue"), value: billed, format: "money", hint: i18n.t("reports.hints.excludesCancelled") },
+      { label: i18n.t("reports.kpis.revenueCollected"), value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
+      { label: i18n.t("reports.kpis.averageOrderValue"), value: current.avgOrderValue, format: "money" },
+      { label: i18n.t("reports.kpis.newClients"), value: current.newClients, format: "number", hint: changeHint(current.newClients, previous.newClients) },
+      { label: i18n.t("reports.kpis.collectionRate"), value: share(current.revenue, billed), format: "percent", hint: i18n.t("reports.hints.collectionRate") },
     ],
     sections: [
       {
         kind: "table",
-        title: "Sales by period",
+        title: i18n.t("reports.sections.salesByPeriod.title"),
         columns: [
-          { key: "period", header: "Period" },
-          { key: "orders", header: "Orders", format: "number" },
-          { key: "billed", header: "Order value", format: "money" },
-          { key: "collected", header: "Collected", format: "money" },
+          { key: "period", header: i18n.t("reports.columns.period") },
+          { key: "orders", header: i18n.t("reports.columns.orders"), format: "number" },
+          { key: "billed", header: i18n.t("reports.columns.orderValue"), format: "money" },
+          { key: "collected", header: i18n.t("reports.columns.collected"), format: "money" },
         ],
         rows: series,
-        totals: series.length ? { period: "Total", orders: current.orders, billed, collected: current.revenue } : undefined,
+        totals: series.length ? { period: totalLabel(), orders: current.orders, billed, collected: current.revenue } : undefined,
       },
       ordersByStatusSection(orders, period),
       servicesSoldSection(orders, period),
@@ -263,7 +276,7 @@ export function inventoryReport(items: InventoryItem[]): QuickReportModel {
 
   const categories = new Map<string, { category: string; items: number; quantity: number; value: number }>();
   for (const item of active) {
-    const name = item.category.trim() || "Uncategorized";
+    const name = item.category.trim() || i18n.t("reports.values.uncategorized");
     const row = categories.get(name) ?? { category: name, items: 0, quantity: 0, value: 0 };
     row.items += 1;
     row.quantity += item.quantity;
@@ -274,51 +287,51 @@ export function inventoryReport(items: InventoryItem[]): QuickReportModel {
 
   return {
     kpis: [
-      { label: "Active items", value: active.length, format: "number", hint: inactiveCount ? `${inactiveCount} inactive not included` : undefined },
-      { label: "Total quantity", value: sum(active, (item) => item.quantity), format: "number", hint: "Across all units" },
-      { label: "Stock value at cost", value: costValue, format: "money", hint: unpriced ? `${unpriced} items without a purchase price` : undefined },
-      { label: "Stock value at selling price", value: sum(active, (item) => stockValue(item, item.sellingPrice)), format: "money" },
-      { label: "Low stock items", value: active.filter((item) => item.stockStatus === "low_stock").length, format: "number" },
-      { label: "Out of stock items", value: active.filter((item) => item.stockStatus === "out_of_stock").length, format: "number" },
+      { label: i18n.t("reports.kpis.activeItems"), value: active.length, format: "number", hint: inactiveCount ? i18n.t("reports.hints.inactiveNotIncluded", { count: inactiveCount }) : undefined },
+      { label: i18n.t("reports.kpis.totalQuantity"), value: sum(active, (item) => item.quantity), format: "number", hint: i18n.t("reports.hints.acrossAllUnits") },
+      { label: i18n.t("reports.kpis.stockValueAtCost"), value: costValue, format: "money", hint: unpriced ? i18n.t("reports.hints.itemsWithoutPurchasePrice", { count: unpriced }) : undefined },
+      { label: i18n.t("reports.kpis.stockValueAtSellingPrice"), value: sum(active, (item) => stockValue(item, item.sellingPrice)), format: "money" },
+      { label: i18n.t("reports.kpis.lowStockItems"), value: active.filter((item) => item.stockStatus === "low_stock").length, format: "number" },
+      { label: i18n.t("reports.kpis.outOfStockItems"), value: active.filter((item) => item.stockStatus === "out_of_stock").length, format: "number" },
     ],
     sections: [
       {
         kind: "table",
-        title: "Items needing attention",
-        description: "Active items that are low on stock or out of stock.",
+        title: i18n.t("reports.sections.itemsNeedingAttention.title"),
+        description: i18n.t("reports.sections.itemsNeedingAttention.description"),
         columns: [
-          { key: "name", header: "Item", secondary: [{ key: "sku", header: "SKU" }] },
-          { key: "quantity", header: "In stock", format: "number" },
-          { key: "minimum", header: "Minimum", format: "number" },
-          { key: "unit", header: "Unit" },
-          { key: "status", header: "Status" },
-          { key: "supplier", header: "Supplier" },
+          { key: "name", header: i18n.t("reports.columns.item"), secondary: [{ key: "sku", header: i18n.t("reports.columns.sku") }] },
+          { key: "quantity", header: i18n.t("reports.columns.inStock"), format: "number" },
+          { key: "minimum", header: i18n.t("reports.columns.minimum"), format: "number" },
+          { key: "unit", header: i18n.t("reports.columns.unit") },
+          { key: "status", header: i18n.t("reports.columns.status") },
+          { key: "supplier", header: i18n.t("reports.columns.supplier") },
         ],
-        rows: attention.map((item) => ({ name: item.name, sku: item.sku, quantity: item.quantity, minimum: item.minQuantity, unit: item.unit, status: stockStatusLabels[item.stockStatus], supplier: item.supplier })),
+        rows: attention.map((item) => ({ name: item.name, sku: item.sku, quantity: item.quantity, minimum: item.minQuantity, unit: item.unit, status: stockStatusLabel(item.stockStatus), supplier: item.supplier })),
       },
       {
         kind: "table",
-        title: "Stock by category",
+        title: i18n.t("reports.sections.stockByCategory.title"),
         columns: [
-          { key: "category", header: "Category" },
-          { key: "items", header: "Items", format: "number" },
-          { key: "quantity", header: "Quantity", format: "number" },
-          { key: "value", header: "Value at cost", format: "money" },
+          { key: "category", header: i18n.t("reports.columns.category") },
+          { key: "items", header: i18n.t("reports.columns.items"), format: "number" },
+          { key: "quantity", header: i18n.t("reports.columns.quantity"), format: "number" },
+          { key: "value", header: i18n.t("reports.columns.valueAtCost"), format: "money" },
         ],
         rows: categoryRows,
-        totals: categoryRows.length ? { category: "Total", items: active.length, quantity: sum(active, (item) => item.quantity), value: costValue } : undefined,
+        totals: categoryRows.length ? { category: totalLabel(), items: active.length, quantity: sum(active, (item) => item.quantity), value: costValue } : undefined,
       },
       {
         kind: "table",
-        title: "Stock list",
+        title: i18n.t("reports.sections.stockList.title"),
         columns: [
-          { key: "name", header: "Item", secondary: [{ key: "sku", header: "SKU" }] },
-          { key: "category", header: "Category", secondary: [{ key: "location", header: "Location" }] },
-          { key: "quantity", header: "In stock", format: "number" },
-          { key: "unit", header: "Unit" },
-          { key: "cost", header: "Unit cost", format: "money" },
-          { key: "value", header: "Value at cost", format: "money" },
-          { key: "status", header: "Status" },
+          { key: "name", header: i18n.t("reports.columns.item"), secondary: [{ key: "sku", header: i18n.t("reports.columns.sku") }] },
+          { key: "category", header: i18n.t("reports.columns.category"), secondary: [{ key: "location", header: i18n.t("reports.columns.location") }] },
+          { key: "quantity", header: i18n.t("reports.columns.inStock"), format: "number" },
+          { key: "unit", header: i18n.t("reports.columns.unit") },
+          { key: "cost", header: i18n.t("reports.columns.unitCost"), format: "money" },
+          { key: "value", header: i18n.t("reports.columns.valueAtCost"), format: "money" },
+          { key: "status", header: i18n.t("reports.columns.status") },
         ],
         rows: active.map((item) => ({
           name: item.name,
@@ -329,11 +342,11 @@ export function inventoryReport(items: InventoryItem[]): QuickReportModel {
           unit: item.unit,
           cost: item.purchasePrice,
           value: item.purchasePrice == null ? null : stockValue(item, item.purchasePrice),
-          status: stockStatusLabels[item.stockStatus],
+          status: stockStatusLabel(item.stockStatus),
         })),
-        totals: active.length ? { name: "Total", value: costValue } : undefined,
+        totals: active.length ? { name: totalLabel(), value: costValue } : undefined,
       },
-      { kind: "unavailable", title: "Stock movements and parts usage", description: "Stock movements and parts usage are not recorded yet, so usage history cannot be reported." },
+      { kind: "unavailable", title: i18n.t("reports.sections.stockMovements.title"), description: i18n.t("reports.sections.stockMovements.description") },
     ],
   };
 }
@@ -350,8 +363,8 @@ export function employeeReport(orders: Order[], employees: Employee[], period: R
       const completed = assigned.filter((order) => completedStatuses.has(order.status));
       return {
         name: employee.name,
-        role: capitalize(employee.role),
-        status: capitalize(employee.status),
+        role: employeeRoleLabel(employee.role),
+        status: employeeStatusLabel(employee.status),
         assigned: assigned.length,
         completed: completed.length,
         open: assigned.filter((order) => !closedStatuses.has(order.status)).length,
@@ -371,51 +384,51 @@ export function employeeReport(orders: Order[], employees: Employee[], period: R
 
   return {
     kpis: [
-      { label: "Active employees", value: employees.filter((employee) => employee.status === "active").length, format: "number" },
-      { label: "Orders assigned", value: assignedOrders.length, format: "number" },
-      { label: "Orders completed", value: completedCount, format: "number" },
-      { label: "Completion rate", value: share(completedCount, assignedOrders.filter(isBillable).length), format: "percent", hint: "Completed / assigned, excluding cancelled" },
-      { label: "Unassigned orders", value: periodOrders.filter((order) => isBillable(order) && !employeeNames.has(order.assignedEmployeeId)).length, format: "number" },
-      { label: "Overdue open orders", value: overdue.length, format: "number" },
+      { label: i18n.t("reports.kpis.activeEmployees"), value: employees.filter((employee) => employee.status === "active").length, format: "number" },
+      { label: i18n.t("reports.kpis.ordersAssigned"), value: assignedOrders.length, format: "number" },
+      { label: i18n.t("reports.kpis.ordersCompleted"), value: completedCount, format: "number" },
+      { label: i18n.t("reports.kpis.completionRate"), value: share(completedCount, assignedOrders.filter(isBillable).length), format: "percent", hint: i18n.t("reports.hints.completionRate") },
+      { label: i18n.t("reports.kpis.unassignedOrders"), value: periodOrders.filter((order) => isBillable(order) && !employeeNames.has(order.assignedEmployeeId)).length, format: "number" },
+      { label: i18n.t("reports.kpis.overdueOpenOrders"), value: overdue.length, format: "number" },
     ],
     sections: [
       {
         kind: "table",
-        title: "Performance by employee",
-        description: "Orders created in this period, grouped by the assigned employee.",
+        title: i18n.t("reports.sections.employeePerformance.title"),
+        description: i18n.t("reports.sections.employeePerformance.description"),
         columns: [
           {
             key: "name",
-            header: "Employee",
+            header: i18n.t("reports.columns.employee"),
             secondary: [
-              { key: "role", header: "Role" },
-              { key: "status", header: "Status" },
+              { key: "role", header: i18n.t("reports.columns.role") },
+              { key: "status", header: i18n.t("reports.columns.status") },
             ],
           },
-          { key: "assigned", header: "Assigned", format: "number" },
-          { key: "completed", header: "Completed", format: "number" },
-          { key: "open", header: "Open", format: "number" },
-          { key: "overdue", header: "Overdue", format: "number" },
-          { key: "rate", header: "Completion", format: "percent" },
-          { key: "revenue", header: "Revenue", format: "money" },
+          { key: "assigned", header: i18n.t("reports.columns.assigned"), format: "number" },
+          { key: "completed", header: i18n.t("reports.columns.completed"), format: "number" },
+          { key: "open", header: i18n.t("reports.columns.open"), format: "number" },
+          { key: "overdue", header: i18n.t("reports.columns.overdue"), format: "number" },
+          { key: "rate", header: i18n.t("reports.columns.completion"), format: "percent" },
+          { key: "revenue", header: i18n.t("reports.columns.revenue"), format: "money" },
         ],
         rows,
         totals: rows.length
-          ? { name: "Total", assigned: sum(rows, (row) => row.assigned), completed: sum(rows, (row) => row.completed), open: sum(rows, (row) => row.open), overdue: sum(rows, (row) => row.overdue), revenue: sum(rows, (row) => row.revenue) }
+          ? { name: totalLabel(), assigned: sum(rows, (row) => row.assigned), completed: sum(rows, (row) => row.completed), open: sum(rows, (row) => row.open), overdue: sum(rows, (row) => row.overdue), revenue: sum(rows, (row) => row.revenue) }
           : undefined,
       },
       {
         kind: "table",
-        title: "Overdue orders",
-        description: "Open orders past their deadline.",
+        title: i18n.t("reports.sections.overdueOrders.title"),
+        description: i18n.t("reports.sections.overdueOrders.description"),
         columns: [
-          { key: "number", header: "Order" },
-          { key: "employee", header: "Employee" },
-          { key: "client", header: "Client" },
-          { key: "deadline", header: "Deadline", format: "date" },
-          { key: "status", header: "Status" },
+          { key: "number", header: i18n.t("reports.columns.order") },
+          { key: "employee", header: i18n.t("reports.columns.employee") },
+          { key: "client", header: i18n.t("reports.columns.client") },
+          { key: "deadline", header: i18n.t("reports.columns.deadline"), format: "date" },
+          { key: "status", header: i18n.t("reports.columns.status") },
         ],
-        rows: overdue.map((order) => ({ number: order.orderNumber, employee: employeeNames.get(order.assignedEmployeeId) ?? "—", client: order.clientName, deadline: order.deadline, status: statusLabels[order.status] })),
+        rows: overdue.map((order) => ({ number: order.orderNumber, employee: employeeNames.get(order.assignedEmployeeId) ?? "—", client: order.clientName, deadline: order.deadline, status: statusLabel(order.status) })),
       },
     ],
   };
@@ -430,16 +443,16 @@ export function revenueByPeriodSection(orders: Order[], period: ReportPeriod): R
 
   return {
     kind: "table",
-    title: "Revenue by period",
+    title: i18n.t("reports.sections.revenueByPeriod.title"),
     columns: [
-      { key: "period", header: "Period" },
-      { key: "orders", header: "Orders", format: "number" },
-      { key: "billed", header: "Billed", format: "money" },
-      { key: "collected", header: "Collected", format: "money" },
-      { key: "outstanding", header: "Outstanding", format: "money" },
+      { key: "period", header: i18n.t("reports.columns.period") },
+      { key: "orders", header: i18n.t("reports.columns.orders"), format: "number" },
+      { key: "billed", header: i18n.t("reports.columns.billed"), format: "money" },
+      { key: "collected", header: i18n.t("reports.columns.collected"), format: "money" },
+      { key: "outstanding", header: i18n.t("reports.columns.outstanding"), format: "money" },
     ],
     rows: series,
-    totals: series.length ? { period: "Total", orders: current.orders, billed, collected: current.revenue, outstanding } : undefined,
+    totals: series.length ? { period: totalLabel(), orders: current.orders, billed, collected: current.revenue, outstanding } : undefined,
   };
 }
 
@@ -448,23 +461,27 @@ export function outstandingOrdersSection(orders: Order[], period: ReportPeriod):
 
   return {
     kind: "table",
-    title: "Outstanding orders",
-    description: "Unpaid orders created in this period, excluding cancelled orders.",
+    title: i18n.t("reports.sections.outstandingOrders.title"),
+    description: i18n.t("reports.sections.outstandingOrders.description"),
     columns: [
-      { key: "number", header: "Order" },
-      { key: "date", header: "Date", format: "date" },
-      { key: "client", header: "Client" },
-      { key: "status", header: "Status" },
-      { key: "total", header: "Amount due", format: "money" },
+      { key: "number", header: i18n.t("reports.columns.order") },
+      { key: "date", header: i18n.t("reports.columns.date"), format: "date" },
+      { key: "client", header: i18n.t("reports.columns.client") },
+      { key: "status", header: i18n.t("reports.columns.status") },
+      { key: "total", header: i18n.t("reports.columns.amountDue"), format: "money" },
     ],
-    rows: outstandingOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabels[order.status], total: order.totalPrice })),
-    totals: outstandingOrders.length ? { number: "Total", total: sum(outstandingOrders, (order) => order.totalPrice) } : undefined,
+    rows: outstandingOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabel(order.status), total: order.totalPrice })),
+    totals: outstandingOrders.length ? { number: totalLabel(), total: sum(outstandingOrders, (order) => order.totalPrice) } : undefined,
   };
 }
 
-export const expensesUnavailable: ReportSection = { kind: "unavailable", title: "Expenses and profit", description: "Expenses are not recorded in the app yet, so costs and profit cannot be calculated." };
+export function expensesUnavailable(): ReportSection {
+  return { kind: "unavailable", title: i18n.t("reports.sections.expenses.title"), description: i18n.t("reports.sections.expenses.description") };
+}
 
-export const invoicesUnavailable: ReportSection = { kind: "unavailable", title: "Invoices", description: "Invoices are not stored in the database yet, so invoice totals cannot be reported." };
+export function invoicesUnavailable(): ReportSection {
+  return { kind: "unavailable", title: i18n.t("reports.sections.invoices.title"), description: i18n.t("reports.sections.invoices.description") };
+}
 
 export function financialReport(orders: Order[], items: InventoryItem[], period: ReportPeriod): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
@@ -482,30 +499,30 @@ export function financialReport(orders: Order[], items: InventoryItem[], period:
 
   return {
     kpis: [
-      { label: "Revenue collected", value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
-      { label: "Total billed", value: billed, format: "money", hint: "Order value excluding cancelled orders" },
-      { label: "Outstanding", value: outstanding, format: "money", hint: `${outstandingOrders.length} unpaid orders` },
-      { label: "Cancelled order value", value: sum(periodOrders.filter((order) => !isBillable(order)), (order) => order.totalPrice), format: "money" },
-      { label: "Collection rate", value: share(current.revenue, billed), format: "percent" },
-      { label: "Inventory value at cost", value: inventoryCost, format: "money", hint: "Current stock, not period-based" },
+      { label: i18n.t("reports.kpis.revenueCollected"), value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
+      { label: i18n.t("reports.kpis.totalBilled"), value: billed, format: "money", hint: i18n.t("reports.hints.orderValueExcludingCancelled") },
+      { label: i18n.t("reports.kpis.outstanding"), value: outstanding, format: "money", hint: i18n.t("reports.hints.unpaidOrders", { count: outstandingOrders.length }) },
+      { label: i18n.t("reports.kpis.cancelledOrderValue"), value: sum(periodOrders.filter((order) => !isBillable(order)), (order) => order.totalPrice), format: "money" },
+      { label: i18n.t("reports.kpis.collectionRate"), value: share(current.revenue, billed), format: "percent" },
+      { label: i18n.t("reports.kpis.inventoryValueAtCost"), value: inventoryCost, format: "money", hint: i18n.t("reports.hints.currentStock") },
     ],
     sections: [
       revenueByPeriodSection(orders, period),
       {
         kind: "table",
-        title: "Revenue by service",
-        description: "Billed value of service lines, excluding cancelled orders.",
+        title: i18n.t("reports.sections.revenueByService.title"),
+        description: i18n.t("reports.sections.revenueByService.description"),
         columns: [
-          { key: "service", header: "Service" },
-          { key: "count", header: "Times performed", format: "number" },
-          { key: "revenue", header: "Billed", format: "money" },
-          { key: "share", header: "Share of billed", format: "share" },
+          { key: "service", header: i18n.t("reports.columns.service") },
+          { key: "count", header: i18n.t("reports.columns.timesPerformed"), format: "number" },
+          { key: "revenue", header: i18n.t("reports.columns.billed"), format: "money" },
+          { key: "share", header: i18n.t("reports.columns.shareOfBilled"), format: "share" },
         ],
         rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.revenue, servicesRevenue) })),
       },
       outstandingOrdersSection(orders, period),
-      expensesUnavailable,
-      invoicesUnavailable,
+      expensesUnavailable(),
+      invoicesUnavailable(),
     ],
   };
 }
@@ -524,19 +541,19 @@ function csvCell(value: string) {
 }
 
 export function reportCsv(meta: { title: string; workspace: string; period: string; generated: string }, model: QuickReportModel) {
-  const lines: string[][] = [[meta.title], ["Workspace", meta.workspace], ["Period", meta.period], ["Generated", meta.generated]];
+  const lines: string[][] = [[meta.title], [i18n.t("reports.document.workspace"), meta.workspace], [i18n.t("reports.document.period"), meta.period], [i18n.t("reports.document.generated"), meta.generated]];
 
-  if (model.kpis.length) lines.push([], ["Key figures"]);
+  if (model.kpis.length) lines.push([], [i18n.t("reports.document.keyFigures")]);
   for (const kpi of model.kpis) lines.push([kpi.label, csvRawValue(kpi.value, kpi.format)]);
 
   for (const section of model.sections) {
     lines.push([], [section.title]);
     if (section.kind === "unavailable") {
-      lines.push(["No data available yet", section.description]);
+      lines.push([i18n.t("reports.document.noData"), section.description]);
       continue;
     }
     if (section.rows.length === 0) {
-      lines.push(["No data available yet"]);
+      lines.push([i18n.t("reports.document.noData")]);
       continue;
     }
     const columns = section.columns.flatMap((column) => [column, ...(column.secondary ?? [])]);

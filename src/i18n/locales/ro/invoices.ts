@@ -1,0 +1,91 @@
+import type en from "../en/invoices";
+import type { Messages } from "../../types";
+
+const invoices: Messages<typeof en> = {
+  title: "Facturi",
+  totalCount_one: "{{count}} factură în total",
+  totalCount_few: "{{count}} facturi în total",
+  totalCount_other: "{{count}} de facturi în total",
+  notSetUp: "Neconfigurat încă",
+  createInvoice: "Creează factură",
+  searchPlaceholder: "Caută facturi...",
+  allStatuses: "Toate statusurile",
+  summary: {
+    overdueCount_one: "{{count}} factură restantă",
+    overdueCount_few: "{{count}} facturi restante",
+    overdueCount_other: "{{count}} de facturi restante",
+    requiresAttention: "Necesită atenție imediată",
+    unpaidAmount: "{{amount}} neachitat",
+    outstandingBalance: "Sold restant",
+  },
+  columns: {
+    number: "Nr. factură",
+    client: "Client",
+    order: "Comandă",
+    created: "Creată",
+    amount: "Sumă",
+    dueDate: "Scadență",
+  },
+  empty: {
+    unavailableTitle: "Facturile nu sunt configurate încă",
+    loadErrorTitle: "Facturile nu au putut fi încărcate",
+    filteredTitle: "Nicio factură nu corespunde filtrelor",
+    filteredDescription: "Încearcă alt termen de căutare sau resetează filtrele.",
+    title: "Nicio factură încă",
+    description: "Creează o factură dintr-o comandă pentru a factura serviciile acesteia.",
+  },
+  create: {
+    description: "Factura copiază clientul, detaliile și serviciile comenzii așa cum sunt acum.",
+    noOrders: "Fiecare comandă cu servicii are deja o factură.",
+    orderLabel: "Comandă *",
+    orderPlaceholder: "Selectează o comandă",
+  },
+  actions: {
+    menuLabel: "Acțiuni pentru factura {{number}}",
+    markSent: "Marchează ca trimisă",
+    markUnpaid: "Marchează ca neachitată",
+    markPaid: "Marchează ca achitată",
+  },
+  detail: {
+    fallbackTitle: "Factură",
+    srDescription: "Detaliile facturii, serviciile facturate și starea plății.",
+    loadErrorTitle: "Factura nu a putut fi încărcată",
+    billTo: "Facturat către",
+    order: "Comandă",
+    created: "Creată",
+    device: "Dispozitiv",
+    carNumber: "Număr auto",
+    vin: "VIN",
+    paidOn: "Achitată la",
+    dueDate: "Scadență",
+    description: "Descriere",
+    items: {
+      service: "Serviciu",
+      quantity: "Cant.",
+      price: "Preț",
+      amount: "Sumă",
+    },
+  },
+  toast: {
+    creating: "Se creează factura...",
+    created: "Factura {{number}} a fost creată",
+    statusChanged: {
+      draft: "Factura {{number}} a fost marcată ca ciornă",
+      sent: "Factura {{number}} a fost marcată ca trimisă",
+      paid: "Factura {{number}} a fost marcată ca achitată",
+      overdue: "Factura {{number}} a fost marcată ca restantă",
+    },
+    statusFailed: "Starea facturii nu a putut fi actualizată",
+  },
+  errors: {
+    unavailable: "Facturile nu sunt încă configurate în această bază de date. Mai întâi trebuie aplicată migrarea pentru facturi.",
+    noPermission: "Factura nu a fost găsită sau nu ai permisiunea să o modifici.",
+    notFound: "Factura nu a fost găsită în acest spațiu de lucru.",
+    orderNotFound: "Comanda nu a fost găsită în acest spațiu de lucru.",
+    orderHasNoServices: "Această comandă nu are servicii de facturat.",
+    alreadyInvoiced: "Factura {{number}} există deja pentru această comandă.",
+    alreadyInvoicedUnknown: "Pentru această comandă există deja o factură.",
+  },
+};
+
+export default invoices;

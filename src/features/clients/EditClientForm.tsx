@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import type { Client, ClientFormValues } from "../../lib/types";
@@ -12,6 +13,7 @@ type EditClientFormProps = {
 };
 
 export default function EditClientForm({ client, onCancel, onUpdated }: EditClientFormProps) {
+  const { t } = useTranslation();
   const { mutateAsync: updateClient } = useUpdateClient();
 
   const {
@@ -50,10 +52,10 @@ export default function EditClientForm({ client, onCancel, onUpdated }: EditClie
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Save Changes"}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("common.saveChanges")}
         </Button>
       </div>
     </form>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, Menu } from "lucide-react";
 import { useApp } from "../lib/appContext";
 import { useLocation, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
 import { useWorkspaceAvatar } from "../features/workspaces/useWorkspaceAvatar";
 import { Skeleton } from "./Skeleton";
@@ -12,24 +13,26 @@ import AppTopbarNotifications from "./AppTopbarNotifications";
 import GlobalSearch from "../features/search/GlobalSearch";
 import CompanySelector from "./CompanySelector";
 import UserMenu from "./UserMenu";
+import type { AppModule } from "../lib/types";
 
-const moduleLabels: Record<string, string> = {
-  dashboard: "Dashboard",
-  orders: "Orders",
-  clients: "Clients",
-  employees: "Employees",
-  inventory: "Inventory",
-  services: "Services",
-  invoices: "Invoices",
-  finance: "Finance",
-  reports: "Reports",
-  settings: "Settings",
+const moduleLabelKeys: Record<string, `nav.modules.${AppModule}` | undefined> = {
+  dashboard: "nav.modules.dashboard",
+  orders: "nav.modules.orders",
+  clients: "nav.modules.clients",
+  employees: "nav.modules.employees",
+  inventory: "nav.modules.inventory",
+  services: "nav.modules.services",
+  invoices: "nav.modules.invoices",
+  finance: "nav.modules.finance",
+  reports: "nav.modules.reports",
+  settings: "nav.modules.settings",
 };
 
 export function AppTopbar() {
+  const { t } = useTranslation();
   const location = useLocation();
 
-  const currentTitle = location.pathname.split("/")[3];
+  const currentTitleKey = moduleLabelKeys[location.pathname.split("/")[3]];
 
   const { setMobileSidebarOpen } = useApp();
   const { workspaceId } = useParams();
@@ -43,7 +46,7 @@ export function AppTopbar() {
         <button
           type="button"
           onClick={() => setMobileSidebarOpen(true)}
-          aria-label="Open navigation"
+          aria-label={t("nav.sidebar.openNavigation")}
           className="-ml-1.5 inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
         >
           <Menu className="size-5" />
@@ -51,11 +54,11 @@ export function AppTopbar() {
 
         <div className="flex min-w-0 items-center gap-1.5 text-sm">
           <WorkspacePageMark />
-          {moduleLabels[currentTitle] && (
+          {currentTitleKey && (
             <>
               <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-subtle-foreground" />
               <span aria-current="page" className="shrink-0 whitespace-nowrap font-medium text-foreground">
-                {moduleLabels[currentTitle]}
+                {t(currentTitleKey)}
               </span>
             </>
           )}
@@ -75,8 +78,8 @@ export function AppTopbar() {
         <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Add New Workspace</DialogTitle>
-              <DialogDescription>Fill in workspace name below</DialogDescription>
+              <DialogTitle>{t("nav.workspace.addTitle")}</DialogTitle>
+              <DialogDescription>{t("nav.workspace.addDescription")}</DialogDescription>
             </DialogHeader>
 
             <AddNewWorkspaceForm setCreateModalOpen={setCreateModalOpen} />
@@ -90,6 +93,7 @@ export function AppTopbar() {
 }
 
 function WorkspacePageMark() {
+  const { t } = useTranslation();
   const { workspaceId } = useParams();
   const { data: workspace, isLoading } = useGetWorkspace(workspaceId);
   const { data: imageUrl, isLoading: logoLoading } = useWorkspaceAvatar(workspace?.id, workspace?.avatarPath);
@@ -100,7 +104,7 @@ function WorkspacePageMark() {
 
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="sm" className="size-7 rounded-md text-[11px] *:rounded-md" />
+      <WorkspaceAvatar name={workspace.name || t("nav.workspace.fallbackName")} imageUrl={imageUrl} size="sm" className="size-7 rounded-md text-[11px] *:rounded-md" />
       <span className="hidden max-w-40 truncate text-muted-foreground xl:inline">{workspace.name}</span>
     </span>
   );

@@ -4,8 +4,9 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
-import type { AddNewEmployeesFormData, CreateEmployeeData, CreateMadalProps, EmployeeRoleOption } from "../../lib/types";
+import type { AddNewEmployeesFormData, CreateEmployeeData, CreateMadalProps, EmployeeRole } from "../../lib/types";
 import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { useGetProfile } from "../profiles/useGetProfile";
 import { profileDisplayName } from "../profiles/profileName";
 import { useGetWorkspaceMembers } from "../workspaces/useGetWorkspaceMembers";
@@ -15,20 +16,12 @@ import useGetEmployees from "./useGetEmployees";
 
 const NOT_LINKED = "not-linked";
 
-const roles: EmployeeRoleOption[] = [
-  // { value: "owner", label: "Owner" },
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
-  { value: "technician", label: "Technician" },
-  { value: "receptionist", label: "Receptionict" },
-];
+const roles: EmployeeRole[] = ["admin", "manager", "technician", "receptionist"];
 
-const employeesStatuses = [
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-] as const;
+const employeesStatuses = ["active", "inactive"] as const;
 
 export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalProps) {
+  const { t } = useTranslation();
   const { mutateAsync: createEmployee } = useCreateNewEmployee();
   const { members, error: membersError } = useGetWorkspaceMembers();
   const { employees } = useGetEmployees();
@@ -56,14 +49,14 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
 
     if (!currentProfile) {
       setError("root", {
-        message: "Profile not found",
+        message: t("employees.form.profileNotFound"),
       });
       return;
     }
 
     if (!currentProfile.active_workspace_id) {
       setError("root", {
-        message: "No active workspace",
+        message: t("employees.errors.noActiveWorkspace"),
       });
       return;
     }
@@ -90,22 +83,22 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4 py-4">
         <div className="space-y-1.5">
-          <Label htmlFor="name">Full Name *</Label>
+          <Label htmlFor="name">{t("employees.form.fullNameLabel")}</Label>
           <Input
             id="name"
             type="text"
-            placeholder="Employee name"
+            placeholder={t("employees.form.namePlaceholder")}
             autoFocus={true}
             disabled={isSubmitting}
             {...register("name", { required: true })}
             className={errors.name ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
           />
-          {errors.name && <p className="text-xs text-destructive">Name is Reqiured</p>}
+          {errors.name && <p className="text-xs text-destructive">{t("employees.form.nameRequired")}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email *</Label>
+            <Label htmlFor="email">{t("employees.form.emailLabel")}</Label>
             <Input
               id="email"
               type="email"
@@ -113,10 +106,10 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
               placeholder="email@company.com"
               disabled={isSubmitting}
               {...register("email", {
-                required: "Email is required",
+                required: t("employees.form.emailRequired"),
                 pattern: {
                   value: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
-                  message: "Invalid email adress",
+                  message: t("employees.form.emailInvalid"),
                 },
               })}
               className={errors.email ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
@@ -125,17 +118,17 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="phone">Phone *</Label>
+            <Label htmlFor="phone">{t("employees.form.phoneLabel")}</Label>
             <Input
               id="phone"
               autoFocus={true}
               placeholder="+1 (555) 000-0000"
               disabled={isSubmitting}
               {...register("phone", {
-                required: "Phone is required",
+                required: t("employees.form.phoneRequired"),
                 pattern: {
                   value: /^\+373\d{8}$/,
-                  message: "Phone must be in firmat +37300000000",
+                  message: t("employees.form.phoneInvalid"),
                 },
               })}
               className={errors.phone ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
@@ -146,22 +139,22 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="role">Role *</Label>
+            <Label htmlFor="role">{t("employees.form.roleLabel")}</Label>
             <Controller
               name="role"
               control={control}
               rules={{
-                required: "Role is required",
+                required: t("employees.form.roleRequired"),
               }}
               render={({ field }) => (
                 <Select value={field.value ?? ""} onValueChange={field.onChange}>
                   <SelectTrigger id="role" className={errors.role ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}>
-                    <SelectValue placeholder="Select role" />
+                    <SelectValue placeholder={t("employees.form.rolePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
+                      <SelectItem key={role} value={role}>
+                        {t(`employees.form.roleOptions.${role}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -172,7 +165,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
           </div>
 
           <div className="space-y-1.5">
-            <Label>Status</Label>
+            <Label>{t("common.status")}</Label>
             <Controller
               name="status"
               control={control}
@@ -182,9 +175,9 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {employeesStatuses.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
+                    {employeesStatuses.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {t(`employees.statuses.${status}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -195,7 +188,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="profile_id">Linked user</Label>
+          <Label htmlFor="profile_id">{t("employees.form.linkedUserLabel")}</Label>
           <Controller
             name="profile_id"
             control={control}
@@ -205,10 +198,13 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NOT_LINKED}>Not linked</SelectItem>
+                  <SelectItem value={NOT_LINKED}>{t("employees.form.notLinked")}</SelectItem>
                   {linkableMembers.map((member) => (
                     <SelectItem key={member.userId} value={member.userId}>
-                      {profileDisplayName(member.fullName, member.email ?? "Workspace member")} ({workspaceRoleLabel(member.role)})
+                      {t("employees.form.memberOption", {
+                        name: profileDisplayName(member.fullName, member.email ?? t("employees.form.memberFallbackName")),
+                        role: workspaceRoleLabel(member.role),
+                      })}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -216,9 +212,9 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
             )}
           />
           {membersError ? (
-            <p className="text-xs text-destructive">{membersError instanceof Error ? membersError.message : "Workspace members could not be loaded"}</p>
+            <p className="text-xs text-destructive">{membersError instanceof Error ? membersError.message : t("employees.form.membersLoadError")}</p>
           ) : (
-            <p className="text-xs text-muted-foreground">Link the workspace account this employee signs in with. Only linked employees can be assigned to orders.</p>
+            <p className="text-xs text-muted-foreground">{t("employees.form.linkedUserHint")}</p>
           )}
         </div>
       </div>
@@ -227,10 +223,10 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={handleReset} disabled={isSubmitting}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Employee"}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("employees.addEmployee")}
         </Button>
       </div>
     </form>

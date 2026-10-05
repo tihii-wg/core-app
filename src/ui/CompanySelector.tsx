@@ -8,10 +8,12 @@ import { useGetProfile } from "../features/profiles/useGetProfile";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 import { useDeleteWorkspace } from "../features/workspaces/useDeleteWorkspace";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import type { CreateMadalProps } from "../lib/types";
 import { canManageWorkspace } from "../features/workspaces/workspaceRoles";
 
 export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const { updateWorkspace } = useSetActiveWorkspace();
   const { deleteWorkspace } = useDeleteWorkspace();
@@ -47,7 +49,7 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Switch Company</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">{t("nav.workspace.switchCompany")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         {workspaces?.map((w) => (
@@ -60,7 +62,7 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
             {w.canDelete && (
               <span
                 className="rounded p-0.5 text-subtle-foreground hover:text-destructive"
-                aria-label={`Delete ${w.name}`}
+                aria-label={t("nav.workspace.deleteCompany", { name: w.name })}
                 onClick={() => {
                   deleteWorkspaceHandler(w.id);
                 }}
@@ -77,7 +79,7 @@ export default function CompanySelector({ setCreateModalOpen }: CreateMadalProps
             setCreateModalOpen(true);
           }}
         >
-          <span className="text-primary">+ Add company</span>
+          <span className="text-primary">{t("nav.workspace.addCompany")}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

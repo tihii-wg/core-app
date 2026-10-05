@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Label } from "../../ui/Label";
@@ -15,6 +16,7 @@ type CreateInvoiceDialogProps = {
 };
 
 export function CreateInvoiceDialog({ open, onOpenChange, orders }: CreateInvoiceDialogProps) {
+  const { t } = useTranslation();
   const [orderId, setOrderId] = useState("");
   const createInvoice = useCreateInvoice();
   const { formatMoney } = useWorkspaceMoney();
@@ -34,19 +36,19 @@ export function CreateInvoiceDialog({ open, onOpenChange, orders }: CreateInvoic
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Create Invoice</DialogTitle>
-          <DialogDescription>The invoice copies the order's client, details and services as they are now.</DialogDescription>
+          <DialogTitle>{t("invoices.createInvoice")}</DialogTitle>
+          <DialogDescription>{t("invoices.create.description")}</DialogDescription>
         </DialogHeader>
 
         {orders.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Every order with services already has an invoice.</p>
+          <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">{t("invoices.create.noOrders")}</p>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="invoice-order">Order *</Label>
+              <Label htmlFor="invoice-order">{t("invoices.create.orderLabel")}</Label>
               <Select value={orderId} onValueChange={setOrderId}>
                 <SelectTrigger id="invoice-order" className="w-full">
-                  <SelectValue placeholder="Select an order" />
+                  <SelectValue placeholder={t("invoices.create.orderPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {orders.map((order) => (
@@ -85,10 +87,10 @@ export function CreateInvoiceDialog({ open, onOpenChange, orders }: CreateInvoic
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={createInvoice.isPending}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={handleCreate} disabled={!selectedOrder} loading={createInvoice.isPending}>
-            Create Invoice
+            {t("invoices.createInvoice")}
           </Button>
         </DialogFooter>
       </DialogContent>

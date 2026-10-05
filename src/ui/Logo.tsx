@@ -1,4 +1,5 @@
 import { useId } from "react";
+import i18n from "../i18n";
 import { cn } from "../lib/utils";
 
 export function LogoMark({ className }: { className?: string }) {
@@ -22,7 +23,7 @@ export default function Logo() {
   return (
     <div className="mb-2 inline-flex items-center gap-2.5">
       <LogoMark className="size-10" />
-      <span className="text-2xl font-semibold tracking-tight text-foreground">Core App</span>
+      <span className="text-2xl font-semibold tracking-tight text-foreground">{i18n.t("common.appName")}</span>
     </div>
   );
 }

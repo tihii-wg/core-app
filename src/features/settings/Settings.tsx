@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import {
   Building2,
@@ -38,6 +39,8 @@ import { ProfileSettings } from "./ProfileSettings";
 import { CompanySettings } from "./CompanySettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { replaceLocale, settingsTabFromSearch } from "./settingsTab";
+import { languageNames, supportedLanguages } from "../../i18n/languages";
+import { currentIntlLocale } from "../../i18n";
 import { useActiveWorkspaceId, useGetProfile } from "../profiles/useGetProfile";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
@@ -49,6 +52,7 @@ import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 import { TeamSettings } from "./TeamSettings";
 
 export function SettingsModule() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = settingsTabFromSearch(searchParams.get("tab"));
 
@@ -63,11 +67,13 @@ export function SettingsModule() {
     smsReminders: true,
   });
 
+  const nextBillingDate = new Date(2024, 1, 1).toLocaleDateString(currentIntlLocale(), { month: "short", day: "numeric", year: "numeric" });
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Settings"
-        description="Manage your business settings and preferences"
+        title={t("settings.title")}
+        description={t("settings.description")}
       />
 
       <Tabs
@@ -84,31 +90,31 @@ export function SettingsModule() {
         <TabsList>
           <TabsTrigger value="company">
             <Building2 />
-            Company
+            {t("settings.tabs.company")}
           </TabsTrigger>
           <TabsTrigger value="profile">
             <User />
-            Profile
+            {t("settings.tabs.profile")}
           </TabsTrigger>
           <TabsTrigger value="notifications">
             <Bell />
-            Notifications
+            {t("settings.tabs.notifications")}
           </TabsTrigger>
           <TabsTrigger value="security">
             <Shield />
-            Security
+            {t("settings.tabs.security")}
           </TabsTrigger>
           <TabsTrigger value="billing">
             <CreditCard />
-            Billing
+            {t("settings.tabs.billing")}
           </TabsTrigger>
           <TabsTrigger value="team">
             <Users />
-            Team
+            {t("settings.tabs.team")}
           </TabsTrigger>
           <TabsTrigger value="appearance">
             <Palette />
-            Appearance
+            {t("settings.tabs.appearance")}
           </TabsTrigger>
         </TabsList>
 
@@ -125,9 +131,9 @@ export function SettingsModule() {
         <TabsContent value="notifications" className="mt-5 space-y-5">
           <Card>
             <CardHeader>
-              <CardTitle>Email Notifications</CardTitle>
+              <CardTitle>{t("settings.notifications.email.title")}</CardTitle>
               <CardDescription>
-                Manage your email notification preferences
+                {t("settings.notifications.email.description")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -135,18 +141,18 @@ export function SettingsModule() {
               {[
                 {
                   key: "emailOrders",
-                  label: "Order updates",
-                  description: "Receive emails about order status changes",
+                  label: t("settings.notifications.email.orders.label"),
+                  description: t("settings.notifications.email.orders.description"),
                 },
                 {
                   key: "emailInvoices",
-                  label: "Invoice notifications",
-                  description: "Get notified when invoices are created or paid",
+                  label: t("settings.notifications.email.invoices.label"),
+                  description: t("settings.notifications.email.invoices.description"),
                 },
                 {
                   key: "emailMarketing",
-                  label: "Marketing emails",
-                  description: "Receive promotional offers and updates",
+                  label: t("settings.notifications.email.marketing.label"),
+                  description: t("settings.notifications.email.marketing.description"),
                 },
               ].map((item) => (
                 <div
@@ -179,9 +185,9 @@ export function SettingsModule() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Push Notifications</CardTitle>
+              <CardTitle>{t("settings.notifications.push.title")}</CardTitle>
               <CardDescription>
-                Manage your push notification preferences
+                {t("settings.notifications.push.description")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -189,18 +195,18 @@ export function SettingsModule() {
               {[
                 {
                   key: "pushOrders",
-                  label: "New orders",
-                  description: "Get notified when new orders are placed",
+                  label: t("settings.notifications.push.orders.label"),
+                  description: t("settings.notifications.push.orders.description"),
                 },
                 {
                   key: "pushReminders",
-                  label: "Reminders",
-                  description: "Receive appointment and task reminders",
+                  label: t("settings.notifications.push.reminders.label"),
+                  description: t("settings.notifications.push.reminders.description"),
                 },
                 {
                   key: "pushAlerts",
-                  label: "System alerts",
-                  description: "Important system notifications and alerts",
+                  label: t("settings.notifications.push.alerts.label"),
+                  description: t("settings.notifications.push.alerts.description"),
                 },
               ].map((item) => (
                 <div
@@ -240,9 +246,9 @@ export function SettingsModule() {
         <TabsContent value="billing" className="mt-5 space-y-5">
           <Card>
             <CardHeader>
-              <CardTitle>Current Plan</CardTitle>
+              <CardTitle>{t("settings.billing.currentPlan.title")}</CardTitle>
               <CardDescription>
-                Manage your subscription and billing
+                {t("settings.billing.currentPlan.description")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -250,31 +256,31 @@ export function SettingsModule() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-foreground">
-                      Professional Plan
+                      {t("settings.billing.currentPlan.planName")}
                     </h3>
                     <p className="text-[13px] text-muted-foreground">
-                      $49/month, billed monthly
+                      {t("settings.billing.currentPlan.price", { price: "$49" })}
                     </p>
                   </div>
-                  <Button>Upgrade Plan</Button>
+                  <Button>{t("settings.billing.currentPlan.upgrade")}</Button>
                 </div>
                 <Separator className="my-4" />
                 <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                   <div>
-                    <p className="text-muted-foreground">Users</p>
-                    <p className="font-medium">5 of 10</p>
+                    <p className="text-muted-foreground">{t("settings.billing.currentPlan.users")}</p>
+                    <p className="font-medium">{t("settings.billing.currentPlan.usersValue", { used: 5, total: 10 })}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Storage</p>
-                    <p className="font-medium">2.5 GB of 10 GB</p>
+                    <p className="text-muted-foreground">{t("settings.billing.currentPlan.storage")}</p>
+                    <p className="font-medium">{t("settings.billing.currentPlan.storageValue", { used: (2.5).toLocaleString(currentIntlLocale()), total: 10 })}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Next Billing</p>
-                    <p className="font-medium">Feb 1, 2024</p>
+                    <p className="text-muted-foreground">{t("settings.billing.currentPlan.nextBilling")}</p>
+                    <p className="font-medium">{nextBillingDate}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Status</p>
-                    <StatusBadge variant="success" dot className="mt-0.5">Active</StatusBadge>
+                    <p className="text-muted-foreground">{t("common.status")}</p>
+                    <StatusBadge variant="success" dot className="mt-0.5">{t("settings.billing.currentPlan.active")}</StatusBadge>
                   </div>
                 </div>
               </div>
@@ -283,8 +289,8 @@ export function SettingsModule() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Payment Method</CardTitle>
-              <CardDescription>Manage your payment methods</CardDescription>
+              <CardTitle>{t("settings.billing.paymentMethod.title")}</CardTitle>
+              <CardDescription>{t("settings.billing.paymentMethod.description")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
@@ -293,17 +299,17 @@ export function SettingsModule() {
                     <CreditCard aria-hidden="true" className="size-5 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-foreground">Visa ending in 4242</p>
+                    <p className="text-sm font-medium text-foreground">{t("settings.billing.paymentMethod.cardEnding", { last4: "4242" })}</p>
                     <p className="text-[13px] text-muted-foreground">
-                      Expires 12/2025
+                      {t("settings.billing.paymentMethod.expires", { date: "12/2025" })}
                     </p>
                   </div>
                 </div>
                 <Button variant="outline" size="sm">
-                  Edit
+                  {t("common.edit")}
                 </Button>
               </div>
-              <Button variant="outline">Add Payment Method</Button>
+              <Button variant="outline">{t("settings.billing.paymentMethod.add")}</Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -321,25 +327,21 @@ export function SettingsModule() {
   );
 }
 
-const themeOptions: { value: ProfileTheme; label: string }[] = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-];
+const themeOptions = [
+  { value: "light", labelKey: "settings.appearance.themes.light" },
+  { value: "dark", labelKey: "settings.appearance.themes.dark" },
+  { value: "system", labelKey: "settings.appearance.themes.system" },
+] as const satisfies readonly { value: ProfileTheme; labelKey: string }[];
 
-const languageOptions = [
-  { value: "en", label: "English" },
-  { value: "ro", label: "Romanian" },
-  { value: "ru", label: "Russian" },
-];
+const languageOptions = supportedLanguages.map((value) => ({ value, label: languageNames[value] }));
 
 const timezoneOptions = [
-  { value: "Europe/Chisinau", label: "Chisinau (Europe/Chisinau)" },
-  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
-  { value: "America/Denver", label: "Mountain Time (MT)" },
-  { value: "America/Chicago", label: "Central Time (CT)" },
-  { value: "America/New_York", label: "Eastern Time (ET)" },
-];
+  { value: "Europe/Chisinau", labelKey: "settings.appearance.timezones.chisinau" },
+  { value: "America/Los_Angeles", labelKey: "settings.appearance.timezones.pacific" },
+  { value: "America/Denver", labelKey: "settings.appearance.timezones.mountain" },
+  { value: "America/Chicago", labelKey: "settings.appearance.timezones.central" },
+  { value: "America/New_York", labelKey: "settings.appearance.timezones.eastern" },
+] as const;
 
 const dateFormatOptions = ["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"].map((value) => ({ value, label: value }));
 
@@ -357,6 +359,7 @@ function withCurrent(options: { value: string; label: string }[], current: strin
 }
 
 function AppearanceSettings() {
+  const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace, isLoading, error, isFetched } = useGetWorkspace(workspaceId);
   const { data: profile, isLoading: profileLoading } = useGetProfile();
@@ -365,23 +368,23 @@ function AppearanceSettings() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Display Preferences</CardTitle>
-          <CardDescription>Customize how the application looks</CardDescription>
+          <CardTitle>{t("settings.appearance.title")}</CardTitle>
+          <CardDescription>{t("settings.appearance.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Loading preferences...</p>
+          <p className="text-sm text-muted-foreground">{t("settings.appearance.loading")}</p>
         </CardContent>
       </Card>
     );
   }
 
   if (error) {
-    const message = error instanceof Error ? error.message : "Preferences could not be loaded";
+    const message = error instanceof Error ? error.message : t("settings.appearance.loadFailed");
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Display Preferences</CardTitle>
-          <CardDescription>Customize how the application looks</CardDescription>
+          <CardTitle>{t("settings.appearance.title")}</CardTitle>
+          <CardDescription>{t("settings.appearance.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-destructive">{message}</p>
@@ -394,11 +397,11 @@ function AppearanceSettings() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Display Preferences</CardTitle>
-          <CardDescription>Customize how the application looks</CardDescription>
+          <CardTitle>{t("settings.appearance.title")}</CardTitle>
+          <CardDescription>{t("settings.appearance.description")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">You can only view and edit companies you belong to.</p>
+          <p className="text-sm text-muted-foreground">{t("settings.company.notMember")}</p>
         </CardContent>
       </Card>
     );
@@ -410,6 +413,7 @@ function AppearanceSettings() {
 }
 
 function AppearanceForm({ workspace, theme: savedTheme }: { workspace: WorkspaceDetails; theme: ProfileTheme }) {
+  const { t } = useTranslation();
   const { locale = "en" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -422,15 +426,16 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
   const { mutateAsync: savePreferences, isPending: preferencesPending } = useUpdateWorkspacePreferences();
   const isPending = themePending || preferencesPending;
   const canEditWorkspace = canManageWorkspace(workspace.role);
+  const translatedTimezones = timezoneOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }));
 
   async function onSave() {
-    toast.loading("Saving preferences...", { id: "appearance" });
+    toast.loading(t("settings.appearance.toast.saving"), { id: "appearance" });
     const failures: string[] = [];
 
     try {
       await saveTheme(theme);
     } catch (error) {
-      failures.push(error instanceof Error ? error.message : "Could not save theme");
+      failures.push(error instanceof Error ? error.message : t("settings.appearance.toast.themeFailed"));
       applyProfileTheme(savedTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
     }
 
@@ -441,7 +446,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
         const nextPath = replaceLocale(location.pathname, locale, nextLanguage);
         if (nextPath !== location.pathname) navigate(`${nextPath}${location.search}`, { replace: true });
       } catch (error) {
-        failures.push(error instanceof Error ? error.message : "Could not save company preferences");
+        failures.push(error instanceof Error ? error.message : t("settings.appearance.toast.companyPreferencesFailed"));
       }
     }
 
@@ -450,19 +455,19 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
       return;
     }
 
-    toast.success("Preferences saved", { id: "appearance" });
+    toast.success(t("settings.appearance.toast.saved"), { id: "appearance" });
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Display Preferences</CardTitle>
-        <CardDescription>Customize how the application looks</CardDescription>
+        <CardTitle>{t("settings.appearance.title")}</CardTitle>
+        <CardDescription>{t("settings.appearance.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="pref-theme">Theme</Label>
+            <Label htmlFor="pref-theme">{t("settings.appearance.theme")}</Label>
             <Select
               value={theme}
               onValueChange={(value) => {
@@ -477,7 +482,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
               <SelectContent>
                 {themeOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -485,7 +490,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pref-language">Language</Label>
+            <Label htmlFor="pref-language">{t("settings.appearance.language")}</Label>
             <Select value={language} onValueChange={(value) => setLanguage(normalizeWorkspaceLanguage(value))} disabled={!canEditWorkspace}>
               <SelectTrigger id="pref-language" className="w-full">
                 <SelectValue />
@@ -501,13 +506,13 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pref-timezone">Timezone</Label>
+            <Label htmlFor="pref-timezone">{t("settings.appearance.timezone")}</Label>
             <Select value={timezone} onValueChange={setTimezone} disabled={!canEditWorkspace}>
               <SelectTrigger id="pref-timezone" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {withCurrent(timezoneOptions, timezone).map((option) => (
+                {withCurrent(translatedTimezones, timezone).map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -517,7 +522,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pref-date-format">Date Format</Label>
+            <Label htmlFor="pref-date-format">{t("settings.appearance.dateFormat")}</Label>
             <Select value={dateFormat} onValueChange={(value) => setDateFormat(normalizeWorkspaceDateFormat(value))} disabled={!canEditWorkspace}>
               <SelectTrigger id="pref-date-format" className="w-full">
                 <SelectValue />
@@ -533,7 +538,7 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="pref-currency">Currency</Label>
+            <Label htmlFor="pref-currency">{t("settings.appearance.currency")}</Label>
             <Select value={currency} onValueChange={setCurrency} disabled={!canEditWorkspace}>
               <SelectTrigger id="pref-currency" className="w-full">
                 <SelectValue />
@@ -549,12 +554,12 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
           </div>
         </div>
 
-        {!canEditWorkspace && <p className="text-sm text-muted-foreground">Language, time zone, date format, and currency apply to the whole company and can only be changed by the workspace owner.</p>}
+        {!canEditWorkspace && <p className="text-sm text-muted-foreground">{t("settings.appearance.ownerOnlyHint")}</p>}
 
         <div className="flex justify-end border-t border-border pt-5">
           <Button type="button" onClick={onSave} disabled={isPending}>
             <Save />
-            Save Preferences
+            {t("settings.appearance.save")}
           </Button>
         </div>
       </CardContent>

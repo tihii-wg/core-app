@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { disableTotp, enrollTotp, getMfaAssurance, getMfaStatus, verifyTotp } from "../../services/apiMfa";
 import { sessionNeedsMfa } from "../../services/authMessages";
+import i18n from "../../i18n";
 
 export function useMfaStatus(enabled = true) {
   return useQuery({
@@ -48,7 +49,7 @@ export function useVerifyMfa() {
     mutationFn: ({ factorId, code }: { factorId: string; code: string }) => verifyTotp(factorId, code),
     onSuccess() {
       refresh();
-      toast.success("Two-factor authentication enabled successfully.");
+      toast.success(i18n.t("auth.mfa.enabled"));
     },
   });
 }
@@ -60,10 +61,10 @@ export function useDisableMfa() {
     mutationFn: (factorId: string) => disableTotp(factorId),
     onSuccess() {
       refresh();
-      toast.success("Two-factor authentication disabled.");
+      toast.success(i18n.t("auth.mfa.disabled"));
     },
     onError(error) {
-      toast.error(error.message || "Unable to disable two-factor authentication. Please try again.");
+      toast.error(error.message || i18n.t("auth.mfa.errors.disableFailed"));
     },
   });
 }

@@ -1,3 +1,5 @@
+import i18n from "../i18n";
+
 const passwordMinimum = 6;
 
 export function sessionNeedsMfa(level: { currentLevel: string | null; nextLevel: string | null } | null) {
@@ -16,24 +18,24 @@ export function totpQrSrc(qrCode: string) {
 export function passwordChangeMessage(message: string) {
   const text = message.toLowerCase();
   if (text.includes("invalid login") || text.includes("invalid credentials") || text.includes("current password")) {
-    return "Current password is incorrect.";
+    return i18n.t("auth.password.errors.currentIncorrect");
   }
   if (text.includes("at least") || text.includes("weak") || text.includes("password should")) {
-    return `Password must be at least ${passwordMinimum} characters.`;
+    return i18n.t("auth.password.errors.tooShort", { count: passwordMinimum });
   }
   if (text.includes("different")) {
-    return "Choose a password that is different from your current password.";
+    return i18n.t("auth.password.errors.sameAsCurrent");
   }
   if (text.includes("session") || text.includes("not authenticated") || text.includes("jwt")) {
-    return "Your session has expired. Please sign in again.";
+    return i18n.t("auth.errors.sessionExpired");
   }
-  return "Unable to change password. Please try again.";
+  return i18n.t("auth.password.errors.changeFailed");
 }
 
 export function mfaVerifyMessage(message: string) {
   const text = message.toLowerCase();
-  if (text.includes("expired")) return "The verification code expired. Enter the current code from your authenticator app.";
-  return "Invalid verification code.";
+  if (text.includes("expired")) return i18n.t("auth.mfa.errors.codeExpired");
+  return i18n.t("auth.mfa.errors.invalidCode");
 }
 
 export { passwordMinimum };

@@ -1,4 +1,5 @@
 import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -13,6 +14,7 @@ import useGetServices from "./useGetServices";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 export default function AddNewServiceForm({ setCreateModalOpen }) {
+  const { t } = useTranslation();
   const { mutate } = useCreateNewService();
   const { services } = useGetServices();
   const { currency } = useWorkspaceMoney();
@@ -46,12 +48,12 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4 py-4">
         <div className="space-y-1.5">
-          <Label htmlFor="serviceName">Service Name *</Label>
+          <Label htmlFor="serviceName">{t("services.form.serviceNameRequiredLabel")}</Label>
           <Controller
             name="serviceName"
             control={control}
             rules={{
-              required: "Service is required",
+              required: t("services.form.serviceRequired"),
             }}
             render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} errors={errors.serviceName} />}
           />
@@ -64,7 +66,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
             placeholder="e.g., Screen Replacement"
             className={errors.serviceName ? "border-destructive" : ""}
           /> */}
-          {errors.serviceName && <p className="text-xs text-destructive">Service name is required</p>}
+          {errors.serviceName && <p className="text-xs text-destructive">{t("services.form.serviceNameRequired")}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -86,7 +88,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
           </div> */}
 
           <div className="space-y-1.5">
-            <Label htmlFor="status">Status</Label>
+            <Label htmlFor="status">{t("common.status")}</Label>
             <Controller
               name="status"
               control={control}
@@ -96,25 +98,25 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="active">{t("services.statuses.active")}</SelectItem>
+                    <SelectItem value="inactive">{t("services.statuses.inactive")}</SelectItem>
                   </SelectContent>
                 </Select>
               )}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="price">Price ({currency}) *</Label>
+            <Label htmlFor="price">{t("services.form.priceLabel", { currency })}</Label>
             <Input
               id="price"
               type="number"
               step="0.01"
               {...register("price", {
                 valueAsNumber: true,
-                required: "Price is required",
+                required: t("services.form.priceRequired"),
                 min: {
                   value: 0,
-                  message: "Price cannot be negative",
+                  message: t("services.form.priceNegative"),
                 },
               })}
               // value={formData.price}
@@ -144,8 +146,8 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
           {/* </div> */}
 
           <div className="space-y-1.5">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" {...register("description")} placeholder="Brief description of this service..." rows={3} />
+            <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
+            <Textarea id="description" {...register("description")} placeholder={t("services.form.descriptionPlaceholder")} rows={3} />
           </div>
         </div>
 
@@ -159,10 +161,10 @@ export default function AddNewServiceForm({ setCreateModalOpen }) {
               setCreateModalOpen(false);
             }}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Service"}
+            {isSubmitting ? <Spinner className="h-4 w-4" /> : t("services.addService")}
           </Button>
         </div>
       </div>

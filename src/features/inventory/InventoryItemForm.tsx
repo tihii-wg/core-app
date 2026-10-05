@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -25,6 +26,7 @@ function FieldError({ message }: { message?: string }) {
 }
 
 export default function InventoryItemForm({ defaultValues, markupPercent, submitLabel, isSubmitting, onSubmit, onCancel, onMarkupCommit }: InventoryItemFormProps) {
+  const { t } = useTranslation();
   const [markupText, setMarkupText] = useState(String(markupPercent));
   const [markupError, setMarkupError] = useState("");
   const skipMarkupUpdate = useRef(true);
@@ -69,14 +71,14 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
     >
       <div className="space-y-4 py-2">
         <div className="space-y-1.5">
-          <Label htmlFor="inventory-name">Name *</Label>
+          <Label htmlFor="inventory-name">{t("inventory.form.nameLabel")}</Label>
           <Input
             id="inventory-name"
             {...register("name", {
-              required: "Name is required",
-              validate: (value) => value.trim().length > 0 || "Name is required",
+              required: t("inventory.form.nameRequired"),
+              validate: (value) => value.trim().length > 0 || t("inventory.form.nameRequired"),
             })}
-            placeholder="e.g., Brake pads"
+            placeholder={t("inventory.form.namePlaceholder")}
             className={errors.name ? "border-destructive" : ""}
           />
           <FieldError message={errors.name?.message} />
@@ -84,23 +86,23 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-sku">SKU</Label>
-            <Input id="inventory-sku" {...register("sku")} placeholder="Optional" />
+            <Label htmlFor="inventory-sku">{t("inventory.fields.sku")}</Label>
+            <Input id="inventory-sku" {...register("sku")} placeholder={t("common.optional")} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-category">Category</Label>
-            <Input id="inventory-category" {...register("category")} placeholder="Optional" />
+            <Label htmlFor="inventory-category">{t("inventory.fields.category")}</Label>
+            <Input id="inventory-category" {...register("category")} placeholder={t("common.optional")} />
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="inventory-description">Description</Label>
-          <Textarea id="inventory-description" {...register("description")} rows={3} placeholder="Optional" />
+          <Label htmlFor="inventory-description">{t("inventory.fields.description")}</Label>
+          <Textarea id="inventory-description" {...register("description")} rows={3} placeholder={t("common.optional")} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-quantity">Quantity *</Label>
+            <Label htmlFor="inventory-quantity">{t("inventory.form.quantityLabel")}</Label>
             <Input
               id="inventory-quantity"
               type="number"
@@ -108,16 +110,16 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               step="any"
               {...register("quantity", {
                 valueAsNumber: true,
-                required: "Quantity is required",
-                min: { value: 0, message: "Quantity cannot be negative" },
-                validate: (value) => Number.isFinite(value) || "Quantity is required",
+                required: t("inventory.form.quantityRequired"),
+                min: { value: 0, message: t("inventory.form.quantityNegative") },
+                validate: (value) => Number.isFinite(value) || t("inventory.form.quantityRequired"),
               })}
               className={errors.quantity ? "border-destructive" : ""}
             />
             <FieldError message={errors.quantity?.message} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-min-quantity">Minimum Quantity *</Label>
+            <Label htmlFor="inventory-min-quantity">{t("inventory.form.minQuantityLabel")}</Label>
             <Input
               id="inventory-min-quantity"
               type="number"
@@ -125,9 +127,9 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               step="any"
               {...register("minQuantity", {
                 valueAsNumber: true,
-                required: "Minimum quantity is required",
-                min: { value: 0, message: "Minimum quantity cannot be negative" },
-                validate: (value) => Number.isFinite(value) || "Minimum quantity is required",
+                required: t("inventory.form.minQuantityRequired"),
+                min: { value: 0, message: t("inventory.form.minQuantityNegative") },
+                validate: (value) => Number.isFinite(value) || t("inventory.form.minQuantityRequired"),
               })}
               className={errors.minQuantity ? "border-destructive" : ""}
             />
@@ -136,21 +138,21 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="inventory-unit">Unit *</Label>
+          <Label htmlFor="inventory-unit">{t("inventory.form.unitLabel")}</Label>
           <Input
             id="inventory-unit"
             {...register("unit", {
-              required: "Unit is required",
-              validate: (value) => value.trim().length > 0 || "Unit is required",
+              required: t("inventory.form.unitRequired"),
+              validate: (value) => value.trim().length > 0 || t("inventory.form.unitRequired"),
             })}
-            placeholder="pcs"
+            placeholder={t("inventory.form.defaultUnit")}
             className={errors.unit ? "border-destructive" : ""}
           />
           <FieldError message={errors.unit?.message} />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="inventory-markup">Markup (%)</Label>
+          <Label htmlFor="inventory-markup">{t("inventory.form.markupLabel")}</Label>
           <Input
             id="inventory-markup"
             type="number"
@@ -177,17 +179,17 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
             className={markupError ? "border-destructive" : ""}
           />
           <FieldError message={markupError} />
-          <p className="text-xs text-muted-foreground">Selling price updates from the purchase price and this markup. You can still edit the selling price.</p>
+          <p className="text-xs text-muted-foreground">{t("inventory.form.markupHint")}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-purchase-price">Purchase Price</Label>
+            <Label htmlFor="inventory-purchase-price">{t("inventory.fields.purchasePrice")}</Label>
             <Controller
               name="purchasePrice"
               control={control}
               rules={{
-                validate: (value) => value == null || value >= 0 || "Purchase price cannot be negative",
+                validate: (value) => value == null || value >= 0 || t("inventory.form.purchasePriceNegative"),
               }}
               render={({ field }) => (
                 <Input
@@ -201,7 +203,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                     field.onChange(purchasePrice);
                     applyMarkup(markupText, purchasePrice);
                   }}
-                  placeholder="Optional"
+                  placeholder={t("common.optional")}
                   className={errors.purchasePrice ? "border-destructive" : ""}
                 />
               )}
@@ -209,12 +211,12 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
             <FieldError message={errors.purchasePrice?.message} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-selling-price">Selling Price</Label>
+            <Label htmlFor="inventory-selling-price">{t("inventory.fields.sellingPrice")}</Label>
             <Controller
               name="sellingPrice"
               control={control}
               rules={{
-                validate: (value) => value == null || value >= 0 || "Selling price cannot be negative",
+                validate: (value) => value == null || value >= 0 || t("inventory.form.sellingPriceNegative"),
               }}
               render={({ field }) => (
                 <Input
@@ -224,7 +226,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                   step="0.01"
                   value={field.value ?? ""}
                   onChange={(event) => field.onChange(event.target.value === "" ? null : Number(event.target.value))}
-                  placeholder="Optional"
+                  placeholder={t("common.optional")}
                   className={errors.sellingPrice ? "border-destructive" : ""}
                 />
               )}
@@ -235,23 +237,23 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-supplier">Supplier</Label>
-            <Input id="inventory-supplier" {...register("supplier")} placeholder="Optional" />
+            <Label htmlFor="inventory-supplier">{t("inventory.fields.supplier")}</Label>
+            <Input id="inventory-supplier" {...register("supplier")} placeholder={t("common.optional")} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-location">Location</Label>
-            <Input id="inventory-location" {...register("location")} placeholder="Optional" />
+            <Label htmlFor="inventory-location">{t("inventory.fields.location")}</Label>
+            <Input id="inventory-location" {...register("location")} placeholder={t("common.optional")} />
           </div>
         </div>
 
         <div className="flex items-center justify-between">
-          <Label htmlFor="inventory-active">Active</Label>
+          <Label htmlFor="inventory-active">{t("inventory.active")}</Label>
           <Controller name="isActive" control={control} render={({ field }) => <Switch id="inventory-active" checked={field.value} onCheckedChange={field.onChange} />} />
         </div>
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? <Spinner className="h-4 w-4" /> : submitLabel}

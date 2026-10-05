@@ -1,11 +1,12 @@
-import { Navigate, Outlet } from "react-router-dom";
-import { DEFAULT_LOCALE } from "../App";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Spinner } from "./Spinner";
 import { useUser } from "../features/auth/useUser";
 import { useSessionMfa } from "../features/auth/useMfa";
+import { languageFromPath } from "../i18n/languages";
 import FullPage from "./FullPage";
 
 export function PublicRoute() {
+  const language = languageFromPath(useLocation().pathname);
   const { isAuthenticated, isLoadingSession, isReady } = useUser();
   const { needsMfa, isLoading: mfaLoading } = useSessionMfa(isAuthenticated);
 
@@ -17,7 +18,7 @@ export function PublicRoute() {
     );
 
   if (isAuthenticated && !needsMfa) {
-    return <Navigate to={`/${DEFAULT_LOCALE}/dashboard`} replace />;
+    return <Navigate to={`/${language}/dashboard`} replace />;
   }
 
   return <Outlet />;

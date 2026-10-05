@@ -1,0 +1,75 @@
+export default {
+  title: "Finance",
+  description: "Revenue, expenses, and profit overview",
+  demoDescription: "Layout preview with sample transactions",
+  demoNotice: {
+    title: "Finance is not connected to your workspace yet",
+    body: "All figures on this page are sample values for previewing the layout. They are not calculated from your orders, clients, or inventory.",
+  },
+  stats: {
+    totalRevenue: "Total Revenue",
+    totalExpenses: "Total Expenses",
+    netProfit: "Net Profit",
+    transactions: "Transactions",
+  },
+  transactions: {
+    title: "Recent Transactions",
+    columns: {
+      date: "Date",
+      type: "Type",
+      category: "Category",
+      description: "Description",
+      method: "Method",
+      amount: "Amount",
+    },
+    types: {
+      income: "Income",
+      expense: "Expense",
+    },
+  },
+  paymentMethods: {
+    short: {
+      cash: "Cash",
+      card: "Card",
+      "bank-transfer": "Bank",
+      other: "Other",
+    },
+    full: {
+      cash: "Cash",
+      card: "Card",
+      "bank-transfer": "Bank Transfer",
+      other: "Other",
+    },
+  },
+  revenueByPaymentMethod: "Revenue by Payment Method",
+  profitOverview: {
+    title: "Profit Overview",
+    revenue: "Revenue",
+    expenses: "Expenses",
+    netProfit: "Net Profit",
+    margin: "Profit Margin: <value>{{value}}%</value>",
+  },
+  topExpenses: "Top Expenses",
+  demo: {
+    categories: {
+      serviceRevenue: "Service Revenue",
+      inventoryPurchase: "Inventory Purchase",
+      utilities: "Utilities",
+      rent: "Rent",
+      partsSale: "Parts Sale",
+      marketing: "Marketing",
+    },
+    descriptions: {
+      ipadScreen: "Payment for iPad Pro screen replacement",
+      dellSoftware: "Payment for Dell XPS software installation",
+      iphoneScreens: "iPhone 14 Pro screens x5 from TechParts Direct",
+      watchScreen: "Payment for Apple Watch screen replacement",
+      electricity: "Monthly electricity bill",
+      rent: "Monthly office rent",
+      macbookDiagnostics: "Payment for MacBook diagnostics",
+      macbookBatteries: "MacBook Pro batteries x3 from Apple Parts Co",
+      chargerSale: "USB-C Charger sale to walk-in customer",
+      googleAds: "Google Ads monthly budget",
+    },
+  },
+};

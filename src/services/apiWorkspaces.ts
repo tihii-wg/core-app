@@ -1,5 +1,7 @@
 // import { screen } from "@testing-library/react";
 import type { NewWorkspaceData } from "../lib/types";
+import { fallbackLanguage, isAppLanguage, type AppLanguage } from "../i18n/languages";
+import i18n from "../i18n";
 import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
 
@@ -19,7 +21,7 @@ export type ListedWorkspaceMembership = {
   workspaces: ListedWorkspace | ListedWorkspace[] | null;
 };
 
-const ownerOnlyWorkspaceMessage = "Only the workspace owner can change company settings.";
+const ownerOnlyWorkspaceMessage = () => i18n.t("settings.company.ownerOnly");
 
 export async function getUserWorkspaces() {
   const user = await currentUser();
@@ -102,7 +104,7 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
     throw new Error(error.message);
   }
 
-  throw new Error("Workspace could not be loaded");
+  throw new Error(i18n.t("settings.workspace.errors.loadFailed"));
 }
 
 export type WorkspaceDetails = {
@@ -172,14 +174,11 @@ export type WorkspacePreferencesInput = {
   currency: string;
 };
 
-const workspaceLanguages = ["en", "ro", "ru"] as const;
-
-export type WorkspaceLanguage = (typeof workspaceLanguages)[number];
+export type WorkspaceLanguage = AppLanguage;
 
 export function normalizeWorkspaceLanguage(value: string | null | undefined): WorkspaceLanguage {
   const code = value?.trim().toLowerCase().split(/[-_]/)[0] ?? "";
-  if ((workspaceLanguages as readonly string[]).includes(code)) return code as WorkspaceLanguage;
-  return "en";
+  return isAppLanguage(code) ? code : fallbackLanguage;
 }
 
 const workspaceDateFormats = ["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"] as const;
@@ -202,8 +201,8 @@ export function normalizeWorkspaceDateFormat(value: string | null | undefined): 
 export function workspacePreferenceFields(input: WorkspacePreferencesInput) {
   const timezone = input.timezone.trim();
   const currency = input.currency.trim();
-  if (!timezone) throw new Error("Time zone is required");
-  if (!currency) throw new Error("Currency is required");
+  if (!timezone) throw new Error(i18n.t("settings.appearance.errors.timezoneRequired"));
+  if (!currency) throw new Error(i18n.t("settings.appearance.errors.currencyRequired"));
   return {
     language: normalizeWorkspaceLanguage(input.language),
     timezone,
@@ -214,15 +213,15 @@ export function workspacePreferenceFields(input: WorkspacePreferencesInput) {
 
 export function workspaceUpdateFields(input: { name: string; industryId: string; inventoryMarkup: number }) {
   const name = input.name.trim();
-  if (!name) throw new Error("Company name is required");
+  if (!name) throw new Error(i18n.t("settings.company.validation.nameRequired"));
 
   const industryId = input.industryId.trim();
-  if (!industryId) throw new Error("Business type is required");
+  if (!industryId) throw new Error(i18n.t("settings.company.validation.businessTypeRequired"));
 
   const inventoryMarkup = input.inventoryMarkup;
-  if (!Number.isFinite(inventoryMarkup)) throw new Error("Markup percentage must be a number");
-  if (inventoryMarkup < 0) throw new Error("Markup percentage cannot be negative");
-  if (inventoryMarkup > 1000) throw new Error("Markup percentage cannot be greater than 1000");
+  if (!Number.isFinite(inventoryMarkup)) throw new Error(i18n.t("settings.company.validation.markupNotNumber"));
+  if (inventoryMarkup < 0) throw new Error(i18n.t("settings.company.validation.markupNegative"));
+  if (inventoryMarkup > 1000) throw new Error(i18n.t("settings.company.validation.markupTooHigh"));
 
   return { name, industryId, inventoryMarkup };
 }
@@ -234,7 +233,7 @@ async function currentUser() {
   } = await supabase.auth.getUser();
 
   if (error) throw new Error(error.message);
-  if (!user) throw new Error("User not found");
+  if (!user) throw new Error(i18n.t("settings.workspace.errors.userNotFound"));
   return user;
 }
 
@@ -248,7 +247,7 @@ async function requireWorkspaceMembership(userId: string, workspaceId: string) {
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("You do not have access to this workspace");
+  if (!data) throw new Error(i18n.t("settings.workspace.errors.noAccess"));
 
   return data;
 }
@@ -266,7 +265,6 @@ type TeamProfileRow = { user_id: string; full_name: string | null; email: string
 type TeamMemberRow = { user_id: string; role: string | null; created_at?: string | null; deleted_at?: string | null };
 
 const teamRoleOrder = ["owner", "admin", "manager", "member"];
-const teamMigrationMessage = "Team member management needs the latest database update (supabase/migrations/20260929000300_team_member_rpcs.sql).";
 
 function isMissingFunction(error: { code?: string; message?: string }) {
   return error.code === "PGRST202" || error.code === "42883";
@@ -277,14 +275,14 @@ function isPermissionError(error: { code?: string; message?: string }) {
 }
 
 function teamMemberError(error: { code?: string; message?: string }, permissionMessage: string) {
-  if (isMissingFunction(error)) return new Error(teamMigrationMessage);
+  if (isMissingFunction(error)) return new Error(i18n.t("team.errors.migrationRequired"));
   if (isPermissionError(error)) return new Error(permissionMessage);
   return new Error(error.message ?? permissionMessage);
 }
 
 export function assignableTeamRole(role: string) {
   const value = role.trim().toLowerCase();
-  if (value !== "admin" && value !== "manager" && value !== "member") throw new Error("Choose admin, manager, or member");
+  if (value !== "admin" && value !== "manager" && value !== "member") throw new Error(i18n.t("team.errors.invalidRole"));
   return value;
 }
 
@@ -333,23 +331,23 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
 export async function addWorkspaceMember(workspaceId: string, input: { email: string; role: string }) {
   const role = assignableTeamRole(input.role);
   const email = input.email.trim().toLowerCase();
-  if (!email) throw new Error("Email is required");
+  if (!email) throw new Error(i18n.t("team.errors.emailRequired"));
 
   const user = await currentUser();
   await requireWorkspaceMembership(user.id, workspaceId);
 
   const { data: userId, error: lookupError } = await supabase.rpc("workspace_member_find_user", { target_workspace: workspaceId, member_email: email });
-  if (lookupError) throw teamMemberError(lookupError, "You do not have permission to add team members");
-  if (!userId) throw new Error("No Core App account uses this email. Ask them to sign up first.");
-  if (userId === user.id) throw new Error("You are already a member of this workspace");
+  if (lookupError) throw teamMemberError(lookupError, i18n.t("team.errors.noAddPermission"));
+  if (!userId) throw new Error(i18n.t("team.errors.accountNotFound"));
+  if (userId === user.id) throw new Error(i18n.t("team.errors.alreadyMemberSelf"));
 
   const { data: existingRows, error: existingError } = await supabase.from("workspace_members").select("user_id, role, deleted_at").eq("workspace_id", workspaceId).eq("user_id", userId);
   if (existingError) throw new Error(existingError.message);
 
   const existing = (existingRows ?? []) as TeamMemberRow[];
-  if (existing.some((row) => !row.deleted_at)) throw new Error("This user is already a team member");
+  if (existing.some((row) => !row.deleted_at)) throw new Error(i18n.t("team.errors.alreadyMember"));
 
-  const permissionMessage = "You do not have permission to add this team member";
+  const permissionMessage = i18n.t("team.errors.noAddMemberPermission");
 
   if (existing.length > 0) {
     const { data, error } = await supabase
@@ -371,7 +369,7 @@ export async function addWorkspaceMember(workspaceId: string, input: { email: st
 
 export async function updateWorkspaceMemberRole(workspaceId: string, userId: string, nextRole: string) {
   const role = assignableTeamRole(nextRole);
-  const permissionMessage = "You do not have permission to change this member's role";
+  const permissionMessage = i18n.t("team.errors.noRoleChangePermission");
 
   const { data, error } = await supabase
     .from("workspace_members")
@@ -386,7 +384,7 @@ export async function updateWorkspaceMemberRole(workspaceId: string, userId: str
 }
 
 export async function removeWorkspaceMember(workspaceId: string, userId: string) {
-  const permissionMessage = "You do not have permission to remove this member";
+  const permissionMessage = i18n.t("team.errors.noRemovePermission");
 
   const { data, error } = await supabase
     .from("workspace_members")
@@ -426,7 +424,7 @@ export async function updateWorkspaceDetails(workspaceId: string, input: { name:
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error(ownerOnlyWorkspaceMessage);
+  if (!data) throw new Error(ownerOnlyWorkspaceMessage());
 
   return {
     id: String(data.id),
@@ -444,7 +442,7 @@ export async function updateWorkspacePreferences(workspaceId: string, input: Wor
   const { data, error } = await supabase.from("workspaces").update(fields).eq("id", workspaceId).is("deleted_at", null).select("id").maybeSingle();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error(ownerOnlyWorkspaceMessage);
+  if (!data) throw new Error(ownerOnlyWorkspaceMessage());
 
   return getWorkspace(workspaceId);
 }
@@ -461,13 +459,13 @@ export async function setActiveWorkspace(id: string) {
     .maybeSingle();
 
   if (memberError) throw new Error(memberError.message);
-  if (!member) throw new Error("You do not have access to this workspace");
+  if (!member) throw new Error(i18n.t("settings.workspace.errors.noAccess"));
 
   const { data, error } = await supabase.from("profiles").update({ active_workspace_id: id }).eq("id", user.id).select("active_workspace_id");
   if (error) throw new Error(error.message);
 
   const activeWorkspaceId = data?.[0]?.active_workspace_id;
-  if (!activeWorkspaceId) throw new Error("Workspace was not updated");
+  if (!activeWorkspaceId) throw new Error(i18n.t("settings.workspace.errors.notUpdated"));
 
   return activeWorkspaceId;
 }
@@ -522,18 +520,18 @@ export async function deleteWorkspace(workspaceId: string) {
   if (membershipsError) throw new Error(membershipsError.message);
 
   const workspaceIds = (memberships ?? []).map((membership) => String(membership.workspace_id));
-  if (workspaceIds.length <= 1) throw new Error("You cannot delete last workspace");
+  if (workspaceIds.length <= 1) throw new Error(i18n.t("settings.workspace.errors.cannotDeleteLast"));
 
   const { data: profile, error: profileError } = await supabase.from("profiles").select("active_workspace_id").eq("id", user.id).maybeSingle();
 
   if (profileError) throw new Error(profileError.message);
-  if (!profile) throw new Error("Profile not found");
+  if (!profile) throw new Error(i18n.t("settings.profile.errors.notFound"));
 
   // Owner-only; soft-deletes the workspace and all of its memberships in one transaction.
   const { error: softDeleteError } = await supabase.rpc("soft_delete_workspace", { target_workspace: workspaceId });
 
   if (softDeleteError) {
-    if (isMissingFunction(softDeleteError)) throw new Error("Workspace deletion needs the latest database update (public.soft_delete_workspace).");
+    if (isMissingFunction(softDeleteError)) throw new Error(i18n.t("settings.workspace.errors.deletionMigrationRequired"));
     throw new Error(softDeleteError.message);
   }
 
@@ -544,7 +542,7 @@ export async function deleteWorkspace(workspaceId: string) {
 
     if (nextWorkspaceId) {
       const { error: switchError } = await supabase.from("profiles").update({ active_workspace_id: nextWorkspaceId }).eq("id", user.id);
-      if (switchError) throw new Error(`The workspace was deleted, but switching to another workspace failed: ${switchError.message}`);
+      if (switchError) throw new Error(i18n.t("settings.workspace.errors.switchAfterDeleteFailed", { message: switchError.message }));
     }
   }
 

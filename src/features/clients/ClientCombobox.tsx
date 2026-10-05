@@ -1,4 +1,5 @@
 import { useState, type Ref } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import type { Client } from "../../lib/types";
 import ClientTypeBadge from "./ClientTypeBadge";
@@ -13,6 +14,7 @@ type ClientComboboxProps = {
 };
 
 export default function ClientCombobox({ clients, value, onChange, onSelect, errors, inputRef }: ClientComboboxProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const filteredClients = clients.filter((client) => client.name?.toLowerCase().includes(value.toLowerCase()));
@@ -27,7 +29,7 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
         name="client"
         value={value}
         autoComplete="off"
-        placeholder="Client"
+        placeholder={t("clients.combobox.placeholder")}
         aria-invalid={errors || undefined}
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         // className="w-full rounded-md border px-3 py-2"
@@ -58,7 +60,7 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
 
           {value.trim() && !exactMatch && (
             <div className="cursor-pointer border-t px-3 py-2 text-sm text-foreground" onClick={() => setOpen(false)}>
-              New client: <strong>{value.trim()}</strong>
+              <Trans i18nKey="clients.combobox.newClient" values={{ name: value.trim() }} components={{ strong: <strong /> }} />
             </div>
           )}
         </div>

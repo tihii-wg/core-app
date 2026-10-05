@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Calendar, Pencil } from "lucide-react";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -19,7 +20,10 @@ type OrderDetailPanelProps = {
   onStatusChange: (status: OrderStatus) => void;
 };
 
+const orderStatuses: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
+
 export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDetailPanelOpen, onOrderUpdated, onStatusChange }: OrderDetailPanelProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { employees,} = useGetEmployees();
@@ -48,14 +52,14 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              aria-label="Edit"
-              title="Edit order"
+              aria-label={t("common.edit")}
+              title={t("orders.detail.editTitle")}
               className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
             >
               <Pencil className="size-4" />
             </button>
           )}
-          <SheetDescription className="sr-only">View and edit this order's VIN, services, device, assignment, and deadline.</SheetDescription>
+          <SheetDescription className="sr-only">{t("orders.detail.srDescription")}</SheetDescription>
         </SheetHeader>
 
         {selectedOrder && isEditing && (
@@ -78,17 +82,17 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
           <div className="space-y-5 px-5 py-5">
             <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
               <div className="min-w-0">
-                <h3 className="text-xs font-medium text-muted-foreground">Client</h3>
+                <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.client")}</h3>
                 <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{selectedOrder.clientName}</p>
                 <div className="mt-3">
-                  <h3 className="text-xs font-medium text-muted-foreground">Client Type</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.clientType")}</h3>
                   <div className="mt-1">
                     {selectedOrder.clientType ? <ClientTypeBadge clientType={selectedOrder.clientType} /> : <span className="text-subtle-foreground">—</span>}
                   </div>
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <h3 className="text-xs font-medium text-muted-foreground">Total Price</h3>
+                <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(selectedOrder.totalPrice)}</p>
                 <div className="mt-2">
                   <PaymentStatusBadge status={selectedOrder.paymentStatus} />
@@ -97,13 +101,13 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
             </div>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-              <DetailItem label="Device" value={selectedOrder.device} />
-              <DetailItem label="Service" value={selectedOrder.service} />
-              <DetailItem label="Car Number" value={selectedOrder.carNumber} />
-              <DetailItem label="VIN" value={selectedOrder.vin} mono />
-              <DetailItem label="Assigned To" value={selectedOrder.assignedEmployeeName} />
+              <DetailItem label={t("orders.detail.device")} value={selectedOrder.device} />
+              <DetailItem label={t("orders.detail.service")} value={selectedOrder.service} />
+              <DetailItem label={t("orders.detail.carNumber")} value={selectedOrder.carNumber} />
+              <DetailItem label={t("orders.detail.vin")} value={selectedOrder.vin} mono />
+              <DetailItem label={t("orders.detail.assignedTo")} value={selectedOrder.assignedEmployeeName} />
               <DetailItem
-                label="Deadline"
+                label={t("orders.detail.deadline")}
                 value={
                   selectedOrder.deadline ? (
                     <span className="inline-flex items-center gap-1.5">
@@ -114,31 +118,30 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
                 }
               />
               <div className="col-span-2">
-                <dt className="text-xs font-medium text-muted-foreground">Description</dt>
+                <dt className="text-xs font-medium text-muted-foreground">{t("orders.detail.description")}</dt>
                 <dd className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground">{selectedOrder.description || <span className="text-subtle-foreground">—</span>}</dd>
               </div>
             </dl>
 
             <div className="border-t border-border pt-5">
-              <Label htmlFor="order-status" className="mb-2 block">Update Status</Label>
+              <Label htmlFor="order-status" className="mb-2 block">{t("orders.detail.updateStatus")}</Label>
               <Select value={selectedOrder.status} onValueChange={onStatusChange as (value: string) => void}>
                 <SelectTrigger id="order-status" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="new">New</SelectItem>
-                  <SelectItem value="in-progress">In Progress</SelectItem>
-                  <SelectItem value="waiting-parts">Waiting Parts</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  {orderStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {t(`status.order.${status}`)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-subtle-foreground tabular-nums">
-              <p>Created: {selectedOrder.createdAt}</p>
-              <p>Updated: {selectedOrder.updatedAt}</p>
+              <p>{t("orders.detail.created", { date: selectedOrder.createdAt })}</p>
+              <p>{t("orders.detail.updated", { date: selectedOrder.updatedAt })}</p>
             </div>
           </div>
         )}

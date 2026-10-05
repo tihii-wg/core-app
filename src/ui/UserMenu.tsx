@@ -1,5 +1,6 @@
 import { ChevronDown, LogOut, User } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "./DropdownMenu";
 import { useUser } from "../features/auth/useUser";
@@ -9,6 +10,7 @@ import { profileDisplayName, profileInitials } from "../features/profiles/profil
 import { profileSettingsPath } from "../features/settings/settingsTab";
 
 export default function UserMenu() {
+  const { t } = useTranslation();
   const { logOut } = useLogOut();
   const { user } = useUser();
   const { data: profile } = useGetProfile();
@@ -21,7 +23,7 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" title="Account" className="flex h-9 items-center gap-1.5 px-1.5">
+        <Button variant="ghost" title={t("nav.userMenu.account")} className="flex h-9 items-center gap-1.5 px-1.5">
           <span className="flex size-7 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1557c9] text-[11px] font-semibold text-white ring-2 ring-background">
             {profileInitials(userName)}
           </span>
@@ -45,12 +47,12 @@ export default function UserMenu() {
           }}
         >
           <User className="h-4 w-4 mr-2 text-muted-foreground" />
-          Profile
+          {t("nav.userMenu.profile")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => logOut()}>
           <LogOut className="h-4 w-4 mr-2" />
-          Log out
+          {t("nav.userMenu.logOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

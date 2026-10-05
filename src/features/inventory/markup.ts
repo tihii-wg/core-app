@@ -1,3 +1,5 @@
+import i18n from "../../i18n";
+
 /** Whole-number percent. 25 means 25%. Values above 1000 are rejected. */
 export const MAX_MARKUP_PERCENT = 1000;
 
@@ -8,12 +10,12 @@ export function sellingPriceFromMarkup(purchasePrice: number | null, markupPerce
 
 export function markupFieldError(value: string) {
   const trimmed = value.trim();
-  if (!trimmed) return "Markup percentage is required";
+  if (!trimmed) return i18n.t("inventory.markup.required");
 
   const markup = Number(trimmed);
-  if (!Number.isFinite(markup)) return "Markup percentage must be a number";
-  if (markup < 0) return "Markup percentage cannot be negative";
-  if (markup > MAX_MARKUP_PERCENT) return "Markup percentage cannot be greater than 1000";
+  if (!Number.isFinite(markup)) return i18n.t("inventory.markup.notNumber");
+  if (markup < 0) return i18n.t("inventory.markup.negative");
+  if (markup > MAX_MARKUP_PERCENT) return i18n.t("inventory.markup.tooHigh", { max: MAX_MARKUP_PERCENT });
   return null;
 }
 

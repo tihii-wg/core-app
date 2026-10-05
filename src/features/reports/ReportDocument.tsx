@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { currentIntlLocale } from "../../i18n";
 import type { QuickReportModel, ReportColumn, ReportFormat, ReportRow, ReportSection } from "./quickReports";
 
 type Formatters = {
@@ -25,15 +27,16 @@ function formatValue(value: string | number | null | undefined, format: ReportFo
   if (typeof value === "number") {
     if (format === "money") return formatMoney(value);
     if (format === "percent" || format === "share") return formatPercent(value);
-    return value.toLocaleString();
+    return value.toLocaleString(currentIntlLocale());
   }
   return format === "date" ? formatDate(value) : value;
 }
 
 function NoData({ description }: { description?: string }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-md border border-dashed border-[#d1d5db] px-6 py-8 text-center">
-      <p className="font-medium text-[#1f2933]">No data available yet</p>
+      <p className="font-medium text-[#1f2933]">{t("reports.document.noData")}</p>
       {description && <p className="mt-1 text-sm text-[#6b7280]">{description}</p>}
     </div>
   );
@@ -119,6 +122,7 @@ function SectionTable({ section, formatters }: { section: Extract<ReportSection,
 }
 
 export function ReportDocument({ title, description, workspaceName, periodLabel, generatedLabel, model, formatMoney, formatDate }: ReportDocumentProps) {
+  const { t } = useTranslation();
   const formatters = { formatMoney, formatDate };
 
   return (
@@ -130,15 +134,15 @@ export function ReportDocument({ title, description, workspaceName, periodLabel,
           <p className="text-sm text-[#6b7280]">{description}</p>
         </div>
         <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-1 text-sm sm:text-right print:text-right">
-          <dt className="text-[#6b7280]">Period</dt>
+          <dt className="text-[#6b7280]">{t("reports.document.period")}</dt>
           <dd className="whitespace-nowrap font-medium">{periodLabel}</dd>
-          <dt className="text-[#6b7280]">Generated</dt>
+          <dt className="text-[#6b7280]">{t("reports.document.generated")}</dt>
           <dd className="whitespace-nowrap font-medium">{generatedLabel}</dd>
         </dl>
       </header>
 
       {model.kpis.length > 0 && (
-        <section aria-label="Key figures" className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 print:grid-cols-3 break-inside-avoid">
+        <section aria-label={t("reports.document.keyFigures")} className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 print:grid-cols-3 break-inside-avoid">
           {model.kpis.map((kpi) => (
             <div key={kpi.label} className="min-w-0 rounded-md border border-[#e5e7eb] p-3 [overflow-wrap:anywhere]">
               <p className="text-xs font-medium uppercase tracking-wide text-[#6b7280]">{kpi.label}</p>
@@ -158,7 +162,7 @@ export function ReportDocument({ title, description, workspaceName, periodLabel,
       ))}
 
       <footer className="mt-10 border-t border-[#e5e7eb] pt-3 text-xs text-[#6b7280]">
-        Generated from {workspaceName} data on {generatedLabel}. Figures reflect the records stored at that time.
+        {t("reports.document.footer", { workspace: workspaceName, generated: generatedLabel })}
       </footer>
     </article>
   );

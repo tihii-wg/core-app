@@ -1,5 +1,6 @@
 import { useCallback, useState, type ElementType, type ReactElement, type ReactNode } from "react";
 import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, Wallet, Package, Calendar, Download, FileText, PieChart, Activity, ArrowUpRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -18,11 +19,11 @@ import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { clientCreatedAt } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useNavigate, useParams } from "react-router-dom";
-import { quickReports, quickReportTypes } from "./quickReports";
+import { quickReportDescription, quickReportTitle, quickReportTypes } from "./quickReports";
 import { employeePerformance, lowestStockLevels, percentChange, reportPeriod, revenueSeries, serviceDistribution, summaryStats, type ReportRange } from "./reportStats";
 import { ExportReportDialog } from "./ExportReportDialog";
 import { ReportPrintRoot, type ReportPrintJob } from "./ReportPrintRoot";
-import { useReportFormatting } from "./reportFormatting";
+import { rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
 import { chartAxisProps, chartColors, chartGridProps, chartLegendProps, chartTooltipProps } from "./chartTheme";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
@@ -35,7 +36,8 @@ function ReportChart({ height, children }: { height: number; children: ReactElem
   );
 }
 
-function ReportPlaceholder({ height, title = "No data available yet", description, isLoading = false, isError = false }: { height: number; title?: string; description?: string; isLoading?: boolean; isError?: boolean }) {
+function ReportPlaceholder({ height, title, description, isLoading = false, isError = false }: { height: number; title?: string; description?: string; isLoading?: boolean; isError?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="flex w-full flex-col items-center justify-center gap-1 px-6 text-center" style={{ height }}>
       {isLoading ? (
@@ -45,8 +47,8 @@ function ReportPlaceholder({ height, title = "No data available yet", descriptio
           <span className={cn("mb-2 flex size-9 items-center justify-center rounded-lg", isError ? "bg-destructive/10 text-destructive" : "bg-muted text-subtle-foreground")}>
             <BarChart3 aria-hidden="true" className="size-4" />
           </span>
-          <p className="text-sm font-medium text-foreground">{isError ? "Could not load report data" : title}</p>
-          <p className="max-w-xs text-[13px] text-muted-foreground">{isError ? "Refresh the page to try again." : description}</p>
+          <p className="text-sm font-medium text-foreground">{isError ? t("reports.charts.loadError") : (title ?? t("reports.charts.noData"))}</p>
+          <p className="max-w-xs text-[13px] text-muted-foreground">{isError ? t("reports.charts.loadErrorHint") : description}</p>
         </>
       )}
     </div>
@@ -62,11 +64,10 @@ function ChartTitle({ icon: Icon, children }: { icon?: ElementType; children: Re
   );
 }
 
-const granularityLabels = { day: "Daily", week: "Weekly", month: "Monthly" } as const;
-
 const inventorySort = { field: "name", ascending: true } as const;
 
 export function ReportsModule() {
+  const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
   const [dateRange, setDateRange] = useState<ReportRange>("last30");
   const [activeTab, setActiveTab] = useState("overview");
@@ -99,35 +100,38 @@ export function ReportsModule() {
   const services = serviceDistribution(orders, period);
   const employeeResults = employeePerformance(orders, employees, period);
   const stockLevels = lowestStockLevels(inventoryItems);
-  const granularity = granularityLabels[period.granularity];
 
   const statsLoading = ordersLoading || clientsLoading;
   const statsError = Boolean(ordersError || clientsError);
 
   const stats = [
     {
-      title: "Total Revenue",
+      key: "revenue",
+      title: t("reports.stats.totalRevenue"),
       value: formatMoney(summary.current.revenue),
       change: percentChange(summary.current.revenue, summary.previous.revenue),
       icon: Wallet,
       variant: "success" as const,
     },
     {
-      title: "Total Orders",
+      key: "orders",
+      title: t("reports.stats.totalOrders"),
       value: String(summary.current.orders),
       change: percentChange(summary.current.orders, summary.previous.orders),
       icon: ShoppingCart,
       variant: "primary" as const,
     },
     {
-      title: "New Clients",
+      key: "clients",
+      title: t("reports.stats.newClients"),
       value: String(summary.current.newClients),
       change: percentChange(summary.current.newClients, summary.previous.newClients),
       icon: Users,
       variant: "primary" as const,
     },
     {
-      title: "Avg Order Value",
+      key: "average",
+      title: t("reports.stats.avgOrderValue"),
       value: formatMoney(summary.current.avgOrderValue),
       change: percentChange(summary.current.avgOrderValue, summary.previous.avgOrderValue),
       icon: Activity,
@@ -138,8 +142,8 @@ export function ReportsModule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Reports & Analytics"
-        description="Business performance insights and analytics"
+        title={t("reports.page.title")}
+        description={t("reports.page.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Select value={dateRange} onValueChange={(value) => setDateRange(value as ReportRange)}>
@@ -148,15 +152,16 @@ export function ReportsModule() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="last7">Last 7 days</SelectItem>
-                <SelectItem value="last30">Last 30 days</SelectItem>
-                <SelectItem value="last90">Last 90 days</SelectItem>
-                <SelectItem value="thisYear">This Year</SelectItem>
+                {reportRanges.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {rangeLabel(value)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={() => setExportOpen(true)}>
               <Download />
-              Export
+              {t("reports.page.export")}
             </Button>
           </div>
         }
@@ -167,7 +172,7 @@ export function ReportsModule() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
-          <div key={stat.title} className={statCardClassName}>
+          <div key={stat.key} className={statCardClassName}>
             <span className={cn("absolute top-4 right-4 flex size-8 items-center justify-center rounded-md sm:top-5 sm:right-5", statIconVariants[stat.variant])}>
               <stat.icon aria-hidden="true" className="size-4" />
             </span>
@@ -184,16 +189,16 @@ export function ReportsModule() {
             </div>
             <div className="mt-2 text-xs">
               {statsLoading || statsError || stat.change === null ? (
-                <span className="text-subtle-foreground" title="No data for the previous period">
+                <span className="text-subtle-foreground" title={t("reports.stats.noPreviousData")}>
                   —
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 text-muted-foreground" title="Compared with the previous period">
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground" title={t("reports.stats.comparedWithPrevious")}>
                   <span className={cn("inline-flex items-center gap-0.5 rounded px-1 py-px font-medium tabular-nums", stat.change >= 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive")}>
                     {stat.change >= 0 ? <TrendingUp aria-hidden="true" className="size-3" /> : <TrendingDown aria-hidden="true" className="size-3" />}
                     {`${stat.change >= 0 ? "+" : ""}${stat.change.toFixed(1)}%`}
                   </span>
-                  vs previous period
+                  {t("reports.stats.vsPreviousPeriod")}
                 </span>
               )}
             </div>
@@ -206,19 +211,19 @@ export function ReportsModule() {
         <TabsList>
           <TabsTrigger value="overview">
             <BarChart3 />
-            Overview
+            {t("reports.tabs.overview")}
           </TabsTrigger>
           <TabsTrigger value="services">
             <PieChart />
-            Services
+            {t("reports.tabs.services")}
           </TabsTrigger>
           <TabsTrigger value="employees">
             <Users />
-            Employees
+            {t("reports.tabs.employees")}
           </TabsTrigger>
           <TabsTrigger value="inventory">
             <Package />
-            Inventory
+            {t("reports.tabs.inventory")}
           </TabsTrigger>
         </TabsList>
 
@@ -226,11 +231,11 @@ export function ReportsModule() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <ChartTitle icon={TrendingUp}>{granularity} Revenue</ChartTitle>
+                <ChartTitle icon={TrendingUp}>{t(`reports.charts.revenueTitle.${period.granularity}`)}</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || summary.current.orders === 0 ? (
-                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No orders were created in this period." />
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description={t("reports.charts.noOrders")} />
                 ) : (
                   <ReportChart height={300}>
                     <AreaChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -243,7 +248,7 @@ export function ReportsModule() {
                       <CartesianGrid {...chartGridProps} vertical={false} />
                       <XAxis dataKey="label" {...chartAxisProps} />
                       <YAxis {...chartAxisProps} axisLine={false} width={84} tickFormatter={(v) => formatWorkspaceMoneyCompact(v, currency)} />
-                      <Tooltip {...chartTooltipProps} cursor={{ stroke: "var(--color-border-strong)" }} formatter={(value) => [formatMoney(Number(value)), "Revenue"]} />
+                      <Tooltip {...chartTooltipProps} cursor={{ stroke: "var(--color-border-strong)" }} formatter={(value) => [formatMoney(Number(value)), t("reports.charts.revenue")]} />
                       <Area type="monotone" dataKey="revenue" stroke={chartColors.primary} fill="url(#report-revenue-fill)" strokeWidth={2} />
                     </AreaChart>
                   </ReportChart>
@@ -253,11 +258,11 @@ export function ReportsModule() {
 
             <Card>
               <CardHeader>
-                <ChartTitle icon={ShoppingCart}>{granularity} Orders</ChartTitle>
+                <ChartTitle icon={ShoppingCart}>{t(`reports.charts.ordersTitle.${period.granularity}`)}</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || summary.current.orders === 0 ? (
-                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No orders were created in this period." />
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description={t("reports.charts.noOrders")} />
                 ) : (
                   <ReportChart height={300}>
                     <BarChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -265,7 +270,7 @@ export function ReportsModule() {
                       <XAxis dataKey="label" {...chartAxisProps} />
                       <YAxis {...chartAxisProps} axisLine={false} width={40} allowDecimals={false} />
                       <Tooltip {...chartTooltipProps} />
-                      <Bar dataKey="orders" name="Orders" fill={chartColors.success} radius={[4, 4, 0, 0]} maxBarSize={36} />
+                      <Bar dataKey="orders" name={t("reports.charts.orders")} fill={chartColors.success} radius={[4, 4, 0, 0]} maxBarSize={36} />
                     </BarChart>
                   </ReportChart>
                 )}
@@ -278,11 +283,11 @@ export function ReportsModule() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <ChartTitle icon={PieChart}>Service Distribution</ChartTitle>
+                <ChartTitle icon={PieChart}>{t("reports.charts.serviceDistribution")}</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || services.length === 0 ? (
-                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No services were performed in this period." />
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description={t("reports.charts.noServices")} />
                 ) : (
                   <ReportChart height={300}>
                     <RechartsPieChart>
@@ -291,7 +296,7 @@ export function ReportsModule() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip {...chartTooltipProps} formatter={(value) => [Number(value), "Times performed"]} />
+                      <Tooltip {...chartTooltipProps} formatter={(value) => [Number(value), t("reports.charts.timesPerformed")]} />
                       <Legend {...chartLegendProps} />
                     </RechartsPieChart>
                   </ReportChart>
@@ -301,11 +306,11 @@ export function ReportsModule() {
 
             <Card>
               <CardHeader>
-                <ChartTitle icon={BarChart3}>Top Performing Services</ChartTitle>
+                <ChartTitle icon={BarChart3}>{t("reports.charts.topServices")}</ChartTitle>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || services.length === 0 ? (
-                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description="No services were performed in this period." />
+                  <ReportPlaceholder height={300} isLoading={ordersLoading} isError={Boolean(ordersError)} description={t("reports.charts.noServices")} />
                 ) : (
                   <ol className="space-y-4">
                     {services.map((service, index) => (
@@ -336,7 +341,7 @@ export function ReportsModule() {
         <TabsContent value="employees" className="mt-4">
           <Card>
             <CardHeader>
-              <ChartTitle icon={Users}>Employee Performance</ChartTitle>
+              <ChartTitle icon={Users}>{t("reports.charts.employeePerformance")}</ChartTitle>
             </CardHeader>
             <CardContent>
               {ordersLoading || employeesLoading || ordersError || employeesError || employeeResults.length === 0 ? (
@@ -344,7 +349,7 @@ export function ReportsModule() {
                   height={400}
                   isLoading={ordersLoading || employeesLoading}
                   isError={Boolean(ordersError || employeesError)}
-                  description="No orders assigned to employees were completed in this period."
+                  description={t("reports.charts.noEmployeeResults")}
                 />
               ) : (
                 <ReportChart height={400}>
@@ -354,7 +359,7 @@ export function ReportsModule() {
                     <YAxis dataKey="name" type="category" {...chartAxisProps} axisLine={false} width={120} />
                     <Tooltip {...chartTooltipProps} />
                     <Legend {...chartLegendProps} />
-                    <Bar dataKey="completed" name="Jobs Completed" fill={chartColors.primary} radius={[0, 4, 4, 0]} maxBarSize={28} />
+                    <Bar dataKey="completed" name={t("reports.charts.jobsCompleted")} fill={chartColors.primary} radius={[0, 4, 4, 0]} maxBarSize={28} />
                   </BarChart>
                 </ReportChart>
               )}
@@ -365,21 +370,21 @@ export function ReportsModule() {
         <TabsContent value="inventory" className="mt-4 space-y-4">
           <Card>
             <CardHeader>
-              <ChartTitle icon={Activity}>Inventory Trends</ChartTitle>
+              <ChartTitle icon={Activity}>{t("reports.charts.inventoryTrends")}</ChartTitle>
             </CardHeader>
             <CardContent>
-              <ReportPlaceholder height={200} description="Stock history and parts usage are not recorded yet, so trends cannot be shown." />
+              <ReportPlaceholder height={200} description={t("reports.charts.inventoryTrendsUnavailable")} />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <ChartTitle icon={Package}>Current Stock Levels</ChartTitle>
-              <CardDescription>Active items with the lowest stock relative to their minimum. Current stock, not affected by the date range.</CardDescription>
+              <ChartTitle icon={Package}>{t("reports.charts.stockLevels")}</ChartTitle>
+              <CardDescription>{t("reports.charts.stockLevelsDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               {inventoryLoading || inventoryError || stockLevels.length === 0 ? (
-                <ReportPlaceholder height={300} isLoading={inventoryLoading} isError={inventoryError} description="No active inventory items in this workspace." />
+                <ReportPlaceholder height={300} isLoading={inventoryLoading} isError={inventoryError} description={t("reports.charts.noInventory")} />
               ) : (
                 <ReportChart height={Math.max(200, stockLevels.length * 48)}>
                   <BarChart data={stockLevels} layout="vertical" margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -388,8 +393,8 @@ export function ReportsModule() {
                     <YAxis dataKey="name" type="category" {...chartAxisProps} axisLine={false} width={140} />
                     <Tooltip {...chartTooltipProps} />
                     <Legend {...chartLegendProps} />
-                    <Bar dataKey="quantity" name="In Stock" fill={chartColors.primary} radius={[0, 4, 4, 0]} maxBarSize={18} />
-                    <Bar dataKey="minimum" name="Minimum" fill={chartColors.warning} radius={[0, 4, 4, 0]} maxBarSize={18} />
+                    <Bar dataKey="quantity" name={t("reports.charts.inStock")} fill={chartColors.primary} radius={[0, 4, 4, 0]} maxBarSize={18} />
+                    <Bar dataKey="minimum" name={t("reports.charts.minimum")} fill={chartColors.warning} radius={[0, 4, 4, 0]} maxBarSize={18} />
                   </BarChart>
                 </ReportChart>
               )}
@@ -401,8 +406,8 @@ export function ReportsModule() {
       {/* Quick Reports */}
       <Card>
         <CardHeader>
-          <CardTitle>Quick Reports</CardTitle>
-          <CardDescription>Printable reports for the selected period.</CardDescription>
+          <CardTitle>{t("reports.quickReports.title")}</CardTitle>
+          <CardDescription>{t("reports.quickReports.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -419,8 +424,8 @@ export function ReportsModule() {
                   </span>
                   <ArrowUpRight aria-hidden="true" className="size-4 text-subtle-foreground transition-colors group-hover:text-primary" />
                 </div>
-                <p className="text-sm font-medium text-foreground">{quickReports[type].title}</p>
-                <p className="text-xs leading-5 text-muted-foreground">{quickReports[type].description}</p>
+                <p className="text-sm font-medium text-foreground">{quickReportTitle(type)}</p>
+                <p className="text-xs leading-5 text-muted-foreground">{quickReportDescription(type)}</p>
               </button>
             ))}
           </div>

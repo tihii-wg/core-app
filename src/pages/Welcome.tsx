@@ -1,7 +1,10 @@
+import { useTranslation } from "react-i18next";
+
 export default function Welcome() {
+const { t } = useTranslation();
 return (
 <div>
-welcome
+{t("auth.placeholders.welcome")}
 </div>
 )
 }

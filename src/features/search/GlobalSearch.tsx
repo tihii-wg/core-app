@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import { InventoryStatusBadge, OrderStatusBadge } from "../../ui/StatusBadge";
 import type { Client, InventoryItem, Order } from "../../lib/types";
@@ -20,7 +21,7 @@ const listboxId = "global-search-results";
 
 type SearchResult = { type: "order"; id: string; order: Order } | { type: "client"; id: string; client: Client } | { type: "inventory"; id: string; item: InventoryItem };
 
-type ResultGroup = { key: string; label: string; total: number; isError: boolean; results: SearchResult[] };
+type ResultGroup = { key: string; label: string; errorMessage: string; total: number; isError: boolean; results: SearchResult[] };
 
 function details(values: (string | null | undefined)[]) {
   return values.filter(Boolean).join(" · ");
@@ -59,6 +60,7 @@ function ResultContent({ result }: { result: SearchResult }) {
 }
 
 export default function GlobalSearch() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -98,21 +100,24 @@ export default function GlobalSearch() {
   const groups: ResultGroup[] = [
     {
       key: "orders",
-      label: "Orders",
+      label: t("search.groups.orders"),
+      errorMessage: t("search.errors.orders"),
       total: search.orders.results.length,
       isError: search.orders.isError,
       results: search.orders.results.slice(0, RESULTS_PER_GROUP).map((order) => ({ type: "order", id: order.id, order })),
     },
     {
       key: "clients",
-      label: "Clients",
+      label: t("search.groups.clients"),
+      errorMessage: t("search.errors.clients"),
       total: search.clients.results.length,
       isError: search.clients.isError,
       results: search.clients.results.slice(0, RESULTS_PER_GROUP).map((client) => ({ type: "client", id: client.id, client })),
     },
     {
       key: "inventory",
-      label: "Inventory",
+      label: t("search.groups.inventory"),
+      errorMessage: t("search.errors.inventory"),
       total: search.inventory.results.length,
       isError: search.inventory.isError,
       results: search.inventory.results.slice(0, RESULTS_PER_GROUP).map((item) => ({ type: "inventory", id: item.id, item })),
@@ -162,9 +167,9 @@ export default function GlobalSearch() {
 
   let message: string | null = null;
   if (showDropdown && !showResults) {
-    if (typed.length < MIN_SEARCH_LENGTH) message = `Type at least ${MIN_SEARCH_LENGTH} characters to search.`;
-    else if (search.isSearching) message = "Searching...";
-    else message = `No results for "${search.term}"`;
+    if (typed.length < MIN_SEARCH_LENGTH) message = t("search.minLength", { count: MIN_SEARCH_LENGTH });
+    else if (search.isSearching) message = t("search.searching");
+    else message = t("search.noResults", { term: search.term });
   }
 
   let optionIndex = -1;
@@ -176,12 +181,12 @@ export default function GlobalSearch() {
         ref={inputRef}
         type="text"
         role="combobox"
-        aria-label="Search orders, clients and inventory"
+        aria-label={t("search.inputLabel")}
         aria-autocomplete="list"
         aria-expanded={showResults}
         aria-controls={listboxId}
         aria-activedescendant={showResults && active >= 0 ? `${listboxId}-${active}` : undefined}
-        placeholder="Search..."
+        placeholder={t("common.searchPlaceholder")}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -204,18 +209,18 @@ export default function GlobalSearch() {
             </p>
           )}
           {showResults && (
-            <div id={listboxId} role="listbox" aria-label="Search results" className="p-1.5">
+            <div id={listboxId} role="listbox" aria-label={t("search.resultsLabel")} className="p-1.5">
               {visibleGroups.map((group) => (
                 <div key={group.key} role="group" aria-labelledby={`${listboxId}-${group.key}`} className="py-1">
                   <div id={`${listboxId}-${group.key}`} className="flex items-center justify-between px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">
                     <span>{group.label}</span>
                     {group.total > group.results.length && (
                       <span className="normal-case tracking-normal">
-                        {` ${group.results.length} of ${group.total}`}
+                        {` ${t("search.groupCount", { shown: group.results.length, total: group.total })}`}
                       </span>
                     )}
                   </div>
-                  {group.isError && <p className="px-4 py-2 text-sm text-destructive">Could not load {group.label.toLowerCase()}.</p>}
+                  {group.isError && <p className="px-4 py-2 text-sm text-destructive">{group.errorMessage}</p>}
                   {group.results.map((result) => {
                     optionIndex += 1;
                     const index = optionIndex;

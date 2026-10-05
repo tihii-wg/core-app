@@ -12,6 +12,7 @@ import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
 import {  useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
@@ -20,6 +21,7 @@ import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/
 import ClientTypeSelect from "../clients/ClientTypeSelect";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
+  const { t } = useTranslation();
   const { services } = useGetServices();
   const { clients } = useGetClients(searchQuery);
   const { employees } = useGetEmployees();
@@ -66,10 +68,10 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
     control,
     name: "services",
     rules: {
-      required: "Service is required",
+      required: t("orders.validation.serviceRequired"),
       minLength: {
         value: 1,
-        message: "Service is required",
+        message: t("orders.validation.serviceRequired"),
       },
     },
   });
@@ -109,12 +111,12 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
-          <Label htmlFor="client">{isNewOrganization ? "Organization name *" : "Client *"}</Label>
+          <Label htmlFor="client">{isNewOrganization ? t("orders.form.organizationNameLabel") : t("orders.form.clientLabel")}</Label>
           <Controller
             name="clientId"
             control={control}
             rules={{
-              validate: (clientId) => clientId.trim() !== "" || clientName.trim() !== "" || "Client is required",
+              validate: (clientId) => clientId.trim() !== "" || clientName.trim() !== "" || t("orders.validation.clientRequired"),
             }}
             render={({ field }) => (
               <ClientCombobox
@@ -144,13 +146,13 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           {isNewClient && (
             <div className="space-y-4 pt-1.5">
               <div className="space-y-1.5">
-                <Label htmlFor="newClientType">Client type *</Label>
+                <Label htmlFor="newClientType">{t("clients.form.typeLabel")}</Label>
                 <Controller
                   name="newClientType"
                   control={control}
                   defaultValue="individual"
                   shouldUnregister
-                  rules={clientTypeRules}
+                  rules={clientTypeRules()}
                   render={({ field }) => <ClientTypeSelect id="newClientType" value={field.value} onChange={field.onChange} />}
                 />
                 {errors.newClientType && <p className="text-xs text-destructive">{errors.newClientType.message}</p>}
@@ -158,32 +160,32 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
               {isNewOrganization && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="newClientTaxId">IDNO</Label>
-                    <Input id="newClientTaxId" {...register("newClientTaxId", { shouldUnregister: true })} placeholder="Optional" />
+                    <Label htmlFor="newClientTaxId">{t("orders.form.idnoLabel")}</Label>
+                    <Input id="newClientTaxId" {...register("newClientTaxId", { shouldUnregister: true })} placeholder={t("common.optional")} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="newClientContactPerson">Contact name</Label>
-                    <Input id="newClientContactPerson" {...register("newClientContactPerson", { shouldUnregister: true })} placeholder="Optional" />
+                    <Label htmlFor="newClientContactPerson">{t("orders.form.contactNameLabel")}</Label>
+                    <Input id="newClientContactPerson" {...register("newClientContactPerson", { shouldUnregister: true })} placeholder={t("common.optional")} />
                   </div>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="newClientPhone">Phone *</Label>
+                  <Label htmlFor="newClientPhone">{t("clients.form.phoneLabel")}</Label>
                   <Input
                     id="newClientPhone"
-                    {...register("newClientPhone", { ...clientPhoneRules, shouldUnregister: true })}
+                    {...register("newClientPhone", { ...clientPhoneRules(), shouldUnregister: true })}
                     placeholder="+37300000000"
                     className={errors.newClientPhone ? "border-destructive" : ""}
                   />
                   {errors.newClientPhone && <p className="text-xs text-destructive">{errors.newClientPhone.message}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="newClientEmail">Email *</Label>
+                  <Label htmlFor="newClientEmail">{t("clients.form.emailLabel")}</Label>
                   <Input
                     id="newClientEmail"
                     type="email"
-                    {...register("newClientEmail", { ...clientEmailRules, shouldUnregister: true })}
+                    {...register("newClientEmail", { ...clientEmailRules(), shouldUnregister: true })}
                     placeholder="email@example.com"
                     className={errors.newClientEmail ? "border-destructive" : ""}
                   />
@@ -218,20 +220,20 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="device">Device *</Label>
-          <Input id="device" {...register("device", { required: "Car is required" })} placeholder="Car..." className={errors.device ? "border-destructive" : ""} />
+          <Label htmlFor="device">{t("orders.form.deviceLabel")}</Label>
+          <Input id="device" {...register("device", { required: t("orders.validation.deviceRequired") })} placeholder={t("orders.form.devicePlaceholder")} className={errors.device ? "border-destructive" : ""} />
           {errors.device && <p className="text-xs text-destructive">{errors.device.message}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="carNumber">Car Number *</Label>
+          <Label htmlFor="carNumber">{t("orders.form.carNumberLabel")}</Label>
           <Input
             id="carNumber"
             {...register("carNumber", {
-              required: "Car number is required",
+              required: t("orders.validation.carNumberRequired"),
               setValueAs: (value: string) => value.trim().toUpperCase(),
             })}
-            placeholder="Car number"
+            placeholder={t("orders.form.carNumberPlaceholder")}
             autoCapitalize="characters"
             spellCheck={false}
             className={errors.carNumber ? "border-destructive" : ""}
@@ -240,15 +242,15 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="vin">VIN *</Label>
+          <Label htmlFor="vin">{t("orders.form.vinLabel")}</Label>
           <Input
             id="vin"
             {...register("vin", {
-              required: "VIN is required",
+              required: t("orders.validation.vinRequired"),
               setValueAs: (value: string) => value.trim().toUpperCase(),
-              validate: (value) => value.length === 17 || "VIN must contain exactly 17 characters",
+              validate: (value) => value.length === 17 || t("orders.validation.vinLength"),
             })}
-            placeholder="17-character VIN"
+            placeholder={t("orders.form.vinPlaceholder")}
             maxLength={17}
             autoCapitalize="characters"
             spellCheck={false}
@@ -258,7 +260,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="service">Service *</Label>
+          <Label htmlFor="service">{t("orders.form.serviceLabel")}</Label>
 
           <ServiceCombobox
             services={activeServices}
@@ -302,7 +304,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                     <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
                   </div>
                   <Button type="button" variant="outline" onClick={() => serviceRemove(index)}>
-                    Remove
+                    {t("orders.form.remove")}
                   </Button>
                 </div>
               ))}
@@ -311,23 +313,23 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="description">Description</Label>
-          <Textarea id="description" {...register("description")} placeholder="Describe the issue or work needed..." rows={3} />
+          <Label htmlFor="description">{t("orders.form.descriptionLabel")}</Label>
+          <Textarea id="description" {...register("description")} placeholder={t("orders.form.descriptionPlaceholder")} rows={3} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="assignedEmployeeId">Assigned Employee *</Label>
+            <Label htmlFor="assignedEmployeeId">{t("orders.form.assignedEmployeeRequiredLabel")}</Label>
             <Controller
               name="assignedEmployeeId"
               control={control}
               rules={{
-                required: "Assigned employee is required",
+                required: t("orders.validation.assignedEmployeeRequired"),
               }}
               render={({ field }) => (
                 <Select value={field.value ?? ""} onValueChange={field.onChange}>
                   <SelectTrigger className={errors.assignedEmployeeId ? "border-destructive" : ""}>
-                    <SelectValue placeholder="Select" />
+                    <SelectValue placeholder={t("orders.form.selectPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {technicianOptions.map((employee) => (
@@ -340,13 +342,13 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
               )}
             />
             {employees && technicianOptions.length === 0 && (
-              <p className="text-xs text-muted-foreground">No linked technicians. Link an active technician to a workspace user on the Employees page first.</p>
+              <p className="text-xs text-muted-foreground">{t("orders.form.noLinkedTechnicians")}</p>
             )}
             {errors.assignedEmployeeId && <p className="text-xs text-destructive">{errors.assignedEmployeeId.message}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="deadline">Deadline</Label>
+            <Label htmlFor="deadline">{t("orders.form.deadlineLabel")}</Label>
             <div className="relative">
               <Input id="deadline" type="date" {...register("deadline")} />
             </div>
@@ -354,17 +356,17 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         </div>
 
         <div className=" flex justify-between border-t pt-3">
-          <span className="text-lg font-semibold">Total Price</span>
+          <span className="text-lg font-semibold">{t("orders.form.totalPrice")}</span>
           <span>{formatMoney(totalPrice)}</span>
         </div>
       </div>
 
       <div className="flex w-full  shrink-0 justify-end gap-2 border-t bg-card pt-3">
         <Button variant="outline" type="button" onClick={handleCancel} disabled={isSubmitting}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Create Order"}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("orders.createOrder")}
         </Button>
       </div>
     </form>

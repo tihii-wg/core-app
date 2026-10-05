@@ -1,3 +1,4 @@
+import i18n from "../i18n";
 import supabase from "./supabase";
 
 export type ProfileTheme = "light" | "dark" | "system";
@@ -63,10 +64,10 @@ function isMissingThemeColumn(error: { code?: string; message?: string }) {
 }
 
 export function toProfile(row: unknown): ProfileRecord {
-  if (!row || typeof row !== "object") throw new Error("Profile not found");
+  if (!row || typeof row !== "object") throw new Error(i18n.t("settings.profile.errors.notFound"));
 
   const record = row as Record<string, unknown>;
-  if (typeof record.id !== "string" || !record.id) throw new Error("Profile not found");
+  if (typeof record.id !== "string" || !record.id) throw new Error(i18n.t("settings.profile.errors.notFound"));
 
   return {
     id: record.id,
@@ -80,11 +81,11 @@ export function toProfile(row: unknown): ProfileRecord {
 
 export function profileUpdateFields(input: UpdateProfileInput) {
   const fullName = input.fullName.trim();
-  if (!fullName) throw new Error("Full name is required");
+  if (!fullName) throw new Error(i18n.t("settings.profile.validation.fullNameRequired"));
 
   const phone = input.phone.trim();
   if (phone && !phonePattern.test(phone)) {
-    throw new Error("Phone must be in international format, such as +37300000000");
+    throw new Error(i18n.t("settings.profile.validation.phoneFormat"));
   }
 
   return {
@@ -100,7 +101,7 @@ async function currentUserId() {
   } = await supabase.auth.getUser();
 
   if (userError) throw new Error(userError.message);
-  if (!user) throw new Error("User is not authenticated");
+  if (!user) throw new Error(i18n.t("settings.profile.errors.notAuthenticated"));
 
   return user.id;
 }
@@ -120,7 +121,7 @@ async function updateProfileRow(userId: string, fields: Record<string, string | 
     result = await supabase.from("profiles").update(fields).eq("id", userId).select(profileColumnsWithoutTheme).maybeSingle();
   }
   if (result.error) throw new Error(result.error.message);
-  if (!result.data) throw new Error("Profile could not be updated.");
+  if (!result.data) throw new Error(i18n.t("settings.profile.errors.updateFailed"));
   return toProfile(result.data);
 }
 

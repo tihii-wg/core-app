@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Label } from "../../ui/Label";
@@ -12,6 +13,7 @@ import { workspaceLogoFileError } from "../workspaces/workspaceAvatar";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 
 export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
@@ -65,16 +67,16 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
 
   return (
     <div className="space-y-3">
-      <Label>Company logo</Label>
-      <WorkspaceAvatar name={workspace.name || "Company"} imageUrl={imageUrl} size="lg" />
-      {isError && <p className="text-sm text-destructive">Unable to load company logo. Please try again.</p>}
+      <Label>{t("settings.logo.label")}</Label>
+      <WorkspaceAvatar name={workspace.name || t("settings.logo.fallbackName")} imageUrl={imageUrl} size="lg" />
+      {isError && <p className="text-sm text-destructive">{t("settings.logo.loadFailed")}</p>}
       {canEdit && <div className="flex flex-wrap gap-2">
         <Button type="button" variant="outline" onClick={chooseFile} disabled={busy}>
-          {uploading ? "Uploading..." : workspace.avatarPath ? "Change logo" : "Upload logo"}
+          {uploading ? t("settings.logo.uploading") : workspace.avatarPath ? t("settings.logo.change") : t("settings.logo.upload")}
         </Button>
         {workspace.avatarPath && (
           <Button type="button" variant="outline" onClick={() => setRemoveOpen(true)} disabled={busy}>
-            {removing ? "Removing..." : "Remove logo"}
+            {removing ? t("settings.logo.removing") : t("settings.logo.remove")}
           </Button>
         )}
       </div>}
@@ -83,22 +85,22 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
         type="file"
         accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
         className="hidden"
-        aria-label="Company logo"
+        aria-label={t("settings.logo.label")}
         onChange={(event) => onFile(event.target.files)}
       />
       <CompanyLogoCropDialog imageUrl={previewUrl} open={cropOpen} saving={uploading} onOpenChange={(open) => (open ? setCropOpen(true) : closeCrop())} onConfirm={saveLogo} />
       <Dialog open={removeOpen} onOpenChange={(open) => !removing && setRemoveOpen(open)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove company logo?</DialogTitle>
-            <DialogDescription>The workspace will use its initials instead.</DialogDescription>
+            <DialogTitle>{t("settings.logo.removeDialog.title")}</DialogTitle>
+            <DialogDescription>{t("settings.logo.removeDialog.description")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setRemoveOpen(false)} disabled={removing}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" variant="destructive" onClick={() => void confirmRemove().catch(() => undefined)} disabled={removing}>
-              {removing ? "Removing..." : "Remove"}
+              {removing ? t("settings.logo.removing") : t("settings.logo.removeDialog.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

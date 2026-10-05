@@ -1,16 +1,23 @@
+import i18n from "../i18n";
 import type { Invoice, InvoiceDocument, InvoiceItem, InvoiceStatus } from "../lib/types";
 import { readVin } from "./apiOrders";
 import supabase from "./supabase";
 
 const pendingNumberPrefix = "INV-PENDING-";
 const issueNumberRequest = "INV-NEXT";
-const invoicePermissionMessage = "Invoice was not found or you do not have permission to change it.";
-export const invoicesUnavailableMessage = "Invoices are not set up in this database yet. The invoices migration has to be applied first.";
+
+function invoicePermissionMessage() {
+  return i18n.t("invoices.errors.noPermission");
+}
+
+export function invoicesUnavailableMessage() {
+  return i18n.t("invoices.errors.unavailable");
+}
 
 /** The invoices tables are missing from the connected database (PostgREST PGRST205 / Postgres 42P01). */
 export class InvoicesUnavailableError extends Error {
   constructor() {
-    super(invoicesUnavailableMessage);
+    super(invoicesUnavailableMessage());
     this.name = "InvoicesUnavailableError";
   }
 }
@@ -23,12 +30,12 @@ function toInvoiceError(error: DbError) {
 }
 
 function requireWorkspaceId(workspaceId: string | undefined) {
-  if (!workspaceId) throw new Error("No active workspace selected");
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
   return workspaceId;
 }
 
 export function alreadyInvoicedMessage(invoiceNumber?: string) {
-  return invoiceNumber ? `Invoice ${invoiceNumber} already exists for this order.` : "An invoice already exists for this order.";
+  return invoiceNumber ? i18n.t("invoices.errors.alreadyInvoiced", { number: invoiceNumber }) : i18n.t("invoices.errors.alreadyInvoicedUnknown");
 }
 
 const invoiceStatuses = new Set<InvoiceStatus>(["draft", "sent", "paid", "overdue"]);
@@ -99,7 +106,7 @@ export async function getInvoice(invoiceId: string, workspaceId: string | undefi
   const { data, error } = await supabase.from("invoices").select(invoiceColumns).eq("id", invoiceId).eq("workspace_id", targetWorkspaceId).maybeSingle();
 
   if (error) throw toInvoiceError(error);
-  if (!data) throw new Error("Invoice was not found in this workspace.");
+  if (!data) throw new Error(i18n.t("invoices.errors.notFound"));
 
   const { data: items, error: itemsError } = await supabase.from("invoice_items").select(invoiceItemColumns).eq("invoice_id", invoiceId).order("position", { ascending: true });
   if (itemsError) throw toInvoiceError(itemsError);
@@ -119,7 +126,7 @@ export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStat
     .maybeSingle();
 
   if (error) throw toInvoiceError(error);
-  if (!data) throw new Error(invoicePermissionMessage);
+  if (!data) throw new Error(invoicePermissionMessage());
   return toInvoice(data as Record<string, unknown>);
 }
 
@@ -138,7 +145,7 @@ async function issueInvoiceNumber(workspaceId: string, invoice: Record<string, u
     .maybeSingle();
 
   if (error) throw toInvoiceError(error);
-  if (!data) throw new Error(invoicePermissionMessage);
+  if (!data) throw new Error(invoicePermissionMessage());
   return data as Record<string, unknown>;
 }
 
@@ -170,12 +177,12 @@ export async function createInvoiceFromOrder(orderId: string, workspaceId: strin
   const { data: order, error: orderError } = await supabase.from("orders").select("*,clients(name)").eq("id", orderId).eq("workspace_id", targetWorkspaceId).maybeSingle();
 
   if (orderError) throw new Error(orderError.message);
-  if (!order) throw new Error("Order was not found in this workspace.");
+  if (!order) throw new Error(i18n.t("invoices.errors.orderNotFound"));
 
   const { data: lines, error: linesError } = await supabase.from("order_services").select("service_id, service_name, price, quantity").eq("order_id", orderId).order("created_at", { ascending: true });
 
   if (linesError) throw new Error(linesError.message);
-  if (!lines || lines.length === 0) throw new Error("This order has no services to invoice.");
+  if (!lines || lines.length === 0) throw new Error(i18n.t("invoices.errors.orderHasNoServices"));
 
   const items = (lines as Record<string, unknown>[]).map((line, index) => ({
     service_id: text(line.service_id) || null,

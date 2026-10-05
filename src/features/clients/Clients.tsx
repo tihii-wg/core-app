@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Phone, Mail, Pencil } from "lucide-react";
 import { Button } from "../../ui/Button";
 
@@ -18,6 +19,7 @@ import { clientOrderSummaries } from "./clientOrders";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 export function Clients() {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
@@ -38,7 +40,7 @@ export function Clients() {
   const columns: Column<Client>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("clients.table.name"),
       cell: (client) => (
         <span className="block max-w-[12rem] truncate font-medium text-foreground xl:max-w-[14rem] 2xl:max-w-[16rem]" title={client.name}>
           {client.name}
@@ -47,13 +49,13 @@ export function Clients() {
     },
     {
       key: "clientType",
-      header: "Client Type",
+      header: t("clients.table.clientType"),
       cell: (client) => <ClientTypeBadge clientType={client.client_type} />,
     },
 
     {
       key: "contact",
-      header: "Contact",
+      header: t("clients.table.contact"),
       cell: (client) => (
         <div className="max-w-[12rem] min-w-0 space-y-0.5 xl:max-w-[13rem] 2xl:max-w-[15rem]">
           {client.email && (
@@ -75,7 +77,7 @@ export function Clients() {
     },
     {
       key: "orders",
-      header: "Orders",
+      header: t("clients.table.orders"),
       cell: (client) => {
         const clientOrders = getClientOrders(client.id);
         return <span className="tabular-nums">{clientOrders.length}</span>;
@@ -84,19 +86,19 @@ export function Clients() {
     },
     {
       key: "balance",
-      header: "Balance",
+      header: t("clients.table.balance"),
       cell: (client) => <span className={client.balance > 0 ? "font-medium text-destructive tabular-nums" : "text-foreground tabular-nums"}>{formatMoney(client.balance)}</span>,
       className: "text-right whitespace-nowrap",
     },
     {
       key: "created",
-      header: "Added",
+      header: t("clients.table.added"),
       cell: (client) => <span className="text-muted-foreground tabular-nums">{client.created_at.split("T")[0]}</span>,
       className: "hidden xl:table-cell whitespace-nowrap",
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       className: "w-[80px] text-right",
       cell: (client) => (
         <div className="flex justify-end gap-1">
@@ -104,7 +106,7 @@ export function Clients() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`Edit ${client.name}`}
+            aria-label={t("clients.editClientLabel", { name: client.name })}
             onClick={(event) => {
               event.stopPropagation();
               setEditingClient(client);
@@ -125,12 +127,12 @@ export function Clients() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Clients"
-        description={isPending ? "Loading clients..." : `${clients.length} total clients`}
+        title={t("clients.title")}
+        description={isPending ? t("clients.loading") : t("clients.totalCount", { count: clients.length })}
         actions={
           <Button onClick={() => setCreateModalOpen(true)}>
             <Plus />
-            Add Client
+            {t("clients.addClient")}
           </Button>
         }
       />
@@ -138,17 +140,17 @@ export function Clients() {
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search by name, tax ID, contact, email, phone, or address..."
+        searchPlaceholder={t("clients.searchPlaceholder")}
         filters={[
           {
             key: "clientType",
-            label: "Client type",
+            label: t("clients.filters.clientType"),
             value: clientType,
             onChange: (value) => setClientType(value as ClientListFilter),
             options: [
-              { value: "all", label: "All" },
-              { value: "individual", label: "Individuals" },
-              { value: "organization", label: "Organizations" },
+              { value: "all", label: t("common.all") },
+              { value: "individual", label: t("clients.filters.individuals") },
+              { value: "organization", label: t("clients.filters.organizations") },
             ],
           },
         ]}
@@ -163,9 +165,9 @@ export function Clients() {
         onRowClick={handleRowClick}
         emptyState={
           clientsError ? (
-            <ErrorState title="Could not load clients" description={clientsError.message} onRetry={() => refetchClients()} />
+            <ErrorState title={t("clients.errors.loadFailed")} description={clientsError.message} onRetry={() => refetchClients()} />
           ) : searchQuery || clientType !== "all" ? (
-            <NoSearchResults query={searchQuery || (clientType === "organization" ? "Organizations" : "Individuals")} />
+            <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
           ) : (
             <NoClients onAddClient={() => setCreateModalOpen(true)} />
           )
@@ -186,8 +188,8 @@ export function Clients() {
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Client</DialogTitle>
-            <DialogDescription className="sr-only">Update the selected client's details.</DialogDescription>
+            <DialogTitle>{t("clients.editDialog.title")}</DialogTitle>
+            <DialogDescription className="sr-only">{t("clients.editDialog.description")}</DialogDescription>
           </DialogHeader>
           {editingClient && (
             <EditClientForm

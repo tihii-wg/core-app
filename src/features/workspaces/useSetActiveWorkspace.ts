@@ -3,6 +3,7 @@ import { setActiveWorkspace as setActiveWorkspaceApi } from "../../services/apiW
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { clearWorkspaceQueries, setCachedActiveWorkspace } from "../auth/session";
+import i18n from "../../i18n";
 
 export function useSetActiveWorkspace() {
   const navigate = useNavigate();
@@ -19,13 +20,13 @@ export function useSetActiveWorkspace() {
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       navigate(`/${locale}/${data}/${field[3] || "dashboard"}`);
-      toast.success("Workspace was chenged", { id: "set-active" });
+      toast.success(i18n.t("workspaces.toast.switched"), { id: "set-active" });
     },
     onMutate() {
-      toast.loading("Chenging...", { id: "set-active" });
+      toast.loading(i18n.t("workspaces.toast.switching"), { id: "set-active" });
     },
     onError(error) {
-      toast.error(error.message || "Could not switch workspace", { id: "set-active" });
+      toast.error(error.message || i18n.t("workspaces.toast.switchFailed"), { id: "set-active" });
       if (import.meta.env.DEV) console.error(error);
     },
   });

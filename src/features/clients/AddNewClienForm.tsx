@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import type { ClientFormValues, CreateMadalProps } from "../../lib/types";
@@ -18,6 +19,7 @@ const emptyClient: ClientFormValues = {
 };
 
 export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProps) {
+  const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
   const { mutateAsync: createClient } = useCreateNewClient();
 
@@ -50,10 +52,10 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => setCreateModalOpen(false)} disabled={isSubmitting}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : "Add Client"}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("clients.addClient")}
         </Button>
       </div>
     </form>

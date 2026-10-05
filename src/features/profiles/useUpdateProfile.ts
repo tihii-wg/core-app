@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import i18n from "../../i18n";
 import { updateProfile, updateProfileTheme, type ProfileTheme, type UpdateProfileInput } from "../../services/apiProfiles";
 
 export function useUpdateProfile() {
@@ -8,14 +9,14 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: (input: UpdateProfileInput) => updateProfile(input),
     onMutate() {
-      toast.loading("Saving profile...", { id: "update-profile" });
+      toast.loading(i18n.t("settings.profile.toast.saving"), { id: "update-profile" });
     },
     onSuccess(profile) {
       queryClient.setQueryData(["profiles"], profile);
-      toast.success("Profile updated", { id: "update-profile" });
+      toast.success(i18n.t("settings.profile.toast.updated"), { id: "update-profile" });
     },
     onError(error) {
-      toast.error(error.message || "Could not update profile", { id: "update-profile" });
+      toast.error(error.message || i18n.t("settings.profile.toast.updateFailed"), { id: "update-profile" });
     },
   });
 }

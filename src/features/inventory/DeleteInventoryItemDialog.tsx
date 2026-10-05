@@ -1,3 +1,4 @@
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import type { InventoryItem } from "../../lib/types";
@@ -10,6 +11,7 @@ type DeleteInventoryItemDialogProps = {
 };
 
 export function DeleteInventoryItemDialog({ item, onClose, onDeleted }: DeleteInventoryItemDialogProps) {
+  const { t } = useTranslation();
   const { mutate: deleteItem, isPending: isDeleting } = useDeleteInventoryItem();
 
   return (
@@ -21,15 +23,15 @@ export function DeleteInventoryItemDialog({ item, onClose, onDeleted }: DeleteIn
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete inventory item?</DialogTitle>
-          <DialogDescription>This action cannot be undone.</DialogDescription>
+          <DialogTitle>{t("inventory.dialogs.deleteTitle")}</DialogTitle>
+          <DialogDescription>{t("inventory.dialogs.deleteDescription")}</DialogDescription>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Delete <strong className="text-foreground">{item?.name}</strong>?
+          <Trans i18nKey="inventory.dialogs.deleteConfirm" values={{ name: item?.name }} components={{ strong: <strong className="text-foreground" /> }} />
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             type="button"
@@ -45,7 +47,7 @@ export function DeleteInventoryItemDialog({ item, onClose, onDeleted }: DeleteIn
               });
             }}
           >
-            {isDeleting ? "Deleting..." : "Delete"}
+            {isDeleting ? t("common.deleting") : t("common.delete")}
           </Button>
         </div>
       </DialogContent>

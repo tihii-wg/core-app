@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Users } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "../../i18n";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Avatar, AvatarFallback } from "../../ui/Avatar";
 import { Button } from "../../ui/Button";
@@ -18,10 +20,11 @@ import type { WorkspaceTeamMember } from "../../services/apiWorkspaces";
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function memberName(member: WorkspaceTeamMember) {
-  return profileDisplayName(member.fullName, member.email ?? "Workspace member");
+  return profileDisplayName(member.fullName, member.email ?? i18n.t("team.memberFallbackName"));
 }
 
 export function TeamSettings() {
+  const { t } = useTranslation();
   const { workspaceId, members = [], isLoading, error } = useGetWorkspaceMembers();
   const [addOpen, setAddOpen] = useState(false);
   const currentRole = members.find((member) => member.isCurrentUser)?.role ?? null;
@@ -31,10 +34,10 @@ export function TeamSettings() {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <CardTitle>Team Members</CardTitle>
-          <CardDescription>Manage your team and their permissions</CardDescription>
+          <CardTitle>{t("team.title")}</CardTitle>
+          <CardDescription>{t("team.description")}</CardDescription>
         </div>
-        {canAdd && <Button onClick={() => setAddOpen(true)}>Invite Member</Button>}
+        {canAdd && <Button onClick={() => setAddOpen(true)}>{t("team.inviteMember")}</Button>}
       </CardHeader>
       <CardContent>
         <TeamMembersList workspaceId={workspaceId} members={members} isLoading={isLoading} error={error} currentRole={currentRole} />
@@ -53,21 +56,22 @@ type TeamMembersListProps = {
 };
 
 export function TeamMembersList({ workspaceId, members, isLoading, error, currentRole }: TeamMembersListProps) {
+  const { t } = useTranslation();
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceTeamMember | null>(null);
   const { mutate: updateRole, isPending: updatingRole, variables: roleVariables } = useUpdateWorkspaceMemberRole();
   const { mutateAsync: removeMember, isPending: removing } = useRemoveWorkspaceMember();
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading team members...</p>;
+    return <p className="text-sm text-muted-foreground">{t("team.members.loading")}</p>;
   }
 
   if (error) {
-    const message = error instanceof Error ? error.message : "Team members could not be loaded";
+    const message = error instanceof Error ? error.message : t("team.members.loadFailed");
     return <p className="text-sm text-destructive">{message}</p>;
   }
 
   if (members.length === 0) {
-    return <EmptyState icon={Users} title="No team members yet" description="Team members added to this workspace will appear here." />;
+    return <EmptyState icon={Users} title={t("team.members.emptyTitle")} description={t("team.members.emptyDescription")} />;
   }
 
   async function confirmRemove() {
@@ -97,7 +101,7 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2.5">
-              <StatusBadge variant="success" dot>Active</StatusBadge>
+              <StatusBadge variant="success" dot>{t("team.members.active")}</StatusBadge>
               {canManage && workspaceId ? (
                 <>
                   <Select
@@ -107,7 +111,7 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
                       if (role !== member.role) updateRole({ workspaceId, userId: member.userId, role });
                     }}
                   >
-                    <SelectTrigger className="w-[120px]" aria-label={`Role for ${name}`}>
+                    <SelectTrigger className="w-[120px]" aria-label={t("team.members.roleFor", { name })}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -119,7 +123,7 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
                     </SelectContent>
                   </Select>
                   <Button type="button" variant="outline" size="sm" disabled={rowBusy || removing} onClick={() => setMemberToRemove(member)}>
-                    Remove
+                    {t("team.members.remove")}
                   </Button>
                 </>
               ) : (
@@ -133,15 +137,15 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
       <Dialog open={memberToRemove !== null} onOpenChange={(open) => !removing && !open && setMemberToRemove(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove team member?</DialogTitle>
-            <DialogDescription>{memberToRemove ? `${memberName(memberToRemove)} will lose access to this workspace.` : ""}</DialogDescription>
+            <DialogTitle>{t("team.remove.title")}</DialogTitle>
+            <DialogDescription>{memberToRemove ? t("team.remove.description", { name: memberName(memberToRemove) }) : ""}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setMemberToRemove(null)} disabled={removing}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" variant="destructive" onClick={() => void confirmRemove().catch(() => undefined)} disabled={removing}>
-              {removing ? "Removing..." : "Remove"}
+              {removing ? t("team.remove.removing") : t("team.remove.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -158,6 +162,7 @@ type AddTeamMemberDialogProps = {
 };
 
 function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: AddTeamMemberDialogProps) {
+  const { t } = useTranslation();
   const roles = assignableWorkspaceRoles(currentRole);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceRole>("member");
@@ -175,7 +180,7 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
     event.preventDefault();
     const value = email.trim();
     if (!emailPattern.test(value)) {
-      setFormError("Enter a valid email address");
+      setFormError(t("team.invite.invalidEmail"));
       return;
     }
     setFormError("");
@@ -183,7 +188,7 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
       await addMember({ workspaceId, email: value, role });
       close();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Could not add the team member");
+      setFormError(error instanceof Error ? error.message : t("team.toast.addFailed"));
     }
   }
 
@@ -191,18 +196,18 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : !isPending && close())}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Invite team member</DialogTitle>
-          <DialogDescription>Give an existing Core App account access to this workspace.</DialogDescription>
+          <DialogTitle>{t("team.invite.title")}</DialogTitle>
+          <DialogDescription>{t("team.invite.description")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="team-member-email">Email</Label>
-            <Input id="team-member-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" disabled={isPending} autoFocus />
+            <Label htmlFor="team-member-email">{t("team.invite.emailLabel")}</Label>
+            <Input id="team-member-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t("team.invite.emailPlaceholder")} disabled={isPending} autoFocus />
           </div>
           <div className="space-y-2">
-            <Label>Role</Label>
+            <Label>{t("team.invite.roleLabel")}</Label>
             <Select value={role} onValueChange={(value) => setRole(value as WorkspaceRole)} disabled={isPending}>
-              <SelectTrigger aria-label="Role">
+              <SelectTrigger aria-label={t("team.invite.roleLabel")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -217,10 +222,10 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={isPending}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Adding..." : "Add member"}
+              {isPending ? t("team.invite.adding") : t("team.invite.submit")}
             </Button>
           </DialogFooter>
         </form>

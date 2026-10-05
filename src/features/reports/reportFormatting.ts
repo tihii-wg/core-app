@@ -1,15 +1,15 @@
+import i18n from "../../i18n";
 import { formatWorkspaceDate, workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import type { ReportRange } from "./reportStats";
 
-export const rangeLabels: Record<ReportRange, string> = {
-  last7: "Last 7 days",
-  last30: "Last 30 days",
-  last90: "Last 90 days",
-  thisYear: "This Year",
-};
+export const reportRanges: ReportRange[] = ["last7", "last30", "last90", "thisYear"];
+
+export function rangeLabel(range: ReportRange) {
+  return i18n.t(`reports.ranges.${range}`);
+}
 
 function formatTime(date: Date, timeZone: string) {
   const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false };
@@ -40,7 +40,7 @@ export function useReportFormatting() {
 
   return {
     workspaceId,
-    workspaceName: workspace?.name || "Workspace",
+    workspaceName: workspace?.name || i18n.t("reports.workspaceFallback"),
     formatMoney: (value: number) => formatMoney(value),
     formatDate: (value: string) => formatWorkspaceDate(value, dateFormat, timeZone),
     formatDateTime: (date: Date) => `${formatWorkspaceDate(date.toISOString(), dateFormat, timeZone)} ${formatTime(date, timeZone)}`,

@@ -1,11 +1,13 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { Spinner } from "./Spinner";
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useGetProfile } from "../features/profiles/useGetProfile";
 import { listedWorkspaceIds, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 
 export default function Dashboardredirect() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { locale = "en" } = useParams();
   const { data: profile, isLoading: profileLoading, error: profileError } = useGetProfile();
@@ -35,7 +37,7 @@ export default function Dashboardredirect() {
 
   const error = profileError ?? workspacesError;
   if (error) return <p className="p-6 text-sm text-destructive">{error.message}</p>;
-  if (noWorkspaces) return <p className="p-6 text-sm text-muted-foreground">You are not a member of any workspace yet.</p>;
+  if (noWorkspaces) return <p className="p-6 text-sm text-muted-foreground">{t("workspaces.redirect.noWorkspaces")}</p>;
 
   return <Spinner />;
 }
