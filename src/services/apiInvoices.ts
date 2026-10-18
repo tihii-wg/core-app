@@ -179,18 +179,30 @@ export async function createInvoiceFromOrder(orderId: string, workspaceId: strin
   if (orderError) throw new Error(orderError.message);
   if (!order) throw new Error(i18n.t("invoices.errors.orderNotFound"));
 
-  const { data: lines, error: linesError } = await supabase.from("order_services").select("service_id, service_name, price, quantity").eq("order_id", orderId).order("created_at", { ascending: true });
+  const [{ data: lines, error: linesError }, { data: materialLines, error: materialsError }] = await Promise.all([
+    supabase.from("order_services").select("service_id, service_name, price, quantity").eq("order_id", orderId).order("created_at", { ascending: true }),
+    supabase.from("order_materials").select("item_name, price, quantity").eq("order_id", orderId).order("created_at", { ascending: true }),
+  ]);
 
   if (linesError) throw new Error(linesError.message);
-  if (!lines || lines.length === 0) throw new Error(i18n.t("invoices.errors.orderHasNoServices"));
+  if (materialsError) throw new Error(materialsError.message);
 
-  const items = (lines as Record<string, unknown>[]).map((line, index) => ({
+  const serviceItems = ((lines ?? []) as Record<string, unknown>[]).map((line) => ({
     service_id: text(line.service_id) || null,
     service_name: text(line.service_name),
     price: Number(line.price ?? 0),
     quantity: Number(line.quantity ?? 1),
-    position: index,
   }));
+  const materialItems = ((materialLines ?? []) as Record<string, unknown>[]).map((line) => ({
+    service_id: null as string | null,
+    service_name: text(line.item_name),
+    price: Number(line.price ?? 0),
+    quantity: Number(line.quantity ?? 1),
+  }));
+
+  if (serviceItems.length === 0 && materialItems.length === 0) throw new Error(i18n.t("invoices.errors.orderHasNoServices"));
+
+  const items = [...serviceItems, ...materialItems].map((item, index) => ({ ...item, position: index }));
   const subtotal = toMoney(items.reduce((total, item) => total + item.price * item.quantity, 0));
   const orderRow = order as Record<string, unknown>;
   const client = Array.isArray(orderRow.clients) ? orderRow.clients[0] : orderRow.clients;

@@ -10,7 +10,7 @@ export default {
   outOfStockCount_other: "{{count}} items out of stock",
   attention: {
     title: "Stock needing attention",
-    hint: "Based on each item's quantity and minimum. Order services do not reserve or consume stock automatically.",
+    hint: "Based on each item's quantity and minimum. Order material requests do not change stock — only warehouse issue and return do.",
     allClearTitle: "Stock looks healthy",
     allClearHint: "All active items are above their minimum quantity.",
     loadError: "Could not load stock attention",
@@ -74,6 +74,13 @@ export default {
     description: "Inventory item details, stock status, and pricing.",
     loadError: "Could not load this inventory item.",
     notFound: "Inventory item was not found.",
+    movements: "Stock movements",
+    movementsEmpty: "No warehouse movements recorded for this item yet.",
+    movementIssue: "Issued",
+    movementReturn: "Returned",
+    movementAdjustment: "Adjustment",
+    movementOrder: "Order {{number}}",
+    movementQty: "{{sign}}{{quantity}}",
   },
   form: {
     nameLabel: "Name *",

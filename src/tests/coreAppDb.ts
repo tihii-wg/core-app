@@ -12,6 +12,10 @@
 // 'INV-NEXT' -> the next number of the workspace's per-year counter, which never goes back), and
 // invoice_items SELECT/INSERT only (rows go with the invoice). Counters live in
 // invoice_number_counters, a table the client cannot reach.
+// order_materials / sync_order_materials / issue-return follow
+// 20261018170000_order_materials_stock.sql + 20261018180000_warehouse_issue_return.sql:
+// members SELECT materials; sync writes requested lines only (no stock);
+// issue/return RPCs (owner/admin/manager) change stock + ledger; order DELETE blocked if outstanding issued.
 import { fake, permissionDenied, type PgError, type PolicyCtx, type Row } from "./fakeSupabase";
 
 export const USERS = {
@@ -103,8 +107,269 @@ const memberTable = {
   delete: (row: Row, ctx: PolicyCtx) => isMember(row.workspace_id, ctx),
 };
 
-function error(message: string): PgError {
-  return { code: "42501", message };
+function error(message: string, code = "42501"): PgError {
+  return { code, message };
+}
+
+function cloneRows(rows: Row[]) {
+  return rows.map((row) => ({ ...row }));
+}
+
+function roundQty(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function canWarehouse(workspaceId: unknown, ctx: PolicyCtx) {
+  return ["owner", "admin", "manager"].includes(roleIn(workspaceId, ctx) ?? "");
+}
+
+/** Mirrors sync_order_materials: requested lines only — never changes inventory quantity. */
+function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): { data: Row[] | null; error: PgError | null } {
+  const orderId = String(args.p_order_id ?? "");
+  const payload = args.p_materials;
+  if (!orderId) return { data: null, error: error("order_id is required", "22023") };
+  if (!Array.isArray(payload)) return { data: null, error: error("materials must be a JSON array", "22023") };
+
+  const order = ctx.fake.all("orders").find((row) => row.id === orderId);
+  if (!order || !isMember(order.workspace_id, ctx)) {
+    return { data: null, error: error("Order was not found or you do not have permission to change it.") };
+  }
+
+  const desired = new Map<string, number>();
+  for (const raw of payload) {
+    const elem = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+    const itemId = elem ? String(elem.inventory_item_id ?? "") : "";
+    const quantity = elem ? roundQty(Number(elem.quantity)) : NaN;
+    if (!itemId) return { data: null, error: error("inventory_item_id is required", "22023") };
+    if (!Number.isFinite(quantity) || quantity <= 0) return { data: null, error: error("Material quantity must be greater than 0", "22023") };
+    desired.set(itemId, roundQty((desired.get(itemId) ?? 0) + quantity));
+  }
+
+  const materialsSnapshot = cloneRows(ctx.fake.all("order_materials"));
+  const orderSnapshot = { ...order };
+  const rollback = () => {
+    ctx.fake.tables.order_materials = materialsSnapshot;
+    Object.assign(order, orderSnapshot);
+  };
+  const fail = (message: string, code = "P0001") => {
+    rollback();
+    return { data: null, error: error(message, code) };
+  };
+
+  for (const itemId of desired.keys()) {
+    if (!ctx.fake.all("inventory_items").some((row) => row.id === itemId && row.workspace_id === order.workspace_id)) {
+      return fail("Inventory item is unavailable in this workspace");
+    }
+  }
+
+  for (const row of ctx.fake.all("order_materials").filter((line) => line.order_id === orderId)) {
+    const itemId = String(row.inventory_item_id);
+    const issued = Number(row.quantity_issued ?? 0);
+    const returned = Number(row.quantity_returned ?? 0);
+    const outstanding = issued - returned;
+    const nextQty = desired.get(itemId) ?? 0;
+    if (nextQty === 0 && outstanding > 0) return fail("Cannot remove a material with outstanding issued quantity");
+    if (nextQty > 0 && nextQty < issued) return fail("Requested quantity cannot be less than already issued quantity");
+  }
+
+  ctx.fake.tables.order_materials = ctx.fake
+    .all("order_materials")
+    .filter((row) => row.order_id !== orderId || desired.has(String(row.inventory_item_id)) || Number(row.quantity_issued ?? 0) > 0);
+
+  for (const [itemId, quantity] of [...desired.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const existing = ctx.fake.all("order_materials").find((row) => row.order_id === orderId && row.inventory_item_id === itemId);
+    if (existing) {
+      existing.quantity = quantity;
+      continue;
+    }
+    const catalog = ctx.fake.all("inventory_items").find((row) => row.id === itemId)!;
+    ctx.fake.all("order_materials").push({
+      id: crypto.randomUUID(),
+      order_id: orderId,
+      inventory_item_id: itemId,
+      item_name: String(catalog.name),
+      price: Number(catalog.selling_price ?? 0),
+      quantity,
+      quantity_issued: 0,
+      quantity_returned: 0,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  // Drop zero-issue lines that are no longer desired.
+  ctx.fake.tables.order_materials = ctx.fake
+    .all("order_materials")
+    .filter((row) => row.order_id !== orderId || desired.has(String(row.inventory_item_id)) || Number(row.quantity_issued ?? 0) > 0);
+
+  const serviceTotal = ctx.fake
+    .all("order_services")
+    .filter((row) => row.order_id === orderId)
+    .reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
+  const materialTotal = ctx.fake
+    .all("order_materials")
+    .filter((row) => row.order_id === orderId)
+    .reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
+  order.total_price = serviceTotal + materialTotal;
+  order.updated_at = new Date().toISOString();
+
+  return {
+    data: ctx.fake
+      .all("order_materials")
+      .filter((row) => row.order_id === orderId)
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id))),
+    error: null,
+  };
+}
+
+function parsePositiveIntQty(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (!Number.isInteger(n)) return null;
+  if (n > 2147483647) return null;
+  return n;
+}
+
+function normalizeWarehouseLines(
+  kind: "issue" | "return",
+  payload: unknown[],
+): { lines: Array<{ inventoryItemId: string; quantity: number }> } | { error: PgError } {
+  const seen = new Set<string>();
+  const lines: Array<{ inventoryItemId: string; quantity: number }> = [];
+  for (const raw of payload) {
+    const elem = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+    const itemId = elem ? String(elem.inventory_item_id ?? "").trim() : "";
+    const quantity = elem ? parsePositiveIntQty(elem.quantity) : null;
+    if (!itemId || quantity == null) {
+      return { error: error(`Each ${kind} line requires inventory_item_id and quantity > 0`, "22023") };
+    }
+    if (seen.has(itemId)) {
+      return { error: error(`Duplicate inventory_item_id in ${kind} lines`, "22023") };
+    }
+    seen.add(itemId);
+    lines.push({ inventoryItemId: itemId, quantity });
+  }
+  lines.sort((a, b) => a.inventoryItemId.localeCompare(b.inventoryItemId));
+  return { lines };
+}
+
+function warehouseLinesFingerprint(lines: Array<{ inventoryItemId: string; quantity: number }>) {
+  return lines.map((line) => `${line.inventoryItemId}:${line.quantity}`).join("|");
+}
+
+function issueOrReturnRpc(
+  kind: "issue" | "return",
+  args: Record<string, unknown>,
+  ctx: PolicyCtx,
+): { data: Row[] | null; error: PgError | null } {
+  const orderId = String(args.p_order_id ?? "");
+  const payload = args.p_lines;
+  const idempotencyKey = typeof args.p_idempotency_key === "string" ? args.p_idempotency_key.trim() : "";
+  const reasonRaw = typeof args.p_reason === "string" ? args.p_reason.trim() : "";
+  const reason = kind === "return" ? reasonRaw || null : null;
+
+  if (!orderId) return { data: null, error: error("order_id is required", "22023") };
+  if (!Array.isArray(payload) || payload.length === 0) return { data: null, error: error(`${kind} lines must be a non-empty JSON array`, "22023") };
+  if (kind === "return" && reason && reason.length > 500) {
+    return { data: null, error: error("Return reason is too long", "22023") };
+  }
+
+  const parsed = normalizeWarehouseLines(kind, payload);
+  if ("error" in parsed) return { data: null, error: parsed.error };
+  const { lines } = parsed;
+  const requestFingerprint = warehouseLinesFingerprint(lines);
+
+  const order = ctx.fake.all("orders").find((row) => row.id === orderId);
+  if (!order || !isMember(order.workspace_id, ctx)) {
+    return { data: null, error: error("Order was not found or you do not have permission to change it.") };
+  }
+  if (!canWarehouse(order.workspace_id, ctx)) {
+    return { data: null, error: error(`You do not have permission to ${kind} warehouse materials.`) };
+  }
+
+  if (idempotencyKey) {
+    const existingAll = ctx.fake
+      .all("inventory_movements")
+      .filter((row) => row.workspace_id === order.workspace_id && row.idempotency_key === idempotencyKey);
+    if (existingAll.length > 0) {
+      const mismatch = existingAll.some(
+        (row) =>
+          row.movement_type !== kind ||
+          row.order_id !== orderId ||
+          (kind === "return" && (row.reason ?? null) !== reason),
+      );
+      const existingLines = existingAll
+        .map((row) => ({ inventoryItemId: String(row.inventory_item_id), quantity: Number(row.quantity) }))
+        .sort((a, b) => a.inventoryItemId.localeCompare(b.inventoryItemId));
+      if (mismatch || warehouseLinesFingerprint(existingLines) !== requestFingerprint) {
+        return { data: null, error: error("Idempotency key was already used with a different warehouse operation", "22023") };
+      }
+      return {
+        data: existingAll
+          .filter((row) => row.movement_type === kind && row.order_id === orderId)
+          .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id))),
+        error: null,
+      };
+    }
+  }
+
+  const inventorySnapshot = cloneRows(ctx.fake.all("inventory_items"));
+  const materialsSnapshot = cloneRows(ctx.fake.all("order_materials"));
+  const movementsSnapshot = cloneRows(ctx.fake.all("inventory_movements"));
+  const rollback = () => {
+    ctx.fake.tables.inventory_items = inventorySnapshot;
+    ctx.fake.tables.order_materials = materialsSnapshot;
+    ctx.fake.tables.inventory_movements = movementsSnapshot;
+  };
+  const fail = (message: string, code = "P0001") => {
+    rollback();
+    return { data: null, error: error(message, code) };
+  };
+
+  const created: Row[] = [];
+  for (const { inventoryItemId: itemId, quantity } of lines) {
+    const line = ctx.fake.all("order_materials").find((row) => row.order_id === orderId && row.inventory_item_id === itemId);
+    if (!line) return fail("Material is not on this order");
+    const item = ctx.fake.all("inventory_items").find((row) => row.id === itemId && row.workspace_id === order.workspace_id);
+    if (!item) return fail("Inventory item is unavailable in this workspace");
+
+    const issued = Number(line.quantity_issued ?? 0);
+    const returned = Number(line.quantity_returned ?? 0);
+    if (kind === "issue") {
+      const remaining = Number(line.quantity) - issued;
+      if (quantity > remaining) return fail("Cannot issue more than the remaining requested quantity");
+      if (Number(item.quantity) < quantity) return fail("insufficient_stock");
+      item.quantity = roundQty(Number(item.quantity) - quantity);
+      line.quantity_issued = issued + quantity;
+    } else {
+      const remaining = issued - returned;
+      if (quantity > remaining) return fail("Cannot return more than the outstanding issued quantity");
+      item.quantity = roundQty(Number(item.quantity) + quantity);
+      line.quantity_returned = returned + quantity;
+    }
+    item.updated_at = new Date().toISOString();
+
+    const movement = {
+      id: crypto.randomUUID(),
+      workspace_id: order.workspace_id,
+      inventory_item_id: itemId,
+      order_id: orderId,
+      order_material_id: line.id,
+      movement_type: kind,
+      quantity,
+      reason,
+      idempotency_key: idempotencyKey || null,
+      created_by: ctx.uid,
+      created_at: new Date().toISOString(),
+    };
+
+    const uniqueError = ctx.fake.uniqueViolation("inventory_movements", [movement]);
+    if (uniqueError) return fail(uniqueError.message, uniqueError.code ?? "23505");
+
+    ctx.fake.all("inventory_movements").push(movement);
+    created.push(movement);
+  }
+
+  return { data: created, error: null };
 }
 
 export function installSecurityModel() {
@@ -135,6 +400,8 @@ export function installSecurityModel() {
   fake.uniques = {
     inventory_items: [["workspace_id", "sku"]],
     invoices: [["workspace_id", "number"], ["order_id"]],
+    order_materials: [["order_id", "inventory_item_id"]],
+    inventory_movements: [["workspace_id", "idempotency_key", "inventory_item_id"]],
   };
 
   fake.policies = {
@@ -174,6 +441,12 @@ export function installSecurityModel() {
       insert: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
       delete: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
     },
+    order_materials: {
+      select: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
+    },
+    inventory_movements: {
+      select: (row, ctx) => isMember(row.workspace_id, ctx),
+    },
     invoices: memberTable,
     invoice_items: {
       select: (row, ctx) => isMember(ctx.fake.all("invoices").find((invoice) => invoice.id === row.invoice_id)?.workspace_id, ctx),
@@ -187,6 +460,8 @@ export function installSecurityModel() {
     profiles: { delete: false },
     workspace_members: { insert: ["workspace_id", "user_id", "role"], update: ["role", "deleted_at"], delete: false },
     order_services: { update: false },
+    order_materials: { insert: false, update: false, delete: false },
+    inventory_movements: { insert: false, update: false, delete: false },
     invoice_items: { update: false, delete: false },
     invoice_number_counters: { select: false, insert: false, update: false, delete: false },
   };
@@ -194,6 +469,17 @@ export function installSecurityModel() {
   fake.triggers = {
     workspaces: (op, oldRow, newRow) => {
       if (op === "UPDATE" && oldRow && newRow && newRow.owner_id !== oldRow.owner_id) return error("owner_id cannot be changed");
+      return null;
+    },
+    orders: (op, oldRow, _newRow, ctx) => {
+      if (op === "DELETE" && oldRow) {
+        const outstanding = ctx.fake
+          .all("order_materials")
+          .some((row) => row.order_id === oldRow.id && Number(row.quantity_issued ?? 0) - Number(row.quantity_returned ?? 0) > 0);
+        if (outstanding) return error("Cannot delete an order with outstanding issued materials. Return issued stock first.", "P0001");
+        ctx.fake.tables.order_materials = ctx.fake.all("order_materials").filter((row) => row.order_id !== oldRow.id);
+        ctx.fake.tables.order_services = ctx.fake.all("order_services").filter((row) => row.order_id !== oldRow.id);
+      }
       return null;
     },
     workspace_members: (op, oldRow, newRow, ctx) => {
@@ -250,6 +536,9 @@ export function installSecurityModel() {
       for (const row of ctx.fake.all("workspace_members")) if (row.workspace_id === target_workspace && !row.deleted_at) row.deleted_at = now;
       return { data: null, error: null };
     },
+    sync_order_materials: (args, ctx) => syncOrderMaterialsRpc(args, ctx),
+    issue_order_materials: (args, ctx) => issueOrReturnRpc("issue", args, ctx),
+    return_order_materials: (args, ctx) => issueOrReturnRpc("return", args, ctx),
   };
 
   fake.storagePolicy = (bucket, path, ctx) => bucket === "workspace" && isMember(path.split("/")[0], ctx);
@@ -368,7 +657,8 @@ export function seedCoreApp() {
       car_number: `${letter.toUpperCase()}AA111`,
       description: "Noise",
       status: "new",
-      assigned_to: employee.profile_id,
+      assigned_to: null,
+      employee_id: employee.id,
       deadline: `${year}-12-01T00:00:00.000Z`,
       total_price: service.service_price,
       is_paid: false,

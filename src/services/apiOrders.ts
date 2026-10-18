@@ -1,4 +1,5 @@
-import type { CreateOrderInput, Order, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
+import type { CreateOrderInput, Order, OrderMaterial, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
+import { consolidateOrderMaterials } from "../features/inventory/orderMaterialLine";
 import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
@@ -6,6 +7,22 @@ import { searchTerm } from "./searchTerm";
 import i18n from "../i18n";
 
 const orderPermissionMessage = () => i18n.t("orders.errors.notFoundOrForbidden");
+
+function materialsSyncError(error: { message?: string; code?: string } | null) {
+  const message = error?.message ?? "";
+  const code = error?.code ?? "";
+  // Missing live RPC (PGRST202) or similar — never treat as a successful materials save.
+  if (code === "PGRST202" || /could not find the function|function .* does not exist/i.test(message)) {
+    return i18n.t("orders.errors.materialsSyncFailed");
+  }
+  if (message.includes("outstanding issued") || message.includes("already issued")) {
+    return i18n.t("orders.errors.cannotReduceBelowIssued");
+  }
+  if (message.includes("unavailable") || message.includes("Inventory item")) {
+    return i18n.t("orders.errors.invalidMaterial");
+  }
+  return message || i18n.t("orders.errors.materialsSyncFailed");
+}
 
 function requireWorkspaceId(workspaceId: string | undefined) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
@@ -79,9 +96,9 @@ async function resolveService(workspaceId: string, service: OrderService) {
 }
 
 /**
- * Resolve a form assignee (employees.id, or a legacy auth user id) to the value stored on
- * orders.assigned_to. That column FKs to auth.users(id), so only a linked employees.profile_id
- * can be persisted — never employees.id. Unlinked technicians require a schema change.
+ * Resolve a form assignee to employees.id for orders.employee_id.
+ * Employees belong to a workspace via workspace_id only — profile_id / Auth is optional.
+ * Legacy form values that still hold an auth user id (from old assigned_to) are remapped to employees.id.
  */
 async function resolveAssignedEmployeeId(workspaceId: string, assignedEmployeeId?: string) {
   const selectedId = assignedEmployeeId?.trim() ?? "";
@@ -89,31 +106,23 @@ async function resolveAssignedEmployeeId(workspaceId: string, assignedEmployeeId
 
   const { data: byId, error: byIdError } = await supabase
     .from("employees")
-    .select("id, profile_id")
+    .select("id")
     .eq("id", selectedId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (byIdError) throw new Error(byIdError.message);
+  if (byId?.id) return String(byId.id);
 
-  if (byId) {
-    const profileId = typeof byId.profile_id === "string" ? byId.profile_id.trim() : "";
-    if (!profileId) throw new Error(i18n.t("orders.errors.employeeNotLinked"));
-    return profileId;
-  }
-
-  // Legacy edit values / historical orders may still pass the auth user id stored on assigned_to.
+  // Legacy edit values may still pass an auth user id previously stored on assigned_to.
   const { data: byProfile, error: byProfileError } = await supabase
     .from("employees")
-    .select("id, profile_id")
+    .select("id")
     .eq("profile_id", selectedId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (byProfileError) throw new Error(byProfileError.message);
-  if (!byProfile) throw new Error(i18n.t("orders.errors.employeeNotFound"));
-
-  const profileId = typeof byProfile.profile_id === "string" ? byProfile.profile_id.trim() : "";
-  if (!profileId) throw new Error(i18n.t("orders.errors.employeeNotLinked"));
-  return profileId;
+  if (!byProfile?.id) throw new Error(i18n.t("orders.errors.employeeNotFound"));
+  return String(byProfile.id);
 }
 
 const defaultOrderTimeZone = "Europe/Chisinau";
@@ -175,7 +184,10 @@ async function assignOrderNumber(workspaceId: string, order: Record<string, unkn
   throw new Error(i18n.t("orders.errors.orderNumberFailed"));
 }
 
-// Not atomic: services and a new client may already exist if a later insert is rejected.
+// Not atomic across client/service creation, order insert, and materials RPC.
+// Empty materials skip the sync RPC (avoids failing create when sync_order_materials is unavailable).
+// Non-empty materials require the RPC; on failure the order is deleted (CASCADE service lines).
+// Clients/services created earlier in this call are not rolled back.
 export async function createOrder(input: CreateOrderInput, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   if (input.services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
@@ -190,11 +202,14 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     });
   }
 
-  const assignedTo = await resolveAssignedEmployeeId(targetWorkspaceId, input.assignedEmployeeId);
+  const employeeId = await resolveAssignedEmployeeId(targetWorkspaceId, input.assignedEmployeeId);
   const clientId = await resolveClientId(targetWorkspaceId, input);
+  const materials = consolidateOrderMaterials(input.materials ?? []);
 
-  const totalPrice = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
+  const serviceTotal = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
+  const materialTotal = materials.reduce((total, line) => total + line.price * line.quantity, 0);
   const timeZone = await workspaceTimeZone(targetWorkspaceId);
+  const normalizedVin = input.vin?.trim().toUpperCase() ?? "";
 
   const { data: insertedOrder, error: orderError } = await supabase
     .from("orders")
@@ -204,13 +219,15 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       device: input.device.trim(),
       car_number: input.carNumber?.trim() ?? "",
       description: input.description?.trim() || null,
-      assigned_to: assignedTo,
+      employee_id: employeeId,
+      // Do not write employee ids into assigned_to (auth.users FK). Clear default auth.uid().
+      assigned_to: null,
       ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : {}),
-      total_price: totalPrice,
+      total_price: serviceTotal + materialTotal,
       status: "new",
       is_paid: false,
       number: `ORD-PENDING-${crypto.randomUUID()}`,
-      ...(await vinColumnValue(input.vin)),
+      vin: normalizedVin || null,
       service_id: resolvedServices[0].id,
       service: resolvedServices.map((service) => service.name).join(", "),
     })
@@ -234,10 +251,29 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       service_name: service.name,
       price: service.price,
       quantity: service.quantity,
-    }))
+    })),
   );
 
-  if (orderServicesError) throw new Error(orderServicesError.message);
+  if (orderServicesError) {
+    const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+    if (rollbackError) {
+      throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
+    }
+    throw new Error(orderServicesError.message);
+  }
+
+  if (materials.length > 0) {
+    try {
+      await syncOrderMaterialsRpc(String(order.id), materials);
+    } catch (error) {
+      const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+      const syncMessage = error instanceof Error ? error.message : String(error);
+      if (rollbackError) {
+        throw new Error(`${syncMessage}; order rollback failed: ${rollbackError.message}`);
+      }
+      throw error instanceof Error ? error : new Error(syncMessage);
+    }
+  }
 
   return order;
 }
@@ -260,30 +296,77 @@ function clientFromRow(clients: unknown) {
 }
 
 type OrderServiceLine = { id?: string; order_id?: string; service_id?: string; service_name?: string; price?: number; quantity?: number };
+type OrderMaterialLine = {
+  id?: string;
+  order_id?: string;
+  inventory_item_id?: string;
+  item_name?: string;
+  price?: number;
+  quantity?: number;
+  quantity_issued?: number;
+  quantity_returned?: number;
+};
 
 const orderServiceColumns = "id, order_id, service_id, service_name, price, quantity";
+const orderMaterialColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
 
-function toOrder(
-  row: Record<string, unknown>,
-  employees: { id: string; name: string; profile_id: string | null }[],
-  serviceLines: OrderServiceLine[] = [],
-  memberNames: Map<string, string> = new Map(),
-): Order {
-  const assignedTo = typeof row.assigned_to === "string" ? row.assigned_to : "";
-  const employee =
-    employees.find((item) => item.profile_id != null && String(item.profile_id) === assignedTo) ??
-    employees.find((item) => String(item.id) === assignedTo);
-  const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
-  const isPaid = Boolean(row.is_paid);
-  const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
-  const client = clientFromRow(row.clients);
-  const services = serviceLines.map((line) => ({
+function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
+  return serviceLines.map((line) => ({
     ...(line.id ? { id: String(line.id) } : {}),
     serviceId: String(line.service_id ?? ""),
     serviceName: String(line.service_name ?? ""),
     price: Number(line.price ?? 0),
     quantity: Number(line.quantity ?? 1),
   }));
+}
+
+function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
+  return materialLines.map((line) => ({
+    ...(line.id ? { id: String(line.id) } : {}),
+    inventoryItemId: String(line.inventory_item_id ?? ""),
+    itemName: String(line.item_name ?? ""),
+    price: Number(line.price ?? 0),
+    quantity: Number(line.quantity ?? 1),
+    quantityIssued: Number(line.quantity_issued ?? 0),
+    quantityReturned: Number(line.quantity_returned ?? 0),
+  }));
+}
+
+async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]) {
+  const payload = consolidateOrderMaterials(materials).map((line) => ({
+    inventory_item_id: line.inventoryItemId,
+    quantity: line.quantity,
+  }));
+
+  const { data, error } = await supabase.rpc("sync_order_materials", {
+    p_order_id: orderId,
+    p_materials: payload,
+  });
+
+  if (error) throw new Error(materialsSyncError(error));
+  return mapMaterialLines((data ?? []) as OrderMaterialLine[]);
+}
+
+function toOrder(
+  row: Record<string, unknown>,
+  employees: { id: string; name: string; profile_id: string | null }[],
+  serviceLines: OrderServiceLine[] = [],
+  memberNames: Map<string, string> = new Map(),
+  materialLines: OrderMaterialLine[] = [],
+): Order {
+  const employeeId = typeof row.employee_id === "string" ? row.employee_id.trim() : "";
+  const legacyAssignedTo = typeof row.assigned_to === "string" ? row.assigned_to.trim() : "";
+  const employee =
+    (employeeId ? employees.find((item) => String(item.id) === employeeId) : undefined) ??
+    (legacyAssignedTo ? employees.find((item) => String(item.id) === legacyAssignedTo) : undefined) ??
+    (legacyAssignedTo ? employees.find((item) => item.profile_id != null && String(item.profile_id) === legacyAssignedTo) : undefined);
+  const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
+  const isPaid = Boolean(row.is_paid);
+  const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
+  const client = clientFromRow(row.clients);
+  const services = mapServiceLines(serviceLines);
+  const materials = mapMaterialLines(materialLines);
+  const fallbackAssigneeId = employeeId || legacyAssignedTo;
 
   return {
     id: String(row.id),
@@ -299,12 +382,12 @@ function toOrder(
     carNumber: typeof row.car_number === "string" ? row.car_number : "",
     service: typeof row.service === "string" ? row.service : services.map((service) => service.serviceName).join(", "),
     services,
+    materials,
     description: typeof row.description === "string" ? row.description : "",
     status,
-    // Prefer employees.id for form/filter values; fall back to the raw assigned_to auth user id.
-    assignedEmployeeId: employee?.id ?? assignedTo,
-    // Employee roster name is authoritative; profile labels only cover assignees with no employee row.
-    assignedEmployeeName: employee?.name || memberNames.get(assignedTo) || "",
+    // Canonical: employees.id via orders.employee_id; legacy assigned_to only when employee_id is empty.
+    assignedEmployeeId: employee?.id ?? fallbackAssigneeId,
+    assignedEmployeeName: employee?.name || memberNames.get(legacyAssignedTo) || "",
     deadline: formatOrderDate(row.deadline),
     totalPrice: Number(row.total_price ?? 0),
     isPaid,
@@ -337,8 +420,7 @@ async function assigneeDisplayNames(workspaceId: string, assignedUserIds: string
 }
 
 async function orderSearchFilter(workspaceId: string, term: string) {
-  const vinColumn = (await supportsVinColumn()) ? "vin" : "employee_id";
-  const filters = ["number", "device", "car_number", vinColumn, "service", "description"].map((column) => `${column}.ilike.%${term}%`);
+  const filters = ["number", "device", "car_number", "vin", "service", "description"].map((column) => `${column}.ilike.%${term}%`);
   const matchingClients = await getClients(term, workspaceId);
   if (matchingClients.length > 0) filters.push(`client_id.in.(${matchingClients.map((client) => client.id).join(",")})`);
   return filters.join(",");
@@ -362,15 +444,29 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
 
   const rows = (data ?? []) as Record<string, unknown>[];
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
-  const assignedUserIds = [...new Set(rows.map((row) => (typeof row.assigned_to === "string" ? row.assigned_to : "")).filter(Boolean))];
-  const memberNames = await assigneeDisplayNames(resolvedWorkspaceId, assignedUserIds);
+  // Legacy assigned_to auth user ids only — used when employee_id is missing and no employee row matches.
+  const legacyAuthIds = [
+    ...new Set(
+      rows
+        .filter((row) => !(typeof row.employee_id === "string" && row.employee_id.trim()))
+        .map((row) => (typeof row.assigned_to === "string" ? row.assigned_to.trim() : ""))
+        .filter(Boolean),
+    ),
+  ];
+  const memberNames = await assigneeDisplayNames(resolvedWorkspaceId, legacyAuthIds);
   let serviceLines: OrderServiceLine[] = [];
+  let materialLines: OrderMaterialLine[] = [];
 
   if (orderIds.length > 0) {
-    const { data: lines, error: linesError } = await supabase.from("order_services").select(orderServiceColumns).in("order_id", orderIds).order("created_at", { ascending: true });
+    const [{ data: lines, error: linesError }, { data: materials, error: materialsError }] = await Promise.all([
+      supabase.from("order_services").select(orderServiceColumns).in("order_id", orderIds).order("created_at", { ascending: true }),
+      supabase.from("order_materials").select(orderMaterialColumns).in("order_id", orderIds).order("created_at", { ascending: true }),
+    ]);
 
     if (linesError) throw new Error(linesError.message);
+    if (materialsError) throw new Error(materialsError.message);
     serviceLines = lines ?? [];
+    materialLines = materials ?? [];
   }
 
   return rows.map((row) =>
@@ -379,8 +475,16 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
       employees ?? [],
       serviceLines.filter((line) => line.order_id === row.id),
       memberNames,
+      materialLines.filter((line) => line.order_id === row.id),
     ),
   );
+}
+
+export async function getOrder(orderId: string, workspaceId: string | undefined) {
+  const orders = await getOrders(workspaceId);
+  const order = orders.find((item) => item.id === orderId);
+  if (!order) throw new Error(orderPermissionMessage());
+  return order;
 }
 
 export async function updateOrderStatus(orderId: string, status: OrderStatus, workspaceId: string | undefined) {
@@ -399,34 +503,18 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
 
 const orderColumns = "*,clients(name,client_type,email,phone)";
 
-let vinColumnSupported: boolean | undefined;
-
-async function supportsVinColumn() {
-  if (vinColumnSupported !== undefined) return vinColumnSupported;
-
-  const { error } = await supabase.from("orders").select("vin").limit(1);
-  vinColumnSupported = !error;
-
-  return vinColumnSupported;
-}
-
 export function readVin(row: Record<string, unknown>) {
   if (typeof row.vin === "string" && row.vin) return row.vin;
-  if (typeof row.employee_id === "string" && /^[A-Za-z0-9]{17}$/.test(row.employee_id)) return row.employee_id.toUpperCase();
   return "";
 }
 
-async function vinColumnValue(vin: string | undefined) {
-  const normalizedVin = vin?.trim().toUpperCase() ?? "";
-  if (!normalizedVin) return {};
-  if (await supportsVinColumn()) return { vin: normalizedVin };
-  return { employee_id: normalizedVin };
-}
-
-export async function updateOrder({ orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services }: UpdateOrderDetails, targetWorkspaceId: string | undefined) {
+export async function updateOrder(
+  { orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services, materials }: UpdateOrderDetails,
+  targetWorkspaceId: string | undefined,
+) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
   if (services && services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
-  const assignedTo = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
+  const employeeId = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = vin.trim().toUpperCase();
 
   if (normalizedVin && normalizedVin.length !== 17) throw new Error(i18n.t("orders.validation.vinLength"));
@@ -437,9 +525,9 @@ export async function updateOrder({ orderId, device, carNumber, vin = "", descri
       device: device.trim(),
       car_number: carNumber.trim().toUpperCase(),
       description: description.trim() || null,
-      assigned_to: assignedTo,
+      employee_id: employeeId,
       deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
-      ...(await vinColumnValue(normalizedVin)),
+      vin: normalizedVin || null,
     })
     .eq("id", orderId)
     .eq("workspace_id", workspaceId)
@@ -464,15 +552,72 @@ export async function updateOrder({ orderId, device, carNumber, vin = "", descri
     lines = existingLines ?? [];
   }
 
+  let materialLines: OrderMaterial[] = [];
+  if (materials !== undefined) {
+    const desiredMaterials = consolidateOrderMaterials(materials);
+    if (desiredMaterials.length > 0) {
+      // Non-empty: must sync via RPC. Failure throws — do not treat the update as fully successful.
+      materialLines = await syncOrderMaterialsRpc(orderId, desiredMaterials);
+    } else {
+      const { data: existingMaterials, error: materialsError } = await supabase
+        .from("order_materials")
+        .select(orderMaterialColumns)
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: true });
+      if (materialsError) throw new Error(materialsError.message);
+      if ((existingMaterials ?? []).length > 0) {
+        // Clearing saved lines still requires sync_order_materials; surface RPC errors (no silent success).
+        materialLines = await syncOrderMaterialsRpc(orderId, []);
+      } else {
+        materialLines = [];
+      }
+    }
+  } else {
+    const { data: existingMaterials, error: materialsError } = await supabase
+      .from("order_materials")
+      .select(orderMaterialColumns)
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true });
+    if (materialsError) throw new Error(materialsError.message);
+    materialLines = mapMaterialLines(existingMaterials ?? []);
+  }
+
+  // If only services changed, refresh total so material amounts are not wiped.
+  if (materials === undefined && summary) {
+    const materialTotal = materialLines.reduce((total, line) => total + line.price * line.quantity, 0);
+    const serviceTotal = lines.reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
+    summary = { ...summary, total_price: serviceTotal + materialTotal };
+    const { data: updatedRows, error: totalError } = await supabase
+      .from("orders")
+      .update({ total_price: summary.total_price })
+      .eq("id", orderId)
+      .eq("workspace_id", workspaceId)
+      .select("id");
+    if (totalError) throw new Error(totalError.message);
+    if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage());
+  }
+
+  const { data: refreshed, error: refreshError } = await supabase.from("orders").select(orderColumns).eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle();
+  if (refreshError) throw new Error(refreshError.message);
+
   const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
 
   if (employeesError) throw new Error(employeesError.message);
 
-  const assignedUserId = typeof (data as Record<string, unknown>).assigned_to === "string" ? String((data as Record<string, unknown>).assigned_to) : "";
-  const memberNames = await assigneeDisplayNames(workspaceId, assignedUserId ? [assignedUserId] : []);
-  const order = toOrder({ ...(data as Record<string, unknown>), ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames);
-
-  return order;
+  const row = (refreshed ?? data) as Record<string, unknown>;
+  const hasEmployeeId = typeof row.employee_id === "string" && row.employee_id.trim() !== "";
+  const legacyAssignedTo = !hasEmployeeId && typeof row.assigned_to === "string" ? String(row.assigned_to) : "";
+  const memberNames = await assigneeDisplayNames(workspaceId, legacyAssignedTo ? [legacyAssignedTo] : []);
+  return toOrder({ ...row, ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames, materialLines.map((line) => ({
+    id: line.id,
+    order_id: orderId,
+    inventory_item_id: line.inventoryItemId,
+    item_name: line.itemName,
+    price: line.price,
+    quantity: line.quantity,
+    quantity_issued: line.quantityIssued,
+    quantity_returned: line.quantityReturned,
+  })));
 }
 
 function isSameService(line: OrderServiceLine, service: OrderService) {
@@ -539,10 +684,15 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   const lines = [...kept, ...inserted];
   if (newLines.length === 0 && removedIds.length === 0) return { lines, summary: null };
 
+  const serviceTotal = lines.reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
+  const { data: materialRows, error: materialRowsError } = await supabase.from("order_materials").select("price, quantity").eq("order_id", orderId);
+  if (materialRowsError) throw new Error(materialRowsError.message);
+  const materialTotal = (materialRows ?? []).reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
+
   const summary = {
     service: lines.map((line) => String(line.service_name ?? "")).join(", "),
     service_id: lines[0]?.service_id ?? null,
-    total_price: lines.reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0),
+    total_price: serviceTotal + materialTotal,
   };
 
   const { data: updatedRows, error: summaryError } = await supabase.from("orders").update(summary).eq("id", orderId).eq("workspace_id", workspaceId).select("id");

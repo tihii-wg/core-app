@@ -18,6 +18,7 @@ export function useCreateOrder() {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       toast.success(i18n.t("orders.toast.created"), { id: "create-order" });
     },
     onError: (error) => {

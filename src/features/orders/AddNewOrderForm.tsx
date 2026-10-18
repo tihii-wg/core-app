@@ -10,9 +10,11 @@ import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, CreateMadalProps } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine } from "../services/orderServiceLine";
+import { catalogServiceToOrderLine, sumOrderServiceLines } from "../services/orderServiceLine";
+import { sumOrderMaterialLines } from "../inventory/orderMaterialLine";
+import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -25,6 +27,7 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
+import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 
 export default function AddNewOrderForm({
   setCreateModalOpen,
@@ -36,14 +39,17 @@ export default function AddNewOrderForm({
   const { services } = useGetServices();
   const { clients } = useGetClients(searchQuery);
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
+  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: createOrder } = useCreateOrder();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const [clientName, setClientName] = useState(initialClientName);
+  const submitLockRef = useRef(false);
 
   const activeServices = services?.filter((service) => service.status === "active");
+  const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees);
 
@@ -51,6 +57,8 @@ export default function AddNewOrderForm({
     control,
     handleSubmit,
     register,
+    setValue,
+    getValues,
     clearErrors,
     trigger,
     formState: { errors, isSubmitting, isSubmitted },
@@ -61,6 +69,7 @@ export default function AddNewOrderForm({
       vin: "",
       carNumber: "",
       services: [],
+      materials: [],
       description: "",
       assignedEmployeeId: "",
       deadline: "",
@@ -92,13 +101,27 @@ export default function AddNewOrderForm({
     },
   });
 
-  const totalPrice = serviceField.reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
+  const {
+    fields: materialFields,
+    append: materialAppend,
+    remove: materialRemove,
+  } = useFieldArray({
+    control,
+    name: "materials",
+  });
+
+  const watchedServices = useWatch({ control, name: "services" });
+  const watchedMaterials = useWatch({ control, name: "materials" });
+  const totalPrice = sumOrderServiceLines(watchedServices) + sumOrderMaterialLines(watchedMaterials);
 
   function handleCancel() {
     setCreateModalOpen(false);
   }
 
   const onSubmit = async (data: addNewOrderFormData) => {
+    if (submitLockRef.current || isSubmitting) return;
+    submitLockRef.current = true;
+
     try {
       await createOrder({
         clientId: data.clientId || undefined,
@@ -113,10 +136,12 @@ export default function AddNewOrderForm({
         carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : "",
         description: data.description,
         services: data.services,
+        materials: data.materials,
         assignedEmployeeId: data.assignedEmployeeId || undefined,
         deadline: data.deadline,
       });
     } catch {
+      submitLockRef.current = false;
       return;
     }
 
@@ -270,20 +295,45 @@ export default function AddNewOrderForm({
 
           {serviceField.length > 0 && (
             <div className="space-y-2">
-              {serviceField.map((field, index) => (
-                <div key={field.id} className="flex items-center justify-between rounded-md border p-3">
-                  <div>
-                    <p className="font-medium">{field.serviceName}</p>
-                    <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
+              {serviceField.map((field, index) => {
+                const unitPrice = watchedServices?.[index]?.price ?? field.price ?? 0;
+
+                return (
+                  <div key={field.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
+                      <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(unitPrice)}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isSubmitting}
+                      onClick={() => serviceRemove(index)}
+                      aria-label={t("orders.form.removeService", { name: field.serviceName })}
+                    >
+                      {t("orders.form.remove")}
+                    </Button>
                   </div>
-                  <Button type="button" variant="outline" onClick={() => serviceRemove(index)}>
-                    {t("orders.form.remove")}
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
+
+        <OrderMaterialLinesEditor
+          control={control}
+          fields={materialFields}
+          append={materialAppend}
+          remove={materialRemove}
+          setValue={setValue}
+          getValues={getValues}
+          trigger={trigger}
+          inventoryItems={activeInventory}
+          disabled={isSubmitting}
+          isSubmitted={isSubmitted}
+          errors={errors.materials}
+        />
 
         <div className="space-y-1.5">
           <Label htmlFor="description">{t("orders.form.descriptionLabel")}</Label>
@@ -331,9 +381,9 @@ export default function AddNewOrderForm({
           </div>
         </div>
 
-        <div className=" flex justify-between border-t pt-3">
+        <div className="flex justify-between border-t pt-3">
           <span className="text-lg font-semibold">{t("orders.form.totalPrice")}</span>
-          <span>{formatMoney(totalPrice)}</span>
+          <span className="tabular-nums">{formatMoney(totalPrice)}</span>
         </div>
       </div>
 

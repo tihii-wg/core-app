@@ -16,7 +16,7 @@ const inventory: Messages<typeof en> = {
   outOfStockCount_other: "{{count}} de articole epuizate",
   attention: {
     title: "Stoc care necesită atenție",
-    hint: "Pe baza cantității și a minimului fiecărui articol. Serviciile din comenzi nu rezervă și nu consumă automat stocul.",
+    hint: "Pe baza cantității și a minimului fiecărui articol. Solicitările de materiale pe comandă nu modifică stocul — doar eliberarea și returnarea din depozit.",
     allClearTitle: "Stocul arată bine",
     allClearHint: "Toate articolele active sunt peste cantitatea minimă.",
     loadError: "Atenția asupra stocului nu a putut fi încărcată",
@@ -81,6 +81,13 @@ const inventory: Messages<typeof en> = {
     description: "Detaliile articolului, starea stocului și prețurile.",
     loadError: "Acest articol de stoc nu a putut fi încărcat.",
     notFound: "Articolul de stoc nu a fost găsit.",
+    movements: "Mișcări de stoc",
+    movementsEmpty: "Nu există încă mișcări de depozit pentru acest articol.",
+    movementIssue: "Eliberat",
+    movementReturn: "Returnat",
+    movementAdjustment: "Ajustare",
+    movementOrder: "Comanda {{number}}",
+    movementQty: "{{sign}}{{quantity}}",
   },
   form: {
     nameLabel: "Denumire *",

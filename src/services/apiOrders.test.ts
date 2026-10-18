@@ -109,7 +109,8 @@ describe("createOrder", () => {
     expect(orders.inserted[0]).toEqual(
       expect.objectContaining({
         client_id: "client-new",
-        assigned_to: assignedUserId,
+        employee_id: employeeId,
+        assigned_to: null,
         service_id: "service-new",
         service: "Wheel alignment",
       }),
@@ -152,7 +153,8 @@ describe("createOrder", () => {
     expect(orders.inserted[0]).toEqual(
       expect.objectContaining({
         client_id: "client-1",
-        assigned_to: assignedUserId,
+        employee_id: employeeId,
+        assigned_to: null,
         service_id: "service-1",
         service: "Oil change",
         number: expect.stringMatching(/^ORD-PENDING-/),
@@ -181,7 +183,7 @@ describe("createOrder", () => {
       services: [{ serviceId: "service-1", serviceName: "Oil change", price: 40, quantity: 1 }],
     }, "ws-1");
 
-    expect(orders.inserted[0]).toEqual(expect.objectContaining({ assigned_to: null }));
+    expect(orders.inserted[0]).toEqual(expect.objectContaining({ employee_id: null, assigned_to: null }));
   });
 
   it("does not insert an employee id from outside the current workspace", async () => {
@@ -206,25 +208,33 @@ describe("createOrder", () => {
     ).rejects.toThrow("Selected employee was not found in this workspace");
   });
 
-  it("does not insert an employee row id into assigned_to", async () => {
+  it("assigns an employee without profile_id using the employee row id", async () => {
     const existingService = query({ data: { id: "service-1", service_name: "Oil change" }, error: null });
     const unlinkedEmployee = query({ data: { id: employeeId, profile_id: null }, error: null });
+    const orders = query({ data: insertedOrder, error: null });
+    const orderServices = query({ data: null, error: null });
 
     from.mockImplementation((table: string) => {
+      if (table === "workspaces") return chisinau();
       if (table === "services") return existingService;
       if (table === "employees") return unlinkedEmployee;
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
       throw new Error(`Unexpected table ${table}`);
     });
 
-    await expect(
-      createOrder({
+    await createOrder(
+      {
         clientId: "client-1",
         clientName: "Ada Lovelace",
         device: "BMW",
         services: [{ serviceId: "service-1", serviceName: "Oil change", price: 40, quantity: 1 }],
         assignedEmployeeId: employeeId,
-      }, "ws-1"),
-    ).rejects.toThrow("Selected employee is not linked to a user");
+      },
+      "ws-1",
+    );
+
+    expect(orders.inserted[0]).toEqual(expect.objectContaining({ employee_id: employeeId, assigned_to: null }));
   });
 
   it("refuses to create an order without an active workspace", async () => {
@@ -306,7 +316,8 @@ describe("getOrders", () => {
           car_number: "ABC123",
           description: "Noise",
           status: "new",
-          assigned_to: "user-1",
+          employee_id: employeeId,
+          assigned_to: null,
           deadline: "2026-10-01T00:00:00.000Z",
           total_price: 40,
           is_paid: false,
@@ -323,10 +334,12 @@ describe("getOrders", () => {
       data: [{ order_id: "order-1", service_id: "service-1", service_name: "Oil change", price: 40, quantity: 1 }],
       error: null,
     });
+    const orderMaterials = query({ data: [], error: null });
 
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
       throw new Error(`Unexpected table ${table}`);
     });
@@ -351,7 +364,52 @@ describe("getOrders", () => {
     ]);
   });
 
-  it("maps assigned_to auth user ids to the linked employee id and employees.name", async () => {
+  it("prefers orders.employee_id over legacy assigned_to", async () => {
+    const orders = query({
+      data: [
+        {
+          id: "order-2",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          number: "ORD-2026-004",
+          device: "Audi",
+          status: "new",
+          employee_id: employeeId,
+          assigned_to: "user-stale",
+          total_price: 10,
+          is_paid: false,
+          clients: { name: "Ada Lovelace" },
+        },
+      ],
+      error: null,
+    });
+    const employees = query({
+      data: [
+        { id: employeeId, name: "Alexander", profile_id: "user-2" },
+        { id: "other-employee", name: "Stale", profile_id: "user-stale" },
+      ],
+      error: null,
+    });
+    const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
+
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
+      if (table === "employees") return employees;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(getOrders("ws-1")).resolves.toEqual([
+      expect.objectContaining({
+        assignedEmployeeId: employeeId,
+        assignedEmployeeName: "Alexander",
+      }),
+    ]);
+  });
+
+  it("maps legacy assigned_to auth user ids when employee_id is empty", async () => {
     rpc.mockResolvedValue({
       data: [{ user_id: "user-2", full_name: "Owner Name", email: "owner@example.com" }],
       error: null,
@@ -375,10 +433,12 @@ describe("getOrders", () => {
     });
     const employees = query({ data: [{ id: employeeId, name: "Alexander", profile_id: "user-2" }], error: null });
     const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
 
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
       throw new Error(`Unexpected table ${table}`);
     });
@@ -414,10 +474,12 @@ describe("getOrders", () => {
     });
     const employees = query({ data: [], error: null });
     const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
 
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
       throw new Error(`Unexpected table ${table}`);
     });
@@ -470,10 +532,15 @@ describe("updateOrder", () => {
       return orders;
     };
 
+    const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
+
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "employees") return employees;
       if (table === "workspace_members") return activeMember();
+      if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -491,21 +558,23 @@ describe("updateOrder", () => {
       device: "Audi",
       car_number: "XYZ789",
       description: "Brake noise",
-      assigned_to: "user-1",
+      employee_id: employeeId,
       deadline: "2026-10-02T00:00:00.000Z",
+      vin: null,
     });
     expect(updated).toEqual(
       expect.objectContaining({
         device: "Audi",
         carNumber: "XYZ789",
         description: "Brake noise",
+        assignedEmployeeId: employeeId,
         assignedEmployeeName: "Ada Tech",
         deadline: "2026-10-02",
       }),
     );
   });
 
-  it("stores a VIN when the orders table has no vin column", async () => {
+  it("stores VIN on orders.vin and assignee on orders.employee_id", async () => {
     const employee = { id: employeeId, name: "Ada Tech", profile_id: "user-1" };
     const employees = query({ data: [employee], error: null });
     employees.maybeSingle = () => Promise.resolve({ data: { id: employeeId, profile_id: "user-1" }, error: null });
@@ -516,21 +585,25 @@ describe("updateOrder", () => {
         client_id: "client-1",
         number: "ORD-2026-003",
         device: "BMW",
-        employee_id: "1HGBH41JXMN109186",
+        employee_id: employeeId,
+        vin: "1HGBH41JXMN109186",
         clients: { name: "Ada Lovelace" },
       },
       error: null,
     });
-    orders.limit = () => Promise.resolve({ data: null, error: { code: "42703", message: "column orders.vin does not exist" } });
     orders.update = (payload: unknown) => {
       updates.push(payload);
       return orders;
     };
+    const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
 
     from.mockImplementation((table: string) => {
       if (table === "employees") return employees;
       if (table === "workspace_members") return activeMember();
       if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -544,8 +617,15 @@ describe("updateOrder", () => {
       deadline: "",
     }, "ws-1");
 
-    expect(updates[0]).toEqual(expect.objectContaining({ employee_id: "1HGBH41JXMN109186" }));
+    expect(updates[0]).toEqual(
+      expect.objectContaining({
+        employee_id: employeeId,
+        vin: "1HGBH41JXMN109186",
+      }),
+    );
+    expect(updates[0]).not.toHaveProperty("assigned_to");
     expect(updated.vin).toBe("1HGBH41JXMN109186");
+    expect(updated.assignedEmployeeId).toBe(employeeId);
   });
 });
 

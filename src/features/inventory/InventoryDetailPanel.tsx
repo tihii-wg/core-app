@@ -3,12 +3,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "../../ui/Button";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import { Spinner } from "../../ui/Spinner";
-import type { InventoryItem } from "../../lib/types";
+import type { InventoryItem, InventoryMovementType } from "../../lib/types";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useInventoryMovements } from "./useInventoryMovements";
 
 type InventoryDetailPanelProps = {
   item: InventoryItem | null;
@@ -36,6 +37,13 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
   const inventoryCopy = industryInventoryCopy(workflow);
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
+  const { data: movements = [], isLoading: movementsLoading } = useInventoryMovements(item?.id, open && Boolean(item?.id));
+
+  function movementLabel(type: InventoryMovementType) {
+    if (type === "issue") return t("inventory.detail.movementIssue");
+    if (type === "return") return t("inventory.detail.movementReturn");
+    return t("inventory.detail.movementAdjustment");
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -82,6 +90,38 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
               {item.location?.trim() ? <DetailRow label={t("inventory.fields.location")} value={item.location} /> : null}
               <DetailRow label={t("inventory.fields.created")} value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
               <DetailRow label={t("inventory.fields.updated")} value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-xs font-medium text-muted-foreground">{t("inventory.detail.movements")}</h3>
+              {movementsLoading ? (
+                <div className="flex justify-center py-4">
+                  <Spinner className="h-4 w-4" />
+                </div>
+              ) : movements.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("inventory.detail.movementsEmpty")}</p>
+              ) : (
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {movements.map((movement) => {
+                    const sign = movement.movementType === "return" || movement.movementType === "adjustment" ? "+" : "−";
+                    return (
+                      <li key={movement.id} className="flex items-start justify-between gap-3 px-3 py-2 text-[13px]">
+                        <div className="min-w-0 space-y-0.5">
+                          <p className="font-medium text-foreground">{movementLabel(movement.movementType)}</p>
+                          <p className="text-muted-foreground tabular-nums">
+                            {formatWorkspaceDate(movement.createdAt, workspace?.dateFormat, workspace?.timezone)}
+                            {movement.orderId ? ` · ${movement.orderId.slice(0, 8)}` : ""}
+                          </p>
+                          {movement.reason ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{movement.reason}</p> : null}
+                        </div>
+                        <span className="shrink-0 tabular-nums font-medium text-foreground">
+                          {t("inventory.detail.movementQty", { sign, quantity: movement.quantity })}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
 
             <div className="flex justify-end gap-2">

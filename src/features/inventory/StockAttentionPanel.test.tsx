@@ -40,7 +40,7 @@ describe("StockAttentionPanel", () => {
     );
 
     expect(screen.getByText("Stock looks healthy")).toBeInTheDocument();
-    expect(screen.queryByText(/Order services do not reserve or consume stock automatically/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Order material requests do not change stock/)).not.toBeInTheDocument();
   });
 
   it("renders nothing when the workspace has no inventory items", () => {
@@ -62,7 +62,7 @@ describe("StockAttentionPanel", () => {
     );
 
     expect(screen.getByText("Stock needing attention")).toBeInTheDocument();
-    expect(screen.getByText(/Order services do not reserve or consume stock automatically/)).toBeInTheDocument();
+    expect(screen.getByText(/Order material requests do not change stock/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1 items out of stock/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1 items low on stock/i })).toBeInTheDocument();
 

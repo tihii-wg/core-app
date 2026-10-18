@@ -11,12 +11,23 @@ import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industryOrderStatusLabel, ORDER_STATUSES, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { canManageWarehouse } from "../workspaces/workspaceRoles";
+import {
+  materialIssued,
+  materialReturned,
+  netOutsideWarehouse,
+  remainingToIssue,
+  warehouseMaterialStatus,
+  warehouseStatusBadgeVariant,
+} from "../inventory/warehouseMaterialStatus";
 import useGetEmployees from "../employees/useGetEmployees";
 import { isOrderOverdue } from "./orderVisibility";
 import { localDateKey } from "../../pages/dashboardStats";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import { useUpdateOrder } from "./useUpdateOrder";
+import OrderWarehouseActions from "./OrderWarehouseActions";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -42,6 +53,8 @@ export default function OrderDetailPanel({
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
+  const workspaceRole = useActiveWorkspaceRole();
+  const canWarehouse = canManageWarehouse(workspaceRole);
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
@@ -79,7 +92,9 @@ export default function OrderDetailPanel({
   const today = localDateKey(new Date());
   const overdue = selectedOrder ? isOrderOverdue(selectedOrder, today) : false;
   const serviceLines = selectedOrder?.services ?? [];
+  const materialLines = selectedOrder?.materials ?? [];
   const hasServiceLines = serviceLines.length > 0;
+  const hasMaterialLines = materialLines.length > 0;
   const fallbackService = selectedOrder?.service?.trim() ?? "";
   const description = selectedOrder?.description?.trim() ?? "";
   const clientEmail = selectedOrder?.clientEmail?.trim() ?? "";
@@ -238,6 +253,52 @@ export default function OrderDetailPanel({
               </div>
             ) : fallbackService ? (
               <DetailItem label={t("orders.detail.service")} value={fallbackService} />
+            ) : null}
+
+            {hasMaterialLines ? (
+              <div className="space-y-3">
+                <div className="overflow-hidden rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">{t("orders.detail.materials")}</th>
+                        <th className="px-3 py-2 text-right font-medium">{t("orders.detail.quantity")}</th>
+                        <th className="px-3 py-2 text-right font-medium">{t("orders.detail.price")}</th>
+                        <th className="px-3 py-2 text-right font-medium">{t("orders.detail.amount")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {materialLines.map((line, index) => {
+                        const status = warehouseMaterialStatus(line);
+                        return (
+                          <tr key={line.id ?? `${line.inventoryItemId}-${index}`}>
+                            <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
+                              <div className="space-y-1">
+                                <p>{line.itemName}</p>
+                                <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
+                                  {t(`orders.warehouse.status.${status}`)}
+                                </StatusBadge>
+                                <p className="text-[11px] text-muted-foreground tabular-nums">
+                                  {t("orders.warehouse.fulfillmentSummary", {
+                                    issued: materialIssued(line),
+                                    returned: materialReturned(line),
+                                    remaining: remainingToIssue(line),
+                                    net: netOutsideWarehouse(line),
+                                  })}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(line.price * line.quantity)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <OrderWarehouseActions order={selectedOrder} canManage={canWarehouse} onOrderUpdated={onOrderUpdated} />
+              </div>
             ) : null}
 
             {description ? (

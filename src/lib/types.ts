@@ -57,8 +57,11 @@ export interface Order {
   carNumber: string;
   service: string;
   services: OrderService[];
+  /** Absent on legacy fixtures; treat as []. */
+  materials?: OrderMaterial[];
   description: string;
   status: OrderStatus;
+  /** employees.id from orders.employee_id (legacy assigned_to only when employee_id is empty). */
   assignedEmployeeId: string;
   assignedEmployeeName: string;
   deadline: string;
@@ -94,6 +97,7 @@ export interface addNewOrderFormData {
   carNumber: string;
   description: string;
   services: OrderService[];
+  materials: OrderMaterial[];
   assignedEmployeeId: string;
   deadline: string;
   status: OrderStatus;
@@ -113,6 +117,8 @@ export type CreateOrderInput = {
   carNumber?: string;
   description?: string;
   services: OrderService[];
+  /** When omitted or empty, the order is created with no material lines. */
+  materials?: OrderMaterial[];
   assignedEmployeeId?: string;
   deadline?: string;
 };
@@ -131,12 +137,15 @@ export type EditOrderFormData = {
   assignedEmployeeId: string;
   deadline: string;
   services: OrderService[];
+  materials: OrderMaterial[];
 };
 
-export type UpdateOrderDetails = Omit<EditOrderFormData, "services"> & {
+export type UpdateOrderDetails = Omit<EditOrderFormData, "services" | "materials"> & {
   orderId: string;
   /** The order's complete final service list; omit to leave the saved lines untouched. */
   services?: OrderService[];
+  /** The order's complete final material list; omit to leave saved materials untouched. Empty array removes all materials and restores stock. */
+  materials?: OrderMaterial[];
 };
 export interface addNewServiceFormData {
   serviceId?: string;
@@ -344,6 +353,40 @@ export type OrderService = {
   serviceId: string;
   serviceName: string;
   price: number;
+  quantity: number;
+};
+
+export type OrderMaterial = {
+  /** order_materials.id; absent for a line that has not been saved yet. */
+  id?: string;
+  inventoryItemId: string;
+  itemName: string;
+  price: number;
+  /** Requested quantity (planning). Does not change warehouse stock by itself. */
+  quantity: number;
+  /** Cumulative quantity issued from the warehouse. */
+  quantityIssued?: number;
+  /** Cumulative quantity returned to the warehouse. */
+  quantityReturned?: number;
+};
+
+export type InventoryMovementType = "issue" | "return" | "adjustment";
+
+export type InventoryMovement = {
+  id: string;
+  workspaceId: string;
+  inventoryItemId: string;
+  orderId: string | null;
+  orderMaterialId: string | null;
+  movementType: InventoryMovementType;
+  quantity: number;
+  reason: string | null;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export type WarehouseMaterialLineInput = {
+  inventoryItemId: string;
   quantity: number;
 };
 

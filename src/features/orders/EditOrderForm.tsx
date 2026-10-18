@@ -8,7 +8,9 @@ import { Textarea } from "../../ui/Textarea";
 import type { EditOrderFormData, Order } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine } from "../services/orderServiceLine";
+import { catalogServiceToOrderLine, sumOrderServiceLines } from "../services/orderServiceLine";
+import { sumOrderMaterialLines } from "../inventory/orderMaterialLine";
+import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -19,6 +21,7 @@ import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderAssetFields from "./OrderAssetFields";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
+import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 
 type EditOrderFormProps = {
   order: Order;
@@ -30,11 +33,13 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { t } = useTranslation();
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const { services } = useGetServices();
+  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const activeServices = services?.filter((service) => service.status === "active");
+  const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees, order.assignedEmployeeId);
 
@@ -42,8 +47,11 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     control,
     register,
     handleSubmit,
+    setValue,
+    getValues,
     clearErrors,
-    formState: { errors, isSubmitting },
+    trigger,
+    formState: { errors, isSubmitting, isSubmitted },
   } = useForm<EditOrderFormData>({
     defaultValues: {
       device: order.device,
@@ -53,6 +61,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       assignedEmployeeId: order.assignedEmployeeId,
       deadline: order.deadline,
       services: order.services,
+      materials: order.materials ?? [],
     },
   });
 
@@ -75,8 +84,18 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     },
   });
 
+  const {
+    fields: materialFields,
+    append: materialAppend,
+    remove: materialRemove,
+  } = useFieldArray({
+    control,
+    name: "materials",
+  });
+
   const watchedServices = useWatch({ control, name: "services" });
-  const totalPrice = (watchedServices ?? []).reduce((total, service) => total + (service.price ?? 0) * service.quantity, 0);
+  const watchedMaterials = useWatch({ control, name: "materials" });
+  const totalPrice = sumOrderServiceLines(watchedServices) + sumOrderMaterialLines(watchedMaterials);
 
   function hasService(serviceId: string | null, serviceName: string) {
     return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
@@ -88,6 +107,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       const updatedOrder = await updateOrder({
         orderId: order.id,
         ...data,
+        services: data.services,
+        materials: data.materials,
         carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : order.carNumber,
         vin: workflow.orderFields.vin.visible ? data.vin : order.vin,
         device: workflow.orderFields.device.visible ? data.device : order.device || data.device,
@@ -143,6 +164,20 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           </div>
         )}
       </div>
+
+      <OrderMaterialLinesEditor
+        control={control}
+        fields={materialFields}
+        append={materialAppend}
+        remove={materialRemove}
+        setValue={setValue}
+        getValues={getValues}
+        trigger={trigger}
+        inventoryItems={activeInventory}
+        disabled={isSubmitting}
+        isSubmitted={isSubmitted}
+        errors={errors.materials}
+      />
 
       <div className="space-y-1.5">
         <Label htmlFor="edit-order-description">{t("orders.form.descriptionLabel")}</Label>

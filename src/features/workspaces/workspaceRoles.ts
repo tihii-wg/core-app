@@ -31,6 +31,11 @@ export function canManageServices(role: string | null | undefined) {
   return role === "owner" || role === "admin";
 }
 
+/** Issue / return warehouse materials (mirrors RPC role gate). */
+export function canManageWarehouse(role: string | null | undefined) {
+  return role === "owner" || role === "admin" || role === "manager";
+}
+
 // UI visibility only; the expenses RLS policies are authoritative.
 export function canManageExpenses(role: string | null | undefined) {
   return role === "owner" || role === "admin";

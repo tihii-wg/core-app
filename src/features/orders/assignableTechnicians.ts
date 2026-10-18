@@ -1,7 +1,7 @@
 import type { Employee } from "../../lib/types";
 
 export type AssignableTechnician = {
-  /** employees.id — form value; persisted via the employee's linked auth user when the schema requires it. */
+  /** employees.id — form value and the id persisted on orders.employee_id. */
   id: string;
   name: string;
 };

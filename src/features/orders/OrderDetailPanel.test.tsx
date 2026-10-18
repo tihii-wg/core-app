@@ -59,6 +59,7 @@ const order: Order = {
   carNumber: "ABC123",
   service: "Oil change",
   services: [{ id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 }],
+  materials: [],
   description: "Noise",
   status: "new",
   assignedEmployeeId: "emp-1",

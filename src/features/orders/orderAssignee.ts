@@ -14,8 +14,7 @@ export function fromAssigneeSelectValue(value: string) {
 
 /**
  * Match an order assignee to an employee row.
- * UI / Order.assignedEmployeeId prefer employees.id; orders.assigned_to historically stores auth.users ids
- * (employees.profile_id) because of the FK on assigned_to.
+ * Canonical assignments use employees.id (orders.employee_id); legacy UI values may still be auth user ids.
  */
 export function orderAssignedToEmployee(assignedEmployeeId: string, employee: Pick<Employee, "id" | "profile_id">) {
   if (!assignedEmployeeId) return false;

@@ -17,6 +17,7 @@ export function useUpdateOrder() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       toast.success(i18n.t("orders.toast.updated"), { id: "update-order" });
     },
     onError: (error) => {

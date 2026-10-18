@@ -18,13 +18,55 @@ function linesOf(orderId: string) {
 }
 
 describe("createOrder", () => {
+  it("assigns a technician without profile_id and stores the employee id", async () => {
+    fake.all("employees").push({
+      id: "employee-unlinked",
+      workspace_id: WS.A,
+      name: "Una Unlinked",
+      email: "una@example.com",
+      phone: "+37362222223",
+      role: "technician",
+      status: "active",
+      profile_id: null,
+    });
+
+    const order = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [oilChange],
+        assignedEmployeeId: "employee-unlinked",
+      },
+      WS.A,
+    );
+
+    expect(order).toMatchObject({ employee_id: "employee-unlinked", assigned_to: null });
+    expect(row("orders", String(order.id))).toMatchObject({ employee_id: "employee-unlinked", assigned_to: null, workspace_id: WS.A });
+  });
+
+  it("rejects an employee from another workspace", async () => {
+    await expect(
+      createOrder(
+        {
+          clientId: "client-a1",
+          clientName: "Ada Alpha",
+          device: "Golf",
+          services: [oilChange],
+          assignedEmployeeId: "employee-b1",
+        },
+        WS.A,
+      ),
+    ).rejects.toThrow(/not found in this workspace/i);
+  });
+
   it("creates an order with its service lines, next number, total and assignee", async () => {
     const order = await createOrder(
       { clientId: "client-a1", clientName: "Ada Alpha", device: " Golf ", carNumber: " ab123 ", vin: "", description: "", services: [oilChange, { ...oilChange, serviceId: "service-a2", serviceName: "Brake check", price: 25, quantity: 2 }], assignedEmployeeId: "employee-a1", deadline: `${year}-11-01` },
       WS.A,
     );
 
-    expect(order).toMatchObject({ workspace_id: WS.A, client_id: "client-a1", number: `ORD-${year}-002`, device: "Golf", total_price: 90, status: "new", is_paid: false, assigned_to: USERS.member.id, service: "Oil change, Brake check" });
+    expect(order).toMatchObject({ workspace_id: WS.A, client_id: "client-a1", number: `ORD-${year}-002`, device: "Golf", total_price: 90, status: "new", is_paid: false, employee_id: "employee-a1", assigned_to: null, service: "Oil change, Brake check" });
     expect(linesOf(String(order.id)).map((line) => [line.service_name, line.price, line.quantity])).toEqual([
       ["Oil change", 40, 1],
       ["Brake check", 25, 2],
@@ -73,13 +115,6 @@ describe("createOrder", () => {
     const order = await createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [{ serviceId: "", serviceName: "Brand new", price: 5, quantity: 3 }] }, WS.A);
     expect(order.total_price).toBe(15);
     expect(fake.all("services").some((item) => item.service_name === "Brand new" && item.workspace_id === WS.A)).toBe(true);
-  });
-
-  it("rejects an employee from another workspace and an employee without a linked user", async () => {
-    await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [oilChange], assignedEmployeeId: "employee-c1" }, WS.A)).rejects.toThrow("Selected employee was not found in this workspace");
-
-    fake.all("employees").push({ id: "employee-unlinked", workspace_id: WS.A, name: "Nobody", profile_id: null });
-    await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [oilChange], assignedEmployeeId: "employee-unlinked" }, WS.A)).rejects.toThrow("Selected employee is not linked to a user");
   });
 
   it("validates input and the workspace", async () => {
@@ -306,9 +341,11 @@ describe("updateOrder", () => {
   it("updates details, reassigns the employee and keeps workspace_id out of the payload", async () => {
     const order = await updateOrder(details, WS.A);
 
-    expect(order).toMatchObject({ device: "Passat", carNumber: "AB 001", description: "Rattle", assignedEmployeeName: "Tina Tech", deadline: `${year}-12-24` });
-    expect(row("orders", "order-a1")).toMatchObject({ assigned_to: USERS.manager.id, workspace_id: WS.A });
+    expect(order).toMatchObject({ device: "Passat", carNumber: "AB 001", description: "Rattle", assignedEmployeeId: "employee-a2", assignedEmployeeName: "Tina Tech", deadline: `${year}-12-24` });
+    expect(row("orders", "order-a1")).toMatchObject({ employee_id: "employee-a2", workspace_id: WS.A });
+    expect(row("orders", "order-a1")).not.toMatchObject({ assigned_to: "employee-a2" });
     expect(fake.requests.find((item) => item.table === "orders" && item.op === "update")?.values).not.toHaveProperty("workspace_id");
+    expect(fake.requests.filter((item) => item.table === "sync_order_materials" && item.op === "rpc")).toHaveLength(0);
   });
 
   it("appends new services once, skips duplicates by id or name, and recalculates the total", async () => {
