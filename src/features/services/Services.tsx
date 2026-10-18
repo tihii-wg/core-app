@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
@@ -24,22 +24,23 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { cn } from "../../lib/utils";
+
+type StatusFilter = "all" | "active" | "inactive";
 
 export function Services() {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [createModalOpen, setCreateModalOpen] = useState(false);
-
   const [editModalOpen, setEditModalOpen] = useState(false);
-
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-
   const [serviceToDelete, setServiceToDelete] = useState<Service | null>(null);
 
-  const debunceSearch = useDebounce(searchQuery, 400);
+  const debouncedSearch = useDebounce(searchQuery, 400);
   const categoryQuery = categoryFilter === "all" ? undefined : (categoryFilter as serviceCategory);
-  const { services, isLoading, isPending, error, refetch } = useGetServices(debunceSearch, categoryQuery);
+  const { services, isLoading, isPending, error, refetch } = useGetServices(debouncedSearch, categoryQuery);
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
   const canManage = canManageServices(useActiveWorkspaceRole());
@@ -60,28 +61,38 @@ export function Services() {
     }
   }, [categoryFilter, workflow.slug, workflow.serviceCategories]);
 
-  // Stats
-  const activeServices = services?.filter((s) => s.status === "active").length;
+  const visibleServices = useMemo(() => {
+    if (statusFilter === "all") return services;
+    return services.filter((service) => service.status === statusFilter);
+  }, [services, statusFilter]);
 
-  // Format duration
-  // const formatDuration = (minutes: number): string => {
-  //   if (minutes < 60) return `${minutes} min`;
-  //   const hours = Math.floor(minutes / 60);
-  //   const mins = minutes % 60;
-  //   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  // };
+  const activeCount = services.filter((service) => service.status === "active").length;
+  const filteredEmpty = services.length > 0 && visibleServices.length === 0;
 
-  // Table columns
+  const openEdit = (service: Service) => {
+    setSelectedService(service);
+    setEditModalOpen(true);
+  };
+
   const columns: Column<Service>[] = [
     {
       key: "name",
       header: t("services.columns.service"),
-      cell: (service) => (
-        <div className="max-w-[28rem] min-w-0">
-          <p className="truncate font-medium text-foreground" title={service.service_name}>{service.service_name}</p>
-          {service.description && <p className="truncate text-xs text-muted-foreground" title={service.description}>{service.description}</p>}
-        </div>
-      ),
+      cell: (service) => {
+        const inactive = service.status === "inactive";
+        return (
+          <div className="max-w-[28rem] min-w-0">
+            <p className={cn("truncate font-medium", inactive ? "text-muted-foreground" : "text-foreground")} title={service.service_name}>
+              {service.service_name}
+            </p>
+            {service.description ? (
+              <p className="truncate text-xs text-muted-foreground" title={service.description}>
+                {service.description}
+              </p>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       key: "category",
@@ -94,7 +105,11 @@ export function Services() {
       key: "price",
       header: t("services.columns.price"),
       className: "text-right w-[140px] whitespace-nowrap",
-      cell: (service) => <span className="font-medium text-foreground tabular-nums">{formatMoney(service.service_price)}</span>,
+      cell: (service) => (
+        <span className={cn("font-semibold tabular-nums", service.status === "inactive" ? "text-muted-foreground" : "text-foreground")}>
+          {formatMoney(service.service_price)}
+        </span>
+      ),
     },
     {
       key: "status",
@@ -103,9 +118,13 @@ export function Services() {
       cell: (service) => (
         <div className="flex justify-end">
           {service.status === "active" ? (
-            <StatusBadge variant="success" dot>{t("services.statuses.active")}</StatusBadge>
+            <StatusBadge variant="success" dot>
+              {t("services.statuses.active")}
+            </StatusBadge>
           ) : (
-            <StatusBadge variant="muted" dot>{t("services.statuses.inactive")}</StatusBadge>
+            <StatusBadge variant="muted" dot>
+              {t("services.statuses.inactive")}
+            </StatusBadge>
           )}
         </div>
       ),
@@ -116,21 +135,35 @@ export function Services() {
     columns.push({
       key: "actions",
       header: "",
-      className: "w-[64px] text-right",
+      className: "w-[96px] text-right",
       cell: (service) => (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="hover:bg-destructive/10 hover:text-destructive"
-          aria-label={t("services.deleteAriaLabel", { name: service.service_name })}
-          onClick={(e) => {
-            e.stopPropagation();
-            setServiceToDelete(service);
-          }}
-        >
-          <Trash2 />
-        </Button>
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("services.editAriaLabel", { name: service.service_name })}
+            onClick={(event) => {
+              event.stopPropagation();
+              openEdit(service);
+            }}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="hover:bg-destructive/10 hover:text-destructive"
+            aria-label={t("services.deleteAriaLabel", { name: service.service_name })}
+            onClick={(event) => {
+              event.stopPropagation();
+              setServiceToDelete(service);
+            }}
+          >
+            <Trash2 />
+          </Button>
+        </div>
       ),
     });
   }
@@ -139,7 +172,7 @@ export function Services() {
     <div className="space-y-5">
       <PageHeader
         title={t("services.title")}
-        description={isPending ? t("services.loading") : t("services.activeCount", { count: activeServices })}
+        description={isPending ? t("services.loading") : t("services.activeCount", { count: activeCount })}
         actions={
           canManage ? (
             <Button onClick={() => setCreateModalOpen(true)}>
@@ -162,38 +195,48 @@ export function Services() {
             value: categoryFilter,
             onChange: setCategoryFilter,
           },
+          {
+            key: "status",
+            label: t("services.filters.status"),
+            options: [
+              { value: "all", label: t("services.filters.allStatuses") },
+              { value: "active", label: t("services.statuses.active") },
+              { value: "inactive", label: t("services.statuses.inactive") },
+            ],
+            value: statusFilter,
+            onChange: (value) => setStatusFilter(value as StatusFilter),
+          },
         ]}
         onClearFilters={() => {
           setSearchQuery("");
           setCategoryFilter("all");
+          setStatusFilter("active");
         }}
       />
 
       <DataTable
         columns={columns}
         isLoading={isLoading}
-        data={services}
+        data={visibleServices}
         emptyState={
           error ? (
             <ErrorState title={t("services.loadError")} description={error.message} onRetry={() => refetch()} />
-          ) : searchQuery || categoryFilter !== "all" ? (
-            <NoSearchResults query={searchQuery || serviceCategoryLabel(categoryFilter)} />
+          ) : filteredEmpty || searchQuery || categoryFilter !== "all" ? (
+            <NoSearchResults
+              query={
+                searchQuery ||
+                (categoryFilter !== "all" ? serviceCategoryLabel(categoryFilter) : t("services.filters.activeFiltersFallback"))
+              }
+            />
           ) : (
             <NoServices onAddService={canManage ? () => setCreateModalOpen(true) : undefined} />
           )
         }
         keyExtractor={(service) => service.id}
-        onRowClick={
-          canManage
-            ? (service) => {
-                setSelectedService(service);
-                setEditModalOpen(true);
-              }
-            : undefined
-        }
+        onRowClick={canManage ? openEdit : undefined}
+        rowClassName={(service) => (service.status === "inactive" ? "bg-muted/20" : undefined)}
       />
 
-      {/* Create Service Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
           <Description className="sr-only">{serviceCopy.createDescription}</Description>
@@ -204,7 +247,6 @@ export function Services() {
         </DialogContent>
       </Dialog>
 
-      {/*Create Edit Service Modal*/}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-lg">
           <Description className="sr-only">{serviceCopy.editDescription}</Description>
@@ -215,7 +257,6 @@ export function Services() {
         </DialogContent>
       </Dialog>
 
-      {/*Delete sevice */}
       <Dialog
         open={!!serviceToDelete}
         onOpenChange={(open) => {

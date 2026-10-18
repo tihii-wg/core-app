@@ -49,6 +49,8 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
     },
   });
 
+  // Depend on stable service fields and workflow.slug — industryWorkflow() returns a new
+  // object each render, so using `workflow` here caused Maximum update depth exceeded.
   useEffect(() => {
     reset({
       serviceName: service.service_name,
@@ -57,7 +59,16 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
       price: service.service_price,
       description: service.description ?? "",
     });
-  }, [service, reset, workflow]);
+  }, [
+    service.id,
+    service.service_name,
+    service.status,
+    service.category,
+    service.service_price,
+    service.description,
+    reset,
+    workflow.slug,
+  ]);
 
   const onSubmit = async (data: EditServiceFormData) => {
     try {

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import type { Service } from "../../lib/types";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { serviceCategoryLabel } from "../industries/industryWorkflow";
 
 type ServiceComboboxProps = {
   services: Service[];
@@ -15,6 +17,7 @@ type ServiceComboboxProps = {
 
 export default function ServiceCombobox({ services, value, onChange, onCreate, onSelect, errors, allowCreate = true }: ServiceComboboxProps) {
   const { t } = useTranslation();
+  const { formatMoney } = useWorkspaceMoney();
   const [open, setOpen] = useState(false);
   const [uncontrolledValue, setUncontrolledValue] = useState("");
   const [price, setPrice] = useState("");
@@ -49,10 +52,16 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
 
-  const filteredServices = services?.filter((service) => service.service_name?.toLowerCase().includes(inputValue.toLowerCase()));
+  const query = inputValue.trim().toLowerCase();
+  const filteredServices = (services ?? []).filter((service) => {
+    if (service.status === "inactive") return false;
+    if (!query) return true;
+    return service.service_name?.toLowerCase().includes(query);
+  });
 
-  const exactMatch = services?.some((service) => service.service_name?.toLowerCase() === inputValue.trim().toLowerCase());
+  const exactMatch = (services ?? []).some((service) => service.service_name?.toLowerCase() === inputValue.trim().toLowerCase());
   const canCreate = allowCreate && Boolean(inputValue.trim()) && !exactMatch;
+  const showEmpty = open && filteredServices.length === 0 && !canCreate;
 
   function createService() {
     const serviceName = inputValue.trim();
@@ -106,24 +115,37 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
       />
 
       {open && (
-        <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow">
-          {filteredServices?.map((service) => (
-            <button
-              key={service.id}
-              type="button"
-              className="block w-full px-3 py-2 text-left hover:bg-muted"
-              onClick={() => {
-                onSelect?.(service);
-                onChange?.(service.service_name);
-                if (value === undefined) {
-                  setUncontrolledValue("");
-                }
-                closeMenu();
-              }}
-            >
-              {service.service_name}
-            </button>
-          ))}
+        <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-popover shadow">
+          {filteredServices.map((service) => {
+            const priceLabel = formatMoney(service.service_price ?? 0);
+            const category = serviceCategoryLabel(service.category);
+            return (
+              <button
+                key={service.id}
+                type="button"
+                className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-muted"
+                aria-label={t("services.combobox.optionAria", { name: service.service_name, price: priceLabel })}
+                onClick={() => {
+                  onSelect?.(service);
+                  onChange?.(service.service_name);
+                  if (value === undefined) {
+                    setUncontrolledValue("");
+                  }
+                  closeMenu();
+                }}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-foreground">{service.service_name}</span>
+                  {category ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{category}</span> : null}
+                </span>
+                <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">{priceLabel}</span>
+              </button>
+            );
+          })}
+
+          {showEmpty ? (
+            <p className="px-3 py-3 text-sm text-muted-foreground">{t("services.combobox.empty")}</p>
+          ) : null}
 
           {canCreate && onCreate && (
             <div className="space-y-2 border-t px-3 py-2">

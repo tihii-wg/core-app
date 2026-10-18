@@ -12,6 +12,7 @@ const services: Messages<typeof en> = {
   searchPlaceholder: "Поиск услуг...",
   loadError: "Не удалось загрузить услуги",
   deleteAriaLabel: "Удалить {{name}}",
+  editAriaLabel: "Редактировать {{name}}",
   columns: {
     service: "Услуга",
     category: "Категория",
@@ -31,6 +32,9 @@ const services: Messages<typeof en> = {
   filters: {
     category: "Категория",
     allCategories: "Все категории",
+    status: "Статус",
+    allStatuses: "Все статусы",
+    activeFiltersFallback: "текущие фильтры",
   },
   dialogs: {
     createTitle: "Новая услуга",
@@ -83,6 +87,8 @@ const services: Messages<typeof en> = {
   combobox: {
     placeholder: "Услуга",
     priceAriaLabel: "Цена",
+    optionAria: "{{name}}, {{price}}",
+    empty: "Нет подходящих активных услуг.",
     create: "Создать: <strong>{{name}}</strong>",
   },
   toast: {

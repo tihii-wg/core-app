@@ -66,7 +66,7 @@ describe("dashboard quick actions", () => {
     await user.type(within(dialog).getByLabelText("Car Number *"), "abc123");
     await user.type(within(dialog).getByLabelText("VIN *"), VIN.toLowerCase());
     await user.click(within(dialog).getByPlaceholderText("Service"));
-    await user.click(await within(dialog).findByRole("button", { name: "Oil change" }));
+    await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
     await user.click(within(dialog).getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
     await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
@@ -91,7 +91,7 @@ describe("dashboard quick actions", () => {
     await user.type(within(dialog).getByLabelText("Car Number *"), "abc123");
     await user.type(within(dialog).getByLabelText("VIN *"), VIN);
     await user.click(within(dialog).getByPlaceholderText("Service"));
-    await user.click(await within(dialog).findByRole("button", { name: "Oil change" }));
+    await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
     await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
 
     await expectClosedOnDashboard(location);

@@ -179,7 +179,7 @@ describe("OrderDetailPanel", () => {
     await user.clear(vinInput);
     await user.type(vinInput, "2HGBH41JXMN109187");
     await user.click(screen.getByPlaceholderText("Service"));
-    await user.click(screen.getByRole("button", { name: "Tires" }));
+    await user.click(screen.getByRole("button", { name: /Tires/i }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(

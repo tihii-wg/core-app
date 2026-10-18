@@ -8,6 +8,7 @@ import { Textarea } from "../../ui/Textarea";
 import type { EditOrderFormData, Order } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
+import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -110,12 +111,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           onSelect={(service) => {
             if (hasService(service.id, service.service_name)) return;
 
-            serviceAppend({
-              serviceId: service.id,
-              serviceName: service.service_name,
-              price: service.service_price ?? 0,
-              quantity: 1,
-            });
+            serviceAppend(catalogServiceToOrderLine(service));
             clearErrors("services");
           }}
           onCreate={(serviceName, price) => {

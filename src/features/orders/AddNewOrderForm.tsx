@@ -10,6 +10,7 @@ import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, CreateMadalProps } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
+import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -248,12 +249,7 @@ export default function AddNewOrderForm({
 
               if (alreadyExists) return;
 
-              serviceAppend({
-                serviceId: service.id,
-                serviceName: service.service_name,
-                price: service.service_price ?? 0,
-                quantity: 1,
-              });
+              serviceAppend(catalogServiceToOrderLine(service));
               clearErrors("services");
             }}
             onCreate={(serviceName, price) => {

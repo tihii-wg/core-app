@@ -7,6 +7,7 @@ export default {
   searchPlaceholder: "Search services...",
   loadError: "Could not load services",
   deleteAriaLabel: "Delete {{name}}",
+  editAriaLabel: "Edit {{name}}",
   columns: {
     service: "Service",
     category: "Category",
@@ -26,6 +27,9 @@ export default {
   filters: {
     category: "Category",
     allCategories: "All categories",
+    status: "Status",
+    allStatuses: "All statuses",
+    activeFiltersFallback: "current filters",
   },
   dialogs: {
     createTitle: "Add New Service",
@@ -78,6 +82,8 @@ export default {
   combobox: {
     placeholder: "Service",
     priceAriaLabel: "Price",
+    optionAria: "{{name}}, {{price}}",
+    empty: "No matching active services.",
     create: "Create: <strong>{{name}}</strong>",
   },
   toast: {

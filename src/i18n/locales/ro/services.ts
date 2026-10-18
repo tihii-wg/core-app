@@ -11,6 +11,7 @@ const services: Messages<typeof en> = {
   searchPlaceholder: "Caută servicii...",
   loadError: "Serviciile nu au putut fi încărcate",
   deleteAriaLabel: "Șterge {{name}}",
+  editAriaLabel: "Editează {{name}}",
   columns: {
     service: "Serviciu",
     category: "Categorie",
@@ -30,6 +31,9 @@ const services: Messages<typeof en> = {
   filters: {
     category: "Categorie",
     allCategories: "Toate categoriile",
+    status: "Status",
+    allStatuses: "Toate statusurile",
+    activeFiltersFallback: "filtrele curente",
   },
   dialogs: {
     createTitle: "Adaugă serviciu nou",
@@ -82,6 +86,8 @@ const services: Messages<typeof en> = {
   combobox: {
     placeholder: "Serviciu",
     priceAriaLabel: "Preț",
+    optionAria: "{{name}}, {{price}}",
+    empty: "Niciun serviciu activ corespunzător.",
     create: "Creează: <strong>{{name}}</strong>",
   },
   toast: {
