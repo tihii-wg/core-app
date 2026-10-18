@@ -1,7 +1,8 @@
 import i18n, { currentIntlLocale } from "../../i18n";
-import type { Employee, InventoryItem, Order } from "../../lib/types";
+import type { Employee, InventoryItem, Order, OrderStatus } from "../../lib/types";
 import { calendarDateKey, localDateKey, startOfWeek } from "../../pages/dashboardStats";
 import { orderAssignedToEmployee } from "../orders/orderAssignee";
+import { isOpenOrder, isOrderOverdue } from "../orders/orderVisibility";
 
 export type ReportRange = "last7" | "last30" | "last90" | "thisYear";
 export type ReportGranularity = "day" | "week" | "month";
@@ -27,10 +28,34 @@ export type ServiceSlice = { name: string; count: number; revenue: number; perce
 
 export type EmployeeResult = { name: string; completed: number; revenue: number };
 
+/** Period workload for an assignee (or the Unassigned bucket). */
+export type WorkloadRow = {
+  name: string;
+  assigned: number;
+  open: number;
+  completed: number;
+  overdue: number;
+};
+
+/** Operational snapshot for the Reports overview. */
+export type OperationsStats = {
+  /** Orders whose createdAt falls in the period. */
+  created: number;
+  /**
+   * Orders currently completed/paid whose updatedAt (fallback: createdAt) falls in the period.
+   * There is no separate completed_at column — this is the closest reliable signal.
+   */
+  completed: number;
+  /** Open orders right now (not limited to the selected period). */
+  open: number;
+  /** Open overdue orders right now, same rule as Orders deadline filters. */
+  overdue: number;
+};
+
 export type StockLevel = { name: string; quantity: number; minimum: number };
 
 const rangeDays: Record<Exclude<ReportRange, "thisYear">, number> = { last7: 7, last30: 30, last90: 90 };
-const completedStatuses = new Set(["completed", "paid"]);
+const completedStatuses = new Set<OrderStatus>(["completed", "paid"]);
 export const serviceColors = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)"];
 export const otherServiceColor = "var(--color-subtle-foreground)";
 
@@ -182,6 +207,63 @@ export function employeePerformance(orders: Order[], employees: Employee[], peri
     })
     .filter((result) => result.completed > 0)
     .sort((a, b) => b.completed - a.completed || a.name.localeCompare(b.name));
+}
+
+function activityDate(order: Pick<Order, "createdAt" | "updatedAt">) {
+  return order.updatedAt?.trim() || order.createdAt;
+}
+
+/** Created / completed in-period, plus current open and overdue snapshots. */
+export function operationsStats(orders: Order[], period: ReportPeriod, today: string): OperationsStats {
+  const created = ordersIn(orders, period.start, period.end).length;
+  const completed = orders.filter(
+    (order) => completedStatuses.has(order.status) && inRange(activityDate(order), period.start, period.end),
+  ).length;
+
+  return {
+    created,
+    completed,
+    open: orders.filter((order) => isOpenOrder(order)).length,
+    overdue: orders.filter((order) => isOrderOverdue(order, today)).length,
+  };
+}
+
+function isAssignedToKnownEmployee(order: Order, employees: Employee[]) {
+  return employees.some((employee) => orderAssignedToEmployee(order.assignedEmployeeId, employee));
+}
+
+/**
+ * Workload for period-created orders by assignee.
+ * Includes an Unassigned row when billable period orders have no matching employee.
+ */
+export function employeeWorkload(orders: Order[], employees: Employee[], period: ReportPeriod, today: string): WorkloadRow[] {
+  const periodOrders = ordersIn(orders, period.start, period.end);
+  const rows = employees
+    .map((employee) => {
+      const assigned = periodOrders.filter((order) => orderAssignedToEmployee(order.assignedEmployeeId, employee));
+      if (assigned.length === 0) return null;
+      return {
+        name: employee.name,
+        assigned: assigned.length,
+        open: assigned.filter((order) => isOpenOrder(order)).length,
+        completed: assigned.filter((order) => completedStatuses.has(order.status)).length,
+        overdue: assigned.filter((order) => isOrderOverdue(order, today)).length,
+      };
+    })
+    .filter((row): row is WorkloadRow => row != null);
+
+  const unassigned = periodOrders.filter((order) => order.status !== "cancelled" && !isAssignedToKnownEmployee(order, employees));
+  if (unassigned.length > 0) {
+    rows.push({
+      name: i18n.t("reports.charts.unassigned"),
+      assigned: unassigned.length,
+      open: unassigned.filter((order) => isOpenOrder(order)).length,
+      completed: unassigned.filter((order) => completedStatuses.has(order.status)).length,
+      overdue: unassigned.filter((order) => isOrderOverdue(order, today)).length,
+    });
+  }
+
+  return rows.sort((a, b) => b.assigned - a.assigned || b.open - a.open || a.name.localeCompare(b.name));
 }
 
 export function lowestStockLevels(items: InventoryItem[], limit = 10): StockLevel[] {

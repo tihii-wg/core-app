@@ -16,11 +16,22 @@ import { useGetOrders } from "../orders/useGetOrders";
 import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import { clientCreatedAt } from "../../pages/dashboardStats";
+import { clientCreatedAt, localDateKey } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useNavigate, useParams } from "react-router-dom";
 import { quickReportDescription, quickReportTitle, quickReportTypes } from "./quickReports";
-import { employeePerformance, lowestStockLevels, percentChange, reportPeriod, revenueSeries, serviceDistribution, summaryStats, type ReportRange } from "./reportStats";
+import {
+  employeePerformance,
+  employeeWorkload,
+  lowestStockLevels,
+  operationsStats,
+  percentChange,
+  reportPeriod,
+  revenueSeries,
+  serviceDistribution,
+  summaryStats,
+  type ReportRange,
+} from "./reportStats";
 import { ExportReportDialog } from "./ExportReportDialog";
 import { ReportPrintRoot, type ReportPrintJob } from "./ReportPrintRoot";
 import { rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
@@ -90,24 +101,31 @@ export function ReportsModule() {
   const employeesLoading = waitingForWorkspace || employeesQueryLoading;
   const inventoryLoading = waitingForWorkspace || inventoryQueryLoading;
 
-  const period = reportPeriod(dateRange, new Date());
+  const now = new Date();
+  const today = localDateKey(now);
+  const period = reportPeriod(dateRange, now);
   const summary = summaryStats(
     orders,
     clients.map((client) => clientCreatedAt(client)),
     period,
   );
+  const operations = operationsStats(orders, period, today);
   const series = revenueSeries(orders, period);
   const services = serviceDistribution(orders, period);
   const employeeResults = employeePerformance(orders, employees, period);
+  const workload = employeeWorkload(orders, employees, period, today);
   const stockLevels = lowestStockLevels(inventoryItems);
 
   const statsLoading = ordersLoading || clientsLoading;
   const statsError = Boolean(ordersError || clientsError);
+  const opsLoading = ordersLoading;
+  const opsError = Boolean(ordersError);
 
   const stats = [
     {
       key: "revenue",
-      title: t("reports.stats.totalRevenue"),
+      title: t("reports.stats.revenueCollected"),
+      hint: t("reports.stats.revenueCollectedHint"),
       value: formatMoney(summary.current.revenue),
       change: percentChange(summary.current.revenue, summary.previous.revenue),
       icon: Wallet,
@@ -115,7 +133,8 @@ export function ReportsModule() {
     },
     {
       key: "orders",
-      title: t("reports.stats.totalOrders"),
+      title: t("reports.stats.ordersCreated"),
+      hint: t("reports.stats.ordersCreatedHint"),
       value: String(summary.current.orders),
       change: percentChange(summary.current.orders, summary.previous.orders),
       icon: ShoppingCart,
@@ -124,6 +143,7 @@ export function ReportsModule() {
     {
       key: "clients",
       title: t("reports.stats.newClients"),
+      hint: t("reports.stats.newClientsHint"),
       value: String(summary.current.newClients),
       change: percentChange(summary.current.newClients, summary.previous.newClients),
       icon: Users,
@@ -132,11 +152,19 @@ export function ReportsModule() {
     {
       key: "average",
       title: t("reports.stats.avgOrderValue"),
+      hint: t("reports.stats.avgOrderValueHint"),
       value: formatMoney(summary.current.avgOrderValue),
       change: percentChange(summary.current.avgOrderValue, summary.previous.avgOrderValue),
       icon: Activity,
       variant: "primary" as const,
     },
+  ];
+
+  const operationCards = [
+    { key: "created", title: t("reports.operations.created"), hint: t("reports.operations.createdHint"), value: operations.created, tone: "default" as const },
+    { key: "completed", title: t("reports.operations.completed"), hint: t("reports.operations.completedHint"), value: operations.completed, tone: "default" as const },
+    { key: "open", title: t("reports.operations.open"), hint: t("reports.operations.openHint"), value: operations.open, tone: "default" as const },
+    { key: "overdue", title: t("reports.operations.overdue"), hint: t("reports.operations.overdueHint"), value: operations.overdue, tone: "danger" as const },
   ];
 
   return (
@@ -185,7 +213,9 @@ export function ReportsModule() {
                   {statsError ? "—" : stat.value}
                 </p>
               )}
-              <p className="flex min-h-8 items-start pr-10 text-[13px] font-medium text-muted-foreground">{stat.title}</p>
+              <p className="flex min-h-8 items-start pr-10 text-[13px] font-medium text-muted-foreground" title={stat.hint}>
+                {stat.title}
+              </p>
             </div>
             <div className="mt-2 text-xs">
               {statsLoading || statsError || stat.change === null ? (
@@ -227,11 +257,42 @@ export function ReportsModule() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4">
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <ChartTitle icon={Activity}>{t("reports.operations.title")}</ChartTitle>
+              <CardDescription>{t("reports.operations.description")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {opsLoading || opsError ? (
+                <ReportPlaceholder height={120} isLoading={opsLoading} isError={opsError} description={t("reports.charts.noOrders")} />
+              ) : orders.length === 0 ? (
+                <ReportPlaceholder height={120} title={t("reports.operations.empty")} description={t("reports.operations.emptyHint")} />
+              ) : (
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                  {operationCards.map((card) => (
+                    <div key={card.key} className="rounded-lg border border-border bg-muted/40 px-3 py-3" title={card.hint}>
+                      <p className="text-xs font-medium text-muted-foreground">{card.title}</p>
+                      <p
+                        className={cn(
+                          "mt-1 text-2xl font-semibold tracking-tight tabular-nums",
+                          card.tone === "danger" && card.value > 0 ? "text-destructive" : "text-foreground",
+                        )}
+                      >
+                        {card.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <ChartTitle icon={TrendingUp}>{t(`reports.charts.revenueTitle.${period.granularity}`)}</ChartTitle>
+                <CardDescription>{t("reports.charts.revenueCollectedDescription")}</CardDescription>
               </CardHeader>
               <CardContent>
                 {ordersLoading || ordersError || summary.current.orders === 0 ? (
@@ -338,21 +399,64 @@ export function ReportsModule() {
           </div>
         </TabsContent>
 
-        <TabsContent value="employees" className="mt-4">
+        <TabsContent value="employees" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader>
+              <ChartTitle icon={Users}>{t("reports.charts.employeeWorkload")}</ChartTitle>
+              <CardDescription>{t("reports.charts.employeeWorkloadDescription")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {ordersLoading || employeesLoading || ordersError || employeesError || workload.length === 0 ? (
+                <ReportPlaceholder
+                  height={280}
+                  isLoading={ordersLoading || employeesLoading}
+                  isError={Boolean(ordersError || employeesError)}
+                  description={t("reports.charts.noEmployeeWorkload")}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[32rem] text-sm">
+                    <thead className="text-xs text-muted-foreground">
+                      <tr className="border-b border-border">
+                        <th className="px-2 py-2 text-left font-medium">{t("reports.columns.employee")}</th>
+                        <th className="px-2 py-2 text-right font-medium">{t("reports.columns.assigned")}</th>
+                        <th className="px-2 py-2 text-right font-medium">{t("reports.columns.open")}</th>
+                        <th className="px-2 py-2 text-right font-medium">{t("reports.columns.completed")}</th>
+                        <th className="px-2 py-2 text-right font-medium">{t("reports.columns.overdue")}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {workload.map((row) => (
+                        <tr key={row.name}>
+                          <td className="px-2 py-2.5 font-medium text-foreground">{row.name}</td>
+                          <td className="px-2 py-2.5 text-right tabular-nums text-foreground">{row.assigned}</td>
+                          <td className="px-2 py-2.5 text-right tabular-nums text-foreground">{row.open}</td>
+                          <td className="px-2 py-2.5 text-right tabular-nums text-foreground">{row.completed}</td>
+                          <td className={cn("px-2 py-2.5 text-right tabular-nums", row.overdue > 0 ? "font-medium text-destructive" : "text-foreground")}>{row.overdue}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <ChartTitle icon={Users}>{t("reports.charts.employeePerformance")}</ChartTitle>
+              <CardDescription>{t("reports.charts.employeePerformanceDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
               {ordersLoading || employeesLoading || ordersError || employeesError || employeeResults.length === 0 ? (
                 <ReportPlaceholder
-                  height={400}
+                  height={320}
                   isLoading={ordersLoading || employeesLoading}
                   isError={Boolean(ordersError || employeesError)}
                   description={t("reports.charts.noEmployeeResults")}
                 />
               ) : (
-                <ReportChart height={400}>
+                <ReportChart height={320}>
                   <BarChart data={employeeResults} layout="vertical" margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid {...chartGridProps} horizontal={false} />
                     <XAxis type="number" {...chartAxisProps} allowDecimals={false} />

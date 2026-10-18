@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import i18n from "../../i18n";
 import type { Employee, InventoryItem, Order } from "../../lib/types";
-import { employeePerformance, lowestStockLevels, otherServiceColor, percentChange, reportPeriod, revenueSeries, serviceDistribution, summaryStats } from "./reportStats";
+import {
+  employeePerformance,
+  employeeWorkload,
+  lowestStockLevels,
+  operationsStats,
+  otherServiceColor,
+  percentChange,
+  reportPeriod,
+  revenueSeries,
+  serviceDistribution,
+  summaryStats,
+} from "./reportStats";
 
 const now = new Date(2026, 9, 2, 10, 0, 0);
 
@@ -127,6 +139,78 @@ describe("employeePerformance", () => {
       { name: "Tom", completed: 2, revenue: 80 },
       { name: "Ann", completed: 1, revenue: 0 },
     ]);
+  });
+});
+
+describe("operationsStats", () => {
+  const today = "2026-10-02";
+  const period = reportPeriod("last7", now);
+
+  it("separates period created/completed from live open and overdue snapshots", () => {
+    const orders = [
+      order({ id: "created", createdAt: "2026-10-01", status: "new" }),
+      order({ id: "completed-in", createdAt: "2026-09-01", updatedAt: "2026-09-30", status: "completed" }),
+      order({ id: "completed-out", createdAt: "2026-08-01", updatedAt: "2026-08-15", status: "paid", isPaid: true }),
+      order({ id: "open", createdAt: "2026-08-01", status: "in-progress", deadline: "2026-10-10" }),
+      order({ id: "overdue", createdAt: "2026-08-01", status: "waiting", deadline: "2026-09-01" }),
+      order({ id: "closed-old", createdAt: "2026-08-01", status: "cancelled", deadline: "2026-01-01" }),
+    ];
+
+    expect(operationsStats(orders, period, today)).toEqual({
+      created: 1,
+      completed: 1,
+      open: 3,
+      overdue: 1,
+    });
+  });
+
+  it("is empty when there are no orders", () => {
+    expect(operationsStats([], period, today)).toEqual({ created: 0, completed: 0, open: 0, overdue: 0 });
+  });
+
+  it("uses createdAt when updatedAt is missing for completed-in-period", () => {
+    expect(
+      operationsStats(
+        [order({ status: "completed", createdAt: "2026-09-28", updatedAt: "" })],
+        period,
+        today,
+      ),
+    ).toEqual({ created: 1, completed: 1, open: 0, overdue: 0 });
+  });
+});
+
+describe("employeeWorkload", () => {
+  const today = "2026-10-02";
+  const period = reportPeriod("last7", now);
+
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+  });
+
+  it("groups period-created orders by assignee and includes an Unassigned row", () => {
+    const employees = [
+      { id: "e1", name: "Tom", profile_id: "p1" },
+      { id: "e2", name: "Ann", profile_id: "p2" },
+    ] as Employee[];
+    const orders = [
+      order({ id: "t1", assignedEmployeeId: "e1", status: "in-progress", deadline: "2026-09-01" }),
+      order({ id: "t2", assignedEmployeeId: "p1", status: "completed" }),
+      order({ id: "a1", assignedEmployeeId: "e2", status: "new", deadline: "2026-10-10" }),
+      order({ id: "u1", assignedEmployeeId: "", status: "waiting", deadline: "2026-09-15" }),
+      order({ id: "u2", assignedEmployeeId: "unknown", status: "new" }),
+      order({ id: "cancelled-unassigned", assignedEmployeeId: "", status: "cancelled" }),
+      order({ id: "outside", assignedEmployeeId: "e1", status: "new", createdAt: "2025-01-01" }),
+    ];
+
+    expect(employeeWorkload(orders, employees, period, today)).toEqual([
+      { name: "Unassigned", assigned: 2, open: 2, completed: 0, overdue: 1 },
+      { name: "Tom", assigned: 2, open: 1, completed: 1, overdue: 1 },
+      { name: "Ann", assigned: 1, open: 1, completed: 0, overdue: 0 },
+    ]);
+  });
+
+  it("returns an empty list when the period has no billable assigned or unassigned work", () => {
+    expect(employeeWorkload([order({ status: "cancelled", assignedEmployeeId: "" })], [], period, today)).toEqual([]);
   });
 });
 
