@@ -1,13 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { getIndustries, getIndustryCatalog } from "../../services/apiIndustries";
+import { getIndustries, IndustriesQueryError } from "../../services/apiIndustries";
 
 export function useGetIndustries() {
-  const { data, error, isLoading } = useQuery({
+  const { data, error, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["industries"],
     queryFn: getIndustries,
+    retry: (failureCount, queryError) => !(queryError instanceof IndustriesQueryError) && failureCount < 3,
   });
 
-  const industries = !isLoading && !error && (data ?? []).length === 0 ? getIndustryCatalog() : (data ?? []);
-
-  return { industries, isLoading, error };
+  return { industries: data ?? [], isLoading, isFetching, error, refetch };
 }

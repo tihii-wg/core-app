@@ -3,6 +3,7 @@ import { createOrder, getOrders, updateOrder, updateOrderStatus, yearInTimeZone 
 
 const getUser = vi.hoisted(() => vi.fn());
 const from = vi.hoisted(() => vi.fn());
+const rpc = vi.hoisted(() => vi.fn());
 const createClient = vi.hoisted(() => vi.fn());
 const createService = vi.hoisted(() => vi.fn());
 
@@ -10,6 +11,7 @@ vi.mock("./supabase", () => ({
   default: {
     auth: { getUser },
     from,
+    rpc,
   },
 }));
 
@@ -26,6 +28,7 @@ function query(result: { data: unknown; error: unknown }) {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    is: () => chain,
     ilike: () => chain,
     like: () => Promise.resolve({ data: chain.numbers, error: null }),
     order: () => chain,
@@ -55,14 +58,19 @@ const assignedUserId = "user-1";
 const insertedOrder = { id: "order-1", number: "ORD-PENDING-1", created_at: "2026-10-04T09:00:00+00:00" };
 const chisinau = () => query({ data: { timezone: "Europe/Chisinau" }, error: null });
 
+const activeMember = () => query({ data: { user_id: assignedUserId }, error: null });
+const missingMember = () => query({ data: null, error: null });
+
 describe("createOrder", () => {
   beforeEach(() => {
     getUser.mockReset();
     from.mockReset();
+    rpc.mockReset();
     createClient.mockReset();
     createService.mockReset();
 
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    rpc.mockResolvedValue({ data: [], error: null });
   });
 
   it("creates a missing client and service, then stores their ids on the order", async () => {
@@ -78,6 +86,7 @@ describe("createOrder", () => {
       if (table === "workspaces") return chisinau();
       if (table === "clients") return clients;
       if (table === "employees") return employees;
+      if (table === "workspace_members") return activeMember();
       if (table === "services") return serviceQueries.shift();
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
@@ -123,6 +132,7 @@ describe("createOrder", () => {
     from.mockImplementation((table: string) => {
       if (table === "workspaces") return chisinau();
       if (table === "employees") return employees;
+      if (table === "workspace_members") return activeMember();
       if (table === "services") return existingService;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
@@ -181,6 +191,7 @@ describe("createOrder", () => {
     from.mockImplementation((table: string) => {
       if (table === "services") return existingService;
       if (table === "employees") return missingEmployee;
+      if (table === "workspace_members") return missingMember();
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -238,6 +249,7 @@ describe("createOrder", () => {
     from.mockImplementation((table: string) => {
       if (table === "workspaces") return chisinau();
       if (table === "employees") return employees;
+      if (table === "workspace_members") return activeMember();
       if (table === "services") return existingService;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
@@ -277,7 +289,9 @@ describe("getOrders", () => {
   beforeEach(() => {
     getUser.mockReset();
     from.mockReset();
+    rpc.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    rpc.mockResolvedValue({ data: [], error: null });
   });
 
   it("returns workspace orders with the client and assigned employee", async () => {
@@ -336,13 +350,94 @@ describe("getOrders", () => {
       }),
     ]);
   });
+
+  it("maps assigned_to auth user ids to the linked employee id and employees.name", async () => {
+    rpc.mockResolvedValue({
+      data: [{ user_id: "user-2", full_name: "Owner Name", email: "owner@example.com" }],
+      error: null,
+    });
+    const orders = query({
+      data: [
+        {
+          id: "order-2",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          number: "ORD-2026-004",
+          device: "Audi",
+          status: "new",
+          assigned_to: "user-2",
+          total_price: 10,
+          is_paid: false,
+          clients: { name: "Ada Lovelace" },
+        },
+      ],
+      error: null,
+    });
+    const employees = query({ data: [{ id: employeeId, name: "Alexander", profile_id: "user-2" }], error: null });
+    const orderServices = query({ data: [], error: null });
+
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      if (table === "employees") return employees;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(getOrders("ws-1")).resolves.toEqual([
+      expect.objectContaining({
+        assignedEmployeeId: employeeId,
+        assignedEmployeeName: "Alexander",
+      }),
+    ]);
+  });
+
+  it("keeps historical assigned_to values readable when no employee row matches", async () => {
+    rpc.mockResolvedValue({
+      data: [{ user_id: "user-legacy", full_name: "Legacy Assignee", email: "legacy@example.com" }],
+      error: null,
+    });
+    const orders = query({
+      data: [
+        {
+          id: "order-legacy",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          number: "ORD-2025-001",
+          status: "completed",
+          assigned_to: "user-legacy",
+          total_price: 0,
+          is_paid: true,
+          clients: { name: "Ada Lovelace" },
+        },
+      ],
+      error: null,
+    });
+    const employees = query({ data: [], error: null });
+    const orderServices = query({ data: [], error: null });
+
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      if (table === "employees") return employees;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(getOrders("ws-1")).resolves.toEqual([
+      expect.objectContaining({
+        assignedEmployeeId: "user-legacy",
+        assignedEmployeeName: "Legacy Assignee",
+      }),
+    ]);
+  });
 });
 
 describe("updateOrder", () => {
   beforeEach(() => {
     getUser.mockReset();
     from.mockReset();
+    rpc.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    rpc.mockResolvedValue({ data: [], error: null });
   });
 
   it("saves edited order fields for the current workspace", async () => {
@@ -378,6 +473,7 @@ describe("updateOrder", () => {
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "employees") return employees;
+      if (table === "workspace_members") return activeMember();
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -433,6 +529,7 @@ describe("updateOrder", () => {
 
     from.mockImplementation((table: string) => {
       if (table === "employees") return employees;
+      if (table === "workspace_members") return activeMember();
       if (table === "orders") return orders;
       throw new Error(`Unexpected table ${table}`);
     });

@@ -19,12 +19,13 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
 import ClientTypeSelect from "../clients/ClientTypeSelect";
+import { assignableTechnicians } from "./assignableTechnicians";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
   const { t } = useTranslation();
   const { services } = useGetServices();
   const { clients } = useGetClients(searchQuery);
-  const { employees } = useGetEmployees();
+  const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: createOrder } = useCreateOrder();
   const { formatMoney } = useWorkspaceMoney();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
@@ -32,7 +33,8 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
   // const clientNameRef = useRef(clientName);
 
   const activeServices = services?.filter((service) => service.status === "active");
-  const technicianOptions = employees?.filter((employee) => employee.id && employee.profile_id && employee.status === "active" && employee.role === "technician") ?? [];
+  const techniciansError = employeesError;
+  const technicianOptions = assignableTechnicians(employees);
 
   const {
     control,
@@ -332,16 +334,19 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
                     <SelectValue placeholder={t("orders.form.selectPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {technicianOptions.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.name}
+                    {technicianOptions.map((technician) => (
+                      <SelectItem key={technician.id} value={technician.id}>
+                        {technician.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             />
-            {employees && technicianOptions.length === 0 && (
+            {techniciansError && (
+              <p className="text-xs text-destructive">{techniciansError instanceof Error ? techniciansError.message : t("orders.form.techniciansLoadFailed")}</p>
+            )}
+            {!techniciansError && !employeesLoading && employees && technicianOptions.length === 0 && (
               <p className="text-xs text-muted-foreground">{t("orders.form.noLinkedTechnicians")}</p>
             )}
             {errors.assignedEmployeeId && <p className="text-xs text-destructive">{errors.assignedEmployeeId.message}</p>}

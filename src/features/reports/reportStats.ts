@@ -1,6 +1,7 @@
 import i18n, { currentIntlLocale } from "../../i18n";
 import type { Employee, InventoryItem, Order } from "../../lib/types";
 import { calendarDateKey, localDateKey, startOfWeek } from "../../pages/dashboardStats";
+import { orderAssignedToEmployee } from "../orders/orderAssignee";
 
 export type ReportRange = "last7" | "last30" | "last90" | "thisYear";
 export type ReportGranularity = "day" | "week" | "month";
@@ -176,7 +177,7 @@ export function employeePerformance(orders: Order[], employees: Employee[], peri
 
   return employees
     .map((employee) => {
-      const completed = periodOrders.filter((order) => order.assignedEmployeeId === employee.id && completedStatuses.has(order.status));
+      const completed = periodOrders.filter((order) => orderAssignedToEmployee(order.assignedEmployeeId, employee) && completedStatuses.has(order.status));
       return { name: employee.name, completed: completed.length, revenue: sumTotals(completed.filter((order) => order.isPaid)) };
     })
     .filter((result) => result.completed > 0)

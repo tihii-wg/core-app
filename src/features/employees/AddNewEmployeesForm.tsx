@@ -1,4 +1,3 @@
-// import { useState } from "react";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -8,13 +7,7 @@ import type { AddNewEmployeesFormData, CreateEmployeeData, CreateMadalProps, Emp
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useGetProfile } from "../profiles/useGetProfile";
-import { profileDisplayName } from "../profiles/profileName";
-import { useGetWorkspaceMembers } from "../workspaces/useGetWorkspaceMembers";
-import { workspaceRoleLabel } from "../workspaces/workspaceRoles";
 import useCreateNewEmployee from "./useCreateNewEmployee";
-import useGetEmployees from "./useGetEmployees";
-
-const NOT_LINKED = "not-linked";
 
 const roles: EmployeeRole[] = ["admin", "manager", "technician", "receptionist"];
 
@@ -23,10 +16,6 @@ const employeesStatuses = ["active", "inactive"] as const;
 export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalProps) {
   const { t } = useTranslation();
   const { mutateAsync: createEmployee } = useCreateNewEmployee();
-  const { members, error: membersError } = useGetWorkspaceMembers();
-  const { employees } = useGetEmployees();
-  const linkedUserIds = new Set((employees ?? []).map((employee) => employee.profile_id).filter(Boolean));
-  const linkableMembers = (members ?? []).filter((member) => !linkedUserIds.has(member.userId));
 
   const {
     register,
@@ -64,7 +53,7 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
     const newEmployeeData: CreateEmployeeData = {
       ...data,
       workspace_id: currentProfile.active_workspace_id,
-      profile_id: data.profile_id ?? null,
+      profile_id: null,
     };
     try {
       await createEmployee(newEmployeeData);
@@ -185,37 +174,6 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
               )}
             />
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="profile_id">{t("employees.form.linkedUserLabel")}</Label>
-          <Controller
-            name="profile_id"
-            control={control}
-            render={({ field }) => (
-              <Select value={field.value ?? NOT_LINKED} onValueChange={(value) => field.onChange(value === NOT_LINKED ? null : value)} disabled={isSubmitting}>
-                <SelectTrigger id="profile_id">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NOT_LINKED}>{t("employees.form.notLinked")}</SelectItem>
-                  {linkableMembers.map((member) => (
-                    <SelectItem key={member.userId} value={member.userId}>
-                      {t("employees.form.memberOption", {
-                        name: profileDisplayName(member.fullName, member.email ?? t("employees.form.memberFallbackName")),
-                        role: workspaceRoleLabel(member.role),
-                      })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          {membersError ? (
-            <p className="text-xs text-destructive">{membersError instanceof Error ? membersError.message : t("employees.form.membersLoadError")}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">{t("employees.form.linkedUserHint")}</p>
-          )}
         </div>
       </div>
 

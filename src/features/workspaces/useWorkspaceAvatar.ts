@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import i18n from "../../i18n";
 import { getWorkspaceLogoUrl, LOGO_REMOVE_ERROR, LOGO_UPLOAD_ERROR, removeWorkspaceLogo, uploadWorkspaceLogo } from "./workspaceAvatar";
 import type { ListedWorkspaceMembership, WorkspaceDetails } from "../../services/apiWorkspaces";
 
@@ -21,7 +22,7 @@ export function useUploadWorkspaceAvatar() {
     mutationFn: ({ workspaceId, file }: { workspaceId: string; file: Blob }) => uploadWorkspaceLogo(workspaceId, file),
     onSuccess(_path, { workspaceId }) {
       invalidateWorkspaceLogo(queryClient, workspaceId);
-      toast.success("Company logo uploaded successfully.");
+      toast.success(i18n.t("workspaces.logo.uploaded"));
     },
     onError(error) {
       toast.error(error instanceof Error ? error.message : LOGO_UPLOAD_ERROR);
@@ -36,7 +37,7 @@ export function useRemoveWorkspaceAvatar() {
     mutationFn: ({ workspaceId, avatarPath }: { workspaceId: string; avatarPath: string | null }) => removeWorkspaceLogo(workspaceId, avatarPath),
     onSuccess(_data, { workspaceId }) {
       clearWorkspaceLogo(queryClient, workspaceId);
-      toast.success("Company logo removed successfully.");
+      toast.success(i18n.t("workspaces.logo.removed"));
     },
     onError(error) {
       toast.error(error instanceof Error ? error.message : LOGO_REMOVE_ERROR);

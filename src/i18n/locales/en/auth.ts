@@ -45,6 +45,7 @@ export default {
     confirmPasswordPlaceholder: "Confirm your password",
     confirmPasswordRequired: "Please confirm your password",
     passwordsMismatch: "Passwords do not match",
+    confirmEmail: "Check your email to confirm your account. You can choose your business type after you sign in.",
     submit: "Create account",
   },
   forgotPassword: {

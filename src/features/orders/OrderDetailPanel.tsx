@@ -8,7 +8,6 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
-import useGetEmployees from "../employees/useGetEmployees";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type OrderDetailPanelProps = {
@@ -26,7 +25,6 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
-  const { employees,} = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
 
 
@@ -67,7 +65,6 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
             <EditOrderForm
               key={selectedOrder.id}
               order={selectedOrder}
-              employees={employees ?? []}
               onCancel={() => setIsEditing(false)}
               onUpdated={(order) => {
                 onOrderUpdated(order);

@@ -2,26 +2,15 @@ import type { Industry } from "../lib/types";
 import i18n from "../i18n";
 import supabase from "./supabase";
 
-const industryCatalog: Array<Pick<Industry, "name" | "slug">> = [
-  { name: "Auto Repair & Service", slug: "auto_repair" },
-  { name: "Phone & Electronics Repair", slug: "phone_electronics_repair" },
-  { name: "Computer Repair", slug: "computer_repair" },
-  { name: "Appliance Repair", slug: "appliance_repair" },
-  { name: "Equipment Repair", slug: "equipment_repair" },
-  { name: "Electrical Services", slug: "electrical_services" },
-  { name: "Home Services", slug: "home_services" },
-  { name: "Other", slug: "other" },
-];
+/** A PostgREST/Postgres error (e.g. 42501 permission denied); retrying will not change the answer. */
+export class IndustriesQueryError extends Error {
+  readonly code: string;
 
-export function getIndustryCatalog(): Industry[] {
-  return industryCatalog.map((industry) => ({
-    id: industry.slug,
-    name: industry.name,
-    slug: industry.slug,
-    description: null,
-    is_active: true,
-    created_at: "",
-  }));
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "IndustriesQueryError";
+    this.code = code;
+  }
 }
 
 export async function getIndustries() {
@@ -31,7 +20,7 @@ export async function getIndustries() {
     .eq("is_active", true)
     .order("created_at", { ascending: true });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new IndustriesQueryError(error.message, error.code);
 
   return (data ?? []) as Industry[];
 }

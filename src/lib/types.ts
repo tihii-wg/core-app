@@ -254,16 +254,33 @@ export interface InvoiceDocument extends Invoice {
   items: InvoiceItem[];
 }
 
+// Mirrors expenses_payment_method_check in supabase/migrations/20261005020000_expenses.sql.
+export const paymentMethods = ["cash", "card", "bank-transfer", "other"] as const;
+export type PaymentMethod = (typeof paymentMethods)[number];
+
+export interface Expense {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+}
+
+export type ExpenseFormData = Omit<Expense, "id">;
+
+/** One Finance row: a paid invoice (income) or a recorded expense. */
 export interface Transaction {
   id: string;
   type: "income" | "expense";
   category: string;
   description: string;
   amount: number;
-  paymentMethod: "cash" | "card" | "bank-transfer" | "other";
+  paymentMethod?: PaymentMethod;
   date: string;
   relatedOrderId?: string;
   relatedInvoiceId?: string;
+  expense?: Expense;
 }
 
 export interface DashboardStats {

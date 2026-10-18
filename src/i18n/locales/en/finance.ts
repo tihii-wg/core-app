@@ -1,19 +1,17 @@
 export default {
   title: "Finance",
   description: "Revenue, expenses, and profit overview",
-  demoDescription: "Layout preview with sample transactions",
-  demoNotice: {
-    title: "Finance is not connected to your workspace yet",
-    body: "All figures on this page are sample values for previewing the layout. They are not calculated from your orders, clients, or inventory.",
-  },
+  periodDescription: "Revenue from paid invoices and recorded expenses · {{range}}",
+  rangeLabel: "Period",
   stats: {
     totalRevenue: "Total Revenue",
     totalExpenses: "Total Expenses",
     netProfit: "Net Profit",
-    transactions: "Transactions",
+    outstanding: "Outstanding Invoices",
   },
   transactions: {
-    title: "Recent Transactions",
+    title: "Transactions",
+    invoiceMethod: "Invoice",
     columns: {
       date: "Date",
       type: "Type",
@@ -27,6 +25,10 @@ export default {
       expense: "Expense",
     },
   },
+  categories: {
+    invoicePayment: "Invoice payment",
+  },
+  invoiceDescription: "{{number}} · {{client}}",
   paymentMethods: {
     short: {
       cash: "Cash",
@@ -41,7 +43,6 @@ export default {
       other: "Other",
     },
   },
-  revenueByPaymentMethod: "Revenue by Payment Method",
   profitOverview: {
     title: "Profit Overview",
     revenue: "Revenue",
@@ -49,27 +50,62 @@ export default {
     netProfit: "Net Profit",
     margin: "Profit Margin: <value>{{value}}%</value>",
   },
-  topExpenses: "Top Expenses",
-  demo: {
-    categories: {
-      serviceRevenue: "Service Revenue",
-      inventoryPurchase: "Inventory Purchase",
-      utilities: "Utilities",
-      rent: "Rent",
-      partsSale: "Parts Sale",
-      marketing: "Marketing",
+  expensesByCategory: "Expenses by Category",
+  expensesByPaymentMethod: "Expenses by Payment Method",
+  noExpensesInPeriod: "No expenses in this period.",
+  empty: {
+    title: "No transactions in this period",
+    description: "Paid invoices and recorded expenses appear here.",
+  },
+  expenses: {
+    add: "Add Expense",
+    fields: {
+      date: "Date *",
+      amount: "Amount ({{currency}}) *",
+      category: "Category *",
+      categoryPlaceholder: "e.g. Parts, Rent, Utilities",
+      paymentMethod: "Payment method",
+      description: "Description",
     },
-    descriptions: {
-      ipadScreen: "Payment for iPad Pro screen replacement",
-      dellSoftware: "Payment for Dell XPS software installation",
-      iphoneScreens: "iPhone 14 Pro screens x5 from TechParts Direct",
-      watchScreen: "Payment for Apple Watch screen replacement",
-      electricity: "Monthly electricity bill",
-      rent: "Monthly office rent",
-      macbookDiagnostics: "Payment for MacBook diagnostics",
-      macbookBatteries: "MacBook Pro batteries x3 from Apple Parts Co",
-      chargerSale: "USB-C Charger sale to walk-in customer",
-      googleAds: "Google Ads monthly budget",
+    suggestedCategories: {
+      parts: "Parts",
+      rent: "Rent",
+      utilities: "Utilities",
+      salaries: "Salaries",
+      tools: "Tools & equipment",
+      marketing: "Marketing",
+      taxes: "Taxes & fees",
+      other: "Other",
+    },
+    validation: {
+      dateRequired: "Date is required",
+      amountRequired: "Amount is required",
+      amountPositive: "Amount must be greater than zero",
+      categoryRequired: "Category is required",
+      categoryTooLong: "Category must be 80 characters or fewer",
+      descriptionTooLong: "Description must be 500 characters or fewer",
+    },
+    dialogs: {
+      addTitle: "Add Expense",
+      editTitle: "Edit Expense",
+      description: "Record a workspace expense",
+      deleteTitle: "Delete expense?",
+      deleteDescription: "{{category}} · {{amount}} will be removed from Finance.",
+    },
+    actions: {
+      menuLabel: "Actions for expense {{category}}",
+    },
+    toast: {
+      creating: "Saving expense...",
+      created: "Expense added",
+      updating: "Saving expense...",
+      updated: "Expense updated",
+      deleted: "Expense deleted",
+    },
+    errors: {
+      unavailable: "Expenses are not set up in this database yet. Apply the expenses migration to record them.",
+      noPermission: "Only the workspace owner or an admin can manage expenses.",
+      saveFailed: "The expense could not be saved",
     },
   },
 };

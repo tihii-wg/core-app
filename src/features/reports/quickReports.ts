@@ -1,5 +1,6 @@
 import i18n from "../../i18n";
 import type { Employee, InventoryItem, Order, OrderStatus } from "../../lib/types";
+import { employeeNameByAssigneeId, orderAssignedToEmployee } from "../orders/orderAssignee";
 import { ordersIn, percentChange, periodTotals, revenueSeries, serviceDistribution, type ReportPeriod, type ReportRange } from "./reportStats";
 
 export type QuickReportType = "sales" | "inventory" | "employees" | "financial";
@@ -354,11 +355,11 @@ export function inventoryReport(items: InventoryItem[]): QuickReportModel {
 export function employeeReport(orders: Order[], employees: Employee[], period: ReportPeriod, today: string): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
   const isOverdue = (order: Order) => !closedStatuses.has(order.status) && Boolean(order.deadline) && order.deadline < today;
-  const employeeNames = new Map(employees.map((employee) => [employee.id, employee.name]));
+  const employeeNames = employeeNameByAssigneeId(employees);
 
   const rows = employees
     .map((employee) => {
-      const assigned = periodOrders.filter((order) => order.assignedEmployeeId === employee.id);
+      const assigned = periodOrders.filter((order) => orderAssignedToEmployee(order.assignedEmployeeId, employee));
       const billable = assigned.filter(isBillable);
       const completed = assigned.filter((order) => completedStatuses.has(order.status));
       return {

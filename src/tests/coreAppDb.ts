@@ -182,6 +182,7 @@ export function installSecurityModel() {
   };
 
   fake.grants = {
+    industries: { insert: false, update: false, delete: false },
     workspaces: { delete: false },
     profiles: { delete: false },
     workspace_members: { insert: ["workspace_id", "user_id", "role"], update: ["role", "deleted_at"], delete: false },

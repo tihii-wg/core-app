@@ -70,6 +70,8 @@ export default {
     },
   },
   logo: {
+    uploaded: "Company logo uploaded successfully.",
+    removed: "Company logo removed successfully.",
     errors: {
       invalidFile: "Please select a JPG, PNG, or WebP image smaller than 5 MB.",
       uploadFailed: "Unable to upload company logo. Please try again.",

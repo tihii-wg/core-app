@@ -14,6 +14,8 @@ type ListedWorkspace = {
   id: string;
   name: string;
   avatar_path?: string | null;
+  owner_id?: string | null;
+  industry_id?: string | null;
 };
 
 export type ListedWorkspaceMembership = {
@@ -286,11 +288,17 @@ export function assignableTeamRole(role: string) {
   return value;
 }
 
+function teamProfileUserId(profile: TeamProfileRow & { id?: string | null }) {
+  const raw = profile.user_id || profile.id;
+  return raw == null || raw === "" ? "" : String(raw);
+}
+
 async function readTeamProfiles(workspaceId: string, userId: string) {
   const { data, error } = await supabase.rpc("workspace_member_profiles", { target_workspace: workspaceId });
   if (!error) return (data ?? []) as TeamProfileRow[];
   if (!isMissingFunction(error)) throw new Error(error.message);
 
+  // profiles RLS only returns the caller's row; other members stay nameless until the RPC exists.
   const { data: own, error: ownError } = await supabase.from("profiles").select("id, full_name, email").eq("id", userId).maybeSingle();
   if (ownError) throw new Error(ownError.message);
   return own ? [{ user_id: String(own.id), full_name: own.full_name ?? null, email: own.email ?? null }] : [];
@@ -306,7 +314,11 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
   ]);
   if (error) throw new Error(error.message);
 
-  const profilesById = new Map(profiles.map((profile) => [profile.user_id, profile]));
+  const profilesById = new Map<string, TeamProfileRow>();
+  for (const profile of profiles) {
+    const id = teamProfileUserId(profile);
+    if (id) profilesById.set(id, profile);
+  }
   const rank = (role: string) => {
     const index = teamRoleOrder.indexOf(role);
     return index === -1 ? teamRoleOrder.length : index;
@@ -314,13 +326,16 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
 
   return ((members ?? []) as TeamMemberRow[])
     .map((row) => {
-      const profile = profilesById.get(row.user_id);
-      const isCurrentUser = row.user_id === user.id;
+      const userId = String(row.user_id);
+      const profile = profilesById.get(userId);
+      const isCurrentUser = userId === String(user.id);
       return {
-        userId: row.user_id,
+        userId,
         role: row.role ?? "member",
         createdAt: row.created_at ?? null,
         fullName: profile?.full_name ?? null,
+        // Never borrow another member's profile: email comes from this user_id's profile, or the
+        // signed-in user's auth email only when this row is the current user.
         email: profile?.email ?? (isCurrentUser ? (user.email ?? null) : null),
         isCurrentUser,
       };
@@ -408,6 +423,32 @@ export async function getWorkspace(workspaceId: string) {
   );
 
   return toWorkspaceDetails(data);
+}
+
+/** Sets industry_id only when it is still empty, and only on a workspace this user owns. */
+export async function setWorkspaceIndustry(workspaceId: string, industryId: string) {
+  const user = await currentUser();
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) throw new Error(i18n.t("workspaces.errors.noAccess"));
+  if (workspace.ownerId !== user.id) throw new Error(i18n.t("settings.company.ownerOnly"));
+  if (workspace.industryId) return workspace;
+
+  const resolvedIndustryId = await resolveIndustryId(industryId);
+  const { data, error } = await supabase
+    .from("workspaces")
+    .update({ industry_id: resolvedIndustryId })
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id)
+    .is("industry_id", null)
+    .select("id, industry_id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (data?.industry_id) return getWorkspace(workspaceId);
+
+  const current = await getWorkspace(workspaceId);
+  if (current?.industryId) return current;
+  throw new Error(i18n.t("onboarding.errors.saveFailed"));
 }
 
 export async function updateWorkspaceDetails(workspaceId: string, input: { name: string; industryId: string; inventoryMarkup: number }) {

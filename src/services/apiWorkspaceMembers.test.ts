@@ -79,6 +79,33 @@ describe("team member service", () => {
     expect(state.rpcCalls).toEqual([{ name: "workspace_member_profiles", args: { target_workspace: "ws-1" } }]);
   });
 
+  it("maps team profiles when the RPC returns id instead of user_id", async () => {
+    state.tableResults.workspace_members = [
+      membership,
+      {
+        data: [
+          { user_id: "user-2", role: "member", created_at: "2026-02-01" },
+          { user_id: "user-1", role: "owner", created_at: "2026-01-01" },
+        ],
+        error: null,
+      },
+    ];
+    state.rpcResults.workspace_member_profiles = {
+      data: [
+        { id: "user-1", full_name: "Owner Name", email: "owner@example.com" },
+        { id: "user-2", full_name: "Grace Hopper", email: "grace@example.com" },
+      ],
+      error: null,
+    };
+
+    const members = await getWorkspaceMembers("ws-1");
+
+    expect(members.map((member) => [member.userId, member.fullName])).toEqual([
+      ["user-1", "Owner Name"],
+      ["user-2", "Grace Hopper"],
+    ]);
+  });
+
   it("refuses a workspace the user does not belong to", async () => {
     state.tableResults.workspace_members = [{ data: null, error: null }];
 

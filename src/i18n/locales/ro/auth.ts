@@ -49,6 +49,7 @@ const auth: Messages<typeof en> = {
     confirmPasswordPlaceholder: "Introduceți din nou parola",
     confirmPasswordRequired: "Vă rugăm să confirmați parola",
     passwordsMismatch: "Parolele nu coincid",
+    confirmEmail: "Verificați emailul pentru a confirma contul. Tipul afacerii se alege după autentificare.",
     submit: "Creați un cont",
   },
   forgotPassword: {

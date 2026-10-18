@@ -8,6 +8,7 @@ import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
 import { applyProfileTheme, cacheProfileTheme, normalizeProfileTheme, readCachedProfileTheme } from "../services/apiProfiles";
 import { replaceLocale } from "../features/settings/settingsTab";
 import { normalizeWorkspaceLanguage } from "../services/apiWorkspaces";
+import { ownedWorkspaceNeedingSetup } from "../features/onboarding/businessSetup";
 
 export function AppLayout() {
   const { workspaceId, locale = "en" } = useParams();
@@ -21,6 +22,7 @@ export function AppLayout() {
   const activeIsMember = Boolean(activeWorkspaceId && memberWorkspaceIds.includes(activeWorkspaceId));
   const workspaceContextReady = !isLoading && !workspacesError && !profileLoading && profile !== undefined;
   const canUseWorkspace = Boolean(workspaceId) && workspaceId === activeWorkspaceId && activeIsMember;
+  const setupWorkspaceId = workspaceContextReady && profile ? ownedWorkspaceNeedingSetup(workspaces, activeWorkspaceId, profile.id) : null;
 
   const profileLoaded = profile !== undefined;
   const theme = profileLoaded ? normalizeProfileTheme(profile?.theme) : readCachedProfileTheme();
@@ -51,6 +53,8 @@ export function AppLayout() {
   }, [canUseWorkspace, workspace?.language, workspaceId, locale, location.pathname, location.search, navigate]);
 
   // The route mirrors profiles.active_workspace_id; DashboardRedirect repairs a stale active workspace.
+  if (setupWorkspaceId) return <Navigate to={`/${locale}/onboarding`} replace />;
+
   if (workspaceContextReady && workspaceId && !canUseWorkspace) {
     if (activeWorkspaceId && activeIsMember) {
       const segments = location.pathname.split("/");

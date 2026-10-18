@@ -73,6 +73,8 @@ const workspaces: Messages<typeof en> = {
     },
   },
   logo: {
+    uploaded: "Логотип компании успешно загружен.",
+    removed: "Логотип компании успешно удалён.",
     errors: {
       invalidFile: "Выберите изображение JPG, PNG или WebP размером до 5 МБ.",
       uploadFailed: "Не удалось загрузить логотип компании. Попробуйте ещё раз.",

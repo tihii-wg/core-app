@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import type { Order } from "../../lib/types";
-import useGetEmployees from "../employees/useGetEmployees";
 import EditOrderForm from "./EditOrderForm";
 
 type EditOrderDialogProps = {
@@ -12,7 +11,6 @@ type EditOrderDialogProps = {
 
 export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogProps) {
   const { t } = useTranslation();
-  const { employees } = useGetEmployees();
 
   return (
     <Dialog
@@ -30,7 +28,6 @@ export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogPr
           <EditOrderForm
             key={order.id}
             order={order}
-            employees={employees ?? []}
             onCancel={onClose}
             onUpdated={(updated) => {
               onUpdated?.(updated);

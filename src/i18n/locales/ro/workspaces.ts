@@ -73,6 +73,8 @@ const workspaces: Messages<typeof en> = {
     },
   },
   logo: {
+    uploaded: "Sigla companiei a fost încărcată cu succes.",
+    removed: "Sigla companiei a fost eliminată cu succes.",
     errors: {
       invalidFile: "Selectați o imagine JPG, PNG sau WebP mai mică de 5 MB.",
       uploadFailed: "Nu s-a putut încărca sigla companiei. Vă rugăm să încercați din nou.",

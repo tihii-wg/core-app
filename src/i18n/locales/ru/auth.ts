@@ -50,6 +50,7 @@ const auth: Messages<typeof en> = {
     confirmPasswordPlaceholder: "Повторите пароль",
     confirmPasswordRequired: "Подтвердите пароль",
     passwordsMismatch: "Пароли не совпадают",
+    confirmEmail: "Проверьте почту и подтвердите аккаунт. Тип бизнеса можно выбрать после входа.",
     submit: "Создать аккаунт",
   },
   forgotPassword: {

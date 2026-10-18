@@ -78,18 +78,41 @@ async function resolveService(workspaceId: string, service: OrderService) {
   return { id: createdService.id as string, name: createdService.service_name as string };
 }
 
+/**
+ * Resolve a form assignee (employees.id, or a legacy auth user id) to the value stored on
+ * orders.assigned_to. That column FKs to auth.users(id), so only a linked employees.profile_id
+ * can be persisted — never employees.id. Unlinked technicians require a schema change.
+ */
 async function resolveAssignedEmployeeId(workspaceId: string, assignedEmployeeId?: string) {
   const selectedId = assignedEmployeeId?.trim() ?? "";
   if (!selectedId) return null;
 
-  const { data: employee, error } = await supabase.from("employees").select("id, profile_id").eq("id", selectedId).eq("workspace_id", workspaceId).maybeSingle();
+  const { data: byId, error: byIdError } = await supabase
+    .from("employees")
+    .select("id, profile_id")
+    .eq("id", selectedId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (byIdError) throw new Error(byIdError.message);
 
-  if (error) throw new Error(error.message);
-  if (!employee?.id) throw new Error(i18n.t("orders.errors.employeeNotFound"));
+  if (byId) {
+    const profileId = typeof byId.profile_id === "string" ? byId.profile_id.trim() : "";
+    if (!profileId) throw new Error(i18n.t("orders.errors.employeeNotLinked"));
+    return profileId;
+  }
 
-  const profileId = typeof employee.profile_id === "string" ? employee.profile_id.trim() : "";
+  // Legacy edit values / historical orders may still pass the auth user id stored on assigned_to.
+  const { data: byProfile, error: byProfileError } = await supabase
+    .from("employees")
+    .select("id, profile_id")
+    .eq("profile_id", selectedId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (byProfileError) throw new Error(byProfileError.message);
+  if (!byProfile) throw new Error(i18n.t("orders.errors.employeeNotFound"));
+
+  const profileId = typeof byProfile.profile_id === "string" ? byProfile.profile_id.trim() : "";
   if (!profileId) throw new Error(i18n.t("orders.errors.employeeNotLinked"));
-
   return profileId;
 }
 
@@ -238,9 +261,16 @@ type OrderServiceLine = { id?: string; order_id?: string; service_id?: string; s
 
 const orderServiceColumns = "id, order_id, service_id, service_name, price, quantity";
 
-function toOrder(row: Record<string, unknown>, employees: { id: string; name: string; profile_id: string | null }[], serviceLines: OrderServiceLine[] = []): Order {
+function toOrder(
+  row: Record<string, unknown>,
+  employees: { id: string; name: string; profile_id: string | null }[],
+  serviceLines: OrderServiceLine[] = [],
+  memberNames: Map<string, string> = new Map(),
+): Order {
   const assignedTo = typeof row.assigned_to === "string" ? row.assigned_to : "";
-  const employee = employees.find((item) => item.profile_id === assignedTo);
+  const employee =
+    employees.find((item) => item.profile_id != null && String(item.profile_id) === assignedTo) ??
+    employees.find((item) => String(item.id) === assignedTo);
   const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
   const isPaid = Boolean(row.is_paid);
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
@@ -267,8 +297,10 @@ function toOrder(row: Record<string, unknown>, employees: { id: string; name: st
     services,
     description: typeof row.description === "string" ? row.description : "",
     status,
-    assignedEmployeeId: employee?.id ?? "",
-    assignedEmployeeName: employee?.name ?? "",
+    // Prefer employees.id for form/filter values; fall back to the raw assigned_to auth user id.
+    assignedEmployeeId: employee?.id ?? assignedTo,
+    // Employee roster name is authoritative; profile labels only cover assignees with no employee row.
+    assignedEmployeeName: employee?.name || memberNames.get(assignedTo) || "",
     deadline: formatOrderDate(row.deadline),
     totalPrice: Number(row.total_price ?? 0),
     isPaid,
@@ -276,6 +308,28 @@ function toOrder(row: Record<string, unknown>, employees: { id: string; name: st
     createdAt: formatOrderDate(row.created_at),
     updatedAt: formatOrderDate(row.updated_at),
   };
+}
+
+async function assigneeDisplayNames(workspaceId: string, assignedUserIds: string[]) {
+  const names = new Map<string, string>();
+  if (assignedUserIds.length === 0) return names;
+
+  const wanted = new Set(assignedUserIds.map(String));
+  const { data, error } = await supabase.rpc("workspace_member_profiles", { target_workspace: workspaceId });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") return names;
+    throw new Error(error.message);
+  }
+
+  for (const profile of (data ?? []) as { user_id?: string | null; id?: string | null; full_name?: string | null; email?: string | null }[]) {
+    const raw = profile.user_id || profile.id;
+    const userId = raw == null || raw === "" ? "" : String(raw);
+    if (!userId || !wanted.has(userId)) continue;
+    const label = profile.full_name?.trim() || profile.email?.trim();
+    if (label) names.set(userId, label);
+  }
+
+  return names;
 }
 
 async function orderSearchFilter(workspaceId: string, term: string) {
@@ -304,6 +358,8 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
 
   const rows = (data ?? []) as Record<string, unknown>[];
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
+  const assignedUserIds = [...new Set(rows.map((row) => (typeof row.assigned_to === "string" ? row.assigned_to : "")).filter(Boolean))];
+  const memberNames = await assigneeDisplayNames(resolvedWorkspaceId, assignedUserIds);
   let serviceLines: OrderServiceLine[] = [];
 
   if (orderIds.length > 0) {
@@ -318,6 +374,7 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
       row,
       employees ?? [],
       serviceLines.filter((line) => line.order_id === row.id),
+      memberNames,
     ),
   );
 }
@@ -393,7 +450,9 @@ export async function updateOrder({ orderId, device, carNumber, vin = "", descri
 
   if (employeesError) throw new Error(employeesError.message);
 
-  const order = toOrder({ ...(data as Record<string, unknown>), ...summary, ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines);
+  const assignedUserId = typeof (data as Record<string, unknown>).assigned_to === "string" ? String((data as Record<string, unknown>).assigned_to) : "";
+  const memberNames = await assigneeDisplayNames(workspaceId, assignedUserId ? [assignedUserId] : []);
+  const order = toOrder({ ...(data as Record<string, unknown>), ...summary, ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames);
 
   return order;
 }

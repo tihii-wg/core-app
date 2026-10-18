@@ -1,22 +1,18 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
-import { Controller, useForm, useWatch, type SubmitHandler } from "react-hook-form";
+import { useForm, useWatch, type SubmitHandler } from "react-hook-form";
 import { Label } from "../../ui/Label";
 import { Input } from "../../ui/Input";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useTranslation } from "react-i18next";
-import { useGetIndustries } from "../industries/useGetIndustries";
-import { industryName } from "../industries/industryName";
 import { passwordMinimum } from "../../services/authMessages";
 import { useSignUp } from "./useSignUp";
 
 type Inputs = {
   companyName: string;
   ownerName: string;
-  industryId: string;
   email: string;
   phone: string;
   password: string;
@@ -25,8 +21,7 @@ type Inputs = {
 
 export default function RegisterForm() {
   const { t } = useTranslation();
-  const { mutateAsync, error: signUpError } = useSignUp();
-  const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
+  const { mutateAsync, error: signUpError, data: signUpResult } = useSignUp();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   // const [authType, setAuthType] = useState<"email" | "phone">("email");
@@ -37,11 +32,7 @@ export default function RegisterForm() {
     register,
     control,
     reset,
-  } = useForm<Inputs>({
-    defaultValues: {
-      industryId: "",
-    },
-  });
+  } = useForm<Inputs>();
 
   const password = useWatch({
     control,
@@ -56,7 +47,6 @@ export default function RegisterForm() {
         email: data.email,
         phone: data.phone,
         password: data.password,
-        industryId: data.industryId,
       });
       reset();
     } catch (error) {
@@ -81,33 +71,6 @@ export default function RegisterForm() {
             disabled={isSubmitting}
           />
           {errors.companyName && <p className="text-xs text-destructive">{t("auth.register.companyNameRequired")}</p>}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="industryId" className="text-sm text-foreground">
-            {t("auth.register.businessType")}
-          </Label>
-          <Controller
-            name="industryId"
-            control={control}
-            rules={{ required: t("auth.register.businessTypeRequired") }}
-            render={({ field }) => (
-              <Select value={field.value || undefined} onValueChange={field.onChange} disabled={isSubmitting || industriesLoading}>
-                <SelectTrigger id="industryId" className={errors.industryId ? "h-10 w-full border-destructive" : "h-10 w-full border-input"}>
-                  <SelectValue placeholder={industriesLoading ? t("auth.register.businessTypeLoading") : t("auth.register.businessTypePlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {industries.map((industry) => (
-                    <SelectItem key={industry.id} value={industry.id}>
-                      {industryName(industry)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          {errors.industryId && <p className="text-xs text-destructive">{errors.industryId.message}</p>}
-          {industriesError && <p className="text-xs text-destructive">{industriesError.message}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -244,6 +207,7 @@ export default function RegisterForm() {
           {errors.confirmPassword && <p className="text-xs text-destructive">{errors.confirmPassword.message}</p>}
         </div>
 
+        {signUpResult?.needsEmailConfirmation && <p className="text-sm text-muted-foreground">{t("auth.register.confirmEmail")}</p>}
         {signUpError && <p className="text-sm text-destructive">{`${signUpError?.message}`}</p>}
 
         <Button type="submit" disabled={isSubmitting} size="lg" className="w-full">

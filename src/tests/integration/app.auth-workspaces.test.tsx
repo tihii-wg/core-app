@@ -79,6 +79,60 @@ describe("login", () => {
     expect(fake.uid).toBeNull();
     expect(queryClient.getQueryCache().findAll({ queryKey: ["clients"] }).filter((query) => query.state.data !== undefined)).toHaveLength(0);
   });
+
+  it("does not ask for a business type on the signup page", async () => {
+    fake.signInAs(USERS.owner.id);
+    const { user, location } = renderApp(`/en/${WS.A}/clients`);
+    await screen.findByText("Ada Alpha");
+    await user.click(screen.getByRole("button", { name: "OO" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Log out/ }));
+    await waitFor(() => expect(location.pathname).toBe("/en/login"));
+
+    await user.click(await screen.findByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(location.pathname).toBe("/en/register"));
+
+    expect(screen.getByLabelText("Company Name")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "What type of business do you run?" })).not.toBeInTheDocument();
+    expect(fake.uid).toBeNull();
+  });
+});
+
+describe("business setup", () => {
+  it("asks the owner to choose a business type before opening the dashboard", async () => {
+    fake.all("industries").push({ id: "98989898-9898-4898-8898-989898989898", name: "Retired Industry", slug: "retired", description: null, is_active: false, created_at: "2026-01-02T00:00:00.000Z" });
+    row("workspaces", WS.A)!.industry_id = null;
+    fake.signInAs(USERS.owner.id);
+    const { user, location } = renderApp("/en/dashboard");
+
+    expect(await screen.findByRole("heading", { name: "Tell us about your business" })).toBeInTheDocument();
+    expect(location.pathname).toBe("/en/onboarding");
+    const continueButton = screen.getByRole("button", { name: "Continue" });
+    expect(continueButton).toBeDisabled();
+
+    expect(await screen.findByRole("radio", { name: "Auto Repair & Service" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Retired Industry" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Auto Repair & Service" }));
+    expect(continueButton).toBeEnabled();
+    await user.click(continueButton);
+
+    await waitFor(() => expect(location.pathname).toBe(`/en/${WS.A}/dashboard`));
+    expect(row("workspaces", WS.A)?.industry_id).toBe(INDUSTRY_ID);
+    expect(row("workspaces", WS.B)?.industry_id).toBe(INDUSTRY_ID);
+  });
+
+  it("opens the dashboard when the active workspace already has a business type", async () => {
+    fake.signInAs(USERS.owner.id);
+    const { location } = renderApp("/en/onboarding");
+    await waitFor(() => expect(location.pathname).toBe(`/en/${WS.A}/dashboard`));
+  });
+
+  it("does not send a member through setup for a workspace they do not own", async () => {
+    row("workspaces", WS.A)!.industry_id = null;
+    fake.signInAs(USERS.member.id);
+    const { location } = renderApp("/en/dashboard");
+    await waitFor(() => expect(location.pathname).toBe(`/en/${WS.A}/dashboard`));
+    expect(screen.queryByRole("heading", { name: "Tell us about your business" })).not.toBeInTheDocument();
+  });
 });
 
 describe("workspace routing and switching", () => {

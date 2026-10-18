@@ -20,6 +20,18 @@ vi.mock("../services/useGetServices", () => ({
   }),
 }));
 
+vi.mock("../employees/useGetEmployees", () => ({
+  default: () => ({ employees, error: null, isLoading: false }),
+}));
+
+vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
+  useActiveWorkspaceRole: () => "owner",
+}));
+
+vi.mock("../workspaces/useWorkspaceMoney", () => ({
+  useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
+}));
+
 const order: Order = {
   id: "order-1",
   clientId: "client-1",
@@ -61,7 +73,6 @@ function renderPanel(onOrderUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
       selectedOrder={order}
       detailPanelOpen
       setDetailPanelOpen={setDetailPanelOpen}
-      employees={employees}
       onOrderUpdated={onOrderUpdated}
       onStatusChange={vi.fn()}
     />,

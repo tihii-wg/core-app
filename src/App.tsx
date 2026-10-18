@@ -23,6 +23,7 @@ import { QuickReportPage } from "./features/reports/QuickReportPage";
 import { SettingsModule } from "./features/settings/Settings";
 import { AppLayout } from "./ui/AppLayout";
 import Dashboardredirect from "./ui/DashboardRedirect";
+import { BusinessSetupPage } from "./features/onboarding/BusinessSetupPage";
 import { AuthSession } from "./features/auth/AuthSession";
 import { isInvalidSessionError } from "./services/apiAuth";
 import supabase from "./services/supabase";
@@ -46,6 +47,7 @@ export function AppRoutes() {
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
+        <Route path="/:locale/onboarding" element={<BusinessSetupPage />} />
         <Route element={<AppLayout />}>
           <Route path="/:locale/dashboard/" element={<Dashboardredirect />} />
           <Route path="/:locale/:workspaceId/dashboard" element={<Dashboard />} />

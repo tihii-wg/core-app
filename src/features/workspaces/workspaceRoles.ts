@@ -31,6 +31,11 @@ export function canManageServices(role: string | null | undefined) {
   return role === "owner" || role === "admin";
 }
 
+// UI visibility only; the expenses RLS policies are authoritative.
+export function canManageExpenses(role: string | null | undefined) {
+  return role === "owner" || role === "admin";
+}
+
 // Workspace updates and deletion are owner-only in the database.
 export function canManageWorkspace(role: string | null | undefined) {
   return role === "owner";

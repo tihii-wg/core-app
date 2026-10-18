@@ -345,7 +345,7 @@ describe("orders page", () => {
     expect(within(panel).getByRole("combobox")).toHaveTextContent("New");
   });
 
-  it("offers only linked active technicians as assignees when creating an order", async () => {
+  it("offers active team members as assignees when creating an order, not unlinked employee rows", async () => {
     fake.all("employees").push({ id: "employee-unlinked", workspace_id: WS.A, name: "Una Unlinked", email: "una@example.com", phone: "+37362222223", role: "technician", status: "active", profile_id: null });
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
@@ -354,23 +354,27 @@ describe("orders page", () => {
     await user.click(within(dialog).getByRole("combobox"));
     await screen.findByRole("option", { name: "Tom Tech" });
 
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Tom Tech", "Tina Tech"]);
-    expect(within(dialog).queryByText(/No linked technicians/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Adam Admin", "Olga Owner", "Tina Tech", "Tom Tech"]);
+    expect(screen.queryByRole("option", { name: "Una Unlinked" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/No team members available/)).not.toBeInTheDocument();
   });
 
-  it("keeps the assignee required and explains when no technician is linked to a workspace user", async () => {
-    for (const employee of fake.all("employees")) if (employee.workspace_id === WS.A) employee.profile_id = null;
+  it("keeps the assignee required and explains when no active team member can be assigned", async () => {
+    for (const member of fake.all("workspace_members")) {
+      if (member.workspace_id === WS.A && member.user_id !== USERS.member.id) member.deleted_at = "2026-01-02T00:00:00.000Z";
+    }
+    for (const employee of fake.all("employees")) if (employee.workspace_id === WS.A) employee.status = "inactive";
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
 
-    expect(await within(dialog).findByText("No linked technicians. Link an active technician to a workspace user on the Employees page first.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("No team members available. Add an active member in Settings → Team first.")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
     expect(await within(dialog).findByText("Assigned employee is required")).toBeInTheDocument();
     expect(fake.requests.filter((request) => request.table === "orders" && request.op === "insert")).toHaveLength(0);
   });
 
-  it("offers the current assignee and linked technicians, but not unlinked ones, when editing an order", async () => {
+  it("offers active team members when editing an order, keeping the current assignee", async () => {
     fake.all("employees").push({ id: "employee-unlinked", workspace_id: WS.A, name: "Una Unlinked", email: "una@example.com", phone: "+37362222223", role: "technician", status: "active", profile_id: null });
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
@@ -380,7 +384,8 @@ describe("orders page", () => {
     await user.click(within(panel).getByRole("combobox", { name: "Assigned Employee" }));
     await screen.findByRole("option", { name: "Tina Tech" });
 
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Tom Tech", "Tina Tech"]);
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Adam Admin", "Olga Owner", "Tina Tech", "Tom Tech"]);
+    expect(screen.queryByRole("option", { name: "Una Unlinked" })).not.toBeInTheDocument();
   });
 
   it("shows the client type stored in Supabase in the table, the detail panel and the client picker", async () => {

@@ -6,28 +6,32 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
-import type { EditOrderFormData, Employee, Order } from "../../lib/types";
+import type { EditOrderFormData, Order } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
+import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
+import { assignableTechnicians } from "./assignableTechnicians";
 
 type EditOrderFormProps = {
   order: Order;
-  employees: Employee[];
   onCancel: () => void;
   onUpdated: (order: Order) => void;
 };
 
-export default function EditOrderForm({ order, employees, onCancel, onUpdated }: EditOrderFormProps) {
+export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderFormProps) {
   const { t } = useTranslation();
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const { services } = useGetServices();
+  const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const activeServices = services?.filter((service) => service.status === "active");
+  const techniciansError = employeesError;
+  const technicianOptions = assignableTechnicians(employees, order.assignedEmployeeId);
 
   const {
     control,
@@ -70,10 +74,6 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
   function hasService(serviceId: string | null, serviceName: string) {
     return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
   }
-
-  const technicianOptions = employees.filter(
-    (employee) => employee.id && (employee.id === order.assignedEmployeeId || (employee.profile_id && employee.status === "active" && employee.role === "technician")),
-  );
 
   const onSubmit = async (data: EditOrderFormData) => {
     try {
@@ -197,16 +197,19 @@ export default function EditOrderForm({ order, employees, onCancel, onUpdated }:
                   <SelectValue placeholder={t("orders.form.selectPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {technicianOptions.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.name}
+                  {technicianOptions.map((technician) => (
+                    <SelectItem key={technician.id} value={technician.id}>
+                      {technician.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
           />
-          {technicianOptions.length === 0 && (
+          {techniciansError && (
+            <p className="text-xs text-destructive">{techniciansError instanceof Error ? techniciansError.message : t("orders.form.techniciansLoadFailed")}</p>
+          )}
+          {!techniciansError && !employeesLoading && employees && technicianOptions.length === 0 && (
             <p className="text-xs text-muted-foreground">{t("orders.form.noLinkedTechnicians")}</p>
           )}
         </div>

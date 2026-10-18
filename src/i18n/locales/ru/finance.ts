@@ -4,19 +4,17 @@ import type { Messages } from "../../types";
 const finance: Messages<typeof en> = {
   title: "Финансы",
   description: "Обзор выручки, расходов и прибыли",
-  demoDescription: "Предпросмотр страницы с примерами операций",
-  demoNotice: {
-    title: "Финансы пока не подключены к вашему рабочему пространству",
-    body: "Все цифры на этой странице — примеры для предпросмотра. Они не рассчитаны на основе ваших заказов, клиентов или склада.",
-  },
+  periodDescription: "Выручка по оплаченным счетам и учтённые расходы · {{range}}",
+  rangeLabel: "Период",
   stats: {
     totalRevenue: "Общая выручка",
     totalExpenses: "Общие расходы",
     netProfit: "Чистая прибыль",
-    transactions: "Операции",
+    outstanding: "Неоплаченные счета",
   },
   transactions: {
-    title: "Последние операции",
+    title: "Операции",
+    invoiceMethod: "Счёт",
     columns: {
       date: "Дата",
       type: "Тип",
@@ -30,6 +28,10 @@ const finance: Messages<typeof en> = {
       expense: "Расход",
     },
   },
+  categories: {
+    invoicePayment: "Оплата счёта",
+  },
+  invoiceDescription: "{{number}} · {{client}}",
   paymentMethods: {
     short: {
       cash: "Наличные",
@@ -44,7 +46,6 @@ const finance: Messages<typeof en> = {
       other: "Другое",
     },
   },
-  revenueByPaymentMethod: "Выручка по способам оплаты",
   profitOverview: {
     title: "Обзор прибыли",
     revenue: "Выручка",
@@ -52,27 +53,62 @@ const finance: Messages<typeof en> = {
     netProfit: "Чистая прибыль",
     margin: "Рентабельность: <value>{{value}}%</value>",
   },
-  topExpenses: "Основные расходы",
-  demo: {
-    categories: {
-      serviceRevenue: "Выручка от услуг",
-      inventoryPurchase: "Закупка запасов",
-      utilities: "Коммунальные услуги",
-      rent: "Аренда",
-      partsSale: "Продажа запчастей",
-      marketing: "Маркетинг",
+  expensesByCategory: "Расходы по категориям",
+  expensesByPaymentMethod: "Расходы по способам оплаты",
+  noExpensesInPeriod: "За этот период расходов нет.",
+  empty: {
+    title: "За этот период операций нет",
+    description: "Здесь появляются оплаченные счета и учтённые расходы.",
+  },
+  expenses: {
+    add: "Добавить расход",
+    fields: {
+      date: "Дата *",
+      amount: "Сумма ({{currency}}) *",
+      category: "Категория *",
+      categoryPlaceholder: "например, Запчасти, Аренда, Коммунальные услуги",
+      paymentMethod: "Способ оплаты",
+      description: "Описание",
     },
-    descriptions: {
-      ipadScreen: "Оплата замены экрана iPad Pro",
-      dellSoftware: "Оплата установки ПО на Dell XPS",
-      iphoneScreens: "Экраны iPhone 14 Pro x5 от TechParts Direct",
-      watchScreen: "Оплата замены экрана Apple Watch",
-      electricity: "Ежемесячный счёт за электроэнергию",
-      rent: "Ежемесячная аренда офиса",
-      macbookDiagnostics: "Оплата диагностики MacBook",
-      macbookBatteries: "Аккумуляторы MacBook Pro x3 от Apple Parts Co",
-      chargerSale: "Продажа зарядного устройства USB-C случайному покупателю",
-      googleAds: "Ежемесячный бюджет Google Ads",
+    suggestedCategories: {
+      parts: "Запчасти",
+      rent: "Аренда",
+      utilities: "Коммунальные услуги",
+      salaries: "Зарплаты",
+      tools: "Инструменты и оборудование",
+      marketing: "Маркетинг",
+      taxes: "Налоги и сборы",
+      other: "Другое",
+    },
+    validation: {
+      dateRequired: "Укажите дату",
+      amountRequired: "Укажите сумму",
+      amountPositive: "Сумма должна быть больше нуля",
+      categoryRequired: "Укажите категорию",
+      categoryTooLong: "Категория — не более 80 символов",
+      descriptionTooLong: "Описание — не более 500 символов",
+    },
+    dialogs: {
+      addTitle: "Добавить расход",
+      editTitle: "Изменить расход",
+      description: "Учёт расхода компании",
+      deleteTitle: "Удалить расход?",
+      deleteDescription: "{{category}} · {{amount}} будет удалён из раздела «Финансы».",
+    },
+    actions: {
+      menuLabel: "Действия для расхода {{category}}",
+    },
+    toast: {
+      creating: "Сохранение расхода...",
+      created: "Расход добавлен",
+      updating: "Сохранение расхода...",
+      updated: "Расход обновлён",
+      deleted: "Расход удалён",
+    },
+    errors: {
+      unavailable: "Расходы ещё не настроены в этой базе данных. Примените миграцию расходов, чтобы их учитывать.",
+      noPermission: "Управлять расходами может только владелец компании или администратор.",
+      saveFailed: "Не удалось сохранить расход",
     },
   },
 };

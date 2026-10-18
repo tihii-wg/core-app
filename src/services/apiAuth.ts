@@ -1,6 +1,6 @@
+import type { User } from "@supabase/supabase-js";
 import supabase from "./supabase";
 import i18n, { currentLanguage } from "../i18n";
-import { resolveIndustryId } from "./apiIndustries";
 import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage } from "./apiWorkspaces";
 
 export function isInvalidSessionError(error: unknown) {
@@ -19,7 +19,12 @@ type signUpProps = {
   email: string;
   phone?: string;
   password: string;
-  industryId: string;
+};
+
+export type SignUpResult = {
+  user: User;
+  workspace: { id: string } | null;
+  needsEmailConfirmation: boolean;
 };
 
 type loginProps = {
@@ -27,7 +32,7 @@ type loginProps = {
   password: string;
 };
 
-export async function signUp(data: signUpProps) {
+export async function signUp(data: signUpProps): Promise<SignUpResult> {
   // 1.AUTH USER
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: data.email,
@@ -49,7 +54,8 @@ export async function signUp(data: signUpProps) {
   const user = authData.user;
   if (!user) throw new Error(i18n.t("auth.errors.userNotFound"));
 
-  const industryId = await resolveIndustryId(data.industryId);
+  // Email confirmation is on: there is no session yet, so profile and workspace writes are rejected.
+  if (!authData.session) return { user, workspace: null, needsEmailConfirmation: true };
 
   const { ownerName, phone, companyName } = user.user_metadata ?? {};
 
@@ -73,7 +79,7 @@ export async function signUp(data: signUpProps) {
       {
         name: companyName,
         owner_id: user.id,
-        industry_id: industryId,
+        industry_id: null,
         language: normalizeWorkspaceLanguage(currentLanguage()),
         date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
       },
@@ -101,7 +107,7 @@ export async function signUp(data: signUpProps) {
 
   if (profilersError) throw new Error(profilersError.message);
 
-  return { user, workspace };
+  return { user, workspace, needsEmailConfirmation: false };
 }
 
 export async function getCurrentUser() {

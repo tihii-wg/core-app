@@ -34,7 +34,10 @@ vi.mock("./useGetOrders", () => ({
 }));
 
 vi.mock("../employees/useGetEmployees", () => ({
-  default: () => ({ employees: [{ id: "emp-1", name: "Ada Tech" }], isLoading: false }),
+  default: () => ({
+    employees: [{ id: "emp-1", name: "Ada Tech", role: "technician", status: "active", profile_id: "user-1" }],
+    isLoading: false,
+  }),
 }));
 
 vi.mock("./AddNewOrderForm", () => ({

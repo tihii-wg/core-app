@@ -36,7 +36,7 @@ const navGroups: NavGroup[] = [
     labelKey: "nav.groups.finance",
     items: [
       { module: "invoices", labelKey: "nav.modules.invoices", icon: FileText },
-      { module: "finance", labelKey: "nav.modules.finance", icon: Wallet, demo: true },
+      { module: "finance", labelKey: "nav.modules.finance", icon: Wallet },
       { module: "reports", labelKey: "nav.modules.reports", icon: BarChart3 },
     ],
   },

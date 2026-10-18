@@ -46,15 +46,17 @@ describe("authentication", () => {
   });
 
   it("signs up: creates profile, workspace, owner membership and sets the active workspace", async () => {
-    const { user, workspace } = await signUp({ companyName: "Fresh Garage", ownerName: "Fred", email: "fred@example.com", phone: "+37360000001", password: "secret1", industryId: "auto_repair" });
+    const { user, workspace } = await signUp({ companyName: "Fresh Garage", ownerName: "Fred", email: "fred@example.com", phone: "+37360000001", password: "secret1" });
 
+    expect(workspace).not.toBeNull();
+    if (!workspace) return;
     expect(row("profiles", user.id)).toMatchObject({ full_name: "Fred", email: "fred@example.com", active_workspace_id: workspace.id });
-    expect(row("workspaces", workspace.id)).toMatchObject({ name: "Fresh Garage", owner_id: user.id, industry_id: INDUSTRY_ID });
+    expect(row("workspaces", workspace.id)).toMatchObject({ name: "Fresh Garage", owner_id: user.id, industry_id: null });
     expect(membership(workspace.id, user.id)).toMatchObject({ role: "owner" });
   });
 
   it("rejects signing up with an email that is already registered", async () => {
-    await expect(signUp({ companyName: "X", ownerName: "X", email: USERS.owner.email, password: "secret1", industryId: "auto_repair" })).rejects.toThrow("User already registered");
+    await expect(signUp({ companyName: "X", ownerName: "X", email: USERS.owner.email, password: "secret1" })).rejects.toThrow("User already registered");
   });
 });
 

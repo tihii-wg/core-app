@@ -6,23 +6,15 @@ import RegisterForm from "./RegisterForm";
 const mutateAsync = vi.fn();
 
 vi.mock("./useSignUp", () => ({
-  useSignUp: () => ({ mutateAsync, error: null }),
-}));
-
-vi.mock("../industries/useGetIndustries", () => ({
-  useGetIndustries: () => ({
-    industries: [
-      { id: "industry-auto", name: "Auto Repair & Service", slug: "auto_repair" },
-      { id: "industry-other", name: "Other", slug: "other" },
-    ],
-    isLoading: false,
-  }),
+  useSignUp: () => ({ mutateAsync, error: null, data: null }),
 }));
 
 describe("RegisterForm", () => {
-  it("requires a business type before creating an account", async () => {
+  it("creates an account without asking for a business type", async () => {
     const user = userEvent.setup();
     render(<RegisterForm />);
+
+    expect(screen.queryByRole("combobox", { name: "What type of business do you run?" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Company Name"), "Core Garage");
     await user.type(screen.getByLabelText("Owner Name"), "Ada Lovelace");
@@ -32,7 +24,12 @@ describe("RegisterForm", () => {
     await user.type(screen.getByLabelText("Confirm Password"), "secret1");
     await user.click(screen.getByRole("button", { name: "Create account" }));
 
-    expect(screen.getByText("Business type is required")).toBeInTheDocument();
-    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(mutateAsync).toHaveBeenCalledWith({
+      companyName: "Core Garage",
+      ownerName: "Ada Lovelace",
+      email: "ada@example.com",
+      phone: "+37360000000",
+      password: "secret1",
+    });
   });
 });

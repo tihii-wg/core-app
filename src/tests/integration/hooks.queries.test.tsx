@@ -200,11 +200,12 @@ describe("single-record and global queries", () => {
     expect(anonymous.current.isAuthenticated).toBe(false);
   });
 
-  it("useGetIndustries falls back to the built-in catalogue when the table is empty", async () => {
+  it("useGetIndustries offers no placeholder business types when no industry is readable", async () => {
     fake.tables.industries = [];
     const { wrapper } = createHookWrapper("/en/register");
     const { result } = renderHook(() => useGetIndustries(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.industries.map((item) => item.slug)).toContain("auto_repair");
+    expect(result.current.industries).toEqual([]);
+    expect(result.current.error).toBeNull();
   });
 });

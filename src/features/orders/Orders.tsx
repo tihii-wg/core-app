@@ -17,6 +17,7 @@ import { EditOrderDialog } from "./EditOrderDialog";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
+import { assignableTechnicians } from "./assignableTechnicians";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
 import { useCreateInvoice } from "../invoices/useCreateInvoice";
@@ -46,7 +47,8 @@ export function Orders() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
-  const { employees} = useGetEmployees();
+  const { employees } = useGetEmployees();
+  const assigneeOptions = assignableTechnicians(employees);
 
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
   const createInvoice = useCreateInvoice();
@@ -167,9 +169,9 @@ export function Orders() {
 
   const employeeFilterOptions = [
     { value: "all", label: t("orders.filters.allEmployees") },
-    ... (employees ?? []).map((employee) => ({
-      value: employee.id,
-      label: employee.name,
+    ...assigneeOptions.map((technician) => ({
+      value: technician.id,
+      label: technician.name,
     })),
   ];
 

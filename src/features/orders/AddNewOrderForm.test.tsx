@@ -24,7 +24,7 @@ vi.mock("../services/useGetServices", () => ({
 }));
 
 vi.mock("../employees/useGetEmployees", () => ({
-  default: () => ({ employees: employeesState.employees }),
+  default: () => ({ employees: employeesState.employees, error: null, isLoading: false }),
 }));
 
 vi.mock("../profiles/useGetProfile", () => ({
@@ -163,5 +163,19 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.getByRole("combobox")).toHaveTextContent("Ada");
     expect(consoleError.mock.calls.flat().join(" ")).not.toContain("uncontrolled");
     consoleError.mockRestore();
+  });
+
+  it("shows Alexander in the assignee list without a workspace membership or login link", async () => {
+    employeesState.employees = [
+      { id: "emp-alexander", name: "Alexander", status: "active", role: "technician", profile_id: null },
+      { id: "emp-owner", name: "Owner Name", status: "active", role: "admin", profile_id: "owner-1" },
+    ];
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    await user.click(screen.getByRole("combobox"));
+
+    expect(await screen.findByRole("option", { name: "Alexander" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Owner Name" })).not.toBeInTheDocument();
   });
 });
