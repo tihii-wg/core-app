@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import { buildOrderAlerts, undismissedAlerts, type OrderAlert } from "../features/notifications/orderAlerts";
+import { buildInventoryAlerts, type InventoryAlert } from "../features/notifications/inventoryAlerts";
+import { buildOrderAlerts, type OrderAlert } from "../features/notifications/orderAlerts";
+import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
 import OrderDetailPanel from "../features/orders/OrderDetailPanel";
 import { useGetOrders } from "../features/orders/useGetOrders";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
@@ -13,6 +15,10 @@ import { Button } from "./Button";
 import { Skeleton } from "./Skeleton";
 import { cn } from "../lib/utils";
 
+type CombinedAlert =
+  | { source: "order"; alert: OrderAlert }
+  | { source: "inventory"; alert: InventoryAlert };
+
 export default function AppTopbarNotifications() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -20,45 +26,81 @@ export default function AppTopbarNotifications() {
   const { workspaceId } = useActiveWorkspaceId();
   const waitingForWorkspace = !workspaceId;
   const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
+  const {
+    items: inventoryItems,
+    isLoading: inventoryLoading,
+    isError: inventoryError,
+  } = useGetInventoryItems("", "all", { field: "quantity", ascending: true });
   const orderDetails = useOrderDetails();
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const alerts = useMemo(() => buildOrderAlerts(orders, localDateKey(new Date())), [orders]);
-  const visibleAlerts = useMemo(() => undismissedAlerts(alerts, dismissedIds), [alerts, dismissedIds]);
-  const unreadCount = visibleAlerts.length;
-  const isLoading = waitingForWorkspace || ordersLoading;
-  const isError = Boolean(ordersError);
+  const orderAlerts = useMemo(() => buildOrderAlerts(orders, localDateKey(new Date())), [orders]);
+  const inventoryAlerts = useMemo(() => buildInventoryAlerts(inventoryItems), [inventoryItems]);
 
-  const alertTitle = (alert: OrderAlert) => {
-    if (alert.kind === "overdue") return t("nav.notifications.overdueOrder", { orderNumber: alert.orderNumber });
-    if (alert.kind === "upcoming") return t("nav.notifications.upcomingDeadline", { orderNumber: alert.orderNumber });
-    return t("nav.notifications.unassignedOrder", { orderNumber: alert.orderNumber });
+  const combined = useMemo<CombinedAlert[]>(() => {
+    const rows: CombinedAlert[] = [
+      ...orderAlerts.map((alert) => ({ source: "order" as const, alert })),
+      ...inventoryAlerts.map((alert) => ({ source: "inventory" as const, alert })),
+    ];
+    return rows;
+  }, [inventoryAlerts, orderAlerts]);
+
+  const visibleAlerts = useMemo(
+    () => combined.filter((row) => !dismissedIds.has(row.alert.id)),
+    [combined, dismissedIds],
+  );
+
+  const unreadCount = visibleAlerts.length;
+  const isLoading = waitingForWorkspace || ordersLoading || inventoryLoading;
+  const isError = Boolean(ordersError) || inventoryError;
+
+  const alertTitle = (row: CombinedAlert) => {
+    if (row.source === "inventory") {
+      if (row.alert.kind === "out_of_stock") {
+        return t("nav.notifications.outOfStockItem", { name: row.alert.name });
+      }
+      return t("nav.notifications.lowStockItem", { name: row.alert.name });
+    }
+    if (row.alert.kind === "overdue") return t("nav.notifications.overdueOrder", { orderNumber: row.alert.orderNumber });
+    if (row.alert.kind === "upcoming") return t("nav.notifications.upcomingDeadline", { orderNumber: row.alert.orderNumber });
+    return t("nav.notifications.unassignedOrder", { orderNumber: row.alert.orderNumber });
   };
 
-  const alertDetail = (alert: OrderAlert) => {
-    const client = alert.clientName.trim() || t("nav.notifications.unknownClient");
-    if (alert.kind === "unassigned") {
-      return alert.deadline
-        ? t("nav.notifications.unassignedWithDeadline", { client, deadline: alert.deadline })
+  const alertDetail = (row: CombinedAlert) => {
+    if (row.source === "inventory") {
+      return t("nav.notifications.stockDetail", {
+        quantity: row.alert.quantity,
+        unit: row.alert.unit,
+        min: row.alert.minQuantity,
+      });
+    }
+    const client = row.alert.clientName.trim() || t("nav.notifications.unknownClient");
+    if (row.alert.kind === "unassigned") {
+      return row.alert.deadline
+        ? t("nav.notifications.unassignedWithDeadline", { client, deadline: row.alert.deadline })
         : t("nav.notifications.unassignedDetail", { client });
     }
-    if (alert.deadline) return t("nav.notifications.deadlineDetail", { client, deadline: alert.deadline });
+    if (row.alert.deadline) return t("nav.notifications.deadlineDetail", { client, deadline: row.alert.deadline });
     return client;
   };
 
   const dismissAll = () => {
     setDismissedIds((prev) => {
       const next = new Set(prev);
-      for (const alert of alerts) next.add(alert.id);
+      for (const row of combined) next.add(row.alert.id);
       return next;
     });
   };
 
-  const openAlert = (alert: OrderAlert) => {
-    const order = orders.find((item) => item.id === alert.orderId);
-    if (!order) return;
-    orderDetails.openOrder(order);
+  const openAlert = (row: CombinedAlert) => {
+    if (row.source === "inventory") {
+      if (!routeWorkspaceId) return;
+      navigate(`/${locale}/${routeWorkspaceId}/inventory?item=${encodeURIComponent(row.alert.itemId)}`);
+      return;
+    }
+    const order = orders.find((item) => item.id === row.alert.orderId);
+    if (order) orderDetails.openOrder(order);
   };
 
   const viewOrders = () => {
@@ -129,22 +171,32 @@ export default function AppTopbarNotifications() {
               <p className="mt-1 text-xs text-muted-foreground">{t("nav.notifications.emptyHint")}</p>
             </div>
           ) : (
-            visibleAlerts.map((alert) => (
+            visibleAlerts.map((row) => (
               <DropdownMenuItem
-                key={alert.id}
+                key={row.alert.id}
                 className="flex cursor-pointer flex-col items-start gap-0.5 py-3"
-                onSelect={() => openAlert(alert)}
+                onSelect={() => openAlert(row)}
               >
                 <span
                   className={cn(
                     "text-sm text-foreground",
-                    alert.kind === "overdue" && "font-medium",
+                    (row.source === "order" && row.alert.kind === "overdue") ||
+                      (row.source === "inventory" && row.alert.kind === "out_of_stock")
+                      ? "font-medium"
+                      : null,
                   )}
                 >
-                  {alertTitle(alert)}
+                  {alertTitle(row)}
                 </span>
-                <span className={cn("text-xs text-muted-foreground", alert.kind === "overdue" && "text-destructive")}>
-                  {alertDetail(alert)}
+                <span
+                  className={cn(
+                    "text-xs text-muted-foreground",
+                    ((row.source === "order" && row.alert.kind === "overdue") ||
+                      (row.source === "inventory" && row.alert.kind === "out_of_stock")) &&
+                      "text-destructive",
+                  )}
+                >
+                  {alertDetail(row)}
                 </span>
               </DropdownMenuItem>
             ))

@@ -52,6 +52,8 @@ const dashboard: Messages<typeof en> = {
     recentOrders: "Последние заказы",
     activeOrders: "Активные заказы",
     lowStockItems: "Заканчиваются на складе",
+    lowStockQuantity: "{{quantity}} {{unit}} (мин. {{min}})",
+    lowStockQuantityHint: "Осталось {{quantity}} {{unit}} (минимум: {{min}})",
   },
   deadlines: {
     overdueTitle: "Просроченные заказы",

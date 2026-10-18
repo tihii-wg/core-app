@@ -1,4 +1,5 @@
 import type { InventoryItem, InventoryStockStatus } from "../../lib/types";
+import { effectiveStockStatus, needsStockAttention } from "./stockStatus";
 
 export type StockAttentionSummary = {
   /** Active items that are out of stock or low stock, out-of-stock first. */
@@ -15,12 +16,13 @@ function statusRank(status: InventoryStockStatus) {
 }
 
 /**
- * Active inventory needing attention using existing stock_status rules
+ * Active inventory needing attention using quantity-derived stock rules
  * (quantity ≤ 0 → out; quantity ≤ minQuantity → low). Inactive items are omitted.
  */
 export function stockAttentionSummary(items: InventoryItem[]): StockAttentionSummary {
   const attention = items
-    .filter((item) => item.isActive && (item.stockStatus === "out_of_stock" || item.stockStatus === "low_stock"))
+    .filter(needsStockAttention)
+    .map((item) => ({ ...item, stockStatus: effectiveStockStatus(item) }))
     .sort(
       (a, b) =>
         statusRank(a.stockStatus) - statusRank(b.stockStatus) ||

@@ -24,14 +24,16 @@ async function openDashboard() {
   fake.signInAs(USERS.owner.id);
   const app = renderApp(dashboardPath);
   await screen.findByText("Quick Actions");
+  // Wait for workspace industry copy + inventory stats (default pack shows "Add Item" until loaded).
+  await screen.findByRole("button", { name: "Add Part" });
+  await screen.findByRole("button", { name: /^Low Stock Items\s*1$/ });
   return app;
 }
 
 async function openQuickAction(user: User, button: string, dialogTitle: string) {
   await user.click(screen.getByRole("button", { name: button }));
-  const dialog = await screen.findByRole("dialog");
-  expect(within(dialog).getByText(dialogTitle)).toBeInTheDocument();
-  return dialog;
+  // Prefer accessible dialog name — title text can also appear on the submit button (e.g. "Add Part").
+  return screen.findByRole("dialog", { name: dialogTitle });
 }
 
 async function expectClosedOnDashboard(location: { pathname: string }) {
@@ -44,7 +46,7 @@ describe("dashboard quick actions", () => {
   it.each([
     ["Create Order", "Create New Order"],
     ["Add Client", "Add New Client"],
-    ["Add Inventory", "Add Inventory Item"],
+    ["Add Part", "Add Part"],
   ])("%s opens its create form in a dialog over the dashboard", async (button, dialogTitle) => {
     const { user, location } = await openDashboard();
 
@@ -62,8 +64,8 @@ describe("dashboard quick actions", () => {
 
     await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
     await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
-    await user.type(within(dialog).getByLabelText("Device *"), "Golf IV");
-    await user.type(within(dialog).getByLabelText("Car Number *"), "abc123");
+    await user.type(within(dialog).getByLabelText("Vehicle *"), "Golf IV");
+    await user.type(within(dialog).getByLabelText("License plate *"), "abc123");
     await user.type(within(dialog).getByLabelText("VIN *"), VIN.toLowerCase());
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
@@ -87,8 +89,8 @@ describe("dashboard quick actions", () => {
     expect(within(dialog).queryByLabelText("IDNO")).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
     await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
-    await user.type(within(dialog).getByLabelText("Device *"), "Golf IV");
-    await user.type(within(dialog).getByLabelText("Car Number *"), "abc123");
+    await user.type(within(dialog).getByLabelText("Vehicle *"), "Golf IV");
+    await user.type(within(dialog).getByLabelText("License plate *"), "abc123");
     await user.type(within(dialog).getByLabelText("VIN *"), VIN);
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
@@ -115,11 +117,11 @@ describe("dashboard quick actions", () => {
 
   it("creates an inventory item from the dashboard and closes the dialog", async () => {
     const { user, location } = await openDashboard();
-    const dialog = await openQuickAction(user, "Add Inventory", "Add Inventory Item");
+    const dialog = await openQuickAction(user, "Add Part", "Add Part");
 
     await user.type(await within(dialog).findByLabelText("Name *"), "Spark plug");
     await user.type(within(dialog).getByLabelText("SKU"), "SP-9");
-    await user.click(within(dialog).getByRole("button", { name: "Add Item" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add Part" }));
 
     await expectClosedOnDashboard(location);
     expect(fake.all("inventory_items").find((item) => item.name === "Spark plug")).toMatchObject({ workspace_id: WS.A, sku: "SP-9" });
@@ -162,10 +164,10 @@ describe("dashboard quick actions", () => {
     const panel = await screen.findByRole("dialog");
     expect(within(panel).getByText(orderNumber)).toBeInTheDocument();
     expect(within(panel).getByText("Update Status")).toBeInTheDocument();
-    expect(within(panel).queryByLabelText("Device *")).not.toBeInTheDocument();
+    expect(within(panel).queryByLabelText("Vehicle *")).not.toBeInTheDocument();
 
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    const device = await within(panel).findByLabelText("Device *");
+    const device = await within(panel).findByLabelText("Vehicle *");
     expect(device).toHaveValue("Alpha Garage car");
     await user.clear(device);
     await user.type(device, "Alpha van");
@@ -183,7 +185,7 @@ describe("dashboard quick actions", () => {
     await user.click(await screen.findByText("Alpha Garage car"));
     const panel = await screen.findByRole("dialog");
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    await user.clear(await within(panel).findByLabelText("Device *"));
+    await user.clear(await within(panel).findByLabelText("Vehicle *"));
     await user.click(within(panel).getByRole("button", { name: "Cancel" }));
 
     expect(within(panel).getByText("Update Status")).toBeInTheDocument();
@@ -197,11 +199,12 @@ describe("dashboard quick actions", () => {
 
     await user.click(await screen.findByText("Alpha Garage car"));
     const panel = await screen.findByRole("dialog");
-    await user.click(within(panel).getByRole("combobox"));
+    const statusSelect = within(panel).getByLabelText("Update Status");
+    await user.click(statusSelect);
     await user.click(await screen.findByRole("option", { name: "Paid" }));
 
     await waitFor(() => expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true }));
-    await waitFor(() => expect(within(panel).getByRole("combobox")).toHaveTextContent("Paid"));
+    await waitFor(() => expect(within(panel).getByLabelText("Update Status")).toHaveTextContent("Paid"));
     expect(location.pathname).toBe(dashboardPath);
   });
 
@@ -277,7 +280,7 @@ describe("dashboard quick actions", () => {
     await user.click(await screen.findByRole("button", { name: /^Low Stock Items\s*1$/ }));
 
     await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
-    const dialog = await screen.findByRole("dialog", { name: "Edit Inventory Item" });
+    const dialog = await screen.findByRole("dialog", { name: "Edit Part" });
     const quantity = await within(dialog).findByLabelText("Quantity *");
     await user.clear(quantity);
     await user.type(quantity, "30");
@@ -294,9 +297,9 @@ describe("dashboard quick actions", () => {
   it("keeps the low-stock edit dialog open when the update is rejected", async () => {
     const { user } = await openDashboard();
     await user.click(await screen.findByRole("button", { name: /^Low Stock Items\s*1$/ }));
-    await user.click(screen.getByText("Alpha brake pads"));
+    await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Edit Inventory Item" });
+    const dialog = await screen.findByRole("dialog", { name: "Edit Part" });
     const quantity = await within(dialog).findByLabelText("Quantity *");
     await user.clear(quantity);
     await user.type(quantity, "30");

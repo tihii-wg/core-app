@@ -92,6 +92,7 @@ export default {
     minQuantityLabel: "Minimum Quantity *",
     minQuantityRequired: "Minimum quantity is required",
     minQuantityNegative: "Minimum quantity cannot be negative",
+    minQuantityHint: "Alerts when stock is at or below this value (default 10 for new items). Use 0 only if you want alerts when stock reaches zero.",
     unitLabel: "Unit *",
     unitRequired: "Unit is required",
     defaultUnit: "pcs",

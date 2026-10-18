@@ -45,6 +45,8 @@ export default {
     recentOrders: "Recent Orders",
     activeOrders: "Active Orders",
     lowStockItems: "Low Stock Items",
+    lowStockQuantity: "{{quantity}} {{unit}} (min {{min}})",
+    lowStockQuantityHint: "{{quantity}} {{unit}} remaining (minimum: {{min}})",
   },
   deadlines: {
     overdueTitle: "Overdue orders",

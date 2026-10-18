@@ -51,8 +51,14 @@ describe("dashboard week stats", () => {
 
   it("counts stock that is at or below the minimum quantity", () => {
     expect(isAtOrBelowMinimum({ quantity: 2, minQuantity: 5 })).toBe(true);
+    expect(isAtOrBelowMinimum({ quantity: 5, minQuantity: 5 })).toBe(true);
     expect(isAtOrBelowMinimum({ quantity: 0, minQuantity: 0 })).toBe(true);
     expect(isAtOrBelowMinimum({ quantity: 6, minQuantity: 5 })).toBe(false);
+    // Quantity wins over a stale stockStatus field.
+    expect(isAtOrBelowMinimum({ quantity: 2, minQuantity: 5, stockStatus: "in_stock" })).toBe(true);
+    expect(isAtOrBelowMinimum({ quantity: 10, minQuantity: 5, stockStatus: "low_stock" })).toBe(false);
+    expect(isAtOrBelowMinimum({ quantity: 0, minQuantity: 1, stockStatus: "out_of_stock", isActive: false })).toBe(false);
+    expect(isAtOrBelowMinimum({ quantity: 2, minQuantity: 0, stockStatus: "in_stock" })).toBe(false);
   });
 
   it("is empty when nothing was created this week", () => {

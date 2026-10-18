@@ -15,6 +15,7 @@ import InventoryDetailPanel from "../inventory/InventoryDetailPanel";
 import { EditInventoryItemDialog } from "../inventory/EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "../inventory/DeleteInventoryItemDialog";
 import { useGetInventoryItem } from "../inventory/useGetInventoryItem";
+import { effectiveStockStatus } from "../inventory/stockStatus";
 import { industryModuleLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
@@ -47,7 +48,7 @@ function ResultContent({ result }: { result: SearchResult }) {
   } else {
     const { item } = result;
     title = <span className="font-medium text-foreground">{item.name}</span>;
-    badge = <InventoryStatusBadge status={item.stockStatus} />;
+    badge = <InventoryStatusBadge status={effectiveStockStatus(item)} />;
     subtitle = details([item.sku, item.category, `${item.quantity} ${item.unit}`.trim()]);
   }
 

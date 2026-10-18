@@ -10,6 +10,7 @@ import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useInventoryMovements } from "./useInventoryMovements";
+import { effectiveStockStatus } from "./stockStatus";
 
 type InventoryDetailPanelProps = {
   item: InventoryItem | null;
@@ -73,7 +74,7 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
         {item && !isLoading && (
           <div className="space-y-5 px-5 py-5">
             <div className="flex flex-wrap items-center gap-2">
-              <InventoryStatusBadge status={item.stockStatus} />
+              <InventoryStatusBadge status={effectiveStockStatus(item)} />
               {item.isActive ? <StatusBadge variant="success">{t("inventory.active")}</StatusBadge> : <StatusBadge variant="muted">{t("inventory.inactive")}</StatusBadge>}
             </div>
 

@@ -99,6 +99,7 @@ const inventory: Messages<typeof en> = {
     minQuantityLabel: "Cantitate minimă *",
     minQuantityRequired: "Cantitatea minimă este obligatorie",
     minQuantityNegative: "Cantitatea minimă nu poate fi negativă",
+    minQuantityHint: "Alerte când stocul este la sau sub această valoare (implicit 10 pentru articole noi). Folosește 0 doar pentru alerte la stoc zero.",
     unitLabel: "Unitate *",
     unitRequired: "Unitatea este obligatorie",
     defaultUnit: "buc.",

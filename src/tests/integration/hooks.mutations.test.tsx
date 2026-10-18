@@ -223,9 +223,26 @@ describe("inventory mutations", () => {
 
     await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 50 }));
     await waitFor(() => expect(result.current.detail.item?.quantity).toBe(50));
+    await waitFor(() => expect(result.current.detail.item?.stockStatus).toBe("in_stock"));
+    await waitFor(() => expect(result.current.list.items.find((item) => item.id === "item-a1")?.stockStatus).toBe("in_stock"));
+
+    await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 0, minQuantity: 1 }));
+    await waitFor(() => expect(result.current.detail.item).toMatchObject({ quantity: 0, stockStatus: "out_of_stock" }));
+    await waitFor(() => expect(result.current.list.items.find((item) => item.id === "item-a1")?.stockStatus).toBe("out_of_stock"));
 
     await settle(() => result.current.remove.mutateAsync("item-a1"));
     await waitFor(() => expect(result.current.list.items.map((item) => item.name)).toEqual(["Wiper"]));
+  });
+
+  it("does not apply a failed inventory update to the cached stock status", async () => {
+    const { result } = setup(() => ({ list: useGetInventoryItems("", "all", sortByName), detail: useGetInventoryItem("item-a1"), update: useUpdateInventoryItem() }), `/en/${WS.A}/inventory`);
+    await waitFor(() => expect(result.current.detail.item).toMatchObject({ quantity: 2, stockStatus: "low_stock" }));
+
+    fake.failNext("inventory_items", "update", { code: "42501", message: 'new row violates row-level security policy for table "inventory_items"' });
+    await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 50 }));
+
+    expect(result.current.detail.item).toMatchObject({ quantity: 2, stockStatus: "low_stock" });
+    expect(result.current.list.items.find((item) => item.id === "item-a1")).toMatchObject({ quantity: 2, stockStatus: "low_stock" });
   });
 
   it("a duplicate SKU shows a readable toast", async () => {

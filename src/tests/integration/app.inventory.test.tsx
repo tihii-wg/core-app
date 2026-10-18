@@ -47,6 +47,7 @@ describe("inventory page", () => {
   it("creates an item in the active workspace", async () => {
     const { user } = await openInventory();
     const dialog = await openCreate(user);
+    expect(within(dialog).getByLabelText("Minimum Quantity *")).toHaveValue(10);
     await user.type(within(dialog).getByLabelText("Name *"), "Spark plug");
     await user.type(within(dialog).getByLabelText("SKU"), "SP-9");
     const quantity = within(dialog).getByLabelText("Quantity *");
@@ -57,7 +58,32 @@ describe("inventory page", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Spark plug")).toBeInTheDocument();
-    expect(fake.all("inventory_items").find((item) => item.name === "Spark plug")).toMatchObject({ workspace_id: WS.A, sku: "SP-9", quantity: 12 });
+    expect(fake.all("inventory_items").find((item) => item.name === "Spark plug")).toMatchObject({
+      workspace_id: WS.A,
+      sku: "SP-9",
+      quantity: 12,
+      min_quantity: 10,
+    });
+  });
+
+  it("preserves a custom minimum quantity entered by the user", async () => {
+    const { user } = await openInventory();
+    const dialog = await openCreate(user);
+    await user.type(within(dialog).getByLabelText("Name *"), "Custom min oil");
+    await user.type(within(dialog).getByLabelText("SKU"), "OIL-MIN");
+    const minQuantity = within(dialog).getByLabelText("Minimum Quantity *");
+    await user.clear(minQuantity);
+    await user.type(minQuantity, "3");
+    const quantity = within(dialog).getByLabelText("Quantity *");
+    await user.clear(quantity);
+    await user.type(quantity, "20");
+
+    await user.click(within(dialog).getByRole("button", { name: "Add Part" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fake.all("inventory_items").find((item) => item.sku === "OIL-MIN")).toMatchObject({ min_quantity: 3, quantity: 20 });
+    // Seeded Alpha brake pads keep their original minimum.
+    expect(row("inventory_items", "item-a1")?.min_quantity).toBe(5);
   });
 
   it("keeps the dialog open and explains a duplicate SKU", async () => {
@@ -84,6 +110,9 @@ describe("inventory page", () => {
 
   it("edits an item and refreshes the list", async () => {
     const { user } = await openInventory();
+    const padsRow = screen.getByRole("row", { name: /Alpha brake pads/ });
+    expect(within(padsRow).getByText("Low Stock")).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
     const dialog = await screen.findByRole("dialog");
     const quantity = await within(dialog).findByLabelText("Quantity *");
@@ -96,6 +125,9 @@ describe("inventory page", () => {
     expect(row("inventory_items", "item-a1")?.quantity).toBe(30);
     await waitFor(() => expect(screen.queryByRole("button", { name: /1 items low on stock/i })).not.toBeInTheDocument());
     expect(await screen.findByText("Stock looks healthy")).toBeInTheDocument();
+    const updatedRow = await screen.findByRole("row", { name: /Alpha brake pads/ });
+    expect(within(updatedRow).getByText("In Stock")).toBeInTheDocument();
+    expect(within(updatedRow).queryByText("Low Stock")).not.toBeInTheDocument();
   });
 
   it("keeps the edit dialog open when the update is rejected", async () => {

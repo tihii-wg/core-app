@@ -4,6 +4,7 @@ import i18n from "../../i18n";
 import { createInventoryItem } from "../../services/apiInventory";
 import type { InventoryItemFormData } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { syncInventoryItemCaches } from "./syncInventoryCaches";
 
 export function useCreateInventoryItem() {
   const queryClient = useQueryClient();
@@ -14,8 +15,9 @@ export function useCreateInventoryItem() {
     onMutate: () => {
       toast.loading(i18n.t("inventory.toast.creating"), { id: "create-inventory" });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
+    onSuccess: async (item) => {
+      syncInventoryItemCaches(queryClient, workspaceId, item);
+      await queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       toast.success(i18n.t("inventory.toast.created"), { id: "create-inventory" });
     },
     onError: (error) => {

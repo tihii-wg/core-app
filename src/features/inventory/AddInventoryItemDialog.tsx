@@ -4,6 +4,7 @@ import type { InventoryItem } from "../../lib/types";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import InventoryItemForm from "./InventoryItemForm";
+import { DEFAULT_INVENTORY_MIN_QUANTITY } from "./inventoryDefaults";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
 
@@ -13,7 +14,8 @@ const emptyInventoryForm = {
   description: "",
   category: "",
   quantity: 0,
-  minQuantity: 0,
+  // min_quantity 0 disables low_stock (only out_of_stock at qty<=0). Default 10 for new parts.
+  minQuantity: DEFAULT_INVENTORY_MIN_QUANTITY,
   purchasePrice: null,
   sellingPrice: null,
   supplier: "",

@@ -50,6 +50,8 @@ const dashboard: Messages<typeof en> = {
     recentOrders: "Comenzi recente",
     activeOrders: "Comenzi active",
     lowStockItems: "Articole cu stoc redus",
+    lowStockQuantity: "{{quantity}} {{unit}} (min {{min}})",
+    lowStockQuantityHint: "{{quantity}} {{unit}} rămase (minim: {{min}})",
   },
   deadlines: {
     overdueTitle: "Comenzi restante",

@@ -1,4 +1,6 @@
-import type { InventoryItem, InventoryItemFormData, InventoryListFilter, InventorySort, InventorySortField, InventoryStockStatus } from "../lib/types";
+import type { InventoryItem, InventoryItemFormData, InventoryListFilter, InventorySort, InventorySortField } from "../lib/types";
+import { DEFAULT_INVENTORY_MIN_QUANTITY } from "../features/inventory/inventoryDefaults";
+import { stockStatusFromQuantities } from "../features/inventory/stockStatus";
 import i18n from "../i18n";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
@@ -12,8 +14,6 @@ const inventorySortColumns: Record<InventorySortField, string> = {
   created_at: "created_at",
   updated_at: "updated_at",
 };
-
-const stockStatuses = new Set<InventoryStockStatus>(["in_stock", "low_stock", "out_of_stock"]);
 
 function requireWorkspaceId(workspaceId: string | undefined) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
@@ -41,16 +41,13 @@ function optionalNumber(value: unknown) {
   return Number.isFinite(number) ? number : null;
 }
 
-function stockStatusFromQuantities(quantity: number, minQuantity: number): InventoryStockStatus {
-  if (quantity <= 0) return "out_of_stock";
-  if (quantity <= minQuantity) return "low_stock";
-  return "in_stock";
-}
-
 export function toInventoryItem(row: Record<string, unknown>): InventoryItem {
   const quantity = numberValue(row.quantity);
   const minQuantity = numberValue(row.min_quantity);
-  const stockStatus = stockStatuses.has(row.stock_status as InventoryStockStatus) ? (row.stock_status as InventoryStockStatus) : stockStatusFromQuantities(quantity, minQuantity);
+  // Always derive from quantity + min_quantity so status cannot drift from stock
+  // (e.g. base-table selects without stock_status, or a stale stock_status field).
+  // Matches public.inventory_items_with_status CASE expression.
+  const stockStatus = stockStatusFromQuantities(quantity, minQuantity);
 
   return {
     id: textValue(row.id),
@@ -73,6 +70,12 @@ export function toInventoryItem(row: Record<string, unknown>): InventoryItem {
   };
 }
 
+function resolveMinQuantity(value: number | null | undefined) {
+  // Explicit 0 is valid (alerts only at empty stock). Only fill when omitted/invalid.
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+  return DEFAULT_INVENTORY_MIN_QUANTITY;
+}
+
 function itemPayload(input: InventoryItemFormData) {
   const sku = input.sku.trim();
 
@@ -82,7 +85,7 @@ function itemPayload(input: InventoryItemFormData) {
     description: input.description.trim() || null,
     category: input.category.trim() || null,
     quantity: input.quantity,
-    min_quantity: input.minQuantity,
+    min_quantity: resolveMinQuantity(input.minQuantity),
     unit: input.unit.trim(),
     purchase_price: input.purchasePrice,
     selling_price: input.sellingPrice,
@@ -136,13 +139,16 @@ export async function createInventoryItem(input: InventoryItemFormData, workspac
       workspace_id: resolvedWorkspaceId,
       ...itemPayload(input),
     })
-    .select("*")
+    .select("id")
     .maybeSingle();
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.saveFailed"));
-  if (!data) throw new Error(i18n.t("inventory.errors.saveFailed"));
+  if (!data || typeof (data as { id?: unknown }).id !== "string") throw new Error(i18n.t("inventory.errors.saveFailed"));
 
-  return toInventoryItem(data as Record<string, unknown>);
+  // Re-read from the status view so callers get quantity-consistent stockStatus.
+  const created = await getInventoryItem((data as { id: string }).id, resolvedWorkspaceId);
+  if (!created) throw new Error(i18n.t("inventory.errors.saveFailed"));
+  return created;
 }
 
 export async function updateInventoryItem({ id, ...input }: InventoryItemFormData & { id: string }, workspaceId: string | undefined) {
@@ -156,13 +162,16 @@ export async function updateInventoryItem({ id, ...input }: InventoryItemFormDat
     })
     .eq("id", id)
     .eq("workspace_id", resolvedWorkspaceId)
-    .select("*")
+    .select("id")
     .maybeSingle();
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.saveFailed"));
   if (!data) throw new Error(i18n.t("inventory.errors.updateNotFound"));
 
-  return toInventoryItem(data as Record<string, unknown>);
+  // Re-read from the status view so stockStatus matches the committed quantity.
+  const updated = await getInventoryItem(id, resolvedWorkspaceId);
+  if (!updated) throw new Error(i18n.t("inventory.errors.updateNotFound"));
+  return updated;
 }
 
 export async function deleteInventoryItem(inventoryItemId: string, workspaceId: string | undefined) {

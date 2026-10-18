@@ -394,7 +394,12 @@ export function installSecurityModel() {
     clients: (row) => ({ balance: 0, ...row }),
     services: (row) => ({ category: null, ...row }),
     orders: (row) => ({ updated_at: row.created_at, ...row }),
-    inventory_items: (row) => ({ updated_at: row.created_at, ...row }),
+    inventory_items: (row) => ({
+      // Mirrors DB default after migration 20261018220000 (existing seed rows still set min_quantity).
+      min_quantity: 10,
+      updated_at: row.created_at,
+      ...row,
+    }),
     invoices: (row) => ({ status: "draft", due_date: null, paid_at: null, updated_at: row.created_at, ...row }),
   };
   fake.uniques = {

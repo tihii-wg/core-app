@@ -138,6 +138,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               className={errors.minQuantity ? "border-destructive" : ""}
             />
             <FieldError message={errors.minQuantity?.message} />
+            <p className="text-xs text-muted-foreground">{t("inventory.form.minQuantityHint")}</p>
           </div>
         </div>
 

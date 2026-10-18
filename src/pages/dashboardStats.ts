@@ -182,7 +182,21 @@ function dateFromKey(dateKey: string) {
   return new Date(year, month - 1, day);
 }
 
-export function isAtOrBelowMinimum(item: { quantity: number; minQuantity: number }) {
+/**
+ * Whether an inventory row should appear in dashboard low-stock lists.
+ * Derived from quantity vs minQuantity (same rules as inventory_items_with_status).
+ * Inactive items never qualify.
+ */
+export function isAtOrBelowMinimum(item: {
+  quantity: number;
+  minQuantity: number;
+  isActive?: boolean;
+  stockStatus?: "in_stock" | "low_stock" | "out_of_stock";
+}) {
+  if (item.isActive === false) return false;
+  if (item.quantity <= 0) return true;
+  // min_quantity 0 disables low_stock (only out_of_stock at qty <= 0) — matches the DB view.
+  if (item.minQuantity <= 0) return false;
   return item.quantity <= item.minQuantity;
 }
 

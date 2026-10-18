@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInventoryItem, deleteInventoryItem, getInventoryItem, getInventoryItems, updateInventoryItem } from "../../services/apiInventory";
 import { getInventoryMarkup, updateInventoryMarkup } from "../../services/apiInventoryMarkup";
+import { issueOrderMaterials, returnOrderMaterials } from "../../services/apiWarehouse";
 import { fake } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
 
@@ -17,8 +18,22 @@ beforeEach(() => {
 describe("inventory items", () => {
   it("creates an item with trimmed fields and a computed stock status", async () => {
     const item = await createInventoryItem(form, WS.A);
-    expect(item).toMatchObject({ name: "Spark plug", sku: "SP-1", workspaceId: WS.A, stockStatus: "in_stock", supplier: "" });
-    expect(row("inventory_items", item.id)).toMatchObject({ supplier: null, workspace_id: WS.A });
+    expect(item).toMatchObject({ name: "Spark plug", sku: "SP-1", workspaceId: WS.A, stockStatus: "in_stock", supplier: "", minQuantity: 2 });
+    expect(row("inventory_items", item.id)).toMatchObject({ supplier: null, workspace_id: WS.A, min_quantity: 2 });
+  });
+
+  it("defaults minQuantity to 10 when the create payload omits a valid minimum", async () => {
+    const beforeSeedMin = row("inventory_items", "item-a1")?.min_quantity;
+    const item = await createInventoryItem({ ...form, sku: "DEF-10", minQuantity: Number.NaN }, WS.A);
+    expect(item).toMatchObject({ minQuantity: 10, stockStatus: "low_stock" }); // qty 8 <= min 10
+    expect(row("inventory_items", item.id)?.min_quantity).toBe(10);
+    expect(row("inventory_items", "item-a1")?.min_quantity).toBe(beforeSeedMin);
+  });
+
+  it("keeps an explicit minimum of 0 (alerts only when empty)", async () => {
+    const item = await createInventoryItem({ ...form, sku: "MIN-0", quantity: 5, minQuantity: 0 }, WS.A);
+    expect(item).toMatchObject({ minQuantity: 0, quantity: 5, stockStatus: "in_stock" });
+    expect(row("inventory_items", item.id)?.min_quantity).toBe(0);
   });
 
   it("maps a duplicate SKU in the same workspace to a readable message", async () => {
@@ -60,6 +75,50 @@ describe("inventory items", () => {
 
     await expect(updateInventoryItem({ ...form, id: "item-c1" }, WS.A)).rejects.toThrow("Inventory item was not found or you do not have permission to change it.");
     expect(row("inventory_items", "item-c1")?.name).toBe("Gamma oil");
+  });
+
+  it("recomputes stockStatus when quantity crosses each threshold", async () => {
+    const base = { ...form, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", minQuantity: 5 };
+
+    expect(await updateInventoryItem({ ...base, quantity: 5 }, WS.A)).toMatchObject({ quantity: 5, stockStatus: "low_stock" });
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ stockStatus: "low_stock" });
+
+    expect(await updateInventoryItem({ ...base, quantity: 6 }, WS.A)).toMatchObject({ quantity: 6, stockStatus: "in_stock" });
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ stockStatus: "in_stock" });
+
+    expect(await updateInventoryItem({ ...base, quantity: 0 }, WS.A)).toMatchObject({ quantity: 0, stockStatus: "out_of_stock" });
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ stockStatus: "out_of_stock" });
+
+    expect(await updateInventoryItem({ ...base, quantity: 1 }, WS.A)).toMatchObject({ quantity: 1, stockStatus: "low_stock" });
+    expect((await getInventoryItems("", "low_stock", sortByName, WS.A)).map((item) => item.id)).toContain("item-a1");
+  });
+
+  it("issue and return RPCs change quantity and the view-derived stock status", async () => {
+    fake.signInAs(USERS.owner.id);
+    row("inventory_items", "item-a1")!.quantity = 6;
+    row("inventory_items", "item-a1")!.min_quantity = 5;
+    fake.all("order_materials").push({
+      id: "om-a1",
+      order_id: "order-a1",
+      inventory_item_id: "item-a1",
+      item_name: "Alpha brake pads",
+      price: 12,
+      quantity: 4,
+      quantity_issued: 0,
+      quantity_returned: 0,
+      created_at: "2026-02-10T10:00:00.000Z",
+    });
+
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ quantity: 6, stockStatus: "in_stock" });
+
+    await issueOrderMaterials("order-a1", [{ inventoryItemId: "item-a1", quantity: 2 }], "issue-key-1");
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ quantity: 4, stockStatus: "low_stock" });
+
+    await issueOrderMaterials("order-a1", [{ inventoryItemId: "item-a1", quantity: 2 }], "issue-key-2");
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ quantity: 2, stockStatus: "low_stock" });
+
+    await returnOrderMaterials("order-a1", [{ inventoryItemId: "item-a1", quantity: 4 }], "unused", "return-key-1");
+    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ quantity: 6, stockStatus: "in_stock" });
   });
 
   it("deletes an item and refuses items from other workspaces", async () => {

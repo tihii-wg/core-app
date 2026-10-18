@@ -2,6 +2,7 @@ import { AlertTriangle, Package } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { InventoryItem, InventoryListFilter } from "../../lib/types";
 import { InventoryStatusBadge } from "../../ui/StatusBadge";
+import { effectiveStockStatus } from "./stockStatus";
 import { Skeleton } from "../../ui/Skeleton";
 import { cn } from "../../lib/utils";
 import { quantityClass } from "./inventoryDisplay";
@@ -138,7 +139,7 @@ export function StockAttentionPanel({
                   </span>
                 </span>
               </span>
-              <InventoryStatusBadge status={item.stockStatus} />
+              <InventoryStatusBadge status={effectiveStockStatus(item)} />
             </button>
           </li>
         ))}

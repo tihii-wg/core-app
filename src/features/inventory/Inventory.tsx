@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -22,6 +23,7 @@ import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
 import { StockAttentionPanel } from "./StockAttentionPanel";
+import { effectiveStockStatus } from "./stockStatus";
 import { industryInventoryCopy, industryInventoryItemCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
@@ -45,6 +47,7 @@ export function Inventory() {
   const { workspaceId } = useActiveWorkspaceId();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
@@ -52,6 +55,15 @@ export function Inventory() {
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
+
+  useEffect(() => {
+    const itemId = searchParams.get("item")?.trim();
+    if (!itemId) return;
+    setDetailId(itemId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("item");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
   const sortOption = sortOptions.find((option) => option.value === sortValue) ?? sortOptions[5];
@@ -112,7 +124,7 @@ export function Inventory() {
     {
       key: "status",
       header: t("common.status"),
-      cell: (item) => <InventoryStatusBadge status={item.stockStatus} />,
+      cell: (item) => <InventoryStatusBadge status={effectiveStockStatus(item)} />,
     },
     {
       key: "unit",
@@ -240,9 +252,10 @@ export function Inventory() {
           isLoading={isLoading}
           keyExtractor={(item) => item.id}
           onRowClick={(item) => setDetailId(item.id)}
-          rowClassName={(item) =>
-            item.stockStatus === "out_of_stock" ? "bg-destructive/[0.035]" : item.stockStatus === "low_stock" ? "bg-warning/[0.045]" : undefined
-          }
+          rowClassName={(item) => {
+            const status = effectiveStockStatus(item);
+            return status === "out_of_stock" ? "bg-destructive/[0.035]" : status === "low_stock" ? "bg-warning/[0.045]" : undefined;
+          }}
           emptyState={hasSearchOrFilter ? <NoSearchResults query={searchQuery || stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
         />
       )}

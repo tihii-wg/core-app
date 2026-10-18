@@ -103,6 +103,7 @@ const inventory: Messages<typeof en> = {
     minQuantityLabel: "Минимальный остаток *",
     minQuantityRequired: "Укажите минимальный остаток",
     minQuantityNegative: "Минимальный остаток не может быть отрицательным",
+    minQuantityHint: "Предупреждение, когда остаток не выше этого значения (для новых позиций по умолчанию 10). 0 — только при полном отсутствии на складе.",
     unitLabel: "Ед. изм. *",
     unitRequired: "Укажите единицу измерения",
     defaultUnit: "шт.",

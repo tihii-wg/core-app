@@ -64,6 +64,36 @@ describe("inventory api", () => {
     });
   });
 
+  it("derives stockStatus from quantity even when stock_status on the row is stale", () => {
+    expect(
+      toInventoryItem({
+        id: "item-1",
+        workspace_id: "ws-1",
+        name: "Oil",
+        sku: "OIL-1",
+        quantity: 0,
+        min_quantity: 5,
+        unit: "pcs",
+        is_active: true,
+        stock_status: "in_stock",
+      }),
+    ).toMatchObject({ quantity: 0, stockStatus: "out_of_stock" });
+
+    expect(
+      toInventoryItem({
+        id: "item-2",
+        workspace_id: "ws-1",
+        name: "Filter",
+        sku: "F-1",
+        quantity: 10,
+        min_quantity: 2,
+        unit: "pcs",
+        is_active: true,
+        stock_status: "low_stock",
+      }),
+    ).toMatchObject({ quantity: 10, stockStatus: "in_stock" });
+  });
+
   it("returns an empty list when the workspace has no inventory", async () => {
     const profiles = query({ data: { active_workspace_id: "ws-1" }, error: null });
     const inventory = query({ data: [], error: null });

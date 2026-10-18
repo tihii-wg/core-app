@@ -35,6 +35,7 @@ import OrderDetailPanel from "../features/orders/OrderDetailPanel";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
 import { EditInventoryItemDialog } from "../features/inventory/EditInventoryItemDialog";
 import { quantityClass } from "../features/inventory/inventoryDisplay";
+import { effectiveStockStatus } from "../features/inventory/stockStatus";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
 import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
 import { industryOrderStatusLabel } from "../features/industries/industryWorkflow";
@@ -215,8 +216,8 @@ export default function Dashboard() {
       key: "quantity",
       header: t("dashboard.columns.quantity"),
       cell: (item) => (
-        <span className={cn("tabular-nums", quantityClass(item))}>
-          {item.quantity} {item.unit}
+        <span className={cn("tabular-nums", quantityClass(item))} title={t("dashboard.lists.lowStockQuantityHint", { quantity: item.quantity, unit: item.unit, min: item.minQuantity })}>
+          {t("dashboard.lists.lowStockQuantity", { quantity: item.quantity, unit: item.unit, min: item.minQuantity })}
         </span>
       ),
       className: "text-right",
@@ -230,7 +231,7 @@ export default function Dashboard() {
     {
       key: "status",
       header: t("common.status"),
-      cell: (item) => <InventoryStatusBadge status={item.stockStatus} />,
+      cell: (item) => <InventoryStatusBadge status={effectiveStockStatus(item)} />,
     },
     {
       key: "actions",
