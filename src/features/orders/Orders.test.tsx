@@ -40,6 +40,16 @@ vi.mock("../employees/useGetEmployees", () => ({
   }),
 }));
 
+vi.mock("../industries/useIndustryWorkflow", async () => {
+  const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  return {
+    useIndustryWorkflow: () => {
+      const workflow = industryWorkflow("auto_repair");
+      return { workflow, copy: industryOrderCopy(workflow), industrySlug: "auto_repair", industryId: null, isLoading: false, error: null };
+    },
+  };
+});
+
 vi.mock("./AddNewOrderForm", () => ({
   default: () => null,
 }));

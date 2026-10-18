@@ -8,6 +8,8 @@ import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
+import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type OrderDetailPanelProps = {
@@ -26,6 +28,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
   const [isEditing, setIsEditing] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
+  const { workflow, copy } = useIndustryWorkflow();
 
 
   if (selectedOrder?.id !== editingOrderId) {
@@ -57,7 +60,7 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
               <Pencil className="size-4" />
             </button>
           )}
-          <SheetDescription className="sr-only">{t("orders.detail.srDescription")}</SheetDescription>
+          <SheetDescription className="sr-only">{copy.detailSrDescription}</SheetDescription>
         </SheetHeader>
 
         {selectedOrder && isEditing && (
@@ -98,13 +101,19 @@ export default function OrderDetailPanel({ selectedOrder, detailPanelOpen, setDe
             </div>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-              <DetailItem label={t("orders.detail.device")} value={selectedOrder.device} />
+              {shouldShowOrderAssetValue(workflow.orderFields.device, selectedOrder.device) && (
+                <DetailItem label={copy.deviceDetail} value={selectedOrder.device} />
+              )}
               <DetailItem label={t("orders.detail.service")} value={selectedOrder.service} />
-              <DetailItem label={t("orders.detail.carNumber")} value={selectedOrder.carNumber} />
-              <DetailItem label={t("orders.detail.vin")} value={selectedOrder.vin} mono />
+              {shouldShowOrderAssetValue(workflow.orderFields.carNumber, selectedOrder.carNumber) && (
+                <DetailItem label={copy.carNumberDetail} value={selectedOrder.carNumber} />
+              )}
+              {shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin) && (
+                <DetailItem label={copy.vinDetail} value={selectedOrder.vin} mono />
+              )}
               <DetailItem label={t("orders.detail.assignedTo")} value={selectedOrder.assignedEmployeeName} />
               <DetailItem
-                label={t("orders.detail.deadline")}
+                label={copy.deadlineDetail}
                 value={
                   selectedOrder.deadline ? (
                     <span className="inline-flex items-center gap-1.5">

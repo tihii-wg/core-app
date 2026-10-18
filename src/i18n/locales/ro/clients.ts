@@ -47,6 +47,7 @@ const clients: Messages<typeof en> = {
     phoneLabel: "Telefon *",
     addressLabel: "Adresă",
     addressPlaceholder: "Stradă, oraș, raion",
+    serviceAddressPlaceholder: "Adresa serviciului, apartament, note de acces",
     notesLabel: "Note",
     notesPlaceholder: "Note suplimentare despre acest client...",
   },

@@ -14,7 +14,9 @@ import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
+import OrderAssetFields from "./OrderAssetFields";
 
 type EditOrderFormProps = {
   order: Order;
@@ -28,6 +30,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { services } = useGetServices();
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
+  const { workflow, copy } = useIndustryWorkflow();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const activeServices = services?.filter((service) => service.status === "active");
   const techniciansError = employeesError;
@@ -77,9 +80,13 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const onSubmit = async (data: EditOrderFormData) => {
     try {
+      // Preserve vehicle fields that are hidden for this industry so historical values are not wiped.
       const updatedOrder = await updateOrder({
         orderId: order.id,
         ...data,
+        carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : order.carNumber,
+        vin: workflow.orderFields.vin.visible ? data.vin : order.vin,
+        device: workflow.orderFields.device.visible ? data.device : order.device || data.device,
       });
       onUpdated(updatedOrder);
     } catch {
@@ -89,49 +96,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="edit-order-device">{t("orders.form.deviceLabel")}</Label>
-        <Input
-          id="edit-order-device"
-          {...register("device", { required: t("orders.validation.deviceRequired") })}
-          className={errors.device ? "border-destructive" : ""}
-          disabled={isSubmitting}
-        />
-        {errors.device && <p className="text-xs text-destructive">{errors.device.message}</p>}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="edit-order-car-number">{t("orders.form.carNumberLabel")}</Label>
-        <Input
-          id="edit-order-car-number"
-          {...register("carNumber", {
-            required: t("orders.validation.carNumberRequired"),
-            setValueAs: (value: string) => value.trim().toUpperCase(),
-          })}
-          className={errors.carNumber ? "border-destructive" : ""}
-          disabled={isSubmitting}
-        />
-        {errors.carNumber && <p className="text-xs text-destructive">{errors.carNumber.message}</p>}
-      </div>
-
-      <div className="space-y-1.5">
-        <Label htmlFor="edit-order-vin">{t("orders.form.vinLabel")}</Label>
-        <Input
-          id="edit-order-vin"
-          {...register("vin", {
-            required: t("orders.validation.vinRequired"),
-            setValueAs: (value: string) => value.trim().toUpperCase(),
-            validate: (value) => value.length === 17 || t("orders.validation.vinLength"),
-          })}
-          placeholder={t("orders.form.vinPlaceholder")}
-          maxLength={17}
-          autoCapitalize="characters"
-          spellCheck={false}
-          className={errors.vin ? "border-destructive" : ""}
-          disabled={isSubmitting}
-        />
-        {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
-      </div>
+      <OrderAssetFields register={register} errors={errors} workflow={workflow} copy={copy} idPrefix="edit-order-" disabled={isSubmitting} preserveHiddenValues />
 
       <div className="space-y-1.5">
         <Label htmlFor="service">{t("orders.form.addServiceLabel")}</Label>
@@ -182,12 +147,12 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
       <div className="space-y-1.5">
         <Label htmlFor="edit-order-description">{t("orders.form.descriptionLabel")}</Label>
-        <Textarea id="edit-order-description" {...register("description")} rows={3} disabled={isSubmitting} />
+        <Textarea id="edit-order-description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} disabled={isSubmitting} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="edit-order-employee">{t("orders.form.assignedEmployeeLabel")}</Label>
+          <Label htmlFor="edit-order-employee">{copy.assignedEmployeeLabel}</Label>
           <Controller
             name="assignedEmployeeId"
             control={control}
@@ -215,7 +180,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="edit-order-deadline">{t("orders.form.deadlineLabel")}</Label>
+          <Label htmlFor="edit-order-deadline">{copy.deadlineLabel}</Label>
           <Input id="edit-order-deadline" type="date" {...register("deadline")} disabled={isSubmitting} />
         </div>
       </div>

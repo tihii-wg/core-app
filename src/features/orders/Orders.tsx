@@ -17,6 +17,7 @@ import { EditOrderDialog } from "./EditOrderDialog";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
@@ -49,6 +50,7 @@ export function Orders() {
 
   const { employees } = useGetEmployees();
   const assigneeOptions = assignableTechnicians(employees);
+  const { copy } = useIndustryWorkflow();
 
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
   const createInvoice = useCreateInvoice();
@@ -101,7 +103,7 @@ export function Orders() {
     },
     {
       key: "device",
-      header: t("orders.table.deviceService"),
+      header: copy.deviceServiceColumn,
       cell: (order) => (
         <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
           <div className="truncate" title={order.device}>{order.device}</div>

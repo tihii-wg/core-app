@@ -7,6 +7,7 @@ import AddNewOrderForm from "./AddNewOrderForm";
 const employeesState = vi.hoisted(() => ({
   employees: [] as { id: string; name: string; status: string; role: string; profile_id: string | null }[],
   role: "owner" as string | null,
+  industrySlug: "auto_repair" as string | null,
 }));
 
 vi.mock("./useCreateOrder", () => ({
@@ -36,10 +37,21 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
   useActiveWorkspaceRole: () => employeesState.role,
 }));
 
+vi.mock("../industries/useIndustryWorkflow", async () => {
+  const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  return {
+    useIndustryWorkflow: () => {
+      const workflow = industryWorkflow(employeesState.industrySlug);
+      return { workflow, copy: industryOrderCopy(workflow), industrySlug: employeesState.industrySlug, industryId: null, isLoading: false, error: null };
+    },
+  };
+});
+
 describe("AddNewOrderForm client validation", () => {
   beforeEach(() => {
     employeesState.employees = [];
     employeesState.role = "owner";
+    employeesState.industrySlug = "auto_repair";
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.setPointerCapture = () => {};
     Element.prototype.releasePointerCapture = () => {};
@@ -54,8 +66,25 @@ describe("AddNewOrderForm client validation", () => {
 
     expect(await screen.findByText("Client is required")).toBeInTheDocument();
     expect(screen.getByLabelText("Client *")).toHaveClass("border-destructive");
-    expect(screen.getByText("Car is required")).toBeInTheDocument();
-    expect(screen.getByText("Car number is required")).toBeInTheDocument();
+    expect(screen.getByText("Vehicle is required")).toBeInTheDocument();
+    expect(screen.getByText("License plate is required")).toBeInTheDocument();
+  });
+
+  it("hides automotive fields for home_services and does not require them", async () => {
+    employeesState.industrySlug = "home_services";
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Job \/ location/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create Order" }));
+
+    expect(await screen.findByText("Client is required")).toBeInTheDocument();
+    expect(screen.getByText("Job or location is required")).toBeInTheDocument();
+    expect(screen.queryByText("License plate is required")).not.toBeInTheDocument();
+    expect(screen.queryByText("VIN is required")).not.toBeInTheDocument();
   });
 
   it("clears the client warning after a name is entered", async () => {

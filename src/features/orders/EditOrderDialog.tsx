@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import type { Order } from "../../lib/types";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import EditOrderForm from "./EditOrderForm";
 
 type EditOrderDialogProps = {
@@ -11,6 +12,7 @@ type EditOrderDialogProps = {
 
 export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogProps) {
   const { t } = useTranslation();
+  const { copy } = useIndustryWorkflow();
 
   return (
     <Dialog
@@ -22,7 +24,7 @@ export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogPr
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("orders.editDialog.title", { number: order?.orderNumber ?? "" })}</DialogTitle>
-          <DialogDescription className="sr-only">{t("orders.editDialog.description")}</DialogDescription>
+          <DialogDescription className="sr-only">{copy.editDescription}</DialogDescription>
         </DialogHeader>
         {order && (
           <EditOrderForm

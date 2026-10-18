@@ -27,6 +27,7 @@ describe("workspace details", () => {
       ownerId: "user-1",
       industryId: "industry-1",
       industryName: "Auto Repair & Service",
+      industrySlug: "auto_repair",
       avatarPath: "ws-1/logo.webp",
       inventoryMarkup: 25,
       language: "de",

@@ -43,6 +43,7 @@ export default {
     phoneLabel: "Phone *",
     addressLabel: "Address",
     addressPlaceholder: "Street address, city, state",
+    serviceAddressPlaceholder: "Service address, apartment, access notes",
     notesLabel: "Notes",
     notesPlaceholder: "Additional notes about this client...",
   },

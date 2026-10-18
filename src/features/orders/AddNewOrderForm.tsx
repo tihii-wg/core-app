@@ -19,7 +19,9 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
 import ClientTypeSelect from "../clients/ClientTypeSelect";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
+import OrderAssetFields from "./OrderAssetFields";
 
 export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
   const { t } = useTranslation();
@@ -28,6 +30,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: createOrder } = useCreateOrder();
   const { formatMoney } = useWorkspaceMoney();
+  const { workflow, copy } = useIndustryWorkflow();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const [clientName, setClientName] = useState("");
   // const clientNameRef = useRef(clientName);
@@ -94,9 +97,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
         clientContactPerson: data.newClientContactPerson,
         clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
-        device: data.device,
-        vin: data.vin,
-        carNumber: data.carNumber,
+        device: data.device?.trim() ?? "",
+        vin: workflow.orderFields.vin.visible ? data.vin : "",
+        carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : "",
         description: data.description,
         services: data.services,
         assignedEmployeeId: data.assignedEmployeeId || undefined,
@@ -221,45 +224,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>} */}
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="device">{t("orders.form.deviceLabel")}</Label>
-          <Input id="device" {...register("device", { required: t("orders.validation.deviceRequired") })} placeholder={t("orders.form.devicePlaceholder")} className={errors.device ? "border-destructive" : ""} />
-          {errors.device && <p className="text-xs text-destructive">{errors.device.message}</p>}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="carNumber">{t("orders.form.carNumberLabel")}</Label>
-          <Input
-            id="carNumber"
-            {...register("carNumber", {
-              required: t("orders.validation.carNumberRequired"),
-              setValueAs: (value: string) => value.trim().toUpperCase(),
-            })}
-            placeholder={t("orders.form.carNumberPlaceholder")}
-            autoCapitalize="characters"
-            spellCheck={false}
-            className={errors.carNumber ? "border-destructive" : ""}
-          />
-          {errors.carNumber && <p className="text-xs text-destructive">{errors.carNumber.message}</p>}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="vin">{t("orders.form.vinLabel")}</Label>
-          <Input
-            id="vin"
-            {...register("vin", {
-              required: t("orders.validation.vinRequired"),
-              setValueAs: (value: string) => value.trim().toUpperCase(),
-              validate: (value) => value.length === 17 || t("orders.validation.vinLength"),
-            })}
-            placeholder={t("orders.form.vinPlaceholder")}
-            maxLength={17}
-            autoCapitalize="characters"
-            spellCheck={false}
-            className={errors.vin ? "border-destructive" : ""}
-          />
-          {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
-        </div>
+        <OrderAssetFields register={register} errors={errors} workflow={workflow} copy={copy} />
 
         <div className="space-y-1.5">
           <Label htmlFor="service">{t("orders.form.serviceLabel")}</Label>
@@ -316,12 +281,12 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
 
         <div className="space-y-1.5">
           <Label htmlFor="description">{t("orders.form.descriptionLabel")}</Label>
-          <Textarea id="description" {...register("description")} placeholder={t("orders.form.descriptionPlaceholder")} rows={3} />
+          <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label htmlFor="assignedEmployeeId">{t("orders.form.assignedEmployeeRequiredLabel")}</Label>
+            <Label htmlFor="assignedEmployeeId">{copy.assignedEmployeeRequiredLabel}</Label>
             <Controller
               name="assignedEmployeeId"
               control={control}
@@ -353,7 +318,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="deadline">{t("orders.form.deadlineLabel")}</Label>
+            <Label htmlFor="deadline">{copy.deadlineLabel}</Label>
             <div className="relative">
               <Input id="deadline" type="date" {...register("deadline")} />
             </div>

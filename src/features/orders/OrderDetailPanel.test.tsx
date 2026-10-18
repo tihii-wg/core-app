@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee, Order } from "../../lib/types";
 import OrderDetailPanel from "./OrderDetailPanel";
 
@@ -31,6 +31,18 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
 }));
+
+const industryState = vi.hoisted(() => ({ slug: "auto_repair" as string }));
+
+vi.mock("../industries/useIndustryWorkflow", async () => {
+  const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  return {
+    useIndustryWorkflow: () => {
+      const workflow = industryWorkflow(industryState.slug);
+      return { workflow, copy: industryOrderCopy(workflow), industrySlug: industryState.slug, industryId: null, isLoading: false, error: null };
+    },
+  };
+});
 
 const order: Order = {
   id: "order-1",
@@ -68,6 +80,7 @@ const employees: Employee[] = [
 ];
 
 function renderPanel(onOrderUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
+  industryState.slug = industryState.slug || "auto_repair";
   renderWithQuery(
     <OrderDetailPanel
       selectedOrder={order}
@@ -81,6 +94,11 @@ function renderPanel(onOrderUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
   return { setDetailPanelOpen };
 }
 
+beforeEach(() => {
+  industryState.slug = "auto_repair";
+  mutateAsync.mockReset();
+});
+
 describe("OrderDetailPanel", () => {
   it("opens with a description and a pencil button", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -88,7 +106,7 @@ describe("OrderDetailPanel", () => {
     renderPanel();
 
     expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
-    expect(screen.getByText("View and edit this order's VIN, services, device, assignment, and deadline.")).toBeInTheDocument();
+    expect(screen.getByText("View and edit this order's VIN, services, vehicle, assignment, and deadline.")).toBeInTheDocument();
     const editButton = screen.getByRole("button", { name: "Edit" });
     expect(editButton).toHaveTextContent("");
     expect(editButton.querySelector("svg")).toBeInTheDocument();
@@ -108,7 +126,7 @@ describe("OrderDetailPanel", () => {
     renderPanel(onOrderUpdated, setDetailPanelOpen);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    const deviceInput = screen.getByLabelText("Device *");
+    const deviceInput = screen.getByLabelText("Vehicle *");
     await user.clear(deviceInput);
     await user.type(deviceInput, "Audi");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
@@ -150,5 +168,31 @@ describe("OrderDetailPanel", () => {
         ],
       }),
     );
+  });
+
+  it("preserves historical VIN and plate when editing under home_services", async () => {
+    industryState.slug = "home_services";
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue(order);
+
+    renderPanel();
+
+    expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
+    expect(screen.getByText("ABC123")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vin: "1HGBH41JXMN109186",
+        carNumber: "ABC123",
+        device: "BMW",
+      }),
+    );
+
+    industryState.slug = "auto_repair";
   });
 });

@@ -4,6 +4,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
 import type { ClientFormValues } from "../../lib/types";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "./clientValidation";
 import ClientTypeSelect from "./ClientTypeSelect";
 
@@ -22,10 +23,13 @@ function FieldError({ message }: { message?: string }) {
 
 export default function ClientFormFields({ idPrefix, control, register, errors, disabled }: ClientFormFieldsProps) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
   const clientType = useWatch({ control, name: "clientType" }) ?? "individual";
   const isOrganization = clientType === "organization";
   const nameLabel = isOrganization ? t("clients.form.organizationNameLabel") : t("clients.form.fullNameLabel");
   const nameError = isOrganization ? t("clients.validation.organizationNameRequired") : t("clients.validation.fullNameRequired");
+  const addressPlaceholder =
+    workflow.copyPack === "field_service" ? t("clients.form.serviceAddressPlaceholder", { defaultValue: t("clients.form.addressPlaceholder") }) : t("clients.form.addressPlaceholder");
 
   return (
     <div className="space-y-4">
@@ -96,7 +100,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
 
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-address`}>{t("clients.form.addressLabel")}</Label>
-        <Input id={`${idPrefix}-address`} {...register("address")} placeholder={t("clients.form.addressPlaceholder")} disabled={disabled} />
+        <Input id={`${idPrefix}-address`} {...register("address")} placeholder={addressPlaceholder} disabled={disabled} />
       </div>
 
       <div className="space-y-1.5">

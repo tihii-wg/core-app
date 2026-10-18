@@ -115,6 +115,8 @@ export type WorkspaceDetails = {
   ownerId: string | null;
   industryId: string | null;
   industryName: string | null;
+  /** public.industries.slug — drive industry-aware forms; null when unset or join missing. */
+  industrySlug: string | null;
   avatarPath: string | null;
   inventoryMarkup: number | null;
   language: string | null;
@@ -159,6 +161,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     ownerId: typeof record.owner_id === "string" ? record.owner_id : null,
     industryId: typeof record.industry_id === "string" ? record.industry_id : null,
     industryName: industryRecord && typeof industryRecord.name === "string" ? industryRecord.name : null,
+    industrySlug: industryRecord && typeof industryRecord.slug === "string" ? industryRecord.slug : null,
     avatarPath: typeof record.avatar_path === "string" && record.avatar_path ? record.avatar_path : null,
     inventoryMarkup: readInventoryMarkup(record.inventory_markup),
     language: readText(record.language),
