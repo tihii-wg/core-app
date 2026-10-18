@@ -19,14 +19,16 @@ afterEach(() => unhandled.stop());
 async function openInventory(userId = USERS.member.id) {
   fake.signInAs(userId);
   const app = renderApp(`/en/${WS.A}/inventory`);
-  await screen.findByText("Alpha brake pads");
+  // Item names can appear in both the stock-attention preview and the table.
+  await screen.findAllByText("Alpha brake pads");
   return app;
 }
 
 type User = ReturnType<typeof renderApp>["user"];
 
 async function openCreate(user: User) {
-  await user.click(screen.getByRole("button", { name: /Add Item/ }));
+  // Seeded workspace uses auto_repair industry copy ("Add Part").
+  await user.click(screen.getByRole("button", { name: /Add Part/ }));
   const dialog = await screen.findByRole("dialog");
   await within(dialog).findByLabelText("Name *");
   return dialog;
@@ -35,8 +37,9 @@ async function openCreate(user: User) {
 describe("inventory page", () => {
   it("shows only items of the active workspace with the low-stock warning", async () => {
     await openInventory();
-    expect(screen.getByText("1 item")).toBeInTheDocument();
-    expect(screen.getByText("1 items low on stock")).toBeInTheDocument();
+    expect(screen.getByText("1 part")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /1 items low on stock/i })).toBeInTheDocument();
+    expect(screen.getByText("Stock needing attention")).toBeInTheDocument();
     expect(screen.queryByText("Beta filter")).not.toBeInTheDocument();
     expect(screen.queryByText("Gamma oil")).not.toBeInTheDocument();
   });
@@ -50,7 +53,7 @@ describe("inventory page", () => {
     await user.clear(quantity);
     await user.type(quantity, "12");
 
-    await user.click(within(dialog).getByRole("button", { name: "Add Item" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add Part" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Spark plug")).toBeInTheDocument();
@@ -63,7 +66,7 @@ describe("inventory page", () => {
     await user.type(within(dialog).getByLabelText("Name *"), "Other pads");
     await user.type(within(dialog).getByLabelText("SKU"), "AP-1");
 
-    await user.click(within(dialog).getByRole("button", { name: "Add Item" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add Part" }));
 
     expect(await screen.findByText("An inventory item with this SKU already exists.")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -73,7 +76,7 @@ describe("inventory page", () => {
   it("validates the name before calling Supabase", async () => {
     const { user } = await openInventory();
     const dialog = await openCreate(user);
-    await user.click(within(dialog).getByRole("button", { name: "Add Item" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add Part" }));
 
     expect(await within(dialog).findByText("Name is required")).toBeInTheDocument();
     expect(fake.requests.filter((request) => request.table === "inventory_items" && request.op === "insert")).toHaveLength(0);
@@ -91,7 +94,8 @@ describe("inventory page", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(row("inventory_items", "item-a1")?.quantity).toBe(30);
-    await waitFor(() => expect(screen.queryByText("1 items low on stock")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: /1 items low on stock/i })).not.toBeInTheDocument());
+    expect(await screen.findByText("Stock looks healthy")).toBeInTheDocument();
   });
 
   it("keeps the edit dialog open when the update is rejected", async () => {
@@ -118,13 +122,13 @@ describe("inventory page", () => {
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(row("inventory_items", "item-a1")).toBeUndefined());
-    expect(await screen.findByText("0 items")).toBeInTheDocument();
+    expect(await screen.findByText("0 parts")).toBeInTheDocument();
   });
 
   it("shows the empty state for a workspace without items", async () => {
     fake.tables.inventory_items = fake.all("inventory_items").filter((item) => item.workspace_id !== WS.A);
     fake.signInAs(USERS.member.id);
     renderApp(`/en/${WS.A}/inventory`);
-    expect(await screen.findByText("0 items")).toBeInTheDocument();
+    expect(await screen.findByText("0 parts")).toBeInTheDocument();
   });
 });

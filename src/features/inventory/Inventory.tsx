@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { PageHeader } from "../../pages/PageHeader";
@@ -21,8 +21,12 @@ import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
 import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
+import { StockAttentionPanel } from "./StockAttentionPanel";
 import { industryInventoryCopy, industryInventoryItemCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+
+/** Fixed sort for the attention query so it stays cacheable while the table sort changes. */
+const attentionSort: InventorySort = { field: "quantity", ascending: true };
 
 type SortLabelKey = "name" | "sku" | "quantity" | "purchasePrice" | "sellingPrice" | "createdAt" | "updatedAt";
 
@@ -55,10 +59,14 @@ export function Inventory() {
 
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
+  const {
+    items: attentionItems,
+    isLoading: attentionLoading,
+    isError: attentionError,
+    refetch: refetchAttention,
+  } = useGetInventoryItems("", "all", attentionSort);
   const detailQuery = useGetInventoryItem(detailId);
   const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all";
-  const lowStockCount = items.filter((item) => item.stockStatus === "low_stock").length;
-  const outOfStockCount = items.filter((item) => item.stockStatus === "out_of_stock").length;
 
   const stockFilters = [
     { value: "all", label: t("common.all") },
@@ -175,22 +183,18 @@ export function Inventory() {
         }
       />
 
-      {!isLoading && !isError && (lowStockCount > 0 || outOfStockCount > 0) && (
-        <div className="flex flex-wrap gap-2">
-          {lowStockCount > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-warning/25 bg-warning/10 px-3 py-2 text-[13px] font-medium text-warning">
-              <AlertTriangle aria-hidden="true" className="size-4" />
-              {t("inventory.lowStockCount", { count: lowStockCount })}
-            </div>
-          )}
-          {outOfStockCount > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-[13px] font-medium text-destructive">
-              <Package aria-hidden="true" className="size-4" />
-              {t("inventory.outOfStockCount", { count: outOfStockCount })}
-            </div>
-          )}
-        </div>
-      )}
+      <StockAttentionPanel
+        items={attentionItems}
+        isLoading={attentionLoading}
+        isError={attentionError}
+        activeFilter={stockFilter}
+        onFilter={(filter) => {
+          setSearchQuery("");
+          setStockFilter(filter);
+        }}
+        onOpenItem={(item) => setDetailId(item.id)}
+        onRetry={() => refetchAttention()}
+      />
 
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <SearchAndFilters
