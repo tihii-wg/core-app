@@ -11,7 +11,7 @@ import type { addNewOrderFormData, CreateMadalProps } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import ClientCombobox from "../clients/ClientCombobox";
-import {  useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -19,11 +19,18 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
 import ClientTypeSelect from "../clients/ClientTypeSelect";
+import { industryClientCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
+import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 
-export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: CreateMadalProps & { searchQuery: string }) {
+export default function AddNewOrderForm({
+  setCreateModalOpen,
+  searchQuery,
+  initialClientId = "",
+  initialClientName = "",
+}: CreateMadalProps & { searchQuery: string; initialClientId?: string; initialClientName?: string }) {
   const { t } = useTranslation();
   const { services } = useGetServices();
   const { clients } = useGetClients(searchQuery);
@@ -31,9 +38,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
   const { mutateAsync: createOrder } = useCreateOrder();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
+  const clientCopy = industryClientCopy(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
-  const [clientName, setClientName] = useState("");
-  // const clientNameRef = useRef(clientName);
+  const [clientName, setClientName] = useState(initialClientName);
 
   const activeServices = services?.filter((service) => service.status === "active");
   const techniciansError = employeesError;
@@ -48,7 +55,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
     formState: { errors, isSubmitting, isSubmitted },
   } = useForm<addNewOrderFormData>({
     defaultValues: {
-      clientId: "",
+      clientId: initialClientId,
       device: "",
       vin: "",
       carNumber: "",
@@ -58,6 +65,9 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
       deadline: "",
     },
   });
+
+  // Keep typed plate/VIN across industry switches; drop stale required/VIN errors when hidden.
+  useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
   const selectedClientId = useWatch({ control, name: "clientId" });
   const typedClientName = clientName.trim();
@@ -151,7 +161,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           {isNewClient && (
             <div className="space-y-4 pt-1.5">
               <div className="space-y-1.5">
-                <Label htmlFor="newClientType">{t("clients.form.typeLabel")}</Label>
+                <Label htmlFor="newClientType">{clientCopy.typeLabel}</Label>
                 <Controller
                   name="newClientType"
                   control={control}
@@ -224,7 +234,7 @@ export default function AddNewOrderForm({ setCreateModalOpen, searchQuery }: Cre
           {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>} */}
         </div>
 
-        <OrderAssetFields register={register} errors={errors} workflow={workflow} copy={copy} />
+        <OrderAssetFields register={register} errors={errors} workflow={workflow} copy={copy} preserveHiddenValues />
 
         <div className="space-y-1.5">
           <Label htmlFor="service">{t("orders.form.serviceLabel")}</Label>

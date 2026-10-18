@@ -33,11 +33,29 @@ vi.mock("./useGetClients", () => ({
 vi.mock("../orders/useGetOrders", () => ({
   useGetOrders: () => ({
     isLoading: false,
+    error: null,
     orders: [
-      { id: "order-1", clientId: "client-1", orderNumber: "ORD-2026-001", device: "BMW", service: "Oil change", totalPrice: 40 },
-      { id: "order-2", clientId: "client-1", orderNumber: "ORD-2026-002", device: "BMW", service: "Tires", totalPrice: 80 },
-      { id: "order-3", clientId: "client-9", orderNumber: "ORD-2026-003", device: "Audi", service: "Oil change", totalPrice: 40 },
+      { id: "order-1", clientId: "client-1", orderNumber: "ORD-2026-001", device: "BMW", vin: "", carNumber: "", service: "Oil change", totalPrice: 40, status: "completed", createdAt: "2026-09-01" },
+      { id: "order-2", clientId: "client-1", orderNumber: "ORD-2026-002", device: "BMW", vin: "", carNumber: "", service: "Tires", totalPrice: 80, status: "in-progress", createdAt: "2026-10-02" },
+      { id: "order-3", clientId: "client-9", orderNumber: "ORD-2026-003", device: "Audi", vin: "", carNumber: "", service: "Oil change", totalPrice: 40, status: "new", createdAt: "2026-10-03" },
     ],
+  }),
+}));
+
+vi.mock("../orders/useOrderDetails", () => ({
+  useOrderDetails: () => ({
+    openOrder: vi.fn(),
+    syncOrder: vi.fn(),
+    changeStatus: vi.fn(),
+    isStatusUpdating: false,
+    panelProps: {
+      selectedOrder: null,
+      detailPanelOpen: false,
+      setDetailPanelOpen: vi.fn(),
+      onOrderUpdated: vi.fn(),
+      onStatusChange: vi.fn(),
+      isStatusUpdating: false,
+    },
   }),
 }));
 

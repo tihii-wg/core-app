@@ -254,6 +254,8 @@ function clientFromRow(clients: unknown) {
   return {
     name: typeof client?.name === "string" ? client.name : "",
     clientType: toClientType(client?.client_type),
+    email: typeof client?.email === "string" ? client.email.trim() : "",
+    phone: typeof client?.phone === "string" ? client.phone.trim() : "",
   };
 }
 
@@ -289,6 +291,8 @@ function toOrder(
     clientId: typeof row.client_id === "string" ? row.client_id : "",
     clientName: client.name,
     clientType: client.clientType,
+    ...(client.email ? { clientEmail: client.email } : {}),
+    ...(client.phone ? { clientPhone: client.phone } : {}),
     orderNumber: typeof row.number === "string" ? row.number : "",
     device: typeof row.device === "string" ? row.device : "",
     vin: readVin(row),
@@ -393,7 +397,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
   if (!data || data.length === 0) throw new Error(orderPermissionMessage());
 }
 
-const orderColumns = "*,clients(name,client_type)";
+const orderColumns = "*,clients(name,client_type,email,phone)";
 
 let vinColumnSupported: boolean | undefined;
 
@@ -445,14 +449,28 @@ export async function updateOrder({ orderId, device, carNumber, vin = "", descri
   if (error) throw new Error(error.message);
   if (!data) throw new Error(orderPermissionMessage());
 
-  const { lines, summary } = services ? await syncOrderServices(workspaceId, orderId, services) : { lines: [], summary: null };
+  let lines: OrderServiceLine[] = [];
+  let summary: Record<string, unknown> | null = null;
+  if (services) {
+    ({ lines, summary } = await syncOrderServices(workspaceId, orderId, services));
+  } else {
+    // Assignee-only (and other partial) updates must keep existing service lines on the returned order.
+    const { data: existingLines, error: linesError } = await supabase
+      .from("order_services")
+      .select(orderServiceColumns)
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true });
+    if (linesError) throw new Error(linesError.message);
+    lines = existingLines ?? [];
+  }
+
   const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
 
   if (employeesError) throw new Error(employeesError.message);
 
   const assignedUserId = typeof (data as Record<string, unknown>).assigned_to === "string" ? String((data as Record<string, unknown>).assigned_to) : "";
   const memberNames = await assigneeDisplayNames(workspaceId, assignedUserId ? [assignedUserId] : []);
-  const order = toOrder({ ...(data as Record<string, unknown>), ...summary, ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames);
+  const order = toOrder({ ...(data as Record<string, unknown>), ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames);
 
   return order;
 }

@@ -14,6 +14,8 @@ import GlobalSearch from "../features/search/GlobalSearch";
 import CompanySelector from "./CompanySelector";
 import UserMenu from "./UserMenu";
 import type { AppModule } from "../lib/types";
+import { industryModuleLabel } from "../features/industries/industryWorkflow";
+import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 
 const moduleLabelKeys: Record<string, `nav.modules.${AppModule}` | undefined> = {
   dashboard: "nav.modules.dashboard",
@@ -31,8 +33,11 @@ const moduleLabelKeys: Record<string, `nav.modules.${AppModule}` | undefined> = 
 export function AppTopbar() {
   const { t } = useTranslation();
   const location = useLocation();
+  const { workflow } = useIndustryWorkflow();
 
-  const currentTitleKey = moduleLabelKeys[location.pathname.split("/")[3]];
+  const currentModule = location.pathname.split("/")[3];
+  const currentTitleKey = moduleLabelKeys[currentModule];
+  const currentTitle = currentModule ? industryModuleLabel(workflow, currentModule) : "";
 
   const { setMobileSidebarOpen } = useApp();
   const { workspaceId } = useParams();
@@ -58,7 +63,7 @@ export function AppTopbar() {
             <>
               <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-subtle-foreground" />
               <span aria-current="page" className="shrink-0 whitespace-nowrap font-medium text-foreground">
-                {t(currentTitleKey)}
+                {currentTitle || t(currentTitleKey)}
               </span>
             </>
           )}

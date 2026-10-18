@@ -21,6 +21,8 @@ import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
 import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
+import { industryInventoryCopy, industryInventoryItemCount } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 type SortLabelKey = "name" | "sku" | "quantity" | "purchasePrice" | "sellingPrice" | "createdAt" | "updatedAt";
 
@@ -37,6 +39,8 @@ const sortOptions: { value: string; labelKey: SortLabelKey; field: InventorySort
 export function Inventory() {
   const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
+  const { workflow } = useIndustryWorkflow();
+  const inventoryCopy = industryInventoryCopy(workflow);
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
@@ -159,12 +163,14 @@ export function Inventory() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={t("inventory.title")}
-        description={isLoading ? t("inventory.loading") : isError ? t("inventory.loadFailedSummary") : t("inventory.itemCount", { count: items.length })}
+        title={inventoryCopy.title}
+        description={
+          isLoading ? inventoryCopy.loading : isError ? t("inventory.loadFailedSummary") : industryInventoryItemCount(workflow, items.length)
+        }
         actions={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus />
-            {t("inventory.addItem")}
+            {inventoryCopy.addItem}
           </Button>
         }
       />
@@ -190,7 +196,7 @@ export function Inventory() {
         <SearchAndFilters
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder={t("inventory.searchPlaceholder")}
+          searchPlaceholder={inventoryCopy.searchPlaceholder}
           filters={[
             {
               key: "stock",

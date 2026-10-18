@@ -1,10 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import {
-  Plus,
-  // Clock,
-  Trash2,
-} from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
@@ -12,7 +8,7 @@ import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { StatusBadge } from "../../ui/StatusBadge";
 
-import type { Service } from "../..//lib/types";
+import type { Service, serviceCategory } from "../../lib/types";
 import { Button } from "../../ui/Button";
 
 import { Description } from "@radix-ui/react-dialog";
@@ -26,20 +22,13 @@ import { ErrorState, NoSearchResults, NoServices } from "../../ui/EmptyState";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
-
-// const categoryOptions = [
-//   { value: "All", label: "All Categories" },
-//   { value: "Repair", label: "Repair" },
-//   { value: "Assessment", label: "Assessment" },
-//   { value: "Software", label: "Software" },
-//   { value: "Data", label: "Data" },
-//   { value: "Upgrade", label: "Upgrade" },
-// ];
+import { industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 export function Services() {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
-  // const [categoryFilter, setCategoryFilter] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -49,11 +38,27 @@ export function Services() {
   const [serviceToDelete, setServiceToDelete] = useState<Service | null>(null);
 
   const debunceSearch = useDebounce(searchQuery, 400);
-  // const debunceCategoryFilter = useDebounce(categoryFilter, 400);
-  const { services, isLoading, isPending, error, refetch } = useGetServices(debunceSearch);
+  const categoryQuery = categoryFilter === "all" ? undefined : (categoryFilter as serviceCategory);
+  const { services, isLoading, isPending, error, refetch } = useGetServices(debunceSearch, categoryQuery);
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
   const canManage = canManageServices(useActiveWorkspaceRole());
+  const { workflow } = useIndustryWorkflow();
+  const serviceCopy = industryServiceCopy(workflow);
+  const categoryOptions = [
+    { value: "all", label: t("services.filters.allCategories") },
+    ...industryServiceCategoryOptions(workflow).map((category) => ({
+      value: category,
+      label: serviceCategoryLabel(category),
+    })),
+  ];
+
+  useEffect(() => {
+    if (categoryFilter === "all") return;
+    if (!workflow.serviceCategories.includes(categoryFilter as serviceCategory)) {
+      setCategoryFilter("all");
+    }
+  }, [categoryFilter, workflow.slug, workflow.serviceCategories]);
 
   // Stats
   const activeServices = services?.filter((s) => s.status === "active").length;
@@ -78,22 +83,13 @@ export function Services() {
         </div>
       ),
     },
-    // {
-    //   key: "category",
-    //   header: "Category",
-    //   cell: (service) => <StatusBadge variant="default">{service.category}</StatusBadge>,
-    // },
-    // {
-    //   key: "duration",
-    //   header: "Duration",
-    //   cell: (service) => (
-    //     <div className="flex items-center gap-1 text-muted-foreground">
-    //       <Clock className="h-4 w-4" />
-    //       <span>{formatDuration(service.duration)}</span>
-    //     </div>
-    //   ),
-    //   className: "hidden sm:table-cell",
-    // },
+    {
+      key: "category",
+      header: t("services.columns.category"),
+      className: "hidden sm:table-cell",
+      cell: (service) =>
+        service.category ? <StatusBadge variant="default">{serviceCategoryLabel(service.category)}</StatusBadge> : <span className="text-subtle-foreground">—</span>,
+    },
     {
       key: "price",
       header: t("services.columns.price"),
@@ -158,19 +154,19 @@ export function Services() {
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder={t("services.searchPlaceholder")}
-        // filters={[
-        //   {
-        //     key: "category",
-        //     label: "Category",
-        //     options: categoryOptions,
-        //     value: categoryFilter,
-        //     onChange: setCategoryFilter,
-        //   },
-        // ]}
-        // onClearFilters={() => {
-        //   setSearchQuery("");
-        //   setCategoryFilter("all");
-        // }}
+        filters={[
+          {
+            key: "category",
+            label: t("services.filters.category"),
+            options: categoryOptions,
+            value: categoryFilter,
+            onChange: setCategoryFilter,
+          },
+        ]}
+        onClearFilters={() => {
+          setSearchQuery("");
+          setCategoryFilter("all");
+        }}
       />
 
       <DataTable
@@ -180,8 +176,8 @@ export function Services() {
         emptyState={
           error ? (
             <ErrorState title={t("services.loadError")} description={error.message} onRetry={() => refetch()} />
-          ) : searchQuery ? (
-            <NoSearchResults query={searchQuery} />
+          ) : searchQuery || categoryFilter !== "all" ? (
+            <NoSearchResults query={searchQuery || serviceCategoryLabel(categoryFilter)} />
           ) : (
             <NoServices onAddService={canManage ? () => setCreateModalOpen(true) : undefined} />
           )
@@ -200,7 +196,7 @@ export function Services() {
       {/* Create Service Modal */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
-          <Description className="sr-only">{t("services.dialogs.createDescription")}</Description>
+          <Description className="sr-only">{serviceCopy.createDescription}</Description>
           <DialogHeader>
             <DialogTitle>{t("services.dialogs.createTitle")}</DialogTitle>
           </DialogHeader>
@@ -211,7 +207,7 @@ export function Services() {
       {/*Create Edit Service Modal*/}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-lg">
-          <Description className="sr-only">{t("services.dialogs.editDescription")}</Description>
+          <Description className="sr-only">{serviceCopy.editDescription}</Description>
           <DialogHeader>
             <DialogTitle>{t("services.dialogs.editTitle")}</DialogTitle>
           </DialogHeader>

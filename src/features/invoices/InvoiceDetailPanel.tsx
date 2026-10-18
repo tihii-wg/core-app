@@ -6,6 +6,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Spinner } from "../../ui/Spinner";
 import { InvoiceStatusBadge } from "../../ui/StatusBadge";
 import type { Invoice, InvoiceStatus } from "../../lib/types";
+import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoice } from "./useGetInvoices";
 
@@ -20,6 +22,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
   const { t } = useTranslation();
   const { invoice, isLoading, error } = useGetInvoice(invoiceId);
   const { formatMoney } = useWorkspaceMoney();
+  const { workflow, copy } = useIndustryWorkflow();
 
   return (
     <Sheet open={invoiceId !== null} onOpenChange={(open) => !open && onClose()}>
@@ -56,9 +59,15 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
               <DetailItem label={t("invoices.detail.order")} value={invoice.orderNumber} />
               <DetailItem label={t("invoices.detail.created")} value={invoice.createdAt} />
-              <DetailItem label={t("invoices.detail.device")} value={invoice.device} />
-              <DetailItem label={t("invoices.detail.carNumber")} value={invoice.carNumber} />
-              <DetailItem label={t("invoices.detail.vin")} value={invoice.vin} mono />
+              {shouldShowOrderAssetValue(workflow.orderFields.device, invoice.device, "device") && (
+                <DetailItem label={copy.deviceDetail} value={invoice.device} />
+              )}
+              {shouldShowOrderAssetValue(workflow.orderFields.carNumber, invoice.carNumber, "carNumber") && (
+                <DetailItem label={copy.carNumberDetail} value={invoice.carNumber} />
+              )}
+              {shouldShowOrderAssetValue(workflow.orderFields.vin, invoice.vin, "vin") && (
+                <DetailItem label={copy.vinDetail} value={invoice.vin} mono />
+              )}
               <DetailItem label={invoice.status === "paid" ? t("invoices.detail.paidOn") : t("invoices.detail.dueDate")} value={invoice.status === "paid" ? invoice.paidAt : invoice.dueDate} />
               {invoice.description && (
                 <div className="col-span-2">

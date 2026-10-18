@@ -4,6 +4,8 @@ import { Button } from "../../ui/Button";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import { Spinner } from "../../ui/Spinner";
 import type { InventoryItem } from "../../lib/types";
+import { industryInventoryCopy } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -30,6 +32,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export default function InventoryDetailPanel({ item, open, isLoading, isError, onOpenChange, onEdit, onDelete, onRetry }: InventoryDetailPanelProps) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const inventoryCopy = industryInventoryCopy(workflow);
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
 
@@ -37,8 +41,8 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle className="[overflow-wrap:anywhere]">{item?.name ?? t("inventory.detail.fallbackTitle")}</SheetTitle>
-          <SheetDescription className="sr-only">{t("inventory.detail.description")}</SheetDescription>
+          <SheetTitle className="[overflow-wrap:anywhere]">{item?.name ?? inventoryCopy.detailFallbackTitle}</SheetTitle>
+          <SheetDescription className="sr-only">{inventoryCopy.detailDescription}</SheetDescription>
         </SheetHeader>
 
         {isLoading && (
@@ -66,16 +70,16 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
             </div>
 
             <div className="divide-y divide-border border-y border-border">
-              <DetailRow label={t("inventory.fields.sku")} value={item.sku || "—"} />
-              <DetailRow label={t("inventory.fields.category")} value={item.category || "—"} />
-              <DetailRow label={t("inventory.fields.description")} value={item.description || "—"} />
+              {item.sku?.trim() ? <DetailRow label={t("inventory.fields.sku")} value={item.sku} /> : null}
+              {item.category?.trim() ? <DetailRow label={t("inventory.fields.category")} value={item.category} /> : null}
+              {item.description?.trim() ? <DetailRow label={t("inventory.fields.description")} value={item.description} /> : null}
               <DetailRow label={t("inventory.fields.quantity")} value={`${item.quantity} ${item.unit}`} />
               <DetailRow label={t("inventory.fields.minQuantity")} value={String(item.minQuantity)} />
               <DetailRow label={t("inventory.fields.unit")} value={item.unit || "—"} />
               <DetailRow label={t("inventory.fields.purchasePrice")} value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
               <DetailRow label={t("inventory.fields.sellingPrice")} value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
-              <DetailRow label={t("inventory.fields.supplier")} value={item.supplier || "—"} />
-              <DetailRow label={t("inventory.fields.location")} value={item.location || "—"} />
+              {item.supplier?.trim() ? <DetailRow label={t("inventory.fields.supplier")} value={item.supplier} /> : null}
+              {item.location?.trim() ? <DetailRow label={t("inventory.fields.location")} value={item.location} /> : null}
               <DetailRow label={t("inventory.fields.created")} value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
               <DetailRow label={t("inventory.fields.updated")} value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />
             </div>

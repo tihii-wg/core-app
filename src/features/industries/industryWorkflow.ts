@@ -1,4 +1,13 @@
 import i18n from "../../i18n";
+import type { OrderStatus, serviceCategory } from "../../lib/types";
+
+/** Stored order.status values (application constants; DB column is unconstrained text). */
+export const ORDER_STATUSES: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
+
+/** Stored services.category values used by the app (includes historical spelling "assesment"). */
+export const SERVICE_CATEGORIES = ["repair", "software", "update", "data", "assesment"] as const;
+
+export type ServiceCategoryValue = (typeof SERVICE_CATEGORIES)[number];
 
 /** Database industry slugs from public.industries (resolve by slug, never by UUID). */
 export const KNOWN_INDUSTRY_SLUGS = [
@@ -40,7 +49,14 @@ export type IndustryWorkflow = {
   copyPack: IndustryCopyPack;
   orderFields: IndustryOrderFields;
   terminology: IndustryTerminology;
+  /** Subset of existing serviceCategory values preferred for this industry. */
+  serviceCategories: ServiceCategoryValue[];
 };
+
+const allServiceCategories: ServiceCategoryValue[] = [...SERVICE_CATEGORIES];
+const autoServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
+const deviceServiceCategories: ServiceCategoryValue[] = ["repair", "software", "data", "update", "assesment"];
+const fieldServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
 
 const automotiveFields: IndustryOrderFields = {
   device: { visible: true, required: true },
@@ -88,14 +104,14 @@ const defaultTerminology: IndustryTerminology = {
 };
 
 const workflowsBySlug: Record<KnownIndustrySlug, Omit<IndustryWorkflow, "slug">> = {
-  auto_repair: { copyPack: "auto_repair", orderFields: automotiveFields, terminology: repairTerminology },
-  phone_electronics_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology },
-  computer_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology },
-  appliance_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology },
-  equipment_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology },
-  electrical_services: { copyPack: "field_service", orderFields: fieldServiceFields, terminology: fieldTerminology },
-  home_services: { copyPack: "field_service", orderFields: fieldServiceFields, terminology: fieldTerminology },
-  other: { copyPack: "default", orderFields: defaultFields, terminology: defaultTerminology },
+  auto_repair: { copyPack: "auto_repair", orderFields: automotiveFields, terminology: repairTerminology, serviceCategories: autoServiceCategories },
+  phone_electronics_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
+  computer_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
+  appliance_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
+  equipment_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
+  electrical_services: { copyPack: "field_service", orderFields: fieldServiceFields, terminology: fieldTerminology, serviceCategories: fieldServiceCategories },
+  home_services: { copyPack: "field_service", orderFields: fieldServiceFields, terminology: fieldTerminology, serviceCategories: fieldServiceCategories },
+  other: { copyPack: "default", orderFields: defaultFields, terminology: defaultTerminology, serviceCategories: allServiceCategories },
 };
 
 function isKnownSlug(slug: string | null | undefined): slug is KnownIndustrySlug {
@@ -107,7 +123,205 @@ export function industryWorkflow(slug: string | null | undefined): IndustryWorkf
   if (isKnownSlug(slug)) {
     return { slug, ...workflowsBySlug[slug] };
   }
-  return { slug: slug?.trim() || "default", copyPack: "default", orderFields: defaultFields, terminology: defaultTerminology };
+  return {
+    slug: slug?.trim() || "default",
+    copyPack: "default",
+    orderFields: defaultFields,
+    terminology: defaultTerminology,
+    serviceCategories: allServiceCategories,
+  };
+}
+
+function isServiceCategory(value: string | null | undefined): value is ServiceCategoryValue {
+  return (SERVICE_CATEGORIES as readonly string[]).includes(value ?? "");
+}
+
+/**
+ * Category options for service forms. Always keeps a service's current category selectable
+ * after an industry change so existing records stay editable.
+ */
+export function industryServiceCategoryOptions(workflow: IndustryWorkflow, currentCategory?: string | null): ServiceCategoryValue[] {
+  const options = [...workflow.serviceCategories];
+  if (currentCategory && isServiceCategory(currentCategory) && !options.includes(currentCategory)) {
+    options.push(currentCategory);
+  }
+  return options;
+}
+
+export function serviceCategoryLabel(category: string | null | undefined) {
+  if (!category?.trim()) return "";
+  if (!isServiceCategory(category)) return category;
+  return i18n.t(`services.categories.${category}`, { defaultValue: category });
+}
+
+/** Service UI copy that follows the active industry pack. */
+export function industryServiceCopy(workflow: IndustryWorkflow) {
+  const text = (key: string, legacyFallback: string) => {
+    const packKey = `services.byIndustry.${workflow.copyPack}.${key}`;
+    return i18n.t(packKey as "services.form.descriptionPlaceholder", {
+      defaultValue: i18n.t(legacyFallback as "services.form.descriptionPlaceholder"),
+    });
+  };
+
+  return {
+    descriptionPlaceholder: text("descriptionPlaceholder", "services.form.descriptionPlaceholder"),
+    namePlaceholder: text("namePlaceholder", "services.combobox.placeholder"),
+    createDescription: text("createDescription", "services.dialogs.createDescription"),
+    editDescription: text("editDescription", "services.dialogs.editDescription"),
+  };
+}
+
+export function defaultServiceCategory(workflow: IndustryWorkflow): serviceCategory {
+  return workflow.serviceCategories[0] ?? "repair";
+}
+
+/**
+ * Client UI copy for the active industry pack.
+ * Schema fields stay the same; only labels/placeholders/terminology adapt.
+ */
+export function industryClientCopy(workflow: IndustryWorkflow) {
+  const text = (key: string, legacyFallback: string) => {
+    const packKey = `clients.byIndustry.${workflow.copyPack}.${key}`;
+    return i18n.t(packKey as "clients.form.addressLabel", {
+      defaultValue: i18n.t(legacyFallback as "clients.form.addressLabel"),
+    });
+  };
+
+  return {
+    title: text("title", "clients.title"),
+    loading: text("loading", "clients.loading"),
+    addClient: text("addClient", "clients.addClient"),
+    searchPlaceholder: text("searchPlaceholder", "clients.searchPlaceholder"),
+    typeFilterLabel: text("typeFilterLabel", "clients.filters.clientType"),
+    addDialogTitle: text("addDialogTitle", "clients.addDialog.title"),
+    addDialogDescription: text("addDialogDescription", "clients.addDialog.description"),
+    editDialogTitle: text("editDialogTitle", "clients.editDialog.title"),
+    editDialogDescription: text("editDialogDescription", "clients.editDialog.description"),
+    typeLabel: text("typeLabel", "clients.form.typeLabel"),
+    addressLabel: text("addressLabel", "clients.form.addressLabel"),
+    addressPlaceholder: text("addressPlaceholder", "clients.form.addressPlaceholder"),
+    notesPlaceholder: text("notesPlaceholder", "clients.form.notesPlaceholder"),
+    comboboxPlaceholder: text("comboboxPlaceholder", "clients.combobox.placeholder"),
+    detailEditTitle: text("detailEditTitle", "clients.detail.editTitle"),
+    detailSrDescription: text("detailSrDescription", "clients.detail.srDescription"),
+    clientSince: (date: string) => {
+      const packKey = `clients.byIndustry.${workflow.copyPack}.clientSince`;
+      return i18n.t(packKey as "clients.detail.clientSince", {
+        date,
+        defaultValue: i18n.t("clients.detail.clientSince", { date }),
+      });
+    },
+  };
+}
+
+/** Pluralized total-count line for the Clients page header. */
+export function industryClientTotalCount(workflow: IndustryWorkflow, count: number) {
+  const packKey = `clients.byIndustry.${workflow.copyPack}.totalCount`;
+  return i18n.t(packKey as "clients.totalCount", {
+    count,
+    defaultValue: i18n.t("clients.totalCount", { count }),
+  });
+}
+
+/**
+ * Inventory UI copy for the active industry pack.
+ * Category remains free-text in the DB; only labels/placeholders adapt (parts / supplies / inventory).
+ */
+export function industryInventoryCopy(workflow: IndustryWorkflow) {
+  const text = (key: string, legacyFallback: string) => {
+    const packKey = `inventory.byIndustry.${workflow.copyPack}.${key}`;
+    return i18n.t(packKey as "inventory.title", {
+      defaultValue: i18n.t(legacyFallback as "inventory.title"),
+    });
+  };
+
+  return {
+    title: text("title", "inventory.title"),
+    loading: text("loading", "inventory.loading"),
+    addItem: text("addItem", "inventory.addItem"),
+    searchPlaceholder: text("searchPlaceholder", "inventory.searchPlaceholder"),
+    addDialogTitle: text("addDialogTitle", "inventory.dialogs.addTitle"),
+    addDialogDescription: text("addDialogDescription", "inventory.dialogs.addDescription"),
+    editDialogTitle: text("editDialogTitle", "inventory.dialogs.editTitle"),
+    editDialogDescription: text("editDialogDescription", "inventory.dialogs.editDescription"),
+    deleteDialogTitle: text("deleteDialogTitle", "inventory.dialogs.deleteTitle"),
+    detailFallbackTitle: text("detailFallbackTitle", "inventory.detail.fallbackTitle"),
+    detailDescription: text("detailDescription", "inventory.detail.description"),
+    namePlaceholder: text("namePlaceholder", "inventory.form.namePlaceholder"),
+    categoryPlaceholder: text("categoryPlaceholder", "common.optional"),
+    locationPlaceholder: text("locationPlaceholder", "common.optional"),
+  };
+}
+
+/** Pluralized item-count line for the Inventory page header. */
+export function industryInventoryItemCount(workflow: IndustryWorkflow, count: number) {
+  const packKey = `inventory.byIndustry.${workflow.copyPack}.itemCount`;
+  return i18n.t(packKey as "inventory.itemCount", {
+    count,
+    defaultValue: i18n.t("inventory.itemCount", { count }),
+  });
+}
+
+/**
+ * Display label for a stored order status value.
+ * Preserves underlying status keys (new, waiting-parts, …); only the translated label adapts.
+ * True industry-specific transitions are not enforced here — statuses remain free to set in the UI.
+ */
+export function industryOrderStatusLabel(workflow: IndustryWorkflow, status: OrderStatus | string) {
+  const packKey = `status.order.byIndustry.${workflow.copyPack}.${status}`;
+  return i18n.t(packKey as "status.order.new", {
+    defaultValue: i18n.t(`status.order.${status}` as "status.order.new", { defaultValue: status }),
+  });
+}
+
+/**
+ * Module / shell labels shared by sidebar, topbar, search, and dashboard.
+ * Reuses clients/inventory/order pack copy — does not invent a second terminology map.
+ */
+export function industryModuleLabel(workflow: IndustryWorkflow, module: string): string {
+  if (module === "clients") return industryClientCopy(workflow).title;
+  if (module === "inventory") return industryInventoryCopy(workflow).title;
+  return i18n.t(`nav.modules.${module}` as "nav.modules.dashboard", {
+    defaultValue: module,
+  });
+}
+
+export function industryShellCopy(workflow: IndustryWorkflow) {
+  const clients = industryClientCopy(workflow);
+  const inventory = industryInventoryCopy(workflow);
+  const orders = industryOrderCopy(workflow);
+
+  const clientPack = (key: string, legacy: string) =>
+    i18n.t(`clients.byIndustry.${workflow.copyPack}.${key}` as "clients.title", {
+      defaultValue: i18n.t(legacy as "clients.title"),
+    });
+  const inventoryPack = (key: string, legacy: string) =>
+    i18n.t(`inventory.byIndustry.${workflow.copyPack}.${key}` as "inventory.title", {
+      defaultValue: i18n.t(legacy as "inventory.title"),
+    });
+
+  return {
+    clientsTitle: clients.title,
+    clientsSingular: clients.comboboxPlaceholder,
+    addClient: clients.addClient,
+    inventoryTitle: inventory.title,
+    addInventory: inventory.addItem,
+    deviceColumn: orders.deviceLabel,
+    newClients: clientPack("newClients", "dashboard.week.newClients"),
+    clientCreated: clientPack("clientCreated", "dashboard.activity.clientCreated"),
+    noClientsTitle: clientPack("emptyTitle", "common.empty.noClientsTitle"),
+    noClientsDescription: clientPack("emptyDescription", "common.empty.noClientsDescription"),
+    noClientsAction: clients.addClient,
+    noInventoryTitle: inventoryPack("emptyTitle", "common.empty.noInventoryTitle"),
+    noInventoryDescription: inventoryPack("emptyDescription", "common.empty.noInventoryDescription"),
+    noInventoryAction: inventory.addItem,
+    searchInputLabel: i18n.t(`search.byIndustry.${workflow.copyPack}.inputLabel` as "search.inputLabel", {
+      defaultValue: i18n.t("search.inputLabel"),
+    }),
+    searchClientsError: clientPack("searchError", "search.errors.clients"),
+    searchInventoryError: inventoryPack("searchError", "search.errors.inventory"),
+    dashboardInventoryError: inventoryPack("loadError", "dashboard.errors.inventory"),
+  };
 }
 
 function copyPath(pack: IndustryCopyPack, key: string) {
@@ -173,8 +387,23 @@ export function orderAssetFieldRules(field: OrderAssetFieldConfig, messages: { r
   };
 }
 
-/** Detail screens: show configured fields, and keep historical values visible when present. */
-export function shouldShowOrderAssetValue(field: OrderAssetFieldConfig, value: string | null | undefined) {
-  if (field.visible) return true;
-  return Boolean(value?.trim());
+/**
+ * Detail / invoice screens:
+ * - Always show a stored value (historical data survives industry changes).
+ * - Never render empty plate/VIN shells (avoids blank automotive labels).
+ * - Show empty device only when the industry configures it as a visible primary field.
+ */
+export function shouldShowOrderAssetValue(
+  field: OrderAssetFieldConfig,
+  value: string | null | undefined,
+  fieldName: OrderAssetFieldName = "device",
+) {
+  if (value?.trim()) return true;
+  if (!field.visible) return false;
+  return fieldName === "device";
+}
+
+/** Field names that are currently hidden — clear their validation when the industry changes. */
+export function hiddenOrderAssetFields(workflow: IndustryWorkflow): OrderAssetFieldName[] {
+  return (Object.keys(workflow.orderFields) as OrderAssetFieldName[]).filter((name) => !workflow.orderFields[name].visible);
 }

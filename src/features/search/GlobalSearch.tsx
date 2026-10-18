@@ -15,6 +15,8 @@ import InventoryDetailPanel from "../inventory/InventoryDetailPanel";
 import { EditInventoryItemDialog } from "../inventory/EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "../inventory/DeleteInventoryItemDialog";
 import { useGetInventoryItem } from "../inventory/useGetInventoryItem";
+import { industryModuleLabel } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 const RESULTS_PER_GROUP = 5;
 const listboxId = "global-search-results";
@@ -61,6 +63,7 @@ function ResultContent({ result }: { result: SearchResult }) {
 
 export default function GlobalSearch() {
   const { t } = useTranslation();
+  const { workflow, shell } = useIndustryWorkflow();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -108,16 +111,16 @@ export default function GlobalSearch() {
     },
     {
       key: "clients",
-      label: t("search.groups.clients"),
-      errorMessage: t("search.errors.clients"),
+      label: industryModuleLabel(workflow, "clients"),
+      errorMessage: shell.searchClientsError,
       total: search.clients.results.length,
       isError: search.clients.isError,
       results: search.clients.results.slice(0, RESULTS_PER_GROUP).map((client) => ({ type: "client", id: client.id, client })),
     },
     {
       key: "inventory",
-      label: t("search.groups.inventory"),
-      errorMessage: t("search.errors.inventory"),
+      label: industryModuleLabel(workflow, "inventory"),
+      errorMessage: shell.searchInventoryError,
       total: search.inventory.results.length,
       isError: search.inventory.isError,
       results: search.inventory.results.slice(0, RESULTS_PER_GROUP).map((item) => ({ type: "inventory", id: item.id, item })),
@@ -181,7 +184,7 @@ export default function GlobalSearch() {
         ref={inputRef}
         type="text"
         role="combobox"
-        aria-label={t("search.inputLabel")}
+        aria-label={shell.searchInputLabel}
         aria-autocomplete="list"
         aria-expanded={showResults}
         aria-controls={listboxId}

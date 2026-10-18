@@ -15,6 +15,7 @@ import { reportCsv } from "./quickReports";
 import { comprehensiveReport, comprehensiveReportDescription, comprehensiveReportTitle, exportNeeds, exportPreview, exportSectionDescription, exportSectionKeys, exportSectionLabel, usesPeriod, type ExportSectionKey } from "./comprehensiveReport";
 import { downloadCsv, rangeLabel, useReportFormatting } from "./reportFormatting";
 import type { ReportPrintJob } from "./ReportPrintRoot";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 type ExportFormat = "pdf" | "csv";
 
@@ -78,6 +79,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
   const sectionsHeadingId = useId();
 
   const { workspaceId, workspaceName, formatMoney, formatDate, formatDateTime } = useReportFormatting();
+  const { industrySlug } = useIndustryWorkflow();
   const ordersQuery = useGetOrders();
   const clientsQuery = useGetClients("");
   const employeesQuery = useGetEmployees();
@@ -120,7 +122,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       const generatedAt = new Date();
       const exportPeriod = reportPeriod(range, generatedAt);
       const today = localDateKey(generatedAt);
-      const model = comprehensiveReport({ orders, clients, employees, items }, ordered, exportPeriod, today);
+      const model = comprehensiveReport({ orders, clients, employees, items }, ordered, exportPeriod, today, industrySlug);
       const withPeriod = usesPeriod(ordered);
       const exportPeriodLabel = withPeriod ? `${formatDate(exportPeriod.start)} – ${formatDate(exportPeriod.end)}` : t("reports.asOf", { date: formatDate(today) });
       const generatedLabel = formatDateTime(generatedAt);

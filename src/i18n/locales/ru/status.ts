@@ -9,6 +9,20 @@ const status: Messages<typeof en> = {
     completed: "Выполнен",
     paid: "Оплачен",
     cancelled: "Отменён",
+    byIndustry: {
+      auto_repair: {
+        "waiting-parts": "Ожидает запчасти",
+      },
+      repair_device: {
+        "waiting-parts": "Ожидает запчасти",
+      },
+      field_service: {
+        "waiting-parts": "Ожидает расходники",
+      },
+      default: {
+        "waiting-parts": "Ожидает запчасти",
+      },
+    },
   },
   payment: {
     unpaid: "Не оплачен",

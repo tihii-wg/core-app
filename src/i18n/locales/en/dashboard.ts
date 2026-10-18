@@ -46,6 +46,16 @@ export default {
     activeOrders: "Active Orders",
     lowStockItems: "Low Stock Items",
   },
+  deadlines: {
+    overdueTitle: "Overdue orders",
+    upcomingTitle: "Upcoming deadlines",
+    emptyOverdue: "No overdue orders",
+    emptyOverdueHint: "Open orders past their deadline will show up here.",
+    emptyUpcoming: "No upcoming deadlines",
+    emptyUpcomingHint: "Open orders due within the next 7 days will show up here.",
+    moreCount_one: "+{{count}} more",
+    moreCount_other: "+{{count}} more",
+  },
   columns: {
     order: "Order",
     client: "Client",

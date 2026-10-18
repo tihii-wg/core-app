@@ -53,6 +53,18 @@ const dashboard: Messages<typeof en> = {
     activeOrders: "Активные заказы",
     lowStockItems: "Заканчиваются на складе",
   },
+  deadlines: {
+    overdueTitle: "Просроченные заказы",
+    upcomingTitle: "Ближайшие сроки",
+    emptyOverdue: "Нет просроченных заказов",
+    emptyOverdueHint: "Открытые заказы с прошедшим сроком появятся здесь.",
+    emptyUpcoming: "Нет ближайших сроков",
+    emptyUpcomingHint: "Открытые заказы со сроком в ближайшие 7 дней появятся здесь.",
+    moreCount_one: "+ ещё {{count}}",
+    moreCount_few: "+ ещё {{count}}",
+    moreCount_many: "+ ещё {{count}}",
+    moreCount_other: "+ ещё {{count}}",
+  },
   columns: {
     order: "Заказ",
     client: "Клиент",

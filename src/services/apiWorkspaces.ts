@@ -464,18 +464,16 @@ export async function updateWorkspaceDetails(workspaceId: string, input: { name:
     .from("workspaces")
     .update({ name: fields.name, industry_id: resolvedIndustryId, inventory_markup: fields.inventoryMarkup })
     .eq("id", workspaceId)
-    .select("id, name, industry_id, inventory_markup")
+    .select("id")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error(ownerOnlyWorkspaceMessage());
 
-  return {
-    id: String(data.id),
-    name: typeof data.name === "string" ? data.name : fields.name,
-    industryId: typeof data.industry_id === "string" ? data.industry_id : resolvedIndustryId,
-    inventoryMarkup: readInventoryMarkup(data.inventory_markup) ?? fields.inventoryMarkup,
-  };
+  // Reload through membership + industries join so industrySlug/name are ready for industry-aware forms.
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) throw new Error(ownerOnlyWorkspaceMessage());
+  return workspace;
 }
 
 export async function updateWorkspacePreferences(workspaceId: string, input: WorkspacePreferencesInput) {

@@ -6,6 +6,20 @@ export default {
     completed: "Completed",
     paid: "Paid",
     cancelled: "Cancelled",
+    byIndustry: {
+      auto_repair: {
+        "waiting-parts": "Waiting Parts",
+      },
+      repair_device: {
+        "waiting-parts": "Waiting Parts",
+      },
+      field_service: {
+        "waiting-parts": "Waiting Supplies",
+      },
+      default: {
+        "waiting-parts": "Waiting Parts",
+      },
+    },
   },
   payment: {
     unpaid: "Unpaid",

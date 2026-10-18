@@ -1,10 +1,9 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Invoice } from "../../lib/types";
+import type { Invoice, Order } from "../../lib/types";
 import { Orders } from "./Orders";
-import type { Order } from "../../lib/types";
 
 const order: Order = {
   id: "order-1",
@@ -28,9 +27,14 @@ const order: Order = {
   updatedAt: "2026-09-26",
 };
 
+const statusHooks = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+}));
+
 vi.mock("./useGetOrders", () => ({
   useGetOrders: () => ({ orders: [order], isLoading: false }),
-  useUpdateOrderStatus: () => ({ mutate: vi.fn() }),
+  useUpdateOrderStatus: () => ({ mutate: statusHooks.mutate, isPending: statusHooks.isPending }),
 }));
 
 vi.mock("../employees/useGetEmployees", () => ({
@@ -74,6 +78,8 @@ beforeEach(() => {
   invoiceHooks.isUnavailable = false;
   invoiceHooks.isPending = false;
   invoiceHooks.mutate.mockReset();
+  statusHooks.isPending = false;
+  statusHooks.mutate.mockReset();
 });
 
 async function openActions() {
@@ -110,11 +116,46 @@ describe("Orders page", () => {
     expect(screen.queryByText("ORD-2026-003")).not.toBeInTheDocument();
   });
 
-  it("shows a three-dot actions menu with Edit and Create Invoice in place of the pencil button", async () => {
+  it("shows a three-dot actions menu with view, status, edit, and invoice actions", async () => {
     await openActions();
 
     expect(screen.queryByRole("button", { name: /Edit order/ })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Edit", "Create Invoice"]);
+    expect(screen.getByRole("menuitem", { name: "View details" })).toBeInTheDocument();
+    expect(screen.getByText("Change status")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "In Progress" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Create Invoice" })).toBeInTheDocument();
+  });
+
+  it("opens the order details panel from the actions menu", async () => {
+    const user = await openActions();
+
+    await user.click(screen.getByRole("menuitem", { name: "View details" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+  });
+
+  it("changes order status from the list actions menu", async () => {
+    const user = await openActions();
+
+    await user.click(screen.getByRole("menuitem", { name: "In Progress" }));
+
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "in-progress" },
+      expect.any(Object),
+    );
+  });
+
+  it("disables status changes while a status update is pending", async () => {
+    statusHooks.isPending = true;
+    const user = await openActions();
+
+    expect(screen.getByText("Updating status...")).toBeInTheDocument();
+    const inProgress = screen.getByRole("menuitem", { name: "In Progress" });
+    expect(inProgress).toHaveAttribute("aria-disabled", "true");
+    await user.click(inProgress);
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
   });
 
   it("creates an invoice for the order from the menu and closes the menu", async () => {
@@ -133,8 +174,8 @@ describe("Orders page", () => {
 
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("menu")).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Edit" })).toHaveFocus();
-    await user.keyboard("{ArrowDown}{Enter}");
+    expect(screen.getByRole("menuitem", { name: "View details" })).toHaveFocus();
+    await user.keyboard("{End}{Enter}");
 
     expect(invoiceHooks.mutate).toHaveBeenCalledExactlyOnceWith("order-1");
   });

@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { SearchX, Package, FileText, Users, AlertTriangle, RotateCw, Plus } from "lucide-react";
+import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 import { Button } from "../ui/Button";
 
 interface EmptyStateProps {
@@ -72,8 +73,8 @@ export function NoOrders({ onCreateOrder }: { onCreateOrder: () => void }) {
 }
 
 export function NoClients({ onAddClient }: { onAddClient: () => void }) {
-  const { t } = useTranslation();
-  return <EmptyState icon={Users} title={t("common.empty.noClientsTitle")} description={t("common.empty.noClientsDescription")} action={{ label: t("common.empty.noClientsAction"), onClick: onAddClient }} />;
+  const { shell } = useIndustryWorkflow();
+  return <EmptyState icon={Users} title={shell.noClientsTitle} description={shell.noClientsDescription} action={{ label: shell.noClientsAction, onClick: onAddClient }} />;
 }
 export function NoServices({ onAddService }: { onAddService?: () => void }) {
   const { t } = useTranslation();
@@ -81,8 +82,8 @@ export function NoServices({ onAddService }: { onAddService?: () => void }) {
 }
 
 export function NoInventory({ onAddItem }: { onAddItem: () => void }) {
-  const { t } = useTranslation();
-  return <EmptyState icon={Package} title={t("common.empty.noInventoryTitle")} description={t("common.empty.noInventoryDescription")} action={{ label: t("common.empty.noInventoryAction"), onClick: onAddItem }} />;
+  const { shell } = useIndustryWorkflow();
+  return <EmptyState icon={Package} title={shell.noInventoryTitle} description={shell.noInventoryDescription} action={{ label: shell.noInventoryAction, onClick: onAddItem }} />;
 }
 
 export function NoEmployees({ onAddClient }: { onAddClient: () => void }) {

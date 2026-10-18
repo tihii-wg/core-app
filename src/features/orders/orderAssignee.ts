@@ -1,5 +1,17 @@
 import type { Employee } from "../../lib/types";
 
+/** Radix Select forbids empty string values — map clear-assignee to this sentinel in the UI. */
+export const ORDER_UNASSIGNED_VALUE = "__unassigned__";
+
+export function toAssigneeSelectValue(assignedEmployeeId: string | null | undefined) {
+  const id = assignedEmployeeId?.trim() ?? "";
+  return id || ORDER_UNASSIGNED_VALUE;
+}
+
+export function fromAssigneeSelectValue(value: string) {
+  return value === ORDER_UNASSIGNED_VALUE ? "" : value;
+}
+
 /**
  * Match an order assignee to an employee row.
  * UI / Order.assignedEmployeeId prefer employees.id; orders.assigned_to historically stores auth.users ids

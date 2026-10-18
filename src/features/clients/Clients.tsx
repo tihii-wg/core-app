@@ -18,23 +18,37 @@ import ClientDetailPanel from "./ClientDetailPanel";
 import { clientOrderSummaries } from "./clientOrders";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { industryClientCopy, industryClientTotalCount } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { CreateOrderDialog } from "../orders/CreateOrderDialog";
+import OrderDetailPanel from "../orders/OrderDetailPanel";
+import { useOrderDetails } from "../orders/useOrderDetails";
+
 export function Clients() {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const clientCopy = industryClientCopy(workflow);
   const [searchQuery, setSearchQuery] = useState("");
   const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const debounceSearch = useDebounce(searchQuery, 400);
   const { isLoading, clients = [], isPending, error: clientsError, refetch: refetchClients } = useGetClients(debounceSearch, clientType);
-  const { orders, isLoading: ordersLoading } = useGetOrders();
+  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
+  const orderDetails = useOrderDetails();
 
-  // State
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [addClientOpen, setAddClientOpen] = useState(false);
+  const [orderForClient, setOrderForClient] = useState<Client | null>(null);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
+
+  function handleOpenHistoricalOrder(orderId: string) {
+    const order = orders.find((item) => item.id === orderId);
+    if (order) orderDetails.openOrder(order);
+  }
 
   // Table columns
   const columns: Column<Client>[] = [
@@ -127,12 +141,12 @@ export function Clients() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={t("clients.title")}
-        description={isPending ? t("clients.loading") : t("clients.totalCount", { count: clients.length })}
+        title={clientCopy.title}
+        description={isPending ? clientCopy.loading : industryClientTotalCount(workflow, clients.length)}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)}>
+          <Button onClick={() => setAddClientOpen(true)}>
             <Plus />
-            {t("clients.addClient")}
+            {clientCopy.addClient}
           </Button>
         }
       />
@@ -140,11 +154,11 @@ export function Clients() {
       <SearchAndFilters
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder={t("clients.searchPlaceholder")}
+        searchPlaceholder={clientCopy.searchPlaceholder}
         filters={[
           {
             key: "clientType",
-            label: t("clients.filters.clientType"),
+            label: clientCopy.typeFilterLabel,
             value: clientType,
             onChange: (value) => setClientType(value as ClientListFilter),
             options: [
@@ -169,16 +183,20 @@ export function Clients() {
           ) : searchQuery || clientType !== "all" ? (
             <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
           ) : (
-            <NoClients onAddClient={() => setCreateModalOpen(true)} />
+            <NoClients onAddClient={() => setAddClientOpen(true)} />
           )
         }
       />
 
-      {/* {isLoading && <FullPageDataSpinner />} */}
+      <AddClientDialog open={addClientOpen} onOpenChange={setAddClientOpen} />
 
-
-      {/* Create Client Modal */}
-      <AddClientDialog open={createModalOpen} onOpenChange={setCreateModalOpen} />
+      <CreateOrderDialog
+        open={Boolean(orderForClient)}
+        onOpenChange={(open) => {
+          if (!open) setOrderForClient(null);
+        }}
+        initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+      />
 
       <Dialog
         open={Boolean(editingClient)}
@@ -188,8 +206,8 @@ export function Clients() {
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("clients.editDialog.title")}</DialogTitle>
-            <DialogDescription className="sr-only">{t("clients.editDialog.description")}</DialogDescription>
+            <DialogTitle>{clientCopy.editDialogTitle}</DialogTitle>
+            <DialogDescription className="sr-only">{clientCopy.editDialogDescription}</DialogDescription>
           </DialogHeader>
           {editingClient && (
             <EditClientForm
@@ -205,15 +223,19 @@ export function Clients() {
         </DialogContent>
       </Dialog>
 
-      {/* Client Detail Panel */}
-      
       <ClientDetailPanel
         selectedClient={selectedClient}
         setDetailPanelOpen={setDetailPanelOpen}
         detailPanelOpen={detailPanelOpen}
         getClientOrders={getClientOrders}
         onClientUpdated={setSelectedClient}
+        ordersLoading={ordersLoading}
+        ordersError={Boolean(ordersError)}
+        onOpenOrder={handleOpenHistoricalOrder}
+        onCreateOrder={setOrderForClient}
       />
+
+      <OrderDetailPanel {...orderDetails.panelProps} />
     </div>
   );
 }

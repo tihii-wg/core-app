@@ -73,7 +73,13 @@ describe("workspace list and details", () => {
 describe("company settings", () => {
   it("lets the owner update details and preferences", async () => {
     fake.signInAs(USERS.owner.id);
-    expect(await updateWorkspaceDetails(WS.A, { name: " Alpha 2 ", industryId: "auto_repair", inventoryMarkup: 15 })).toEqual({ id: WS.A, name: "Alpha 2", industryId: INDUSTRY_ID, inventoryMarkup: 15 });
+    expect(await updateWorkspaceDetails(WS.A, { name: " Alpha 2 ", industryId: "auto_repair", inventoryMarkup: 15 })).toMatchObject({
+      id: WS.A,
+      name: "Alpha 2",
+      industryId: INDUSTRY_ID,
+      industrySlug: "auto_repair",
+      inventoryMarkup: 15,
+    });
     expect(await updateWorkspacePreferences(WS.A, { language: "ro-RO", timezone: "Europe/Bucharest", dateFormat: "yyyy-mm-dd", currency: "EUR" })).toMatchObject({ language: "ro", dateFormat: "YYYY-MM-DD", currency: "EUR" });
   });
 

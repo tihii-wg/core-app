@@ -2,8 +2,17 @@ import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import AddNewOrderForm from "./AddNewOrderForm";
 
-export function CreateOrderDialog({ open, onOpenChange, searchQuery = "" }: { open: boolean; onOpenChange: (open: boolean) => void; searchQuery?: string }) {
+type CreateOrderDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  searchQuery?: string;
+  /** Prefill the create form with an existing client (e.g. from the client details panel). */
+  initialClient?: { id: string; name: string } | null;
+};
+
+export function CreateOrderDialog({ open, onOpenChange, searchQuery = "", initialClient = null }: CreateOrderDialogProps) {
   const { t } = useTranslation();
+  const formSearch = searchQuery || initialClient?.name || "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -13,7 +22,15 @@ export function CreateOrderDialog({ open, onOpenChange, searchQuery = "" }: { op
           <DialogDescription>{t("orders.createDialog.description")}</DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto pr-2">
-          <AddNewOrderForm setCreateModalOpen={onOpenChange} searchQuery={searchQuery} />
+          {open ? (
+            <AddNewOrderForm
+              key={initialClient?.id ?? (formSearch || "new-order")}
+              setCreateModalOpen={onOpenChange}
+              searchQuery={formSearch}
+              initialClientId={initialClient?.id}
+              initialClientName={initialClient?.name}
+            />
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

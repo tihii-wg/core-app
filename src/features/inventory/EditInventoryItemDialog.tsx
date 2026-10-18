@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { EmptyState } from "../../ui/EmptyState";
+import { industryInventoryCopy } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import InventoryItemForm from "./InventoryItemForm";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
@@ -8,6 +10,8 @@ import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 
 export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const inventoryCopy = industryInventoryCopy(workflow);
   const editQuery = useGetInventoryItem(itemId);
   const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const { mutate: updateItem, isPending: isUpdating } = useUpdateInventoryItem();
@@ -38,8 +42,8 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("inventory.dialogs.editTitle")}</DialogTitle>
-          <DialogDescription className="sr-only">{t("inventory.dialogs.editDescription")}</DialogDescription>
+          <DialogTitle>{inventoryCopy.editDialogTitle}</DialogTitle>
+          <DialogDescription className="sr-only">{inventoryCopy.editDialogDescription}</DialogDescription>
         </DialogHeader>
         {editQuery.isLoading && <p className="text-sm text-muted-foreground">{t("inventory.dialogs.loadingItem")}</p>}
         {editQuery.isError && (

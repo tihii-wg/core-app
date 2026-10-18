@@ -87,6 +87,22 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.queryByText("VIN is required")).not.toBeInTheDocument();
   });
 
+  it("clears automotive validation when the industry switches away from auto_repair", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    await user.click(screen.getByRole("button", { name: "Create Order" }));
+    expect(await screen.findByText("VIN is required")).toBeInTheDocument();
+    expect(screen.getByText("License plate is required")).toBeInTheDocument();
+
+    employeesState.industrySlug = "home_services";
+    rerender(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    expect(screen.queryByText("VIN is required")).not.toBeInTheDocument();
+    expect(screen.queryByText("License plate is required")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Job \/ location/i)).toBeInTheDocument();
+  });
+
   it("clears the client warning after a name is entered", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);

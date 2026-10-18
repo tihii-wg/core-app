@@ -1,5 +1,6 @@
 import i18n from "../../i18n";
 import type { Employee, InventoryItem, Order, OrderStatus } from "../../lib/types";
+import { industryOrderStatusLabel, industryWorkflow, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { employeeNameByAssigneeId, orderAssignedToEmployee } from "../orders/orderAssignee";
 import { ordersIn, percentChange, periodTotals, revenueSeries, serviceDistribution, type ReportPeriod, type ReportRange } from "./reportStats";
 
@@ -64,10 +65,10 @@ export function toReportRange(value: string | null): ReportRange {
   return reportRanges.includes(value as ReportRange) ? (value as ReportRange) : "last30";
 }
 
-const orderStatuses: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
+const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
-function statusLabel(status: OrderStatus) {
-  return i18n.t(`status.order.${status}`);
+function statusLabel(status: OrderStatus, industrySlug?: string | null) {
+  return industryOrderStatusLabel(industryWorkflow(industrySlug), status);
 }
 
 function stockStatusLabel(status: InventoryItem["stockStatus"]) {
@@ -126,12 +127,12 @@ function stockValue(item: InventoryItem, price: number | null) {
   return price == null ? 0 : item.quantity * price;
 }
 
-export function ordersByStatusSection(orders: Order[], period: ReportPeriod): ReportSection {
+export function ordersByStatusSection(orders: Order[], period: ReportPeriod, industrySlug?: string | null): ReportSection {
   const periodOrders = ordersIn(orders, period.start, period.end);
   const rows = orderStatuses
     .map((status) => {
       const matching = periodOrders.filter((order) => order.status === status);
-      return { status: statusLabel(status), orders: matching.length, value: sum(matching, (order) => order.totalPrice), share: share(matching.length, periodOrders.length) };
+      return { status: statusLabel(status, industrySlug), orders: matching.length, value: sum(matching, (order) => order.totalPrice), share: share(matching.length, periodOrders.length) };
     })
     .filter((row) => row.orders > 0);
 
@@ -194,7 +195,7 @@ export function topClientsSection(orders: Order[], period: ReportPeriod, limit =
   };
 }
 
-export function ordersListSection(orders: Order[], period: ReportPeriod): ReportSection {
+export function ordersListSection(orders: Order[], period: ReportPeriod, industrySlug?: string | null): ReportSection {
   const periodOrders = ordersIn(orders, period.start, period.end).sort(newestFirst);
 
   return {
@@ -208,7 +209,14 @@ export function ordersListSection(orders: Order[], period: ReportPeriod): Report
       { key: "payment", header: i18n.t("reports.columns.payment") },
       { key: "total", header: i18n.t("reports.columns.total"), format: "money" },
     ],
-    rows: periodOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabel(order.status), payment: order.isPaid ? i18n.t("status.payment.paid") : i18n.t("status.payment.unpaid"), total: order.totalPrice })),
+    rows: periodOrders.map((order) => ({
+      number: order.orderNumber,
+      date: order.createdAt,
+      client: order.clientName,
+      status: statusLabel(order.status, industrySlug),
+      payment: order.isPaid ? i18n.t("status.payment.paid") : i18n.t("status.payment.unpaid"),
+      total: order.totalPrice,
+    })),
     totals: periodOrders.length ? { number: totalLabel(), total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
   };
 }
@@ -229,7 +237,7 @@ export function summaryKpis(orders: Order[], clientCreatedDates: string[], perio
   ];
 }
 
-export function salesReport(orders: Order[], clientCreatedDates: string[], period: ReportPeriod): QuickReportModel {
+export function salesReport(orders: Order[], clientCreatedDates: string[], period: ReportPeriod, industrySlug?: string | null): QuickReportModel {
   const billable = ordersIn(orders, period.start, period.end).filter(isBillable);
   const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
   const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
@@ -258,10 +266,10 @@ export function salesReport(orders: Order[], clientCreatedDates: string[], perio
         rows: series,
         totals: series.length ? { period: totalLabel(), orders: current.orders, billed, collected: current.revenue } : undefined,
       },
-      ordersByStatusSection(orders, period),
+      ordersByStatusSection(orders, period, industrySlug),
       servicesSoldSection(orders, period),
       topClientsSection(orders, period),
-      ordersListSection(orders, period),
+      ordersListSection(orders, period, industrySlug),
     ],
   };
 }
@@ -352,7 +360,7 @@ export function inventoryReport(items: InventoryItem[]): QuickReportModel {
   };
 }
 
-export function employeeReport(orders: Order[], employees: Employee[], period: ReportPeriod, today: string): QuickReportModel {
+export function employeeReport(orders: Order[], employees: Employee[], period: ReportPeriod, today: string, industrySlug?: string | null): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
   const isOverdue = (order: Order) => !closedStatuses.has(order.status) && Boolean(order.deadline) && order.deadline < today;
   const employeeNames = employeeNameByAssigneeId(employees);
@@ -429,7 +437,13 @@ export function employeeReport(orders: Order[], employees: Employee[], period: R
           { key: "deadline", header: i18n.t("reports.columns.deadline"), format: "date" },
           { key: "status", header: i18n.t("reports.columns.status") },
         ],
-        rows: overdue.map((order) => ({ number: order.orderNumber, employee: employeeNames.get(order.assignedEmployeeId) ?? "—", client: order.clientName, deadline: order.deadline, status: statusLabel(order.status) })),
+        rows: overdue.map((order) => ({
+          number: order.orderNumber,
+          employee: employeeNames.get(order.assignedEmployeeId) ?? "—",
+          client: order.clientName,
+          deadline: order.deadline,
+          status: statusLabel(order.status, industrySlug),
+        })),
       },
     ],
   };
@@ -457,7 +471,7 @@ export function revenueByPeriodSection(orders: Order[], period: ReportPeriod): R
   };
 }
 
-export function outstandingOrdersSection(orders: Order[], period: ReportPeriod): ReportSection {
+export function outstandingOrdersSection(orders: Order[], period: ReportPeriod, industrySlug?: string | null): ReportSection {
   const outstandingOrders = ordersIn(orders, period.start, period.end).filter(isOutstanding).sort(newestFirst);
 
   return {
@@ -471,7 +485,13 @@ export function outstandingOrdersSection(orders: Order[], period: ReportPeriod):
       { key: "status", header: i18n.t("reports.columns.status") },
       { key: "total", header: i18n.t("reports.columns.amountDue"), format: "money" },
     ],
-    rows: outstandingOrders.map((order) => ({ number: order.orderNumber, date: order.createdAt, client: order.clientName, status: statusLabel(order.status), total: order.totalPrice })),
+    rows: outstandingOrders.map((order) => ({
+      number: order.orderNumber,
+      date: order.createdAt,
+      client: order.clientName,
+      status: statusLabel(order.status, industrySlug),
+      total: order.totalPrice,
+    })),
     totals: outstandingOrders.length ? { number: totalLabel(), total: sum(outstandingOrders, (order) => order.totalPrice) } : undefined,
   };
 }
@@ -484,7 +504,7 @@ export function invoicesUnavailable(): ReportSection {
   return { kind: "unavailable", title: i18n.t("reports.sections.invoices.title"), description: i18n.t("reports.sections.invoices.description") };
 }
 
-export function financialReport(orders: Order[], items: InventoryItem[], period: ReportPeriod): QuickReportModel {
+export function financialReport(orders: Order[], items: InventoryItem[], period: ReportPeriod, industrySlug?: string | null): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
   const current = periodTotals(orders, [], period.start, period.end);
   const previous = periodTotals(orders, [], period.previousStart, period.previousEnd);
@@ -521,7 +541,7 @@ export function financialReport(orders: Order[], items: InventoryItem[], period:
         ],
         rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.revenue, servicesRevenue) })),
       },
-      outstandingOrdersSection(orders, period),
+      outstandingOrdersSection(orders, period, industrySlug),
       expensesUnavailable(),
       invoicesUnavailable(),
     ],

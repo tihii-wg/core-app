@@ -2,6 +2,8 @@ import { Trans, useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import type { InventoryItem } from "../../lib/types";
+import { industryInventoryCopy } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useDeleteInventoryItem } from "./useDeleteInventoryItem";
 
 type DeleteInventoryItemDialogProps = {
@@ -12,6 +14,8 @@ type DeleteInventoryItemDialogProps = {
 
 export function DeleteInventoryItemDialog({ item, onClose, onDeleted }: DeleteInventoryItemDialogProps) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const inventoryCopy = industryInventoryCopy(workflow);
   const { mutate: deleteItem, isPending: isDeleting } = useDeleteInventoryItem();
 
   return (
@@ -23,7 +27,7 @@ export function DeleteInventoryItemDialog({ item, onClose, onDeleted }: DeleteIn
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("inventory.dialogs.deleteTitle")}</DialogTitle>
+          <DialogTitle>{inventoryCopy.deleteDialogTitle}</DialogTitle>
           <DialogDescription>{t("inventory.dialogs.deleteDescription")}</DialogDescription>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">

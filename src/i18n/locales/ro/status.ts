@@ -9,6 +9,20 @@ const status: Messages<typeof en> = {
     completed: "Finalizată",
     paid: "Achitată",
     cancelled: "Anulată",
+    byIndustry: {
+      auto_repair: {
+        "waiting-parts": "Așteaptă piese",
+      },
+      repair_device: {
+        "waiting-parts": "Așteaptă piese",
+      },
+      field_service: {
+        "waiting-parts": "Așteaptă consumabile",
+      },
+      default: {
+        "waiting-parts": "Așteaptă piese",
+      },
+    },
   },
   payment: {
     unpaid: "Neachitată",

@@ -21,6 +21,20 @@ const search: Messages<typeof en> = {
     clients: "Не удалось загрузить клиентов.",
     inventory: "Не удалось загрузить склад.",
   },
+  byIndustry: {
+    auto_repair: {
+      inputLabel: "Поиск по заказам, клиентам и запчастям",
+    },
+    repair_device: {
+      inputLabel: "Поиск по заказам, клиентам и запчастям",
+    },
+    field_service: {
+      inputLabel: "Поиск по заказам, клиентам и расходникам",
+    },
+    default: {
+      inputLabel: "Поиск по заказам, клиентам и складу",
+    },
+  },
 };
 
 export default search;

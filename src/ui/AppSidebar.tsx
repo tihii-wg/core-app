@@ -5,6 +5,8 @@ import { cn } from "../lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { languageFromPath } from "../i18n/languages";
+import { industryModuleLabel } from "../features/industries/industryWorkflow";
+import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 import { LogoMark } from "./Logo";
 
 interface NavItem {
@@ -49,6 +51,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const currentWorkspaceId = location.pathname.split("/")[2];
+  const { workflow } = useIndustryWorkflow();
 
   const currentNavItem = location.pathname.split("/")[3];
 
@@ -65,7 +68,7 @@ export function AppSidebar() {
 
   const renderItem = ({ module, labelKey, icon: Icon, demo }: NavItem) => {
     const active = currentNavItem === module;
-    const label = t(labelKey);
+    const label = industryModuleLabel(workflow, module) || t(labelKey);
     return (
       <li key={module}>
         <button

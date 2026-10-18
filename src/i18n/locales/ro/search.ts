@@ -20,6 +20,20 @@ const search: Messages<typeof en> = {
     clients: "Clienții nu au putut fi încărcați.",
     inventory: "Stocul nu a putut fi încărcat.",
   },
+  byIndustry: {
+    auto_repair: {
+      inputLabel: "Caută comenzi, clienți și piese",
+    },
+    repair_device: {
+      inputLabel: "Caută comenzi, clienți și piese",
+    },
+    field_service: {
+      inputLabel: "Caută comenzi, clienți și consumabile",
+    },
+    default: {
+      inputLabel: "Caută comenzi, clienți și articole din stoc",
+    },
+  },
 };
 
 export default search;

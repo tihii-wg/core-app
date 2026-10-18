@@ -16,6 +16,7 @@ import { reportPeriod } from "./reportStats";
 import { employeeReport, financialReport, inventoryReport, isQuickReportType, quickReportDescription, quickReportTitle, quickReports, reportCsv, salesReport, toReportRange, type QuickReportModel, type QuickReportType } from "./quickReports";
 import { ReportDocument } from "./ReportDocument";
 import { downloadCsv, rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 const inventorySort = { field: "name", ascending: true } as const;
 
@@ -50,6 +51,7 @@ export function QuickReportPage() {
   const range = toReportRange(searchParams.get("range"));
 
   const { workspaceId, workspaceName, formatMoney, formatDate, formatDateTime } = useReportFormatting();
+  const { industrySlug } = useIndustryWorkflow();
   const ordersQuery = useGetOrders("", { enabled: definition.needs.orders });
   const clientsQuery = useGetClients("", "all", { enabled: definition.needs.clients });
   const employeesQuery = useGetEmployees();
@@ -71,10 +73,10 @@ export function QuickReportPage() {
 
   let model: QuickReportModel | null = null;
   if (!isLoading && !isError) {
-    if (type === "sales") model = salesReport(ordersQuery.orders, (clientsQuery.clients ?? []).map(clientCreatedAt), period);
+    if (type === "sales") model = salesReport(ordersQuery.orders, (clientsQuery.clients ?? []).map(clientCreatedAt), period, industrySlug);
     else if (type === "inventory") model = inventoryReport(inventoryQuery.items);
-    else if (type === "employees") model = employeeReport(ordersQuery.orders, employeesQuery.employees ?? [], period, today);
-    else model = financialReport(ordersQuery.orders, inventoryQuery.items, period);
+    else if (type === "employees") model = employeeReport(ordersQuery.orders, employeesQuery.employees ?? [], period, today, industrySlug);
+    else model = financialReport(ordersQuery.orders, inventoryQuery.items, period, industrySlug);
   }
 
   const documentTitle = `${title} – ${workspaceName} – ${periodLabel}`;

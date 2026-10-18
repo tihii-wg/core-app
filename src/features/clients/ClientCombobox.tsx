@@ -2,6 +2,8 @@ import { useState, type Ref } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import type { Client } from "../../lib/types";
+import { industryClientCopy } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import ClientTypeBadge from "./ClientTypeBadge";
 
 type ClientComboboxProps = {
@@ -15,6 +17,8 @@ type ClientComboboxProps = {
 
 export default function ClientCombobox({ clients, value, onChange, onSelect, errors, inputRef }: ClientComboboxProps) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const copy = industryClientCopy(workflow);
   const [open, setOpen] = useState(false);
 
   const filteredClients = clients.filter((client) => client.name?.toLowerCase().includes(value.toLowerCase()));
@@ -29,7 +33,7 @@ export default function ClientCombobox({ clients, value, onChange, onSelect, err
         name="client"
         value={value}
         autoComplete="off"
-        placeholder={t("clients.combobox.placeholder")}
+        placeholder={copy.comboboxPlaceholder}
         aria-invalid={errors || undefined}
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         // className="w-full rounded-md border px-3 py-2"

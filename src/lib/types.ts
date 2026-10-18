@@ -48,6 +48,9 @@ export interface Order {
   clientId: string;
   clientName: string;
   clientType?: ClientType | null;
+  /** Present when the orders query embeds clients.email / clients.phone. */
+  clientEmail?: string;
+  clientPhone?: string;
   orderNumber: string;
   device: string;
   vin: string;
@@ -139,6 +142,7 @@ export interface addNewServiceFormData {
   serviceId?: string;
   serviceName: string;
   status: string;
+  category?: serviceCategory | "";
   price: number | undefined;
   description?: string;
 }
@@ -146,6 +150,7 @@ export interface addNewServiceFormData {
 export type EditServiceFormData = {
   serviceName: string;
   status: string;
+  category: serviceCategory | "";
   price: number | undefined;
   description: string;
 };

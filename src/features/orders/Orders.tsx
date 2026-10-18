@@ -8,40 +8,39 @@ import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
-// import { Spinner } from "../../ui/Spinner";
 import { useGetOrders } from "./useGetOrders";
 import type { Order, OrderStatus } from "../../lib/types";
+import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useOrderDetails } from "./useOrderDetails";
 import { CreateOrderDialog } from "./CreateOrderDialog";
 import { EditOrderDialog } from "./EditOrderDialog";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
-import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
 import { useCreateInvoice } from "../invoices/useCreateInvoice";
 import { OrderActionsMenu } from "./OrderActionsMenu";
-// import FullPageDataSpinner from "../../ui/FullPageDataSpinner";
+import { localDateKey } from "../../pages/dashboardStats";
+import { cn } from "../../lib/utils";
+import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
 
-const orderStatuses: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
-
-// const employeeFilterOptions2 = [
-//   { value: "all", label: "All Employees" },
-//   { value: "emp-3", label: "Alex Turner" },
-//   { value: "emp-4", label: "Sophie Brown" },
-// ];
+const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
 export function Orders() {
   const { t } = useTranslation();
+  const { workflow, copy } = useIndustryWorkflow();
   const { orders, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
+  const today = localDateKey(new Date());
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
 
   // Modals
@@ -50,7 +49,6 @@ export function Orders() {
 
   const { employees } = useGetEmployees();
   const assigneeOptions = assignableTechnicians(employees);
-  const { copy } = useIndustryWorkflow();
 
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
   const createInvoice = useCreateInvoice();
@@ -60,6 +58,8 @@ export function Orders() {
     if (createInvoice.isPending) return;
     createInvoice.mutate(order.id);
   };
+
+  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== "all" || deadlineFilter !== "all" || employeeFilter !== "all";
 
   // Filtered data
   const filteredOrders = useMemo(() => {
@@ -72,11 +72,12 @@ export function Orders() {
         order.vin.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+      const matchesDeadline = matchesDeadlineFilter(order, deadlineFilter, today);
       const matchesEmployee = employeeFilter === "all" || order.assignedEmployeeId === employeeFilter;
 
-      return matchesSearch && matchesStatus && matchesEmployee;
+      return matchesSearch && matchesStatus && matchesDeadline && matchesEmployee;
     });
-  }, [orders, searchQuery, statusFilter, employeeFilter]);
+  }, [orders, searchQuery, statusFilter, deadlineFilter, employeeFilter, today]);
 
   // Table columns
   const columns: Column<Order>[] = [
@@ -106,8 +107,14 @@ export function Orders() {
       header: copy.deviceServiceColumn,
       cell: (order) => (
         <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
-          <div className="truncate" title={order.device}>{order.device}</div>
-          {order.service && <div className="truncate text-xs text-muted-foreground" title={order.service}>{order.service}</div>}
+          <div className="truncate" title={order.device}>
+            {order.device}
+          </div>
+          {order.service && (
+            <div className="truncate text-xs text-muted-foreground" title={order.service}>
+              {order.service}
+            </div>
+          )}
         </div>
       ),
       className: "hidden xl:table-cell",
@@ -121,8 +128,11 @@ export function Orders() {
       key: "employee",
       header: t("orders.table.assigned"),
       cell: (order) => (
-        <span className="block max-w-[10rem] truncate text-muted-foreground" title={order.assignedEmployeeName}>
-          {order.assignedEmployeeName || "—"}
+        <span
+          className="block max-w-[10rem] truncate text-muted-foreground"
+          title={order.assignedEmployeeName || t("orders.detail.unassigned")}
+        >
+          {order.assignedEmployeeName || t("orders.detail.unassigned")}
         </span>
       ),
       className: "hidden min-[1800px]:table-cell",
@@ -130,7 +140,11 @@ export function Orders() {
     {
       key: "deadline",
       header: t("orders.table.deadline"),
-      cell: (order) => <span className="tabular-nums text-muted-foreground">{order.deadline || "—"}</span>,
+      cell: (order) => (
+        <span className={cn("tabular-nums", isOrderOverdue(order, today) ? "font-medium text-destructive" : "text-muted-foreground")}>
+          {order.deadline || "—"}
+        </span>
+      ),
       className: "hidden 2xl:table-cell whitespace-nowrap",
     },
     {
@@ -155,7 +169,10 @@ export function Orders() {
             invoiceNumber={invoiceNumberByOrder.get(order.id)}
             invoicesUnavailable={invoicesUnavailable}
             isCreatingInvoice={createInvoice.isPending}
+            isStatusUpdating={orderDetails.isStatusUpdating}
+            onView={orderDetails.openOrder}
             onEdit={setEditingOrder}
+            onStatusChange={orderDetails.changeStatus}
             onCreateInvoice={handleCreateInvoice}
           />
         </div>
@@ -163,11 +180,16 @@ export function Orders() {
     },
   ];
 
-  // if (ordersLoading || employeesIsLoading) {
-  //   return <FullPageDataSpinner />;
-  // }
+  const statusOptions = [
+    { value: "all", label: t("orders.filters.allStatuses") },
+    ...orderStatuses.map((status) => ({ value: status, label: industryOrderStatusLabel(workflow, status) })),
+  ];
 
-  const statusOptions = [{ value: "all", label: t("orders.filters.allStatuses") }, ...orderStatuses.map((status) => ({ value: status, label: t(`status.order.${status}`) }))];
+  const deadlineOptions = [
+    { value: "all", label: t("orders.filters.allDeadlines") },
+    { value: "overdue", label: t("orders.filters.overdue") },
+    { value: "upcoming", label: t("orders.filters.upcoming") },
+  ];
 
   const employeeFilterOptions = [
     { value: "all", label: t("orders.filters.allEmployees") },
@@ -177,11 +199,36 @@ export function Orders() {
     })),
   ];
 
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setDeadlineFilter("all");
+    setEmployeeFilter("all");
+  };
+
+  function emptyFilterState() {
+    if (deadlineFilter === "overdue" && !searchQuery && statusFilter === "all" && employeeFilter === "all") {
+      return <EmptyState title={t("orders.empty.noOverdueTitle")} description={t("orders.empty.noOverdueDescription")} />;
+    }
+    if (deadlineFilter === "upcoming" && !searchQuery && statusFilter === "all" && employeeFilter === "all") {
+      return <EmptyState title={t("orders.empty.noUpcomingTitle")} description={t("orders.empty.noUpcomingDescription")} />;
+    }
+    if (statusFilter === "waiting-parts" && !searchQuery && deadlineFilter === "all" && employeeFilter === "all") {
+      const statusLabel = industryOrderStatusLabel(workflow, "waiting-parts");
+      return <EmptyState title={t("orders.empty.noWaitingTitle", { status: statusLabel })} description={t("orders.empty.noWaitingDescription")} />;
+    }
+    return <EmptyState title={t("orders.empty.noMatchesTitle")} description={t("orders.empty.noMatchesDescription")} />;
+  }
+
+  const headerDescription = hasActiveFilters
+    ? t("orders.filteredCount", { shown: filteredOrders.length, total: orders.length })
+    : t("orders.totalCount", { count: orders.length });
+
   return (
     <div className="space-y-5">
       <PageHeader
         title={t("orders.title")}
-        description={t("orders.totalCount", { count: orders.length })}
+        description={headerDescription}
         actions={
           <Button onClick={() => setCreateModalOpen(true)}>
             <Plus />
@@ -194,7 +241,6 @@ export function Orders() {
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder={t("orders.searchPlaceholder")}
-
         filters={[
           {
             key: "status",
@@ -204,6 +250,13 @@ export function Orders() {
             onChange: setStatusFilter,
           },
           {
+            key: "deadline",
+            label: t("orders.filters.deadline"),
+            options: deadlineOptions,
+            value: deadlineFilter,
+            onChange: (value) => setDeadlineFilter(value as DeadlineFilter),
+          },
+          {
             key: "employee",
             label: t("orders.filters.employee"),
             options: employeeFilterOptions,
@@ -211,11 +264,7 @@ export function Orders() {
             onChange: setEmployeeFilter,
           },
         ]}
-        onClearFilters={() => {
-          setSearchQuery("");
-          setStatusFilter("all");
-          setEmployeeFilter("all");
-        }}
+        onClearFilters={clearFilters}
       />
 
       <DataTable
@@ -227,23 +276,17 @@ export function Orders() {
         emptyState={
           ordersError ? (
             <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
-          ) : searchQuery || statusFilter !== "all" || employeeFilter !== "all" ? (
-            <EmptyState title={t("orders.empty.noMatchesTitle")} description={t("orders.empty.noMatchesDescription")} />
+          ) : hasActiveFilters ? (
+            emptyFilterState()
           ) : (
             <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
           )
         }
       />
-      {/* {isLoading && <Spinner />} */}
 
-      {/* Create Order Modal */}
       <CreateOrderDialog open={createModalOpen} onOpenChange={setCreateModalOpen} searchQuery={searchQuery} />
 
-      <EditOrderDialog
-        order={editingOrder}
-        onClose={() => setEditingOrder(null)}
-        onUpdated={orderDetails.syncOrder}
-      />
+      <EditOrderDialog order={editingOrder} onClose={() => setEditingOrder(null)} onUpdated={orderDetails.syncOrder} />
 
       <OrderDetailPanel {...orderDetails.panelProps} />
     </div>

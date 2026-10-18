@@ -8,6 +8,8 @@ import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import { Spinner } from "../../ui/Spinner";
 import type { InventoryItemFormData } from "../../lib/types";
+import { industryInventoryCopy } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { parseMarkupPercent, markupFieldError, sellingPriceFromMarkup } from "./markup";
 
 type InventoryItemFormProps = {
@@ -27,6 +29,8 @@ function FieldError({ message }: { message?: string }) {
 
 export default function InventoryItemForm({ defaultValues, markupPercent, submitLabel, isSubmitting, onSubmit, onCancel, onMarkupCommit }: InventoryItemFormProps) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const inventoryCopy = industryInventoryCopy(workflow);
   const [markupText, setMarkupText] = useState(String(markupPercent));
   const [markupError, setMarkupError] = useState("");
   const skipMarkupUpdate = useRef(true);
@@ -78,7 +82,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               required: t("inventory.form.nameRequired"),
               validate: (value) => value.trim().length > 0 || t("inventory.form.nameRequired"),
             })}
-            placeholder={t("inventory.form.namePlaceholder")}
+            placeholder={inventoryCopy.namePlaceholder}
             className={errors.name ? "border-destructive" : ""}
           />
           <FieldError message={errors.name?.message} />
@@ -91,7 +95,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inventory-category">{t("inventory.fields.category")}</Label>
-            <Input id="inventory-category" {...register("category")} placeholder={t("common.optional")} />
+            <Input id="inventory-category" {...register("category")} placeholder={inventoryCopy.categoryPlaceholder} />
           </div>
         </div>
 
@@ -242,7 +246,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inventory-location">{t("inventory.fields.location")}</Label>
-            <Input id="inventory-location" {...register("location")} placeholder={t("common.optional")} />
+            <Input id="inventory-location" {...register("location")} placeholder={inventoryCopy.locationPlaceholder} />
           </div>
         </div>
 

@@ -18,7 +18,9 @@ export function useUpdateWorkspace() {
     onMutate() {
       toast.loading(i18n.t("settings.company.toast.saving"), { id: "update-workspace" });
     },
-    onSuccess(_data, { workspaceId }) {
+    onSuccess(workspace, { workspaceId }) {
+      // Immediate cache write so order forms pick up the new industrySlug without waiting on refetch.
+      queryClient.setQueryData(["workspace", workspaceId], workspace);
       queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       queryClient.invalidateQueries({ queryKey: ["workspace-markup", workspaceId] });

@@ -16,4 +16,18 @@ export default {
     clients: "Could not load clients.",
     inventory: "Could not load inventory.",
   },
+  byIndustry: {
+    auto_repair: {
+      inputLabel: "Search orders, clients and parts",
+    },
+    repair_device: {
+      inputLabel: "Search orders, clients and parts",
+    },
+    field_service: {
+      inputLabel: "Search orders, customers and supplies",
+    },
+    default: {
+      inputLabel: "Search orders, clients and inventory",
+    },
+  },
 };

@@ -9,11 +9,23 @@ export default {
   deleteAriaLabel: "Delete {{name}}",
   columns: {
     service: "Service",
+    category: "Category",
     price: "Price",
   },
   statuses: {
     active: "Active",
     inactive: "Inactive",
+  },
+  categories: {
+    repair: "Repair",
+    software: "Software",
+    update: "Upgrade",
+    data: "Data",
+    assesment: "Assessment",
+  },
+  filters: {
+    category: "Category",
+    allCategories: "All categories",
   },
   dialogs: {
     createTitle: "Add New Service",
@@ -26,14 +38,42 @@ export default {
   },
   form: {
     serviceNameRequiredLabel: "Service Name *",
-    serviceNameLabel: "Service Name",
+    serviceNameLabel: "Service Name *",
     serviceRequired: "Service is required",
     serviceNameRequired: "Service name is required",
+    categoryLabel: "Category *",
+    categoryRequired: "Category is required",
     priceLabel: "Price ({{currency}}) *",
     priceRequired: "Price is required",
     priceNegative: "Price cannot be negative",
     descriptionLabel: "Description",
     descriptionPlaceholder: "Brief description of this service...",
+  },
+  byIndustry: {
+    auto_repair: {
+      descriptionPlaceholder: "e.g. oil change, brake pads, diagnostics...",
+      namePlaceholder: "Service",
+      createDescription: "Add a service offered by your auto workshop",
+      editDescription: "Update this workshop service",
+    },
+    repair_device: {
+      descriptionPlaceholder: "e.g. screen repair, data recovery, OS install...",
+      namePlaceholder: "Service",
+      createDescription: "Add a device repair or support service",
+      editDescription: "Update this repair service",
+    },
+    field_service: {
+      descriptionPlaceholder: "e.g. on-site visit, installation, troubleshooting...",
+      namePlaceholder: "Service",
+      createDescription: "Add a field or household service",
+      editDescription: "Update this field service",
+    },
+    default: {
+      descriptionPlaceholder: "Brief description of this service...",
+      namePlaceholder: "Service",
+      createDescription: "Manage your workspace service",
+      editDescription: "Edit workspace service",
+    },
   },
   combobox: {
     placeholder: "Service",

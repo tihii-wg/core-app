@@ -1,8 +1,17 @@
-import { EllipsisVertical, FileCheck2, FilePlus2, FileX2, Pencil } from "lucide-react";
+import { Check, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Pencil } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/DropdownMenu";
-import type { Order } from "../../lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../ui/DropdownMenu";
+import type { Order, OrderStatus } from "../../lib/types";
+import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -10,15 +19,29 @@ type OrderActionsMenuProps = {
   invoiceNumber?: string;
   invoicesUnavailable?: boolean;
   isCreatingInvoice?: boolean;
+  isStatusUpdating?: boolean;
+  onView: (order: Order) => void;
   onEdit: (order: Order) => void;
+  onStatusChange: (order: Order, status: OrderStatus) => void;
   onCreateInvoice: (order: Order) => void;
 };
 
 // The menu sits inside a clickable table row and React events bubble through the portal, so clicks
 // are stopped here to keep the row from opening the order panel. Non-modal so the edit dialog
 // opened from it gets focus and pointer events back.
-export function OrderActionsMenu({ order, invoiceNumber, invoicesUnavailable = false, isCreatingInvoice = false, onEdit, onCreateInvoice }: OrderActionsMenuProps) {
+export function OrderActionsMenu({
+  order,
+  invoiceNumber,
+  invoicesUnavailable = false,
+  isCreatingInvoice = false,
+  isStatusUpdating = false,
+  onView,
+  onEdit,
+  onStatusChange,
+  onCreateInvoice,
+}: OrderActionsMenuProps) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
   return (
@@ -29,6 +52,29 @@ export function OrderActionsMenu({ order, invoiceNumber, invoicesUnavailable = f
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60" onClick={stop}>
+        <DropdownMenuItem onSelect={() => onView(order)}>
+          <Eye />
+          {t("orders.actions.viewDetails")}
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{isStatusUpdating ? t("orders.actions.updatingStatus") : t("orders.actions.changeStatus")}</DropdownMenuLabel>
+        {ORDER_STATUSES.map((status) => {
+          const current = status === order.status;
+          return (
+            <DropdownMenuItem
+              key={status}
+              disabled={current || isStatusUpdating}
+              onSelect={() => onStatusChange(order, status)}
+            >
+              {current ? <Check /> : <span className="size-4" aria-hidden />}
+              {industryOrderStatusLabel(workflow, status)}
+            </DropdownMenuItem>
+          );
+        })}
+
+        <DropdownMenuSeparator />
+
         <DropdownMenuItem onSelect={() => onEdit(order)}>
           <Pencil />
           {t("common.edit")}

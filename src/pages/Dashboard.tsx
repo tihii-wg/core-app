@@ -36,6 +36,9 @@ import { useOrderDetails } from "../features/orders/useOrderDetails";
 import { EditInventoryItemDialog } from "../features/inventory/EditInventoryItemDialog";
 import { quantityClass } from "../features/inventory/inventoryDisplay";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
+import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
+import { industryOrderStatusLabel } from "../features/industries/industryWorkflow";
+import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 import { cn } from "../lib/utils";
 import { currentIntlLocale } from "../i18n";
 
@@ -79,6 +82,7 @@ function PanelSkeleton({ rows = 3 }: { rows?: number }) {
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const { shell, workflow } = useIndustryWorkflow();
   const { setCurrentModule } = useApp();
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
@@ -125,8 +129,8 @@ export default function Dashboard() {
   const weekPeak = Math.max(...week.days.map((day) => day.count), 0);
   const taskTotal = taskOverview.total;
   const taskRows = [
-    { key: "inProgress", label: t("status.order.in-progress"), count: taskOverview.inProgress, color: "bg-warning" },
-    { key: "waitingParts", label: t("status.order.waiting-parts"), count: taskOverview.waitingParts, color: "bg-chart-4" },
+    { key: "inProgress", label: industryOrderStatusLabel(workflow, "in-progress"), count: taskOverview.inProgress, color: "bg-warning" },
+    { key: "waitingParts", label: industryOrderStatusLabel(workflow, "waiting-parts"), count: taskOverview.waitingParts, color: "bg-chart-4" },
     { key: "completedToday", label: t("dashboard.tasks.completedToday"), count: taskOverview.completedToday, color: "bg-success" },
   ];
 
@@ -161,7 +165,7 @@ export default function Dashboard() {
     },
     {
       key: "client",
-      header: t("dashboard.columns.client"),
+      header: shell.clientsSingular,
       cell: (order) => <span className="block max-w-[10rem] truncate xl:max-w-[14rem]" title={order.clientName}>{order.clientName}</span>,
     },
     {
@@ -172,7 +176,7 @@ export default function Dashboard() {
     },
     {
       key: "device",
-      header: t("dashboard.columns.device"),
+      header: shell.deviceColumn,
       cell: (order) => <span className="block max-w-[12rem] truncate text-muted-foreground" title={order.device}>{order.device}</span>,
       className: "hidden 2xl:table-cell",
     },
@@ -253,8 +257,8 @@ export default function Dashboard() {
 
   const quickActions = [
     { key: "order", label: t("dashboard.quickActions.createOrder"), icon: ClipboardList, onClick: () => setOpenDialog("order") },
-    { key: "client", label: t("dashboard.quickActions.addClient"), icon: UserPlus, onClick: () => setOpenDialog("client") },
-    { key: "inventory", label: t("dashboard.quickActions.addInventory"), icon: Package, onClick: () => setOpenDialog("inventory") },
+    { key: "client", label: shell.addClient, icon: UserPlus, onClick: () => setOpenDialog("client") },
+    { key: "inventory", label: shell.addInventory, icon: Package, onClick: () => setOpenDialog("inventory") },
     { key: "invoice", label: t("dashboard.quickActions.createInvoice"), icon: FileText, onClick: () => setCurrentModule("invoices") },
   ];
 
@@ -341,7 +345,7 @@ export default function Dashboard() {
                   <Skeleton className="mt-2 h-7 w-12" />
                 ) : inventoryError ? (
                   <>
-                    <span className="mt-2 block text-sm font-medium text-foreground">{t("dashboard.errors.inventory")}</span>
+                    <span className="mt-2 block text-sm font-medium text-foreground">{shell.dashboardInventoryError}</span>
                     <span className="mt-1 block text-xs text-muted-foreground">{refreshHint}</span>
                   </>
                 ) : lowStockCount === 0 ? (
@@ -385,6 +389,14 @@ export default function Dashboard() {
       <OrderDetailPanel {...orderDetails.panelProps} />
       <EditInventoryItemDialog itemId={editInventoryId} onClose={() => setEditInventoryId(null)} />
 
+      <DashboardDeadlinePanels
+        orders={workspaceOrders}
+        today={today}
+        isLoading={ordersLoading}
+        isError={ordersError}
+        onOpenOrder={orderDetails.openOrder}
+      />
+
       <div className="space-y-6">
         {showLowStock ? (
           <div className="min-w-0">
@@ -400,7 +412,7 @@ export default function Dashboard() {
               isLoading={inventoryLoading}
               emptyState={
                 inventoryError ? (
-                  <EmptyState icon={Package} title={t("dashboard.errors.inventory")} description={refreshHint} />
+                  <EmptyState icon={Package} title={shell.dashboardInventoryError} description={refreshHint} />
                 ) : (
                   <EmptyState icon={Package} title={t("dashboard.empty.noLowStock")} description={t("dashboard.empty.lowStockHint")} />
                 )
@@ -471,7 +483,8 @@ export default function Dashboard() {
                           )}
                           {event.kind === "client-created" && (
                             <Trans
-                              i18nKey="dashboard.activity.clientCreated"
+                              i18nKey={`clients.byIndustry.${workflow.copyPack}.clientCreated`}
+                              defaultValue={t("dashboard.activity.clientCreated")}
                               values={{ clientName: event.clientName }}
                               components={{ highlight: <span className="font-medium" /> }}
                             />
@@ -559,7 +572,7 @@ export default function Dashboard() {
                     <dd className="text-[13px] font-medium text-foreground tabular-nums">{week.orders}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="text-[13px] text-muted-foreground">{t("dashboard.week.newClients")}</dt>
+                    <dt className="text-[13px] text-muted-foreground">{shell.newClients}</dt>
                     <dd className="text-[13px] font-medium text-foreground tabular-nums">{clientsError ? t("dashboard.errors.generic") : week.newClients}</dd>
                   </div>
                 </dl>

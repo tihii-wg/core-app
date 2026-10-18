@@ -4,6 +4,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
 import type { ClientFormValues } from "../../lib/types";
+import { industryClientCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "./clientValidation";
 import ClientTypeSelect from "./ClientTypeSelect";
@@ -24,17 +25,16 @@ function FieldError({ message }: { message?: string }) {
 export default function ClientFormFields({ idPrefix, control, register, errors, disabled }: ClientFormFieldsProps) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
+  const copy = industryClientCopy(workflow);
   const clientType = useWatch({ control, name: "clientType" }) ?? "individual";
   const isOrganization = clientType === "organization";
   const nameLabel = isOrganization ? t("clients.form.organizationNameLabel") : t("clients.form.fullNameLabel");
   const nameError = isOrganization ? t("clients.validation.organizationNameRequired") : t("clients.validation.fullNameRequired");
-  const addressPlaceholder =
-    workflow.copyPack === "field_service" ? t("clients.form.serviceAddressPlaceholder", { defaultValue: t("clients.form.addressPlaceholder") }) : t("clients.form.addressPlaceholder");
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-type`}>{t("clients.form.typeLabel")}</Label>
+        <Label htmlFor={`${idPrefix}-type`}>{copy.typeLabel}</Label>
         <Controller
           name="clientType"
           control={control}
@@ -99,13 +99,13 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-address`}>{t("clients.form.addressLabel")}</Label>
-        <Input id={`${idPrefix}-address`} {...register("address")} placeholder={addressPlaceholder} disabled={disabled} />
+        <Label htmlFor={`${idPrefix}-address`}>{copy.addressLabel}</Label>
+        <Input id={`${idPrefix}-address`} {...register("address")} placeholder={copy.addressPlaceholder} disabled={disabled} />
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-notes`}>{t("clients.form.notesLabel")}</Label>
-        <Textarea id={`${idPrefix}-notes`} {...register("notes")} placeholder={t("clients.form.notesPlaceholder")} rows={3} disabled={disabled} />
+        <Textarea id={`${idPrefix}-notes`} {...register("notes")} placeholder={copy.notesPlaceholder} rows={3} disabled={disabled} />
       </div>
     </div>
   );

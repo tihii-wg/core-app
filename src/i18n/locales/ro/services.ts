@@ -13,11 +13,23 @@ const services: Messages<typeof en> = {
   deleteAriaLabel: "Șterge {{name}}",
   columns: {
     service: "Serviciu",
+    category: "Categorie",
     price: "Preț",
   },
   statuses: {
     active: "Activ",
     inactive: "Inactiv",
+  },
+  categories: {
+    repair: "Reparație",
+    software: "Software",
+    update: "Upgrade",
+    data: "Date",
+    assesment: "Evaluare",
+  },
+  filters: {
+    category: "Categorie",
+    allCategories: "Toate categoriile",
   },
   dialogs: {
     createTitle: "Adaugă serviciu nou",
@@ -30,14 +42,42 @@ const services: Messages<typeof en> = {
   },
   form: {
     serviceNameRequiredLabel: "Denumirea serviciului *",
-    serviceNameLabel: "Denumirea serviciului",
+    serviceNameLabel: "Denumirea serviciului *",
     serviceRequired: "Serviciul este obligatoriu",
     serviceNameRequired: "Denumirea serviciului este obligatorie",
+    categoryLabel: "Categorie *",
+    categoryRequired: "Categoria este obligatorie",
     priceLabel: "Preț ({{currency}}) *",
     priceRequired: "Prețul este obligatoriu",
     priceNegative: "Prețul nu poate fi negativ",
     descriptionLabel: "Descriere",
     descriptionPlaceholder: "Scurtă descriere a acestui serviciu...",
+  },
+  byIndustry: {
+    auto_repair: {
+      descriptionPlaceholder: "ex. schimb ulei, plăcuțe de frână, diagnostic...",
+      namePlaceholder: "Serviciu",
+      createDescription: "Adaugă un serviciu oferit de service-ul auto",
+      editDescription: "Actualizează acest serviciu auto",
+    },
+    repair_device: {
+      descriptionPlaceholder: "ex. schimb ecran, recuperare date, instalare OS...",
+      namePlaceholder: "Serviciu",
+      createDescription: "Adaugă un serviciu de reparații sau suport",
+      editDescription: "Actualizează acest serviciu de reparații",
+    },
+    field_service: {
+      descriptionPlaceholder: "ex. vizită la domiciliu, instalare, depanare...",
+      namePlaceholder: "Serviciu",
+      createDescription: "Adaugă un serviciu de teren sau casnic",
+      editDescription: "Actualizează acest serviciu de teren",
+    },
+    default: {
+      descriptionPlaceholder: "Scurtă descriere a acestui serviciu...",
+      namePlaceholder: "Serviciu",
+      createDescription: "Gestionează serviciile spațiului de lucru",
+      editDescription: "Editează serviciul spațiului de lucru",
+    },
   },
   combobox: {
     placeholder: "Serviciu",

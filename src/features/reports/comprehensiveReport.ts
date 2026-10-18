@@ -97,16 +97,16 @@ function newClientsSection(clients: Client[], period: ReportPeriod): ReportSecti
   };
 }
 
-export function comprehensiveReport(data: ExportData, selected: ExportSectionKey[], period: ReportPeriod, today: string): QuickReportModel {
+export function comprehensiveReport(data: ExportData, selected: ExportSectionKey[], period: ReportPeriod, today: string, industrySlug?: string | null): QuickReportModel {
   const include = new Set(selected);
   const sections: ReportSection[] = [];
   const currentStockNote = i18n.t("reports.sections.currentStockNote");
 
-  if (include.has("revenue")) sections.push(revenueByPeriodSection(data.orders, period), outstandingOrdersSection(data.orders, period), expensesUnavailable(), invoicesUnavailable());
-  if (include.has("orders")) sections.push(ordersByStatusSection(data.orders, period), ordersListSection(data.orders, period));
+  if (include.has("revenue")) sections.push(revenueByPeriodSection(data.orders, period), outstandingOrdersSection(data.orders, period, industrySlug), expensesUnavailable(), invoicesUnavailable());
+  if (include.has("orders")) sections.push(ordersByStatusSection(data.orders, period, industrySlug), ordersListSection(data.orders, period, industrySlug));
   if (include.has("services")) sections.push(servicesSoldSection(data.orders, period));
   if (include.has("clients")) sections.push(newClientsSection(data.clients, period), topClientsSection(data.orders, period, Number.POSITIVE_INFINITY));
-  if (include.has("employees")) sections.push(...employeeReport(data.orders, data.employees, period, today).sections);
+  if (include.has("employees")) sections.push(...employeeReport(data.orders, data.employees, period, today, industrySlug).sections);
   if (include.has("inventory")) {
     sections.push(...inventoryReport(data.items).sections.map((section) => (section.kind === "table" ? { ...section, description: [section.description, currentStockNote].filter(Boolean).join(" ") } : section)));
   }

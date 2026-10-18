@@ -110,6 +110,13 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                       <SelectValue placeholder={industriesLoading ? t("settings.company.businessTypeLoading") : t("settings.company.businessTypeLabel")} />
                     </SelectTrigger>
                     <SelectContent>
+                      {workspace.industryId && !industries.some((industry) => industry.id === workspace.industryId) ? (
+                        <SelectItem value={workspace.industryId}>
+                          {workspace.industrySlug
+                            ? industryName({ name: workspace.industryName ?? "", slug: workspace.industrySlug })
+                            : (workspace.industryName ?? workspace.industryId)}
+                        </SelectItem>
+                      ) : null}
                       {industries.map((industry) => (
                         <SelectItem key={industry.id} value={industry.id}>
                           {industryName(industry)}

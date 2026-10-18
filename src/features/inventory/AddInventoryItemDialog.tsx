@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { industryInventoryCopy } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import InventoryItemForm from "./InventoryItemForm";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
@@ -20,6 +22,8 @@ const emptyInventoryForm = {
 
 export function AddInventoryItemDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useTranslation();
+  const { workflow } = useIndustryWorkflow();
+  const inventoryCopy = industryInventoryCopy(workflow);
   const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
 
@@ -27,8 +31,8 @@ export function AddInventoryItemDialog({ open, onOpenChange }: { open: boolean; 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("inventory.dialogs.addTitle")}</DialogTitle>
-          <DialogDescription className="sr-only">{t("inventory.dialogs.addDescription")}</DialogDescription>
+          <DialogTitle>{inventoryCopy.addDialogTitle}</DialogTitle>
+          <DialogDescription className="sr-only">{inventoryCopy.addDialogDescription}</DialogDescription>
         </DialogHeader>
         {markupLoading ? (
           <p className="text-sm text-muted-foreground">{t("inventory.dialogs.loadingItem")}</p>
@@ -36,7 +40,7 @@ export function AddInventoryItemDialog({ open, onOpenChange }: { open: boolean; 
           <InventoryItemForm
             defaultValues={{ ...emptyInventoryForm, unit: t("inventory.form.defaultUnit") }}
             markupPercent={markupPercent}
-            submitLabel={t("inventory.addItem")}
+            submitLabel={inventoryCopy.addItem}
             isSubmitting={isCreating}
             onCancel={() => onOpenChange(false)}
             onMarkupCommit={commitMarkup}

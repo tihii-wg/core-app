@@ -29,7 +29,7 @@ async function assertUniqueServiceName(workspaceId: string, serviceName: string,
   if (data && data.length > 0) throw new Error(i18n.t("services.errors.duplicateName"));
 }
 
-export async function createService({ serviceName, status, price, description }: addNewServiceFormData, workspaceId: string | undefined) {
+export async function createService({ serviceName, status, category, price, description }: addNewServiceFormData, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const name = serviceName.trim();
   await assertUniqueServiceName(targetWorkspaceId, name);
@@ -42,6 +42,7 @@ export async function createService({ serviceName, status, price, description }:
         service_name: name,
         service_price: price,
         description: description || null,
+        category: category || null,
         status,
       },
     ])
@@ -74,7 +75,7 @@ export async function getServices(workspaceId: string | undefined, search?: stri
   return (data ?? []) as Service[];
 }
 
-export async function updateService({ serviceName, status, price, description, serviceId }: addNewServiceFormData, workspaceId: string | undefined) {
+export async function updateService({ serviceName, status, category, price, description, serviceId }: addNewServiceFormData, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   if (!serviceId) throw new Error(i18n.t("services.errors.notFound"));
   const name = serviceName.trim();
@@ -86,6 +87,7 @@ export async function updateService({ serviceName, status, price, description, s
       service_name: name,
       service_price: price,
       description: description || null,
+      category: category || null,
       status,
     })
     .eq("id", serviceId)

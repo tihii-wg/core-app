@@ -1,4 +1,6 @@
 import { useTranslation } from 'react-i18next';
+import { industryOrderStatusLabel } from '../features/industries/industryWorkflow';
+import { useIndustryWorkflow } from '../features/industries/useIndustryWorkflow';
 import { cn } from '../lib/utils';
 import type { OrderStatus, PaymentStatus, InvoiceStatus } from '../lib/types';
 
@@ -57,8 +59,8 @@ const orderVariants: Record<OrderStatus, BadgeVariant> = {
 };
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  const { t } = useTranslation();
-  return <StatusBadge variant={orderVariants[status]} dot>{t(`status.order.${status}`)}</StatusBadge>;
+  const { workflow } = useIndustryWorkflow();
+  return <StatusBadge variant={orderVariants[status]} dot>{industryOrderStatusLabel(workflow, status)}</StatusBadge>;
 }
 
 const paymentVariants: Record<PaymentStatus, BadgeVariant> = { unpaid: 'danger', partial: 'warning', paid: 'success' };

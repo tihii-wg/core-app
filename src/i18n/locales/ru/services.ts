@@ -14,11 +14,23 @@ const services: Messages<typeof en> = {
   deleteAriaLabel: "Удалить {{name}}",
   columns: {
     service: "Услуга",
+    category: "Категория",
     price: "Цена",
   },
   statuses: {
     active: "Активна",
     inactive: "Неактивна",
+  },
+  categories: {
+    repair: "Ремонт",
+    software: "ПО",
+    update: "Обновление",
+    data: "Данные",
+    assesment: "Диагностика",
+  },
+  filters: {
+    category: "Категория",
+    allCategories: "Все категории",
   },
   dialogs: {
     createTitle: "Новая услуга",
@@ -31,14 +43,42 @@ const services: Messages<typeof en> = {
   },
   form: {
     serviceNameRequiredLabel: "Название услуги *",
-    serviceNameLabel: "Название услуги",
+    serviceNameLabel: "Название услуги *",
     serviceRequired: "Укажите услугу",
     serviceNameRequired: "Укажите название услуги",
+    categoryLabel: "Категория *",
+    categoryRequired: "Укажите категорию",
     priceLabel: "Цена ({{currency}}) *",
     priceRequired: "Укажите цену",
     priceNegative: "Цена не может быть отрицательной",
     descriptionLabel: "Описание",
     descriptionPlaceholder: "Краткое описание услуги...",
+  },
+  byIndustry: {
+    auto_repair: {
+      descriptionPlaceholder: "напр. замена масла, тормозные колодки, диагностика...",
+      namePlaceholder: "Услуга",
+      createDescription: "Добавьте услугу автосервиса",
+      editDescription: "Обновите услугу автосервиса",
+    },
+    repair_device: {
+      descriptionPlaceholder: "напр. замена экрана, восстановление данных, установка ОС...",
+      namePlaceholder: "Услуга",
+      createDescription: "Добавьте услугу ремонта или поддержки",
+      editDescription: "Обновите услугу ремонта",
+    },
+    field_service: {
+      descriptionPlaceholder: "напр. выезд, установка, устранение неисправности...",
+      namePlaceholder: "Услуга",
+      createDescription: "Добавьте выездную или бытовую услугу",
+      editDescription: "Обновите выездную услугу",
+    },
+    default: {
+      descriptionPlaceholder: "Краткое описание услуги...",
+      namePlaceholder: "Услуга",
+      createDescription: "Управление услугами рабочего пространства",
+      editDescription: "Редактирование услуги рабочего пространства",
+    },
   },
   combobox: {
     placeholder: "Услуга",

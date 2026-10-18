@@ -5,12 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee, Order } from "../../lib/types";
 import OrderDetailPanel from "./OrderDetailPanel";
 
-const mutateAsync = vi.hoisted(() => vi.fn());
+const updateOrderHooks = vi.hoisted(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+}));
 
 vi.mock("./useUpdateOrder", () => ({
   useUpdateOrder: () => ({
-    mutateAsync,
-    isPending: false,
+    mutateAsync: updateOrderHooks.mutateAsync,
+    isPending: updateOrderHooks.isPending,
   }),
 }));
 
@@ -48,6 +51,8 @@ const order: Order = {
   id: "order-1",
   clientId: "client-1",
   clientName: "Ada Lovelace",
+  clientEmail: "ada@example.com",
+  clientPhone: "+37361111111",
   orderNumber: "ORD-2026-003",
   device: "BMW",
   vin: "1HGBH41JXMN109186",
@@ -76,18 +81,35 @@ const employees: Employee[] = [
     status: "active",
     assignedTasks: 0,
     completedTasks: 0,
+    profile_id: "user-1",
+  },
+  {
+    id: "emp-2",
+    name: "Bob Tech",
+    email: "bob@example.com",
+    phone: "+37362222222",
+    role: "technician",
+    status: "active",
+    assignedTasks: 0,
+    completedTasks: 0,
+    profile_id: null,
   },
 ];
 
-function renderPanel(onOrderUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
+function renderPanel(
+  onOrderUpdated = vi.fn(),
+  setDetailPanelOpen = vi.fn(),
+  overrides: { order?: Order; isStatusUpdating?: boolean; onStatusChange?: (status: string) => void } = {},
+) {
   industryState.slug = industryState.slug || "auto_repair";
   renderWithQuery(
     <OrderDetailPanel
-      selectedOrder={order}
+      selectedOrder={overrides.order ?? order}
       detailPanelOpen
       setDetailPanelOpen={setDetailPanelOpen}
       onOrderUpdated={onOrderUpdated}
-      onStatusChange={vi.fn()}
+      onStatusChange={overrides.onStatusChange ?? vi.fn()}
+      isStatusUpdating={overrides.isStatusUpdating}
     />,
   );
 
@@ -96,7 +118,8 @@ function renderPanel(onOrderUpdated = vi.fn(), setDetailPanelOpen = vi.fn()) {
 
 beforeEach(() => {
   industryState.slug = "auto_repair";
-  mutateAsync.mockReset();
+  updateOrderHooks.isPending = false;
+  updateOrderHooks.mutateAsync.mockReset();
 });
 
 describe("OrderDetailPanel", () => {
@@ -121,7 +144,7 @@ describe("OrderDetailPanel", () => {
     const user = userEvent.setup();
     const onOrderUpdated = vi.fn();
     const setDetailPanelOpen = vi.fn();
-    mutateAsync.mockResolvedValue({ ...order, device: "Audi" });
+    updateOrderHooks.mutateAsync.mockResolvedValue({ ...order, device: "Audi" });
 
     renderPanel(onOrderUpdated, setDetailPanelOpen);
 
@@ -131,7 +154,7 @@ describe("OrderDetailPanel", () => {
     await user.type(deviceInput, "Audi");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
-    expect(mutateAsync).toHaveBeenCalledWith(
+    expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: "order-1",
         device: "Audi",
@@ -147,7 +170,7 @@ describe("OrderDetailPanel", () => {
 
   it("saves an edited VIN and an added service", async () => {
     const user = userEvent.setup();
-    mutateAsync.mockResolvedValue({ ...order, vin: "2HGBH41JXMN109187" });
+    updateOrderHooks.mutateAsync.mockResolvedValue({ ...order, vin: "2HGBH41JXMN109187" });
 
     renderPanel();
 
@@ -159,7 +182,7 @@ describe("OrderDetailPanel", () => {
     await user.click(screen.getByRole("button", { name: "Tires" }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
-    expect(mutateAsync).toHaveBeenCalledWith(
+    expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         vin: "2HGBH41JXMN109187",
         services: [
@@ -173,7 +196,7 @@ describe("OrderDetailPanel", () => {
   it("preserves historical VIN and plate when editing under home_services", async () => {
     industryState.slug = "home_services";
     const user = userEvent.setup();
-    mutateAsync.mockResolvedValue(order);
+    updateOrderHooks.mutateAsync.mockResolvedValue(order);
 
     renderPanel();
 
@@ -185,7 +208,7 @@ describe("OrderDetailPanel", () => {
     expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
-    expect(mutateAsync).toHaveBeenCalledWith(
+    expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         vin: "1HGBH41JXMN109186",
         carNumber: "ABC123",
@@ -194,5 +217,107 @@ describe("OrderDetailPanel", () => {
     );
 
     industryState.slug = "auto_repair";
+  });
+
+  it("surfaces status, overdue deadline, assignee, contact, and service lines", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: {
+        ...order,
+        services: [
+          { id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 },
+          { id: "line-2", serviceId: "svc-filter", serviceName: "Oil filter", price: 15, quantity: 2 },
+        ],
+        totalPrice: 70,
+      },
+    });
+
+    expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+    expect(screen.getAllByText("New").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Overdue")).toBeInTheDocument();
+    expect(screen.getByText("2026-10-01")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toHaveTextContent("Ada Tech");
+    expect(screen.getByRole("link", { name: "+37361111111" })).toHaveAttribute("href", "tel:+37361111111");
+    expect(screen.getByRole("link", { name: "ada@example.com" })).toHaveAttribute("href", "mailto:ada@example.com");
+    expect(screen.getByRole("columnheader", { name: "Services" })).toBeInTheDocument();
+    expect(screen.getByText("Oil change")).toBeInTheDocument();
+    expect(screen.getByText("Oil filter")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("MDL 70.00")).toBeInTheDocument();
+  });
+
+  it("shows Unassigned when no employee is assigned", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, assignedEmployeeId: "", assignedEmployeeName: "" },
+    });
+
+    expect(await screen.findByRole("combobox", { name: /Assigned technician/i })).toHaveTextContent("Unassigned");
+  });
+
+  it("reassigns the order from the details panel without opening edit", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    updateOrderHooks.mutateAsync.mockResolvedValue({
+      ...order,
+      assignedEmployeeId: "emp-2",
+      assignedEmployeeName: "Bob Tech",
+    });
+
+    renderPanel(onOrderUpdated);
+
+    await user.click(screen.getByRole("combobox", { name: /Assigned technician/i }));
+    expect(await screen.findByRole("option", { name: "Bob Tech" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Bob Tech" }));
+
+    expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: "order-1",
+        assignedEmployeeId: "emp-2",
+        device: "BMW",
+        vin: "1HGBH41JXMN109186",
+      }),
+    );
+    expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ assignedEmployeeName: "Bob Tech" }));
+  });
+
+  it("disables assignee changes while saving", async () => {
+    updateOrderHooks.isPending = true;
+    renderPanel();
+
+    expect(await screen.findByRole("combobox", { name: /Assigned technician/i })).toBeDisabled();
+  });
+
+  it("hides empty optional fields instead of placeholder dashes", async () => {
+    const sparse: Order = {
+      ...order,
+      clientType: null,
+      clientEmail: "",
+      clientPhone: "",
+      assignedEmployeeId: "",
+      assignedEmployeeName: "",
+      deadline: "",
+      description: "",
+      vin: "",
+      carNumber: "",
+      device: "BMW",
+      services: [],
+      service: "",
+    };
+
+    renderPanel(vi.fn(), vi.fn(), { order: sparse });
+
+    expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+    expect(screen.queryByText("Overdue")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toHaveTextContent("Unassigned");
+    expect(screen.queryByText("Description")).not.toBeInTheDocument();
+    expect(screen.queryByText("Services")).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /@/ })).not.toBeInTheDocument();
+  });
+
+  it("disables the status control while a status update is in flight", async () => {
+    renderPanel(vi.fn(), vi.fn(), { isStatusUpdating: true });
+
+    expect(await screen.findByRole("combobox", { name: /Update Status/i })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toBeDisabled();
   });
 });

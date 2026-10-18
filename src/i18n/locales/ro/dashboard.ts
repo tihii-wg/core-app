@@ -51,6 +51,17 @@ const dashboard: Messages<typeof en> = {
     activeOrders: "Comenzi active",
     lowStockItems: "Articole cu stoc redus",
   },
+  deadlines: {
+    overdueTitle: "Comenzi restante",
+    upcomingTitle: "Termene apropiate",
+    emptyOverdue: "Nicio comandă restantă",
+    emptyOverdueHint: "Comenzile deschise cu termen depășit vor apărea aici.",
+    emptyUpcoming: "Niciun termen apropiat",
+    emptyUpcomingHint: "Comenzile deschise cu termen în următoarele 7 zile vor apărea aici.",
+    moreCount_one: "+ încă {{count}}",
+    moreCount_few: "+ încă {{count}}",
+    moreCount_other: "+ încă {{count}}",
+  },
   columns: {
     order: "Comandă",
     client: "Client",

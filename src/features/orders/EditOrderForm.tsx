@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
 import type { EditOrderFormData, Order } from "../../lib/types";
@@ -16,7 +15,9 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
+import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderAssetFields from "./OrderAssetFields";
+import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 
 type EditOrderFormProps = {
   order: Order;
@@ -53,6 +54,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       services: order.services,
     },
   });
+
+  useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
   const {
     fields: serviceFields,
@@ -151,33 +154,28 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-order-employee">{copy.assignedEmployeeLabel}</Label>
-          <Controller
-            name="assignedEmployeeId"
-            control={control}
-            render={({ field }) => (
-              <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                <SelectTrigger id="edit-order-employee">
-                  <SelectValue placeholder={t("orders.form.selectPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {technicianOptions.map((technician) => (
-                    <SelectItem key={technician.id} value={technician.id}>
-                      {technician.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          {techniciansError && (
-            <p className="text-xs text-destructive">{techniciansError instanceof Error ? techniciansError.message : t("orders.form.techniciansLoadFailed")}</p>
+        <Controller
+          name="assignedEmployeeId"
+          control={control}
+          render={({ field }) => (
+            <OrderAssigneeSelect
+              id="edit-order-employee"
+              label={copy.assignedEmployeeLabel}
+              value={field.value ?? ""}
+              options={technicianOptions}
+              disabled={isSubmitting}
+              errorMessage={
+                techniciansError instanceof Error ? techniciansError.message : techniciansError ? t("orders.form.techniciansLoadFailed") : null
+              }
+              emptyHint={
+                !techniciansError && !employeesLoading && employees && technicianOptions.length === 0
+                  ? t("orders.form.noLinkedTechnicians")
+                  : null
+              }
+              onChange={field.onChange}
+            />
           )}
-          {!techniciansError && !employeesLoading && employees && technicianOptions.length === 0 && (
-            <p className="text-xs text-muted-foreground">{t("orders.form.noLinkedTechnicians")}</p>
-          )}
-        </div>
+        />
 
         <div className="space-y-1.5">
           <Label htmlFor="edit-order-deadline">{copy.deadlineLabel}</Label>

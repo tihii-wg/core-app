@@ -21,6 +21,7 @@ const workspace: WorkspaceDetails = {
   ownerId: null,
   industryId: null,
   industryName: null,
+  industrySlug: null,
   avatarPath: null,
   inventoryMarkup: null,
   language: "en",
