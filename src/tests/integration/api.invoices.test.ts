@@ -208,8 +208,26 @@ describe("createInvoiceFromOrder", () => {
       vin: VIN,
       description: "Front brakes squeak",
       items: [
-        { id: expect.any(String), serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 },
-        { id: expect.any(String), serviceId: "service-a2", serviceName: "Brake check", price: 25, quantity: 2 },
+        {
+          id: expect.any(String),
+          invoiceId: invoice.id,
+          serviceId: "service-a1",
+          serviceName: "Oil change",
+          price: 40,
+          quantity: 1,
+          position: 0,
+          createdAt: "2026-10-04",
+        },
+        {
+          id: expect.any(String),
+          invoiceId: invoice.id,
+          serviceId: "service-a2",
+          serviceName: "Brake check",
+          price: 25,
+          quantity: 2,
+          position: 1,
+          createdAt: "2026-10-04",
+        },
       ],
       subtotal: 90,
       total: 90,
@@ -217,6 +235,8 @@ describe("createInvoiceFromOrder", () => {
       status: "draft",
       dueDate: "",
       createdAt: "2026-10-04",
+      updatedAt: "2026-10-04",
+      ...(invoice.createdById ? { createdById: invoice.createdById } : {}),
     });
     expect(fake.all("invoice_items").map((item) => [item.invoice_id, item.service_name, item.price, item.quantity, item.position])).toEqual([
       [invoice.id, "Oil change", 40, 1, 0],

@@ -237,38 +237,51 @@ export interface Service {
   status: "active" | "inactive";
 }
 
+/** List/detail invoice fields aligned with public.invoices. */
 export interface Invoice {
   id: string;
+  workspaceId: string;
   invoiceNumber: string;
   clientId: string;
   clientName: string;
+  /** Live clients.phone for the linked client when available. */
+  clientPhone?: string;
   orderId?: string;
   orderNumber?: string;
-  amount: number;
-  status: InvoiceStatus;
-  dueDate: string;
-  createdAt: string;
-  paidAt?: string;
-}
-
-/** A copy of one order_services line, frozen on the invoice when it is created. */
-export type InvoiceItem = {
-  id: string;
-  serviceId: string | null;
-  serviceName: string;
-  price: number;
-  quantity: number;
-};
-
-/** A saved invoice with the order details and lines it copied when it was created. */
-export interface InvoiceDocument extends Invoice {
-  workspaceId: string;
   device: string;
   carNumber: string;
   vin: string;
   description: string;
   subtotal: number;
+  /** Same as total — kept for list/summary call sites. */
+  amount: number;
   total: number;
+  status: InvoiceStatus;
+  dueDate: string;
+  createdAt: string;
+  updatedAt: string;
+  paidAt?: string;
+  /** auth.users id from invoices.created_by when present. */
+  createdById?: string;
+  /** Workspace member display name for created_by. */
+  createdByName?: string;
+}
+
+/** A copy of one order line, frozen on the invoice when it is created (matches public.invoice_items). */
+export type InvoiceItem = {
+  id: string;
+  invoiceId: string;
+  serviceId: string | null;
+  serviceName: string;
+  price: number;
+  quantity: number;
+  /** 0-based line order from invoice_items.position. */
+  position: number;
+  createdAt: string;
+};
+
+/** A saved invoice with the order details and lines it copied when it was created. */
+export interface InvoiceDocument extends Invoice {
   items: InvoiceItem[];
 }
 

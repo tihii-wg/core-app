@@ -11,6 +11,7 @@ import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { Button } from "../../ui/Button";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetOrders } from "../orders/useGetOrders";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGetInvoices } from "./useGetInvoices";
 import { useUpdateInvoiceStatus } from "./useUpdateInvoiceStatus";
 import { CreateInvoiceDialog } from "./CreateInvoiceDialog";
@@ -19,6 +20,7 @@ import { InvoiceDetailPanel } from "./InvoiceDetailPanel";
 
 export function Invoices() {
   const { t } = useTranslation();
+  const { workflow, copy } = useIndustryWorkflow();
   const { invoices, isLoading, error, refetch, isUnavailable } = useGetInvoices();
   const { orders } = useGetOrders("", { enabled: !isUnavailable });
   const updateStatus = useUpdateInvoiceStatus();
@@ -61,28 +63,83 @@ export function Invoices() {
     {
       key: "client",
       header: t("invoices.columns.client"),
-      cell: (invoice) => (
-        <span className="block max-w-56 truncate" title={invoice.clientName}>
-          {invoice.clientName || "—"}
-        </span>
-      ),
+      cell: (invoice) => {
+        const phone = invoice.clientPhone?.trim() || "—";
+        return (
+          <div className="max-w-[11rem] min-w-0">
+            <div className="truncate font-medium" title={invoice.clientName}>
+              {invoice.clientName || "—"}
+            </div>
+            <div className="truncate text-xs text-muted-foreground" title={phone}>
+              {phone}
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: "order",
       header: t("invoices.columns.order"),
-      cell: (invoice) => <span className="text-sm text-muted-foreground tabular-nums">{invoice.orderNumber || "—"}</span>,
-      className: "hidden xl:table-cell whitespace-nowrap",
+      cell: (invoice) => (
+        <span className="block truncate text-center tabular-nums text-muted-foreground">
+          {invoice.orderNumber || "—"}
+        </span>
+      ),
+      className: "whitespace-nowrap text-center",
+    },
+  ];
+
+  if (workflow.orderFields.device.visible) {
+    columns.push({
+      key: "device",
+      header: copy.deviceLabel.replace(/\s*\*$/, ""),
+      cell: (invoice) => (
+        <span className="block max-w-[9rem] truncate" title={invoice.device}>
+          {invoice.device || "—"}
+        </span>
+      ),
+    });
+  }
+  if (workflow.orderFields.carNumber.visible) {
+    columns.push({
+      key: "carNumber",
+      header: copy.carNumberLabel.replace(/\s*\*$/, ""),
+      cell: (invoice) => <span className="tabular-nums text-muted-foreground">{invoice.carNumber || "—"}</span>,
+      className: "whitespace-nowrap",
+    });
+  }
+  if (workflow.orderFields.vin.visible) {
+    columns.push({
+      key: "vin",
+      header: copy.vinLabel.replace(/\s*\*$/, ""),
+      cell: (invoice) => (
+        <span className="block max-w-[8rem] truncate font-mono text-[12px] text-muted-foreground" title={invoice.vin}>
+          {invoice.vin || "—"}
+        </span>
+      ),
+    });
+  }
+
+  columns.push(
+    {
+      key: "description",
+      header: t("invoices.columns.description"),
+      cell: (invoice) => (
+        <span className="block max-w-[12rem] truncate text-muted-foreground" title={invoice.description}>
+          {invoice.description || "—"}
+        </span>
+      ),
     },
     {
-      key: "created",
-      header: t("invoices.columns.created"),
-      cell: (invoice) => <span className="text-muted-foreground tabular-nums">{invoice.createdAt}</span>,
-      className: "hidden lg:table-cell whitespace-nowrap",
+      key: "subtotal",
+      header: t("invoices.columns.subtotal"),
+      cell: (invoice) => <span className="tabular-nums text-muted-foreground">{formatMoney(invoice.subtotal)}</span>,
+      className: "text-right whitespace-nowrap",
     },
     {
       key: "amount",
       header: t("invoices.columns.amount"),
-      cell: (invoice) => <span className="font-medium text-foreground tabular-nums">{formatMoney(invoice.amount)}</span>,
+      cell: (invoice) => <span className="font-medium text-foreground tabular-nums">{formatMoney(invoice.total)}</span>,
       className: "text-right whitespace-nowrap",
     },
     {
@@ -91,10 +148,28 @@ export function Invoices() {
       cell: (invoice) => <InvoiceStatusBadge status={invoice.status} />,
     },
     {
-      key: "dueDate",
-      header: t("invoices.columns.dueDate"),
-      cell: (invoice) => <span className={invoice.status === "overdue" ? "text-destructive tabular-nums" : "text-muted-foreground tabular-nums"}>{invoice.dueDate || "—"}</span>,
-      className: "hidden xl:table-cell whitespace-nowrap",
+      key: "paidAt",
+      header: t("invoices.columns.paidAt"),
+      cell: (invoice) => <span className="tabular-nums text-muted-foreground">{invoice.paidAt || "—"}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "created",
+      header: t("invoices.columns.created"),
+      cell: (invoice) => <span className="tabular-nums text-muted-foreground">{invoice.createdAt}</span>,
+      className: "whitespace-nowrap",
+    },
+    {
+      key: "createdBy",
+      header: t("invoices.columns.createdBy"),
+      cell: (invoice) => {
+        const creator = invoice.createdByName?.trim() || t("invoices.columns.unknownCreator");
+        return (
+          <span className="block max-w-[10rem] truncate font-medium" title={creator}>
+            {invoice.createdById ? creator : "—"}
+          </span>
+        );
+      },
     },
     {
       key: "actions",
@@ -106,7 +181,7 @@ export function Invoices() {
         </div>
       ),
     },
-  ];
+  );
 
   const statusOptions = [
     { value: "all", label: t("invoices.allStatuses") },

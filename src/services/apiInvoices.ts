@@ -39,8 +39,10 @@ export function alreadyInvoicedMessage(invoiceNumber?: string) {
 }
 
 const invoiceStatuses = new Set<InvoiceStatus>(["draft", "sent", "paid", "overdue"]);
-const invoiceColumns = "id, workspace_id, order_id, client_id, number, status, client_name, order_number, device, car_number, vin, description, subtotal, total, due_date, paid_at, created_at";
-const invoiceItemColumns = "id, invoice_id, service_id, service_name, price, quantity, position";
+const invoiceColumns =
+  "id, workspace_id, order_id, client_id, number, status, client_name, order_number, device, car_number, vin, description, subtotal, total, due_date, paid_at, created_by, created_at, updated_at";
+const invoiceListColumns = `${invoiceColumns},clients(phone)`;
+const invoiceItemColumns = "id, invoice_id, service_id, service_name, price, quantity, position, created_at";
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -50,43 +52,88 @@ function toMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function toInvoice(row: Record<string, unknown>): Invoice {
+function clientPhoneFromRow(clients: unknown) {
+  const client: Record<string, unknown> | null = Array.isArray(clients)
+    ? (clients[0] as Record<string, unknown> | undefined) ?? null
+    : clients && typeof clients === "object"
+      ? (clients as Record<string, unknown>)
+      : null;
+  return typeof client?.phone === "string" ? client.phone.trim() : "";
+}
+
+async function memberDisplayNames(workspaceId: string, userIds: string[]) {
+  const names = new Map<string, string>();
+  if (userIds.length === 0) return names;
+
+  const wanted = new Set(userIds.map(String));
+  const { data, error } = await supabase.rpc("workspace_member_profiles", { target_workspace: workspaceId });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") return names;
+    throw toInvoiceError(error);
+  }
+
+  for (const profile of (data ?? []) as { user_id?: string | null; id?: string | null; full_name?: string | null; email?: string | null }[]) {
+    const raw = profile.user_id || profile.id;
+    const userId = raw == null || raw === "" ? "" : String(raw);
+    if (!userId || !wanted.has(userId)) continue;
+    const label = profile.full_name?.trim() || profile.email?.trim();
+    if (label) names.set(userId, label);
+  }
+
+  return names;
+}
+
+function toInvoice(row: Record<string, unknown>, memberNames: Map<string, string> = new Map()): Invoice {
   const status = invoiceStatuses.has(row.status as InvoiceStatus) ? (row.status as InvoiceStatus) : "draft";
+  const total = Number(row.total ?? 0);
+  const createdById = text(row.created_by);
+  const clientPhone = clientPhoneFromRow(row.clients);
   return {
     id: String(row.id),
+    workspaceId: text(row.workspace_id),
     invoiceNumber: text(row.number),
     clientId: text(row.client_id),
     clientName: text(row.client_name),
+    ...(clientPhone ? { clientPhone } : {}),
     ...(text(row.order_id) ? { orderId: text(row.order_id) } : {}),
     ...(text(row.order_number) ? { orderNumber: text(row.order_number) } : {}),
-    amount: Number(row.total ?? 0),
+    device: text(row.device),
+    carNumber: text(row.car_number),
+    vin: text(row.vin),
+    description: text(row.description),
+    subtotal: Number(row.subtotal ?? 0),
+    amount: total,
+    total,
     status,
     dueDate: text(row.due_date).slice(0, 10),
     createdAt: text(row.created_at).slice(0, 10),
+    updatedAt: text(row.updated_at).slice(0, 10),
     ...(text(row.paid_at) ? { paidAt: text(row.paid_at).slice(0, 10) } : {}),
+    ...(createdById
+      ? {
+          createdById,
+          createdByName: memberNames.get(createdById) || "",
+        }
+      : {}),
   };
 }
 
 function toInvoiceItem(row: Record<string, unknown>): InvoiceItem {
   return {
     id: String(row.id),
+    invoiceId: text(row.invoice_id),
     serviceId: text(row.service_id) || null,
     serviceName: text(row.service_name),
     price: Number(row.price ?? 0),
     quantity: Number(row.quantity ?? 1),
+    position: Number(row.position ?? 0),
+    createdAt: text(row.created_at).slice(0, 10),
   };
 }
 
-function toInvoiceDocument(row: Record<string, unknown>, items: Record<string, unknown>[]): InvoiceDocument {
+function toInvoiceDocument(row: Record<string, unknown>, items: Record<string, unknown>[], memberNames: Map<string, string> = new Map()): InvoiceDocument {
   return {
-    ...toInvoice(row),
-    workspaceId: text(row.workspace_id),
-    device: text(row.device),
-    carNumber: text(row.car_number),
-    vin: text(row.vin),
-    description: text(row.description),
-    subtotal: Number(row.subtotal ?? 0),
-    total: Number(row.total ?? 0),
+    ...toInvoice(row, memberNames),
     items: [...items].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)).map(toInvoiceItem),
   };
 }
@@ -94,16 +141,28 @@ function toInvoiceDocument(row: Record<string, unknown>, items: Record<string, u
 /** Invoices of the workspace, newest first. Invoices still being numbered are left out. */
 export async function getInvoices(workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase.from("invoices").select(invoiceColumns).eq("workspace_id", targetWorkspaceId).order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(invoiceListColumns)
+    .eq("workspace_id", targetWorkspaceId)
+    .order("created_at", { ascending: false });
 
   if (error) throw toInvoiceError(error);
-  return ((data ?? []) as Record<string, unknown>[]).filter((row) => !text(row.number).startsWith(pendingNumberPrefix)).map(toInvoice);
+  const rows = ((data ?? []) as Record<string, unknown>[]).filter((row) => !text(row.number).startsWith(pendingNumberPrefix));
+  const createdByIds = rows.map((row) => text(row.created_by)).filter(Boolean);
+  const memberNames = await memberDisplayNames(targetWorkspaceId, [...new Set(createdByIds)]);
+  return rows.map((row) => toInvoice(row, memberNames));
 }
 
 /** One invoice of the workspace with the lines it copied from its order. */
 export async function getInvoice(invoiceId: string, workspaceId: string | undefined): Promise<InvoiceDocument> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase.from("invoices").select(invoiceColumns).eq("id", invoiceId).eq("workspace_id", targetWorkspaceId).maybeSingle();
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(invoiceListColumns)
+    .eq("id", invoiceId)
+    .eq("workspace_id", targetWorkspaceId)
+    .maybeSingle();
 
   if (error) throw toInvoiceError(error);
   if (!data) throw new Error(i18n.t("invoices.errors.notFound"));
@@ -111,7 +170,10 @@ export async function getInvoice(invoiceId: string, workspaceId: string | undefi
   const { data: items, error: itemsError } = await supabase.from("invoice_items").select(invoiceItemColumns).eq("invoice_id", invoiceId).order("position", { ascending: true });
   if (itemsError) throw toInvoiceError(itemsError);
 
-  return toInvoiceDocument(data as Record<string, unknown>, (items ?? []) as Record<string, unknown>[]);
+  const row = data as Record<string, unknown>;
+  const createdById = text(row.created_by);
+  const memberNames = await memberDisplayNames(targetWorkspaceId, createdById ? [createdById] : []);
+  return toInvoiceDocument(row, (items ?? []) as Record<string, unknown>[], memberNames);
 }
 
 /** Moves an invoice to another status; paid_at is set when it becomes paid and cleared otherwise. */

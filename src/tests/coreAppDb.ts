@@ -375,6 +375,7 @@ function issueOrReturnRpc(
 export function installSecurityModel() {
   fake.relations = {
     orders: { clients: { table: "clients", column: "client_id" } },
+    invoices: { clients: { table: "clients", column: "client_id" } },
     workspace_members: { workspaces: { table: "workspaces", column: "workspace_id" } },
     workspaces: { industries: { table: "industries", column: "industry_id" } },
   };

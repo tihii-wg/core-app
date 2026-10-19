@@ -77,29 +77,46 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
               )}
             </dl>
 
-            <div className="overflow-hidden rounded-lg border border-border">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full min-w-[36rem] text-sm">
                 <thead className="bg-muted/50 text-xs text-muted-foreground">
                   <tr>
+                    <th className="px-3 py-2 text-left font-medium">{t("invoices.detail.items.position")}</th>
                     <th className="px-3 py-2 text-left font-medium">{t("invoices.detail.items.service")}</th>
+                    <th className="hidden px-3 py-2 text-left font-medium sm:table-cell">{t("invoices.detail.items.serviceId")}</th>
+                    <th className="hidden px-3 py-2 text-left font-medium lg:table-cell">{t("invoices.detail.items.lineId")}</th>
                     <th className="px-3 py-2 text-right font-medium">{t("invoices.detail.items.quantity")}</th>
                     <th className="px-3 py-2 text-right font-medium">{t("invoices.detail.items.price")}</th>
                     <th className="px-3 py-2 text-right font-medium">{t("invoices.detail.items.amount")}</th>
+                    <th className="hidden px-3 py-2 text-right font-medium md:table-cell">{t("invoices.detail.items.created")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {invoice.items.map((item) => (
                     <tr key={item.id}>
-                      <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">{item.serviceName}</td>
+                      <td className="px-3 py-2 tabular-nums text-muted-foreground">{item.position + 1}</td>
+                      <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
+                        <div>{item.serviceName}</div>
+                        <div className="mt-0.5 font-mono text-[11px] text-subtle-foreground sm:hidden" title={item.serviceId ?? undefined}>
+                          {item.serviceId || "—"}
+                        </div>
+                      </td>
+                      <td className="hidden max-w-[8rem] truncate px-3 py-2 font-mono text-[11px] text-muted-foreground sm:table-cell" title={item.serviceId ?? undefined}>
+                        {item.serviceId || "—"}
+                      </td>
+                      <td className="hidden max-w-[8rem] truncate px-3 py-2 font-mono text-[11px] text-muted-foreground lg:table-cell" title={item.id}>
+                        {item.id}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{item.quantity}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(item.price)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(item.price * item.quantity)}</td>
+                      <td className="hidden px-3 py-2 text-right tabular-nums text-muted-foreground md:table-cell">{item.createdAt || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot className="border-t border-border font-medium">
                   <tr>
-                    <td colSpan={3} className="px-3 py-2 text-right text-muted-foreground">
+                    <td colSpan={7} className="px-3 py-2 text-right text-muted-foreground">
                       {t("common.total")}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(invoice.total)}</td>
