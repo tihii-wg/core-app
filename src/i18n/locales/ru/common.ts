@@ -60,6 +60,12 @@ const common: Messages<typeof en> = {
   demo: {
     label: "Демо-данные",
   },
+  pagination: {
+    previous: "Назад",
+    next: "Вперёд",
+    page: "Страница {{page}}",
+    showing: "Показаны {{from}}–{{to}} из {{total}}",
+  },
 };
 
 export default common;

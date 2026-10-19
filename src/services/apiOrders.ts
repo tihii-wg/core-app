@@ -1,10 +1,40 @@
 import type { CreateOrderInput, Order, OrderMaterial, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
 import { consolidateOrderMaterials } from "../features/inventory/orderMaterialLine";
+import {
+  addCalendarDays,
+  OPEN_ORDER_STATUSES,
+  UPCOMING_DEADLINE_DAYS,
+  type DeadlineFilter,
+} from "../features/orders/orderVisibility";
 import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
 import i18n from "../i18n";
+
+export const ORDERS_PAGE_SIZES = [25, 50, 100] as const;
+export type OrdersPageSize = (typeof ORDERS_PAGE_SIZES)[number];
+export const DEFAULT_ORDERS_PAGE_SIZE: OrdersPageSize = 25;
+
+export type OrdersListQuery = {
+  search?: string;
+  status?: OrderStatus | "all";
+  deadline?: DeadlineFilter;
+  /** employees.id; omit / "all" = no assignee filter */
+  employeeId?: string | "all";
+  /** Local YYYY-MM-DD used for deadline filters (matches client calendar logic). */
+  today: string;
+  page: number;
+  pageSize: OrdersPageSize;
+};
+
+export type OrdersPageResult = {
+  orders: Order[];
+  total: number;
+  page: number;
+  pageSize: OrdersPageSize;
+  pageCount: number;
+};
 
 const orderPermissionMessage = () => i18n.t("orders.errors.notFoundOrForbidden");
 
@@ -315,6 +345,7 @@ type OrderMaterialLine = {
   quantity_returned?: number;
 };
 
+const orderColumns = "*,clients(name,client_type,email,phone)";
 const orderServiceColumns = "id, order_id, service_id, service_name, price, quantity";
 const orderMaterialColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
 
@@ -441,23 +472,11 @@ async function orderSearchFilter(workspaceId: string, term: string) {
   return filters.join(",");
 }
 
-export async function getOrders(workspaceId: string | undefined, search = "") {
-  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
-
-  let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
-
-  const term = searchTerm(search);
-  if (term) query = query.or(await orderSearchFilter(resolvedWorkspaceId, term));
-
-  const { data, error } = await query.order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-
-  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", resolvedWorkspaceId);
+async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknown>[]): Promise<Order[]> {
+  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
 
   if (employeesError) throw new Error(employeesError.message);
 
-  const rows = (data ?? []) as Record<string, unknown>[];
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
   // Legacy assigned_to auth user ids only — used when employee_id is missing and no employee row matches.
   const legacyAuthIds = rows
@@ -465,7 +484,7 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
     .map((row) => (typeof row.assigned_to === "string" ? row.assigned_to.trim() : ""))
     .filter(Boolean);
   const createdByIds = rows.map((row) => (typeof row.created_by === "string" ? row.created_by.trim() : "")).filter(Boolean);
-  const memberNames = await assigneeDisplayNames(resolvedWorkspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]);
+  const memberNames = await assigneeDisplayNames(workspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]);
   let serviceLines: OrderServiceLine[] = [];
   let materialLines: OrderMaterialLine[] = [];
 
@@ -492,6 +511,119 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
   );
 }
 
+type OrdersFilterInput = {
+  search?: string;
+  status?: OrderStatus | "all";
+  deadline?: DeadlineFilter;
+  employeeId?: string | "all";
+  today: string;
+};
+
+/** Statuses to send to PostgREST for the combined status + deadline filters. Empty = no matches. */
+function statusesForOrdersFilter(status: OrderStatus | "all" = "all", deadline: DeadlineFilter = "all"): OrderStatus[] | null {
+  if (deadline === "all") {
+    if (status === "all") return null;
+    return [status];
+  }
+  if (status === "all") return [...OPEN_ORDER_STATUSES];
+  return OPEN_ORDER_STATUSES.includes(status) ? [status] : [];
+}
+
+/**
+ * Applies list filters to a Supabase orders query.
+ * Returns `{ query }` (never the builder alone) so `await` cannot unwrap the Thenable client.
+ * Returns null when the filter combo cannot match.
+ */
+async function applyOrdersListFilters(
+  // PostgREST builders are invariant; keep this untyped at the boundary.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  workspaceId: string,
+  { search = "", status = "all", deadline = "all", employeeId = "all", today }: OrdersFilterInput,
+): Promise<{ query: typeof query } | null> {
+  const statuses = statusesForOrdersFilter(status, deadline);
+  if (statuses && statuses.length === 0) return null;
+  if (statuses) query = query.in("status", statuses);
+
+  // NULL deadlines never satisfy inequality filters in Postgres, matching client-side checks.
+  if (deadline === "overdue") {
+    query = query.lt("deadline", `${today}T00:00:00.000Z`);
+  } else if (deadline === "upcoming") {
+    const until = addCalendarDays(today, UPCOMING_DEADLINE_DAYS);
+    query = query.gte("deadline", `${today}T00:00:00.000Z`).lte("deadline", `${until}T23:59:59.999Z`);
+  }
+
+  const assignee = employeeId === "all" ? "" : employeeId.trim();
+  if (assignee) query = query.eq("employee_id", assignee);
+
+  const term = searchTerm(search);
+  if (term) query = query.or(await orderSearchFilter(workspaceId, term));
+
+  return { query };
+}
+
+/** Full workspace order list (dashboard, notifications, search). Prefer getOrdersPage for the Orders table. */
+export async function getOrders(workspaceId: string | undefined, search = "") {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+
+  let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
+
+  const term = searchTerm(search);
+  if (term) query = query.or(await orderSearchFilter(resolvedWorkspaceId, term));
+
+  const { data, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+}
+
+/**
+ * Server-paginated orders for the Orders page.
+ * Filters and stable sort (created_at desc, id desc) run before `.range()`.
+ */
+export async function getOrdersPage(workspaceId: string | undefined, input: OrdersListQuery): Promise<OrdersPageResult> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const pageSize = ORDERS_PAGE_SIZES.includes(input.pageSize) ? input.pageSize : DEFAULT_ORDERS_PAGE_SIZE;
+  const page = Math.max(1, Math.floor(input.page) || 1);
+
+  const empty = (): OrdersPageResult => ({ orders: [], total: 0, page: 1, pageSize, pageCount: 1 });
+
+  let query = supabase
+    .from("orders")
+    .select(orderColumns, { count: "exact" })
+    .eq("workspace_id", resolvedWorkspaceId);
+
+  const filtered = await applyOrdersListFilters(query, resolvedWorkspaceId, input);
+  if (!filtered) return empty();
+  query = filtered.query;
+
+  // Stable ordering so pages don't shuffle when timestamps collide.
+  query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) throw new Error(error.message);
+
+  const total = typeof count === "number" && count >= 0 ? count : (data ?? []).length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  // If the requested page is past the end (e.g. last row deleted), re-fetch the last page once.
+  if (total > 0 && page > pageCount) {
+    return getOrdersPage(workspaceId, { ...input, page: pageCount, pageSize });
+  }
+
+  const orders = await hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+  return {
+    orders,
+    total,
+    page: total === 0 ? 1 : page,
+    pageSize,
+    pageCount: total === 0 ? 1 : pageCount,
+  };
+}
+
 export async function getOrder(orderId: string, workspaceId: string | undefined) {
   const orders = await getOrders(workspaceId);
   const order = orders.find((item) => item.id === orderId);
@@ -512,8 +644,6 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error(orderPermissionMessage());
 }
-
-const orderColumns = "*,clients(name,client_type,email,phone)";
 
 export function readVin(row: Record<string, unknown>) {
   if (typeof row.vin === "string" && row.vin) return row.vin;

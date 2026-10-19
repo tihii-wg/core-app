@@ -1,10 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
-import { getOrders, updateOrderStatus } from "../../services/apiOrders";
+import {
+  DEFAULT_ORDERS_PAGE_SIZE,
+  getOrders,
+  getOrdersPage,
+  updateOrderStatus,
+  type OrdersListQuery,
+  type OrdersPageResult,
+} from "../../services/apiOrders";
 import type { OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
+/** Unpaginated orders (dashboard, notifications, global search). */
 export function useGetOrders(search = "", { enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
   const { data: orders, isLoading, error, refetch } = useQuery({
@@ -14,6 +22,51 @@ export function useGetOrders(search = "", { enabled = true }: { enabled?: boolea
   });
 
   return { orders: orders ?? [], isLoading, error, refetch };
+}
+
+export type OrdersListParams = Omit<OrdersListQuery, "today"> & { today: string };
+
+/** Server-paginated orders list for the Orders page. */
+export function useOrdersPage(params: OrdersListParams, { enabled = true }: { enabled?: boolean } = {}) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const pageSize = params.pageSize ?? DEFAULT_ORDERS_PAGE_SIZE;
+  const listKey = {
+    search: params.search ?? "",
+    status: params.status ?? "all",
+    deadline: params.deadline ?? "all",
+    employeeId: params.employeeId ?? "all",
+    today: params.today,
+    page: params.page,
+    pageSize,
+  } as const;
+
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ["orders", workspaceId, "page", listKey],
+    queryFn: () =>
+      getOrdersPage(workspaceId, {
+        search: listKey.search,
+        status: listKey.status,
+        deadline: listKey.deadline,
+        employeeId: listKey.employeeId,
+        today: listKey.today,
+        page: listKey.page,
+        pageSize: listKey.pageSize,
+      }),
+    enabled: Boolean(workspaceId) && enabled,
+    placeholderData: (previous: OrdersPageResult | undefined) => previous,
+  });
+
+  return {
+    orders: data?.orders ?? [],
+    total: data?.total ?? 0,
+    page: data?.page ?? params.page,
+    pageSize: data?.pageSize ?? pageSize,
+    pageCount: data?.pageCount ?? 1,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  };
 }
 
 export function useUpdateOrderStatus() {

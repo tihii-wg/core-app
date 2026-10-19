@@ -37,8 +37,26 @@ const statusHooks = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const ordersState = vi.hoisted(() => ({
+  list: [] as Order[],
+  total: 0,
+  page: 1,
+  pageSize: 25,
+  pageCount: 1,
+}));
+
 vi.mock("./useGetOrders", () => ({
-  useGetOrders: () => ({ orders: [order], isLoading: false }),
+  useOrdersPage: () => ({
+    orders: ordersState.list,
+    total: ordersState.total,
+    page: ordersState.page,
+    pageSize: ordersState.pageSize,
+    pageCount: ordersState.pageCount,
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
   useUpdateOrderStatus: () => ({ mutate: statusHooks.mutate, isPending: statusHooks.isPending }),
 }));
 
@@ -89,7 +107,22 @@ beforeEach(() => {
   order.createdById = "user-1";
   order.createdByName = "Olga Owner";
   order.clientPhone = "+37361111111";
+  ordersState.list = [order];
+  ordersState.total = 1;
+  ordersState.page = 1;
+  ordersState.pageSize = 25;
+  ordersState.pageCount = 1;
 });
+
+function manyOrders(count: number): Order[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...order,
+    id: `order-${index + 1}`,
+    orderNumber: `ORD-2026-${String(index + 1).padStart(3, "0")}`,
+    clientName: `Client ${index + 1}`,
+    device: `Device ${index + 1}`,
+  }));
+}
 
 async function openActions() {
   const user = userEvent.setup();
@@ -107,6 +140,20 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("shows the server pagination summary, page controls, and page-size choices", () => {
+    ordersState.list = manyOrders(25);
+    ordersState.total = 55;
+    ordersState.page = 1;
+    ordersState.pageSize = 25;
+    ordersState.pageCount = 3;
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByText(/Showing 1–25 of 55 orders/)).toBeInTheDocument();
+    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Orders per page" })).toBeInTheDocument();
   });
 
   it("lets the user hide and show order fields from the Columns menu", async () => {
@@ -173,20 +220,14 @@ describe("Orders page", () => {
     expect(creatorCell).toHaveTextContent("2026-09-26");
   });
 
-  it("finds an order by VIN the same way it finds one by client name", async () => {
+  it("keeps the search field available for server-side order lookup", async () => {
     const user = userEvent.setup();
     renderWithQuery(<Orders />);
 
-    await user.type(screen.getByPlaceholderText("Search orders..."), "1hgb");
+    const search = screen.getByPlaceholderText("Search orders...");
+    await user.type(search, "1hgb");
+    expect(search).toHaveValue("1hgb");
     expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
-
-    await user.clear(screen.getByPlaceholderText("Search orders..."));
-    await user.type(screen.getByPlaceholderText("Search orders..."), "ada lovelace");
-    expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
-
-    await user.clear(screen.getByPlaceholderText("Search orders..."));
-    await user.type(screen.getByPlaceholderText("Search orders..."), "not-a-vin");
-    expect(screen.queryByText("ORD-2026-003")).not.toBeInTheDocument();
   });
 
   it("shows a three-dot actions menu with view, status, edit, and invoice actions", async () => {

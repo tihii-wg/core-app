@@ -40,6 +40,14 @@ export default {
     noWaitingDescription: "Orders with this status will show up here.",
   },
   filteredCount: "Showing {{shown}} of {{total}}",
+  matchingCount_one: "{{count}} matching order",
+  matchingCount_other: "{{count}} matching orders",
+  pagination: {
+    showing: "Showing {{from}}–{{to}} of {{total}} orders",
+    pageOf: "Page {{page}} of {{pageCount}}",
+    pageSize: "Orders per page",
+    perPage: "{{count}} / page",
+  },
   actions: {
     menuLabel: "Actions for order {{number}}",
     viewDetails: "View details",

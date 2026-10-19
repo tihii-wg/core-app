@@ -6,7 +6,7 @@
 
 export type Row = Record<string, unknown>;
 export type PgError = { code: string; message: string; details?: string | null; hint?: string | null; status?: number };
-export type Result = { data: unknown; error: PgError | null };
+export type Result = { data: unknown; error: PgError | null; count?: number | null };
 export type PolicyCtx = { uid: string | null; fake: FakeSupabase };
 type Check = (row: Row, ctx: PolicyCtx) => boolean;
 
@@ -128,6 +128,9 @@ class FakeQuery implements PromiseLike<Result> {
   private embedFilters: { embed: string; filter: Filter }[] = [];
   private orders: { column: string; ascending: boolean }[] = [];
   private limitCount: number | null = null;
+  private rangeFrom: number | null = null;
+  private rangeTo: number | null = null;
+  private wantCount = false;
   private mode: "many" | "single" | "maybeSingle" = "many";
 
   constructor(
@@ -135,9 +138,10 @@ class FakeQuery implements PromiseLike<Result> {
     private table: string,
   ) {}
 
-  select(columns = "*") {
+  select(columns = "*", options?: { count?: "exact" | "planned" | "estimated"; head?: boolean }) {
     this.columns = columns;
     if (this.op !== "select") this.returning = true;
+    this.wantCount = Boolean(options?.count);
     return this;
   }
 
@@ -220,6 +224,12 @@ class FakeQuery implements PromiseLike<Result> {
     return this;
   }
 
+  range(from: number, to: number) {
+    this.rangeFrom = from;
+    this.rangeTo = to;
+    return this;
+  }
+
   single() {
     this.mode = "single";
     return this;
@@ -256,7 +266,10 @@ class FakeQuery implements PromiseLike<Result> {
     switch (this.op) {
       case "select":
         if (!fake.grantAllows(this.table, "select")) return { data: null, error: permissionDenied(this.table) };
-        return this.finish(this.readRows());
+        {
+          const { rows, total } = this.readRows();
+          return this.finish(rows, total);
+        }
       case "insert":
         return this.runInsert();
       case "update":
@@ -279,16 +292,22 @@ class FakeQuery implements PromiseLike<Result> {
     for (const { column, ascending } of [...this.orders].reverse()) {
       rows = [...rows].sort((a, b) => (ascending ? 1 : -1) * compareValues(a[column], b[column]));
     }
-    if (this.limitCount != null) rows = rows.slice(0, this.limitCount);
-    return rows;
+    const total = rows.length;
+    if (this.rangeFrom != null && this.rangeTo != null) {
+      rows = rows.slice(this.rangeFrom, this.rangeTo + 1);
+    } else if (this.limitCount != null) {
+      rows = rows.slice(0, this.limitCount);
+    }
+    return { rows, total };
   }
 
-  private finish(rows: Row[]): Result {
-    if (this.mode === "many") return { data: rows, error: null };
+  private finish(rows: Row[], count?: number | null): Result {
+    const payload = this.wantCount ? { data: rows, error: null, count: count ?? rows.length } : { data: rows, error: null };
+    if (this.mode === "many") return payload;
     if (rows.length > 1 || (this.mode === "single" && rows.length === 0)) {
-      return { data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" } };
+      return { data: null, error: { code: "PGRST116", message: "JSON object requested, multiple (or no) rows returned" }, count: this.wantCount ? count ?? null : undefined };
     }
-    return { data: rows[0] ?? null, error: null };
+    return { data: rows[0] ?? null, error: null, count: this.wantCount ? count ?? null : undefined };
   }
 
   private returned(rows: Row[]): Result {

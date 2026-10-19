@@ -44,6 +44,15 @@ const orders: Messages<typeof en> = {
     noWaitingDescription: "Comenzile cu acest status vor apărea aici.",
   },
   filteredCount: "Se afișează {{shown}} din {{total}}",
+  matchingCount_one: "{{count}} comandă potrivită",
+  matchingCount_few: "{{count}} comenzi potrivite",
+  matchingCount_other: "{{count}} de comenzi potrivite",
+  pagination: {
+    showing: "Se afișează {{from}}–{{to}} din {{total}} comenzi",
+    pageOf: "Pagina {{page}} din {{pageCount}}",
+    pageSize: "Comenzi pe pagină",
+    perPage: "{{count}} / pagină",
+  },
   actions: {
     menuLabel: "Acțiuni pentru comanda {{number}}",
     viewDetails: "Vezi detalii",

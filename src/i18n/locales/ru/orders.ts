@@ -45,6 +45,16 @@ const orders: Messages<typeof en> = {
     noWaitingDescription: "Заказы с этим статусом появятся здесь.",
   },
   filteredCount: "Показано {{shown}} из {{total}}",
+  matchingCount_one: "{{count}} подходящий заказ",
+  matchingCount_few: "{{count}} подходящих заказа",
+  matchingCount_many: "{{count}} подходящих заказов",
+  matchingCount_other: "{{count}} подходящих заказа",
+  pagination: {
+    showing: "Показаны {{from}}–{{to}} из {{total}} заказов",
+    pageOf: "Страница {{page}} из {{pageCount}}",
+    pageSize: "Заказов на странице",
+    perPage: "{{count}} / стр.",
+  },
   actions: {
     menuLabel: "Действия для заказа {{number}}",
     viewDetails: "Открыть детали",

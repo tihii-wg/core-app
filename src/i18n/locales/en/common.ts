@@ -57,4 +57,10 @@ export default {
   demo: {
     label: "Demo data",
   },
+  pagination: {
+    previous: "Previous",
+    next: "Next",
+    page: "Page {{page}}",
+    showing: "Showing {{from}}–{{to}} of {{total}}",
+  },
 };

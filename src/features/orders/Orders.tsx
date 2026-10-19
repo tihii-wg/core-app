@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Plus } from "lucide-react";
@@ -6,10 +6,18 @@ import { Button } from "../../ui/Button";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
 import { DataTable, type Column } from "../../ui/DataTable";
+import { ListPagination } from "../../ui/ListPagination";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
-import { useGetOrders } from "./useGetOrders";
+import { useOrdersPage } from "./useGetOrders";
 import type { Order, OrderStatus } from "../../lib/types";
+import { useDebounce } from "../../hooks/useDebounce";
+import {
+  DEFAULT_ORDERS_PAGE_SIZE,
+  ORDERS_PAGE_SIZES,
+  type OrdersPageSize,
+} from "../../services/apiOrders";
 import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useOrderDetails } from "./useOrderDetails";
@@ -31,24 +39,27 @@ import {
 } from "./orderColumnVisibility";
 import { localDateKey } from "../../pages/dashboardStats";
 import { cn } from "../../lib/utils";
-import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
+import { isOrderOverdue, type DeadlineFilter } from "./orderVisibility";
 
 const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
 export function Orders() {
   const { t } = useTranslation();
   const { workflow, copy } = useIndustryWorkflow();
-  const { orders, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
   const today = localDateKey(new Date());
 
-  // Filters
+  // Filters / pagination (server-side via getOrdersPage)
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState(() => new Set<OrderToggleableColumn>(readOrderVisibleColumns()));
+
+  const debouncedSearch = useDebounce(searchQuery, 400);
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -71,25 +82,38 @@ export function Orders() {
     createInvoice.mutate(order.id);
   };
 
-  const hasActiveFilters = Boolean(searchQuery) || statusFilter !== "all" || deadlineFilter !== "all" || employeeFilter !== "all";
+  const hasActiveFilters =
+    Boolean(debouncedSearch) || statusFilter !== "all" || deadlineFilter !== "all" || employeeFilter !== "all";
 
-  // Filtered data
-  const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
-      const matchesSearch =
-        !searchQuery ||
-        order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.device.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.vin.toLowerCase().includes(searchQuery.toLowerCase());
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, statusFilter, deadlineFilter, employeeFilter, pageSize]);
 
-      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-      const matchesDeadline = matchesDeadlineFilter(order, deadlineFilter, today);
-      const matchesEmployee = employeeFilter === "all" || order.assignedEmployeeId === employeeFilter;
+  const {
+    orders,
+    total,
+    page: resolvedPage,
+    pageCount,
+    isLoading: ordersLoading,
+    error: ordersError,
+    refetch: refetchOrders,
+  } = useOrdersPage({
+    search: debouncedSearch,
+    status: statusFilter,
+    deadline: deadlineFilter,
+    employeeId: employeeFilter,
+    today,
+    page,
+    pageSize,
+  });
 
-      return matchesSearch && matchesStatus && matchesDeadline && matchesEmployee;
-    });
-  }, [orders, searchQuery, statusFilter, deadlineFilter, employeeFilter, today]);
+  // Keep local page in sync when the server clamps (e.g. last row on a page was deleted).
+  useEffect(() => {
+    if (resolvedPage !== page) setPage(resolvedPage);
+  }, [page, resolvedPage]);
+
+  const rangeFrom = total === 0 ? 0 : (resolvedPage - 1) * pageSize + 1;
+  const rangeTo = total === 0 ? 0 : Math.min(resolvedPage * pageSize, total);
 
   // Table columns — order # and actions stay fixed; the rest follow the Columns menu.
   const allColumns: Column<Order>[] = [
@@ -238,16 +262,17 @@ export function Orders() {
     setStatusFilter("all");
     setDeadlineFilter("all");
     setEmployeeFilter("all");
+    setPage(1);
   };
 
   function emptyFilterState() {
-    if (deadlineFilter === "overdue" && !searchQuery && statusFilter === "all" && employeeFilter === "all") {
+    if (deadlineFilter === "overdue" && !debouncedSearch && statusFilter === "all" && employeeFilter === "all") {
       return <EmptyState title={t("orders.empty.noOverdueTitle")} description={t("orders.empty.noOverdueDescription")} />;
     }
-    if (deadlineFilter === "upcoming" && !searchQuery && statusFilter === "all" && employeeFilter === "all") {
+    if (deadlineFilter === "upcoming" && !debouncedSearch && statusFilter === "all" && employeeFilter === "all") {
       return <EmptyState title={t("orders.empty.noUpcomingTitle")} description={t("orders.empty.noUpcomingDescription")} />;
     }
-    if (statusFilter === "waiting-parts" && !searchQuery && deadlineFilter === "all" && employeeFilter === "all") {
+    if (statusFilter === "waiting-parts" && !debouncedSearch && deadlineFilter === "all" && employeeFilter === "all") {
       const statusLabel = industryOrderStatusLabel(workflow, "waiting-parts");
       return <EmptyState title={t("orders.empty.noWaitingTitle", { status: statusLabel })} description={t("orders.empty.noWaitingDescription")} />;
     }
@@ -255,8 +280,16 @@ export function Orders() {
   }
 
   const headerDescription = hasActiveFilters
-    ? t("orders.filteredCount", { shown: filteredOrders.length, total: orders.length })
-    : t("orders.totalCount", { count: orders.length });
+    ? t("orders.matchingCount", { count: total })
+    : t("orders.totalCount", { count: total });
+
+  const paginationSummary =
+    total === 0
+      ? null
+      : `${t("orders.pagination.showing", { from: rangeFrom, to: rangeTo, total })} · ${t("orders.pagination.pageOf", {
+          page: resolvedPage,
+          pageCount,
+        })}`;
 
   return (
     <div className="space-y-5">
@@ -283,7 +316,7 @@ export function Orders() {
               label: t("common.status"),
               options: statusOptions,
               value: statusFilter,
-              onChange: setStatusFilter,
+              onChange: (value) => setStatusFilter(value as OrderStatus | "all"),
             },
             {
               key: "deadline",
@@ -311,7 +344,7 @@ export function Orders() {
 
       <DataTable
         columns={columns}
-        data={filteredOrders}
+        data={orders}
         keyExtractor={(order) => order.id}
         onRowClick={orderDetails.openOrder}
         isLoading={ordersLoading}
@@ -325,6 +358,33 @@ export function Orders() {
           )
         }
       />
+
+      {!ordersLoading && total > 0 ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <ListPagination
+            className="min-w-0 flex-1 sm:justify-between"
+            page={resolvedPage}
+            pageCount={pageCount}
+            onPageChange={setPage}
+            summary={paginationSummary}
+          />
+          <Select
+            value={String(pageSize)}
+            onValueChange={(value) => setPageSize(Number(value) as OrdersPageSize)}
+          >
+            <SelectTrigger className="h-9 w-full text-[13px] sm:w-40" aria-label={t("orders.pagination.pageSize")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ORDERS_PAGE_SIZES.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {t("orders.pagination.perPage", { count: size })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
       <CreateOrderDialog open={createModalOpen} onOpenChange={setCreateModalOpen} searchQuery={searchQuery} />
 
