@@ -206,6 +206,13 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   const clientId = await resolveClientId(targetWorkspaceId, input);
   const materials = consolidateOrderMaterials(input.materials ?? []);
 
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) throw new Error(userError.message);
+  if (!user) throw new Error(i18n.t("clients.errors.notAuthenticated"));
+
   const serviceTotal = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
   const materialTotal = materials.reduce((total, line) => total + line.price * line.quantity, 0);
   const timeZone = await workspaceTimeZone(targetWorkspaceId);
@@ -222,6 +229,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       employee_id: employeeId,
       // Do not write employee ids into assigned_to (auth.users FK). Clear default auth.uid().
       assigned_to: null,
+      created_by: user.id,
       ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : {}),
       total_price: serviceTotal + materialTotal,
       status: "new",
@@ -367,6 +375,7 @@ function toOrder(
   const services = mapServiceLines(serviceLines);
   const materials = mapMaterialLines(materialLines);
   const fallbackAssigneeId = employeeId || legacyAssignedTo;
+  const createdById = typeof row.created_by === "string" ? row.created_by.trim() : "";
 
   return {
     id: String(row.id),
@@ -392,6 +401,12 @@ function toOrder(
     totalPrice: Number(row.total_price ?? 0),
     isPaid,
     paymentStatus,
+    ...(createdById
+      ? {
+          createdById,
+          createdByName: memberNames.get(createdById) || "",
+        }
+      : {}),
     createdAt: formatOrderDate(row.created_at),
     updatedAt: formatOrderDate(row.updated_at),
   };
@@ -445,15 +460,12 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
   const rows = (data ?? []) as Record<string, unknown>[];
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
   // Legacy assigned_to auth user ids only — used when employee_id is missing and no employee row matches.
-  const legacyAuthIds = [
-    ...new Set(
-      rows
-        .filter((row) => !(typeof row.employee_id === "string" && row.employee_id.trim()))
-        .map((row) => (typeof row.assigned_to === "string" ? row.assigned_to.trim() : ""))
-        .filter(Boolean),
-    ),
-  ];
-  const memberNames = await assigneeDisplayNames(resolvedWorkspaceId, legacyAuthIds);
+  const legacyAuthIds = rows
+    .filter((row) => !(typeof row.employee_id === "string" && row.employee_id.trim()))
+    .map((row) => (typeof row.assigned_to === "string" ? row.assigned_to.trim() : ""))
+    .filter(Boolean);
+  const createdByIds = rows.map((row) => (typeof row.created_by === "string" ? row.created_by.trim() : "")).filter(Boolean);
+  const memberNames = await assigneeDisplayNames(resolvedWorkspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]);
   let serviceLines: OrderServiceLine[] = [];
   let materialLines: OrderMaterialLine[] = [];
 
@@ -607,7 +619,11 @@ export async function updateOrder(
   const row = (refreshed ?? data) as Record<string, unknown>;
   const hasEmployeeId = typeof row.employee_id === "string" && row.employee_id.trim() !== "";
   const legacyAssignedTo = !hasEmployeeId && typeof row.assigned_to === "string" ? String(row.assigned_to) : "";
-  const memberNames = await assigneeDisplayNames(workspaceId, legacyAssignedTo ? [legacyAssignedTo] : []);
+  const createdById = typeof row.created_by === "string" ? row.created_by.trim() : "";
+  const memberNames = await assigneeDisplayNames(
+    workspaceId,
+    [...new Set([legacyAssignedTo, createdById].filter(Boolean))],
+  );
   return toOrder({ ...row, ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames, materialLines.map((line) => ({
     id: line.id,
     order_id: orderId,

@@ -669,6 +669,7 @@ export function seedCoreApp() {
       is_paid: false,
       service: service.service_name,
       service_id: service.id,
+      created_by: workspace.owner,
       created_at: `${year}-02-10T10:00:00.000Z`,
       updated_at: `${year}-02-10T10:00:00.000Z`,
     });

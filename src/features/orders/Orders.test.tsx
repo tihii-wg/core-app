@@ -9,6 +9,7 @@ const order: Order = {
   id: "order-1",
   clientId: "client-1",
   clientName: "Ada Lovelace",
+  clientPhone: "+37361111111",
   orderNumber: "ORD-2026-003",
   device: "BMW",
   vin: "1HGBH41JXMN109186",
@@ -23,6 +24,8 @@ const order: Order = {
   totalPrice: 40,
   isPaid: false,
   paymentStatus: "unpaid",
+  createdById: "user-1",
+  createdByName: "Olga Owner",
   createdAt: "2026-09-26",
   updatedAt: "2026-09-26",
 };
@@ -80,6 +83,9 @@ beforeEach(() => {
   invoiceHooks.mutate.mockReset();
   statusHooks.isPending = false;
   statusHooks.mutate.mockReset();
+  order.createdById = "user-1";
+  order.createdByName = "Olga Owner";
+  order.clientPhone = "+37361111111";
 });
 
 async function openActions() {
@@ -98,6 +104,42 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("shows the client name with the phone number underneath", () => {
+    renderWithQuery(<Orders />);
+
+    const clientCell = screen.getByText("Ada Lovelace").parentElement?.parentElement;
+    expect(clientCell).toHaveTextContent("Ada Lovelace");
+    expect(clientCell).toHaveTextContent("+37361111111");
+  });
+
+  it("shows a dash when the client phone is missing", () => {
+    order.clientPhone = "";
+    renderWithQuery(<Orders />);
+
+    const clientCell = screen.getByText("Ada Lovelace").parentElement?.parentElement;
+    expect(clientCell).toHaveTextContent("Ada Lovelace");
+    expect(clientCell).toHaveTextContent("—");
+  });
+
+  it("shows the creator name with the creation date underneath", () => {
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByRole("columnheader", { name: "Created by" })).toBeInTheDocument();
+    const creatorCell = screen.getByText("Olga Owner").parentElement?.parentElement;
+    expect(creatorCell).toHaveTextContent("Olga Owner");
+    expect(creatorCell).toHaveTextContent("2026-09-26");
+  });
+
+  it("shows Unknown when the creator name is missing", () => {
+    order.createdByName = "";
+    order.createdById = undefined;
+    renderWithQuery(<Orders />);
+
+    const creatorCell = screen.getByText("Unknown").parentElement?.parentElement;
+    expect(creatorCell).toHaveTextContent("Unknown");
+    expect(creatorCell).toHaveTextContent("2026-09-26");
   });
 
   it("finds an order by VIN the same way it finds one by client name", async () => {

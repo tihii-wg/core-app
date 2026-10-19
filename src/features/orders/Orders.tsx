@@ -90,11 +90,19 @@ export function Orders() {
     {
       key: "client",
       header: t("orders.table.client"),
-      cell: (order) => (
-        <span className="block max-w-[11rem] truncate font-medium 2xl:max-w-[13rem]" title={order.clientName}>
-          {order.clientName}
-        </span>
-      ),
+      cell: (order) => {
+        const phone = order.clientPhone?.trim() || "—";
+        return (
+          <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
+            <div className="truncate font-medium" title={order.clientName}>
+              {order.clientName}
+            </div>
+            <div className="truncate text-xs text-muted-foreground" title={phone}>
+              {phone}
+            </div>
+          </div>
+        );
+      },
     },
     {
       key: "clientType",
@@ -123,6 +131,22 @@ export function Orders() {
       key: "status",
       header: t("common.status"),
       cell: (order) => <OrderStatusBadge status={order.status} />,
+    },
+    {
+      key: "createdBy",
+      header: t("orders.table.createdBy"),
+      cell: (order) => {
+        const creator = order.createdByName?.trim() || t("orders.table.unknownCreator");
+        return (
+          <div className="max-w-[11rem] min-w-0">
+            <div className="truncate font-medium" title={creator}>
+              {creator}
+            </div>
+            <div className="tabular-nums text-xs text-muted-foreground">{order.createdAt || "—"}</div>
+          </div>
+        );
+      },
+      className: "hidden lg:table-cell",
     },
     {
       key: "employee",

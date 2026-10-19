@@ -18,6 +18,8 @@ export default {
     client: "Client",
     clientType: "Client Type",
     deviceService: "Device/Service",
+    createdBy: "Created by",
+    unknownCreator: "Unknown",
     assigned: "Assigned",
     deadline: "Deadline",
     payment: "Payment",

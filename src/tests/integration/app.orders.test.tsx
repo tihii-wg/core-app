@@ -44,6 +44,25 @@ async function openOrderPanel(user: User) {
 }
 
 describe("orders page", () => {
+  it("lists who created each order with the creation date below the name", async () => {
+    await openOrders();
+
+    expect(screen.getByRole("columnheader", { name: "Created by" })).toBeInTheDocument();
+    const creator = await screen.findByText(USERS.owner.name);
+    const cell = creator.closest("td") ?? creator.parentElement;
+    expect(cell).toHaveTextContent(USERS.owner.name);
+    expect(cell).toHaveTextContent(`${new Date().getFullYear()}-02-10`);
+  });
+
+  it("lists the client phone under the client name", async () => {
+    await openOrders();
+
+    const client = await screen.findByText("Ada Alpha");
+    const cell = client.closest("td") ?? client.parentElement;
+    expect(cell).toHaveTextContent("Ada Alpha");
+    expect(cell).toHaveTextContent("+37361111111");
+  });
+
   it("creates an order with a line item in the active workspace", async () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
@@ -55,9 +74,19 @@ describe("orders page", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Order created successfully")).toBeInTheDocument();
     const created = fake.all("orders").find((order) => order.device === "Golf IV");
-    expect(created).toMatchObject({ workspace_id: WS.A, client_id: "client-a1", car_number: "ABC123", vin: VIN, total_price: 40, employee_id: "employee-a1", assigned_to: null });
+    expect(created).toMatchObject({
+      workspace_id: WS.A,
+      client_id: "client-a1",
+      car_number: "ABC123",
+      vin: VIN,
+      total_price: 40,
+      employee_id: "employee-a1",
+      assigned_to: null,
+      created_by: USERS.member.id,
+    });
     expect(fake.all("order_services").filter((line) => line.order_id === created?.id)).toEqual([expect.objectContaining({ service_id: "service-a1", price: 40, quantity: 1 })]);
     expect(await screen.findByText("Golf IV")).toBeInTheDocument();
+    expect(await screen.findByText(USERS.member.name)).toBeInTheDocument();
   });
 
   it("creates a new client with phone and email from the order form and links it to the order", async () => {
@@ -394,7 +423,7 @@ describe("orders page", () => {
     expect(clientTypeColumn).toBe(headers.indexOf("Client") + 1);
     const orderRow = screen.getByRole("row", { name: /Ada Alpha/ });
     expect(within(orderRow).getAllByRole("cell")[clientTypeColumn]).toHaveTextContent(/^Organization$/);
-    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/^Ada Alpha$/);
+    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/Ada Alpha/);
 
     await user.click(screen.getByText("Ada Alpha"));
     const panel = await screen.findByRole("dialog");

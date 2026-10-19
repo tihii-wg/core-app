@@ -23,6 +23,8 @@ const orders: Messages<typeof en> = {
     client: "Клиент",
     clientType: "Тип клиента",
     deviceService: "Автомобиль/Услуга",
+    createdBy: "Создал",
+    unknownCreator: "Неизвестно",
     assigned: "Ответственный",
     deadline: "Срок",
     payment: "Оплата",

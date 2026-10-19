@@ -22,6 +22,8 @@ const orders: Messages<typeof en> = {
     client: "Client",
     clientType: "Tip client",
     deviceService: "Automobil/Serviciu",
+    createdBy: "Creat de",
+    unknownCreator: "Necunoscut",
     assigned: "Responsabil",
     deadline: "Termen",
     payment: "Plată",

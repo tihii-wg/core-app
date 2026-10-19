@@ -68,6 +68,10 @@ export interface Order {
   totalPrice: number;
   isPaid: boolean;
   paymentStatus: PaymentStatus;
+  /** auth.users id from orders.created_by when present. */
+  createdById?: string;
+  /** Workspace member display name for created_by (full name or email). */
+  createdByName?: string;
   createdAt: string;
   updatedAt: string;
 }
