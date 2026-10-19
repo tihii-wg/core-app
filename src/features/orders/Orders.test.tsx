@@ -1,8 +1,10 @@
 import { screen, within } from "@testing-library/react";
+import { stubLocalStorage } from "../../tests/memoryStorage";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Invoice, Order } from "../../lib/types";
+import { ORDER_COLUMN_STORAGE_KEY } from "./orderColumnVisibility";
 import { Orders } from "./Orders";
 
 const order: Order = {
@@ -77,6 +79,7 @@ vi.mock("../invoices/useCreateInvoice", () => ({
 }));
 
 beforeEach(() => {
+  stubLocalStorage();
   invoiceHooks.invoices = [];
   invoiceHooks.isUnavailable = false;
   invoiceHooks.isPending = false;
@@ -104,6 +107,34 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("lets the user hide and show order fields from the Columns menu", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByRole("columnheader", { name: "Client" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Created by" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Columns" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Client" }));
+    expect(screen.queryByRole("columnheader", { name: "Client" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Order #" })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(ORDER_COLUMN_STORAGE_KEY) ?? "[]")).not.toContain("client");
+
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Client" }));
+    expect(screen.getByRole("columnheader", { name: "Client" })).toBeInTheDocument();
+  });
+
+  it("restores the saved column selection on load", () => {
+    window.localStorage.setItem(ORDER_COLUMN_STORAGE_KEY, JSON.stringify(["status", "total"]));
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByRole("columnheader", { name: "Order #" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Total" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Client" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Created by" })).not.toBeInTheDocument();
   });
 
   it("shows the client name with the phone number underneath", () => {

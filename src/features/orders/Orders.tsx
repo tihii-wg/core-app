@@ -23,6 +23,12 @@ import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
 import { useCreateInvoice } from "../invoices/useCreateInvoice";
 import { OrderActionsMenu } from "./OrderActionsMenu";
+import { OrderColumnsMenu } from "./OrderColumnsMenu";
+import {
+  readOrderVisibleColumns,
+  writeOrderVisibleColumns,
+  type OrderToggleableColumn,
+} from "./orderColumnVisibility";
 import { localDateKey } from "../../pages/dashboardStats";
 import { cn } from "../../lib/utils";
 import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
@@ -42,10 +48,16 @@ export function Orders() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  const [visibleColumns, setVisibleColumns] = useState(() => new Set<OrderToggleableColumn>(readOrderVisibleColumns()));
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
+  const handleVisibleColumnsChange = (columns: Set<OrderToggleableColumn>) => {
+    setVisibleColumns(columns);
+    writeOrderVisibleColumns(columns);
+  };
 
   const { employees } = useGetEmployees();
   const assigneeOptions = assignableTechnicians(employees);
@@ -79,8 +91,8 @@ export function Orders() {
     });
   }, [orders, searchQuery, statusFilter, deadlineFilter, employeeFilter, today]);
 
-  // Table columns
-  const columns: Column<Order>[] = [
+  // Table columns — order # and actions stay fixed; the rest follow the Columns menu.
+  const allColumns: Column<Order>[] = [
     {
       key: "orderNumber",
       header: t("orders.table.orderNumber"),
@@ -108,7 +120,6 @@ export function Orders() {
       key: "clientType",
       header: t("orders.table.clientType"),
       cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
-      className: "hidden 2xl:table-cell",
     },
     {
       key: "device",
@@ -125,7 +136,6 @@ export function Orders() {
           )}
         </div>
       ),
-      className: "hidden xl:table-cell",
     },
     {
       key: "status",
@@ -146,7 +156,6 @@ export function Orders() {
           </div>
         );
       },
-      className: "hidden lg:table-cell",
     },
     {
       key: "employee",
@@ -159,7 +168,6 @@ export function Orders() {
           {order.assignedEmployeeName || t("orders.detail.unassigned")}
         </span>
       ),
-      className: "hidden min-[1800px]:table-cell",
     },
     {
       key: "deadline",
@@ -169,7 +177,7 @@ export function Orders() {
           {order.deadline || "—"}
         </span>
       ),
-      className: "hidden 2xl:table-cell whitespace-nowrap",
+      className: "whitespace-nowrap",
     },
     {
       key: "total",
@@ -203,6 +211,8 @@ export function Orders() {
       ),
     },
   ];
+
+  const columns = allColumns.filter((column) => column.key === "orderNumber" || column.key === "actions" || visibleColumns.has(column.key as OrderToggleableColumn));
 
   const statusOptions = [
     { value: "all", label: t("orders.filters.allStatuses") },
@@ -261,35 +271,43 @@ export function Orders() {
         }
       />
 
-      <SearchAndFilters
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder={t("orders.searchPlaceholder")}
-        filters={[
-          {
-            key: "status",
-            label: t("common.status"),
-            options: statusOptions,
-            value: statusFilter,
-            onChange: setStatusFilter,
-          },
-          {
-            key: "deadline",
-            label: t("orders.filters.deadline"),
-            options: deadlineOptions,
-            value: deadlineFilter,
-            onChange: (value) => setDeadlineFilter(value as DeadlineFilter),
-          },
-          {
-            key: "employee",
-            label: t("orders.filters.employee"),
-            options: employeeFilterOptions,
-            value: employeeFilter,
-            onChange: setEmployeeFilter,
-          },
-        ]}
-        onClearFilters={clearFilters}
-      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <SearchAndFilters
+          className="min-w-0 flex-1"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t("orders.searchPlaceholder")}
+          filters={[
+            {
+              key: "status",
+              label: t("common.status"),
+              options: statusOptions,
+              value: statusFilter,
+              onChange: setStatusFilter,
+            },
+            {
+              key: "deadline",
+              label: t("orders.filters.deadline"),
+              options: deadlineOptions,
+              value: deadlineFilter,
+              onChange: (value) => setDeadlineFilter(value as DeadlineFilter),
+            },
+            {
+              key: "employee",
+              label: t("orders.filters.employee"),
+              options: employeeFilterOptions,
+              value: employeeFilter,
+              onChange: setEmployeeFilter,
+            },
+          ]}
+          onClearFilters={clearFilters}
+        />
+        <OrderColumnsMenu
+          visibleColumns={visibleColumns}
+          onVisibleColumnsChange={handleVisibleColumnsChange}
+          deviceColumnLabel={copy.deviceServiceColumn}
+        />
+      </div>
 
       <DataTable
         columns={columns}

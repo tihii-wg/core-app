@@ -4,6 +4,10 @@ export default {
   totalCount_other: "{{count}} total orders",
   createOrder: "Create Order",
   searchPlaceholder: "Search orders...",
+  columns: {
+    button: "Columns",
+    menuLabel: "Show columns",
+  },
   filters: {
     employee: "Employee",
     deadline: "Deadline",

@@ -8,6 +8,10 @@ const orders: Messages<typeof en> = {
   totalCount_other: "{{count}} de comenzi în total",
   createOrder: "Creează comandă",
   searchPlaceholder: "Caută comenzi...",
+  columns: {
+    button: "Coloane",
+    menuLabel: "Afișează coloanele",
+  },
   filters: {
     employee: "Angajat",
     deadline: "Termen",

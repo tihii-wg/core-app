@@ -9,6 +9,10 @@ const orders: Messages<typeof en> = {
   totalCount_other: "Всего {{count}} заказа",
   createOrder: "Создать заказ",
   searchPlaceholder: "Поиск заказов...",
+  columns: {
+    button: "Колонки",
+    menuLabel: "Показать колонки",
+  },
   filters: {
     employee: "Сотрудник",
     deadline: "Срок",

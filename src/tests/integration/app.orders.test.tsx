@@ -63,6 +63,16 @@ describe("orders page", () => {
     expect(cell).toHaveTextContent("+37361111111");
   });
 
+  it("lets the user choose which order fields are shown from Columns", async () => {
+    const { user } = await openOrders();
+
+    expect(screen.getByRole("columnheader", { name: "Client" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Columns" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Client" }));
+    expect(screen.queryByRole("columnheader", { name: "Client" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Order #" })).toBeInTheDocument();
+  });
+
   it("creates an order with a line item in the active workspace", async () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
