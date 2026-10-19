@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Plus } from "lucide-react";
+import { Banknote, Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
@@ -10,7 +10,9 @@ import { ListPagination } from "../../ui/ListPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
-import { useOrdersPage } from "./useGetOrders";
+import { Skeleton } from "../../ui/Skeleton";
+import { useOrdersAwaitingPayment, useOrdersPage } from "./useGetOrders";
+import { statIconVariants } from "../../ui/statCardStyles";
 import type { Order, OrderStatus } from "../../lib/types";
 import { useDebounce } from "../../hooks/useDebounce";
 import {
@@ -106,6 +108,8 @@ export function Orders() {
     page,
     pageSize,
   });
+
+  const awaitingPayment = useOrdersAwaitingPayment();
 
   // Keep local page in sync when the server clamps (e.g. last row on a page was deleted).
   useEffect(() => {
@@ -296,6 +300,35 @@ export function Orders() {
       <PageHeader
         title={t("orders.title")}
         description={headerDescription}
+        aside={
+          <div className="flex h-[calc(3rem*1.5)] min-w-0 max-w-full items-center gap-3 rounded-lg border border-border bg-card px-3.5 shadow-xs sm:max-w-[16rem]">
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-md",
+                statIconVariants[awaitingPayment.amount > 0 ? "primary" : "default"],
+              )}
+            >
+              <Banknote aria-hidden="true" className="size-4" />
+            </span>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-xs font-medium text-muted-foreground">{t("orders.awaitingPayment.title")}</p>
+              {awaitingPayment.isLoading ? (
+                <Skeleton className="mt-1 h-5 w-20" />
+              ) : (
+                <p className="mt-0.5 truncate text-base font-semibold tabular-nums tracking-tight text-foreground">
+                  {awaitingPayment.error ? "—" : formatMoney(awaitingPayment.amount)}
+                </p>
+              )}
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                {awaitingPayment.error
+                  ? t("orders.awaitingPayment.loadFailed")
+                  : awaitingPayment.count > 0
+                    ? t("orders.awaitingPayment.unpaidCount", { count: awaitingPayment.count })
+                    : t("orders.awaitingPayment.allPaid")}
+              </p>
+            </div>
+          </div>
+        }
         actions={
           <Button onClick={() => setCreateModalOpen(true)}>
             <Plus />

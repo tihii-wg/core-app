@@ -2,6 +2,13 @@ export default {
   title: "Orders",
   totalCount_one: "{{count}} total orders",
   totalCount_other: "{{count}} total orders",
+  awaitingPayment: {
+    title: "Awaiting Payment",
+    unpaidCount_one: "{{count}} unpaid order",
+    unpaidCount_other: "{{count}} unpaid orders",
+    allPaid: "All orders paid",
+    loadFailed: "Could not load unpaid total",
+  },
   createOrder: "Create Order",
   searchPlaceholder: "Search orders...",
   columns: {

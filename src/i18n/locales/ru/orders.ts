@@ -7,6 +7,15 @@ const orders: Messages<typeof en> = {
   totalCount_few: "Всего {{count}} заказа",
   totalCount_many: "Всего {{count}} заказов",
   totalCount_other: "Всего {{count}} заказа",
+  awaitingPayment: {
+    title: "Ожидает оплаты",
+    unpaidCount_one: "{{count}} неоплаченный заказ",
+    unpaidCount_few: "{{count}} неоплаченных заказа",
+    unpaidCount_many: "{{count}} неоплаченных заказов",
+    unpaidCount_other: "{{count}} неоплаченного заказа",
+    allPaid: "Все заказы оплачены",
+    loadFailed: "Не удалось загрузить сумму к оплате",
+  },
   createOrder: "Создать заказ",
   searchPlaceholder: "Поиск заказов...",
   columns: {

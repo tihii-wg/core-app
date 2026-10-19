@@ -6,6 +6,14 @@ const orders: Messages<typeof en> = {
   totalCount_one: "{{count}} comandă în total",
   totalCount_few: "{{count}} comenzi în total",
   totalCount_other: "{{count}} de comenzi în total",
+  awaitingPayment: {
+    title: "În așteptarea plății",
+    unpaidCount_one: "{{count}} comandă neachitată",
+    unpaidCount_few: "{{count}} comenzi neachitate",
+    unpaidCount_other: "{{count}} de comenzi neachitate",
+    allPaid: "Toate comenzile sunt plătite",
+    loadFailed: "Totalul neachitat nu a putut fi încărcat",
+  },
   createOrder: "Creează comandă",
   searchPlaceholder: "Caută comenzi...",
   columns: {

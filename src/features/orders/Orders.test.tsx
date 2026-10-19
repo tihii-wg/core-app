@@ -45,6 +45,13 @@ const ordersState = vi.hoisted(() => ({
   pageCount: 1,
 }));
 
+const awaitingPaymentState = vi.hoisted(() => ({
+  amount: 40,
+  count: 1,
+  isLoading: false,
+  error: null as Error | null,
+}));
+
 vi.mock("./useGetOrders", () => ({
   useOrdersPage: () => ({
     orders: ordersState.list,
@@ -55,6 +62,13 @@ vi.mock("./useGetOrders", () => ({
     isLoading: false,
     isFetching: false,
     error: null,
+    refetch: vi.fn(),
+  }),
+  useOrdersAwaitingPayment: () => ({
+    amount: awaitingPaymentState.amount,
+    count: awaitingPaymentState.count,
+    isLoading: awaitingPaymentState.isLoading,
+    error: awaitingPaymentState.error,
     refetch: vi.fn(),
   }),
   useUpdateOrderStatus: () => ({ mutate: statusHooks.mutate, isPending: statusHooks.isPending }),
@@ -112,6 +126,10 @@ beforeEach(() => {
   ordersState.page = 1;
   ordersState.pageSize = 25;
   ordersState.pageCount = 1;
+  awaitingPaymentState.amount = 40;
+  awaitingPaymentState.count = 1;
+  awaitingPaymentState.isLoading = false;
+  awaitingPaymentState.error = null;
 });
 
 function manyOrders(count: number): Order[] {
@@ -140,6 +158,13 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("shows an Awaiting Payment card next to the Orders heading", () => {
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByText("Awaiting Payment")).toBeInTheDocument();
+    expect(screen.getByText("1 unpaid order")).toBeInTheDocument();
   });
 
   it("shows the server pagination summary, page controls, and page-size choices", () => {

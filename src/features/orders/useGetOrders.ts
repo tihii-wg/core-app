@@ -4,6 +4,7 @@ import i18n from "../../i18n";
 import {
   DEFAULT_ORDERS_PAGE_SIZE,
   getOrders,
+  getOrdersAwaitingPayment,
   getOrdersPage,
   updateOrderStatus,
   type OrdersListQuery,
@@ -64,6 +65,24 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
     pageCount: data?.pageCount ?? 1,
     isLoading,
     isFetching,
+    error,
+    refetch,
+  };
+}
+
+/** Unpaid non-cancelled order total for the Orders header card. */
+export function useOrdersAwaitingPayment({ enabled = true }: { enabled?: boolean } = {}) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["orders", workspaceId, "awaitingPayment"],
+    queryFn: () => getOrdersAwaitingPayment(workspaceId),
+    enabled: Boolean(workspaceId) && enabled,
+  });
+
+  return {
+    amount: data?.amount ?? 0,
+    count: data?.count ?? 0,
+    isLoading,
     error,
     refetch,
   };

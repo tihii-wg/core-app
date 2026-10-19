@@ -624,6 +624,33 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
   };
 }
 
+export type OrdersAwaitingPayment = {
+  amount: number;
+  count: number;
+};
+
+/**
+ * Workspace total for unpaid, non-cancelled orders (same rule as dashboard outstanding).
+ * Loads only `total_price` rows — not full order hydration.
+ */
+export async function getOrdersAwaitingPayment(workspaceId: string | undefined): Promise<OrdersAwaitingPayment> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase
+    .from("orders")
+    .select("total_price")
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("is_paid", false)
+    .neq("status", "cancelled");
+
+  if (error) throw new Error(error.message);
+
+  const rows = data ?? [];
+  return {
+    amount: rows.reduce((sum, row) => sum + Number((row as { total_price?: unknown }).total_price ?? 0), 0),
+    count: rows.length,
+  };
+}
+
 export async function getOrder(orderId: string, workspaceId: string | undefined) {
   const orders = await getOrders(workspaceId);
   const order = orders.find((item) => item.id === orderId);
