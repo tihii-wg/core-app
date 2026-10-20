@@ -221,6 +221,7 @@ export function Orders() {
     {
       key: "actions",
       header: t("common.actions"),
+      stickyRight: true,
       className: "w-[80px] text-right",
       cell: (order) => (
         <div className="flex justify-end gap-1">

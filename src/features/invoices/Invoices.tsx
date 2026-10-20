@@ -17,6 +17,7 @@ import { useUpdateInvoiceStatus } from "./useUpdateInvoiceStatus";
 import { CreateInvoiceDialog } from "./CreateInvoiceDialog";
 import { InvoiceActionsMenu } from "./InvoiceActionsMenu";
 import { InvoiceDetailPanel } from "./InvoiceDetailPanel";
+import { InvoicePrintButton } from "./InvoicePrintButton";
 
 export function Invoices() {
   const { t } = useTranslation();
@@ -174,9 +175,11 @@ export function Invoices() {
     {
       key: "actions",
       header: t("common.actions"),
-      className: "w-[80px] text-right",
+      stickyRight: true,
+      className: "w-[104px] text-right",
       cell: (invoice) => (
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-1">
+          <InvoicePrintButton invoice={invoice} />
           <InvoiceActionsMenu invoice={invoice} isUpdating={updateStatus.isPending} onStatusChange={handleStatusChange} />
         </div>
       ),

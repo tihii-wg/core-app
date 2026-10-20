@@ -14,7 +14,12 @@ export interface Column<T> {
   header: string;
   cell: (item: T) => React.ReactNode;
   className?: string;
+  /** Pin the column to the right edge while the rest of the table scrolls horizontally (opt-in per table). */
+  stickyRight?: boolean;
 }
+
+const stickyHeadClassName = 'sticky right-0 z-20 bg-muted shadow-[-10px_0_14px_-10px_rgb(10_14_20/0.25)]';
+const stickyCellClassName = 'sticky right-0 z-10 bg-card shadow-[-10px_0_14px_-10px_rgb(10_14_20/0.18)]';
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -44,7 +49,7 @@ export function DataTable<T>({
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         {columns.map((column) => (
-          <TableHead key={column.key} className={column.className}>
+          <TableHead key={column.key} className={cn(column.className, column.stickyRight && stickyHeadClassName)}>
             {column.header}
           </TableHead>
         ))}
@@ -61,7 +66,7 @@ export function DataTable<T>({
             {Array.from({ length: 6 }).map((_, i) => (
               <TableRow key={i} className="hover:bg-transparent">
                 {columns.map((column, c) => (
-                  <TableCell key={column.key} className={cn('h-12', column.className)}>
+                  <TableCell key={column.key} className={cn('h-12', column.className, column.stickyRight && stickyCellClassName)}>
                     <Skeleton className={cn('h-3.5', skeletonWidths[(i + c) % skeletonWidths.length])} />
                   </TableCell>
                 ))}
@@ -91,7 +96,7 @@ export function DataTable<T>({
               {columns.map((column) => (
                 <TableCell
                   key={column.key}
-                  className={cn('h-12 text-sm text-foreground', column.className)}
+                  className={cn('h-12 text-sm text-foreground', column.className, column.stickyRight && stickyCellClassName)}
                 >
                   {column.cell(item)}
                 </TableCell>

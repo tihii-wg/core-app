@@ -1,4 +1,5 @@
-import { CircleCheck, RotateCcw, Send } from "lucide-react";
+import { useState } from "react";
+import { CircleCheck, Download, Mail, Printer, RotateCcw, Send } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { ErrorState } from "../../ui/EmptyState";
@@ -10,6 +11,9 @@ import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoice } from "./useGetInvoices";
+import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
+import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
+import { InvoiceEmailDialog } from "./InvoiceEmailDialog";
 
 type InvoiceDetailPanelProps = {
   invoiceId: string | null;
@@ -23,6 +27,22 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
   const { invoice, isLoading, error } = useGetInvoice(invoiceId);
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
+  const documentData = useInvoiceDocumentData(invoice ?? null);
+  const [printJob, setPrintJob] = useState<InvoicePrintJob | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+
+  const startPrint = () => {
+    if (!invoice) return;
+    setPrintJob({
+      invoice,
+      sections: documentData.sections,
+      companyName: documentData.companyName,
+      logoUrl: documentData.logoUrl,
+      supplier: documentData.supplier,
+      formatMoney,
+      documentTitle: `${invoice.invoiceNumber}.pdf`,
+    });
+  };
 
   return (
     <Sheet open={invoiceId !== null} onOpenChange={(open) => !open && onClose()}>
@@ -127,9 +147,26 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                 </Button>
               )}
             </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" disabled={documentData.isLoading} onClick={startPrint}>
+                <Download />
+                {t("invoices.actions.downloadPdf")}
+              </Button>
+              <Button variant="outline" size="sm" disabled={documentData.isLoading} onClick={startPrint}>
+                <Printer />
+                {t("invoices.actions.previewPrint")}
+              </Button>
+              <Button variant="outline" size="sm" disabled={documentData.isLoading} onClick={() => setEmailOpen(true)}>
+                <Mail />
+                {t("invoices.actions.sendEmail")}
+              </Button>
+            </div>
           </div>
         )}
       </SheetContent>
+      {printJob ? <InvoicePrintRoot job={printJob} onDone={() => setPrintJob(null)} /> : null}
+      {emailOpen && invoice ? <InvoiceEmailDialog invoice={invoice} onClose={() => setEmailOpen(false)} onDownloadPdf={startPrint} /> : null}
     </Sheet>
   );
 }

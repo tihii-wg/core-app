@@ -206,6 +206,16 @@
     margin: 14mm 12mm;
   }
 
+  /* Invoices always print on a single A4 portrait page size. */
+  @page invoice-a4 {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  [data-invoice-print-root] article {
+    page: invoice-a4;
+  }
+
   html,
   body {
     background: #fff !important;
@@ -224,7 +234,7 @@
     display: table-row-group;
   }
 
-  body:has(> [data-report-print-root]) > :not([data-report-print-root]) {
+  body:has(> [data-report-print-root], > [data-invoice-print-root]) > :not([data-report-print-root]):not([data-invoice-print-root]) {
     display: none !important;
   }
 }
