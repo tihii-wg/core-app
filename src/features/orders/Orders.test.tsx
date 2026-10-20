@@ -332,7 +332,7 @@ describe("Orders page", () => {
   });
 
   it("shows the existing invoice instead of offering another one", async () => {
-    invoiceHooks.invoices = [{ id: "inv-1", invoiceNumber: "INV-2026-001", clientId: "client-1", clientName: "Ada Lovelace", orderId: "order-1", orderNumber: "ORD-2026-003", amount: 40, status: "draft", dueDate: "", createdAt: "2026-10-04" }];
+    invoiceHooks.invoices = [{ id: "inv-1", workspaceId: "ws-1", invoiceNumber: "INV-2026-001", clientId: "client-1", clientName: "Ada Lovelace", orderId: "order-1", orderNumber: "ORD-2026-003", device: "", carNumber: "", vin: "", description: "", subtotal: 40, amount: 40, total: 40, status: "draft", dueDate: "", createdAt: "2026-10-04", updatedAt: "2026-10-04" }];
     const user = await openActions();
 
     const invoiced = screen.getByRole("menuitem", { name: "Invoice INV-2026-001 already created" });

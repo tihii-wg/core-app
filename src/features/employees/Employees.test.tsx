@@ -43,7 +43,7 @@ vi.mock("./AddNewEmployeesForm", () => ({
   default: () => <div>Create form</div>,
 }));
 
-function employee(partial: Partial<Employee>): Employee {
+function employee(partial: Partial<Employee> = {}): Employee {
   return {
     id: "emp-1",
     name: "Ada Tech",

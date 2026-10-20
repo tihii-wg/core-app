@@ -65,7 +65,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
             rules={{
               required: t("services.form.serviceRequired"),
             }}
-            render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} errors={errors.serviceName} />}
+            render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} errors={Boolean(errors.serviceName)} />}
           />
           {errors.serviceName && <p className="text-xs text-destructive">{t("services.form.serviceNameRequired")}</p>}
         </div>

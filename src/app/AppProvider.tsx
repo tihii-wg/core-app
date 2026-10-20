@@ -6,7 +6,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import type { Company, Profile } from "../../types/app";
+import type { Company, Profile } from "../lib/types";
 
 type AppStatus = "loading" | "ready";
 type AuthState = "unknown" | "signed_out" | "authenticated";

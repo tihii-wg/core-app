@@ -5,7 +5,7 @@ import type {
   // User,
   Client,
   Employee,
-  // Order,
+  Order,
   MockInventoryItem,
   Service,
   AppModule,
@@ -25,10 +25,10 @@ import {
 
 interface AppContextType {
   // Auth
-  auth: AuthState;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  register: (data: { companyName: string; ownerName: string; email: string; password: string }) => Promise<boolean>;
+  auth?: AuthState;
+  login?: (email: string, password: string) => Promise<boolean>;
+  logout?: () => void;
+  register?: (data: { companyName: string; ownerName: string; email: string; password: string }) => Promise<boolean>;
 
   // Navigation
   // currentModule: AppModule;
@@ -39,20 +39,20 @@ interface AppContextType {
   setMobileSidebarOpen: (open: boolean) => void;
 
   // Data
-  clients: Client[];
-  employees: Employee[];
+  clients?: Client[];
+  employees?: Employee[];
   orders: Order[];
   inventory: MockInventoryItem[];
   services: Service[];
 
   // Actions
-  addClient: (client: Omit<Client, 'id' | 'createdAt' | 'balance'>) => void;
+  addClient?: (client: Omit<Client, 'id' | 'createdAt' | 'balance'>) => void;
   addOrder: (order: Omit<Order, 'id' | 'orderNumber' | 'createdAt' | 'updatedAt'>) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   addInventoryItem: (item: Omit<MockInventoryItem, 'id' | 'status'>) => void;
   updateInventoryQuantity: (itemId: string, quantity: number) => void;
   addService: (service: Omit<Service, 'id'>) => void;
-  addEmployee: (employee: Omit<Employee, 'id' | 'assignedTasks' | 'completedTasks'>) => void;
+  addEmployee?: (employee: Omit<Employee, 'id' | 'assignedTasks' | 'completedTasks'>) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -62,7 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false, user: null });
 
   // Navigation state
-  const [currentModule, setCurrentModule] = useState<AppModule>('dashboard');
+  const [, setCurrentModule] = useState<AppModule>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 

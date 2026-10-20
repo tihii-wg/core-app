@@ -1231,8 +1231,14 @@ revoke all on function public.protect_invoice_identity() from public, anon, auth
 grant execute on function public.protect_invoice_identity() to service_role;
 revoke all on function public.format_invoice_number(text, timestamptz, text, integer) from public, anon, authenticated;
 grant execute on function public.format_invoice_number(text, timestamptz, text, integer) to service_role;
-revoke all on function public.invoice_number_template_is_valid(text) from public, anon, authenticated;
-grant execute on function public.invoice_number_template_is_valid(text) to service_role;
+revoke all on function public.invoice_number_template_is_valid(text) from public, anon;
+-- CHECK constraints evaluate functions as the WRITING role (authenticated
+-- via PostgREST), unlike trigger functions. The workspaces template CHECK
+-- therefore requires authenticated EXECUTE; without it every workspace
+-- update fails with "permission denied for function
+-- invoice_number_template_is_valid". The function is a pure immutable
+-- validator (no data access), so this grant is safe. anon stays revoked.
+grant execute on function public.invoice_number_template_is_valid(text) to authenticated, service_role;
 revoke all on function public.legal_entity_belongs_to_workspace(uuid, uuid) from public, anon;
 grant execute on function public.legal_entity_belongs_to_workspace(uuid, uuid) to authenticated, service_role;
 revoke all on function public.legal_entities_protect_workspace() from public, anon, authenticated, service_role;

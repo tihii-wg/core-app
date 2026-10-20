@@ -31,6 +31,14 @@ begin
                  where n.nspname='public' and c.relname='orders_workspace_open_vin_idx' and c.relkind='i') then
     raise exception 'VERIFY FAILED: index orders_workspace_open_vin_idx missing.';
   end if;
+  -- The workspaces CHECK constraint evaluates this validator as the
+  -- writing role: authenticated must hold EXECUTE, anon must not.
+  if not has_function_privilege('authenticated', 'public.invoice_number_template_is_valid(text)', 'execute') then
+    raise exception 'VERIFY FAILED: authenticated lacks EXECUTE on invoice_number_template_is_valid(text); workspace updates will fail with permission denied.';
+  end if;
+  if has_function_privilege('anon', 'public.invoice_number_template_is_valid(text)', 'execute') then
+    raise exception 'VERIFY FAILED: anon must not hold EXECUTE on invoice_number_template_is_valid(text).';
+  end if;
   if (select count(*) from pg_policies where schemaname='public' and tablename='legal_entities') <> 4 then
     raise exception 'VERIFY FAILED: legal_entities must have exactly 4 policies.';
   end if;
@@ -100,4 +108,4 @@ order by w.id;
 
 -- THE visible result of a whole-file run.
 select 'PASS' as verify_status,
-       'General Settings post-conditions hold: legal_entities created with 4 policies, defaults in sync, no cross-workspace/deleted invoice legal entities, no unique client phone/email index.' as detail;
+       'General Settings post-conditions hold: legal_entities created with 4 policies, template validator executable by authenticated (not anon), defaults in sync, no cross-workspace/deleted invoice legal entities, no unique client phone/email index.' as detail;

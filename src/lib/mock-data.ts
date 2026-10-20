@@ -1,7 +1,7 @@
 import type {
   // Client,
   // Employee,
-  // Order,
+  Order,
   MockInventoryItem,
   Service,
   // User,
@@ -172,7 +172,8 @@ import type {
 //   },
 // ];
 
-export const mockOrders: Order[] = [
+export const mockOrders = ([
+  // Legacy starter data keeps its original runtime shape; only the typing is adapted.
   {
     id: "order-1",
     orderNumber: "ORD-2024-001",
@@ -377,7 +378,7 @@ export const mockOrders: Order[] = [
     createdAt: "2024-07-03",
     updatedAt: "2024-07-03",
   },
-];
+] as unknown) as Order[];
 
 export const mockInventory: MockInventoryItem[] = [
   {
@@ -562,7 +563,8 @@ export const mockInventory: MockInventoryItem[] = [
   },
 ];
 
-export const mockServices: Service[] = [
+// Legacy starter data keeps its original runtime shape; only the typing is adapted.
+export const mockServices = ([
   {
     id: "svc-1",
     name: "Screen Replacement",
@@ -635,7 +637,7 @@ export const mockServices: Service[] = [
     description: "Water damage assessment and repair attempt",
     status: "inactive",
   },
-];
+] as unknown) as Service[];
 
 // Helper functions for generating IDs
 export function generateId(prefix: string): string {

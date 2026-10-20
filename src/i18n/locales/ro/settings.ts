@@ -139,7 +139,6 @@ const settings: Messages<typeof en> = {
       },
       validation: {
         nameRequired: "Denumirea legală este obligatorie",
-      billingEmailInvalid: "Introduceți un e-mail de facturare valid",
       },
       toast: {
         saved: "Entitatea juridică a fost salvată",
@@ -262,6 +261,7 @@ const settings: Messages<typeof en> = {
     save: "Salvați setările companiei",
     validation: {
       nameRequired: "Numele companiei este obligatoriu",
+      billingEmailInvalid: "Introduceți un e-mail de facturare valid",
       businessTypeRequired: "Tipul afacerii este obligatoriu",
       markupRequired: "Procentul de adaos este obligatoriu",
       markupNotNumber: "Procentul de adaos trebuie să fie un număr",

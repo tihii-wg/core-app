@@ -139,7 +139,6 @@ const settings: Messages<typeof en> = {
       },
       validation: {
         nameRequired: "Укажите юридическое название",
-      billingEmailInvalid: "Укажите корректный email для счетов",
       },
       toast: {
         saved: "Юридическое лицо сохранено",
@@ -262,6 +261,7 @@ const settings: Messages<typeof en> = {
     save: "Сохранить настройки компании",
     validation: {
       nameRequired: "Укажите название компании",
+      billingEmailInvalid: "Укажите корректный email для счетов",
       businessTypeRequired: "Укажите вид деятельности",
       markupRequired: "Укажите процент наценки",
       markupNotNumber: "Процент наценки должен быть числом",

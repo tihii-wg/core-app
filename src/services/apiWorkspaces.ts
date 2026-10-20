@@ -5,7 +5,6 @@ import i18n from "../i18n";
 import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
 import {
-  companyFieldDefaults,
   contactSettingsDefaults,
   invoiceSettingsDefaults,
   normalizeDocumentLanguage,

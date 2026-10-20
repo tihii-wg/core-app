@@ -1,7 +1,7 @@
 import type { PropsWithChildren, ReactElement } from "react";
 import { render, type RenderOptions } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { AppProvider, type AppContextValue } from "../features/app/AppProvider";
+import { AppProvider, type AppContextValue } from "../app/AppProvider";
 
 type RenderWithAppOptions = Omit<RenderOptions, "wrapper"> & {
   withRouter?: boolean;

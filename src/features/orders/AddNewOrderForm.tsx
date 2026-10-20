@@ -322,13 +322,13 @@ export default function AddNewOrderForm({
         </div>
 
         <OrderMaterialLinesEditor
-          control={control}
+          control={control as never}
           fields={materialFields}
           append={materialAppend}
           remove={materialRemove}
           setValue={setValue}
           getValues={getValues}
-          trigger={trigger}
+          trigger={trigger as never}
           inventoryItems={activeInventory}
           disabled={isSubmitting}
           isSubmitted={isSubmitted}

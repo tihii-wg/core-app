@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFieldArrayRemove, UseFormGetValues, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
 import type { InventoryItem, OrderMaterial } from "../../lib/types";
@@ -34,19 +35,19 @@ type OrderMaterialLinesEditorProps = {
   errors?: { root?: { message?: string }; [index: number]: { quantity?: { message?: string } } | undefined };
 };
 
-function quantityValidationMessage(value: unknown, t: (key: string) => string): true | string {
+function quantityValidationMessage(value: unknown, t: TFunction): true | string {
   if (value === "" || value === null || value === undefined) {
-    return t("orders.validation.quantityRequired");
+    return t("orders.validation.quantityRequired") as string;
   }
   const number = typeof value === "number" ? value : Number(typeof value === "string" ? value.trim() : value);
   if (!Number.isFinite(number)) {
-    return t("orders.validation.quantityRequired");
+    return t("orders.validation.quantityRequired") as string;
   }
   if (number <= 0) {
-    return t("orders.validation.quantityMin");
+    return t("orders.validation.quantityMin") as string;
   }
   if (!Number.isInteger(number)) {
-    return t("orders.validation.quantityInteger");
+    return t("orders.validation.quantityInteger") as string;
   }
   return true;
 }

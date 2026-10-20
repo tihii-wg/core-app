@@ -152,7 +152,7 @@ describe("operationsStats", () => {
       order({ id: "completed-in", createdAt: "2026-09-01", updatedAt: "2026-09-30", status: "completed" }),
       order({ id: "completed-out", createdAt: "2026-08-01", updatedAt: "2026-08-15", status: "paid", isPaid: true }),
       order({ id: "open", createdAt: "2026-08-01", status: "in-progress", deadline: "2026-10-10" }),
-      order({ id: "overdue", createdAt: "2026-08-01", status: "waiting", deadline: "2026-09-01" }),
+      order({ id: "overdue", createdAt: "2026-08-01", status: "waiting-parts", deadline: "2026-09-01" }),
       order({ id: "closed-old", createdAt: "2026-08-01", status: "cancelled", deadline: "2026-01-01" }),
     ];
 
@@ -196,7 +196,7 @@ describe("employeeWorkload", () => {
       order({ id: "t1", assignedEmployeeId: "e1", status: "in-progress", deadline: "2026-09-01" }),
       order({ id: "t2", assignedEmployeeId: "p1", status: "completed" }),
       order({ id: "a1", assignedEmployeeId: "e2", status: "new", deadline: "2026-10-10" }),
-      order({ id: "u1", assignedEmployeeId: "", status: "waiting", deadline: "2026-09-15" }),
+      order({ id: "u1", assignedEmployeeId: "", status: "waiting-parts", deadline: "2026-09-15" }),
       order({ id: "u2", assignedEmployeeId: "unknown", status: "new" }),
       order({ id: "cancelled-unassigned", assignedEmployeeId: "", status: "cancelled" }),
       order({ id: "outside", assignedEmployeeId: "e1", status: "new", createdAt: "2025-01-01" }),
