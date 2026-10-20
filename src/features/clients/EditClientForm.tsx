@@ -25,12 +25,15 @@ export default function EditClientForm({ client, onCancel, onUpdated }: EditClie
     defaultValues: {
       clientType: client.client_type === "organization" ? "organization" : "individual",
       clientName: client.name,
+      middleName: client.middleName ?? "",
       taxId: client.tax_id ?? "",
       contactPerson: client.contact_person ?? "",
       email: client.email ?? "",
       phone: client.phone ?? "",
       address: client.address ?? "",
       notes: client.notes ?? "",
+      phoneNotificationsConsent: Boolean(client.phoneNotificationsConsent),
+      emailNotificationsConsent: Boolean(client.emailNotificationsConsent),
     },
   });
 

@@ -1,10 +1,12 @@
-export const settingsTabs = ["company", "profile", "notifications", "security", "billing", "team", "appearance"] as const;
+export const settingsTabs = ["general", "profile", "notifications", "security", "billing", "team", "appearance"] as const;
 
 export type SettingsTab = (typeof settingsTabs)[number];
 
+/** Older bookmarks used `company`; treat it as General. */
 export function settingsTabFromSearch(value: string | null): SettingsTab {
+  if (value === "company") return "general";
   if (value && (settingsTabs as readonly string[]).includes(value)) return value as SettingsTab;
-  return "company";
+  return "general";
 }
 
 export function profileSettingsPath(locale: string, workspaceId: string) {

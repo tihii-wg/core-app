@@ -6,22 +6,27 @@ import type { ClientFormValues, CreateMadalProps } from "../../lib/types";
 import { useCreateNewClient } from "./useCreateNewClient";
 import ClientFormFields from "./ClientFormFields";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-
-const emptyClient: ClientFormValues = {
-  clientType: "individual",
-  clientName: "",
-  taxId: "",
-  contactPerson: "",
-  email: "",
-  phone: "",
-  address: "",
-  notes: "",
-};
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 
 export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProps) {
   const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
+  const { data: workspace } = useGetWorkspace(workspaceId);
   const { mutateAsync: createClient } = useCreateNewClient();
+
+  const emptyClient: ClientFormValues = {
+    clientType: "individual",
+    clientName: "",
+    middleName: "",
+    taxId: "",
+    contactPerson: "",
+    email: "",
+    phone: "",
+    address: "",
+    notes: "",
+    phoneNotificationsConsent: Boolean(workspace?.defaultPhoneConsent),
+    emailNotificationsConsent: Boolean(workspace?.defaultEmailConsent),
+  };
 
   const {
     register,

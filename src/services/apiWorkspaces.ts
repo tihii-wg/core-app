@@ -4,6 +4,24 @@ import { fallbackLanguage, isAppLanguage, type AppLanguage } from "../i18n/langu
 import i18n from "../i18n";
 import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
+import {
+  companyFieldDefaults,
+  contactSettingsDefaults,
+  invoiceSettingsDefaults,
+  normalizeDocumentLanguage,
+  isValidInvoiceNumberTemplate,
+  normalizeInvoiceDueDays,
+  normalizeInvoiceNumberTemplate,
+  normalizeInvoiceOrderDetailsMode,
+  normalizeVisibility,
+  normalizeWarrantyStart,
+  orderSettingsDefaults,
+  type WorkspaceCompanyFields,
+  type WorkspaceContactSettings,
+  type WorkspaceInvoiceSettings,
+  type WorkspaceOrderSettings,
+  type WorkspaceRegionalExtra,
+} from "../lib/workspaceGeneralSettings";
 
 type MembershipResult = {
   data: unknown;
@@ -37,15 +55,49 @@ export async function getUserWorkspaces() {
 
 const preferenceColumns = ["language", "timezone", "date_format", "currency"] as const;
 
+const generalSettingsColumns = [
+  "company_address",
+  "billing_email",
+  "registration_number",
+  "tax_vat_number",
+  "iban",
+  "bank_name",
+  "bank_code",
+  "company_description",
+  "print_extra_info",
+  "country_code",
+  "document_language",
+  "warranty_start",
+  "default_comments_visibility",
+  "default_files_visibility",
+  "prevent_duplicate_device_orders",
+  "show_client_middle_name",
+  "default_phone_consent",
+  "prevent_duplicate_phones",
+  "default_email_consent",
+  "prevent_duplicate_emails",
+  "invoice_number_template",
+  "invoice_due_days",
+  "invoice_order_details_mode",
+  "prevent_backdated_invoices",
+  "default_legal_entity_id",
+  "online_payments_enabled",
+] as const;
+
 function mentionsPreferenceColumn(message?: string) {
   return preferenceColumns.some((column) => message?.includes(column) === true);
 }
 
-function membershipSelect(options: { industry: boolean; avatar: boolean; markup: boolean; preferences: boolean }) {
+function mentionsGeneralSettingsColumn(message?: string) {
+  return generalSettingsColumns.some((column) => message?.includes(column) === true);
+}
+
+function membershipSelect(options: { industry: boolean; avatar: boolean; markup: boolean; preferences: boolean; general: boolean }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
   if (options.markup) fields.push("inventory_markup");
   if (options.preferences) fields.push(...preferenceColumns);
+  if (options.general) fields.push(...generalSettingsColumns);
   const industry = options.industry
     ? `,
     industry:industries (
@@ -66,12 +118,23 @@ function isMissingAvatarColumn(error: { code?: string; message?: string }) {
 }
 
 function isMissingIndustrySchema(error: { code?: string; message?: string }) {
-  if (error.message?.includes("avatar_path") || error.message?.includes("inventory_markup") || mentionsPreferenceColumn(error.message)) return false;
+  if (
+    error.message?.includes("avatar_path") ||
+    error.message?.includes("inventory_markup") ||
+    mentionsPreferenceColumn(error.message) ||
+    mentionsGeneralSettingsColumn(error.message)
+  ) {
+    return false;
+  }
   return error.code === "PGRST205" || error.code === "PGRST200" || error.code === "42703" || error.message?.includes("industries") === true;
 }
 
 function isMissingPreferenceColumn(error: { code?: string; message?: string }) {
   return (error.code === "42703" || error.code === "PGRST204") && mentionsPreferenceColumn(error.message);
+}
+
+function isMissingGeneralSettingsColumn(error: { code?: string; message?: string }) {
+  return (error.code === "42703" || error.code === "PGRST204") && mentionsGeneralSettingsColumn(error.message);
 }
 
 function isMissingMarkupColumn(error: { code?: string; message?: string }) {
@@ -83,10 +146,15 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let avatar = true;
   let markup = true;
   let preferences = true;
+  let general = true;
 
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const { data, error } = await run(membershipSelect({ industry, avatar, markup, preferences }));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const { data, error } = await run(membershipSelect({ industry, avatar, markup, preferences, general }));
     if (!error) return data;
+    if (general && isMissingGeneralSettingsColumn(error)) {
+      general = false;
+      continue;
+    }
     if (preferences && isMissingPreferenceColumn(error)) {
       preferences = false;
       continue;
@@ -124,6 +192,32 @@ export type WorkspaceDetails = {
   dateFormat: string | null;
   currency: string | null;
   role: string;
+  companyAddress: string;
+  billingEmail: string;
+  registrationNumber: string;
+  taxVatNumber: string;
+  iban: string;
+  bankName: string;
+  bankCode: string;
+  companyDescription: string;
+  printExtraInfo: string;
+  countryCode: string;
+  documentLanguage: string;
+  warrantyStart: string;
+  defaultCommentsVisibility: string;
+  defaultFilesVisibility: string;
+  preventDuplicateDeviceOrders: boolean;
+  showClientMiddleName: boolean;
+  defaultPhoneConsent: boolean;
+  preventDuplicatePhones: boolean;
+  defaultEmailConsent: boolean;
+  preventDuplicateEmails: boolean;
+  invoiceNumberTemplate: string;
+  invoiceDueDays: number;
+  invoiceOrderDetailsMode: string;
+  preventBackdatedInvoices: boolean;
+  defaultLegalEntityId: string | null;
+  onlinePaymentsEnabled: boolean;
 };
 
 function firstRecord(value: unknown) {
@@ -155,6 +249,9 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
   const industry = firstRecord(record.industry);
   const industryRecord = industry && typeof industry === "object" ? (industry as Record<string, unknown>) : null;
 
+  const readBool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
+  const readString = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
+
   return {
     id: record.id,
     name: typeof record.name === "string" ? record.name : "",
@@ -169,6 +266,32 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     dateFormat: readText(record.date_format),
     currency: readText(record.currency),
     role: typeof membership.role === "string" ? membership.role : "member",
+    companyAddress: readString(record.company_address),
+    billingEmail: readString(record.billing_email),
+    registrationNumber: readString(record.registration_number),
+    taxVatNumber: readString(record.tax_vat_number),
+    iban: readString(record.iban),
+    bankName: readString(record.bank_name),
+    bankCode: readString(record.bank_code),
+    companyDescription: readString(record.company_description),
+    printExtraInfo: readString(record.print_extra_info),
+    countryCode: readString(record.country_code, "MD") || "MD",
+    documentLanguage: normalizeDocumentLanguage(readString(record.document_language, readString(record.language, "en"))),
+    warrantyStart: normalizeWarrantyStart(readString(record.warranty_start)),
+    defaultCommentsVisibility: normalizeVisibility(readString(record.default_comments_visibility)),
+    defaultFilesVisibility: normalizeVisibility(readString(record.default_files_visibility)),
+    preventDuplicateDeviceOrders: readBool(record.prevent_duplicate_device_orders, orderSettingsDefaults.preventDuplicateDeviceOrders),
+    showClientMiddleName: readBool(record.show_client_middle_name, contactSettingsDefaults.showClientMiddleName),
+    defaultPhoneConsent: readBool(record.default_phone_consent, contactSettingsDefaults.defaultPhoneConsent),
+    preventDuplicatePhones: readBool(record.prevent_duplicate_phones, contactSettingsDefaults.preventDuplicatePhones),
+    defaultEmailConsent: readBool(record.default_email_consent, contactSettingsDefaults.defaultEmailConsent),
+    preventDuplicateEmails: readBool(record.prevent_duplicate_emails, contactSettingsDefaults.preventDuplicateEmails),
+    invoiceNumberTemplate: normalizeInvoiceNumberTemplate(readString(record.invoice_number_template)),
+    invoiceDueDays: normalizeInvoiceDueDays(record.invoice_due_days),
+    invoiceOrderDetailsMode: normalizeInvoiceOrderDetailsMode(readString(record.invoice_order_details_mode)),
+    preventBackdatedInvoices: readBool(record.prevent_backdated_invoices, invoiceSettingsDefaults.preventBackdatedInvoices),
+    defaultLegalEntityId: typeof record.default_legal_entity_id === "string" ? record.default_legal_entity_id : null,
+    onlinePaymentsEnabled: readBool(record.online_payments_enabled, false),
   };
 }
 
@@ -177,6 +300,8 @@ export type WorkspacePreferencesInput = {
   timezone: string;
   dateFormat: string;
   currency: string;
+  countryCode?: string;
+  documentLanguage?: string;
 };
 
 export type WorkspaceLanguage = AppLanguage;
@@ -208,11 +333,14 @@ export function workspacePreferenceFields(input: WorkspacePreferencesInput) {
   const currency = input.currency.trim();
   if (!timezone) throw new Error(i18n.t("settings.appearance.errors.timezoneRequired"));
   if (!currency) throw new Error(i18n.t("settings.appearance.errors.currencyRequired"));
+  const countryCode = (input.countryCode ?? "MD").trim().toUpperCase() || "MD";
   return {
     language: normalizeWorkspaceLanguage(input.language),
     timezone,
     date_format: normalizeWorkspaceDateFormat(input.dateFormat),
     currency,
+    country_code: countryCode,
+    document_language: normalizeDocumentLanguage(input.documentLanguage ?? input.language),
   };
 }
 
@@ -454,7 +582,10 @@ export async function setWorkspaceIndustry(workspaceId: string, industryId: stri
   throw new Error(i18n.t("onboarding.errors.saveFailed"));
 }
 
-export async function updateWorkspaceDetails(workspaceId: string, input: { name: string; industryId: string; inventoryMarkup: number }) {
+export async function updateWorkspaceDetails(
+  workspaceId: string,
+  input: { name: string; industryId: string; inventoryMarkup: number } & Partial<WorkspaceCompanyFields>,
+) {
   const fields = workspaceUpdateFields(input);
   const user = await currentUser();
   await requireWorkspaceMembership(user.id, workspaceId);
@@ -462,7 +593,20 @@ export async function updateWorkspaceDetails(workspaceId: string, input: { name:
   const resolvedIndustryId = await resolveIndustryId(fields.industryId);
   const { data, error } = await supabase
     .from("workspaces")
-    .update({ name: fields.name, industry_id: resolvedIndustryId, inventory_markup: fields.inventoryMarkup })
+    .update({
+      name: fields.name,
+      industry_id: resolvedIndustryId,
+      inventory_markup: fields.inventoryMarkup,
+      company_address: (input.companyAddress ?? "").trim() || null,
+      billing_email: (input.billingEmail ?? "").trim() || null,
+      registration_number: (input.registrationNumber ?? "").trim() || null,
+      tax_vat_number: (input.taxVatNumber ?? "").trim() || null,
+      iban: (input.iban ?? "").trim() || null,
+      bank_name: (input.bankName ?? "").trim() || null,
+      bank_code: (input.bankCode ?? "").trim() || null,
+      company_description: (input.companyDescription ?? "").trim() || null,
+      print_extra_info: (input.printExtraInfo ?? "").trim() || null,
+    })
     .eq("id", workspaceId)
     .select("id")
     .maybeSingle();
@@ -488,6 +632,83 @@ export async function updateWorkspacePreferences(workspaceId: string, input: Wor
 
   return getWorkspace(workspaceId);
 }
+
+
+async function updateWorkspaceColumns(workspaceId: string, patch: Record<string, unknown>) {
+  const user = await currentUser();
+  await requireWorkspaceMembership(user.id, workspaceId);
+  const { data, error } = await supabase.from("workspaces").update(patch).eq("id", workspaceId).is("deleted_at", null).select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(ownerOnlyWorkspaceMessage());
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) throw new Error(ownerOnlyWorkspaceMessage());
+  return workspace;
+}
+
+export async function updateWorkspaceOrderSettings(workspaceId: string, input: WorkspaceOrderSettings) {
+  return updateWorkspaceColumns(workspaceId, {
+    warranty_start: normalizeWarrantyStart(input.warrantyStart),
+    default_comments_visibility: normalizeVisibility(input.defaultCommentsVisibility),
+    default_files_visibility: normalizeVisibility(input.defaultFilesVisibility),
+    prevent_duplicate_device_orders: Boolean(input.preventDuplicateDeviceOrders),
+  });
+}
+
+export async function updateWorkspaceContactSettings(workspaceId: string, input: WorkspaceContactSettings) {
+  return updateWorkspaceColumns(workspaceId, {
+    show_client_middle_name: Boolean(input.showClientMiddleName),
+    default_phone_consent: Boolean(input.defaultPhoneConsent),
+    prevent_duplicate_phones: Boolean(input.preventDuplicatePhones),
+    default_email_consent: Boolean(input.defaultEmailConsent),
+    prevent_duplicate_emails: Boolean(input.preventDuplicateEmails),
+  });
+}
+
+export async function updateWorkspaceInvoiceSettings(workspaceId: string, input: WorkspaceInvoiceSettings & { invoiceNextNumber?: number }) {
+  // M8: validate the RAW user input. Never silently replace an
+  // unsupported template with the default and report success.
+  const template = input.invoiceNumberTemplate.trim();
+  if (!isValidInvoiceNumberTemplate(template)) {
+    throw new Error(i18n.t("settings.general.invoices.validation.templateCounter"));
+  }
+  const dueDays = normalizeInvoiceDueDays(input.invoiceDueDays);
+  const workspace = await updateWorkspaceColumns(workspaceId, {
+    invoice_number_template: template,
+    invoice_due_days: dueDays,
+    invoice_order_details_mode: normalizeInvoiceOrderDetailsMode(input.invoiceOrderDetailsMode),
+    prevent_backdated_invoices: Boolean(input.preventBackdatedInvoices),
+    default_legal_entity_id: input.defaultLegalEntityId?.trim() || null,
+  });
+
+  // H5: only called when the caller intentionally changed the next
+  // number. The year is derived server-side from the workspace time
+  // zone (year-less overload); the RPC refuses to rewind numbering.
+  if (input.invoiceNextNumber != null) {
+    const { error } = await supabase.rpc("workspace_set_invoice_next_number", {
+      target_workspace: workspaceId,
+      next_number: Math.max(1, Math.round(input.invoiceNextNumber)),
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  return workspace;
+}
+
+export async function getWorkspaceInvoiceNextNumber(workspaceId: string) {
+  // Year-less overload: the database derives the invoice year from
+  // the workspace time zone, not the browser's local year (H5).
+  const { data, error } = await supabase.rpc("workspace_get_invoice_next_number", {
+    target_workspace: workspaceId,
+  });
+  if (error) {
+    if (error.code === "PGRST202" || error.code === "42883") return 1;
+    throw new Error(error.message);
+  }
+  const value = typeof data === "number" ? data : Number(data);
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+export type { WorkspaceCompanyFields, WorkspaceContactSettings, WorkspaceInvoiceSettings, WorkspaceOrderSettings, WorkspaceRegionalExtra };
 
 export async function setActiveWorkspace(id: string) {
   const user = await currentUser();

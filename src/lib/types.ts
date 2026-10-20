@@ -40,6 +40,9 @@ export interface Client {
   client_type: ClientType | null;
   tax_id: string | null;
   contact_person: string | null;
+  middleName?: string | null;
+  phoneNotificationsConsent?: boolean;
+  emailNotificationsConsent?: boolean;
 }
 
 export interface Order {
@@ -417,12 +420,15 @@ export type Company = {
 export type ClientFormValues = {
   clientType: ClientType;
   clientName: string;
+  middleName?: string;
   taxId: string;
   contactPerson: string;
   email: string;
   phone: string;
   address?: string;
   notes?: string;
+  phoneNotificationsConsent?: boolean;
+  emailNotificationsConsent?: boolean;
 };
 
 export type AddNewClientFormData = ClientFormValues & {
@@ -440,6 +446,9 @@ export type CreateClientInput = {
   clientType?: ClientType;
   taxId?: string | null;
   contactPerson?: string | null;
+  middleName?: string | null;
+  phoneNotificationsConsent?: boolean;
+  emailNotificationsConsent?: boolean;
 };
 
 export type EditClientFormData = ClientFormValues;

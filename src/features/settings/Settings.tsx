@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import {
-  Building2,
+  SlidersHorizontal,
   User,
   Bell,
   Shield,
@@ -36,19 +36,14 @@ import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { ProfileSettings } from "./ProfileSettings";
-import { CompanySettings } from "./CompanySettings";
+import { GeneralSettings } from "./GeneralSettings";
 import { SecuritySettings } from "./SecuritySettings";
-import { replaceLocale, settingsTabFromSearch } from "./settingsTab";
-import { languageNames, supportedLanguages } from "../../i18n/languages";
+import { settingsTabFromSearch } from "./settingsTab";
 import { currentIntlLocale } from "../../i18n";
 import { useActiveWorkspaceId, useGetProfile } from "../profiles/useGetProfile";
-import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
-import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
-import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 import { TeamSettings } from "./TeamSettings";
 
 export function SettingsModule() {
@@ -80,7 +75,7 @@ export function SettingsModule() {
         value={activeTab}
         onValueChange={(tab) => {
           const next = settingsTabFromSearch(tab);
-          if (next === "company") {
+          if (next === "general") {
             setSearchParams({}, { replace: true });
             return;
           }
@@ -88,9 +83,9 @@ export function SettingsModule() {
         }}
       >
         <TabsList>
-          <TabsTrigger value="company">
-            <Building2 />
-            {t("settings.tabs.company")}
+          <TabsTrigger value="general">
+            <SlidersHorizontal />
+            {t("settings.tabs.general")}
           </TabsTrigger>
           <TabsTrigger value="profile">
             <User />
@@ -118,8 +113,8 @@ export function SettingsModule() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="company" className="mt-5 space-y-5">
-          <CompanySettings />
+        <TabsContent value="general" className="mt-5 space-y-5">
+          <GeneralSettings />
         </TabsContent>
 
         {/* Profile Settings */}
@@ -333,31 +328,6 @@ const themeOptions = [
   { value: "system", labelKey: "settings.appearance.themes.system" },
 ] as const satisfies readonly { value: ProfileTheme; labelKey: string }[];
 
-const languageOptions = supportedLanguages.map((value) => ({ value, label: languageNames[value] }));
-
-const timezoneOptions = [
-  { value: "Europe/Chisinau", labelKey: "settings.appearance.timezones.chisinau" },
-  { value: "America/Los_Angeles", labelKey: "settings.appearance.timezones.pacific" },
-  { value: "America/Denver", labelKey: "settings.appearance.timezones.mountain" },
-  { value: "America/Chicago", labelKey: "settings.appearance.timezones.central" },
-  { value: "America/New_York", labelKey: "settings.appearance.timezones.eastern" },
-] as const;
-
-const dateFormatOptions = ["DD.MM.YYYY", "MM/DD/YYYY", "YYYY-MM-DD"].map((value) => ({ value, label: value }));
-
-const currencyOptions = [
-  { value: "MDL", label: "MDL (L)" },
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "CAD", label: "CAD ($)" },
-];
-
-function withCurrent(options: { value: string; label: string }[], current: string) {
-  if (options.some((option) => option.value === current)) return options;
-  return [{ value: current, label: current }, ...options];
-}
-
 function AppearanceSettings() {
   const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
@@ -409,53 +379,23 @@ function AppearanceSettings() {
 
   if (!workspace) return null;
 
-  return <AppearanceForm key={`${workspace.id}:${profile?.theme ?? "system"}:${workspace.language}:${workspace.timezone}:${workspace.dateFormat}:${workspace.currency}`} workspace={workspace} theme={normalizeProfileTheme(profile?.theme)} />;
+  return <AppearanceForm key={`${workspace.id}:${profile?.theme ?? "system"}`} theme={normalizeProfileTheme(profile?.theme)} />;
 }
 
-function AppearanceForm({ workspace, theme: savedTheme }: { workspace: WorkspaceDetails; theme: ProfileTheme }) {
+function AppearanceForm({ theme: savedTheme }: { theme: ProfileTheme }) {
   const { t } = useTranslation();
-  const { locale = "en" } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
   const [theme, setTheme] = useState<ProfileTheme>(savedTheme);
-  const [language, setLanguage] = useState(normalizeWorkspaceLanguage(workspace.language));
-  const [timezone, setTimezone] = useState(workspace.timezone ?? workspacePreferenceDefaults.timezone);
-  const [dateFormat, setDateFormat] = useState(normalizeWorkspaceDateFormat(workspace.dateFormat));
-  const [currency, setCurrency] = useState(workspace.currency ?? workspacePreferenceDefaults.currency);
-  const { mutateAsync: saveTheme, isPending: themePending } = useUpdateProfileTheme();
-  const { mutateAsync: savePreferences, isPending: preferencesPending } = useUpdateWorkspacePreferences();
-  const isPending = themePending || preferencesPending;
-  const canEditWorkspace = canManageWorkspace(workspace.role);
-  const translatedTimezones = timezoneOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }));
+  const { mutateAsync: saveTheme, isPending } = useUpdateProfileTheme();
 
   async function onSave() {
     toast.loading(t("settings.appearance.toast.saving"), { id: "appearance" });
-    const failures: string[] = [];
-
     try {
       await saveTheme(theme);
+      toast.success(t("settings.appearance.toast.saved"), { id: "appearance" });
     } catch (error) {
-      failures.push(error instanceof Error ? error.message : t("settings.appearance.toast.themeFailed"));
       applyProfileTheme(savedTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
+      toast.error(error instanceof Error ? error.message : t("settings.appearance.toast.themeFailed"), { id: "appearance" });
     }
-
-    if (canEditWorkspace) {
-      try {
-        const saved = await savePreferences({ workspaceId: workspace.id, language, timezone, dateFormat, currency });
-        const nextLanguage = saved?.language ?? language;
-        const nextPath = replaceLocale(location.pathname, locale, nextLanguage);
-        if (nextPath !== location.pathname) navigate(`${nextPath}${location.search}`, { replace: true });
-      } catch (error) {
-        failures.push(error instanceof Error ? error.message : t("settings.appearance.toast.companyPreferencesFailed"));
-      }
-    }
-
-    if (failures.length > 0) {
-      toast.error(failures.join(" "), { id: "appearance" });
-      return;
-    }
-
-    toast.success(t("settings.appearance.toast.saved"), { id: "appearance" });
   }
 
   return (
@@ -465,99 +405,31 @@ function AppearanceForm({ workspace, theme: savedTheme }: { workspace: Workspace
         <CardDescription>{t("settings.appearance.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="pref-theme">{t("settings.appearance.theme")}</Label>
-            <Select
-              value={theme}
-              onValueChange={(value) => {
-                const nextTheme = normalizeProfileTheme(value);
-                setTheme(nextTheme);
-                applyProfileTheme(nextTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
-              }}
-            >
-              <SelectTrigger id="pref-theme" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {themeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {t(option.labelKey)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pref-language">{t("settings.appearance.language")}</Label>
-            <Select value={language} onValueChange={(value) => setLanguage(normalizeWorkspaceLanguage(value))} disabled={!canEditWorkspace}>
-              <SelectTrigger id="pref-language" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {languageOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pref-timezone">{t("settings.appearance.timezone")}</Label>
-            <Select value={timezone} onValueChange={setTimezone} disabled={!canEditWorkspace}>
-              <SelectTrigger id="pref-timezone" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {withCurrent(translatedTimezones, timezone).map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pref-date-format">{t("settings.appearance.dateFormat")}</Label>
-            <Select value={dateFormat} onValueChange={(value) => setDateFormat(normalizeWorkspaceDateFormat(value))} disabled={!canEditWorkspace}>
-              <SelectTrigger id="pref-date-format" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {dateFormatOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pref-currency">{t("settings.appearance.currency")}</Label>
-            <Select value={currency} onValueChange={setCurrency} disabled={!canEditWorkspace}>
-              <SelectTrigger id="pref-currency" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {withCurrent(currencyOptions, currency).map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="max-w-sm space-y-2">
+          <Label htmlFor="pref-theme">{t("settings.appearance.theme")}</Label>
+          <Select
+            value={theme}
+            onValueChange={(value) => {
+              const nextTheme = normalizeProfileTheme(value);
+              setTheme(nextTheme);
+              applyProfileTheme(nextTheme, window.matchMedia("(prefers-color-scheme: dark)").matches);
+            }}
+          >
+            <SelectTrigger id="pref-theme" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {themeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {!canEditWorkspace && <p className="text-sm text-muted-foreground">{t("settings.appearance.ownerOnlyHint")}</p>}
-
         <div className="flex justify-end border-t border-border pt-5">
-          <Button type="button" onClick={onSave} disabled={isPending}>
+          <Button type="button" onClick={() => void onSave()} disabled={isPending}>
             <Save />
             {t("settings.appearance.save")}
           </Button>

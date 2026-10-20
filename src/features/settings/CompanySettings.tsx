@@ -7,6 +7,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Skeleton } from "../../ui/Skeleton";
 import { Separator } from "../../ui/Separator";
+import { Textarea } from "../../ui/Textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetIndustries } from "../industries/useGetIndustries";
 import { industryName } from "../industries/industryName";
@@ -22,6 +23,15 @@ type CompanyFormValues = {
   name: string;
   industryId: string;
   inventoryMarkup: string;
+  companyAddress: string;
+  billingEmail: string;
+  registrationNumber: string;
+  taxVatNumber: string;
+  iban: string;
+  bankName: string;
+  bankCode: string;
+  companyDescription: string;
+  printExtraInfo: string;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -44,6 +54,15 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
       name: workspace.name,
       industryId: workspace.industryId ?? "",
       inventoryMarkup: workspace.inventoryMarkup == null ? "0" : String(workspace.inventoryMarkup),
+      companyAddress: workspace.companyAddress ?? "",
+      billingEmail: workspace.billingEmail ?? "",
+      registrationNumber: workspace.registrationNumber ?? "",
+      taxVatNumber: workspace.taxVatNumber ?? "",
+      iban: workspace.iban ?? "",
+      bankName: workspace.bankName ?? "",
+      bankCode: workspace.bankCode ?? "",
+      companyDescription: workspace.companyDescription ?? "",
+      printExtraInfo: workspace.printExtraInfo ?? "",
     },
   });
 
@@ -61,8 +80,28 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
     const inventoryMarkup = parseMarkupPercent(values.inventoryMarkup);
     if (inventoryMarkup == null) return;
 
+    const email = values.billingEmail.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("billingEmail", { message: t("settings.company.validation.billingEmailInvalid") });
+      return;
+    }
+
     try {
-      await saveWorkspace({ workspaceId: workspace.id, name: values.name, industryId: values.industryId, inventoryMarkup });
+      await saveWorkspace({
+        workspaceId: workspace.id,
+        name: values.name,
+        industryId: values.industryId,
+        inventoryMarkup,
+        companyAddress: values.companyAddress,
+        billingEmail: values.billingEmail,
+        registrationNumber: values.registrationNumber,
+        taxVatNumber: values.taxVatNumber,
+        iban: values.iban,
+        bankName: values.bankName,
+        bankCode: values.bankCode,
+        companyDescription: values.companyDescription,
+        printExtraInfo: values.printExtraInfo,
+      });
     } catch {
       return;
     }
@@ -130,6 +169,17 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
               {industriesError && <p className="text-xs text-destructive">{industriesError.message}</p>}
             </div>
 
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="companyAddress">{t("settings.company.addressLabel")}</Label>
+              <Input id="companyAddress" {...register("companyAddress")} disabled={locked} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="billingEmail">{t("settings.company.billingEmailLabel")}</Label>
+              <Input id="billingEmail" type="email" {...register("billingEmail")} disabled={locked} className={errors.billingEmail ? "border-destructive" : ""} />
+              <FieldError message={errors.billingEmail?.message} />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="inventoryMarkup">{t("settings.company.markupLabel")}</Label>
               <Input
@@ -148,13 +198,50 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
               <FieldError message={errors.inventoryMarkup?.message} />
               <p className="text-xs text-muted-foreground">{t("settings.company.markupHint")}</p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="registrationNumber">{t("settings.company.registrationNumberLabel")}</Label>
+              <Input id="registrationNumber" {...register("registrationNumber")} disabled={locked} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="taxVatNumber">{t("settings.company.taxVatNumberLabel")}</Label>
+              <Input id="taxVatNumber" {...register("taxVatNumber")} disabled={locked} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="iban">{t("settings.company.ibanLabel")}</Label>
+              <Input id="iban" {...register("iban")} disabled={locked} className="font-mono text-sm" />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bankName">{t("settings.company.bankNameLabel")}</Label>
+              <Input id="bankName" {...register("bankName")} disabled={locked} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bankCode">{t("settings.company.bankCodeLabel")}</Label>
+              <Input id="bankCode" {...register("bankCode")} disabled={locked} />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="companyDescription">{t("settings.company.descriptionLabel")}</Label>
+              <Textarea id="companyDescription" rows={3} {...register("companyDescription")} disabled={locked} />
+              <p className="text-xs text-muted-foreground">{t("settings.company.descriptionHint")}</p>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="printExtraInfo">{t("settings.company.printExtraInfoLabel")}</Label>
+              <Textarea id="printExtraInfo" rows={3} {...register("printExtraInfo")} disabled={locked} />
+              <p className="text-xs text-muted-foreground">{t("settings.company.printExtraInfoHint")}</p>
+            </div>
           </div>
 
           {canEdit ? (
             <div className="flex justify-end">
               <Button type="submit" disabled={saving || !isDirty}>
                 <Save />
-                {saving ? t("common.saving") : t("common.saveChanges")}
+                {saving ? t("common.saving") : t("settings.company.save")}
               </Button>
             </div>
           ) : (
@@ -211,13 +298,7 @@ export function CompanySettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-destructive">{message}</p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              void refetch();
-            }}
-          >
+          <Button type="button" variant="outline" onClick={() => void refetch()}>
             {t("common.retry")}
           </Button>
         </CardContent>
@@ -241,5 +322,10 @@ export function CompanySettings() {
 
   if (!workspace) return null;
 
-  return <CompanyForm key={`${workspace.id}:${workspace.name}:${workspace.industryId ?? ""}:${workspace.inventoryMarkup ?? ""}`} workspace={workspace} />;
+  return (
+    <CompanyForm
+      key={`${workspace.id}:${workspace.name}:${workspace.industryId ?? ""}:${workspace.inventoryMarkup ?? ""}:${workspace.companyAddress}:${workspace.billingEmail}`}
+      workspace={workspace}
+    />
+  );
 }

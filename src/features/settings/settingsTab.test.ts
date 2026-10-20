@@ -15,8 +15,9 @@ describe("settings tabs", () => {
     expect(replaceLocale("/en/ws-1/settings", "en", "en")).toBe("/en/ws-1/settings");
   });
 
-  it("keeps the company tab when no tab is requested", () => {
-    expect(settingsTabFromSearch(null)).toBe("company");
-    expect(settingsTabFromSearch("unknown")).toBe("company");
+  it("opens general by default and maps the legacy company tab", () => {
+    expect(settingsTabFromSearch(null)).toBe("general");
+    expect(settingsTabFromSearch("unknown")).toBe("general");
+    expect(settingsTabFromSearch("company")).toBe("general");
   });
 });

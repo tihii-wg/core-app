@@ -2,10 +2,13 @@ import { Controller, useWatch, type Control, type FieldErrors, type UseFormRegis
 import { useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import type { ClientFormValues } from "../../lib/types";
 import { industryClientCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "./clientValidation";
 import ClientTypeSelect from "./ClientTypeSelect";
 
@@ -26,6 +29,9 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const copy = industryClientCopy(workflow);
+  const { workspaceId } = useActiveWorkspaceId();
+  const { data: workspace } = useGetWorkspace(workspaceId);
+  const showMiddleName = Boolean(workspace?.showClientMiddleName);
   const clientType = useWatch({ control, name: "clientType" }) ?? "individual";
   const isOrganization = clientType === "organization";
   const nameLabel = isOrganization ? t("clients.form.organizationNameLabel") : t("clients.form.fullNameLabel");
@@ -58,6 +64,13 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
         />
         <FieldError message={errors.clientName?.message} />
       </div>
+
+      {showMiddleName && !isOrganization ? (
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefix}-middle-name`}>{t("clients.form.middleNameLabel")}</Label>
+          <Input id={`${idPrefix}-middle-name`} {...register("middleName")} placeholder={t("common.optional")} disabled={disabled} />
+        </div>
+      ) : null}
 
       {isOrganization && (
         <div className="grid grid-cols-2 gap-4">
@@ -106,6 +119,33 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-notes`}>{t("clients.form.notesLabel")}</Label>
         <Textarea id={`${idPrefix}-notes`} {...register("notes")} placeholder={copy.notesPlaceholder} rows={3} disabled={disabled} />
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-border px-3 py-3">
+        <Controller
+          name="phoneNotificationsConsent"
+          control={control}
+          render={({ field }) => (
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`${idPrefix}-phone-consent`} className="text-sm font-normal">
+                {t("clients.form.phoneConsentLabel")}
+              </Label>
+              <Switch id={`${idPrefix}-phone-consent`} checked={Boolean(field.value)} onCheckedChange={field.onChange} disabled={disabled} />
+            </div>
+          )}
+        />
+        <Controller
+          name="emailNotificationsConsent"
+          control={control}
+          render={({ field }) => (
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`${idPrefix}-email-consent`} className="text-sm font-normal">
+                {t("clients.form.emailConsentLabel")}
+              </Label>
+              <Switch id={`${idPrefix}-email-consent`} checked={Boolean(field.value)} onCheckedChange={field.onChange} disabled={disabled} />
+            </div>
+          )}
+        />
       </div>
     </div>
   );

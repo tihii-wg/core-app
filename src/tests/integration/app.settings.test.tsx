@@ -30,7 +30,7 @@ describe("company settings", () => {
     await waitFor(() => expect(name).toBeEnabled());
     await user.clear(name);
     await user.type(name, "Alpha Motors");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save company settings" }));
 
     expect(await screen.findByText("Company updated")).toBeInTheDocument();
     expect(row("workspaces", WS.A)?.name).toBe("Alpha Motors");
@@ -45,7 +45,7 @@ describe("company settings", () => {
     await user.type(name, "Alpha Motors");
     fake.failNext("workspaces", "update", { code: "PGRST000", message: "Network request failed" });
 
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save company settings" }));
 
     expect(await screen.findByText("Network request failed")).toBeInTheDocument();
     expect(screen.getByLabelText("Company name")).toHaveValue("Alpha Motors");
@@ -59,7 +59,7 @@ describe("company settings", () => {
     await waitFor(() => expect(markup).toBeEnabled());
     await user.clear(markup);
     await user.type(markup, "2000");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save company settings" }));
 
     expect(markup).toBeInvalid();
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -69,10 +69,10 @@ describe("company settings", () => {
 
   it.each([USERS.admin, USERS.manager, USERS.member])("is read-only for $email", async (viewer) => {
     await openSettings(viewer.id);
-    expect(await screen.findByText("Only the workspace owner can change company settings.")).toBeInTheDocument();
+    expect((await screen.findAllByText("Only the workspace owner can change company settings.")).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Company name")).toBeDisabled();
     expect(screen.getByLabelText("Inventory markup (%)")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save company settings" })).not.toBeInTheDocument();
   });
 });
 
@@ -100,25 +100,34 @@ describe("profile settings", () => {
   });
 });
 
-describe("appearance settings", () => {
-  it("saves company preferences for the owner", async () => {
-    const { user } = await openSettings(USERS.owner.id, "appearance");
-    await screen.findByRole("button", { name: /Save Preferences/ });
-    const selects = within(screen.getByRole("main")).getAllByRole("combobox");
-    expect(selects[4]).toHaveTextContent("MDL");
-    await user.click(selects[4]);
+describe("general regional settings", () => {
+  it("saves regional preferences for the owner", async () => {
+    const { user } = await openSettings(USERS.owner.id);
+    await screen.findByRole("button", { name: /Save regional settings/ });
+    const currency = screen.getByLabelText("Currency");
+    expect(currency).toHaveTextContent("MDL");
+    await user.click(currency);
     await user.click(await screen.findByRole("option", { name: "USD ($)" }));
-    await user.click(screen.getByRole("button", { name: /Save Preferences/ }));
+    await user.click(screen.getByRole("button", { name: /Save regional settings/ }));
 
-    expect(await screen.findByText("Preferences saved")).toBeInTheDocument();
+    expect(await screen.findByText("Regional settings saved")).toBeInTheDocument();
     expect(row("workspaces", WS.A)?.currency).toBe("USD");
   });
 
-  it("lets a member change only the personal theme", async () => {
+  it("is read-only for members", async () => {
+    await openSettings(USERS.member.id);
+    expect(await screen.findByText("Only the workspace owner can change regional settings.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Currency")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Save regional settings/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("appearance settings", () => {
+  it("lets a member change the personal theme", async () => {
     const { user } = await openSettings(USERS.member.id, "appearance");
-    expect(await screen.findByText(/can only be changed by the workspace owner/)).toBeInTheDocument();
+    await screen.findByRole("button", { name: /Save Preferences/ });
     const selects = within(screen.getByRole("main")).getAllByRole("combobox");
-    expect(selects.slice(1).every((select) => select.hasAttribute("disabled") || select.getAttribute("data-disabled") !== null)).toBe(true);
+    expect(selects).toHaveLength(1);
 
     await user.click(selects[0]);
     await user.click(await screen.findByRole("option", { name: "Dark" }));

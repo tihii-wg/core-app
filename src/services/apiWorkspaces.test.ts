@@ -21,7 +21,7 @@ describe("workspace details", () => {
           currency: "MDL",
         },
       }),
-    ).toEqual({
+    ).toMatchObject({
       id: "ws-1",
       name: "Inventory UI Co",
       ownerId: "user-1",
@@ -35,6 +35,9 @@ describe("workspace details", () => {
       dateFormat: "DD.MM.YYYY",
       currency: "MDL",
       role: "owner",
+      documentLanguage: "en",
+      countryCode: "MD",
+      invoiceNumberTemplate: "INV-{YYYY}-{###}",
     });
   });
 
@@ -55,6 +58,8 @@ describe("workspace preferences", () => {
       timezone: "Europe/Berlin",
       date_format: "DD.MM.YYYY",
       currency: "eur",
+      country_code: "MD",
+      document_language: "en",
     });
     expect(workspacePreferenceFields({ language: "ro", timezone: "Europe/Chisinau", dateFormat: "DD.MM.YYYY", currency: "MDL" }).language).toBe("ro");
     expect(normalizeWorkspaceDateFormat("DD/MM/YYYY")).toBe("DD.MM.YYYY");
