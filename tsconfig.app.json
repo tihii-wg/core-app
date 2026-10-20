@@ -9,6 +9,9 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
@@ -57,9 +60,7 @@
     "src/ui/toaster.tsx",
     "src/ui/toggle.tsx",
     "src/ui/toggle-group.tsx",
-    "src/ui/Tooltip.tsx",
     "src/ui/Sidebar.tsx",
-    "src/ui/use-toast.tsx",
     "src/ui/use-toast.ts",
     "src/hooks/use-toast.ts"
   ],
