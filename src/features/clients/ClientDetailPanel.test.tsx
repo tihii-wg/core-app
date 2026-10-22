@@ -60,6 +60,7 @@ const history: ClientOrderSummary[] = [
     service: "Tires",
     totalPrice: 80,
     status: "in-progress",
+    isPaid: false,
     createdAt: "2026-10-02",
   },
   {
@@ -70,6 +71,7 @@ const history: ClientOrderSummary[] = [
     carNumber: "",
     service: "Oil change",
     totalPrice: 40,
+    isPaid: true,
     status: "completed",
     createdAt: "2026-09-01",
   },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ClipboardList, Mail, MapPin, Pencil, Phone, Plus } from "lucide-react";
+import { Calculator, ClipboardList, Mail, MapPin, Pencil, Phone, Plus } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
 import { OrderStatusBadge } from "../../ui/StatusBadge";
@@ -10,6 +10,7 @@ import type { Client } from "../../lib/types";
 import { industryClientCopy, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import EditClientForm from "./EditClientForm";
+import ClientSettlementDialog from "./ClientSettlementDialog";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { clientOrderHistoryLine, type ClientOrderSummary } from "./clientOrders";
 
@@ -41,6 +42,7 @@ export default function ClientDetailPanel({
   const clientCopy = industryClientCopy(workflow);
   const { formatMoney } = useWorkspaceMoney();
   const [isEditing, setIsEditing] = useState(false);
+  const [settlementOpen, setSettlementOpen] = useState(false);
   const [editingClientId, setEditingClientId] = useState(selectedClient?.id);
 
   if (selectedClient?.id !== editingClientId) {
@@ -159,6 +161,11 @@ export default function ClientDetailPanel({
               </p>
             </div>
 
+            <Button type="button" variant="outline" className="w-full" onClick={() => setSettlementOpen(true)}>
+              <Calculator />
+              {t("clients.settlement.button")}
+            </Button>
+
             <div>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.orderHistory")}</h3>
@@ -242,6 +249,20 @@ export default function ClientDetailPanel({
               </div>
             ) : null}
           </div>
+        )}
+
+        {selectedClient && (
+          <ClientSettlementDialog
+            open={settlementOpen}
+            onOpenChange={setSettlementOpen}
+            clientName={selectedClient.name}
+            clientBalance={selectedClient.balance}
+            orders={clientOrders}
+            ordersLoading={ordersLoading}
+            ordersError={ordersError}
+            formatMoney={formatMoney}
+            onOpenOrder={onOpenOrder}
+          />
         )}
       </SheetContent>
     </Sheet>

@@ -9,6 +9,7 @@ export type ClientOrderSummary = {
   service: string;
   totalPrice: number;
   status: OrderStatus;
+  isPaid: boolean;
   createdAt: string;
 };
 
@@ -25,6 +26,7 @@ export function clientOrderSummaries(orders: Order[], clientId: string): ClientO
       service: order.service,
       totalPrice: order.totalPrice,
       status: order.status,
+      isPaid: Boolean(order.isPaid),
       createdAt: order.createdAt,
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.orderNumber.localeCompare(a.orderNumber));
