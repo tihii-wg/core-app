@@ -34,6 +34,8 @@ const inventory: Messages<typeof en> = {
   deleteAriaLabel: "Șterge {{name}}",
   filters: {
     stock: "Stoc",
+    supplier: "Furnizor",
+    allSuppliers: "Toți furnizorii",
   },
   sort: {
     ariaLabel: "Sortează stocul",

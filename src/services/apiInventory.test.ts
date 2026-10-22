@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createInventoryItem, getInventoryItems, toInventoryItem } from "./apiInventory";
+import { createInventoryItem, distinctSupplierNames, getInventoryItems, getInventorySuppliers, toInventoryItem } from "./apiInventory";
 
 const getUser = vi.hoisted(() => vi.fn());
 const from = vi.hoisted(() => vi.fn());
@@ -24,6 +24,77 @@ function query(result: { data: unknown; error: unknown }) {
 
   return chain;
 }
+
+function recordingQuery(result: { data: unknown; error: unknown }) {
+  const calls: { method: string; args: unknown[] }[] = [];
+  const chain: Record<string, unknown> = {};
+  for (const method of ["select", "eq", "or", "order", "not"]) {
+    chain[method] = (...args: unknown[]) => {
+      calls.push({ method, args });
+      return chain;
+    };
+  }
+  chain.then = (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+    Promise.resolve(result).then(resolve, reject);
+  return { chain, calls };
+}
+
+describe("inventory suppliers", () => {
+  beforeEach(() => {
+    from.mockReset();
+  });
+
+  it("normalizes supplier names: trims, drops empties/nulls, dedupes, sorts", () => {
+    expect(distinctSupplierNames([" Beta ", "Acme", "", null, undefined, "Acme", "  ", "Beta"])).toEqual(["Acme", "Beta"]);
+    expect(distinctSupplierNames([null, ""])).toEqual([]);
+  });
+
+  it("applies the supplier filter as an equality clause scoped to the workspace", async () => {
+    const { chain, calls } = recordingQuery({ data: [], error: null });
+    from.mockReturnValue(chain);
+
+    await getInventoryItems(undefined, "all", { field: "name", ascending: true }, "ws-1", "Acme");
+
+    expect(calls).toContainEqual({ method: "eq", args: ["workspace_id", "ws-1"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["supplier", "Acme"] });
+  });
+
+  it("does not add a supplier clause for 'all' or an empty supplier", async () => {
+    for (const supplier of ["all", "", undefined]) {
+      const { chain, calls } = recordingQuery({ data: [], error: null });
+      from.mockReturnValue(chain);
+      await getInventoryItems(undefined, "all", { field: "name", ascending: true }, "ws-1", supplier);
+      expect(calls.some((call) => call.method === "eq" && call.args[0] === "supplier")).toBe(false);
+    }
+  });
+
+  it("combines supplier with search and stock-status filters", async () => {
+    const { chain, calls } = recordingQuery({ data: [], error: null });
+    from.mockReturnValue(chain);
+
+    await getInventoryItems("brake", "low_stock", { field: "name", ascending: true }, "ws-1", "Acme");
+
+    expect(calls.some((call) => call.method === "or")).toBe(true);
+    expect(calls).toContainEqual({ method: "eq", args: ["stock_status", "low_stock"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["supplier", "Acme"] });
+  });
+
+  it("loads distinct suppliers for the workspace, ignoring missing values", async () => {
+    const { chain, calls } = recordingQuery({
+      data: [{ supplier: "Beta" }, { supplier: "Acme" }, { supplier: "Beta" }, { supplier: null }, { supplier: "  " }],
+      error: null,
+    });
+    from.mockReturnValue(chain);
+
+    await expect(getInventorySuppliers("ws-1")).resolves.toEqual(["Acme", "Beta"]);
+    expect(calls).toContainEqual({ method: "eq", args: ["workspace_id", "ws-1"] });
+  });
+
+  it("refuses to load suppliers without a workspace", async () => {
+    await expect(getInventorySuppliers(undefined)).rejects.toThrow("No active workspace selected");
+    expect(from).not.toHaveBeenCalled();
+  });
+});
 
 describe("inventory api", () => {
   beforeEach(() => {

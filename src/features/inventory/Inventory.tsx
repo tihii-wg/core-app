@@ -13,6 +13,7 @@ import { cn } from "../../lib/utils";
 import { useDebounce } from "../../hooks/useDebounce";
 import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortField } from "../../lib/types";
 import { useGetInventoryItems } from "./useGetInventoryItems";
+import { useGetInventorySuppliers } from "./useGetInventorySuppliers";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
@@ -50,6 +51,7 @@ export function Inventory() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
   const [sortValue, setSortValue] = useState("created_at.desc");
   const [createOpen, setCreateOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -70,7 +72,14 @@ export function Inventory() {
   const sort: InventorySort = { field: sortOption.field, ascending: sortOption.ascending };
 
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort);
+  const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort, { supplier: supplierFilter });
+  const { suppliers, isLoading: suppliersLoading } = useGetInventorySuppliers();
+
+  // A selected supplier can disappear (renamed/deleted): fall back to "all".
+  useEffect(() => {
+    if (suppliersLoading || supplierFilter === "all") return;
+    if (!suppliers.includes(supplierFilter)) setSupplierFilter("all");
+  }, [suppliers, suppliersLoading, supplierFilter]);
   const {
     items: attentionItems,
     isLoading: attentionLoading,
@@ -78,7 +87,7 @@ export function Inventory() {
     refetch: refetchAttention,
   } = useGetInventoryItems("", "all", attentionSort);
   const detailQuery = useGetInventoryItem(detailId);
-  const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all";
+  const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all" || supplierFilter !== "all";
 
   const stockFilters = [
     { value: "all", label: t("common.all") },
@@ -104,6 +113,16 @@ export function Inventory() {
       header: t("inventory.fields.sku"),
       cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || "—"}</span>,
       className: "hidden sm:table-cell whitespace-nowrap",
+    },
+    {
+      key: "supplier",
+      header: t("inventory.fields.supplier"),
+      cell: (item) => (
+        <span className="block max-w-[10rem] truncate text-muted-foreground" title={item.supplier || undefined}>
+          {item.supplier || "—"}
+        </span>
+      ),
+      className: "hidden md:table-cell",
     },
     {
       key: "category",
@@ -221,10 +240,21 @@ export function Inventory() {
               value: stockFilter,
               onChange: (value) => setStockFilter(value as InventoryListFilter),
             },
+            {
+              key: "supplier",
+              label: t("inventory.filters.supplier"),
+              options: [
+                { value: "all", label: t("inventory.filters.allSuppliers") },
+                ...suppliers.map((supplier) => ({ value: supplier, label: supplier })),
+              ],
+              value: supplierFilter,
+              onChange: setSupplierFilter,
+            },
           ]}
           onClearFilters={() => {
             setSearchQuery("");
             setStockFilter("all");
+            setSupplierFilter("all");
           }}
         />
         <Select value={sortValue} onValueChange={setSortValue}>
@@ -256,7 +286,7 @@ export function Inventory() {
             const status = effectiveStockStatus(item);
             return status === "out_of_stock" ? "bg-destructive/[0.035]" : status === "low_stock" ? "bg-warning/[0.045]" : undefined;
           }}
-          emptyState={hasSearchOrFilter ? <NoSearchResults query={searchQuery || stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
+          emptyState={hasSearchOrFilter ? <NoSearchResults query={searchQuery || (supplierFilter !== "all" ? supplierFilter : stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter)} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
         />
       )}
 

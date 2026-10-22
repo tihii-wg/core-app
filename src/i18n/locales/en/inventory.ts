@@ -27,6 +27,8 @@ export default {
   deleteAriaLabel: "Delete {{name}}",
   filters: {
     stock: "Stock",
+    supplier: "Supplier",
+    allSuppliers: "All suppliers",
   },
   sort: {
     ariaLabel: "Sort inventory",

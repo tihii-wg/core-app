@@ -95,7 +95,16 @@ function itemPayload(input: InventoryItemFormData) {
   };
 }
 
-export async function getInventoryItems(search: string | undefined, filter: InventoryListFilter, sort: InventorySort, workspaceId: string | undefined) {
+export function distinctSupplierNames(values: readonly (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  for (const value of values) {
+    const name = typeof value === "string" ? value.trim() : "";
+    if (name) seen.add(name);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+export async function getInventoryItems(search: string | undefined, filter: InventoryListFilter, sort: InventorySort, workspaceId: string | undefined, supplier?: string) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const column = inventorySortColumns[sort.field] ?? "created_at";
 
@@ -112,11 +121,31 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
     query = query.eq("stock_status", filter);
   }
 
+  const supplierName = supplier?.trim();
+  if (supplierName && supplierName !== "all") {
+    query = query.eq("supplier", supplierName);
+  }
+
   const { data, error } = await query;
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
 
   return ((data ?? []) as Record<string, unknown>[]).map(toInventoryItem);
+}
+
+/** Distinct non-empty supplier names used by parts in the workspace (filter options). */
+export async function getInventorySuppliers(workspaceId: string | undefined) {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+
+  const { data, error } = await supabase
+    .from("inventory_items_with_status")
+    .select("supplier")
+    .eq("workspace_id", resolvedWorkspaceId)
+    .not("supplier", "is", null);
+
+  if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
+
+  return distinctSupplierNames(((data ?? []) as { supplier?: unknown }[]).map((row) => (typeof row.supplier === "string" ? row.supplier : null)));
 }
 
 export async function getInventoryItem(inventoryItemId: string, targetWorkspaceId: string | undefined) {

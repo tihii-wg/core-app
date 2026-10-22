@@ -38,6 +38,8 @@ const inventory: Messages<typeof en> = {
   deleteAriaLabel: "Удалить {{name}}",
   filters: {
     stock: "Остатки",
+    supplier: "Поставщик",
+    allSuppliers: "Все поставщики",
   },
   sort: {
     ariaLabel: "Сортировка склада",
