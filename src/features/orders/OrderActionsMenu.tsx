@@ -24,6 +24,8 @@ type OrderActionsMenuProps = {
   onEdit: (order: Order) => void;
   onStatusChange: (order: Order, status: OrderStatus) => void;
   onCreateInvoice: (order: Order) => void;
+  /** Extra classes for the trigger (e.g. a larger touch target on mobile cards). */
+  triggerClassName?: string;
 };
 
 // The menu sits inside a clickable table row and React events bubble through the portal, so clicks
@@ -39,6 +41,7 @@ export function OrderActionsMenu({
   onEdit,
   onStatusChange,
   onCreateInvoice,
+  triggerClassName,
 }: OrderActionsMenuProps) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
@@ -47,7 +50,7 @@ export function OrderActionsMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={t("orders.actions.menuLabel", { number: order.orderNumber })} onClick={stop}>
+        <Button type="button" variant="ghost" size="icon-sm" className={triggerClassName} aria-label={t("orders.actions.menuLabel", { number: order.orderNumber })} onClick={stop}>
           <EllipsisVertical />
         </Button>
       </DropdownMenuTrigger>

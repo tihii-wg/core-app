@@ -32,7 +32,9 @@ import { assignableTechnicians } from "./assignableTechnicians";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
 import { useCreateInvoice } from "../invoices/useCreateInvoice";
+import { useIsMobile } from "../../hooks/use-mobile";
 import { OrderActionsMenu } from "./OrderActionsMenu";
+import { OrderCard } from "./OrderCard";
 import { OrderColumnsMenu } from "./OrderColumnsMenu";
 import {
   readOrderVisibleColumns,
@@ -47,6 +49,7 @@ const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
 export function Orders() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const { workflow, copy } = useIndustryWorkflow();
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
@@ -376,22 +379,64 @@ export function Orders() {
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={orders}
-        keyExtractor={(order) => order.id}
-        onRowClick={orderDetails.openOrder}
-        isLoading={ordersLoading}
-        emptyState={
-          ordersError ? (
-            <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
-          ) : hasActiveFilters ? (
-            emptyFilterState()
-          ) : (
-            <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
-          )
-        }
-      />
+      {isMobile ? (
+        ordersLoading ? (
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+            {ordersError ? (
+              <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
+            ) : hasActiveFilters ? (
+              emptyFilterState()
+            ) : (
+              <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {orders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                invoiceNumber={invoiceNumberByOrder.get(order.id)}
+                invoicesUnavailable={invoicesUnavailable}
+                isCreatingInvoice={createInvoice.isPending}
+                isStatusUpdating={orderDetails.isStatusUpdating}
+                formatMoney={formatMoney}
+                onView={orderDetails.openOrder}
+                onEdit={setEditingOrder}
+                onStatusChange={orderDetails.changeStatus}
+                onCreateInvoice={handleCreateInvoice}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <DataTable
+          columns={columns}
+          data={orders}
+          keyExtractor={(order) => order.id}
+          onRowClick={orderDetails.openOrder}
+          isLoading={ordersLoading}
+          emptyState={
+            ordersError ? (
+              <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
+            ) : hasActiveFilters ? (
+              emptyFilterState()
+            ) : (
+              <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
+            )
+          }
+        />
+      )}
 
       {!ordersLoading && total > 0 ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
