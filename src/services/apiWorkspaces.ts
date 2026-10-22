@@ -81,6 +81,7 @@ const generalSettingsColumns = [
   "prevent_backdated_invoices",
   "default_legal_entity_id",
   "online_payments_enabled",
+  "require_tax_invoice_number",
 ] as const;
 
 function mentionsPreferenceColumn(message?: string) {
@@ -217,6 +218,7 @@ export type WorkspaceDetails = {
   preventBackdatedInvoices: boolean;
   defaultLegalEntityId: string | null;
   onlinePaymentsEnabled: boolean;
+  requireTaxInvoiceNumber: boolean;
 };
 
 function firstRecord(value: unknown) {
@@ -291,6 +293,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     preventBackdatedInvoices: readBool(record.prevent_backdated_invoices, invoiceSettingsDefaults.preventBackdatedInvoices),
     defaultLegalEntityId: typeof record.default_legal_entity_id === "string" ? record.default_legal_entity_id : null,
     onlinePaymentsEnabled: readBool(record.online_payments_enabled, false),
+    requireTaxInvoiceNumber: readBool(record.require_tax_invoice_number, false),
   };
 }
 
@@ -642,6 +645,12 @@ async function updateWorkspaceColumns(workspaceId: string, patch: Record<string,
   const workspace = await getWorkspace(workspaceId);
   if (!workspace) throw new Error(ownerOnlyWorkspaceMessage());
   return workspace;
+}
+
+export async function updateWorkspaceTaxInvoiceSettings(workspaceId: string, requireTaxInvoiceNumber: boolean) {
+  return updateWorkspaceColumns(workspaceId, {
+    require_tax_invoice_number: Boolean(requireTaxInvoiceNumber),
+  });
 }
 
 export async function updateWorkspaceOrderSettings(workspaceId: string, input: WorkspaceOrderSettings) {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createOrder, getOrders, updateOrder, updateOrderStatus, yearInTimeZone } from "./apiOrders";
+import { createOrder, getOrders, hasTaxInvoiceNumber, updateOrder, updateOrderStatus, updateOrderTaxInvoiceNumber, yearInTimeZone } from "./apiOrders";
 
 const getUser = vi.hoisted(() => vi.fn());
 const from = vi.hoisted(() => vi.fn());
@@ -627,6 +627,54 @@ describe("updateOrder", () => {
     expect(updated.vin).toBe("1HGBH41JXMN109186");
     expect(updated.assignedEmployeeId).toBe(employeeId);
   });
+
+  it("preserves the tax invoice number during unrelated order updates", async () => {
+    const employee = { id: employeeId, name: "Ada Tech", profile_id: "user-1" };
+    const employees = query({ data: [employee], error: null });
+    employees.maybeSingle = () => Promise.resolve({ data: { id: employeeId, profile_id: "user-1" }, error: null });
+    const updates: unknown[] = [];
+    const orders = query({
+      data: {
+        id: "order-1",
+        client_id: "client-1",
+        number: "ORD-2026-003",
+        device: "BMW",
+        employee_id: employeeId,
+        vin: "1HGBH41JXMN109186",
+        tax_invoice_number: "FV-77",
+        clients: { name: "Ada Lovelace" },
+      },
+      error: null,
+    });
+    orders.update = (payload: unknown) => {
+      updates.push(payload);
+      return orders;
+    };
+    const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
+
+    from.mockImplementation((table: string) => {
+      if (table === "employees") return employees;
+      if (table === "workspace_members") return activeMember();
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const updated = await updateOrder({
+      orderId: "order-1",
+      device: "BMW",
+      carNumber: "ABC123",
+      vin: "1hgbh41jxmn109186",
+      description: "",
+      assignedEmployeeId: employeeId,
+      deadline: "",
+    }, "ws-1");
+
+    expect(updates[0]).not.toHaveProperty("tax_invoice_number");
+    expect(updated.taxInvoiceNumber).toBe("FV-77");
+  });
 });
 
 describe("updateOrderStatus", () => {
@@ -681,5 +729,100 @@ describe("updateOrderStatus", () => {
     });
 
     await expect(updateOrderStatus("order-1", "completed", "ws-1")).rejects.toThrow("permission");
+  });
+});
+
+describe("tax invoice requirement", () => {
+  beforeEach(() => {
+    getUser.mockReset();
+    from.mockReset();
+    getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+  });
+
+  function statusSetup({ required, taxNumber }: { required: boolean; taxNumber: string | null }) {
+    const updates: unknown[] = [];
+    const ordersChain: Record<string, unknown> = {
+      select: () => ordersChain,
+      eq: () => ordersChain,
+      update: (payload: unknown) => {
+        updates.push(payload);
+        return ordersChain;
+      },
+      maybeSingle: () => Promise.resolve({ data: { tax_invoice_number: taxNumber }, error: null }),
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
+    };
+    const workspaceChain: Record<string, unknown> = {
+      select: () => workspaceChain,
+      eq: () => workspaceChain,
+      maybeSingle: () => Promise.resolve({ data: { require_tax_invoice_number: required }, error: null }),
+    };
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return ordersChain;
+      if (table === "workspaces") return workspaceChain;
+      throw new Error(`Unexpected table ${table}`);
+    });
+    return { updates };
+  }
+
+  it("blocks marking paid when the workspace requires a tax invoice number and none is saved", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: null });
+    await expect(updateOrderStatus("order-1", "paid", "ws-1")).rejects.toThrow(/tax invoice number is required/i);
+    expect(updates).toEqual([]);
+  });
+
+  it("rejects a whitespace-only tax invoice number", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: "   " });
+    await expect(updateOrderStatus("order-1", "paid", "ws-1")).rejects.toThrow(/tax invoice number is required/i);
+    expect(updates).toEqual([]);
+  });
+
+  it("allows marking paid after a valid tax invoice number is saved", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: "FV-2026-77" });
+    await updateOrderStatus("order-1", "paid", "ws-1");
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+  });
+
+  it("preserves existing behavior when the requirement is disabled", async () => {
+    const { updates } = statusSetup({ required: false, taxNumber: null });
+    await updateOrderStatus("order-1", "paid", "ws-1");
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+  });
+
+  it("does not gate non-paid statuses even when the requirement is enabled", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: null });
+    await updateOrderStatus("order-1", "completed", "ws-1");
+    expect(updates[0]).toEqual({ status: "completed" });
+  });
+
+  it("trims and saves the tax invoice number; blank clears it", async () => {
+    const updates: unknown[] = [];
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      eq: () => chain,
+      update: (payload: unknown) => {
+        updates.push(payload);
+        return chain;
+      },
+      maybeSingle: () => Promise.resolve({ data: { id: "order-1" }, error: null }),
+    };
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return chain;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(updateOrderTaxInvoiceNumber("order-1", "  FV-9  ", "ws-1")).resolves.toBe("FV-9");
+    expect(updates[0]).toEqual({ tax_invoice_number: "FV-9" });
+
+    await expect(updateOrderTaxInvoiceNumber("order-1", "   ", "ws-1")).resolves.toBe("");
+    expect(updates[1]).toEqual({ tax_invoice_number: null });
+  });
+
+  it("treats only non-whitespace values as present", () => {
+    expect(hasTaxInvoiceNumber("FV-1")).toBe(true);
+    expect(hasTaxInvoiceNumber("  ")).toBe(false);
+    expect(hasTaxInvoiceNumber("")).toBe(false);
+    expect(hasTaxInvoiceNumber(null)).toBe(false);
+    expect(hasTaxInvoiceNumber(undefined)).toBe(false);
   });
 });

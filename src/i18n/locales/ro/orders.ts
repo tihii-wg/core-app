@@ -131,6 +131,14 @@ const orders: Messages<typeof en> = {
     quantityInteger: "Cantitatea trebuie să fie un număr întreg",
     assignedEmployeeRequired: "Responsabilul este obligatoriu",
   },
+  taxInvoice: {
+    label: "Numărul facturii fiscale",
+    placeholder: "Introduceți numărul facturii fiscale",
+    required: "Numărul facturii fiscale este obligatoriu înainte ca această comandă să poată fi marcată ca plătită. Introduceți-l și salvați-l mai întâi în comandă.",
+    requiredHint: "Numărul facturii fiscale este obligatoriu înainte ca această comandă să poată fi marcată ca plătită.",
+    saved: "Numărul facturii fiscale a fost salvat",
+    saveFailed: "Numărul facturii fiscale nu a putut fi salvat",
+  },
   warehouse: {
     issueAction: "Eliberează materiale",
     returnAction: "Returnează materiale",

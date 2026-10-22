@@ -45,6 +45,17 @@ describe("workspace details", () => {
     expect(toWorkspaceDetails(null)).toBeNull();
     expect(toWorkspaceDetails({ role: "owner", workspaces: { id: "ws-1", name: "Closed", deleted_at: "2026-01-01" } })).toBeNull();
   });
+
+  it("reads require_tax_invoice_number, defaulting to disabled when absent or invalid", () => {
+    const base = { role: "owner", workspaces: { id: "ws-1", name: "Co", deleted_at: null } };
+    expect(toWorkspaceDetails(base)?.requireTaxInvoiceNumber).toBe(false);
+    expect(
+      toWorkspaceDetails({ role: "owner", workspaces: { id: "ws-1", name: "Co", deleted_at: null, require_tax_invoice_number: true } })?.requireTaxInvoiceNumber,
+    ).toBe(true);
+    expect(
+      toWorkspaceDetails({ role: "owner", workspaces: { id: "ws-1", name: "Co", deleted_at: null, require_tax_invoice_number: "yes" } })?.requireTaxInvoiceNumber,
+    ).toBe(false);
+  });
 });
 
 describe("workspace preferences", () => {

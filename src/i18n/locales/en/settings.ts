@@ -265,6 +265,14 @@ export default {
       markupNegative: "Markup percentage cannot be negative",
       markupTooHigh: "Markup percentage cannot be greater than 1000",
     },
+    taxInvoice: {
+      label: "Require tax invoice number to close orders",
+      description: "When enabled, orders cannot be marked as paid or closed until a tax invoice number has been entered and saved on the order.",
+      toast: {
+        saved: "Tax invoice setting saved",
+        failed: "Could not save the tax invoice setting",
+      },
+    },
     toast: {
       saving: "Saving company...",
       updated: "Company updated",

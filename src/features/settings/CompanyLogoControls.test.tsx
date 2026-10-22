@@ -55,6 +55,7 @@ const workspace: WorkspaceDetails = {
   preventBackdatedInvoices: true,
   defaultLegalEntityId: null,
   onlinePaymentsEnabled: false,
+  requireTaxInvoiceNumber: false,
 };
 
 describe("Company logo controls", () => {

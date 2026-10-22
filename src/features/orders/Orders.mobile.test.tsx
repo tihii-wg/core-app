@@ -47,6 +47,7 @@ vi.mock("./useGetOrders", () => ({
   }),
   useOrdersAwaitingPayment: () => ({ amount: 40, count: 1, isLoading: false, error: null, refetch: vi.fn() }),
   useUpdateOrderStatus: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(async () => ""), isPending: false }),
 }));
 
 vi.mock("../employees/useGetEmployees", () => ({

@@ -268,6 +268,14 @@ const settings: Messages<typeof en> = {
       markupNegative: "Procentul de adaos nu poate fi negativ",
       markupTooHigh: "Procentul de adaos nu poate fi mai mare de 1000",
     },
+    taxInvoice: {
+      label: "Solicită numărul facturii fiscale pentru închiderea comenzilor",
+      description: "Când este activat, comenzile nu pot fi marcate ca plătite sau închise până când numărul facturii fiscale nu a fost introdus și salvat în comandă.",
+      toast: {
+        saved: "Setarea facturii fiscale a fost salvată",
+        failed: "Setarea facturii fiscale nu a putut fi salvată",
+      },
+    },
     toast: {
       saving: "Se salvează compania...",
       updated: "Compania a fost actualizată",

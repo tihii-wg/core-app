@@ -125,6 +125,14 @@ export default {
     quantityInteger: "Quantity must be a whole number",
     assignedEmployeeRequired: "Assigned employee is required",
   },
+  taxInvoice: {
+    label: "Tax invoice number",
+    placeholder: "Enter tax invoice number",
+    required: "A tax invoice number is required before this order can be marked as paid. Enter and save it on the order first.",
+    requiredHint: "A tax invoice number is required before this order can be marked as paid.",
+    saved: "Tax invoice number saved",
+    saveFailed: "Could not save the tax invoice number",
+  },
   warehouse: {
     issueAction: "Issue Materials",
     returnAction: "Return Materials",

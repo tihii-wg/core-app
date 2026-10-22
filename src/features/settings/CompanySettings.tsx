@@ -1,4 +1,6 @@
 import { Controller, useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Building2, Save } from "lucide-react";
 import { Button } from "../../ui/Button";
@@ -7,12 +9,13 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Skeleton } from "../../ui/Skeleton";
 import { Separator } from "../../ui/Separator";
+import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetIndustries } from "../industries/useGetIndustries";
 import { industryName } from "../industries/industryName";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { useUpdateWorkspace } from "../workspaces/useUpdateWorkspace";
+import { useUpdateWorkspace, useUpdateWorkspaceTaxInvoiceSettings } from "../workspaces/useUpdateWorkspace";
 import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoControls } from "./CompanyLogoControls";
@@ -69,6 +72,23 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   const saving = isSavingWorkspace || isSubmitting;
   const canEdit = canManageWorkspace(workspace.role);
   const locked = saving || !canEdit;
+
+  const { mutateAsync: saveTaxInvoiceSetting, isPending: taxInvoiceSaving } = useUpdateWorkspaceTaxInvoiceSettings();
+  const [taxInvoiceEnabled, setTaxInvoiceEnabled] = useState(workspace.requireTaxInvoiceNumber);
+  useEffect(() => {
+    setTaxInvoiceEnabled(workspace.requireTaxInvoiceNumber);
+  }, [workspace.requireTaxInvoiceNumber]);
+
+  async function handleTaxInvoiceToggle(next: boolean) {
+    setTaxInvoiceEnabled(next);
+    try {
+      await saveTaxInvoiceSetting({ workspaceId: workspace.id, requireTaxInvoiceNumber: next });
+      toast.success(t("settings.company.taxInvoice.toast.saved"), { id: "tax-invoice-settings" });
+    } catch (error) {
+      setTaxInvoiceEnabled(!next);
+      toast.error(error instanceof Error ? error.message : t("settings.company.taxInvoice.toast.failed"), { id: "tax-invoice-settings" });
+    }
+  }
 
   async function onSubmit(values: CompanyFormValues) {
     const markupMessage = markupFieldError(values.inventoryMarkup);
@@ -248,6 +268,22 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
             <p className="text-sm text-muted-foreground">{t("settings.company.ownerOnly")}</p>
           )}
         </form>
+
+        <Separator />
+
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="requireTaxInvoiceNumber">{t("settings.company.taxInvoice.label")}</Label>
+            <p className="text-xs text-muted-foreground">{t("settings.company.taxInvoice.description")}</p>
+          </div>
+          <Switch
+            id="requireTaxInvoiceNumber"
+            checked={taxInvoiceEnabled}
+            onCheckedChange={(checked) => void handleTaxInvoiceToggle(checked)}
+            disabled={!canEdit || taxInvoiceSaving}
+            aria-label={t("settings.company.taxInvoice.label")}
+          />
+        </div>
       </CardContent>
     </Card>
   );

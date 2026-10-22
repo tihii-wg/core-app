@@ -432,6 +432,7 @@ function toOrder(
     totalPrice: Number(row.total_price ?? 0),
     isPaid,
     paymentStatus,
+    taxInvoiceNumber: typeof row.tax_invoice_number === "string" ? row.tax_invoice_number : "",
     ...(createdById
       ? {
           createdById,
@@ -658,8 +659,39 @@ export async function getOrder(orderId: string, workspaceId: string | undefined)
   return order;
 }
 
+export function hasTaxInvoiceNumber(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
+ * Whether the workspace requires a tax invoice number before an order may be
+ * marked paid. Missing-column errors (older databases) degrade to "not
+ * required" so existing flows keep working.
+ */
+async function workspaceRequiresTaxInvoice(workspaceId: string) {
+  try {
+    const { data, error } = await supabase.from("workspaces").select("require_tax_invoice_number").eq("id", workspaceId).maybeSingle();
+    if (error) return false;
+    return (data as { require_tax_invoice_number?: unknown } | null)?.require_tax_invoice_number === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function updateOrderStatus(orderId: string, status: OrderStatus, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
+
+  if (status === "paid" && (await workspaceRequiresTaxInvoice(targetWorkspaceId))) {
+    const { data: orderRow } = await supabase
+      .from("orders")
+      .select("tax_invoice_number")
+      .eq("id", orderId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle();
+    if (orderRow && !hasTaxInvoiceNumber((orderRow as { tax_invoice_number?: unknown }).tax_invoice_number as string | null)) {
+      throw new Error(i18n.t("orders.taxInvoice.required"));
+    }
+  }
 
   const { data, error } = await supabase
     .from("orders")
@@ -670,6 +702,24 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
 
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error(orderPermissionMessage());
+}
+
+/** Saves (or clears, when blank) the tax invoice number of one order. Trims whitespace. */
+export async function updateOrderTaxInvoiceNumber(orderId: string, taxInvoiceNumber: string, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const trimmed = taxInvoiceNumber.trim();
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ tax_invoice_number: trimmed || null })
+    .eq("id", orderId)
+    .eq("workspace_id", targetWorkspaceId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(orderPermissionMessage());
+  return trimmed;
 }
 
 export function readVin(row: Record<string, unknown>) {

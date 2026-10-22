@@ -8,6 +8,7 @@ import {
   updateWorkspaceInvoiceSettings,
   updateWorkspaceOrderSettings,
   updateWorkspacePreferences,
+  updateWorkspaceTaxInvoiceSettings,
   type WorkspacePreferencesInput,
 } from "../../services/apiWorkspaces";
 
@@ -51,6 +52,17 @@ export function useUpdateWorkspacePreferences() {
     mutationFn: ({ workspaceId, ...preferences }: WorkspacePreferencesInput & { workspaceId: string }) => updateWorkspacePreferences(workspaceId, preferences),
     onSuccess(workspace) {
       if (!workspace) return;
+      invalidateWorkspace(queryClient, workspace.id, workspace);
+    },
+  });
+}
+
+export function useUpdateWorkspaceTaxInvoiceSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workspaceId, requireTaxInvoiceNumber }: { workspaceId: string; requireTaxInvoiceNumber: boolean }) =>
+      updateWorkspaceTaxInvoiceSettings(workspaceId, requireTaxInvoiceNumber),
+    onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
     },
   });

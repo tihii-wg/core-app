@@ -71,6 +71,8 @@ export interface Order {
   totalPrice: number;
   isPaid: boolean;
   paymentStatus: PaymentStatus;
+  /** Tax (fiscal) invoice number from orders.tax_invoice_number; absent on legacy fixtures — treat as "". Not the app invoice number. */
+  taxInvoiceNumber?: string;
   /** auth.users id from orders.created_by when present. */
   createdById?: string;
   /** Workspace member display name for created_by (full name or email). */

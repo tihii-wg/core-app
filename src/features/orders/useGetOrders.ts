@@ -7,6 +7,7 @@ import {
   getOrdersAwaitingPayment,
   getOrdersPage,
   updateOrderStatus,
+  updateOrderTaxInvoiceNumber,
   type OrdersListQuery,
   type OrdersPageResult,
 } from "../../services/apiOrders";
@@ -86,6 +87,22 @@ export function useOrdersAwaitingPayment({ enabled = true }: { enabled?: boolean
     error,
     refetch,
   };
+}
+
+export function useUpdateOrderTaxInvoiceNumber() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+
+  return useMutation({
+    mutationFn: ({ orderId, taxInvoiceNumber }: { orderId: string; taxInvoiceNumber: string }) =>
+      updateOrderTaxInvoiceNumber(orderId, taxInvoiceNumber, workspaceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+    },
+    onError: (error) => {
+      toast.error(error.message || i18n.t("orders.taxInvoice.saveFailed"), { id: "update-tax-invoice-number" });
+    },
+  });
 }
 
 export function useUpdateOrderStatus() {
