@@ -40,7 +40,7 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{inventoryCopy.editDialogTitle}</DialogTitle>
           <DialogDescription className="sr-only">{inventoryCopy.editDialogDescription}</DialogDescription>

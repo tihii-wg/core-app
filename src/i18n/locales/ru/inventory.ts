@@ -35,6 +35,10 @@ const inventory: Messages<typeof en> = {
   active: "Активна",
   inactive: "Неактивна",
   editAriaLabel: "Редактировать {{name}}",
+  actions: {
+    menuLabel: "Действия для {{name}}",
+    viewDetails: "Подробнее",
+  },
   deleteAriaLabel: "Удалить {{name}}",
   filters: {
     stock: "Остатки",

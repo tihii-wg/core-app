@@ -16,11 +16,15 @@ import { useGetInvoices } from "./useGetInvoices";
 import { useUpdateInvoiceStatus } from "./useUpdateInvoiceStatus";
 import { CreateInvoiceDialog } from "./CreateInvoiceDialog";
 import { InvoiceActionsMenu } from "./InvoiceActionsMenu";
+import { useIsMobile } from "../../hooks/use-mobile";
+import { Skeleton } from "../../ui/Skeleton";
+import { InvoiceCard } from "./InvoiceCard";
 import { InvoiceDetailPanel } from "./InvoiceDetailPanel";
 import { InvoicePrintButton } from "./InvoicePrintButton";
 
 export function Invoices() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const { workflow, copy } = useIndustryWorkflow();
   const { invoices, isLoading, error, refetch, isUnavailable } = useGetInvoices();
   const { orders } = useGetOrders("", { enabled: !isUnavailable });
@@ -253,24 +257,63 @@ export function Invoices() {
         }}
       />
 
-      <DataTable
-        columns={columns}
-        data={filteredInvoices}
-        keyExtractor={(invoice) => invoice.id}
-        onRowClick={(invoice) => setOpenInvoiceId(invoice.id)}
-        isLoading={isLoading}
-        emptyState={
-          isUnavailable ? (
-            <EmptyState icon={FileX2} title={t("invoices.empty.unavailableTitle")} description={t("invoices.errors.unavailable")} />
-          ) : error ? (
-            <ErrorState title={t("invoices.empty.loadErrorTitle")} description={error.message} onRetry={() => refetch()} />
-          ) : isFiltered ? (
-            <EmptyState title={t("invoices.empty.filteredTitle")} description={t("invoices.empty.filteredDescription")} />
-          ) : (
-            <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={{ label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) }} />
-          )
-        }
-      />
+      {isMobile ? (
+        isLoading ? (
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        ) : filteredInvoices.length === 0 ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+            {isUnavailable ? (
+              <EmptyState icon={FileX2} title={t("invoices.empty.unavailableTitle")} description={t("invoices.errors.unavailable")} />
+            ) : error ? (
+              <ErrorState title={t("invoices.empty.loadErrorTitle")} description={error.message} onRetry={() => refetch()} />
+            ) : isFiltered ? (
+              <EmptyState title={t("invoices.empty.filteredTitle")} description={t("invoices.empty.filteredDescription")} />
+            ) : (
+              <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={{ label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) }} />
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredInvoices.map((invoice) => (
+              <InvoiceCard
+                key={invoice.id}
+                invoice={invoice}
+                isUpdating={updateStatus.isPending}
+                formatMoney={formatMoney}
+                onView={(selected) => setOpenInvoiceId(selected.id)}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <DataTable
+          columns={columns}
+          data={filteredInvoices}
+          keyExtractor={(invoice) => invoice.id}
+          onRowClick={(invoice) => setOpenInvoiceId(invoice.id)}
+          isLoading={isLoading}
+          emptyState={
+            isUnavailable ? (
+              <EmptyState icon={FileX2} title={t("invoices.empty.unavailableTitle")} description={t("invoices.errors.unavailable")} />
+            ) : error ? (
+              <ErrorState title={t("invoices.empty.loadErrorTitle")} description={error.message} onRetry={() => refetch()} />
+            ) : isFiltered ? (
+              <EmptyState title={t("invoices.empty.filteredTitle")} description={t("invoices.empty.filteredDescription")} />
+            ) : (
+              <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={{ label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) }} />
+            )
+          }
+        />
+      )}
 
       <CreateInvoiceDialog open={createModalOpen} onOpenChange={setCreateModalOpen} orders={invoiceableOrders} />
 

@@ -34,7 +34,7 @@ export function CreateInvoiceDialog({ open, onOpenChange, orders }: CreateInvoic
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("invoices.createInvoice")}</DialogTitle>
           <DialogDescription>{t("invoices.create.description")}</DialogDescription>

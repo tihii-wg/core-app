@@ -17,7 +17,7 @@ import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
  * materials), and only then opens the browser print dialog via
  * InvoicePrintRoot. The invoice detail panel is never opened.
  */
-export function InvoicePrintButton({ invoice }: { invoice: Invoice }) {
+export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Invoice; triggerClassName?: string }) {
   const { t } = useTranslation();
   const [active, setActive] = useState(false);
 
@@ -42,6 +42,7 @@ export function InvoicePrintButton({ invoice }: { invoice: Invoice }) {
         type="button"
         variant="ghost"
         size="icon-sm"
+        className={triggerClassName}
         disabled={busy}
         aria-label={t("invoices.actions.print")}
         title={t("invoices.actions.print")}

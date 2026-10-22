@@ -2,8 +2,16 @@ import * as React from 'react'
 
 const MOBILE_BREAKPOINT = 768
 
+function getIsMobile() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.innerWidth < MOBILE_BREAKPOINT
+}
+
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+  // Initialize synchronously so the first render already matches the viewport
+  // (no desktop-table flash on phones). This app has no SSR/hydration, so
+  // reading window during the initial state is safe.
+  const [isMobile, setIsMobile] = React.useState<boolean>(getIsMobile)
 
   React.useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
@@ -15,9 +23,9 @@ export function useIsMobile() {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     }
     mql.addEventListener('change', onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+    onChange()
     return () => mql.removeEventListener('change', onChange)
   }, [])
 
-  return !!isMobile
+  return isMobile
 }

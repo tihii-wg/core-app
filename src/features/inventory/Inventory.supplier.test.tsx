@@ -135,4 +135,25 @@ describe("Inventory supplier column and filter", () => {
     expect(screen.queryByText("Oil filter")).not.toBeInTheDocument();
     expect(screen.queryByText("Chain lube")).not.toBeInTheDocument();
   });
+
+  it("renders item cards instead of the table on a phone viewport", async () => {
+    window.matchMedia = ((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    Object.defineProperty(window, "innerWidth", { value: 375, configurable: true });
+
+    renderPage();
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(await screen.findByText("Brake pads")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions for Brake pads" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Supplier" })).toBeInTheDocument();
+  });
 });

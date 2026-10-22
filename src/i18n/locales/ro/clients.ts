@@ -10,6 +10,10 @@ const clients: Messages<typeof en> = {
   addClient: "Adaugă client",
   searchPlaceholder: "Caută după nume, cod fiscal, persoană de contact, email, telefon sau adresă...",
   editClientLabel: "Editează {{name}}",
+  actions: {
+    menuLabel: "Acțiuni pentru clientul {{name}}",
+    viewDetails: "Vezi detalii",
+  },
   types: {
     individual: "Persoană fizică",
     organization: "Persoană juridică",

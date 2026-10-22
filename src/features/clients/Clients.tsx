@@ -14,6 +14,9 @@ import EditClientForm from "./EditClientForm";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
+import { useIsMobile } from "../../hooks/use-mobile";
+import { Skeleton } from "../../ui/Skeleton";
+import { ClientCard } from "./ClientCard";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { clientOrderSummaries } from "./clientOrders";
 import { useGetOrders } from "../orders/useGetOrders";
@@ -26,6 +29,7 @@ import { useOrderDetails } from "../orders/useOrderDetails";
 
 export function Clients() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const { workflow } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
   const [searchQuery, setSearchQuery] = useState("");
@@ -171,22 +175,59 @@ export function Clients() {
         onClearFilters={() => setClientType("all")}
       />
 
-      <DataTable
-        columns={columns}
-        data={clients}
-        isLoading={isLoading || ordersLoading}
-        keyExtractor={(client) => client.id}
-        onRowClick={handleRowClick}
-        emptyState={
-          clientsError ? (
-            <ErrorState title={t("clients.errors.loadFailed")} description={clientsError.message} onRetry={() => refetchClients()} />
-          ) : searchQuery || clientType !== "all" ? (
-            <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
-          ) : (
-            <NoClients onAddClient={() => setAddClientOpen(true)} />
-          )
-        }
-      />
+      {isMobile ? (
+        isLoading || ordersLoading ? (
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        ) : clients.length === 0 ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+            {clientsError ? (
+              <ErrorState title={t("clients.errors.loadFailed")} description={clientsError.message} onRetry={() => refetchClients()} />
+            ) : searchQuery || clientType !== "all" ? (
+              <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
+            ) : (
+              <NoClients onAddClient={() => setAddClientOpen(true)} />
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {clients.map((client) => (
+              <ClientCard
+                key={client.id}
+                client={client}
+                ordersCount={getClientOrders(client.id).length}
+                formatMoney={formatMoney}
+                onView={handleRowClick}
+                onEdit={setEditingClient}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <DataTable
+          columns={columns}
+          data={clients}
+          isLoading={isLoading || ordersLoading}
+          keyExtractor={(client) => client.id}
+          onRowClick={handleRowClick}
+          emptyState={
+            clientsError ? (
+              <ErrorState title={t("clients.errors.loadFailed")} description={clientsError.message} onRetry={() => refetchClients()} />
+            ) : searchQuery || clientType !== "all" ? (
+              <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
+            ) : (
+              <NoClients onAddClient={() => setAddClientOpen(true)} />
+            )
+          }
+        />
+      )}
 
       <AddClientDialog open={addClientOpen} onOpenChange={setAddClientOpen} />
 
@@ -204,7 +245,7 @@ export function Clients() {
           if (!open) setEditingClient(null);
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{clientCopy.editDialogTitle}</DialogTitle>
             <DialogDescription className="sr-only">{clientCopy.editDialogDescription}</DialogDescription>

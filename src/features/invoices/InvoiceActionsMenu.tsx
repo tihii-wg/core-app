@@ -8,17 +8,19 @@ type InvoiceActionsMenuProps = {
   invoice: Invoice;
   isUpdating?: boolean;
   onStatusChange: (invoice: Invoice, status: InvoiceStatus) => void;
+  /** Extra classes for the trigger (e.g. a larger touch target on mobile cards). */
+  triggerClassName?: string;
 };
 
 // Clicks are stopped so the menu can sit inside a clickable table row (see OrderActionsMenu).
-export function InvoiceActionsMenu({ invoice, isUpdating = false, onStatusChange }: InvoiceActionsMenuProps) {
+export function InvoiceActionsMenu({ invoice, isUpdating = false, onStatusChange, triggerClassName }: InvoiceActionsMenuProps) {
   const { t } = useTranslation();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={t("invoices.actions.menuLabel", { number: invoice.invoiceNumber })} onClick={stop}>
+        <Button type="button" variant="ghost" size="icon-sm" className={triggerClassName} aria-label={t("invoices.actions.menuLabel", { number: invoice.invoiceNumber })} onClick={stop}>
           <EllipsisVertical />
         </Button>
       </DropdownMenuTrigger>

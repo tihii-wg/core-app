@@ -31,6 +31,10 @@ const inventory: Messages<typeof en> = {
   active: "Activ",
   inactive: "Inactiv",
   editAriaLabel: "Editează {{name}}",
+  actions: {
+    menuLabel: "Acțiuni pentru {{name}}",
+    viewDetails: "Vezi detalii",
+  },
   deleteAriaLabel: "Șterge {{name}}",
   filters: {
     stock: "Stoc",

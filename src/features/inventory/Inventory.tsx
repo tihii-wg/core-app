@@ -17,6 +17,9 @@ import { useGetInventorySuppliers } from "./useGetInventorySuppliers";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
+import { useIsMobile } from "../../hooks/use-mobile";
+import { Skeleton } from "../../ui/Skeleton";
+import { InventoryCard } from "./InventoryCard";
 import InventoryDetailPanel from "./InventoryDetailPanel";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
@@ -45,6 +48,7 @@ const sortOptions: { value: string; labelKey: SortLabelKey; field: InventorySort
 
 export function Inventory() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const { workspaceId } = useActiveWorkspaceId();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
@@ -275,6 +279,35 @@ export function Inventory() {
         <div className="rounded-lg border border-border bg-card shadow-xs">
           <ErrorState title={t("inventory.loadError.title")} description={t("inventory.loadError.listDescription")} onRetry={() => refetch()} />
         </div>
+      ) : isMobile ? (
+        isLoading ? (
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+            {hasSearchOrFilter ? <NoSearchResults query={searchQuery || (supplierFilter !== "all" ? supplierFilter : stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter)} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map((item) => (
+              <InventoryCard
+                key={item.id}
+                item={item}
+                formatMoney={(value) => formatWorkspaceMoney(value, workspace?.currency)}
+                onView={(selected) => setDetailId(selected.id)}
+                onEdit={(selected) => setEditId(selected.id)}
+                onDelete={setItemToDelete}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <DataTable
           columns={columns}

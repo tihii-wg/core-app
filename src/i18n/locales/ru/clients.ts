@@ -11,6 +11,10 @@ const clients: Messages<typeof en> = {
   addClient: "Добавить клиента",
   searchPlaceholder: "Поиск по имени, налоговому коду, контактному лицу, email, телефону или адресу...",
   editClientLabel: "Редактировать {{name}}",
+  actions: {
+    menuLabel: "Действия для клиента {{name}}",
+    viewDetails: "Подробнее",
+  },
   types: {
     individual: "Физическое лицо",
     organization: "Юридическое лицо",

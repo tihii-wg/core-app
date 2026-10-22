@@ -24,6 +24,10 @@ export default {
   active: "Active",
   inactive: "Inactive",
   editAriaLabel: "Edit {{name}}",
+  actions: {
+    menuLabel: "Actions for {{name}}",
+    viewDetails: "View details",
+  },
   deleteAriaLabel: "Delete {{name}}",
   filters: {
     stock: "Stock",

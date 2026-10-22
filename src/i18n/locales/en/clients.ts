@@ -6,6 +6,10 @@ export default {
   addClient: "Add Client",
   searchPlaceholder: "Search by name, tax ID, contact, email, phone, or address...",
   editClientLabel: "Edit {{name}}",
+  actions: {
+    menuLabel: "Actions for client {{name}}",
+    viewDetails: "View details",
+  },
   types: {
     individual: "Individual",
     organization: "Organization",
