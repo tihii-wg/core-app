@@ -216,4 +216,48 @@ describe("ClientDetailPanel settlement entry point", () => {
     await user.click(within(dialog).getByRole("button", { name: "ORD-2026-002" }));
     expect(onOpenOrder).toHaveBeenCalledWith("b");
   });
+
+  it("constrains the dialog to the viewport with a fixed header/totals and independently scrolling regions", () => {
+    render(
+      <ClientSettlementDialog
+        open
+        onOpenChange={() => {}}
+        clientName="Ada Lovelace"
+        clientBalance={0}
+        orders={mixedOrders}
+        formatMoney={formatMoney}
+        onOpenOrder={() => {}}
+      />,
+    );
+    const dialog = screen.getByRole("dialog");
+
+    // The dialog itself never exceeds the visible viewport and never scrolls
+    // as a whole, so the title and the Radix close button stay in place.
+    expect(dialog.className).toContain("flex");
+    expect(dialog.className).toContain("flex-col");
+    expect(dialog.className).toContain("overflow-hidden");
+    expect(dialog.className).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(dialog.className).toContain("max-w-[calc(100vw-2rem)]");
+
+    // The summary cards live in a non-scrolling region above the scroll body.
+    const finalBalanceLabel = within(dialog).getByText("Final settlement balance");
+    const summaryRegion = finalBalanceLabel.closest("div.min-w-0.flex-none, div[class*='flex-none']");
+    expect(summaryRegion).not.toBeNull();
+    expect(summaryRegion?.className ?? "").not.toContain("overflow-y-auto");
+
+    // The table sits inside a vertical scroll body and its own horizontal
+    // scroll wrapper, so a wide table can never widen the dialog or page.
+    const table = within(dialog).getByRole("table");
+    const horizontalScroller = table.parentElement;
+    expect(horizontalScroller?.className ?? "").toContain("overflow-x-auto");
+    expect(horizontalScroller?.className ?? "").toContain("min-w-0");
+    expect(horizontalScroller?.className ?? "").toContain("max-w-full");
+    expect(table.className).toContain("min-w-[540px]");
+
+    const verticalScroller = horizontalScroller?.parentElement;
+    expect(verticalScroller?.className ?? "").toContain("overflow-y-auto");
+    expect(verticalScroller?.className ?? "").toContain("min-w-0");
+    expect(verticalScroller?.className ?? "").toContain("min-h-0");
+    expect(verticalScroller?.className ?? "").toContain("flex-1");
+  });
 });

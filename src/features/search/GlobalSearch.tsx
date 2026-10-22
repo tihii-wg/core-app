@@ -67,6 +67,7 @@ export default function GlobalSearch() {
   const { workflow, shell } = useIndustryWorkflow();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -93,13 +94,16 @@ export default function GlobalSearch() {
   const inventoryDetail = useGetInventoryItem(inventoryDetailId);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !mobileOpen) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setMobileOpen(false);
+      }
     };
     document.addEventListener("mousedown", closeOnOutsideClick);
     return () => document.removeEventListener("mousedown", closeOnOutsideClick);
-  }, [open]);
+  }, [open, mobileOpen]);
 
   const groups: ResultGroup[] = [
     {
@@ -137,6 +141,7 @@ export default function GlobalSearch() {
 
   function selectResult(result: SearchResult) {
     setOpen(false);
+    setMobileOpen(false);
     setQuery("");
     setActiveIndex(-1);
     if (result.type === "order") {
@@ -152,6 +157,7 @@ export default function GlobalSearch() {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       setOpen(false);
+      setMobileOpen(false);
       return;
     }
     if (!showResults && event.key !== "ArrowDown") return;
@@ -179,10 +185,32 @@ export default function GlobalSearch() {
   let optionIndex = -1;
 
   return (
-    <div ref={containerRef} className="relative hidden md:block">
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        aria-label={shell.searchInputLabel}
+        aria-expanded={mobileOpen}
+        onClick={() => {
+          setMobileOpen((current) => !current);
+          setOpen(true);
+        }}
+        className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+      >
+        <Search aria-hidden="true" className="size-4" />
+      </button>
+
+      <div
+        className={
+          mobileOpen
+            ? "fixed inset-x-3 top-16 z-50 rounded-lg border border-border bg-popover p-3 shadow-lg"
+            : "relative hidden md:block"
+        }
+      >
+      <div className="relative">
       <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" />
       <Input
         ref={inputRef}
+        autoFocus={mobileOpen}
         type="text"
         role="combobox"
         aria-label={shell.searchInputLabel}
@@ -199,14 +227,15 @@ export default function GlobalSearch() {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
-        className="h-9 w-44 border-transparent bg-muted pr-12 pl-9 text-sm shadow-none hover:border-border focus:bg-card md:w-56 lg:w-52 xl:w-72"
+        className="h-9 w-full border-transparent bg-muted pr-12 pl-9 text-sm shadow-none hover:border-border focus:bg-card md:w-56 lg:w-52 xl:w-72"
       />
       <kbd aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-card px-1.5 py-px font-sans text-[10px] font-medium text-subtle-foreground lg:block">
         ⌘K
       </kbd>
+      </div>
 
       {showDropdown && (
-        <div className="absolute right-0 top-full z-50 mt-2 max-h-[70vh] w-[26rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-popover shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150">
+        <div className={mobileOpen ? "mt-2 max-h-[60vh] overflow-y-auto" : "absolute right-0 top-full z-50 mt-2 max-h-[70vh] w-[26rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-popover shadow-lg animate-in fade-in-0 slide-in-from-top-1 duration-150"}>
           {message && (
             <p role="status" className="px-4 py-6 text-center text-sm text-muted-foreground">
               {message}
@@ -249,6 +278,7 @@ export default function GlobalSearch() {
           )}
         </div>
       )}
+      </div>
 
       {orderDetails.panelProps.selectedOrder && <OrderDetailPanel {...orderDetails.panelProps} />}
 

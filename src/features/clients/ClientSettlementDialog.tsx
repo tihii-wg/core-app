@@ -48,44 +48,50 @@ export default function ClientSettlementDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100vw-2rem)] flex-col gap-4 overflow-hidden p-4 sm:max-w-2xl sm:gap-5 sm:p-6">
+        <DialogHeader className="min-w-0 flex-none">
           <DialogTitle>{t("clients.settlement.title")}</DialogTitle>
           <DialogDescription>{t("clients.settlement.description", { name: clientName })}</DialogDescription>
         </DialogHeader>
 
         {ordersLoading ? (
-          <div className="space-y-2" aria-busy="true">
+          <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto" aria-busy="true">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-12 w-full" />
           </div>
         ) : ordersError ? (
-          <div className="rounded-md border border-dashed border-border px-4 py-6 text-center">
-            <p className="text-sm font-medium text-foreground">{t("clients.settlement.loadFailed")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{t("clients.settlement.loadFailedHint")}</p>
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="rounded-md border border-dashed border-border px-4 py-6 text-center">
+              <p className="text-sm font-medium text-foreground">{t("clients.settlement.loadFailed")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("clients.settlement.loadFailedHint")}</p>
+            </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <>
+            <div className="min-w-0 flex-none space-y-4">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
+              <div className="rounded-lg border border-border bg-muted/50 p-2.5 sm:p-3">
                 <p className="text-xs font-medium text-muted-foreground">{t("clients.settlement.existingBalance")}</p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{formatMoney(settlement.existingBalance)}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums sm:text-lg text-foreground">{formatMoney(settlement.existingBalance)}</p>
               </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
+              <div className="rounded-lg border border-border bg-muted/50 p-2.5 sm:p-3">
                 <p className="text-xs font-medium text-muted-foreground">{t("clients.settlement.displayedOrderTotal")}</p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{formatMoney(settlement.displayedOrderTotal)}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums sm:text-lg text-foreground">{formatMoney(settlement.displayedOrderTotal)}</p>
               </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
+              <div className="rounded-lg border border-border bg-muted/50 p-2.5 sm:p-3">
                 <p className="text-xs font-medium text-muted-foreground">{t("clients.settlement.totalOutstanding")}</p>
-                <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{formatMoney(settlement.totalOutstanding)}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums sm:text-lg text-foreground">{formatMoney(settlement.totalOutstanding)}</p>
               </div>
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
+              <div className="rounded-lg border border-border bg-muted/50 p-2.5 sm:p-3">
                 <p className="text-xs font-medium text-muted-foreground">{t("clients.settlement.balance")}</p>
-                <p className={`mt-1 text-lg font-semibold tabular-nums ${balanceToneClass[tone]}`}>{signedFinalBalance}</p>
+                <p className={`mt-1 text-base font-semibold tabular-nums sm:text-lg ${balanceToneClass[tone]}`}>{signedFinalBalance}</p>
               </div>
             </div>
 
+            </div>
+
+            <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
             <p className="text-xs text-muted-foreground">{t("clients.settlement.signExplanation")}</p>
 
             {settlement.rows.length === 0 ? (
@@ -94,7 +100,7 @@ export default function ClientSettlementDialog({
                 <p className="mt-1 text-xs text-muted-foreground">{t("clients.settlement.emptyHint")}</p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-border">
+              <div className="max-w-full min-w-0 overflow-x-auto overscroll-contain rounded-lg border border-border">
                 <table className="w-full min-w-[540px] text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50 text-left text-xs text-muted-foreground">
@@ -159,7 +165,8 @@ export default function ClientSettlementDialog({
               <p className="text-xs text-muted-foreground">{t("clients.settlement.cancelledExcluded", { count: settlement.excludedCancelledCount })}</p>
             ) : null}
             <p className="text-xs text-muted-foreground">{t("clients.settlement.paymentNote")}</p>
-          </div>
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>

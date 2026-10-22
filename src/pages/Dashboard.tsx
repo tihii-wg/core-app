@@ -373,11 +373,11 @@ export default function Dashboard() {
         </h2>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {quickActions.map(({ key, label, icon: Icon, onClick }) => (
-            <Button key={key} onClick={onClick} variant="outline" className="h-10 justify-start gap-2.5 px-3 font-medium">
+            <Button key={key} onClick={onClick} variant="outline" className="h-auto min-h-10 justify-start gap-2.5 px-3 py-1.5 font-medium sm:h-10 sm:py-0">
               <span className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
                 <Icon aria-hidden="true" className="size-3.5" />
               </span>
-              <span className="truncate">{label}</span>
+              <span className="leading-tight sm:truncate">{label}</span>
               <Plus aria-hidden="true" className="ml-auto hidden size-3.5 shrink-0 text-subtle-foreground xl:block" />
             </Button>
           ))}
