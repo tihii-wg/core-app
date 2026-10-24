@@ -10,11 +10,39 @@ const updateOrderHooks = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const taxInvoiceHooks = vi.hoisted(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+}));
+
+const workspaceState = vi.hoisted(() => ({
+  requireTaxInvoiceNumber: false,
+}));
+
 vi.mock("./useUpdateOrder", () => ({
   useUpdateOrder: () => ({
     mutateAsync: updateOrderHooks.mutateAsync,
     isPending: updateOrderHooks.isPending,
   }),
+}));
+
+vi.mock("./useGetOrders", () => ({
+  useUpdateOrderTaxInvoiceNumber: () => ({
+    mutateAsync: taxInvoiceHooks.mutateAsync,
+    isPending: taxInvoiceHooks.isPending,
+  }),
+}));
+
+vi.mock("../workspaces/useGetWorkspace", () => ({
+  useGetWorkspace: () => ({
+    data: { currency: "MDL", requireTaxInvoiceNumber: workspaceState.requireTaxInvoiceNumber },
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
 }));
 
 vi.mock("../services/useGetServices", () => ({
@@ -121,6 +149,9 @@ beforeEach(() => {
   industryState.slug = "auto_repair";
   updateOrderHooks.isPending = false;
   updateOrderHooks.mutateAsync.mockReset();
+  taxInvoiceHooks.isPending = false;
+  taxInvoiceHooks.mutateAsync.mockReset();
+  workspaceState.requireTaxInvoiceNumber = false;
 });
 
 describe("OrderDetailPanel", () => {
@@ -320,5 +351,206 @@ describe("OrderDetailPanel", () => {
 
     expect(await screen.findByRole("combobox", { name: /Update Status/i })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toBeDisabled();
+  });
+
+  it("shows a saved tax invoice number for a legal-entity order and keeps it after the order is marked paid", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    const onStatusChange = vi.fn();
+    workspaceState.requireTaxInvoiceNumber = true;
+    taxInvoiceHooks.mutateAsync.mockResolvedValue("FV-2026-77");
+
+    const legalOrder: Order = {
+      ...order,
+      clientType: "organization",
+      taxInvoiceNumber: "",
+      status: "completed",
+    };
+
+    const { rerender } = renderWithQuery(
+      <OrderDetailPanel
+        selectedOrder={legalOrder}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={onOrderUpdated}
+        onStatusChange={onStatusChange}
+      />,
+    );
+
+    const input = await screen.findByLabelText("Tax invoice number");
+    expect(input).toHaveValue("");
+    await user.type(input, "FV-2026-77");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(taxInvoiceHooks.mutateAsync).toHaveBeenCalledWith({ orderId: "order-1", taxInvoiceNumber: "FV-2026-77" });
+    expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ taxInvoiceNumber: "FV-2026-77" }));
+
+    // Simulate parent keeping the saved number while marking the order paid (status update must not clear it).
+    const paidOrder: Order = {
+      ...legalOrder,
+      taxInvoiceNumber: "FV-2026-77",
+      status: "paid",
+      isPaid: true,
+      paymentStatus: "paid",
+    };
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={paidOrder}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={onOrderUpdated}
+        onStatusChange={onStatusChange}
+      />,
+    );
+
+    expect(screen.getByLabelText("Tax invoice number")).toHaveValue("FV-2026-77");
+  });
+
+  it("redisplays the persisted tax invoice number when the same legal-entity order is reopened", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    const legalOrder: Order = {
+      ...order,
+      clientType: "organization",
+      taxInvoiceNumber: "FV-PERSISTED",
+      status: "paid",
+      isPaid: true,
+      paymentStatus: "paid",
+    };
+
+    const { rerender } = renderWithQuery(
+      <OrderDetailPanel
+        selectedOrder={legalOrder}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={vi.fn()}
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByLabelText("Tax invoice number")).toHaveValue("FV-PERSISTED");
+    expect(screen.queryByText(/tax invoice number is required/i)).not.toBeInTheDocument();
+
+    // Close then reopen with the same persisted payload (as after navigation/refresh).
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={legalOrder}
+        detailPanelOpen={false}
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={vi.fn()}
+        onStatusChange={vi.fn()}
+      />,
+    );
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={{ ...legalOrder }}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={vi.fn()}
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText("Tax invoice number");
+    expect(input).toHaveValue("FV-PERSISTED");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByText(/tax invoice number is required/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps a saved tax invoice number after save → close → reopen and after a refetch payload", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    workspaceState.requireTaxInvoiceNumber = true;
+    taxInvoiceHooks.mutateAsync.mockResolvedValue("FV-REFETCH-9");
+
+    let selected: Order = {
+      ...order,
+      clientType: "organization",
+      taxInvoiceNumber: "",
+      status: "completed",
+    };
+
+    const { rerender } = renderWithQuery(
+      <OrderDetailPanel
+        selectedOrder={selected}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={(next) => {
+          selected = next;
+          onOrderUpdated(next);
+        }}
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    const input = await screen.findByLabelText("Tax invoice number");
+    expect(input).toHaveAttribute("aria-invalid");
+    await user.type(input, "FV-REFETCH-9");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ taxInvoiceNumber: "FV-REFETCH-9" }));
+
+    // Close panel.
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={selected}
+        detailPanelOpen={false}
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={onOrderUpdated}
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    // Reopen with the saved order (as after closing the sheet).
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={{ ...selected, taxInvoiceNumber: "FV-REFETCH-9" }}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={onOrderUpdated}
+        onStatusChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Tax invoice number")).toHaveValue("FV-REFETCH-9");
+    expect(screen.queryByText(/tax invoice number is required/i)).not.toBeInTheDocument();
+
+    // Simulate page reload / React Query refetch bringing the same persisted value.
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={{
+          ...selected,
+          taxInvoiceNumber: "FV-REFETCH-9",
+          status: "paid",
+          isPaid: true,
+          paymentStatus: "paid",
+        }}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={onOrderUpdated}
+        onStatusChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Tax invoice number")).toHaveValue("FV-REFETCH-9");
+    expect(screen.getByLabelText("Tax invoice number")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("still shows the required validation for a legal-entity order with no saved number", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, clientType: "organization", taxInvoiceNumber: "", status: "completed" },
+    });
+
+    const input = await screen.findByLabelText("Tax invoice number");
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("aria-invalid");
+    expect(screen.getByText(/tax invoice number is required/i)).toBeInTheDocument();
+  });
+
+  it("does not show the tax invoice field for individual customers", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, clientType: "individual", taxInvoiceNumber: "FV-HIDDEN" },
+    });
+
+    expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tax invoice number")).not.toBeInTheDocument();
   });
 });

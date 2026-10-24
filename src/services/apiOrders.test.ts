@@ -739,7 +739,15 @@ describe("tax invoice requirement", () => {
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
   });
 
-  function statusSetup({ required, taxNumber }: { required: boolean; taxNumber: string | null }) {
+  function statusSetup({
+    required,
+    taxNumber,
+    clientType = "organization",
+  }: {
+    required: boolean;
+    taxNumber: string | null;
+    clientType?: "organization" | "individual" | null;
+  }) {
     const updates: unknown[] = [];
     const ordersChain: Record<string, unknown> = {
       select: () => ordersChain,
@@ -748,7 +756,11 @@ describe("tax invoice requirement", () => {
         updates.push(payload);
         return ordersChain;
       },
-      maybeSingle: () => Promise.resolve({ data: { tax_invoice_number: taxNumber }, error: null }),
+      maybeSingle: () =>
+        Promise.resolve({
+          data: { tax_invoice_number: taxNumber, clients: { client_type: clientType } },
+          error: null,
+        }),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
         Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
     };
@@ -765,46 +777,62 @@ describe("tax invoice requirement", () => {
     return { updates };
   }
 
-  it("blocks marking paid when the workspace requires a tax invoice number and none is saved", async () => {
-    const { updates } = statusSetup({ required: true, taxNumber: null });
+  it("blocks marking paid for a legal-entity order when the workspace requires a tax invoice number and none is saved", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: null, clientType: "organization" });
     await expect(updateOrderStatus("order-1", "paid", "ws-1")).rejects.toThrow(/tax invoice number is required/i);
     expect(updates).toEqual([]);
   });
 
-  it("rejects a whitespace-only tax invoice number", async () => {
-    const { updates } = statusSetup({ required: true, taxNumber: "   " });
+  it("rejects a whitespace-only tax invoice number for a legal-entity order", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: "   ", clientType: "organization" });
     await expect(updateOrderStatus("order-1", "paid", "ws-1")).rejects.toThrow(/tax invoice number is required/i);
     expect(updates).toEqual([]);
   });
 
-  it("allows marking paid after a valid tax invoice number is saved", async () => {
-    const { updates } = statusSetup({ required: true, taxNumber: "FV-2026-77" });
+  it("allows marking paid for a legal entity after a valid tax invoice number is saved", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: "FV-2026-77", clientType: "organization" });
+    await updateOrderStatus("order-1", "paid", "ws-1");
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+  });
+
+  it("allows marking an individual order paid without a tax invoice number when the setting is enabled", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: null, clientType: "individual" });
     await updateOrderStatus("order-1", "paid", "ws-1");
     expect(updates[0]).toEqual({ status: "paid", is_paid: true });
   });
 
   it("preserves existing behavior when the requirement is disabled", async () => {
-    const { updates } = statusSetup({ required: false, taxNumber: null });
+    const { updates } = statusSetup({ required: false, taxNumber: null, clientType: "organization" });
     await updateOrderStatus("order-1", "paid", "ws-1");
     expect(updates[0]).toEqual({ status: "paid", is_paid: true });
   });
 
   it("does not gate non-paid statuses even when the requirement is enabled", async () => {
-    const { updates } = statusSetup({ required: true, taxNumber: null });
+    const { updates } = statusSetup({ required: true, taxNumber: null, clientType: "organization" });
     await updateOrderStatus("order-1", "completed", "ws-1");
     expect(updates[0]).toEqual({ status: "completed" });
   });
 
+  it("status updates to paid never clear tax_invoice_number in the write payload", async () => {
+    const { updates } = statusSetup({ required: true, taxNumber: "FV-KEEP", clientType: "organization" });
+    await updateOrderStatus("order-1", "paid", "ws-1");
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+    expect(updates[0]).not.toHaveProperty("tax_invoice_number");
+  });
+
   it("trims and saves the tax invoice number; blank clears it", async () => {
     const updates: unknown[] = [];
+    let saved: string | null = null;
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: () => chain,
       update: (payload: unknown) => {
         updates.push(payload);
+        saved = (payload as { tax_invoice_number: string | null }).tax_invoice_number;
         return chain;
       },
-      maybeSingle: () => Promise.resolve({ data: { id: "order-1" }, error: null }),
+      maybeSingle: () => Promise.resolve({ data: { tax_invoice_number: saved }, error: null }),
     };
     from.mockImplementation((table: string) => {
       if (table === "orders") return chain;
@@ -816,6 +844,48 @@ describe("tax invoice requirement", () => {
 
     await expect(updateOrderTaxInvoiceNumber("order-1", "   ", "ws-1")).resolves.toBe("");
     expect(updates[1]).toEqual({ tax_invoice_number: null });
+  });
+
+  it("maps tax_invoice_number from fetched order rows so reopen/refetch keeps the value", async () => {
+    const orders = query({
+      data: [
+        {
+          id: "order-1",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          number: "ORD-2026-003",
+          device: "BMW",
+          status: "paid",
+          employee_id: employeeId,
+          total_price: 40,
+          is_paid: true,
+          tax_invoice_number: "FV-PERSISTED",
+          clients: { name: "Org SA", client_type: "organization" },
+        },
+      ],
+      error: null,
+    });
+    const employees = query({ data: [{ id: employeeId, name: "Ada Tech", profile_id: "user-1" }], error: null });
+    const orderServices = query({ data: [], error: null });
+    const orderMaterials = query({ data: [], error: null });
+
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "order_services") return orderServices;
+      if (table === "order_materials") return orderMaterials;
+      if (table === "employees") return employees;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(getOrders("ws-1")).resolves.toEqual([
+      expect.objectContaining({
+        id: "order-1",
+        taxInvoiceNumber: "FV-PERSISTED",
+        clientType: "organization",
+        status: "paid",
+        paymentStatus: "paid",
+      }),
+    ]);
   });
 
   it("treats only non-whitespace values as present", () => {

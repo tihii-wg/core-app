@@ -270,7 +270,7 @@ const settings: Messages<typeof en> = {
     },
     taxInvoice: {
       label: "Solicită numărul facturii fiscale pentru închiderea comenzilor",
-      description: "Când este activat, comenzile nu pot fi marcate ca plătite sau închise până când numărul facturii fiscale nu a fost introdus și salvat în comandă.",
+      description: "Când este activat, comenzile clienților persoane juridice nu pot fi marcate ca plătite până când numărul facturii fiscale nu a fost introdus și salvat în comandă. Clienții persoane fizice nu sunt afectați.",
       toast: {
         saved: "Setarea facturii fiscale a fost salvată",
         failed: "Setarea facturii fiscale nu a putut fi salvată",

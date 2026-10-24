@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { Calendar, Mail, Pencil, Phone, Save } from "lucide-react";
@@ -31,7 +31,7 @@ import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useUpdateOrderTaxInvoiceNumber } from "./useGetOrders";
-import { hasTaxInvoiceNumber } from "./taxInvoice";
+import { hasTaxInvoiceNumber, isLegalEntityCustomer } from "./taxInvoice";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import OrderWarehouseActions from "./OrderWarehouseActions";
@@ -200,12 +200,16 @@ export default function OrderDetailPanel({
               </div>
             </div>
 
-            <TaxInvoiceNumberField
-              key={selectedOrder.id}
-              order={selectedOrder}
-              required={taxInvoiceRequired}
-              onSaved={onOrderUpdated}
-            />
+            {isLegalEntityCustomer(selectedOrder.clientType) ? (
+              <TaxInvoiceNumberField
+                // Include persisted number in the key so a reopen/refetch that
+                // brings a saved value remounts with the correct input state.
+                key={`${selectedOrder.id}:${selectedOrder.taxInvoiceNumber ?? ""}`}
+                order={selectedOrder}
+                required={taxInvoiceRequired}
+                onSaved={onOrderUpdated}
+              />
+            ) : null}
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
               {deadline ? (
@@ -373,8 +377,17 @@ function TaxInvoiceNumberField({
   const { mutateAsync: saveTaxInvoiceNumber, isPending } = useUpdateOrderTaxInvoiceNumber();
   const savedValue = order.taxInvoiceNumber ?? "";
   const [value, setValue] = useState(savedValue);
+
+  // Re-adopt the persisted value when the order is reopened or refetched after
+  // pay/status/cache updates (same component instance can receive a newly
+  // hydrated taxInvoiceNumber without remounting).
+  useEffect(() => {
+    setValue(savedValue);
+  }, [order.id, savedValue]);
+
   const trimmed = value.trim();
   const dirty = trimmed !== savedValue.trim();
+  // Validate against the latest persisted order value — never local draft text.
   const missingRequired = required && !hasTaxInvoiceNumber(order);
 
   async function handleSave() {

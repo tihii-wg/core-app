@@ -267,7 +267,7 @@ export default {
     },
     taxInvoice: {
       label: "Require tax invoice number to close orders",
-      description: "When enabled, orders cannot be marked as paid or closed until a tax invoice number has been entered and saved on the order.",
+      description: "When enabled, orders for legal-entity customers cannot be marked as paid until a tax invoice number has been entered and saved on the order. Individual customers are not affected.",
       toast: {
         saved: "Tax invoice setting saved",
         failed: "Could not save the tax invoice setting",

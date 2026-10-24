@@ -15,6 +15,8 @@ export function useUpdateClient() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+      // Orders embed clients.client_type; keep tax-invoice rules in sync when type changes.
+      queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       toast.success(i18n.t("clients.toast.updated"), { id: "update-client" });
     },
     onError: (error) => {

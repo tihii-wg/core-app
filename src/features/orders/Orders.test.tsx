@@ -66,28 +66,32 @@ const awaitingPaymentState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
-vi.mock("./useGetOrders", () => ({
-  useOrdersPage: () => ({
-    orders: ordersState.list,
-    total: ordersState.total,
-    page: ordersState.page,
-    pageSize: ordersState.pageSize,
-    pageCount: ordersState.pageCount,
-    isLoading: false,
-    isFetching: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-  useOrdersAwaitingPayment: () => ({
-    amount: awaitingPaymentState.amount,
-    count: awaitingPaymentState.count,
-    isLoading: awaitingPaymentState.isLoading,
-    error: awaitingPaymentState.error,
-    refetch: vi.fn(),
-  }),
-  useUpdateOrderStatus: () => ({ mutate: statusHooks.mutate, isPending: statusHooks.isPending }),
-  useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(async () => "FV-1"), isPending: false }),
-}));
+vi.mock("./useGetOrders", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./useGetOrders")>();
+  return {
+    ...actual,
+    useOrdersPage: () => ({
+      orders: ordersState.list,
+      total: ordersState.total,
+      page: ordersState.page,
+      pageSize: ordersState.pageSize,
+      pageCount: ordersState.pageCount,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
+    useOrdersAwaitingPayment: () => ({
+      amount: awaitingPaymentState.amount,
+      count: awaitingPaymentState.count,
+      isLoading: awaitingPaymentState.isLoading,
+      error: awaitingPaymentState.error,
+      refetch: vi.fn(),
+    }),
+    useUpdateOrderStatus: () => ({ mutate: statusHooks.mutate, isPending: statusHooks.isPending }),
+    useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(async () => "FV-1"), isPending: false }),
+  };
+});
 
 vi.mock("../employees/useGetEmployees", () => ({
   default: () => ({
@@ -374,8 +378,9 @@ describe("Orders page", () => {
     expect(screen.getByRole("menuitem", { name: "Invoices are not set up yet" })).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("blocks marking paid without a tax invoice number when the workspace requires one", async () => {
+  it("blocks marking a legal-entity order paid without a tax invoice number when the workspace requires one", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "organization";
     order.taxInvoiceNumber = "";
     const user = await openActions();
 
@@ -385,10 +390,12 @@ describe("Orders page", () => {
     // The order opens so the number can be entered without losing context.
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     workspaceState.requireTaxInvoiceNumber = false;
+    order.clientType = undefined;
   });
 
-  it("allows marking paid once a tax invoice number is saved on the order", async () => {
+  it("allows marking a legal-entity order paid once a tax invoice number is saved", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "organization";
     order.taxInvoiceNumber = "FV-2026-77";
     const user = await openActions();
 
@@ -400,10 +407,29 @@ describe("Orders page", () => {
     );
     workspaceState.requireTaxInvoiceNumber = false;
     order.taxInvoiceNumber = "";
+    order.clientType = undefined;
   });
 
-  it("keeps the tax invoice field in the order detail panel", async () => {
+  it("allows marking an individual order paid without a tax invoice number when the setting is enabled", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "individual";
+    order.taxInvoiceNumber = "";
+    const user = await openActions();
+
+    await user.click(screen.getByRole("menuitem", { name: "Paid" }));
+
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "paid" },
+      expect.any(Object),
+    );
+    expect(screen.queryByLabelText("Tax invoice number")).not.toBeInTheDocument();
+    workspaceState.requireTaxInvoiceNumber = false;
+    order.clientType = undefined;
+  });
+
+  it("shows the tax invoice field only for legal-entity orders", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "organization";
     order.taxInvoiceNumber = "FV-2026-77";
     const user = await openActions();
 
@@ -411,7 +437,48 @@ describe("Orders page", () => {
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByLabelText("Tax invoice number")).toHaveValue("FV-2026-77");
+    expect(screen.getByLabelText("Tax invoice number")).not.toHaveAttribute("aria-invalid");
     workspaceState.requireTaxInvoiceNumber = false;
     order.taxInvoiceNumber = "";
+    order.clientType = undefined;
+  });
+
+  it("keeps a saved tax invoice number visible without validation errors on a paid legal-entity order", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "organization";
+    order.taxInvoiceNumber = "FV-PAID-1";
+    order.status = "paid";
+    order.isPaid = true;
+    order.paymentStatus = "paid";
+    const user = await openActions();
+
+    await user.click(screen.getByRole("menuitem", { name: "View details" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Tax invoice number")).toHaveValue("FV-PAID-1");
+    expect(screen.getByLabelText("Tax invoice number")).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByText(/tax invoice number is required/i)).not.toBeInTheDocument();
+
+    workspaceState.requireTaxInvoiceNumber = false;
+    order.taxInvoiceNumber = "";
+    order.clientType = undefined;
+    order.status = "new";
+    order.isPaid = false;
+    order.paymentStatus = "unpaid";
+  });
+
+  it("does not show the tax invoice field for individual orders", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "individual";
+    order.taxInvoiceNumber = "FV-should-not-display-as-required";
+    const user = await openActions();
+
+    await user.click(screen.getByRole("menuitem", { name: "View details" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tax invoice number")).not.toBeInTheDocument();
+    workspaceState.requireTaxInvoiceNumber = false;
+    order.taxInvoiceNumber = "";
+    order.clientType = undefined;
   });
 });

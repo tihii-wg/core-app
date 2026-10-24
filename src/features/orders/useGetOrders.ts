@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import {
@@ -11,8 +11,56 @@ import {
   type OrdersListQuery,
   type OrdersPageResult,
 } from "../../services/apiOrders";
-import type { OrderStatus } from "../../lib/types";
+import type { Order, OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+
+/** Patches taxInvoiceNumber on every cached orders list/page for this workspace. */
+export function patchOrderTaxInvoiceInCache(
+  queryClient: QueryClient,
+  workspaceId: string | undefined,
+  orderId: string,
+  taxInvoiceNumber: string,
+) {
+  if (!workspaceId) return;
+
+  const patchOrder = (order: Order): Order =>
+    order.id === orderId ? { ...order, taxInvoiceNumber } : order;
+
+  queryClient.setQueriesData({ queryKey: ["orders", workspaceId] }, (data: unknown) => {
+    if (Array.isArray(data)) {
+      return (data as Order[]).map(patchOrder);
+    }
+    if (data && typeof data === "object" && Array.isArray((data as OrdersPageResult).orders)) {
+      const page = data as OrdersPageResult;
+      return { ...page, orders: page.orders.map(patchOrder) };
+    }
+    return data;
+  });
+}
+
+/** Best cached Order for `orderId` across list and page queries (prefers one with a tax number). */
+export function findCachedOrder(
+  queryClient: QueryClient,
+  workspaceId: string | undefined,
+  orderId: string,
+): Order | undefined {
+  if (!workspaceId) return undefined;
+
+  let fallback: Order | undefined;
+  for (const [, data] of queryClient.getQueriesData({ queryKey: ["orders", workspaceId] })) {
+    const orders: Order[] | undefined = Array.isArray(data)
+      ? (data as Order[])
+      : data && typeof data === "object" && Array.isArray((data as OrdersPageResult).orders)
+        ? (data as OrdersPageResult).orders
+        : undefined;
+    if (!orders) continue;
+    const found = orders.find((order) => order.id === orderId);
+    if (!found) continue;
+    if ((found.taxInvoiceNumber ?? "").trim()) return found;
+    fallback ??= found;
+  }
+  return fallback;
+}
 
 /** Unpaginated orders (dashboard, notifications, global search). */
 export function useGetOrders(search = "", { enabled = true }: { enabled?: boolean } = {}) {
@@ -96,7 +144,10 @@ export function useUpdateOrderTaxInvoiceNumber() {
   return useMutation({
     mutationFn: ({ orderId, taxInvoiceNumber }: { orderId: string; taxInvoiceNumber: string }) =>
       updateOrderTaxInvoiceNumber(orderId, taxInvoiceNumber, workspaceId),
-    onSuccess: () => {
+    onSuccess: (saved, { orderId }) => {
+      // Keep list/page caches in sync immediately so reopen during placeholderData
+      // refetch does not open a stale order with an empty tax invoice number.
+      patchOrderTaxInvoiceInCache(queryClient, workspaceId, orderId, saved);
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
     },
     onError: (error) => {

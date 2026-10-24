@@ -33,22 +33,26 @@ const order: Order = {
 
 const ordersState = vi.hoisted(() => ({ list: [] as Order[], total: 0, page: 1, pageSize: 25, pageCount: 1 }));
 
-vi.mock("./useGetOrders", () => ({
-  useOrdersPage: () => ({
-    orders: ordersState.list,
-    total: ordersState.total,
-    page: ordersState.page,
-    pageSize: ordersState.pageSize,
-    pageCount: ordersState.pageCount,
-    isLoading: false,
-    isFetching: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-  useOrdersAwaitingPayment: () => ({ amount: 40, count: 1, isLoading: false, error: null, refetch: vi.fn() }),
-  useUpdateOrderStatus: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(async () => ""), isPending: false }),
-}));
+vi.mock("./useGetOrders", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./useGetOrders")>();
+  return {
+    ...actual,
+    useOrdersPage: () => ({
+      orders: ordersState.list,
+      total: ordersState.total,
+      page: ordersState.page,
+      pageSize: ordersState.pageSize,
+      pageCount: ordersState.pageCount,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
+    useOrdersAwaitingPayment: () => ({ amount: 40, count: 1, isLoading: false, error: null, refetch: vi.fn() }),
+    useUpdateOrderStatus: () => ({ mutate: vi.fn(), isPending: false }),
+    useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(async () => ""), isPending: false }),
+  };
+});
 
 vi.mock("../employees/useGetEmployees", () => ({
   default: () => ({

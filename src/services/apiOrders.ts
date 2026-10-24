@@ -345,9 +345,19 @@ type OrderMaterialLine = {
   quantity_returned?: number;
 };
 
-const orderColumns = "*,clients(name,client_type,email,phone)";
+// Explicit tax_invoice_number so PostgREST always returns it even if a stale
+// schema-cache expansion of `*` ever omitted a newly added column.
+const orderColumns = "*,tax_invoice_number,clients(name,client_type,email,phone)";
 const orderServiceColumns = "id, order_id, service_id, service_name, price, quantity";
 const orderMaterialColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
+
+/** Reads orders.tax_invoice_number; coerces unexpected non-null types instead of dropping them. */
+export function readTaxInvoiceNumber(row: Record<string, unknown>) {
+  const raw = row.tax_invoice_number;
+  if (raw == null) return "";
+  if (typeof raw === "string") return raw;
+  return String(raw);
+}
 
 function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
   return serviceLines.map((line) => ({
@@ -432,7 +442,7 @@ function toOrder(
     totalPrice: Number(row.total_price ?? 0),
     isPaid,
     paymentStatus,
-    taxInvoiceNumber: typeof row.tax_invoice_number === "string" ? row.tax_invoice_number : "",
+    taxInvoiceNumber: readTaxInvoiceNumber(row),
     ...(createdById
       ? {
           createdById,
@@ -684,12 +694,23 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
   if (status === "paid" && (await workspaceRequiresTaxInvoice(targetWorkspaceId))) {
     const { data: orderRow } = await supabase
       .from("orders")
-      .select("tax_invoice_number")
+      .select("tax_invoice_number, clients(client_type)")
       .eq("id", orderId)
       .eq("workspace_id", targetWorkspaceId)
       .maybeSingle();
-    if (orderRow && !hasTaxInvoiceNumber((orderRow as { tax_invoice_number?: unknown }).tax_invoice_number as string | null)) {
-      throw new Error(i18n.t("orders.taxInvoice.required"));
+
+    const client = (orderRow as { clients?: unknown } | null)?.clients;
+    const clientRecord = Array.isArray(client) ? client[0] : client;
+    const clientType =
+      clientRecord && typeof clientRecord === "object"
+        ? (clientRecord as { client_type?: unknown }).client_type
+        : null;
+
+    if (clientType === "organization") {
+      const taxNumber = (orderRow as { tax_invoice_number?: unknown } | null)?.tax_invoice_number;
+      if (!hasTaxInvoiceNumber(typeof taxNumber === "string" ? taxNumber : null)) {
+        throw new Error(i18n.t("orders.taxInvoice.required"));
+      }
     }
   }
 
@@ -714,12 +735,13 @@ export async function updateOrderTaxInvoiceNumber(orderId: string, taxInvoiceNum
     .update({ tax_invoice_number: trimmed || null })
     .eq("id", orderId)
     .eq("workspace_id", targetWorkspaceId)
-    .select("id")
+    // Round-trip the persisted column so callers adopt the DB value, not only the local trim.
+    .select("tax_invoice_number")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error(orderPermissionMessage());
-  return trimmed;
+  return readTaxInvoiceNumber(data as Record<string, unknown>);
 }
 
 export function readVin(row: Record<string, unknown>) {
