@@ -119,11 +119,71 @@ describe("useOrderDetails tax invoice persistence", () => {
     expect(result.current.panelProps.detailPanelOpen).toBe(true);
   });
 
+  it("blocks paying a legal-entity order when the tax invoice number is whitespace-only", () => {
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, taxInvoiceNumber: "   " }, "paid");
+    });
+
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
+    expect(result.current.panelProps.detailPanelOpen).toBe(true);
+  });
+
+  it("blocks payment when a stale list row says individual but the cache knows the customer is a legal entity", () => {
+    queryClient.setQueryData(["orders", "ws-1"], [
+      { ...baseOrder, clientType: "organization", taxInvoiceNumber: "" },
+    ]);
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      // Stale actions-menu payload incorrectly typed as individual.
+      result.current.changeStatus({ ...baseOrder, clientType: "individual", taxInvoiceNumber: "" }, "paid");
+    });
+
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
+    expect(result.current.panelProps.selectedOrder?.clientType).toBe("organization");
+  });
+
+  it("allows paying once a saved number is in the cache even if the list row is still empty", () => {
+    queryClient.setQueryData(["orders", "ws-1", "page", { page: 1 }], {
+      orders: [{ ...baseOrder, taxInvoiceNumber: "FV-SAVED" }],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+      pageCount: 1,
+    });
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, taxInvoiceNumber: "" }, "paid");
+    });
+
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "paid" },
+      expect.any(Object),
+    );
+  });
+
   it("allows paying an individual order without a tax invoice number", () => {
     const { result } = renderHook(() => useOrderDetails(), { wrapper });
 
     act(() => {
       result.current.changeStatus({ ...baseOrder, clientType: "individual", taxInvoiceNumber: "" }, "paid");
+    });
+
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "paid" },
+      expect.any(Object),
+    );
+  });
+
+  it("does not block payment when the workspace requirement is disabled", () => {
+    workspaceState.requireTaxInvoiceNumber = false;
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, taxInvoiceNumber: "" }, "paid");
     });
 
     expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(

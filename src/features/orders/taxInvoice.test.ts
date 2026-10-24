@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Order } from "../../lib/types";
-import { hasTaxInvoiceNumber, isLegalEntityCustomer, isPaidClosureStatus, isTaxInvoiceBlocked } from "./taxInvoice";
+import {
+  hasTaxInvoiceNumber,
+  isLegalEntityCustomer,
+  isPaidClosureStatus,
+  isTaxInvoiceBlocked,
+  resolveClientTypeForTaxGate,
+  taxInvoiceNumberPresent,
+} from "./taxInvoice";
 
 const base = { taxInvoiceNumber: "", clientType: "organization" as const } as Order;
 
@@ -19,10 +26,19 @@ describe("taxInvoice helpers", () => {
   });
 
   it("requires non-whitespace content", () => {
+    expect(taxInvoiceNumberPresent("FV-1")).toBe(true);
+    expect(taxInvoiceNumberPresent("  ")).toBe(false);
     expect(hasTaxInvoiceNumber({ taxInvoiceNumber: "FV-1" })).toBe(true);
     expect(hasTaxInvoiceNumber({ taxInvoiceNumber: "  " })).toBe(false);
     expect(hasTaxInvoiceNumber({ taxInvoiceNumber: "" })).toBe(false);
     expect(hasTaxInvoiceNumber({ taxInvoiceNumber: undefined })).toBe(false);
+  });
+
+  it("fail-closes the UI gate when any source says the customer is a legal entity", () => {
+    expect(resolveClientTypeForTaxGate({ clientType: "individual" }, { clientType: "organization" })).toBe("organization");
+    expect(resolveClientTypeForTaxGate({ clientType: undefined }, { clientType: "organization" })).toBe("organization");
+    expect(resolveClientTypeForTaxGate({ clientType: "individual" }, { clientType: "individual" })).toBe("individual");
+    expect(resolveClientTypeForTaxGate({ clientType: undefined }, null)).toBeUndefined();
   });
 
   it("blocks only legal-entity paid closure when required and missing", () => {

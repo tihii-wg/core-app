@@ -6,6 +6,7 @@ import {
   UPCOMING_DEADLINE_DAYS,
   type DeadlineFilter,
 } from "../features/orders/orderVisibility";
+import { isLegalEntityCustomer, taxInvoiceNumberPresent } from "../features/orders/taxInvoice";
 import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import supabase from "./supabase";
@@ -669,8 +670,9 @@ export async function getOrder(orderId: string, workspaceId: string | undefined)
   return order;
 }
 
+/** String helper used by tests; same trim rules as `taxInvoiceNumberPresent`. */
 export function hasTaxInvoiceNumber(value: string | null | undefined) {
-  return typeof value === "string" && value.trim().length > 0;
+  return taxInvoiceNumberPresent(value);
 }
 
 /**
@@ -688,30 +690,49 @@ async function workspaceRequiresTaxInvoice(workspaceId: string) {
   }
 }
 
+/**
+ * Authoritative paid-gate for legal-entity orders: reads the current
+ * `clients.client_type` and `orders.tax_invoice_number` from Supabase (not the
+ * React Query cache). Fails closed when the check query errors so a transient
+ * failure cannot skip the requirement.
+ */
+async function assertTaxInvoiceAllowsPaid(orderId: string, workspaceId: string) {
+  if (!(await workspaceRequiresTaxInvoice(workspaceId))) return;
+
+  const { data: orderRow, error } = await supabase
+    .from("orders")
+    .select("tax_invoice_number, clients(client_type)")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!orderRow) throw new Error(orderPermissionMessage());
+
+  const client = (orderRow as { clients?: unknown }).clients;
+  const clientRecord = Array.isArray(client) ? client[0] : client;
+  const rawType =
+    clientRecord && typeof clientRecord === "object"
+      ? (clientRecord as { client_type?: unknown }).client_type
+      : null;
+  const clientType = toClientType(rawType);
+
+  if (isLegalEntityCustomer(clientType) && !taxInvoiceNumberPresent(readTaxInvoiceNumber(orderRow as Record<string, unknown>))) {
+    throw new Error(i18n.t("orders.taxInvoice.required"));
+  }
+}
+
+/**
+ * Sole application write path that can set `orders.status = paid` / `is_paid`.
+ * Every UI entry point (order menu, detail panel, etc.) goes through
+ * `useUpdateOrderStatus` → this function. Direct Supabase/SQL updates are
+ * outside app enforcement (no DB trigger in this codebase).
+ */
 export async function updateOrderStatus(orderId: string, status: OrderStatus, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
 
-  if (status === "paid" && (await workspaceRequiresTaxInvoice(targetWorkspaceId))) {
-    const { data: orderRow } = await supabase
-      .from("orders")
-      .select("tax_invoice_number, clients(client_type)")
-      .eq("id", orderId)
-      .eq("workspace_id", targetWorkspaceId)
-      .maybeSingle();
-
-    const client = (orderRow as { clients?: unknown } | null)?.clients;
-    const clientRecord = Array.isArray(client) ? client[0] : client;
-    const clientType =
-      clientRecord && typeof clientRecord === "object"
-        ? (clientRecord as { client_type?: unknown }).client_type
-        : null;
-
-    if (clientType === "organization") {
-      const taxNumber = (orderRow as { tax_invoice_number?: unknown } | null)?.tax_invoice_number;
-      if (!hasTaxInvoiceNumber(typeof taxNumber === "string" ? taxNumber : null)) {
-        throw new Error(i18n.t("orders.taxInvoice.required"));
-      }
-    }
+  if (status === "paid") {
+    await assertTaxInvoiceAllowsPaid(orderId, targetWorkspaceId);
   }
 
   const { data, error } = await supabase

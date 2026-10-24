@@ -821,6 +821,62 @@ describe("tax invoice requirement", () => {
     expect(updates[0]).not.toHaveProperty("tax_invoice_number");
   });
 
+  it("fails closed when the tax-invoice verification query errors (cannot skip the rule)", async () => {
+    const updates: unknown[] = [];
+    const ordersChain: Record<string, unknown> = {
+      select: () => ordersChain,
+      eq: () => ordersChain,
+      update: (payload: unknown) => {
+        updates.push(payload);
+        return ordersChain;
+      },
+      maybeSingle: () => Promise.resolve({ data: null, error: { message: "network down" } }),
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
+    };
+    const workspaceChain: Record<string, unknown> = {
+      select: () => workspaceChain,
+      eq: () => workspaceChain,
+      maybeSingle: () => Promise.resolve({ data: { require_tax_invoice_number: true }, error: null }),
+    };
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return ordersChain;
+      if (table === "workspaces") return workspaceChain;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(updateOrderStatus("order-1", "paid", "ws-1")).rejects.toThrow("network down");
+    expect(updates).toEqual([]);
+  });
+
+  it("fails closed when the order row is missing during tax-invoice verification", async () => {
+    const updates: unknown[] = [];
+    const ordersChain: Record<string, unknown> = {
+      select: () => ordersChain,
+      eq: () => ordersChain,
+      update: (payload: unknown) => {
+        updates.push(payload);
+        return ordersChain;
+      },
+      maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
+    };
+    const workspaceChain: Record<string, unknown> = {
+      select: () => workspaceChain,
+      eq: () => workspaceChain,
+      maybeSingle: () => Promise.resolve({ data: { require_tax_invoice_number: true }, error: null }),
+    };
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return ordersChain;
+      if (table === "workspaces") return workspaceChain;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(updateOrderStatus("order-1", "paid", "ws-1")).rejects.toThrow(/not found or you do not have permission/i);
+    expect(updates).toEqual([]);
+  });
+
   it("trims and saves the tax invoice number; blank clears it", async () => {
     const updates: unknown[] = [];
     let saved: string | null = null;

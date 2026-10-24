@@ -11,8 +11,13 @@ export function isLegalEntityCustomer(clientType: ClientType | null | undefined)
 }
 
 /** A tax invoice number counts only when it has non-whitespace content. */
+export function taxInvoiceNumberPresent(value: string | null | undefined) {
+  return (value ?? "").trim().length > 0;
+}
+
+/** Order-shaped helper; trims whitespace the same way as `taxInvoiceNumberPresent`. */
 export function hasTaxInvoiceNumber(order: Pick<Order, "taxInvoiceNumber">) {
-  return (order.taxInvoiceNumber ?? "").trim().length > 0;
+  return taxInvoiceNumberPresent(order.taxInvoiceNumber);
 }
 
 /**
@@ -27,4 +32,19 @@ export function isTaxInvoiceBlocked(order: Order, status: OrderStatus, requireTa
     isLegalEntityCustomer(order.clientType) &&
     !hasTaxInvoiceNumber(order)
   );
+}
+
+/**
+ * Fail-closed client type for the UI paid gate: if any known source says the
+ * customer is a legal entity, treat them as one so a stale "individual" /
+ * missing type cannot skip the tax-invoice check before the API runs.
+ */
+export function resolveClientTypeForTaxGate(
+  primary: Pick<Order, "clientType">,
+  secondary?: Pick<Order, "clientType"> | null,
+): ClientType | null | undefined {
+  if (isLegalEntityCustomer(primary.clientType) || isLegalEntityCustomer(secondary?.clientType)) {
+    return "organization";
+  }
+  return primary.clientType ?? secondary?.clientType;
 }

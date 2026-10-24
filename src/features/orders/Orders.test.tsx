@@ -393,6 +393,21 @@ describe("Orders page", () => {
     order.clientType = undefined;
   });
 
+  it("blocks marking a legal-entity order paid when the tax invoice number is whitespace-only", async () => {
+    workspaceState.requireTaxInvoiceNumber = true;
+    order.clientType = "organization";
+    order.taxInvoiceNumber = "   ";
+    const user = await openActions();
+
+    await user.click(screen.getByRole("menuitem", { name: "Paid" }));
+
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    workspaceState.requireTaxInvoiceNumber = false;
+    order.taxInvoiceNumber = "";
+    order.clientType = undefined;
+  });
+
   it("allows marking a legal-entity order paid once a tax invoice number is saved", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
     order.clientType = "organization";
