@@ -1,4 +1,4 @@
-import { ClipboardList, Package, Pencil, Plus, UserPlus, ArrowLeft, ArrowRight, FileText, RefreshCw, Activity } from "lucide-react";
+import { ClipboardList, Package, Pencil, UserPlus, ArrowLeft, ArrowRight, FileText, RefreshCw, Activity } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Trans, useTranslation } from "react-i18next";
@@ -38,6 +38,7 @@ import { quantityClass } from "../features/inventory/inventoryDisplay";
 import { effectiveStockStatus } from "../features/inventory/stockStatus";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
 import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
+import { DashboardQuickActions } from "../features/dashboard/DashboardQuickActions";
 import { industryOrderStatusLabel } from "../features/industries/industryWorkflow";
 import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 import { cn } from "../lib/utils";
@@ -366,23 +367,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Quick Actions */}
-      <section aria-labelledby="dashboard-quick-actions" className="rounded-lg border border-border bg-card p-4 shadow-xs">
-        <h2 id="dashboard-quick-actions" className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
-          {t("dashboard.quickActions.title")}
-        </h2>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {quickActions.map(({ key, label, icon: Icon, onClick }) => (
-            <Button key={key} onClick={onClick} variant="outline" className="h-auto min-h-10 justify-start gap-2.5 px-3 py-1.5 font-medium sm:h-10 sm:py-0">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
-                <Icon aria-hidden="true" className="size-3.5" />
-              </span>
-              <span className="leading-tight sm:truncate">{label}</span>
-              <Plus aria-hidden="true" className="ml-auto hidden size-3.5 shrink-0 text-subtle-foreground xl:block" />
-            </Button>
-          ))}
-        </div>
-      </section>
+      <DashboardQuickActions actions={quickActions} />
 
       <CreateOrderDialog {...dialogProps("order")} />
       <AddClientDialog {...dialogProps("client")} />
