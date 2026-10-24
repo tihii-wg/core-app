@@ -1,10 +1,25 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../../lib/types";
 import ClientDetailPanel from "./ClientDetailPanel";
 import ClientSettlementDialog from "./ClientSettlementDialog";
 import type { ClientOrderSummary } from "./clientOrders";
+
+function stubViewport(width: number) {
+  const isMobile = width < 768;
+  window.matchMedia = ((query: string) => ({
+    matches: isMobile && String(query).includes("max-width"),
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+  Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+}
 
 vi.mock("./useUpdateClient", () => ({
   useUpdateClient: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -51,9 +66,22 @@ function summary(partial: Partial<ClientOrderSummary>): ClientOrderSummary {
 
 const mixedOrders = [
   summary({ id: "a", orderNumber: "ORD-2026-001", totalPrice: 100, isPaid: true }),
-  summary({ id: "b", orderNumber: "ORD-2026-002", totalPrice: 300, isPaid: false }),
+  summary({
+    id: "b",
+    orderNumber: "ORD-2026-002",
+    totalPrice: 300,
+    isPaid: false,
+    device: "BMW 320d",
+    carNumber: "ABC123",
+    status: "completed",
+  }),
   summary({ id: "c", orderNumber: "ORD-2026-003", totalPrice: 50, isPaid: true }),
 ];
+
+beforeEach(() => {
+  // Default suite assumes the desktop table layout.
+  stubViewport(1280);
+});
 
 function balanceValue() {
   const card = screen.getByText("Final settlement balance").closest("div");
@@ -259,5 +287,63 @@ describe("ClientDetailPanel settlement entry point", () => {
     expect(verticalScroller?.className ?? "").toContain("min-w-0");
     expect(verticalScroller?.className ?? "").toContain("min-h-0");
     expect(verticalScroller?.className ?? "").toContain("flex-1");
+  });
+
+  it("renders unpaid orders as mobile cards with remaining amounts and opens details on tap", async () => {
+    stubViewport(375);
+    const user = userEvent.setup();
+    const onOpenOrder = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <ClientSettlementDialog
+        open
+        onOpenChange={onOpenChange}
+        clientName="Ada Lovelace"
+        clientBalance={0}
+        orders={mixedOrders}
+        formatMoney={formatMoney}
+        onOpenOrder={onOpenOrder}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByRole("table")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "ORD-2026-002" })).toBeInTheDocument();
+    expect(within(dialog).getByText("BMW 320d")).toBeInTheDocument();
+    expect(within(dialog).getByText("ABC123")).toBeInTheDocument();
+    // Card + mobile totals footer both label the outstanding amount.
+    expect(within(dialog).getAllByText("Remaining").length).toBeGreaterThanOrEqual(2);
+    expect(within(dialog).getAllByText("MDL 300.00").length).toBeGreaterThan(0);
+    expect(within(dialog).queryByText("ORD-2026-001")).not.toBeInTheDocument();
+
+    // Prefer truncation / break-all over a forced wide table min-width (portal lives on body).
+    expect(dialog.querySelector(".truncate")).not.toBeNull();
+    expect(dialog.querySelector(".break-all")).not.toBeNull();
+
+    await user.click(within(dialog).getByText("BMW 320d"));
+    expect(onOpenOrder).toHaveBeenCalledWith("b");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it.each([320, 360, 390, 414, 440])("keeps mobile settlement cards readable at %ipx width", (width) => {
+    stubViewport(width);
+    render(
+      <ClientSettlementDialog
+        open
+        onOpenChange={() => {}}
+        clientName="Ada Lovelace"
+        clientBalance={0}
+        orders={mixedOrders}
+        formatMoney={formatMoney}
+        onOpenOrder={() => {}}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByRole("table")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "ORD-2026-002" })).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Remaining").length).toBeGreaterThanOrEqual(1);
+    expect(dialog.querySelector(".break-all")).not.toBeNull();
   });
 });

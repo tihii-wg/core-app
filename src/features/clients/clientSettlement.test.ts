@@ -35,7 +35,7 @@ describe("computeClientSettlement — outstanding orders only", () => {
 
   it("lists unpaid orders with their full remaining amount", () => {
     const result = computeClientSettlement([
-      summary({ id: "a", totalPrice: 100 }),
+      summary({ id: "a", totalPrice: 100, device: "BMW", carNumber: "ABC", service: "Oil", status: "completed" }),
       summary({ id: "b", totalPrice: 40 }),
     ]);
     expect(result.rows).toHaveLength(2);
@@ -44,6 +44,13 @@ describe("computeClientSettlement — outstanding orders only", () => {
     expect(result.finalBalance).toBe(-140);
     expect(settlementBalanceTone(result.finalBalance)).toBe("debt");
     expect(result.rows.every((row) => row.remaining === row.total && row.remaining > 0)).toBe(true);
+    // Display fields are carried for mobile cards without affecting money math.
+    expect(result.rows[0]).toMatchObject({
+      device: "BMW",
+      carNumber: "ABC",
+      service: "Oil",
+      status: "completed",
+    });
   });
 
   it("handles a client-level partial settlement: paid orders drop out, unpaid remain and reconcile", () => {

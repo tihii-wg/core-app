@@ -1,3 +1,4 @@
+import type { OrderStatus } from "../../lib/types";
 import type { ClientOrderSummary } from "./clientOrders";
 
 /**
@@ -47,6 +48,11 @@ export type ClientSettlementRow = {
   paid: number;
   remaining: number;
   isPaid: boolean;
+  /** Display-only fields for mobile cards; unused in money totals. */
+  status: OrderStatus;
+  device: string;
+  carNumber: string;
+  service: string;
 };
 
 export type ClientSettlement = {
@@ -103,6 +109,10 @@ export function computeClientSettlement(orders: ClientOrderSummary[], storedBala
       paid,
       remaining,
       isPaid: Boolean(order.isPaid),
+      status: order.status,
+      device: order.device ?? "",
+      carNumber: order.carNumber ?? "",
+      service: order.service ?? "",
     });
   }
 
