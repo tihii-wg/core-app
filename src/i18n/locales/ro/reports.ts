@@ -18,7 +18,7 @@ const reports: Messages<typeof en> = {
   stats: {
     totalRevenue: "Venituri totale",
     revenueCollected: "Venituri încasate",
-    revenueCollectedHint: "Suma totalurilor comenzilor achitate create în această perioadă.",
+    revenueCollectedHint: "Încasări nete confirmate în registru după data plății în această perioadă.",
     totalOrders: "Total comenzi",
     ordersCreated: "Comenzi create",
     ordersCreatedHint: "Comenzi cu data creării în această perioadă.",

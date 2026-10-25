@@ -1,5 +1,5 @@
 import { useMemo, useState, type ElementType } from "react";
-import { TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, CreditCard, Banknote, Building, FileText, Plus, EllipsisVertical, Pencil, Trash2, Receipt } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, CreditCard, Banknote, Building, FileText, Plus, EllipsisVertical, Pencil, Trash2, Receipt, AlertTriangle } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { PageHeader } from "../../pages/PageHeader";
 import { DashboardCard } from "../../ui/DashboardCard";
@@ -18,14 +18,22 @@ import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNo
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { rangeLabel, reportRanges, useReportFormatting } from "../reports/reportFormatting";
 import { reportPeriod, type ReportRange } from "../reports/reportStats";
-import { useFinanceTransactions } from "./useFinanceTransactions";
+import { useFinanceTransactions, type FinanceUiFilters } from "./useFinanceTransactions";
 import { ExpenseFormDialog } from "./ExpenseFormDialog";
 import { DeleteExpenseDialog } from "./DeleteExpenseDialog";
+import { ledgerPaymentMethods, type LedgerPaymentMethod } from "./paymentTypes";
 
 const paymentMethodIcons: Record<PaymentMethod, ElementType> = {
   cash: Banknote,
   card: CreditCard,
   "bank-transfer": Building,
+  other: DollarSign,
+};
+
+const ledgerMethodIcons: Record<LedgerPaymentMethod, ElementType> = {
+  cash: Banknote,
+  card: CreditCard,
+  bank_transfer: Building,
   other: DollarSign,
 };
 
@@ -40,36 +48,39 @@ export function Finance() {
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
   const canManage = withSubscriptionWriteAccess(canManageExpenses(useActiveWorkspaceRole()), subscriptionAllowsWrite);
   const [range, setRange] = useState<ReportRange>("last30");
+  const [linkFilter, setLinkFilter] = useState<"all" | "invoice" | "no-invoice">("all");
+  const [methodFilter, setMethodFilter] = useState<"all" | LedgerPaymentMethod>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [deleting, setDeleting] = useState<Expense | null>(null);
-  const { transactions, outstanding, isLoading, invoicesError, expensesError, invoicesUnavailable, expensesUnavailable } = useFinanceTransactions();
 
   const period = useMemo(() => reportPeriod(range, new Date()), [range]);
-  const inPeriod = useMemo(() => transactions.filter((txn) => txn.date >= period.start && txn.date <= period.end), [transactions, period]);
+  const filters: FinanceUiFilters = useMemo(
+    () => ({
+      ...(linkFilter !== "all" ? { link: linkFilter } : {}),
+      ...(methodFilter !== "all" ? { paymentMethod: methodFilter } : {}),
+    }),
+    [linkFilter, methodFilter],
+  );
+  const {
+    transactions,
+    inPeriod,
+    stats,
+    legacyItems,
+    isLoading,
+    paymentsError,
+    invoicesError,
+    expensesError,
+    paymentsUnavailable,
+    invoicesUnavailable,
+    expensesUnavailable,
+    refetch,
+  } = useFinanceTransactions(period, filters);
 
-  const stats = useMemo(() => {
-    const income = inPeriod.filter((txn) => txn.type === "income").reduce((sum, txn) => sum + txn.amount, 0);
-    const expenseRows = inPeriod.filter((txn) => txn.type === "expense");
-    const expenses = expenseRows.reduce((sum, txn) => sum + txn.amount, 0);
-    const byCategory = Object.entries(
-      expenseRows.reduce<Record<string, number>>((acc, txn) => {
-        acc[txn.category] = (acc[txn.category] ?? 0) + txn.amount;
-        return acc;
-      }, {}),
-    ).sort((a, b) => b[1] - a[1]);
-    const byMethod = Object.entries(
-      expenseRows.reduce<Record<string, number>>((acc, txn) => {
-        const method = txn.paymentMethod ?? "other";
-        acc[method] = (acc[method] ?? 0) + txn.amount;
-        return acc;
-      }, {}),
-    ).sort((a, b) => b[1] - a[1]) as [PaymentMethod, number][];
-    const outstandingTotal = outstanding.reduce((sum, invoice) => sum + invoice.amount, 0);
-    return { income, expenses, profit: income - expenses, byCategory, byMethod, outstandingTotal };
-  }, [inPeriod, outstanding]);
-
-  const knownCategories = useMemo(() => [...new Set(transactions.filter((txn) => txn.type === "expense").map((txn) => txn.category))], [transactions]);
+  const knownCategories = useMemo(
+    () => [...new Set(transactions.filter((txn) => txn.type === "expense").map((txn) => txn.category))],
+    [transactions],
+  );
 
   function openAdd() {
     setEditing(null);
@@ -90,6 +101,11 @@ export function Finance() {
           <div className="flex items-center gap-2">
             <ArrowUpRight className="h-4 w-4 text-success" />
             <span className="text-success">{t("finance.transactions.types.income")}</span>
+          </div>
+        ) : txn.type === "refund" ? (
+          <div className="flex items-center gap-2">
+            <ArrowDownRight className="h-4 w-4 text-warning" />
+            <span className="text-warning">{t("finance.transactions.types.refund")}</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
@@ -126,7 +142,7 @@ export function Finance() {
             </div>
           );
         }
-        const Icon = paymentMethodIcons[txn.paymentMethod];
+        const Icon = paymentMethodIcons[txn.paymentMethod] ?? DollarSign;
         return (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Icon className="h-4 w-4" />
@@ -140,7 +156,11 @@ export function Finance() {
       key: "amount",
       header: t("finance.transactions.columns.amount"),
       cell: (txn) => (
-        <span className={`whitespace-nowrap font-medium tabular-nums ${txn.type === "income" ? "text-success" : "text-destructive"}`}>
+        <span
+          className={`whitespace-nowrap font-medium tabular-nums ${
+            txn.type === "income" ? "text-success" : txn.type === "refund" ? "text-warning" : "text-destructive"
+          }`}
+        >
           {txn.type === "income" ? "+" : "-"}
           {formatMoney(txn.amount)}
         </span>
@@ -170,6 +190,7 @@ export function Finance() {
   ];
 
   const description = isLoading ? t("common.loadingEllipsis") : t("finance.periodDescription", { range: rangeLabel(range) });
+  const showDataWarning = paymentsUnavailable || invoicesUnavailable || expensesUnavailable || paymentsError || invoicesError || expensesError;
 
   return (
     <div className="space-y-6">
@@ -190,6 +211,29 @@ export function Finance() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={linkFilter} onValueChange={(value) => setLinkFilter(value as typeof linkFilter)}>
+              <SelectTrigger className="w-44" aria-label={t("finance.linkFilterLabel")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("finance.linkFilters.all")}</SelectItem>
+                <SelectItem value="invoice">{t("finance.linkFilters.invoice")}</SelectItem>
+                <SelectItem value="no-invoice">{t("finance.linkFilters.no-invoice")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={methodFilter} onValueChange={(value) => setMethodFilter(value as typeof methodFilter)}>
+              <SelectTrigger className="w-40" aria-label={t("finance.methodFilterLabel")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("finance.methodFilters.all")}</SelectItem>
+                {ledgerPaymentMethods.map((method) => (
+                  <SelectItem key={method} value={method}>
+                    {t(`finance.paymentMethods.full.${method}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {canManage && !expensesUnavailable && (
               <Button onClick={openAdd}>
                 <Plus />
@@ -202,21 +246,81 @@ export function Finance() {
 
       <SubscriptionReadOnlyNotice />
 
-      {(invoicesUnavailable || expensesUnavailable || invoicesError || expensesError) && (
-        <div className="space-y-1 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-foreground">
+      {showDataWarning ? (
+        <div className="space-y-2 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-foreground">
+          {paymentsUnavailable && <p>{t("finance.payments.errors.unavailable")}</p>}
           {invoicesUnavailable && <p>{t("invoices.errors.unavailable")}</p>}
           {expensesUnavailable && <p>{t("finance.expenses.errors.unavailable")}</p>}
+          {paymentsError && <p>{paymentsError.message}</p>}
           {invoicesError && <p>{invoicesError.message}</p>}
           {expensesError && <p>{expensesError.message}</p>}
+          {(paymentsError || invoicesError || expensesError) && (
+            <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
+              {t("common.retry")}
+            </Button>
+          )}
         </div>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <DashboardCard title={t("finance.stats.totalRevenue")} value={formatMoney(stats.income)} icon={TrendingUp} variant="success" />
-        <DashboardCard title={t("finance.stats.totalExpenses")} value={formatMoney(stats.expenses)} icon={TrendingDown} variant="danger" />
-        <DashboardCard title={t("finance.stats.netProfit")} value={formatMoney(stats.profit)} icon={DollarSign} variant={stats.profit >= 0 ? "primary" : "danger"} />
-        <DashboardCard title={t("finance.stats.outstanding")} value={formatMoney(stats.outstandingTotal)} icon={FileText} variant="warning" />
+        <DashboardCard
+          title={t("finance.stats.netReceipts")}
+          value={formatMoney(stats.netReceipts)}
+          icon={TrendingUp}
+          variant="success"
+          isLoading={isLoading}
+          footer={!isLoading ? <span className="text-xs text-muted-foreground">{t("finance.stats.totalRevenueHint")}</span> : undefined}
+        />
+        <DashboardCard title={t("finance.stats.totalExpenses")} value={formatMoney(stats.expenses)} icon={TrendingDown} variant="danger" isLoading={isLoading} />
+        <DashboardCard
+          title={t("finance.stats.netProfit")}
+          value={formatMoney(stats.netOperating)}
+          icon={DollarSign}
+          variant={stats.netOperating >= 0 ? "primary" : "danger"}
+          isLoading={isLoading}
+          footer={!isLoading ? <span className="text-xs text-muted-foreground">{t("finance.stats.netProfitHint")}</span> : undefined}
+        />
+        <DashboardCard
+          title={t("finance.stats.outstanding")}
+          value={formatMoney(stats.outstandingTotal)}
+          icon={FileText}
+          variant="warning"
+          isLoading={isLoading}
+          footer={!isLoading ? <span className="text-xs text-muted-foreground">{t("finance.stats.outstandingHint")}</span> : undefined}
+        />
       </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <DashboardCard title={t("finance.stats.invoiceLinked")} value={formatMoney(stats.invoiceLinkedReceipts)} icon={FileText} variant="primary" isLoading={isLoading} />
+        <DashboardCard title={t("finance.stats.noInvoice")} value={formatMoney(stats.noInvoiceReceipts)} icon={Receipt} variant="primary" isLoading={isLoading} />
+        <DashboardCard title={t("finance.stats.refunds")} value={formatMoney(stats.refunds)} icon={TrendingDown} variant="warning" isLoading={isLoading} />
+      </div>
+
+      {stats.legacyUnreconciledTotal > 0 || legacyItems.length > 0 ? (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
+          <div className="mb-2 flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("finance.legacy.title")}</p>
+              <p className="text-sm text-muted-foreground">{t("finance.legacy.description")}</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
+                {t("finance.stats.legacy")}: {formatMoney(stats.legacyUnreconciledTotal)}
+              </p>
+            </div>
+          </div>
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            {legacyItems.slice(0, 8).map((item) => (
+              <li key={`${item.kind}-${item.id}`}>
+                {item.label} · {formatMoney(item.amount)}
+                {" — "}
+                {item.dateReliable && item.attributedDate
+                  ? t("finance.legacy.invoiceDate", { date: item.attributedDate })
+                  : t("finance.legacy.orderNoDate")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid gap-5 2xl:grid-cols-3">
         <div className="min-w-0 2xl:col-span-2">
@@ -225,6 +329,7 @@ export function Finance() {
             columns={columns}
             data={inPeriod}
             keyExtractor={(txn) => txn.id}
+            isLoading={isLoading}
             emptyState={
               <EmptyState
                 icon={Receipt}
@@ -239,39 +344,54 @@ export function Finance() {
         <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-1">
           <div className="rounded-lg border border-border bg-card p-5 shadow-xs">
             <h3 className="mb-4 text-sm font-semibold text-foreground">{t("finance.profitOverview.title")}</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{t("finance.profitOverview.revenue")}</span>
-                <span className="text-sm font-medium text-success">+{formatMoney(stats.income)}</span>
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">{t("common.loadingEllipsis")}</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{t("finance.profitOverview.revenue")}</span>
+                  <span className="text-sm font-medium text-success">+{formatMoney(stats.netReceipts)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">{t("finance.profitOverview.expenses")}</span>
+                  <span className="text-sm font-medium text-destructive">-{formatMoney(stats.expenses)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <span className="text-sm font-medium text-foreground">{t("finance.profitOverview.netProfit")}</span>
+                  <span className={`text-lg font-semibold tabular-nums ${stats.netOperating >= 0 ? "text-success" : "text-destructive"}`}>
+                    {formatMoney(stats.netOperating)}
+                  </span>
+                </div>
+                <p className="pt-2 text-xs text-muted-foreground">
+                  <Trans i18nKey="finance.profitOverview.margin" values={{ value: percent(stats.netOperating, stats.netReceipts) }} components={{ value: <span className="font-medium" /> }} />
+                </p>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{t("finance.profitOverview.expenses")}</span>
-                <span className="text-sm font-medium text-destructive">-{formatMoney(stats.expenses)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-border pt-4">
-                <span className="text-sm font-medium text-foreground">{t("finance.profitOverview.netProfit")}</span>
-                <span className={`text-lg font-semibold tabular-nums ${stats.profit >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(stats.profit)}</span>
-              </div>
-              <p className="pt-2 text-xs text-muted-foreground">
-                <Trans i18nKey="finance.profitOverview.margin" values={{ value: percent(stats.profit, stats.income) }} components={{ value: <span className="font-medium" /> }} />
-              </p>
-            </div>
+            )}
           </div>
 
           <BreakdownCard
             title={t("finance.expensesByCategory")}
             empty={t("finance.noExpensesInPeriod")}
+            loadingLabel={t("common.loadingEllipsis")}
             rows={stats.byCategory.map(([category, amount]) => ({ key: category, label: category, amount }))}
             total={stats.expenses}
             formatMoney={formatMoney}
+            isLoading={isLoading}
           />
 
           <BreakdownCard
-            title={t("finance.expensesByPaymentMethod")}
-            empty={t("finance.noExpensesInPeriod")}
-            rows={stats.byMethod.map(([method, amount]) => ({ key: method, label: t(`finance.paymentMethods.full.${method}`), amount, icon: paymentMethodIcons[method] }))}
-            total={stats.expenses}
+            title={t("finance.receiptsByPaymentMethod")}
+            empty={t("finance.noReceiptsInPeriod")}
+            loadingLabel={t("common.loadingEllipsis")}
+            rows={stats.byPaymentMethod.map(([method, amount]) => ({
+              key: method,
+              label: t(`finance.paymentMethods.full.${method}`),
+              amount: Math.abs(amount),
+              icon: ledgerMethodIcons[method],
+            }))}
+            total={stats.grossReceipts}
             formatMoney={formatMoney}
+            isLoading={isLoading}
           />
         </div>
       </div>
@@ -292,11 +412,29 @@ export function Finance() {
 
 type BreakdownRow = { key: string; label: string; amount: number; icon?: ElementType };
 
-function BreakdownCard({ title, empty, rows, total, formatMoney }: { title: string; empty: string; rows: BreakdownRow[]; total: number; formatMoney: (value: number) => string }) {
+function BreakdownCard({
+  title,
+  empty,
+  loadingLabel,
+  rows,
+  total,
+  formatMoney,
+  isLoading,
+}: {
+  title: string;
+  empty: string;
+  loadingLabel: string;
+  rows: BreakdownRow[];
+  total: number;
+  formatMoney: (value: number) => string;
+  isLoading?: boolean;
+}) {
   return (
     <div className="rounded-lg border border-border bg-card p-5 shadow-xs">
       <h3 className="mb-4 text-sm font-semibold text-foreground">{title}</h3>
-      {rows.length === 0 ? (
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">{loadingLabel}</p>
+      ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{empty}</p>
       ) : (
         <div className="space-y-4">

@@ -15,7 +15,7 @@ export default {
   stats: {
     totalRevenue: "Total Revenue",
     revenueCollected: "Revenue collected",
-    revenueCollectedHint: "Sum of paid order totals created in this period.",
+    revenueCollectedHint: "Ledger-confirmed net receipts by payment date in this period.",
     totalOrders: "Total Orders",
     ordersCreated: "Orders created",
     ordersCreatedHint: "Orders with a created date in this period.",

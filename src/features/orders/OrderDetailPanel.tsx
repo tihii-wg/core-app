@@ -43,6 +43,9 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import OrderWarehouseActions from "./OrderWarehouseActions";
 import OrderAttachmentsSection from "./OrderAttachmentsSection";
+import { PaymentHistorySection } from "../finance/PaymentHistorySection";
+import { orderPaymentBalance } from "../finance/paymentCalculations";
+import { useGetPayments } from "../finance/usePayments";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -83,6 +86,8 @@ export default function OrderDetailPanel({
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
+  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const paymentBalance = selectedOrder ? orderPaymentBalance(selectedOrder, payments) : null;
 
   if (selectedOrder?.id !== editingOrderId) {
     setEditingOrderId(selectedOrder?.id);
@@ -210,7 +215,7 @@ export default function OrderDetailPanel({
                 <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(selectedOrder.totalPrice)}</p>
                 <div className="mt-2">
-                  <PaymentStatusBadge status={selectedOrder.paymentStatus} />
+                  <PaymentStatusBadge status={paymentBalance?.status ?? selectedOrder.paymentStatus} />
                 </div>
               </div>
             </div>
@@ -343,6 +348,14 @@ export default function OrderDetailPanel({
                 <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{description}</p>
               </div>
             ) : null}
+
+            <PaymentHistorySection
+              target="order"
+              order={selectedOrder}
+              payments={payments}
+              isLoading={paymentsLoading}
+              canRecord={canEditOrder}
+            />
 
             <OrderAttachmentsSection orderId={selectedOrder.id} enabled={detailPanelOpen} />
 

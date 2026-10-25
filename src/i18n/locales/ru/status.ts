@@ -26,7 +26,7 @@ const status: Messages<typeof en> = {
   },
   payment: {
     unpaid: "Не оплачен",
-    partial: "Частично",
+    partial: "Частично оплачено",
     paid: "Оплачен",
   },
   invoice: {

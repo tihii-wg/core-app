@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { Order, OrderStatus } from "../../lib/types";
+import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
 import { OrderActionsMenu } from "./OrderActionsMenu";
@@ -11,6 +11,8 @@ type OrderCardProps = {
   isCreatingInvoice?: boolean;
   isStatusUpdating?: boolean;
   requireTaxInvoiceNumber?: boolean;
+  /** Ledger-derived payment status when available; falls back to order.paymentStatus. */
+  paymentStatus?: PaymentStatus;
   formatMoney: (value: number) => string;
   onView: (order: Order) => void;
   onEdit: (order: Order) => void;
@@ -30,6 +32,7 @@ export function OrderCard({
   isCreatingInvoice = false,
   isStatusUpdating = false,
   requireTaxInvoiceNumber = false,
+  paymentStatus,
   formatMoney,
   onView,
   onEdit,
@@ -38,6 +41,7 @@ export function OrderCard({
 }: OrderCardProps) {
   const { t } = useTranslation();
   const registration = order.carNumber?.trim() || order.vin?.trim() || "";
+  const resolvedPaymentStatus = paymentStatus ?? order.paymentStatus;
 
   return (
     <article
@@ -84,7 +88,7 @@ export function OrderCard({
       <div className="mt-2.5 flex items-end gap-3 border-t border-border pt-2.5">
         <div className="flex min-w-0 flex-col items-start gap-1">
           <OrderStatusBadge status={order.status} />
-          <PaymentStatusBadge status={order.paymentStatus} />
+          <PaymentStatusBadge status={resolvedPaymentStatus} />
         </div>
         <span className={cn("ml-auto shrink-0 text-right")}>
           <span className="block font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>

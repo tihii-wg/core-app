@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import i18n from "../../i18n";
 import type { Employee, InventoryItem, Order } from "../../lib/types";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import {
   employeePerformance,
   employeeWorkload,
@@ -10,9 +11,28 @@ import {
   percentChange,
   reportPeriod,
   revenueSeries,
+  revenueSeriesWithLedger,
   serviceDistribution,
   summaryStats,
+  summaryStatsWithLedger,
 } from "./reportStats";
+
+function ledgerPayment(partial: Partial<LedgerPayment> & Pick<LedgerPayment, "id" | "amount">): LedgerPayment {
+  return {
+    workspaceId: "ws-a",
+    orderId: null,
+    invoiceId: null,
+    relatedPaymentId: null,
+    kind: "payment",
+    currencyCode: "MDL",
+    paymentMethod: "cash",
+    paidAt: "2026-10-01T12:00:00.000Z",
+    note: "",
+    createdBy: null,
+    createdAt: "2026-10-01T12:00:00.000Z",
+    ...partial,
+  };
+}
 
 const now = new Date(2026, 9, 2, 10, 0, 0);
 
@@ -76,6 +96,31 @@ describe("summaryStats", () => {
     expect(percentChange(150, 100)).toBe(50);
     expect(percentChange(50, 100)).toBe(-50);
     expect(percentChange(10, 0)).toBeNull();
+  });
+});
+
+describe("summaryStatsWithLedger", () => {
+  it("uses payment paid_at for confirmed revenue instead of order isPaid/createdAt", () => {
+    const orders = [order({ id: "1", totalPrice: 100, isPaid: true, createdAt: "2026-10-01" })];
+    const payments = [
+      ledgerPayment({ id: "p1", amount: 60, paidAt: "2026-10-01T10:00:00.000Z", orderId: "1" }),
+      ledgerPayment({ id: "p2", amount: 999, paidAt: "2026-08-01T10:00:00.000Z", orderId: "1" }),
+    ];
+    const stats = summaryStatsWithLedger(orders, [], reportPeriod("last7", now), payments, "MDL");
+    expect(stats.current.revenue).toBe(60);
+    expect(stats.current.orders).toBe(1);
+  });
+});
+
+describe("revenueSeriesWithLedger", () => {
+  it("buckets confirmed revenue by paid_at and does not count legacy isPaid as cash", () => {
+    const series = revenueSeriesWithLedger(
+      [order({ id: "1", totalPrice: 100, isPaid: true, createdAt: "2026-10-01" })],
+      reportPeriod("last7", now),
+      [ledgerPayment({ id: "p1", amount: 40, paidAt: "2026-10-01T10:00:00.000Z", orderId: "1" })],
+      "MDL",
+    );
+    expect(series.find((point) => point.key === "2026-10-01")).toMatchObject({ revenue: 40, orders: 1, outstanding: 60 });
   });
 });
 

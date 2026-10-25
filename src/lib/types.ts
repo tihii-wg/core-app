@@ -305,10 +305,10 @@ export interface Expense {
 
 export type ExpenseFormData = Omit<Expense, "id">;
 
-/** One Finance row: a paid invoice (income) or a recorded expense. */
+/** One Finance row: ledger payment/refund or a recorded expense. */
 export interface Transaction {
   id: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "refund";
   category: string;
   description: string;
   amount: number;

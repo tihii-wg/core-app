@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button";
 import { ErrorState } from "../../ui/EmptyState";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Spinner } from "../../ui/Spinner";
-import { InvoiceStatusBadge } from "../../ui/StatusBadge";
+import { InvoiceStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -14,6 +14,12 @@ import { useGetInvoice } from "./useGetInvoices";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 import { InvoiceEmailDialog } from "./InvoiceEmailDialog";
+import { PaymentHistorySection } from "../finance/PaymentHistorySection";
+import { invoicePaymentBalance } from "../finance/paymentCalculations";
+import { useGetPayments } from "../finance/usePayments";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 
 type InvoiceDetailPanelProps = {
   invoiceId: string | null;
@@ -30,6 +36,10 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
   const documentData = useInvoiceDocumentData(invoice ?? null);
   const [printJob, setPrintJob] = useState<InvoicePrintJob | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const { canWrite } = useWorkspaceSubscription();
+  const canRecord = withSubscriptionWriteAccess(Boolean(useActiveWorkspaceRole()), canWrite);
+  const paymentBalance = invoice ? invoicePaymentBalance(invoice, payments) : null;
 
   const startPrint = () => {
     if (!invoice) return;
@@ -73,6 +83,11 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
               <div className="shrink-0 text-right">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("common.total")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(invoice.total)}</p>
+                {paymentBalance ? (
+                  <div className="mt-2">
+                    <PaymentStatusBadge status={paymentBalance.status} />
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -127,6 +142,8 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                 </tfoot>
               </table>
             </div>
+
+            <PaymentHistorySection target="invoice" invoice={invoice} payments={payments} isLoading={paymentsLoading} canRecord={canRecord} />
 
             <div className="flex flex-wrap gap-2 border-t border-border pt-5">
               {invoice.status === "draft" && (

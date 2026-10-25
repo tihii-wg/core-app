@@ -9,14 +9,20 @@ import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscriptio
 
 export function useGetExpenses() {
   const { workspaceId } = useActiveWorkspaceId();
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["expenses", workspaceId],
     queryFn: () => getExpenses(workspaceId),
     enabled: Boolean(workspaceId),
     retry: (failureCount, queryError) => !(queryError instanceof ExpensesUnavailableError) && failureCount < 3,
   });
 
-  return { expenses: data ?? [], isLoading, error, isUnavailable: error instanceof ExpensesUnavailableError };
+  return {
+    expenses: data ?? [],
+    isLoading,
+    error,
+    refetch,
+    isUnavailable: error instanceof ExpensesUnavailableError,
+  };
 }
 
 function useExpenseMutation<T>(toastId: string, pendingKey: ParseKeys, doneKey: ParseKeys, mutationFn: (input: T, workspaceId: string | undefined) => Promise<unknown>) {

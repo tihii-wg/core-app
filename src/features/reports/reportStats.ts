@@ -1,6 +1,15 @@
 import i18n, { currentIntlLocale } from "../../i18n";
 import type { Employee, InventoryItem, Order, OrderStatus } from "../../lib/types";
 import { calendarDateKey, localDateKey, startOfWeek } from "../../pages/dashboardStats";
+import { financeDateKey } from "../finance/financeStats";
+import {
+  netCollected,
+  orderPaymentBalance,
+  paymentsForCurrency,
+  paymentsInPeriod,
+  signedLedgerAmount,
+} from "../finance/paymentCalculations";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import { orderAssignedToEmployee } from "../orders/orderAssignee";
 import { isOpenOrder, isOrderOverdue } from "../orders/orderVisibility";
 
@@ -105,7 +114,7 @@ export function reportPeriod(range: ReportRange, now: Date): ReportPeriod {
   };
 }
 
-// Revenue counts paid orders only, matching the Dashboard's "This Week" revenue.
+/** Operational order totals for a period. Revenue here is legacy order.isPaid — prefer ledgerPeriodRevenue for confirmed cash. */
 export function periodTotals(orders: Order[], clientCreatedDates: string[], start: string, end: string): PeriodTotals {
   const periodOrders = ordersIn(orders, start, end);
   const billable = periodOrders.filter((order) => order.status !== "cancelled");
@@ -118,10 +127,34 @@ export function periodTotals(orders: Order[], clientCreatedDates: string[], star
   };
 }
 
+/** Confirmed cash receipts in period from the payments ledger (by paid_at). */
+export function ledgerPeriodRevenue(payments: LedgerPayment[], period: Pick<ReportPeriod, "start" | "end">, currencyCode: string) {
+  return netCollected(paymentsInPeriod(paymentsForCurrency(payments, currencyCode), period));
+}
+
 export function summaryStats(orders: Order[], clientCreatedDates: string[], period: ReportPeriod) {
   return {
     current: periodTotals(orders, clientCreatedDates, period.start, period.end),
     previous: periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd),
+  };
+}
+
+/** Same as summaryStats but replaces revenue with ledger-confirmed net receipts. */
+export function summaryStatsWithLedger(
+  orders: Order[],
+  clientCreatedDates: string[],
+  period: ReportPeriod,
+  payments: LedgerPayment[],
+  currencyCode: string,
+) {
+  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
+  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
+  return {
+    current: { ...current, revenue: ledgerPeriodRevenue(payments, period, currencyCode) },
+    previous: {
+      ...previous,
+      revenue: ledgerPeriodRevenue(payments, { start: period.previousStart, end: period.previousEnd }, currencyCode),
+    },
   };
 }
 
@@ -157,6 +190,46 @@ export function revenueSeries(orders: Order[], period: ReportPeriod): SeriesPoin
     if (order.status === "cancelled") continue;
     point.billed += order.totalPrice;
     if (!order.isPaid) point.outstanding += order.totalPrice;
+  }
+
+  return [...points.values()];
+}
+
+/**
+ * Series with confirmed revenue from payments.paid_at; order counts/billed still by order createdAt.
+ * Outstanding uses ledger remaining (excludes unreconciled legacy paid-with-no-ledger).
+ */
+export function revenueSeriesWithLedger(
+  orders: Order[],
+  period: ReportPeriod,
+  payments: LedgerPayment[],
+  currencyCode: string,
+): SeriesPoint[] {
+  const points = new Map<string, SeriesPoint>();
+
+  for (let day = fromDateKey(period.start); localDateKey(day) <= period.end; day = addDays(day, 1)) {
+    const key = bucketKey(localDateKey(day), period.granularity);
+    if (!points.has(key)) points.set(key, { key, label: bucketLabel(key, period.granularity), revenue: 0, orders: 0, billed: 0, outstanding: 0 });
+  }
+
+  for (const order of ordersIn(orders, period.start, period.end)) {
+    const point = points.get(bucketKey(order.createdAt, period.granularity));
+    if (!point) continue;
+    point.orders += 1;
+    if (order.status === "cancelled") continue;
+    point.billed += order.totalPrice;
+    const balance = orderPaymentBalance(order, payments);
+    if (!balance.isLegacyUnreconciled && balance.remaining > 0) point.outstanding += balance.remaining;
+  }
+
+  for (const payment of paymentsInPeriod(paymentsForCurrency(payments, currencyCode), period)) {
+    const date = financeDateKey(payment.paidAt);
+    if (!date) continue;
+    const point = points.get(bucketKey(date, period.granularity));
+    if (!point) continue;
+    const signed = signedLedgerAmount(payment);
+    if (signed == null) continue;
+    point.revenue += signed;
   }
 
   return [...points.values()];

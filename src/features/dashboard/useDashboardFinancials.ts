@@ -1,7 +1,12 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getOrders } from "../../services/apiOrders";
+import { getInvoices } from "../../services/apiInvoices";
+import { getPayments, PaymentsUnavailableError } from "../../services/apiPayments";
+import { localDateKey } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { outstandingPaymentStats, todayRevenueStats } from "../../pages/dashboardStats";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { combinedOutstanding, netReceiptsOnDate } from "../finance/paymentCalculations";
 
 export type DashboardFinancials = {
   revenueToday: number;
@@ -15,32 +20,63 @@ export type DashboardFinancials = {
   isError: boolean;
 };
 
-// Both Dashboard financial cards read from this hook. They are derived from the workspace's
-// real orders (`is_paid`) until the Finance/Invoices data model exists; switching the source
-// later only requires changing this hook.
+/**
+ * Dashboard financial cards use ledger-confirmed receipts (payments.paid_at)
+ * and outstanding balances after ledger payments. Legacy paid flags without
+ * ledger rows are excluded from confirmed revenue.
+ */
 export function useDashboardFinancials(now: Date): DashboardFinancials {
   const { workspaceId } = useActiveWorkspaceId();
+  const { currency } = useWorkspaceMoney();
   const {
     data: orders = [],
-    isLoading,
-    isError,
+    isLoading: ordersLoading,
+    isError: ordersError,
   } = useQuery({
     queryKey: ["orders", workspaceId],
     queryFn: () => getOrders(workspaceId),
     enabled: Boolean(workspaceId),
   });
+  const {
+    data: invoices = [],
+    isLoading: invoicesLoading,
+    isError: invoicesError,
+  } = useQuery({
+    queryKey: ["invoices", workspaceId],
+    queryFn: () => getInvoices(workspaceId),
+    enabled: Boolean(workspaceId),
+    retry: (failureCount, error) => !(error instanceof Error && error.name === "InvoicesUnavailableError") && failureCount < 3,
+  });
+  const {
+    data: payments = [],
+    isLoading: paymentsLoading,
+    isError: paymentsError,
+    error: paymentsQueryError,
+  } = useQuery({
+    queryKey: ["payments", workspaceId, {}],
+    queryFn: () => getPayments(workspaceId),
+    enabled: Boolean(workspaceId),
+    retry: (failureCount, error) => !(error instanceof PaymentsUnavailableError) && failureCount < 3,
+  });
 
-  const today = todayRevenueStats(orders, now);
-  const outstanding = outstandingPaymentStats(orders);
+  const todayKey = localDateKey(now);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yesterdayKey = localDateKey(yesterday);
+
+  const revenueToday = useMemo(() => netReceiptsOnDate(payments, todayKey, currency), [payments, todayKey, currency]);
+  const revenueYesterday = useMemo(() => netReceiptsOnDate(payments, yesterdayKey, currency), [payments, yesterdayKey, currency]);
+  const outstanding = useMemo(() => combinedOutstanding(orders, invoices, payments), [orders, invoices, payments]);
+
+  const paymentsUnavailable = paymentsQueryError instanceof PaymentsUnavailableError;
 
   return {
-    revenueToday: today.revenue,
-    paidOrdersToday: today.paidOrders,
-    revenueChangeVsYesterday: today.changeVsYesterday,
+    revenueToday,
+    paidOrdersToday: payments.filter((row) => row.kind === "payment" && row.paidAt.slice(0, 10) === todayKey).length,
+    revenueChangeVsYesterday: revenueYesterday > 0 ? ((revenueToday - revenueYesterday) / revenueYesterday) * 100 : null,
     outstandingAmount: outstanding.amount,
-    unpaidOrders: outstanding.orders,
+    unpaidOrders: outstanding.unpaidCount,
     hasOrders: orders.length > 0,
-    isLoading,
-    isError,
+    isLoading: ordersLoading || invoicesLoading || paymentsLoading,
+    isError: ordersError || invoicesError || (paymentsError && !paymentsUnavailable),
   };
 }

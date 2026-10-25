@@ -16,6 +16,7 @@ import { useGetOrders } from "../orders/useGetOrders";
 import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { useGetPayments } from "../finance/usePayments";
 import { clientCreatedAt, localDateKey } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useNavigate, useParams } from "react-router-dom";
@@ -27,9 +28,9 @@ import {
   operationsStats,
   percentChange,
   reportPeriod,
-  revenueSeries,
+  revenueSeriesWithLedger,
   serviceDistribution,
-  summaryStats,
+  summaryStatsWithLedger,
   type ReportRange,
 } from "./reportStats";
 import { ExportReportDialog } from "./ExportReportDialog";
@@ -96,28 +97,32 @@ export function ReportsModule() {
   const { clients = [], isLoading: clientsQueryLoading, error: clientsError } = useGetClients("");
   const { employees = [], isLoading: employeesQueryLoading, error: employeesError } = useGetEmployees();
   const { items: inventoryItems, isLoading: inventoryQueryLoading, isError: inventoryError } = useGetInventoryItems("", "all", inventorySort);
+  const { payments, isLoading: paymentsQueryLoading, error: paymentsError, isUnavailable: paymentsUnavailable } = useGetPayments();
   const ordersLoading = waitingForWorkspace || ordersQueryLoading;
   const clientsLoading = waitingForWorkspace || clientsQueryLoading;
   const employeesLoading = waitingForWorkspace || employeesQueryLoading;
   const inventoryLoading = waitingForWorkspace || inventoryQueryLoading;
+  const paymentsLoading = waitingForWorkspace || paymentsQueryLoading;
 
   const now = new Date();
   const today = localDateKey(now);
   const period = reportPeriod(dateRange, now);
-  const summary = summaryStats(
+  const summary = summaryStatsWithLedger(
     orders,
     clients.map((client) => clientCreatedAt(client)),
     period,
+    payments,
+    currency,
   );
   const operations = operationsStats(orders, period, today);
-  const series = revenueSeries(orders, period);
+  const series = revenueSeriesWithLedger(orders, period, payments, currency);
   const services = serviceDistribution(orders, period);
   const employeeResults = employeePerformance(orders, employees, period);
   const workload = employeeWorkload(orders, employees, period, today);
   const stockLevels = lowestStockLevels(inventoryItems);
 
-  const statsLoading = ordersLoading || clientsLoading;
-  const statsError = Boolean(ordersError || clientsError);
+  const statsLoading = ordersLoading || clientsLoading || paymentsLoading;
+  const statsError = Boolean(ordersError || clientsError || (paymentsError && !paymentsUnavailable));
   const opsLoading = ordersLoading;
   const opsError = Boolean(ordersError);
 

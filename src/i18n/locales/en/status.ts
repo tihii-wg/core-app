@@ -23,7 +23,7 @@ export default {
   },
   payment: {
     unpaid: "Unpaid",
-    partial: "Partial",
+    partial: "Partially Paid",
     paid: "Paid",
   },
   invoice: {

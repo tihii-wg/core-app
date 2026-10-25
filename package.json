@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:supabase": "node --env-file=.env.test.local --test --test-concurrency=1 \"supabase/tests/**/*.test.mjs\""
+    "test:supabase": "node --env-file=.env.test.local --test --test-concurrency=1 \"supabase/tests/**/*.test.mjs\"",
+    "test:harden-ledger-sql": "./supabase/manual-sql/local-validate/run.sh"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

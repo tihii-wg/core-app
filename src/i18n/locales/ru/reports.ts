@@ -18,7 +18,7 @@ const reports: Messages<typeof en> = {
   stats: {
     totalRevenue: "Общая выручка",
     revenueCollected: "Собранная выручка",
-    revenueCollectedHint: "Сумма итогов оплаченных заказов, созданных за этот период.",
+    revenueCollectedHint: "Подтверждённые чистые поступления из реестра по дате оплаты за этот период.",
     totalOrders: "Всего заказов",
     ordersCreated: "Созданные заказы",
     ordersCreatedHint: "Заказы с датой создания в этом периоде.",

@@ -46,6 +46,8 @@ import { cn } from "../../lib/utils";
 import { isOrderOverdue, type DeadlineFilter } from "./orderVisibility";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
+import { useGetPayments } from "../finance/usePayments";
+import { orderPaymentBalance } from "../finance/paymentCalculations";
 
 const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
@@ -81,6 +83,7 @@ export function Orders() {
   const assigneeOptions = assignableTechnicians(employees);
 
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
+  const { payments } = useGetPayments();
   const createInvoice = useCreateInvoice();
   const invoiceNumberByOrder = useMemo(() => new Map(invoices.flatMap((invoice) => (invoice.orderId ? [[invoice.orderId, invoice.invoiceNumber] as const] : []))), [invoices]);
 
@@ -113,6 +116,14 @@ export function Orders() {
     page,
     pageSize,
   });
+
+  const paymentStatusByOrder = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof orderPaymentBalance>["status"]>();
+    for (const order of orders) {
+      map.set(order.id, orderPaymentBalance(order, payments).status);
+    }
+    return map;
+  }, [orders, payments]);
 
   const awaitingPayment = useOrdersAwaitingPayment();
   const { canWrite: canCreateOrders } = useWorkspaceSubscription();
@@ -177,7 +188,7 @@ export function Orders() {
       cell: (order) => (
         <div className="flex min-w-0 flex-col items-start gap-1">
           <OrderStatusBadge status={order.status} />
-          <PaymentStatusBadge status={order.paymentStatus} />
+          <PaymentStatusBadge status={paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
         </div>
       ),
     },
@@ -419,6 +430,7 @@ export function Orders() {
                 isCreatingInvoice={createInvoice.isPending}
                 isStatusUpdating={orderDetails.isStatusUpdating}
                 requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
+                paymentStatus={paymentStatusByOrder.get(order.id)}
                 formatMoney={formatMoney}
                 onView={orderDetails.openOrder}
                 onEdit={setEditingOrder}

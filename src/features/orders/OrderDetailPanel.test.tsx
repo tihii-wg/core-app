@@ -77,8 +77,19 @@ vi.mock("./OrderAttachmentsSection", () => ({
   default: () => <div data-testid="order-attachments-stub" />,
 }));
 
+vi.mock("../finance/usePayments", () => ({
+  useGetPayments: () => ({ payments: [], isLoading: false, error: null, isUnavailable: false, refetch: vi.fn() }),
+  useRecordPayment: () => ({ mutate: vi.fn(), isPending: false }),
+  useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
+}));
+
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useWorkspaceSubscription: () => ({ canWrite: true, isEntitlementPending: false }),
+  useGuardSubscriptionWrite: () => vi.fn(),
 }));
 
 const industryState = vi.hoisted(() => ({ slug: "auto_repair" as string }));
@@ -293,7 +304,7 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("Oil filter")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
-    expect(screen.getByText("MDL 70.00")).toBeInTheDocument();
+    expect(screen.getAllByText("MDL 70.00").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows Unassigned when no employee is assigned", async () => {
