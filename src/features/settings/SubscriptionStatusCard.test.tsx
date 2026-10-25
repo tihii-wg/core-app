@@ -8,6 +8,7 @@ const subscriptionState = vi.hoisted(() => ({
   status: "active" as string | null,
   expiresAt: null as string | null,
   isLoading: false,
+  isEntitlementPending: false,
   error: null as Error | null,
 }));
 
@@ -19,6 +20,8 @@ vi.mock("../workspaces/useWorkspaceSubscription", () => ({
     startedAt: null,
     updatedAt: null,
     isLoading: subscriptionState.isLoading,
+    isEntitlementPending: subscriptionState.isEntitlementPending,
+    isEntitlementResolved: !subscriptionState.isEntitlementPending,
     isFetching: false,
     isFetched: true,
     error: subscriptionState.error,

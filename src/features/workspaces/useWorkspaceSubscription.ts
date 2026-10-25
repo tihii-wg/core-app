@@ -29,13 +29,37 @@ export function workspaceSubscriptionFromDetails(
  * Subscription state for the active workspace. Refetches when `workspaceId`
  * changes (query key `["workspace", workspaceId]`) — never reuse another
  * workspace's entitlement.
+ *
+ * TanStack Query v5 reports `isLoading === false` for disabled queries
+ * (`enabled: false` while the profile/workspace id is still unknown). Treat
+ * that as entitlement-pending so the read-only notice does not flash on reload.
  */
 export function useWorkspaceSubscription() {
-  const { workspaceId } = useActiveWorkspaceId();
-  const { data: workspace, isLoading, isFetching, isFetched, error, refetch } = useGetWorkspace(workspaceId);
+  const { workspaceId, isLoading: isProfileLoading } = useActiveWorkspaceId();
+  const {
+    data: workspace,
+    isPending,
+    isFetching,
+    isFetched,
+    isError,
+    error,
+    refetch,
+  } = useGetWorkspace(workspaceId);
 
-  const subscription = workspaceSubscriptionFromDetails(workspace);
-  const canWrite = hasSubscriptionWriteEntitlement(subscription);
+  // Only trust subscription fields once they belong to the current workspace id.
+  // useGetWorkspace keys by workspaceId, so a switch clears prior data automatically.
+  const workspaceMatchesActive =
+    Boolean(workspaceId) && workspace != null && (workspace.id == null || workspace.id === workspaceId);
+
+  const isEntitlementPending =
+    Boolean(isProfileLoading) || !workspaceId || (isPending && !isError);
+
+  const subscription = isEntitlementPending
+    ? null
+    : workspaceSubscriptionFromDetails(workspaceMatchesActive ? workspace : null);
+
+  // Fail closed while unresolved — never grant writes from a loading/empty state.
+  const canWrite = !isEntitlementPending && hasSubscriptionWriteEntitlement(subscription);
 
   return {
     workspaceId: workspaceId ?? null,
@@ -45,10 +69,14 @@ export function useWorkspaceSubscription() {
     startedAt: subscription?.subscriptionStartedAt ?? null,
     updatedAt: subscription?.subscriptionUpdatedAt ?? null,
     canWrite,
-    isLoading,
+    /** True until active-workspace subscription fields are resolved or the query errors. */
+    isEntitlementPending,
+    isEntitlementResolved: !isEntitlementPending,
+    /** Alias of `isEntitlementPending` for existing skeleton/loading consumers. */
+    isLoading: isEntitlementPending,
     isFetching,
     isFetched,
-    error,
+    error: isError ? error : null,
     refetch,
   };
 }
@@ -66,14 +94,15 @@ export function assertSubscriptionWriteAccess(
   }
 }
 
-/** Guard for TanStack mutationFns — fail closed while workspace is unknown. */
+/** Guard for TanStack mutationFns — fail closed while workspace/entitlement is unknown. */
 export function useGuardSubscriptionWrite() {
-  const { subscription, workspaceId } = useWorkspaceSubscription();
+  const { subscription, workspaceId, isEntitlementPending } = useWorkspaceSubscription();
 
   return useCallback(() => {
     if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+    if (isEntitlementPending) throw new Error(subscriptionWriteDeniedMessage());
     assertSubscriptionWriteAccess(subscription);
-  }, [subscription, workspaceId]);
+  }, [subscription, workspaceId, isEntitlementPending]);
 }
 
 /** Owner settings UI gate: owner role AND subscription write entitlement. */

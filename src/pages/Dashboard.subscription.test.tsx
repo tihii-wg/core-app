@@ -8,6 +8,8 @@ const subscriptionState = vi.hoisted(() => ({
   status: "active" as string | null,
   expiresAt: null as string | null,
   isLoading: false,
+  isEntitlementPending: false,
+  error: null as Error | null,
 }));
 
 vi.mock("../features/workspaces/useWorkspaceSubscription", () => ({
@@ -18,9 +20,11 @@ vi.mock("../features/workspaces/useWorkspaceSubscription", () => ({
     startedAt: null,
     updatedAt: null,
     isLoading: subscriptionState.isLoading,
+    isEntitlementPending: subscriptionState.isEntitlementPending,
+    isEntitlementResolved: !subscriptionState.isEntitlementPending,
     isFetching: false,
     isFetched: true,
-    error: null,
+    error: subscriptionState.error,
     refetch: vi.fn(),
     workspaceId: "ws-1",
     subscription: null,
@@ -125,6 +129,8 @@ describe("Dashboard subscription notice", () => {
     subscriptionState.status = "active";
     subscriptionState.expiresAt = null;
     subscriptionState.isLoading = false;
+    subscriptionState.isEntitlementPending = false;
+    subscriptionState.error = null;
   });
 
   it("does not show a read-only notice when the workspace has write entitlement", () => {
@@ -134,6 +140,19 @@ describe("Dashboard subscription notice", () => {
     expect(screen.getByTestId("dashboard-financial-cards")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByText(/view-only/i)).not.toBeInTheDocument();
+  });
+
+  it("does not flash a read-only notice while subscription entitlement is still loading", () => {
+    subscriptionState.canWrite = false;
+    subscriptionState.isEntitlementPending = true;
+    subscriptionState.isLoading = true;
+    subscriptionState.status = null;
+
+    renderDashboard();
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/view-only/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-financial-cards")).toBeInTheDocument();
   });
 
   it("shows the shared read-only notice above dashboard cards when write entitlement is denied", () => {
