@@ -727,9 +727,31 @@ async function assertTaxInvoiceAllowsPaid(orderId: string, workspaceId: string) 
  * Every UI entry point (order menu, detail panel, etc.) goes through
  * `useUpdateOrderStatus` → this function. Direct Supabase/SQL updates are
  * outside app enforcement (no DB trigger in this codebase).
+ *
+ * Paid is irreversible: the persisted `status` is re-read before update so a
+ * stale client cannot move a paid order back to another status.
  */
 export async function updateOrderStatus(orderId: string, status: OrderStatus, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
+
+  const { data: existing, error: loadError } = await supabase
+    .from("orders")
+    .select("id, status")
+    .eq("id", orderId)
+    .eq("workspace_id", targetWorkspaceId)
+    .maybeSingle();
+
+  if (loadError) throw new Error(loadError.message);
+  if (!existing) throw new Error(orderPermissionMessage());
+
+  const currentStatus =
+    typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
+
+  // Already paid: same-status calls are a no-op; any other target is rejected.
+  if (currentStatus === "paid") {
+    if (status === "paid") return;
+    throw new Error(i18n.t("orders.errors.paidStatusLocked"));
+  }
 
   if (status === "paid") {
     await assertTaxInvoiceAllowsPaid(orderId, targetWorkspaceId);
@@ -740,10 +762,24 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
     .update(status === "paid" ? { status, is_paid: true } : { status })
     .eq("id", orderId)
     .eq("workspace_id", targetWorkspaceId)
+    // Concurrent writer may have marked paid after our read — do not overwrite it.
+    .neq("status", "paid")
     .select("id");
 
   if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error(orderPermissionMessage());
+  if (!data || data.length === 0) {
+    const { data: again, error: againError } = await supabase
+      .from("orders")
+      .select("status")
+      .eq("id", orderId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle();
+    if (againError) throw new Error(againError.message);
+    if (again && (again as { status?: unknown }).status === "paid") {
+      throw new Error(i18n.t("orders.errors.paidStatusLocked"));
+    }
+    throw new Error(orderPermissionMessage());
+  }
 }
 
 /** Saves (or clears, when blank) the tax invoice number of one order. Trims whitespace. */

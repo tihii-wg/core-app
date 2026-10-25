@@ -6,7 +6,12 @@ import type { Order, OrderStatus } from "../../lib/types";
 import { useUpdateOrderStatus, findCachedOrder } from "./useGetOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { hasTaxInvoiceNumber, isTaxInvoiceBlocked, resolveClientTypeForTaxGate } from "./taxInvoice";
+import {
+  hasTaxInvoiceNumber,
+  isPaidStatusChangeForbidden,
+  isTaxInvoiceBlocked,
+  resolveClientTypeForTaxGate,
+} from "./taxInvoice";
 
 /** Prefer a non-empty tax invoice number from either side of a merge. */
 function preferTaxInvoiceNumber(primary: Order, secondary?: Order | null) {
@@ -63,12 +68,19 @@ export function useOrderDetails() {
 
   /**
    * UI gate for every order status control (table menu, mobile card menu,
-   * detail panel). The API `updateOrderStatus` re-checks persisted DB values;
-   * this gate only avoids a round-trip and opens the tax-invoice field early.
+   * detail panel). The API `updateOrderStatus` re-checks persisted DB values
+   * (including irreversible Paid); this gate only avoids a round-trip and
+   * opens the tax-invoice field early.
    */
   const changeStatus = (order: Order, newStatus: OrderStatus) => {
     if (order.status === newStatus || isStatusUpdating) return;
     const cached = findCachedOrder(queryClient, workspaceId, order.id);
+    // Fail closed on Paid using either the row or a fresher cached snapshot.
+    const currentStatus = cached?.status === "paid" || order.status === "paid" ? "paid" : order.status;
+    if (isPaidStatusChangeForbidden(currentStatus, newStatus)) {
+      toast.error(t("orders.errors.paidStatusLocked"), { id: "paid-status-locked" });
+      return;
+    }
     const resolved = resolveOrderForTaxGate(order, cached);
     if (isTaxInvoiceBlocked(resolved, newStatus, requireTaxInvoiceNumber)) {
       toast.error(t("orders.taxInvoice.required"), { id: "tax-invoice-required" });

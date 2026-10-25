@@ -369,6 +369,18 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toBeDisabled();
   });
 
+  it("disables the status selector entirely for a Paid order", async () => {
+    const onStatusChange = vi.fn();
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "paid", isPaid: true, paymentStatus: "paid" },
+      onStatusChange,
+    });
+
+    expect(await screen.findByRole("combobox", { name: /Status locked/i })).toBeDisabled();
+    expect(screen.getByText(/status cannot be changed/i)).toBeInTheDocument();
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
   it("shows a saved tax invoice number for a legal-entity order and keeps it after the order is marked paid", async () => {
     const user = userEvent.setup();
     const onOrderUpdated = vi.fn();

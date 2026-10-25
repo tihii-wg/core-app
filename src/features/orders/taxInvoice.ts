@@ -5,6 +5,22 @@ export function isPaidClosureStatus(status: OrderStatus) {
   return status === "paid";
 }
 
+/** True when the order is already persisted as Paid (status is irreversible in-app). */
+export function isOrderPaidLocked(order: Pick<Order, "status"> | { status?: string | null }) {
+  return order.status === "paid";
+}
+
+/**
+ * True when changing from the current status to `nextStatus` must be rejected
+ * because Paid is irreversible. Same-status Paid → Paid is allowed as a no-op.
+ */
+export function isPaidStatusChangeForbidden(
+  currentStatus: OrderStatus | string | null | undefined,
+  nextStatus: OrderStatus | string | null | undefined,
+) {
+  return currentStatus === "paid" && nextStatus !== "paid";
+}
+
 /** Legal entities use clients.client_type = "organization"; individuals are "individual". */
 export function isLegalEntityCustomer(clientType: ClientType | null | undefined) {
   return clientType === "organization";

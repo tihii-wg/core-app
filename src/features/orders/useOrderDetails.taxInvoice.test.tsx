@@ -191,4 +191,25 @@ describe("useOrderDetails tax invoice persistence", () => {
       expect.any(Object),
     );
   });
+
+  it("rejects changing away from Paid even when the list row is stale as unpaid", () => {
+    queryClient.setQueryData(["orders", "ws-1"], [{ ...baseOrder, status: "paid", isPaid: true }]);
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, status: "completed", taxInvoiceNumber: "FV-1" }, "in-progress");
+    });
+
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
+  });
+
+  it("rejects changing a Paid order to cancelled from the UI gate", () => {
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, status: "paid", isPaid: true, taxInvoiceNumber: "FV-1" }, "cancelled");
+    });
+
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
+  });
 });

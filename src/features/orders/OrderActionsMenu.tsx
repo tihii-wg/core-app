@@ -12,7 +12,7 @@ import {
 import type { Order, OrderStatus } from "../../lib/types";
 import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
-import { isPaidStatusOptionBlocked } from "./taxInvoice";
+import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -50,6 +50,7 @@ export function OrderActionsMenu({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
+  const paidLocked = isOrderPaidLocked(order);
   const paidBlocked = isPaidStatusOptionBlocked(order, requireTaxInvoiceNumber);
 
   return (
@@ -66,17 +67,30 @@ export function OrderActionsMenu({
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
-        <DropdownMenuLabel>{isStatusUpdating ? t("orders.actions.updatingStatus") : t("orders.actions.changeStatus")}</DropdownMenuLabel>
+        <DropdownMenuLabel>
+          {paidLocked
+            ? t("orders.actions.statusLocked")
+            : isStatusUpdating
+              ? t("orders.actions.updatingStatus")
+              : t("orders.actions.changeStatus")}
+        </DropdownMenuLabel>
         {ORDER_STATUSES.map((status) => {
           const current = status === order.status;
           const blockedPaid = status === "paid" && paidBlocked && !current;
+          const locked = paidLocked || blockedPaid;
           return (
             <DropdownMenuItem
               key={status}
-              disabled={current || isStatusUpdating || blockedPaid}
-              title={blockedPaid ? t("orders.taxInvoice.requiredHint") : undefined}
+              disabled={current || isStatusUpdating || locked}
+              title={
+                paidLocked
+                  ? t("orders.errors.paidStatusLocked")
+                  : blockedPaid
+                    ? t("orders.taxInvoice.requiredHint")
+                    : undefined
+              }
               onSelect={() => {
-                if (blockedPaid) return;
+                if (locked) return;
                 onStatusChange(order, status);
               }}
             >
@@ -85,7 +99,11 @@ export function OrderActionsMenu({
             </DropdownMenuItem>
           );
         })}
-        {paidBlocked && order.status !== "paid" ? (
+        {paidLocked ? (
+          <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+            {t("orders.actions.paidStatusImmutable")}
+          </p>
+        ) : paidBlocked ? (
           <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
             {t("orders.taxInvoice.paidRequiresNumber")}
           </p>

@@ -28,6 +28,7 @@ function query(result: { data: unknown; error: unknown }) {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    neq: () => chain,
     is: () => chain,
     ilike: () => chain,
     like: () => Promise.resolve({ data: chain.numbers, error: null }),
@@ -684,14 +685,35 @@ describe("updateOrderStatus", () => {
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
   });
 
-  it("marks the order paid when the status changes to paid", async () => {
+  function statusOrdersMock(currentStatus: string, updateResult: { data: unknown; error: unknown } = { data: [{ id: "order-1" }], error: null }) {
     const updates: unknown[] = [];
-    const orders = query({ data: [{ id: "order-1" }], error: null });
-    orders.update = (payload: unknown) => {
-      updates.push(payload);
-      return orders;
+    let phase: "load" | "update" = "load";
+    const orders: Record<string, unknown> = {
+      select: () => {
+        phase = "load";
+        return orders;
+      },
+      eq: () => orders,
+      neq: () => orders,
+      update: (payload: unknown) => {
+        updates.push(payload);
+        phase = "update";
+        return orders;
+      },
+      maybeSingle: () =>
+        Promise.resolve(
+          phase === "load"
+            ? { data: { id: "order-1", status: currentStatus }, error: null }
+            : updateResult,
+        ),
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve(phase === "update" ? updateResult : { data: [{ id: "order-1" }], error: null }).then(resolve, reject),
     };
+    return { orders, updates };
+  }
 
+  it("marks the order paid when the status changes to paid", async () => {
+    const { orders, updates } = statusOrdersMock("completed");
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       throw new Error(`Unexpected table ${table}`);
@@ -703,13 +725,7 @@ describe("updateOrderStatus", () => {
   });
 
   it("leaves payment unchanged for other statuses", async () => {
-    const updates: unknown[] = [];
-    const orders = query({ data: [{ id: "order-1" }], error: null });
-    orders.update = (payload: unknown) => {
-      updates.push(payload);
-      return orders;
-    };
-
+    const { orders, updates } = statusOrdersMock("new");
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       throw new Error(`Unexpected table ${table}`);
@@ -720,8 +736,65 @@ describe("updateOrderStatus", () => {
     expect(updates[0]).toEqual({ status: "in-progress" });
   });
 
+  it("rejects changing a persisted Paid order to any other status", async () => {
+    const { orders, updates } = statusOrdersMock("paid");
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(/cannot change.*paid|paid.*cannot|irreversible|locked/i);
+    await expect(updateOrderStatus("order-1", "cancelled", "ws-1")).rejects.toThrow(/cannot change.*paid|paid.*cannot|irreversible|locked/i);
+    expect(updates).toHaveLength(0);
+  });
+
+  it("allows a no-op when the order is already paid and the target is paid", async () => {
+    const { orders, updates } = statusOrdersMock("paid");
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await updateOrderStatus("order-1", "paid", "ws-1");
+    expect(updates).toHaveLength(0);
+  });
+
+  it("rejects a concurrent race where the order becomes Paid after the initial read", async () => {
+    const updates: unknown[] = [];
+    let selectPhase = 0;
+    const orders: Record<string, unknown> = {
+      select: () => {
+        selectPhase += 1;
+        return orders;
+      },
+      eq: () => orders,
+      neq: () => orders,
+      update: (payload: unknown) => {
+        updates.push(payload);
+        return orders;
+      },
+      maybeSingle: () =>
+        Promise.resolve(
+          selectPhase === 1
+            ? { data: { id: "order-1", status: "completed" }, error: null }
+            : { data: { status: "paid" }, error: null },
+        ),
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: [], error: null }).then(resolve, reject),
+    };
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(
+      /cannot change.*paid|paid.*cannot|irreversible|locked/i,
+    );
+    expect(updates).toEqual([{ status: "in-progress" }]);
+  });
+
   it("reports a permission error when RLS lets no row through", async () => {
-    const orders = query({ data: [], error: null });
+    const orders = query({ data: null, error: null });
 
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
@@ -743,22 +816,32 @@ describe("tax invoice requirement", () => {
     required,
     taxNumber,
     clientType = "organization",
+    currentStatus = "completed",
   }: {
     required: boolean;
     taxNumber: string | null;
     clientType?: "organization" | "individual" | null;
+    currentStatus?: string;
   }) {
     const updates: unknown[] = [];
+    let selectKind: "status" | "tax" = "status";
     const ordersChain: Record<string, unknown> = {
-      select: () => ordersChain,
+      select: (columns: string) => {
+        selectKind = columns.includes("tax_invoice_number") ? "tax" : "status";
+        return ordersChain;
+      },
       eq: () => ordersChain,
+      neq: () => ordersChain,
       update: (payload: unknown) => {
         updates.push(payload);
         return ordersChain;
       },
       maybeSingle: () =>
         Promise.resolve({
-          data: { tax_invoice_number: taxNumber, clients: { client_type: clientType } },
+          data:
+            selectKind === "tax"
+              ? { tax_invoice_number: taxNumber, clients: { client_type: clientType } }
+              : { id: "order-1", status: currentStatus },
           error: null,
         }),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
@@ -823,14 +906,24 @@ describe("tax invoice requirement", () => {
 
   it("fails closed when the tax-invoice verification query errors (cannot skip the rule)", async () => {
     const updates: unknown[] = [];
+    let selectKind: "status" | "tax" = "status";
     const ordersChain: Record<string, unknown> = {
-      select: () => ordersChain,
+      select: (columns: string) => {
+        selectKind = columns.includes("tax_invoice_number") ? "tax" : "status";
+        return ordersChain;
+      },
       eq: () => ordersChain,
+      neq: () => ordersChain,
       update: (payload: unknown) => {
         updates.push(payload);
         return ordersChain;
       },
-      maybeSingle: () => Promise.resolve({ data: null, error: { message: "network down" } }),
+      maybeSingle: () =>
+        Promise.resolve(
+          selectKind === "tax"
+            ? { data: null, error: { message: "network down" } }
+            : { data: { id: "order-1", status: "completed" }, error: null },
+        ),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
         Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
     };
@@ -851,14 +944,24 @@ describe("tax invoice requirement", () => {
 
   it("fails closed when the order row is missing during tax-invoice verification", async () => {
     const updates: unknown[] = [];
+    let selectKind: "status" | "tax" = "status";
     const ordersChain: Record<string, unknown> = {
-      select: () => ordersChain,
+      select: (columns: string) => {
+        selectKind = columns.includes("tax_invoice_number") ? "tax" : "status";
+        return ordersChain;
+      },
       eq: () => ordersChain,
+      neq: () => ordersChain,
       update: (payload: unknown) => {
         updates.push(payload);
         return ordersChain;
       },
-      maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      maybeSingle: () =>
+        Promise.resolve(
+          selectKind === "tax"
+            ? { data: null, error: null }
+            : { data: { id: "order-1", status: "completed" }, error: null },
+        ),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
         Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
     };

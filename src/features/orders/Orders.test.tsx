@@ -436,6 +436,23 @@ describe("Orders page", () => {
     order.clientType = undefined;
   });
 
+  it("locks all status options once the order is Paid", async () => {
+    order.status = "paid";
+    order.isPaid = true;
+    order.paymentStatus = "paid";
+    await openActions();
+
+    expect(screen.getByText(/Status locked/i)).toBeInTheDocument();
+    expect(screen.getByText(/status cannot be changed/i)).toBeInTheDocument();
+    for (const label of ["New", "In Progress", "Waiting Parts", "Completed", "Cancelled"]) {
+      expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute("aria-disabled", "true");
+    }
+    expect(statusHooks.mutate).not.toHaveBeenCalled();
+    order.status = "new";
+    order.isPaid = false;
+    order.paymentStatus = "unpaid";
+  });
+
   it("allows marking an individual order paid without a tax invoice number when the setting is enabled", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
     order.clientType = "individual";

@@ -68,6 +68,8 @@ const orders: Messages<typeof en> = {
     menuLabel: "Действия для заказа {{number}}",
     viewDetails: "Открыть детали",
     changeStatus: "Изменить статус",
+    statusLocked: "Статус заблокирован",
+    paidStatusImmutable: "Этот заказ оплачен. Его статус изменить нельзя.",
     updatingStatus: "Обновление статуса...",
     invoiceAlreadyCreated: "Счёт {{number}} уже создан",
     invoicesNotSetUp: "Счета ещё не настроены",
@@ -245,6 +247,7 @@ const orders: Messages<typeof en> = {
   },
   errors: {
     notFoundOrForbidden: "Заказ не найден или у вас нет прав на его изменение.",
+    paidStatusLocked: "У оплаченных заказов нельзя менять статус. Если статус выставлен ошибочно, нужна отдельная аудируемая административная процедура.",
     clientNotCreated: "Не удалось создать клиента",
     serviceNotCreated: "Не удалось создать услугу",
     employeeNotFound: "Выбранный сотрудник не найден в этом рабочем пространстве",

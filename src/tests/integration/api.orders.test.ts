@@ -321,6 +321,13 @@ describe("updateOrderStatus", () => {
     expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true });
   });
 
+  it("rejects changing a persisted Paid order to another status", async () => {
+    Object.assign(row("orders", "order-a1")!, { status: "paid", is_paid: true });
+    await expect(updateOrderStatus("order-a1", "in-progress", WS.A)).rejects.toThrow(/cannot change|locked|irreversible/i);
+    await expect(updateOrderStatus("order-a1", "cancelled", WS.A)).rejects.toThrow(/cannot change|locked|irreversible/i);
+    expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true });
+  });
+
   it("refuses an order from another workspace", async () => {
     await expect(updateOrderStatus("order-c1", "cancelled", WS.A)).rejects.toThrow("Order was not found or you do not have permission to change it.");
     await expect(updateOrderStatus("order-c1", "cancelled", WS.C)).rejects.toThrow("Order was not found or you do not have permission to change it.");

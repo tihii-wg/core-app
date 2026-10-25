@@ -3,7 +3,9 @@ import type { Order } from "../../lib/types";
 import {
   hasTaxInvoiceNumber,
   isLegalEntityCustomer,
+  isOrderPaidLocked,
   isPaidClosureStatus,
+  isPaidStatusChangeForbidden,
   isPaidStatusOptionBlocked,
   isTaxInvoiceBlocked,
   resolveClientTypeForTaxGate,
@@ -17,6 +19,15 @@ describe("taxInvoice helpers", () => {
     expect(isPaidClosureStatus("paid")).toBe(true);
     expect(isPaidClosureStatus("completed")).toBe(false);
     expect(isPaidClosureStatus("cancelled")).toBe(false);
+  });
+
+  it("treats Paid as irreversible for status changes", () => {
+    expect(isOrderPaidLocked({ status: "paid" })).toBe(true);
+    expect(isOrderPaidLocked({ status: "completed" })).toBe(false);
+    expect(isPaidStatusChangeForbidden("paid", "in-progress")).toBe(true);
+    expect(isPaidStatusChangeForbidden("paid", "cancelled")).toBe(true);
+    expect(isPaidStatusChangeForbidden("paid", "paid")).toBe(false);
+    expect(isPaidStatusChangeForbidden("completed", "paid")).toBe(false);
   });
 
   it("identifies legal entities via clients.client_type = organization", () => {

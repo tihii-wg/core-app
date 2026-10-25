@@ -59,6 +59,8 @@ export default {
     menuLabel: "Actions for order {{number}}",
     viewDetails: "View details",
     changeStatus: "Change status",
+    statusLocked: "Status locked",
+    paidStatusImmutable: "This order is Paid. Its status cannot be changed.",
     updatingStatus: "Updating status...",
     invoiceAlreadyCreated: "Invoice {{number}} already created",
     invoicesNotSetUp: "Invoices are not set up yet",
@@ -236,6 +238,7 @@ export default {
   },
   errors: {
     notFoundOrForbidden: "Order was not found or you do not have permission to change it.",
+    paidStatusLocked: "Paid orders cannot change status. A separate audited correction is required if this was set by mistake.",
     clientNotCreated: "Client was not created",
     serviceNotCreated: "Service was not created",
     employeeNotFound: "Selected employee was not found in this workspace",
