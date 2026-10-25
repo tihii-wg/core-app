@@ -59,6 +59,10 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
   useActiveWorkspaceRole: () => "owner",
 }));
 
+vi.mock("./OrderAttachmentsSection", () => ({
+  default: () => <div data-testid="order-attachments-stub" />,
+}));
+
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
 }));

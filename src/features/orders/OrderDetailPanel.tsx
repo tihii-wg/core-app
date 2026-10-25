@@ -35,6 +35,7 @@ import { hasTaxInvoiceNumber, isLegalEntityCustomer } from "./taxInvoice";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import OrderWarehouseActions from "./OrderWarehouseActions";
+import OrderAttachmentsSection from "./OrderAttachmentsSection";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -328,6 +329,8 @@ export default function OrderDetailPanel({
                 <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{description}</p>
               </div>
             ) : null}
+
+            <OrderAttachmentsSection orderId={selectedOrder.id} enabled={detailPanelOpen} />
 
             <div className="border-t border-border pt-5">
               <Label htmlFor="order-status" className="mb-2 block">
