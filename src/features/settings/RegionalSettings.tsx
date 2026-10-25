@@ -10,7 +10,7 @@ import { Skeleton } from "../../ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { languageNames, supportedLanguages } from "../../i18n/languages";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { canManageWorkspace } from "../workspaces/workspaceRoles";
+import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
 import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
@@ -55,7 +55,7 @@ function RegionalForm({ workspace }: { workspace: WorkspaceDetails }) {
   const [dateFormat, setDateFormat] = useState(normalizeWorkspaceDateFormat(workspace.dateFormat));
   const [currency, setCurrency] = useState(workspace.currency ?? workspacePreferenceDefaults.currency);
   const { mutateAsync: savePreferences, isPending } = useUpdateWorkspacePreferences();
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const translatedTimezones = timezoneOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }));
 
   const dirty =

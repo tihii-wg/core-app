@@ -22,6 +22,20 @@ vi.mock("../workspaces/useManageWorkspaceMembers", () => ({
   useAddWorkspaceMember: () => ({ mutateAsync: state.addMember, isPending: false }),
 }));
 
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useWorkspaceSubscription: () => ({
+    canWrite: true,
+    status: "active",
+    expiresAt: null,
+    isLoading: false,
+    workspaceId: "ws-1",
+  }),
+}));
+
+vi.mock("../workspaces/SubscriptionReadOnlyNotice", () => ({
+  SubscriptionReadOnlyNotice: () => null,
+}));
+
 function member(userId: string, role: string, fullName: string, isCurrentUser = false): WorkspaceTeamMember {
   return { userId, role, fullName, email: `${userId}@example.com`, createdAt: null, isCurrentUser };
 }

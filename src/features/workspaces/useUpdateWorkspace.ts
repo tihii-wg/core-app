@@ -11,6 +11,7 @@ import {
   updateWorkspaceTaxInvoiceSettings,
   type WorkspacePreferencesInput,
 } from "../../services/apiWorkspaces";
+import { useGuardSubscriptionWrite } from "./useWorkspaceSubscription";
 
 type UpdateWorkspaceInput = {
   workspaceId: string;
@@ -29,9 +30,13 @@ function invalidateWorkspace(queryClient: ReturnType<typeof useQueryClient>, wor
 
 export function useUpdateWorkspace() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ workspaceId, ...input }: UpdateWorkspaceInput) => updateWorkspaceDetails(workspaceId, input),
+    mutationFn: ({ workspaceId, ...input }: UpdateWorkspaceInput) => {
+      guardWrite();
+      return updateWorkspaceDetails(workspaceId, input);
+    },
     onMutate() {
       toast.loading(i18n.t("settings.company.toast.saving"), { id: "update-workspace" });
     },
@@ -47,9 +52,13 @@ export function useUpdateWorkspace() {
 
 export function useUpdateWorkspacePreferences() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ workspaceId, ...preferences }: WorkspacePreferencesInput & { workspaceId: string }) => updateWorkspacePreferences(workspaceId, preferences),
+    mutationFn: ({ workspaceId, ...preferences }: WorkspacePreferencesInput & { workspaceId: string }) => {
+      guardWrite();
+      return updateWorkspacePreferences(workspaceId, preferences);
+    },
     onSuccess(workspace) {
       if (!workspace) return;
       invalidateWorkspace(queryClient, workspace.id, workspace);
@@ -59,9 +68,12 @@ export function useUpdateWorkspacePreferences() {
 
 export function useUpdateWorkspaceTaxInvoiceSettings() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
-    mutationFn: ({ workspaceId, requireTaxInvoiceNumber }: { workspaceId: string; requireTaxInvoiceNumber: boolean }) =>
-      updateWorkspaceTaxInvoiceSettings(workspaceId, requireTaxInvoiceNumber),
+    mutationFn: ({ workspaceId, requireTaxInvoiceNumber }: { workspaceId: string; requireTaxInvoiceNumber: boolean }) => {
+      guardWrite();
+      return updateWorkspaceTaxInvoiceSettings(workspaceId, requireTaxInvoiceNumber);
+    },
     onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
     },
@@ -70,8 +82,12 @@ export function useUpdateWorkspaceTaxInvoiceSettings() {
 
 export function useUpdateWorkspaceOrderSettings() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
-    mutationFn: ({ workspaceId, ...input }: WorkspaceOrderSettings & { workspaceId: string }) => updateWorkspaceOrderSettings(workspaceId, input),
+    mutationFn: ({ workspaceId, ...input }: WorkspaceOrderSettings & { workspaceId: string }) => {
+      guardWrite();
+      return updateWorkspaceOrderSettings(workspaceId, input);
+    },
     onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
     },
@@ -80,8 +96,12 @@ export function useUpdateWorkspaceOrderSettings() {
 
 export function useUpdateWorkspaceContactSettings() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
-    mutationFn: ({ workspaceId, ...input }: WorkspaceContactSettings & { workspaceId: string }) => updateWorkspaceContactSettings(workspaceId, input),
+    mutationFn: ({ workspaceId, ...input }: WorkspaceContactSettings & { workspaceId: string }) => {
+      guardWrite();
+      return updateWorkspaceContactSettings(workspaceId, input);
+    },
     onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
     },
@@ -90,11 +110,15 @@ export function useUpdateWorkspaceContactSettings() {
 
 export function useUpdateWorkspaceInvoiceSettings() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
     mutationFn: ({
       workspaceId,
       ...input
-    }: WorkspaceInvoiceSettings & { workspaceId: string; invoiceNextNumber?: number }) => updateWorkspaceInvoiceSettings(workspaceId, input),
+    }: WorkspaceInvoiceSettings & { workspaceId: string; invoiceNextNumber?: number }) => {
+      guardWrite();
+      return updateWorkspaceInvoiceSettings(workspaceId, input);
+    },
     onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
     },

@@ -11,7 +11,7 @@ import { Textarea } from "../../ui/Textarea";
 import { EmptyState } from "../../ui/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { canManageWorkspace } from "../workspaces/workspaceRoles";
+import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import {
   useUpdateWorkspaceContactSettings,
@@ -47,7 +47,7 @@ function SettingRow({ label, description, control }: { label: string; descriptio
 
 function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const { mutateAsync: save, isPending } = useUpdateWorkspaceOrderSettings();
   const [warrantyStart, setWarrantyStart] = useState<WarrantyStart>(normalizeWarrantyStart(workspace.warrantyStart));
   const [comments, setComments] = useState<VisibilityDefault>(normalizeVisibility(workspace.defaultCommentsVisibility));
@@ -145,7 +145,7 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
 
 function ContactsSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const { mutateAsync: save, isPending } = useUpdateWorkspaceContactSettings();
   const [showMiddleName, setShowMiddleName] = useState(workspace.showClientMiddleName);
   const [phoneConsent, setPhoneConsent] = useState(workspace.defaultPhoneConsent);
@@ -220,7 +220,7 @@ function ContactsSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
 
 function InvoicesSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const { mutateAsync: save, isPending } = useUpdateWorkspaceInvoiceSettings();
   const { data: entities = [] } = useLegalEntities(workspace.id);
   const [template, setTemplate] = useState(normalizeInvoiceNumberTemplate(workspace.invoiceNumberTemplate));
@@ -383,7 +383,7 @@ const emptyLegalEntity = (): LegalEntityInput => ({
 
 function LegalEntitiesCard({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const { data: entities = [], isLoading } = useLegalEntities(workspace.id);
   const createEntity = useCreateLegalEntity(workspace.id);
   const updateEntity = useUpdateLegalEntity(workspace.id);
@@ -559,7 +559,7 @@ function PaymentsSettingsCard() {
 
 function SecuritySettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   return (
     <Card>
       <CardHeader>

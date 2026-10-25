@@ -9,18 +9,14 @@ import {
 } from "../../services/apiOrderAttachments";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { canMutateOrderAttachments, orderAttachmentsQueryKey } from "./orderAttachments";
 
-/**
- * Write access for attachments. No subscription entitlement exists in the
- * current schema; active membership (a known workspace role) counts as
- * subscribed until billing lands. Tests can still assert view-only via
- * `canMutateOrderAttachments(role, { hasActiveSubscription: false })`.
- */
+/** Upload/delete require a known workspace role AND subscription write entitlement. */
 export function useCanMutateOrderAttachments() {
   const role = useActiveWorkspaceRole();
-  const hasActiveSubscription = Boolean(role);
-  return canMutateOrderAttachments(role, { hasActiveSubscription });
+  const { canWrite } = useWorkspaceSubscription();
+  return canMutateOrderAttachments(role, { hasActiveSubscription: canWrite });
 }
 
 export function useOrderAttachments(orderId: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {
@@ -49,7 +45,7 @@ export function useUploadOrderAttachment(orderId: string | undefined) {
 
   return useMutation({
     mutationFn: async (file: File) => {
-      if (!canMutate) throw new Error(i18n.t("orders.attachments.errors.viewOnly"));
+      if (!canMutate) throw new Error(i18n.t("settings.subscription.errors.writeDenied"));
       return uploadOrderAttachment(workspaceId, orderId, file);
     },
     onSuccess: () => {
@@ -71,7 +67,7 @@ export function useDeleteOrderAttachment(orderId: string | undefined) {
 
   return useMutation({
     mutationFn: async (attachmentId: string) => {
-      if (!canMutate) throw new Error(i18n.t("orders.attachments.errors.viewOnly"));
+      if (!canMutate) throw new Error(i18n.t("settings.subscription.errors.writeDenied"));
       return deleteOrderAttachment(workspaceId, orderId, attachmentId);
     },
     onSuccess: () => {

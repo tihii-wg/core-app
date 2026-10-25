@@ -4,13 +4,18 @@ import i18n from "../../i18n";
 import { createOrder } from "../../services/apiOrders";
 import type { CreateOrderInput } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useCreateOrder() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (input: CreateOrderInput) => createOrder(input, workspaceId),
+    mutationFn: (input: CreateOrderInput) => {
+      guardWrite();
+      return createOrder(input, workspaceId);
+    },
     onMutate: () => {
       toast.loading(i18n.t("orders.toast.creating"), { id: "create-order" });
     },

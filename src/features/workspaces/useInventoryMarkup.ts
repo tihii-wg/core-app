@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import { getInventoryMarkup, updateInventoryMarkup } from "../../services/apiInventoryMarkup";
+import { useGuardSubscriptionWrite } from "./useWorkspaceSubscription";
 
 export function useGetInventoryMarkup(workspaceId?: string) {
   return useQuery({
@@ -13,9 +14,13 @@ export function useGetInventoryMarkup(workspaceId?: string) {
 
 export function useUpdateInventoryMarkup() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ workspaceId, markupPercent }: { workspaceId: string; markupPercent: number }) => updateInventoryMarkup(workspaceId, markupPercent),
+    mutationFn: ({ workspaceId, markupPercent }: { workspaceId: string; markupPercent: number }) => {
+      guardWrite();
+      return updateInventoryMarkup(workspaceId, markupPercent);
+    },
     onSuccess(markupPercent, { workspaceId }) {
       queryClient.setQueryData(["workspace-markup", workspaceId], markupPercent);
       queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });

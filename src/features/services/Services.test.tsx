@@ -35,6 +35,14 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
   useActiveWorkspaceRole: () => "owner",
 }));
 
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useWorkspaceSubscription: () => ({ canWrite: true, status: "active", expiresAt: null, isLoading: false }),
+}));
+
+vi.mock("../workspaces/SubscriptionReadOnlyNotice", () => ({
+  SubscriptionReadOnlyNotice: () => null,
+}));
+
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({
     currency: "MDL",

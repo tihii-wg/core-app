@@ -20,7 +20,8 @@ import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoControls } from "./CompanyLogoControls";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { canManageWorkspace } from "../workspaces/workspaceRoles";
+import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 
 type CompanyFormValues = {
   name: string;
@@ -70,7 +71,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   });
 
   const saving = isSavingWorkspace || isSubmitting;
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const locked = saving || !canEdit;
 
   const { mutateAsync: saveTaxInvoiceSetting, isPending: taxInvoiceSaving } = useUpdateWorkspaceTaxInvoiceSettings();
@@ -134,6 +135,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
         <CardDescription>{t("settings.company.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <SubscriptionReadOnlyNotice />
         <CompanyLogoControls workspace={workspace} />
 
         <Separator />

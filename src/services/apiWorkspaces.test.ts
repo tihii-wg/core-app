@@ -56,6 +56,34 @@ describe("workspace details", () => {
       toWorkspaceDetails({ role: "owner", workspaces: { id: "ws-1", name: "Co", deleted_at: null, require_tax_invoice_number: "yes" } })?.requireTaxInvoiceNumber,
     ).toBe(false);
   });
+
+  it("reads subscription fields and normalizes unknown status to null", () => {
+    expect(
+      toWorkspaceDetails({
+        role: "owner",
+        workspaces: {
+          id: "ws-1",
+          name: "Co",
+          deleted_at: null,
+          subscription_status: "trial",
+          subscription_started_at: "2026-01-01T00:00:00.000Z",
+          subscription_expires_at: "2026-02-01T00:00:00.000Z",
+          subscription_updated_at: "2026-01-15T00:00:00.000Z",
+        },
+      }),
+    ).toMatchObject({
+      subscriptionStatus: "trial",
+      subscriptionStartedAt: "2026-01-01T00:00:00.000Z",
+      subscriptionExpiresAt: "2026-02-01T00:00:00.000Z",
+      subscriptionUpdatedAt: "2026-01-15T00:00:00.000Z",
+    });
+    expect(
+      toWorkspaceDetails({
+        role: "owner",
+        workspaces: { id: "ws-1", name: "Co", deleted_at: null, subscription_status: "mystery" },
+      })?.subscriptionStatus,
+    ).toBeNull();
+  });
 });
 
 describe("workspace preferences", () => {

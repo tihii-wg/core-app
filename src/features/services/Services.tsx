@@ -21,7 +21,10 @@ import useDeleteService from "./useDeleteService";
 import { ErrorState, NoSearchResults, NoServices } from "../../ui/EmptyState";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { canManageServices } from "../workspaces/workspaceRoles";
+import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { cn } from "../../lib/utils";
@@ -43,7 +46,8 @@ export function Services() {
   const { services, isLoading, isPending, error, refetch } = useGetServices(debouncedSearch, categoryQuery);
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
-  const canManage = canManageServices(useActiveWorkspaceRole());
+  const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
+  const canManage = withSubscriptionWriteAccess(canManageServices(useActiveWorkspaceRole()), subscriptionAllowsWrite);
   const { workflow } = useIndustryWorkflow();
   const serviceCopy = industryServiceCopy(workflow);
   const categoryOptions = [
@@ -182,6 +186,8 @@ export function Services() {
           ) : undefined
         }
       />
+
+      <SubscriptionReadOnlyNotice />
 
       <SearchAndFilters
         searchValue={searchQuery}

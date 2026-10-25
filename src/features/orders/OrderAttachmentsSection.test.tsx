@@ -83,7 +83,7 @@ describe("OrderAttachmentsSection", () => {
     renderWithQuery(<OrderAttachmentsSection orderId="order-1" />);
 
     expect(screen.queryByRole("button", { name: "Add files" })).not.toBeInTheDocument();
-    expect(screen.getByText(/View only/i)).toBeInTheDocument();
+    expect(screen.getByText(/view-only/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     expect(screen.getByText("bumper-damage.jpg")).toBeInTheDocument();
   });

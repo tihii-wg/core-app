@@ -15,6 +15,12 @@ vi.mock("../workspaces/useWorkspaceAvatar", () => ({
   useRemoveWorkspaceAvatar: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useCanEditWorkspaceSettings: () => true,
+  useWorkspaceSubscription: () => ({ canWrite: true }),
+  useGuardSubscriptionWrite: () => () => undefined,
+}));
+
 const workspace: WorkspaceDetails = {
   id: "4b8f0c3a-1111-4111-8111-111111111111",
   name: "FixFlow",
@@ -56,6 +62,10 @@ const workspace: WorkspaceDetails = {
   defaultLegalEntityId: null,
   onlinePaymentsEnabled: false,
   requireTaxInvoiceNumber: false,
+  subscriptionStatus: "active",
+  subscriptionStartedAt: null,
+  subscriptionExpiresAt: null,
+  subscriptionUpdatedAt: null,
 };
 
 describe("Company logo controls", () => {

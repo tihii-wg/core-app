@@ -8,6 +8,7 @@ import {
   updateLegalEntity,
   type LegalEntityInput,
 } from "../../services/apiLegalEntities";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useLegalEntities(workspaceId: string | undefined) {
   return useQuery({
@@ -19,9 +20,11 @@ export function useLegalEntities(workspaceId: string | undefined) {
 
 export function useCreateLegalEntity(workspaceId: string | undefined) {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
     mutationFn: (input: LegalEntityInput) => {
       if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+      guardWrite();
       return createLegalEntity(workspaceId, input);
     },
     onSuccess() {
@@ -37,9 +40,11 @@ export function useCreateLegalEntity(workspaceId: string | undefined) {
 
 export function useUpdateLegalEntity(workspaceId: string | undefined) {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
     mutationFn: ({ entityId, input }: { entityId: string; input: LegalEntityInput }) => {
       if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+      guardWrite();
       return updateLegalEntity(workspaceId, entityId, input);
     },
     onSuccess() {
@@ -55,9 +60,11 @@ export function useUpdateLegalEntity(workspaceId: string | undefined) {
 
 export function useDeleteLegalEntity(workspaceId: string | undefined) {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
     mutationFn: (entityId: string) => {
       if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+      guardWrite();
       return softDeleteLegalEntity(workspaceId, entityId);
     },
     onSuccess() {

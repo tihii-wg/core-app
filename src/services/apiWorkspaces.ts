@@ -2,6 +2,10 @@
 import type { NewWorkspaceData } from "../lib/types";
 import { fallbackLanguage, isAppLanguage, type AppLanguage } from "../i18n/languages";
 import i18n from "../i18n";
+import {
+  normalizeSubscriptionStatus,
+  type WorkspaceSubscriptionStatus,
+} from "../features/workspaces/workspaceSubscription";
 import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
 import {
@@ -54,6 +58,13 @@ export async function getUserWorkspaces() {
 
 const preferenceColumns = ["language", "timezone", "date_format", "currency"] as const;
 
+const subscriptionColumns = [
+  "subscription_status",
+  "subscription_started_at",
+  "subscription_expires_at",
+  "subscription_updated_at",
+] as const;
+
 const generalSettingsColumns = [
   "company_address",
   "billing_email",
@@ -88,15 +99,27 @@ function mentionsPreferenceColumn(message?: string) {
   return preferenceColumns.some((column) => message?.includes(column) === true);
 }
 
+function mentionsSubscriptionColumn(message?: string) {
+  return subscriptionColumns.some((column) => message?.includes(column) === true);
+}
+
 function mentionsGeneralSettingsColumn(message?: string) {
   return generalSettingsColumns.some((column) => message?.includes(column) === true);
 }
 
-function membershipSelect(options: { industry: boolean; avatar: boolean; markup: boolean; preferences: boolean; general: boolean }) {
+function membershipSelect(options: {
+  industry: boolean;
+  avatar: boolean;
+  markup: boolean;
+  preferences: boolean;
+  subscription: boolean;
+  general: boolean;
+}) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
   if (options.markup) fields.push("inventory_markup");
   if (options.preferences) fields.push(...preferenceColumns);
+  if (options.subscription) fields.push(...subscriptionColumns);
   if (options.general) fields.push(...generalSettingsColumns);
   const industry = options.industry
     ? `,
@@ -122,6 +145,7 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
     error.message?.includes("avatar_path") ||
     error.message?.includes("inventory_markup") ||
     mentionsPreferenceColumn(error.message) ||
+    mentionsSubscriptionColumn(error.message) ||
     mentionsGeneralSettingsColumn(error.message)
   ) {
     return false;
@@ -131,6 +155,10 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
 
 function isMissingPreferenceColumn(error: { code?: string; message?: string }) {
   return (error.code === "42703" || error.code === "PGRST204") && mentionsPreferenceColumn(error.message);
+}
+
+function isMissingSubscriptionColumn(error: { code?: string; message?: string }) {
+  return (error.code === "42703" || error.code === "PGRST204") && mentionsSubscriptionColumn(error.message);
 }
 
 function isMissingGeneralSettingsColumn(error: { code?: string; message?: string }) {
@@ -146,13 +174,18 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let avatar = true;
   let markup = true;
   let preferences = true;
+  let subscription = true;
   let general = true;
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const { data, error } = await run(membershipSelect({ industry, avatar, markup, preferences, general }));
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    const { data, error } = await run(membershipSelect({ industry, avatar, markup, preferences, subscription, general }));
     if (!error) return data;
     if (general && isMissingGeneralSettingsColumn(error)) {
       general = false;
+      continue;
+    }
+    if (subscription && isMissingSubscriptionColumn(error)) {
+      subscription = false;
       continue;
     }
     if (preferences && isMissingPreferenceColumn(error)) {
@@ -219,6 +252,10 @@ export type WorkspaceDetails = {
   defaultLegalEntityId: string | null;
   onlinePaymentsEnabled: boolean;
   requireTaxInvoiceNumber: boolean;
+  subscriptionStatus: WorkspaceSubscriptionStatus | null;
+  subscriptionStartedAt: string | null;
+  subscriptionExpiresAt: string | null;
+  subscriptionUpdatedAt: string | null;
 };
 
 function firstRecord(value: unknown) {
@@ -252,6 +289,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
 
   const readBool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
   const readString = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
+  const readTimestamp = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
 
   return {
     id: record.id,
@@ -294,6 +332,10 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     defaultLegalEntityId: typeof record.default_legal_entity_id === "string" ? record.default_legal_entity_id : null,
     onlinePaymentsEnabled: readBool(record.online_payments_enabled, false),
     requireTaxInvoiceNumber: readBool(record.require_tax_invoice_number, false),
+    subscriptionStatus: normalizeSubscriptionStatus(record.subscription_status),
+    subscriptionStartedAt: readTimestamp(record.subscription_started_at),
+    subscriptionExpiresAt: readTimestamp(record.subscription_expires_at),
+    subscriptionUpdatedAt: readTimestamp(record.subscription_updated_at),
   };
 }
 

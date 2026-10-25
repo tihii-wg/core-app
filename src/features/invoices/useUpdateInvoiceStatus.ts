@@ -4,13 +4,18 @@ import i18n from "../../i18n";
 import type { InvoiceStatus } from "../../lib/types";
 import { updateInvoiceStatus } from "../../services/apiInvoices";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useUpdateInvoiceStatus() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ invoiceId, status }: { invoiceId: string; status: InvoiceStatus }) => updateInvoiceStatus(invoiceId, status, workspaceId),
+    mutationFn: ({ invoiceId, status }: { invoiceId: string; status: InvoiceStatus }) => {
+      guardWrite();
+      return updateInvoiceStatus(invoiceId, status, workspaceId);
+    },
     onSuccess: (invoice) => {
       toast.success(i18n.t(`invoices.toast.statusChanged.${invoice.status}`, { number: invoice.invoiceNumber }), { id: "update-invoice-status" });
     },

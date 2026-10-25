@@ -15,6 +15,9 @@ import { profileDisplayName, profileInitials } from "../profiles/profileName";
 import { useGetWorkspaceMembers } from "../workspaces/useGetWorkspaceMembers";
 import { useAddWorkspaceMember, useRemoveWorkspaceMember, useUpdateWorkspaceMemberRole } from "../workspaces/useManageWorkspaceMembers";
 import { assignableWorkspaceRoles, canManageWorkspaceMember, workspaceRoleLabel, type WorkspaceRole } from "../workspaces/workspaceRoles";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import type { WorkspaceTeamMember } from "../../services/apiWorkspaces";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,7 +31,10 @@ export function TeamSettings() {
   const { workspaceId, members = [], isLoading, error } = useGetWorkspaceMembers();
   const [addOpen, setAddOpen] = useState(false);
   const currentRole = members.find((member) => member.isCurrentUser)?.role ?? null;
-  const canAdd = Boolean(workspaceId) && assignableWorkspaceRoles(currentRole).length > 0;
+  const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
+  const canAdd =
+    Boolean(workspaceId) &&
+    withSubscriptionWriteAccess(assignableWorkspaceRoles(currentRole).length > 0, subscriptionAllowsWrite);
 
   return (
     <Card>
@@ -39,8 +45,16 @@ export function TeamSettings() {
         </div>
         {canAdd && <Button onClick={() => setAddOpen(true)}>{t("team.inviteMember")}</Button>}
       </CardHeader>
-      <CardContent>
-        <TeamMembersList workspaceId={workspaceId} members={members} isLoading={isLoading} error={error} currentRole={currentRole} />
+      <CardContent className="space-y-4">
+        <SubscriptionReadOnlyNotice />
+        <TeamMembersList
+          workspaceId={workspaceId}
+          members={members}
+          isLoading={isLoading}
+          error={error}
+          currentRole={currentRole}
+          subscriptionAllowsWrite={subscriptionAllowsWrite}
+        />
       </CardContent>
       {canAdd && workspaceId && <AddTeamMemberDialog workspaceId={workspaceId} currentRole={currentRole} open={addOpen} onOpenChange={setAddOpen} />}
     </Card>
@@ -53,9 +67,17 @@ type TeamMembersListProps = {
   isLoading: boolean;
   error: unknown;
   currentRole: string | null;
+  subscriptionAllowsWrite?: boolean;
 };
 
-export function TeamMembersList({ workspaceId, members, isLoading, error, currentRole }: TeamMembersListProps) {
+export function TeamMembersList({
+  workspaceId,
+  members,
+  isLoading,
+  error,
+  currentRole,
+  subscriptionAllowsWrite = true,
+}: TeamMembersListProps) {
   const { t } = useTranslation();
   const [memberToRemove, setMemberToRemove] = useState<WorkspaceTeamMember | null>(null);
   const { mutate: updateRole, isPending: updatingRole, variables: roleVariables } = useUpdateWorkspaceMemberRole();
@@ -86,7 +108,10 @@ export function TeamMembersList({ workspaceId, members, isLoading, error, curren
     <div className="space-y-2.5">
       {members.map((member) => {
         const name = memberName(member);
-        const canManage = Boolean(workspaceId) && !member.isCurrentUser && canManageWorkspaceMember(currentRole, member.role);
+        const canManage = withSubscriptionWriteAccess(
+          Boolean(workspaceId) && !member.isCurrentUser && canManageWorkspaceMember(currentRole, member.role),
+          subscriptionAllowsWrite,
+        );
         const rowBusy = updatingRole && roleVariables?.userId === member.userId;
 
         return (

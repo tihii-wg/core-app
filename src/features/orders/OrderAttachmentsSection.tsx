@@ -212,7 +212,7 @@ export default function OrderAttachmentsSection({ orderId, enabled = true }: Ord
             </Button>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">{t("orders.attachments.viewOnlyHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("settings.subscription.readOnlyTitle")}</p>
         )}
       </div>
 

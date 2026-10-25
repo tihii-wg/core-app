@@ -13,6 +13,9 @@ import type { Expense, PaymentMethod, Transaction } from "../../lib/types";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageExpenses } from "../workspaces/workspaceRoles";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
+import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { rangeLabel, reportRanges, useReportFormatting } from "../reports/reportFormatting";
 import { reportPeriod, type ReportRange } from "../reports/reportStats";
 import { useFinanceTransactions } from "./useFinanceTransactions";
@@ -34,7 +37,8 @@ export function Finance() {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const { formatDate } = useReportFormatting();
-  const canManage = canManageExpenses(useActiveWorkspaceRole());
+  const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
+  const canManage = withSubscriptionWriteAccess(canManageExpenses(useActiveWorkspaceRole()), subscriptionAllowsWrite);
   const [range, setRange] = useState<ReportRange>("last30");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
@@ -195,6 +199,8 @@ export function Finance() {
           </>
         }
       />
+
+      <SubscriptionReadOnlyNotice />
 
       {(invoicesUnavailable || expensesUnavailable || invoicesError || expensesError) && (
         <div className="space-y-1 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-foreground">

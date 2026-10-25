@@ -10,7 +10,7 @@ import { useRemoveWorkspaceAvatar, useUploadWorkspaceAvatar, useWorkspaceAvatar 
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoCropDialog } from "./CompanyLogoCropDialog";
 import { workspaceLogoFileError } from "../workspaces/workspaceAvatar";
-import { canManageWorkspace } from "../workspaces/workspaceRoles";
+import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
 
 export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
@@ -22,7 +22,7 @@ export function CompanyLogoControls({ workspace }: { workspace: WorkspaceDetails
   const { mutateAsync: uploadLogo, isPending: uploading } = useUploadWorkspaceAvatar();
   const { mutateAsync: removeLogo, isPending: removing } = useRemoveWorkspaceAvatar();
   const busy = uploading || removing;
-  const canEdit = canManageWorkspace(workspace.role);
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
 
   function chooseFile() {
     inputRef.current?.click();

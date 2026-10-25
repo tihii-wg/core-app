@@ -3,7 +3,7 @@ import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import { getWorkspaceLogoUrl, LOGO_REMOVE_ERROR, LOGO_UPLOAD_ERROR, removeWorkspaceLogo, uploadWorkspaceLogo } from "./workspaceAvatar";
 import type { ListedWorkspaceMembership, WorkspaceDetails } from "../../services/apiWorkspaces";
-
+import { useGuardSubscriptionWrite } from "./useWorkspaceSubscription";
 
 export function useWorkspaceAvatar(workspaceId?: string, avatarPath?: string | null) {
   return useQuery({
@@ -17,9 +17,13 @@ export function useWorkspaceAvatar(workspaceId?: string, avatarPath?: string | n
 
 export function useUploadWorkspaceAvatar() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ workspaceId, file }: { workspaceId: string; file: Blob }) => uploadWorkspaceLogo(workspaceId, file),
+    mutationFn: ({ workspaceId, file }: { workspaceId: string; file: Blob }) => {
+      guardWrite();
+      return uploadWorkspaceLogo(workspaceId, file);
+    },
     onSuccess(_path, { workspaceId }) {
       invalidateWorkspaceLogo(queryClient, workspaceId);
       toast.success(i18n.t("workspaces.logo.uploaded"));
@@ -32,9 +36,13 @@ export function useUploadWorkspaceAvatar() {
 
 export function useRemoveWorkspaceAvatar() {
   const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ workspaceId, avatarPath }: { workspaceId: string; avatarPath: string | null }) => removeWorkspaceLogo(workspaceId, avatarPath),
+    mutationFn: ({ workspaceId, avatarPath }: { workspaceId: string; avatarPath: string | null }) => {
+      guardWrite();
+      return removeWorkspaceLogo(workspaceId, avatarPath);
+    },
     onSuccess(_data, { workspaceId }) {
       clearWorkspaceLogo(queryClient, workspaceId);
       toast.success(i18n.t("workspaces.logo.removed"));

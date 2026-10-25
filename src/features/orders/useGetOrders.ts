@@ -13,6 +13,7 @@ import {
 } from "../../services/apiOrders";
 import type { Order, OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 /** Patches taxInvoiceNumber on every cached orders list/page for this workspace. */
 export function patchOrderTaxInvoiceInCache(
@@ -140,10 +141,13 @@ export function useOrdersAwaitingPayment({ enabled = true }: { enabled?: boolean
 export function useUpdateOrderTaxInvoiceNumber() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ orderId, taxInvoiceNumber }: { orderId: string; taxInvoiceNumber: string }) =>
-      updateOrderTaxInvoiceNumber(orderId, taxInvoiceNumber, workspaceId),
+    mutationFn: ({ orderId, taxInvoiceNumber }: { orderId: string; taxInvoiceNumber: string }) => {
+      guardWrite();
+      return updateOrderTaxInvoiceNumber(orderId, taxInvoiceNumber, workspaceId);
+    },
     onSuccess: (saved, { orderId }) => {
       // Keep list/page caches in sync immediately so reopen during placeholderData
       // refetch does not open a stale order with an empty tax invoice number.
@@ -159,9 +163,13 @@ export function useUpdateOrderTaxInvoiceNumber() {
 export function useUpdateOrderStatus() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) => updateOrderStatus(orderId, status, workspaceId),
+    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
+      guardWrite();
+      return updateOrderStatus(orderId, status, workspaceId);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
     },

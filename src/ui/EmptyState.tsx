@@ -67,9 +67,16 @@ export function NoSearchResults({ query }: { query: string }) {
   return <EmptyState icon={SearchX} title={t("common.empty.noResultsTitle")} description={t("common.empty.noResultsDescription", { query })} />;
 }
 
-export function NoOrders({ onCreateOrder }: { onCreateOrder: () => void }) {
+export function NoOrders({ onCreateOrder }: { onCreateOrder?: () => void }) {
   const { t } = useTranslation();
-  return <EmptyState icon={FileText} title={t("common.empty.noOrdersTitle")} description={t("common.empty.noOrdersDescription")} action={{ label: t("common.empty.noOrdersAction"), onClick: onCreateOrder }} />;
+  return (
+    <EmptyState
+      icon={FileText}
+      title={t("common.empty.noOrdersTitle")}
+      description={t("common.empty.noOrdersDescription")}
+      action={onCreateOrder ? { label: t("common.empty.noOrdersAction"), onClick: onCreateOrder } : undefined}
+    />
+  );
 }
 
 export function NoClients({ onAddClient }: { onAddClient: () => void }) {

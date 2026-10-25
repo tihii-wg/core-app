@@ -3,13 +3,18 @@ import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import { createInvoiceFromOrder } from "../../services/apiInvoices";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useCreateInvoice() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (orderId: string) => createInvoiceFromOrder(orderId, workspaceId),
+    mutationFn: (orderId: string) => {
+      guardWrite();
+      return createInvoiceFromOrder(orderId, workspaceId);
+    },
     onMutate: () => {
       toast.loading(i18n.t("invoices.toast.creating"), { id: "create-invoice" });
     },

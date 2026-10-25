@@ -5,13 +5,18 @@ import { createInventoryItem } from "../../services/apiInventory";
 import type { InventoryItemFormData } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { syncInventoryItemCaches } from "./syncInventoryCaches";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useCreateInventoryItem() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (input: InventoryItemFormData) => createInventoryItem(input, workspaceId),
+    mutationFn: (input: InventoryItemFormData) => {
+      guardWrite();
+      return createInventoryItem(input, workspaceId);
+    },
     onMutate: () => {
       toast.loading(i18n.t("inventory.toast.creating"), { id: "create-inventory" });
     },

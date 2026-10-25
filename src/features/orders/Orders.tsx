@@ -44,6 +44,8 @@ import {
 import { localDateKey } from "../../pages/dashboardStats";
 import { cn } from "../../lib/utils";
 import { isOrderOverdue, type DeadlineFilter } from "./orderVisibility";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 
 const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
@@ -113,6 +115,7 @@ export function Orders() {
   });
 
   const awaitingPayment = useOrdersAwaitingPayment();
+  const { canWrite: canCreateOrders } = useWorkspaceSubscription();
 
   // Keep local page in sync when the server clamps (e.g. last row on a page was deleted).
   useEffect(() => {
@@ -334,12 +337,16 @@ export function Orders() {
           </div>
         }
         actions={
-          <Button onClick={() => setCreateModalOpen(true)}>
-            <Plus />
-            {t("orders.createOrder")}
-          </Button>
+          canCreateOrders ? (
+            <Button onClick={() => setCreateModalOpen(true)}>
+              <Plus />
+              {t("orders.createOrder")}
+            </Button>
+          ) : undefined
         }
       />
+
+      <SubscriptionReadOnlyNotice />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <SearchAndFilters
@@ -397,7 +404,7 @@ export function Orders() {
             ) : hasActiveFilters ? (
               emptyFilterState()
             ) : (
-              <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
+              <NoOrders onCreateOrder={canCreateOrders ? () => setCreateModalOpen(true) : undefined} />
             )}
           </div>
         ) : (
@@ -432,7 +439,7 @@ export function Orders() {
             ) : hasActiveFilters ? (
               emptyFilterState()
             ) : (
-              <NoOrders onCreateOrder={() => setCreateModalOpen(true)} />
+              <NoOrders onCreateOrder={canCreateOrders ? () => setCreateModalOpen(true) : undefined} />
             )
           }
         />

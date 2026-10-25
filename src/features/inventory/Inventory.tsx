@@ -30,6 +30,8 @@ import { StockAttentionPanel } from "./StockAttentionPanel";
 import { effectiveStockStatus } from "./stockStatus";
 import { industryInventoryCopy, industryInventoryItemCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 
 /** Fixed sort for the attention query so it stays cacheable while the table sort changes. */
 const attentionSort: InventorySort = { field: "quantity", ascending: true };
@@ -52,6 +54,7 @@ export function Inventory() {
   const { workspaceId } = useActiveWorkspaceId();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
+  const { canWrite: canMutateInventory } = useWorkspaceSubscription();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
@@ -211,12 +214,16 @@ export function Inventory() {
           isLoading ? inventoryCopy.loading : isError ? t("inventory.loadFailedSummary") : industryInventoryItemCount(workflow, items.length)
         }
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus />
-            {inventoryCopy.addItem}
-          </Button>
+          canMutateInventory ? (
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus />
+              {inventoryCopy.addItem}
+            </Button>
+          ) : undefined
         }
       />
+
+      <SubscriptionReadOnlyNotice />
 
       <StockAttentionPanel
         items={attentionItems}

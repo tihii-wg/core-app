@@ -3,13 +3,18 @@ import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import { deleteInventoryItem } from "../../services/apiInventory";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useDeleteInventoryItem() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (inventoryItemId: string) => deleteInventoryItem(inventoryItemId, workspaceId),
+    mutationFn: (inventoryItemId: string) => {
+      guardWrite();
+      return deleteInventoryItem(inventoryItemId, workspaceId);
+    },
     onMutate: () => {
       toast.loading(i18n.t("inventory.toast.deleting"), { id: "delete-inventory" });
     },

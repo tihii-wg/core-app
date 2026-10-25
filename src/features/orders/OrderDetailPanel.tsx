@@ -16,6 +16,8 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageWarehouse } from "../workspaces/workspaceRoles";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import {
   materialIssued,
   materialReturned,
@@ -62,7 +64,9 @@ export default function OrderDetailPanel({
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const workspaceRole = useActiveWorkspaceRole();
-  const canWarehouse = canManageWarehouse(workspaceRole);
+  const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
+  const canWarehouse = withSubscriptionWriteAccess(canManageWarehouse(workspaceRole), subscriptionAllowsWrite);
+  const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
   const { workspaceId } = useActiveWorkspaceId();
@@ -126,7 +130,7 @@ export default function OrderDetailPanel({
             {selectedOrder?.orderNumber}
             {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} />}
           </SheetTitle>
-          {selectedOrder && !isEditing && (
+          {selectedOrder && !isEditing && canEditOrder && (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
@@ -243,7 +247,7 @@ export default function OrderDetailPanel({
                 label={copy.assignedEmployeeLabel}
                 value={selectedOrder.assignedEmployeeId}
                 options={technicianOptions}
-                disabled={isAssigneeUpdating || isStatusUpdating}
+                disabled={!canEditOrder || isAssigneeUpdating || isStatusUpdating}
                 errorMessage={assigneeErrorMessage}
                 emptyHint={assigneeEmptyHint}
                 onChange={handleAssigneeChange}
@@ -339,7 +343,7 @@ export default function OrderDetailPanel({
               <Select
                 value={selectedOrder.status}
                 onValueChange={(value) => onStatusChange(value as OrderStatus)}
-                disabled={isStatusUpdating || isAssigneeUpdating}
+                disabled={!canEditOrder || isStatusUpdating || isAssigneeUpdating}
               >
                 <SelectTrigger id="order-status" className="w-full">
                   <SelectValue />

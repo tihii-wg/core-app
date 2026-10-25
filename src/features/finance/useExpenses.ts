@@ -5,6 +5,7 @@ import i18n from "../../i18n";
 import { createExpense, deleteExpense, ExpensesUnavailableError, getExpenses, updateExpense } from "../../services/apiExpenses";
 import type { ExpenseFormData } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 export function useGetExpenses() {
   const { workspaceId } = useActiveWorkspaceId();
@@ -21,9 +22,13 @@ export function useGetExpenses() {
 function useExpenseMutation<T>(toastId: string, pendingKey: ParseKeys, doneKey: ParseKeys, mutationFn: (input: T, workspaceId: string | undefined) => Promise<unknown>) {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (input: T) => mutationFn(input, workspaceId),
+    mutationFn: (input: T) => {
+      guardWrite();
+      return mutationFn(input, workspaceId);
+    },
     onMutate: () => {
       toast.loading(i18n.t(pendingKey), { id: toastId });
     },

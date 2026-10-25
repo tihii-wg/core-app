@@ -41,6 +41,7 @@ import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadline
 import { DashboardQuickActions } from "../features/dashboard/DashboardQuickActions";
 import { industryOrderStatusLabel } from "../features/industries/industryWorkflow";
 import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
+import { SubscriptionReadOnlyNotice } from "../features/workspaces/SubscriptionReadOnlyNotice";
 import { cn } from "../lib/utils";
 import { currentIntlLocale } from "../i18n";
 
@@ -287,6 +288,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <PageHeader title={t("dashboard.title")} description={now.toLocaleDateString(currentIntlLocale(), { weekday: "long", month: "long", day: "numeric" })} />
+
+      <SubscriptionReadOnlyNotice className="min-w-0 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-foreground [overflow-wrap:anywhere]" />
 
       {/* Key figures */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

@@ -17,6 +17,10 @@ const taxInvoiceHooks = vi.hoisted(() => ({
 
 const workspaceState = vi.hoisted(() => ({
   requireTaxInvoiceNumber: false,
+  subscriptionStatus: "active",
+  subscriptionStartedAt: null,
+  subscriptionExpiresAt: null,
+  subscriptionUpdatedAt: null,
 }));
 
 vi.mock("./useUpdateOrder", () => ({
@@ -35,9 +39,17 @@ vi.mock("./useGetOrders", () => ({
 
 vi.mock("../workspaces/useGetWorkspace", () => ({
   useGetWorkspace: () => ({
-    data: { currency: "MDL", requireTaxInvoiceNumber: workspaceState.requireTaxInvoiceNumber },
+    data: {
+      currency: "MDL",
+      requireTaxInvoiceNumber: workspaceState.requireTaxInvoiceNumber,
+      subscriptionStatus: workspaceState.subscriptionStatus,
+      subscriptionStartedAt: workspaceState.subscriptionStartedAt,
+      subscriptionExpiresAt: workspaceState.subscriptionExpiresAt,
+      subscriptionUpdatedAt: workspaceState.subscriptionUpdatedAt,
+    },
     isLoading: false,
     error: null,
+    isFetched: true,
   }),
 }));
 

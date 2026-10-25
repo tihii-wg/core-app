@@ -31,20 +31,18 @@ import {
   SelectValue,
 } from "../../ui/Select";
 import { PageHeader } from "../../pages/PageHeader";
-import { Separator } from "../../ui/Separator";
 import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
-import { StatusBadge } from "../../ui/StatusBadge";
 import { ProfileSettings } from "./ProfileSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { settingsTabFromSearch } from "./settingsTab";
-import { currentIntlLocale } from "../../i18n";
 import { useActiveWorkspaceId, useGetProfile } from "../profiles/useGetProfile";
 import { useUpdateProfileTheme } from "../profiles/useUpdateProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
 import { TeamSettings } from "./TeamSettings";
+import { SubscriptionStatusCard } from "./SubscriptionStatusCard";
 
 export function SettingsModule() {
   const { t } = useTranslation();
@@ -61,8 +59,6 @@ export function SettingsModule() {
     smsOrders: false,
     smsReminders: true,
   });
-
-  const nextBillingDate = new Date(2024, 1, 1).toLocaleDateString(currentIntlLocale(), { month: "short", day: "numeric", year: "numeric" });
 
   return (
     <div className="space-y-6">
@@ -239,72 +235,15 @@ export function SettingsModule() {
 
         {/* Billing Settings */}
         <TabsContent value="billing" className="mt-5 space-y-5">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("settings.billing.currentPlan.title")}</CardTitle>
-              <CardDescription>
-                {t("settings.billing.currentPlan.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-primary/20 bg-accent/50 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">
-                      {t("settings.billing.currentPlan.planName")}
-                    </h3>
-                    <p className="text-[13px] text-muted-foreground">
-                      {t("settings.billing.currentPlan.price", { price: "$49" })}
-                    </p>
-                  </div>
-                  <Button>{t("settings.billing.currentPlan.upgrade")}</Button>
-                </div>
-                <Separator className="my-4" />
-                <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.billing.currentPlan.users")}</p>
-                    <p className="font-medium">{t("settings.billing.currentPlan.usersValue", { used: 5, total: 10 })}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.billing.currentPlan.storage")}</p>
-                    <p className="font-medium">{t("settings.billing.currentPlan.storageValue", { used: (2.5).toLocaleString(currentIntlLocale()), total: 10 })}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">{t("settings.billing.currentPlan.nextBilling")}</p>
-                    <p className="font-medium">{nextBillingDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">{t("common.status")}</p>
-                    <StatusBadge variant="success" dot className="mt-0.5">{t("settings.billing.currentPlan.active")}</StatusBadge>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <SubscriptionStatusCard />
 
           <Card>
             <CardHeader>
               <CardTitle>{t("settings.billing.paymentMethod.title")}</CardTitle>
               <CardDescription>{t("settings.billing.paymentMethod.description")}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded-md border border-border bg-muted">
-                    <CreditCard aria-hidden="true" className="size-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{t("settings.billing.paymentMethod.cardEnding", { last4: "4242" })}</p>
-                    <p className="text-[13px] text-muted-foreground">
-                      {t("settings.billing.paymentMethod.expires", { date: "12/2025" })}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm">
-                  {t("common.edit")}
-                </Button>
-              </div>
-              <Button variant="outline">{t("settings.billing.paymentMethod.add")}</Button>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{t("settings.subscription.paymentsUnavailable")}</p>
             </CardContent>
           </Card>
         </TabsContent>

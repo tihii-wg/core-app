@@ -390,7 +390,18 @@ export function installSecurityModel() {
     },
   };
   fake.defaults = {
-    workspaces: (row) => ({ deleted_at: null, inventory_markup: 0, avatar_path: null, timezone: "Europe/Chisinau", currency: "MDL", ...row }),
+    workspaces: (row) => ({
+      deleted_at: null,
+      inventory_markup: 0,
+      avatar_path: null,
+      timezone: "Europe/Chisinau",
+      currency: "MDL",
+      subscription_status: "active",
+      subscription_started_at: null,
+      subscription_expires_at: null,
+      subscription_updated_at: "2026-01-01T00:00:00.000Z",
+      ...row,
+    }),
     workspace_members: (row) => ({ deleted_at: null, ...row }),
     clients: (row) => ({ balance: 0, ...row }),
     services: (row) => ({ category: null, ...row }),
@@ -634,6 +645,10 @@ export function seedCoreApp() {
       timezone: "Europe/Chisinau",
       date_format: "DD.MM.YYYY",
       currency: "MDL",
+      subscription_status: "active",
+      subscription_started_at: "2026-01-01T00:00:00.000Z",
+      subscription_expires_at: null,
+      subscription_updated_at: "2026-01-01T00:00:00.000Z",
       created_at: "2026-01-01T00:00:00.000Z",
     });
     fake.all("workspace_members").push({ workspace_id: workspace.id, user_id: workspace.owner, role: "owner", deleted_at: null, created_at: "2026-01-01T00:00:00.000Z" });

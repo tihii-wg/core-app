@@ -26,12 +26,15 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { CreateOrderDialog } from "../orders/CreateOrderDialog";
 import OrderDetailPanel from "../orders/OrderDetailPanel";
 import { useOrderDetails } from "../orders/useOrderDetails";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 
 export function Clients() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const { workflow } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
+  const { canWrite: canMutateClients } = useWorkspaceSubscription();
   const [searchQuery, setSearchQuery] = useState("");
   const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
@@ -148,12 +151,16 @@ export function Clients() {
         title={clientCopy.title}
         description={isPending ? clientCopy.loading : industryClientTotalCount(workflow, clients.length)}
         actions={
-          <Button onClick={() => setAddClientOpen(true)}>
-            <Plus />
-            {clientCopy.addClient}
-          </Button>
+          canMutateClients ? (
+            <Button onClick={() => setAddClientOpen(true)}>
+              <Plus />
+              {clientCopy.addClient}
+            </Button>
+          ) : undefined
         }
       />
+
+      <SubscriptionReadOnlyNotice />
 
       <SearchAndFilters
         searchValue={searchQuery}

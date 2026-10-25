@@ -13,6 +13,7 @@ import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { issueOrderMaterials, returnOrderMaterials } from "../../services/apiWarehouse";
 import { getOrder } from "../../services/apiOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Mode = "issue" | "return";
@@ -31,6 +32,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const submitLock = useRef(false);
   const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
   const queryClient = useQueryClient();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
 
@@ -92,6 +94,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     toast.loading(mode === "issue" ? t("orders.toast.issuing") : t("orders.toast.returning"), { id: toastId });
 
     try {
+      guardWrite();
       const idempotencyKey = crypto.randomUUID();
       if (mode === "issue") {
         await issueOrderMaterials(order.id, lines, idempotencyKey);

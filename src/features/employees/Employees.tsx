@@ -18,6 +18,8 @@ import { localDateKey } from "../../pages/dashboardStats";
 import { teamWorkloadSummary, type EmployeeWorkloadCounts } from "./employeeWorkload";
 import { cn } from "../../lib/utils";
 import { Skeleton } from "../../ui/Skeleton";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 
 const roleVariants: Record<EmployeeRole, "info" | "violet" | "default" | "warning"> = {
   admin: "violet",
@@ -31,6 +33,7 @@ const emptyEmployees: Employee[] = [];
 
 export function Employees() {
   const { t } = useTranslation();
+  const { canWrite: canMutateEmployees } = useWorkspaceSubscription();
   const roleLabels: Record<EmployeeRole, string> = {
     admin: t("employees.roles.admin"),
     manager: t("employees.roles.manager"),
@@ -157,12 +160,16 @@ export function Employees() {
         title={t("employees.title")}
         description={isPending ? t("employees.loading") : t("employees.memberCount", { count: roster.length })}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)}>
-            <Plus />
-            {t("employees.addEmployee")}
-          </Button>
+          canMutateEmployees ? (
+            <Button onClick={() => setCreateModalOpen(true)}>
+              <Plus />
+              {t("employees.addEmployee")}
+            </Button>
+          ) : undefined
         }
       />
+
+      <SubscriptionReadOnlyNotice />
 
       <SearchAndFilters
         searchValue={searchQuery}
