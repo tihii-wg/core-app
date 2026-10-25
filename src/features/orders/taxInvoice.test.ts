@@ -4,6 +4,7 @@ import {
   hasTaxInvoiceNumber,
   isLegalEntityCustomer,
   isPaidClosureStatus,
+  isPaidStatusOptionBlocked,
   isTaxInvoiceBlocked,
   resolveClientTypeForTaxGate,
   taxInvoiceNumberPresent,
@@ -46,6 +47,8 @@ describe("taxInvoice helpers", () => {
     expect(isTaxInvoiceBlocked(base, "completed", true)).toBe(false);
     expect(isTaxInvoiceBlocked(base, "paid", false)).toBe(false);
     expect(isTaxInvoiceBlocked({ ...base, taxInvoiceNumber: "FV-1" }, "paid", true)).toBe(false);
+    expect(isPaidStatusOptionBlocked(base, true)).toBe(true);
+    expect(isPaidStatusOptionBlocked({ ...base, taxInvoiceNumber: "FV-1" }, true)).toBe(false);
   });
 
   it("never blocks individual customers, even with the setting enabled and no number", () => {

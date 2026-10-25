@@ -33,7 +33,7 @@ import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useUpdateOrderTaxInvoiceNumber } from "./useGetOrders";
-import { hasTaxInvoiceNumber, isLegalEntityCustomer } from "./taxInvoice";
+import { hasTaxInvoiceNumber, isLegalEntityCustomer, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import OrderWarehouseActions from "./OrderWarehouseActions";
@@ -72,6 +72,8 @@ export default function OrderDetailPanel({
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
+  const paidStatusBlocked =
+    selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
 
   if (selectedOrder?.id !== editingOrderId) {
@@ -342,20 +344,32 @@ export default function OrderDetailPanel({
               </Label>
               <Select
                 value={selectedOrder.status}
-                onValueChange={(value) => onStatusChange(value as OrderStatus)}
+                onValueChange={(value) => {
+                  const next = value as OrderStatus;
+                  if (next === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
+                  onStatusChange(next);
+                }}
                 disabled={!canEditOrder || isStatusUpdating || isAssigneeUpdating}
               >
-                <SelectTrigger id="order-status" className="w-full">
+                <SelectTrigger id="order-status" className="w-full min-w-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {orderStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
+                    <SelectItem
+                      key={status}
+                      value={status}
+                      disabled={status === "paid" && paidStatusBlocked}
+                      title={status === "paid" && paidStatusBlocked ? t("orders.taxInvoice.requiredHint") : undefined}
+                    >
                       {industryOrderStatusLabel(workflow, status)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {paidStatusBlocked ? (
+                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.taxInvoice.paidRequiresNumber")}</p>
+              ) : null}
             </div>
 
             {(selectedOrder.createdAt || selectedOrder.updatedAt) && (

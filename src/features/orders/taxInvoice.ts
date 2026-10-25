@@ -34,6 +34,11 @@ export function isTaxInvoiceBlocked(order: Order, status: OrderStatus, requireTa
   );
 }
 
+/** Whether the Paid status option must be disabled for this order in selectors/menus. */
+export function isPaidStatusOptionBlocked(order: Order, requireTaxInvoiceNumber: boolean) {
+  return isTaxInvoiceBlocked(order, "paid", requireTaxInvoiceNumber);
+}
+
 /**
  * Fail-closed client type for the UI paid gate: if any known source says the
  * customer is a legal entity, treat them as one so a stale "individual" /

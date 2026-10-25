@@ -560,6 +560,101 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByText(/tax invoice number is required/i)).toBeInTheDocument();
   });
 
+  it("keeps Paid disabled for a typed but unsaved tax invoice number", async () => {
+    const user = userEvent.setup();
+    const onStatusChange = vi.fn();
+    workspaceState.requireTaxInvoiceNumber = true;
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, clientType: "organization", taxInvoiceNumber: "", status: "completed" },
+      onStatusChange,
+    });
+
+    const input = await screen.findByLabelText("Tax invoice number");
+    await user.type(input, "FV-DRAFT-ONLY");
+    expect(taxInvoiceHooks.mutateAsync).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("combobox", { name: /Update Status/i }));
+    const paidOption = await screen.findByRole("option", { name: "Paid" });
+    expect(paidOption).toHaveAttribute("data-disabled");
+    expect(screen.getByText(/Save a tax invoice number on this order before marking it as paid/i)).toBeInTheDocument();
+
+    await user.click(paidOption);
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it("enables Paid only after the tax invoice number is persisted on the order", async () => {
+    const user = userEvent.setup();
+    const onStatusChange = vi.fn();
+    workspaceState.requireTaxInvoiceNumber = true;
+    taxInvoiceHooks.mutateAsync.mockResolvedValue("FV-SAVED-1");
+
+    let selected: Order = {
+      ...order,
+      clientType: "organization",
+      taxInvoiceNumber: "",
+      status: "completed",
+    };
+
+    const { rerender } = renderWithQuery(
+      <OrderDetailPanel
+        selectedOrder={selected}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={(next) => {
+          selected = next;
+        }}
+        onStatusChange={onStatusChange}
+      />,
+    );
+
+    await user.click(await screen.findByRole("combobox", { name: /Update Status/i }));
+    expect(await screen.findByRole("option", { name: "Paid" })).toHaveAttribute("data-disabled");
+
+    // Close the select (Escape) then save a number and re-render with the persisted order.
+    await user.keyboard("{Escape}");
+    await user.type(screen.getByLabelText("Tax invoice number"), "FV-SAVED-1");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={{ ...selected, taxInvoiceNumber: "FV-SAVED-1" }}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={(next) => {
+          selected = next;
+        }}
+        onStatusChange={onStatusChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /Update Status/i }));
+    const paidOption = await screen.findByRole("option", { name: "Paid" });
+    expect(paidOption).not.toHaveAttribute("data-disabled");
+    await user.click(paidOption);
+    expect(onStatusChange).toHaveBeenCalledWith("paid");
+  });
+
+  it("leaves Paid blocked and shows the save error when tax invoice save fails", async () => {
+    const user = userEvent.setup();
+    const onStatusChange = vi.fn();
+    workspaceState.requireTaxInvoiceNumber = true;
+    taxInvoiceHooks.mutateAsync.mockRejectedValue(new Error("Could not save the tax invoice number"));
+
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, clientType: "organization", taxInvoiceNumber: "", status: "completed" },
+      onStatusChange,
+    });
+
+    await user.type(await screen.findByLabelText("Tax invoice number"), "FV-FAIL");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(taxInvoiceHooks.mutateAsync).toHaveBeenCalled();
+    // Order prop still has no persisted number.
+    await user.click(screen.getByRole("combobox", { name: /Update Status/i }));
+    expect(await screen.findByRole("option", { name: "Paid" })).toHaveAttribute("data-disabled");
+    expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
   it("does not show the tax invoice field for individual customers", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
     renderPanel(vi.fn(), vi.fn(), {

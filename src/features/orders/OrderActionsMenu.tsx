@@ -12,6 +12,7 @@ import {
 import type { Order, OrderStatus } from "../../lib/types";
 import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { isPaidStatusOptionBlocked } from "./taxInvoice";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -20,6 +21,8 @@ type OrderActionsMenuProps = {
   invoicesUnavailable?: boolean;
   isCreatingInvoice?: boolean;
   isStatusUpdating?: boolean;
+  /** When true, Paid is disabled for legal-entity orders without a saved tax invoice number. */
+  requireTaxInvoiceNumber?: boolean;
   onView: (order: Order) => void;
   onEdit: (order: Order) => void;
   onStatusChange: (order: Order, status: OrderStatus) => void;
@@ -37,6 +40,7 @@ export function OrderActionsMenu({
   invoicesUnavailable = false,
   isCreatingInvoice = false,
   isStatusUpdating = false,
+  requireTaxInvoiceNumber = false,
   onView,
   onEdit,
   onStatusChange,
@@ -46,6 +50,7 @@ export function OrderActionsMenu({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
+  const paidBlocked = isPaidStatusOptionBlocked(order, requireTaxInvoiceNumber);
 
   return (
     <DropdownMenu modal={false}>
@@ -64,17 +69,27 @@ export function OrderActionsMenu({
         <DropdownMenuLabel>{isStatusUpdating ? t("orders.actions.updatingStatus") : t("orders.actions.changeStatus")}</DropdownMenuLabel>
         {ORDER_STATUSES.map((status) => {
           const current = status === order.status;
+          const blockedPaid = status === "paid" && paidBlocked && !current;
           return (
             <DropdownMenuItem
               key={status}
-              disabled={current || isStatusUpdating}
-              onSelect={() => onStatusChange(order, status)}
+              disabled={current || isStatusUpdating || blockedPaid}
+              title={blockedPaid ? t("orders.taxInvoice.requiredHint") : undefined}
+              onSelect={() => {
+                if (blockedPaid) return;
+                onStatusChange(order, status);
+              }}
             >
               {current ? <Check /> : <span className="size-4" aria-hidden />}
               {industryOrderStatusLabel(workflow, status)}
             </DropdownMenuItem>
           );
         })}
+        {paidBlocked && order.status !== "paid" ? (
+          <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+            {t("orders.taxInvoice.paidRequiresNumber")}
+          </p>
+        ) : null}
 
         <DropdownMenuSeparator />
 

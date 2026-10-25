@@ -174,6 +174,7 @@ const orders: Messages<typeof en> = {
     placeholder: "Introduceți numărul facturii fiscale",
     required: "Numărul facturii fiscale este obligatoriu înainte ca această comandă a unui client persoană juridică să poată fi marcată ca plătită. Introduceți-l și salvați-l mai întâi în comandă.",
     requiredHint: "Numărul facturii fiscale este obligatoriu înainte ca această comandă a unui client persoană juridică să poată fi marcată ca plătită.",
+    paidRequiresNumber: "Salvați numărul facturii fiscale pe această comandă înainte de a o marca ca plătită.",
     saved: "Numărul facturii fiscale a fost salvat",
     saveFailed: "Numărul facturii fiscale nu a putut fi salvat",
   },

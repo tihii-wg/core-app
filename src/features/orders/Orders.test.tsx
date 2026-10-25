@@ -393,31 +393,27 @@ describe("Orders page", () => {
     expect(screen.getByRole("menuitem", { name: "Invoices are not set up yet" })).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("blocks marking a legal-entity order paid without a tax invoice number when the workspace requires one", async () => {
+  it("disables Paid for a legal-entity order without a saved tax invoice number when the workspace requires one", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
     order.clientType = "organization";
     order.taxInvoiceNumber = "";
-    const user = await openActions();
+    await openActions();
 
-    await user.click(screen.getByRole("menuitem", { name: "Paid" }));
-
+    expect(screen.getByRole("menuitem", { name: "Paid" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(/Save a tax invoice number/i)).toBeInTheDocument();
     expect(statusHooks.mutate).not.toHaveBeenCalled();
-    // The order opens so the number can be entered without losing context.
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     workspaceState.requireTaxInvoiceNumber = false;
     order.clientType = undefined;
   });
 
-  it("blocks marking a legal-entity order paid when the tax invoice number is whitespace-only", async () => {
+  it("disables Paid when the tax invoice number is whitespace-only", async () => {
     workspaceState.requireTaxInvoiceNumber = true;
     order.clientType = "organization";
     order.taxInvoiceNumber = "   ";
-    const user = await openActions();
+    await openActions();
 
-    await user.click(screen.getByRole("menuitem", { name: "Paid" }));
-
+    expect(screen.getByRole("menuitem", { name: "Paid" })).toHaveAttribute("aria-disabled", "true");
     expect(statusHooks.mutate).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
     workspaceState.requireTaxInvoiceNumber = false;
     order.taxInvoiceNumber = "";
     order.clientType = undefined;

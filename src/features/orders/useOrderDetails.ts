@@ -93,6 +93,7 @@ export function useOrderDetails() {
     syncOrder,
     changeStatus,
     isStatusUpdating,
+    requireTaxInvoiceNumber,
     panelProps: {
       selectedOrder,
       detailPanelOpen,

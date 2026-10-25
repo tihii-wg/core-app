@@ -237,6 +237,7 @@ export function Orders() {
             invoicesUnavailable={invoicesUnavailable}
             isCreatingInvoice={createInvoice.isPending}
             isStatusUpdating={orderDetails.isStatusUpdating}
+            requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
             onView={orderDetails.openOrder}
             onEdit={setEditingOrder}
             onStatusChange={orderDetails.changeStatus}
@@ -417,6 +418,7 @@ export function Orders() {
                 invoicesUnavailable={invoicesUnavailable}
                 isCreatingInvoice={createInvoice.isPending}
                 isStatusUpdating={orderDetails.isStatusUpdating}
+                requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
                 formatMoney={formatMoney}
                 onView={orderDetails.openOrder}
                 onEdit={setEditingOrder}

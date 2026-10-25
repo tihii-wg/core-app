@@ -10,6 +10,7 @@ type OrderCardProps = {
   invoicesUnavailable?: boolean;
   isCreatingInvoice?: boolean;
   isStatusUpdating?: boolean;
+  requireTaxInvoiceNumber?: boolean;
   formatMoney: (value: number) => string;
   onView: (order: Order) => void;
   onEdit: (order: Order) => void;
@@ -28,6 +29,7 @@ export function OrderCard({
   invoicesUnavailable = false,
   isCreatingInvoice = false,
   isStatusUpdating = false,
+  requireTaxInvoiceNumber = false,
   formatMoney,
   onView,
   onEdit,
@@ -55,6 +57,7 @@ export function OrderCard({
           invoicesUnavailable={invoicesUnavailable}
           isCreatingInvoice={isCreatingInvoice}
           isStatusUpdating={isStatusUpdating}
+          requireTaxInvoiceNumber={requireTaxInvoiceNumber}
           onView={onView}
           onEdit={onEdit}
           onStatusChange={onStatusChange}
