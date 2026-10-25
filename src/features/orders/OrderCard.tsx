@@ -81,10 +81,12 @@ export function OrderCard({
         </div>
       )}
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-2.5">
-        <OrderStatusBadge status={order.status} />
-        <PaymentStatusBadge status={order.paymentStatus} />
-        <span className={cn("ml-auto text-right")}>
+      <div className="mt-2.5 flex items-end gap-3 border-t border-border pt-2.5">
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <OrderStatusBadge status={order.status} />
+          <PaymentStatusBadge status={order.paymentStatus} />
+        </div>
+        <span className={cn("ml-auto shrink-0 text-right")}>
           <span className="block font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
           <span className="block text-[11px] tabular-nums text-muted-foreground">{order.createdAt || "—"}</span>
         </span>

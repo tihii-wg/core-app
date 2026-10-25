@@ -174,7 +174,12 @@ export function Orders() {
     {
       key: "status",
       header: t("common.status"),
-      cell: (order) => <OrderStatusBadge status={order.status} />,
+      cell: (order) => (
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <OrderStatusBadge status={order.status} />
+          <PaymentStatusBadge status={order.paymentStatus} />
+        </div>
+      ),
     },
     {
       key: "createdBy",
@@ -218,11 +223,6 @@ export function Orders() {
       header: t("common.total"),
       cell: (order) => <span className="font-medium tabular-nums">{formatMoney(order.totalPrice)}</span>,
       className: "text-right whitespace-nowrap",
-    },
-    {
-      key: "payment",
-      header: t("orders.table.payment"),
-      cell: (order) => <PaymentStatusBadge status={order.paymentStatus} />,
     },
     {
       key: "actions",

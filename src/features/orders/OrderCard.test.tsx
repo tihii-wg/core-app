@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { Order } from "../../lib/types";
+import { renderWithQuery } from "../../tests/renderQuery";
 import { OrderCard } from "./OrderCard";
 
 vi.mock("../industries/useIndustryWorkflow", async () => {
@@ -13,6 +14,10 @@ vi.mock("../industries/useIndustryWorkflow", async () => {
     },
   };
 });
+
+vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
+  useActiveWorkspaceRole: () => "member",
+}));
 
 const longOrder: Order = {
   id: "order-1",
@@ -38,7 +43,7 @@ const longOrder: Order = {
 
 function renderCard(overrides: Partial<Order> = {}) {
   const onView = vi.fn();
-  const utils = render(
+  const utils = renderWithQuery(
     <OrderCard
       order={{ ...longOrder, ...overrides }}
       formatMoney={(value) => `MDL ${value.toFixed(2)}`}
@@ -62,6 +67,11 @@ describe("OrderCard", () => {
     expect(screen.getByText("MDL 1250.00")).toBeInTheDocument();
     expect(screen.getByText("2026-10-22")).toBeInTheDocument();
     expect(container.querySelector(".truncate")).not.toBeNull();
+
+    const orderStatus = screen.getByText("In Progress");
+    const paymentStatus = screen.getByText("Unpaid");
+    expect(orderStatus.parentElement).toBe(paymentStatus.parentElement);
+    expect(orderStatus.compareDocumentPosition(paymentStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("falls back to VIN when there is no registration number", () => {

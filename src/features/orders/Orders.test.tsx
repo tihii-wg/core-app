@@ -258,6 +258,18 @@ describe("Orders page", () => {
     expect(clientCell).toHaveTextContent("+37361111111");
   });
 
+  it("stacks order status above payment status in one Status column", () => {
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Payment" })).not.toBeInTheDocument();
+
+    const orderStatus = screen.getByText("New");
+    const paymentStatus = screen.getByText("Unpaid");
+    expect(orderStatus.parentElement).toBe(paymentStatus.parentElement);
+    expect(orderStatus.compareDocumentPosition(paymentStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows a dash when the client phone is missing", () => {
     order.clientPhone = "";
     renderWithQuery(<Orders />);

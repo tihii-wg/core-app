@@ -7,7 +7,6 @@ export const ORDER_TOGGLEABLE_COLUMNS = [
   "employee",
   "deadline",
   "total",
-  "payment",
 ] as const;
 
 export type OrderToggleableColumn = (typeof ORDER_TOGGLEABLE_COLUMNS)[number];
@@ -27,7 +26,12 @@ export function readOrderVisibleColumns(): OrderToggleableColumn[] {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [...DEFAULT_ORDER_VISIBLE_COLUMNS];
     const valid = parsed.filter(isOrderToggleableColumn);
-    return valid.length > 0 ? valid : [...DEFAULT_ORDER_VISIBLE_COLUMNS];
+    // Former standalone "payment" column is stacked under status — keep it visible.
+    if (parsed.includes("payment") && !valid.includes("status")) {
+      valid.push("status");
+    }
+    const ordered = ORDER_TOGGLEABLE_COLUMNS.filter((key) => valid.includes(key));
+    return ordered.length > 0 ? ordered : [...DEFAULT_ORDER_VISIBLE_COLUMNS];
   } catch {
     return [...DEFAULT_ORDER_VISIBLE_COLUMNS];
   }

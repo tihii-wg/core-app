@@ -30,7 +30,6 @@ export function OrderColumnsMenu({ visibleColumns, onVisibleColumnsChange, devic
     employee: t("orders.table.assigned"),
     deadline: t("orders.table.deadline"),
     total: t("common.total"),
-    payment: t("orders.table.payment"),
   };
 
   const toggle = (key: OrderToggleableColumn, checked: boolean) => {
