@@ -15,7 +15,7 @@ import { industryOrderStatusLabel, ORDER_STATUSES, shouldShowOrderAssetValue } f
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
-import { canManageWarehouse } from "../workspaces/workspaceRoles";
+import { canManageWarehouse, canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import {
@@ -77,7 +77,9 @@ export default function OrderDetailPanel({
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
-  const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder);
+  // Owner role unlocks Paid status controls; admin/manager do not. API re-checks owner_id.
+  const isWorkspaceOwner = canManageWorkspace(workspaceRole);
+  const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
@@ -352,7 +354,9 @@ export default function OrderDetailPanel({
                 value={selectedOrder.status}
                 onValueChange={(value) => {
                   const next = value as OrderStatus;
-                  if (isOrderPaidLocked(selectedOrder)) return;
+                  // Must pass the same owner flag used for `paidStatusLocked` / disabled —
+                  // omitting it defaults to non-owner and silently drops owner Paid→* changes.
+                  if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
                   if (next === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
                   onStatusChange(next);
                 }}

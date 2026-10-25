@@ -12,6 +12,8 @@ import {
 import type { Order, OrderStatus } from "../../lib/types";
 import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 
 type OrderActionsMenuProps = {
@@ -50,7 +52,9 @@ export function OrderActionsMenu({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
-  const paidLocked = isOrderPaidLocked(order);
+  // Owner membership role only — admin/manager stay locked. API re-checks owner_id.
+  const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole());
+  const paidLocked = isOrderPaidLocked(order, isWorkspaceOwner);
   const paidBlocked = isPaidStatusOptionBlocked(order, requireTaxInvoiceNumber);
 
   return (

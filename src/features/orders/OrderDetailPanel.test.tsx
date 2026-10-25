@@ -67,8 +67,10 @@ vi.mock("../employees/useGetEmployees", () => ({
   default: () => ({ employees, error: null, isLoading: false }),
 }));
 
+const roleState = vi.hoisted(() => ({ role: "owner" as string }));
+
 vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
-  useActiveWorkspaceRole: () => "owner",
+  useActiveWorkspaceRole: () => roleState.role,
 }));
 
 vi.mock("./OrderAttachmentsSection", () => ({
@@ -163,6 +165,7 @@ function renderPanel(
 
 beforeEach(() => {
   industryState.slug = "auto_repair";
+  roleState.role = "owner";
   updateOrderHooks.isPending = false;
   updateOrderHooks.mutateAsync.mockReset();
   taxInvoiceHooks.isPending = false;
@@ -369,7 +372,8 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toBeDisabled();
   });
 
-  it("disables the status selector entirely for a Paid order", async () => {
+  it("disables the status selector for Paid orders when the actor is not the workspace owner", async () => {
+    roleState.role = "admin";
     const onStatusChange = vi.fn();
     renderPanel(vi.fn(), vi.fn(), {
       order: { ...order, status: "paid", isPaid: true, paymentStatus: "paid" },
@@ -377,8 +381,26 @@ describe("OrderDetailPanel", () => {
     });
 
     expect(await screen.findByRole("combobox", { name: /Status locked/i })).toBeDisabled();
-    expect(screen.getByText(/status cannot be changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Only the workspace owner can change/i)).toBeInTheDocument();
     expect(onStatusChange).not.toHaveBeenCalled();
+  });
+
+  it("lets the workspace owner change status on a Paid order from the detail selector", async () => {
+    const user = userEvent.setup();
+    roleState.role = "owner";
+    const onStatusChange = vi.fn();
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "paid", isPaid: true, paymentStatus: "paid" },
+      onStatusChange,
+    });
+
+    expect(await screen.findByRole("combobox", { name: /Update Status/i })).toBeEnabled();
+    expect(screen.queryByText(/Only the workspace owner can change/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: /Update Status/i }));
+    await user.click(await screen.findByRole("option", { name: "In Progress" }));
+
+    expect(onStatusChange).toHaveBeenCalledExactlyOnceWith("in-progress");
   });
 
   it("shows a saved tax invoice number for a legal-entity order and keeps it after the order is marked paid", async () => {

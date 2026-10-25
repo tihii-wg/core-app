@@ -60,7 +60,7 @@ export default {
     viewDetails: "View details",
     changeStatus: "Change status",
     statusLocked: "Status locked",
-    paidStatusImmutable: "This order is Paid. Its status cannot be changed.",
+    paidStatusImmutable: "This order is Paid. Only the workspace owner can change its status.",
     updatingStatus: "Updating status...",
     invoiceAlreadyCreated: "Invoice {{number}} already created",
     invoicesNotSetUp: "Invoices are not set up yet",
@@ -238,7 +238,7 @@ export default {
   },
   errors: {
     notFoundOrForbidden: "Order was not found or you do not have permission to change it.",
-    paidStatusLocked: "Paid orders cannot change status. A separate audited correction is required if this was set by mistake.",
+    paidStatusLocked: "Only the workspace owner can change the status of a Paid order.",
     clientNotCreated: "Client was not created",
     serviceNotCreated: "Service was not created",
     employeeNotFound: "Selected employee was not found in this workspace",

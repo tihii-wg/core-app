@@ -5,19 +5,30 @@ export function isPaidClosureStatus(status: OrderStatus) {
   return status === "paid";
 }
 
-/** True when the order is already persisted as Paid (status is irreversible in-app). */
-export function isOrderPaidLocked(order: Pick<Order, "status"> | { status?: string | null }) {
-  return order.status === "paid";
+/**
+ * True when Paid status controls must be locked for this actor.
+ * Workspace owners may change Paid orders; everyone else may not.
+ * `isWorkspaceOwner` must come from real workspace ownership / owner role helpers —
+ * never from a user-supplied flag alone.
+ */
+export function isOrderPaidLocked(
+  order: Pick<Order, "status"> | { status?: string | null },
+  isWorkspaceOwner = false,
+) {
+  return order.status === "paid" && !isWorkspaceOwner;
 }
 
 /**
  * True when changing from the current status to `nextStatus` must be rejected
- * because Paid is irreversible. Same-status Paid → Paid is allowed as a no-op.
+ * because Paid is locked for non-owners. Same-status Paid → Paid is a no-op.
+ * Owners are never forbidden by this rule (API still re-checks `workspaces.owner_id`).
  */
 export function isPaidStatusChangeForbidden(
   currentStatus: OrderStatus | string | null | undefined,
   nextStatus: OrderStatus | string | null | undefined,
+  isWorkspaceOwner = false,
 ) {
+  if (isWorkspaceOwner) return false;
   return currentStatus === "paid" && nextStatus !== "paid";
 }
 

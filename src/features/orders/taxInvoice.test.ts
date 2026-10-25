@@ -21,11 +21,14 @@ describe("taxInvoice helpers", () => {
     expect(isPaidClosureStatus("cancelled")).toBe(false);
   });
 
-  it("treats Paid as irreversible for status changes", () => {
+  it("locks Paid status changes for non-owners only", () => {
     expect(isOrderPaidLocked({ status: "paid" })).toBe(true);
+    expect(isOrderPaidLocked({ status: "paid" }, false)).toBe(true);
+    expect(isOrderPaidLocked({ status: "paid" }, true)).toBe(false);
     expect(isOrderPaidLocked({ status: "completed" })).toBe(false);
     expect(isPaidStatusChangeForbidden("paid", "in-progress")).toBe(true);
     expect(isPaidStatusChangeForbidden("paid", "cancelled")).toBe(true);
+    expect(isPaidStatusChangeForbidden("paid", "in-progress", true)).toBe(false);
     expect(isPaidStatusChangeForbidden("paid", "paid")).toBe(false);
     expect(isPaidStatusChangeForbidden("completed", "paid")).toBe(false);
   });

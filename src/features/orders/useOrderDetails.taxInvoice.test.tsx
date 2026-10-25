@@ -12,6 +12,7 @@ const statusHooks = vi.hoisted(() => ({
 
 const workspaceState = vi.hoisted(() => ({
   requireTaxInvoiceNumber: true,
+  role: "member" as string,
 }));
 
 vi.mock("./useGetOrders", async (importOriginal) => {
@@ -31,6 +32,10 @@ vi.mock("../workspaces/useGetWorkspace", () => ({
     isLoading: false,
     error: null,
   }),
+}));
+
+vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
+  useActiveWorkspaceRole: () => workspaceState.role,
 }));
 
 vi.mock("../profiles/useGetProfile", () => ({
@@ -68,6 +73,7 @@ describe("useOrderDetails tax invoice persistence", () => {
     statusHooks.mutate.mockReset();
     statusHooks.isPending = false;
     workspaceState.requireTaxInvoiceNumber = true;
+    workspaceState.role = "member";
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   });
 
@@ -203,7 +209,7 @@ describe("useOrderDetails tax invoice persistence", () => {
     expect(statusHooks.mutate).not.toHaveBeenCalled();
   });
 
-  it("rejects changing a Paid order to cancelled from the UI gate", () => {
+  it("rejects changing a Paid order to cancelled from the UI gate for non-owners", () => {
     const { result } = renderHook(() => useOrderDetails(), { wrapper });
 
     act(() => {
@@ -211,5 +217,55 @@ describe("useOrderDetails tax invoice persistence", () => {
     });
 
     expect(statusHooks.mutate).not.toHaveBeenCalled();
+  });
+
+  it("does not unlock Paid for admin or manager roles", () => {
+    for (const role of ["admin", "manager"] as const) {
+      statusHooks.mutate.mockReset();
+      workspaceState.role = role;
+      const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+      act(() => {
+        result.current.changeStatus({ ...baseOrder, status: "paid", isPaid: true, taxInvoiceNumber: "FV-1" }, "in-progress");
+      });
+
+      expect(statusHooks.mutate).not.toHaveBeenCalled();
+    }
+  });
+
+  it("lets the workspace owner change Paid to another status and change it again", () => {
+    workspaceState.role = "owner";
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, status: "paid", isPaid: true, taxInvoiceNumber: "FV-1" }, "in-progress");
+    });
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "in-progress" },
+      expect.any(Object),
+    );
+
+    statusHooks.mutate.mockReset();
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, status: "in-progress", taxInvoiceNumber: "FV-1" }, "completed");
+    });
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "completed" },
+      expect.any(Object),
+    );
+  });
+
+  it("lets non-owners change unpaid orders", () => {
+    workspaceState.role = "member";
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.changeStatus({ ...baseOrder, status: "new", taxInvoiceNumber: "FV-1" }, "in-progress");
+    });
+
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "in-progress" },
+      expect.any(Object),
+    );
   });
 });

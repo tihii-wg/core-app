@@ -39,6 +39,7 @@ const statusHooks = vi.hoisted(() => ({
 
 const workspaceState = vi.hoisted(() => ({
   requireTaxInvoiceNumber: false,
+  role: "member" as string,
   subscriptionStatus: "active",
   subscriptionStartedAt: null,
   subscriptionExpiresAt: null,
@@ -60,6 +61,10 @@ vi.mock("../workspaces/useGetWorkspace", () => ({
     refetch: vi.fn(),
     isFetched: true,
   }),
+}));
+
+vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
+  useActiveWorkspaceRole: () => workspaceState.role,
 }));
 
 vi.mock("../workspaces/SubscriptionReadOnlyNotice", () => ({
@@ -152,6 +157,8 @@ beforeEach(() => {
   invoiceHooks.mutate.mockReset();
   statusHooks.isPending = false;
   statusHooks.mutate.mockReset();
+  workspaceState.role = "member";
+  workspaceState.requireTaxInvoiceNumber = false;
   order.createdById = "user-1";
   order.createdByName = "Olga Owner";
   order.clientPhone = "+37361111111";
@@ -436,18 +443,38 @@ describe("Orders page", () => {
     order.clientType = undefined;
   });
 
-  it("locks all status options once the order is Paid", async () => {
+  it("locks all status options once the order is Paid for non-owners", async () => {
+    workspaceState.role = "manager";
     order.status = "paid";
     order.isPaid = true;
     order.paymentStatus = "paid";
     await openActions();
 
     expect(screen.getByText(/Status locked/i)).toBeInTheDocument();
-    expect(screen.getByText(/status cannot be changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Only the workspace owner can change/i)).toBeInTheDocument();
     for (const label of ["New", "In Progress", "Waiting Parts", "Completed", "Cancelled"]) {
       expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute("aria-disabled", "true");
     }
     expect(statusHooks.mutate).not.toHaveBeenCalled();
+    order.status = "new";
+    order.isPaid = false;
+    order.paymentStatus = "unpaid";
+  });
+
+  it("lets the workspace owner change status on a Paid order", async () => {
+    workspaceState.role = "owner";
+    order.status = "paid";
+    order.isPaid = true;
+    order.paymentStatus = "paid";
+    const user = await openActions();
+
+    expect(screen.queryByText(/Status locked/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "In Progress" }));
+
+    expect(statusHooks.mutate).toHaveBeenCalledExactlyOnceWith(
+      { orderId: "order-1", status: "in-progress" },
+      expect.any(Object),
+    );
     order.status = "new";
     order.isPaid = false;
     order.paymentStatus = "unpaid";

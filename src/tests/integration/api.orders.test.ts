@@ -321,11 +321,31 @@ describe("updateOrderStatus", () => {
     expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true });
   });
 
-  it("rejects changing a persisted Paid order to another status", async () => {
+  it("rejects changing a persisted Paid order when the caller is not the workspace owner", async () => {
     Object.assign(row("orders", "order-a1")!, { status: "paid", is_paid: true });
-    await expect(updateOrderStatus("order-a1", "in-progress", WS.A)).rejects.toThrow(/cannot change|locked|irreversible/i);
-    await expect(updateOrderStatus("order-a1", "cancelled", WS.A)).rejects.toThrow(/cannot change|locked|irreversible/i);
+    fake.signInAs(USERS.member.id);
+    await expect(updateOrderStatus("order-a1", "in-progress", WS.A)).rejects.toThrow(/workspace owner|paid/i);
+    fake.signInAs(USERS.admin.id);
+    await expect(updateOrderStatus("order-a1", "cancelled", WS.A)).rejects.toThrow(/workspace owner|paid/i);
+    fake.signInAs(USERS.manager.id);
+    await expect(updateOrderStatus("order-a1", "completed", WS.A)).rejects.toThrow(/workspace owner|paid/i);
     expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true });
+  });
+
+  it("lets the workspace owner reverse Paid and change status again", async () => {
+    Object.assign(row("orders", "order-a1")!, { status: "paid", is_paid: true });
+    fake.signInAs(USERS.owner.id);
+    await updateOrderStatus("order-a1", "in-progress", WS.A);
+    expect(row("orders", "order-a1")).toMatchObject({ status: "in-progress", is_paid: false });
+    await updateOrderStatus("order-a1", "completed", WS.A);
+    expect(row("orders", "order-a1")).toMatchObject({ status: "completed", is_paid: false });
+  });
+
+  it("lets non-owners change unpaid order status", async () => {
+    Object.assign(row("orders", "order-a1")!, { status: "new", is_paid: false });
+    fake.signInAs(USERS.member.id);
+    await updateOrderStatus("order-a1", "in-progress", WS.A);
+    expect(row("orders", "order-a1")).toMatchObject({ status: "in-progress", is_paid: false });
   });
 
   it("refuses an order from another workspace", async () => {

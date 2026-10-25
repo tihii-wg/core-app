@@ -723,13 +723,38 @@ async function assertTaxInvoiceAllowsPaid(orderId: string, workspaceId: string) 
 }
 
 /**
+ * Verifies the signed-in user is `workspaces.owner_id` for this workspace.
+ * Uses the authenticated Supabase client — never a client-supplied owner flag.
+ */
+async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError) throw new Error(authError.message);
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data != null;
+}
+
+/**
  * Sole application write path that can set `orders.status = paid` / `is_paid`.
  * Every UI entry point (order menu, detail panel, etc.) goes through
  * `useUpdateOrderStatus` → this function. Direct Supabase/SQL updates are
  * outside app enforcement (no DB trigger in this codebase).
  *
- * Paid is irreversible: the persisted `status` is re-read before update so a
- * stale client cannot move a paid order back to another status.
+ * Paid is locked for non-owners: the persisted `status` is re-read, and only
+ * `workspaces.owner_id === auth.uid()` may move a Paid order to another status.
+ * Non-owner updates keep `.neq("status","paid")` so a concurrent Paid write cannot be overwritten.
  */
 export async function updateOrderStatus(orderId: string, status: OrderStatus, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
@@ -747,24 +772,38 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
   const currentStatus =
     typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
 
-  // Already paid: same-status calls are a no-op; any other target is rejected.
+  let ownerMayChangePaid = false;
   if (currentStatus === "paid") {
     if (status === "paid") return;
-    throw new Error(i18n.t("orders.errors.paidStatusLocked"));
+    ownerMayChangePaid = await isAuthenticatedWorkspaceOwner(targetWorkspaceId);
+    if (!ownerMayChangePaid) {
+      throw new Error(i18n.t("orders.errors.paidStatusLocked"));
+    }
   }
 
   if (status === "paid") {
     await assertTaxInvoiceAllowsPaid(orderId, targetWorkspaceId);
   }
 
-  const { data, error } = await supabase
+  const payload =
+    status === "paid"
+      ? { status, is_paid: true }
+      : currentStatus === "paid"
+        ? { status, is_paid: false }
+        : { status };
+
+  let updateQuery = supabase
     .from("orders")
-    .update(status === "paid" ? { status, is_paid: true } : { status })
+    .update(payload)
     .eq("id", orderId)
-    .eq("workspace_id", targetWorkspaceId)
-    // Concurrent writer may have marked paid after our read — do not overwrite it.
-    .neq("status", "paid")
-    .select("id");
+    .eq("workspace_id", targetWorkspaceId);
+
+  // Non-owners (and unpaid→* paths) must not overwrite a status that became Paid after the read.
+  if (!ownerMayChangePaid) {
+    updateQuery = updateQuery.neq("status", "paid");
+  }
+
+  const { data, error } = await updateQuery.select("id");
 
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {

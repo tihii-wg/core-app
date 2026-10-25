@@ -66,7 +66,7 @@ const orders: Messages<typeof en> = {
     viewDetails: "Vezi detalii",
     changeStatus: "Schimbă statusul",
     statusLocked: "Status blocat",
-    paidStatusImmutable: "Această comandă este Plătită. Statusul nu poate fi schimbat.",
+    paidStatusImmutable: "Această comandă este Plătită. Doar proprietarul spațiului de lucru îi poate schimba statusul.",
     updatingStatus: "Se actualizează statusul...",
     invoiceAlreadyCreated: "Factura {{number}} a fost deja creată",
     invoicesNotSetUp: "Facturile nu sunt încă configurate",
@@ -244,7 +244,7 @@ const orders: Messages<typeof en> = {
   },
   errors: {
     notFoundOrForbidden: "Comanda nu a fost găsită sau nu aveți permisiunea de a o modifica.",
-    paidStatusLocked: "Comenzile plătite nu își pot schimba statusul. Dacă a fost setat greșit, este necesară o procedură administrativă auditată separată.",
+    paidStatusLocked: "Doar proprietarul spațiului de lucru poate schimba statusul unei comenzi Plătite.",
     clientNotCreated: "Clientul nu a fost creat",
     serviceNotCreated: "Serviciul nu a fost creat",
     employeeNotFound: "Angajatul selectat nu a fost găsit în acest spațiu de lucru",

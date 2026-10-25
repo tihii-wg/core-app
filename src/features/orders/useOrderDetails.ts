@@ -6,6 +6,8 @@ import type { Order, OrderStatus } from "../../lib/types";
 import { useUpdateOrderStatus, findCachedOrder } from "./useGetOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import {
   hasTaxInvoiceNumber,
   isPaidStatusChangeForbidden,
@@ -36,6 +38,9 @@ export function useOrderDetails() {
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
   const requireTaxInvoiceNumber = workspace?.requireTaxInvoiceNumber === true;
+  // UI gate only — API re-checks workspaces.owner_id. Role "owner" is the membership
+  // mirror of ownership; admin/manager do not unlock Paid.
+  const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole());
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
@@ -58,26 +63,30 @@ export function useOrderDetails() {
     setSelectedOrder((current) => {
       if (current?.id !== orderId) return current;
       // Spread keeps taxInvoiceNumber and every other field; only status/payment change.
+      const leftPaid = current.status === "paid" && newStatus !== "paid";
       return {
         ...current,
         status: newStatus,
-        ...(newStatus === "paid" ? { isPaid: true, paymentStatus: "paid" as const } : {}),
+        ...(newStatus === "paid"
+          ? { isPaid: true, paymentStatus: "paid" as const }
+          : leftPaid
+            ? { isPaid: false, paymentStatus: "unpaid" as const }
+            : {}),
       };
     });
   };
 
   /**
    * UI gate for every order status control (table menu, mobile card menu,
-   * detail panel). The API `updateOrderStatus` re-checks persisted DB values
-   * (including irreversible Paid); this gate only avoids a round-trip and
-   * opens the tax-invoice field early.
+   * detail panel). The API `updateOrderStatus` re-checks persisted ownership and
+   * Paid state; this gate only avoids a round-trip and opens the tax-invoice field early.
    */
   const changeStatus = (order: Order, newStatus: OrderStatus) => {
     if (order.status === newStatus || isStatusUpdating) return;
     const cached = findCachedOrder(queryClient, workspaceId, order.id);
     // Fail closed on Paid using either the row or a fresher cached snapshot.
     const currentStatus = cached?.status === "paid" || order.status === "paid" ? "paid" : order.status;
-    if (isPaidStatusChangeForbidden(currentStatus, newStatus)) {
+    if (isPaidStatusChangeForbidden(currentStatus, newStatus, isWorkspaceOwner)) {
       toast.error(t("orders.errors.paidStatusLocked"), { id: "paid-status-locked" });
       return;
     }
@@ -106,6 +115,7 @@ export function useOrderDetails() {
     changeStatus,
     isStatusUpdating,
     requireTaxInvoiceNumber,
+    isWorkspaceOwner,
     panelProps: {
       selectedOrder,
       detailPanelOpen,

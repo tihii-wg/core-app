@@ -712,6 +712,16 @@ describe("updateOrderStatus", () => {
     return { orders, updates };
   }
 
+  function workspacesOwnerMock(isOwner: boolean) {
+    const workspaces: Record<string, unknown> = {
+      select: () => workspaces,
+      eq: () => workspaces,
+      is: () => workspaces,
+      maybeSingle: () => Promise.resolve({ data: isOwner ? { id: "ws-1" } : null, error: null }),
+    };
+    return workspaces;
+  }
+
   it("marks the order paid when the status changes to paid", async () => {
     const { orders, updates } = statusOrdersMock("completed");
     from.mockImplementation((table: string) => {
@@ -736,16 +746,42 @@ describe("updateOrderStatus", () => {
     expect(updates[0]).toEqual({ status: "in-progress" });
   });
 
-  it("rejects changing a persisted Paid order to any other status", async () => {
+  it("rejects changing a persisted Paid order when the caller is not the workspace owner", async () => {
     const { orders, updates } = statusOrdersMock("paid");
+    const workspaces = workspacesOwnerMock(false);
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "workspaces") return workspaces;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(/workspace owner|paid/i);
+    await expect(updateOrderStatus("order-1", "cancelled", "ws-1")).rejects.toThrow(/workspace owner|paid/i);
+    expect(updates).toHaveLength(0);
+  });
+
+  it("allows the workspace owner to change a Paid order and clear is_paid", async () => {
+    const { orders, updates } = statusOrdersMock("paid");
+    const workspaces = workspacesOwnerMock(true);
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "workspaces") return workspaces;
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await updateOrderStatus("order-1", "in-progress", "ws-1");
+    expect(updates[0]).toEqual({ status: "in-progress", is_paid: false });
+  });
+
+  it("allows the workspace owner to change status again after reversing Paid", async () => {
+    const { orders, updates } = statusOrdersMock("in-progress");
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       throw new Error(`Unexpected table ${table}`);
     });
 
-    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(/cannot change.*paid|paid.*cannot|irreversible|locked/i);
-    await expect(updateOrderStatus("order-1", "cancelled", "ws-1")).rejects.toThrow(/cannot change.*paid|paid.*cannot|irreversible|locked/i);
-    expect(updates).toHaveLength(0);
+    await updateOrderStatus("order-1", "completed", "ws-1");
+    expect(updates[0]).toEqual({ status: "completed" });
   });
 
   it("allows a no-op when the order is already paid and the target is paid", async () => {
@@ -788,7 +824,7 @@ describe("updateOrderStatus", () => {
     });
 
     await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(
-      /cannot change.*paid|paid.*cannot|irreversible|locked/i,
+      /workspace owner|paid/i,
     );
     expect(updates).toEqual([{ status: "in-progress" }]);
   });
