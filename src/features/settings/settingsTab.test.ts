@@ -20,4 +20,8 @@ describe("settings tabs", () => {
     expect(settingsTabFromSearch("unknown")).toBe("general");
     expect(settingsTabFromSearch("company")).toBe("general");
   });
+
+  it("opens the import data demo tab", () => {
+    expect(settingsTabFromSearch("import")).toBe("import");
+  });
 });

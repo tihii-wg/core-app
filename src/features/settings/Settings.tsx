@@ -11,6 +11,7 @@ import {
   Users,
   Palette,
   Save,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   Card,
@@ -43,6 +44,7 @@ import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
 import { TeamSettings } from "./TeamSettings";
 import { SubscriptionStatusCard } from "./SubscriptionStatusCard";
+import { ImportDataDemo } from "./ImportDataDemo";
 
 export function SettingsModule() {
   const { t } = useTranslation();
@@ -106,6 +108,10 @@ export function SettingsModule() {
           <TabsTrigger value="appearance">
             <Palette />
             {t("settings.tabs.appearance")}
+          </TabsTrigger>
+          <TabsTrigger value="import">
+            <FileSpreadsheet />
+            {t("settings.tabs.import")}
           </TabsTrigger>
         </TabsList>
 
@@ -255,6 +261,10 @@ export function SettingsModule() {
 
         <TabsContent value="appearance" className="mt-5 space-y-5">
           <AppearanceSettings />
+        </TabsContent>
+
+        <TabsContent value="import" className="mt-5 space-y-5">
+          <ImportDataDemo />
         </TabsContent>
       </Tabs>
     </div>
