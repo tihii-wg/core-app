@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { assertVehicleAssignable } from "./apiVehicles";
+import type { Vehicle } from "../lib/types";
+import { assertVehicleAssignable, orderAssetFieldsFromVehicle, vehicleMakeModelLabel } from "./apiVehicles";
 
 const from = vi.hoisted(() => vi.fn());
 
@@ -47,5 +48,52 @@ describe("assertVehicleAssignable", () => {
   it("accepts a vehicle that belongs to the client and workspace", async () => {
     from.mockReturnValue(maybeSingleQuery({ data: { id: "veh-1" }, error: null }));
     await expect(assertVehicleAssignable("ws-1", "client-1", "veh-1")).resolves.toBe("veh-1");
+  });
+});
+
+describe("orderAssetFieldsFromVehicle", () => {
+  const base: Vehicle = {
+    id: "veh-1",
+    workspaceId: "ws-1",
+    clientId: "client-1",
+    make: "Toyota",
+    model: "Corolla",
+    year: 2018,
+    vin: "1HGBH41JXMN109186",
+    licensePlate: "ABC123",
+    initialMileage: null,
+    currentMileage: null,
+    engineDisplacement: null,
+    fuelType: null,
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  };
+
+  it("maps make/model/year, plate, and VIN into order snapshot fields", () => {
+    expect(vehicleMakeModelLabel(base)).toBe("Toyota Corolla 2018");
+    expect(orderAssetFieldsFromVehicle(base)).toEqual({
+      device: "Toyota Corolla 2018",
+      carNumber: "ABC123",
+      vin: "1HGBH41JXMN109186",
+    });
+  });
+
+  it("keeps empty strings when vehicle fields are null", () => {
+    expect(
+      orderAssetFieldsFromVehicle({
+        ...base,
+        make: null,
+        model: null,
+        year: null,
+        vin: null,
+        licensePlate: null,
+      }),
+    ).toEqual({ device: "", carNumber: "", vin: "" });
+  });
+
+  it("returns empty snapshots when no vehicle is selected", () => {
+    expect(orderAssetFieldsFromVehicle(null)).toEqual({ device: "", carNumber: "", vin: "" });
+    expect(orderAssetFieldsFromVehicle(undefined)).toEqual({ device: "", carNumber: "", vin: "" });
   });
 });

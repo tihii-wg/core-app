@@ -1,6 +1,8 @@
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -19,10 +21,14 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderAssetFields from "./OrderAssetFields";
 import { OrderVehicleFields } from "./OrderVehicleFields";
+import { persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 
@@ -35,6 +41,9 @@ type EditOrderFormProps = {
 export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderFormProps) {
   const { t } = useTranslation();
   const { mutateAsync: updateOrder } = useUpdateOrder();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
   const { services } = useGetServices();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
@@ -42,6 +51,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { workflow, copy } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
+  const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? order.clientId || null : null);
   const activeServices = services?.filter((service) => service.status === "active");
   const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
@@ -62,6 +72,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       device: order.device,
       carNumber: order.carNumber,
       vin: order.vin,
+      currentMileage: "",
       description: order.description,
       assignedEmployeeId: order.assignedEmployeeId,
       deadline: order.deadline,
@@ -107,20 +118,46 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const onSubmit = async (data: EditOrderFormData) => {
     try {
-      // When vehicle management is via client vehicles, never clear historical order asset columns from this form.
+      const selectedVehicleId = data.vehicleId?.trim() || "";
+      if (showVehicles && selectedVehicleId) {
+        try {
+          const selectedVehicle = clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+          if (!selectedVehicle) throw new Error(t("vehicles.errors.invalidSelection"));
+          guardWrite();
+          // Mileage write first — failed vehicle update must not report the order as saved.
+          await persistOrderVehicleMileage({
+            workspaceId,
+            clientId: selectedVehicle.clientId,
+            vehicle: selectedVehicle,
+            formMileage: data.currentMileage,
+            queryClient,
+          });
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+          throw error;
+        }
+      }
+
+      // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
       const updatedOrder = await updateOrder({
         orderId: order.id,
-        ...data,
         vehicleId: data.vehicleId || "",
-        services: data.services ?? [],
-        materials: data.materials,
+        device: showVehicles
+          ? (data.device ?? "")
+          : workflow.orderFields.device.visible
+            ? data.device
+            : order.device || data.device,
         carNumber: showVehicles
-          ? order.carNumber
+          ? (data.carNumber ?? "")
           : workflow.orderFields.carNumber.visible
             ? data.carNumber
             : order.carNumber,
-        vin: showVehicles ? order.vin : workflow.orderFields.vin.visible ? data.vin : order.vin,
-        device: showVehicles ? order.device : workflow.orderFields.device.visible ? data.device : order.device || data.device,
+        vin: showVehicles ? (data.vin ?? "") : workflow.orderFields.vin.visible ? data.vin : order.vin,
+        description: data.description,
+        assignedEmployeeId: data.assignedEmployeeId,
+        deadline: data.deadline,
+        services: data.services ?? [],
+        materials: data.materials,
       });
       onUpdated(updatedOrder);
     } catch {
@@ -131,7 +168,14 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {showVehicles && order.clientId ? (
-        <OrderVehicleFields control={control} setValue={setValue} clientId={order.clientId} disabled={isSubmitting} />
+        <OrderVehicleFields
+          control={control}
+          setValue={setValue}
+          register={register}
+          errors={errors}
+          clientId={order.clientId}
+          disabled={isSubmitting}
+        />
       ) : null}
 
       <OrderAssetFields

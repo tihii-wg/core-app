@@ -140,6 +140,8 @@ export interface addNewOrderFormData {
   device: string;
   vin: string;
   carNumber: string;
+  /** Visit mileage for the linked vehicle; persisted to vehicles.current_mileage, not orders. */
+  currentMileage: string;
   description: string;
   services: OrderService[];
   materials: OrderMaterial[];
@@ -183,6 +185,8 @@ export type EditOrderFormData = {
   device: string;
   carNumber: string;
   vin: string;
+  /** Visit mileage for the linked vehicle; persisted to vehicles.current_mileage, not orders. */
+  currentMileage?: string;
   description: string;
   assignedEmployeeId: string;
   deadline: string;

@@ -15,6 +15,8 @@ import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
@@ -24,10 +26,14 @@ import ClientTypeSelect from "../clients/ClientTypeSelect";
 import { industryClientCopy } from "../industries/industryWorkflow";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
+import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import { OrderVehicleFields } from "./OrderVehicleFields";
+import { persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 
@@ -43,6 +49,9 @@ export default function AddNewOrderForm({
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: createOrder } = useCreateOrder();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
@@ -72,6 +81,7 @@ export default function AddNewOrderForm({
       device: "",
       vin: "",
       carNumber: "",
+      currentMileage: "",
       services: [],
       materials: [],
       description: "",
@@ -84,6 +94,7 @@ export default function AddNewOrderForm({
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
   const selectedClientId = useWatch({ control, name: "clientId" });
+  const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? selectedClientId || null : null);
   /** Client-vehicle industries: order-level make/plate/VIN are obsolete — use the vehicle selector only. */
   const hideDuplicateVehicleAssetFields = showVehicles;
   const typedClientName = clientName.trim();
@@ -126,6 +137,26 @@ export default function AddNewOrderForm({
     submitLockRef.current = true;
 
     try {
+      const selectedVehicleId = data.vehicleId?.trim() || "";
+      if (showVehicles && selectedVehicleId) {
+        try {
+          const selectedVehicle = clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+          if (!selectedVehicle) throw new Error(t("vehicles.errors.invalidSelection"));
+          guardWrite();
+          // Persist visit mileage before creating the order so a failed mileage write never reports order success.
+          await persistOrderVehicleMileage({
+            workspaceId,
+            clientId: selectedVehicle.clientId,
+            vehicle: selectedVehicle,
+            formMileage: data.currentMileage,
+            queryClient,
+          });
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+          throw error;
+        }
+      }
+
       await createOrder({
         clientId: data.clientId || undefined,
         clientName: clientName.trim(),
@@ -135,10 +166,14 @@ export default function AddNewOrderForm({
         clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
         vehicleId: data.vehicleId || null,
-        // Vehicle industries store make/plate/VIN on client vehicles, not on the order form.
-        device: showVehicles ? "" : (data.device?.trim() ?? ""),
-        vin: showVehicles ? "" : workflow.orderFields.vin.visible ? data.vin : "",
-        carNumber: showVehicles ? "" : workflow.orderFields.carNumber.visible ? data.carNumber : "",
+        // Vehicle industries: OrderVehicleFields snapshots device/plate/VIN from the selected vehicle.
+        device: data.device?.trim() ?? "",
+        vin: showVehicles ? (data.vin?.trim() ?? "") : workflow.orderFields.vin.visible ? data.vin : "",
+        carNumber: showVehicles
+          ? (data.carNumber?.trim() ?? "")
+          : workflow.orderFields.carNumber.visible
+            ? data.carNumber
+            : "",
         description: data.description,
         services: data.services ?? [],
         materials: data.materials,
@@ -264,7 +299,14 @@ export default function AddNewOrderForm({
         </div>
 
         {showVehicles && selectedClientId ? (
-          <OrderVehicleFields control={control} setValue={setValue} clientId={selectedClientId} disabled={isSubmitting} />
+          <OrderVehicleFields
+            control={control}
+            setValue={setValue}
+            register={register}
+            errors={errors}
+            clientId={selectedClientId}
+            disabled={isSubmitting}
+          />
         ) : null}
 
         <OrderAssetFields

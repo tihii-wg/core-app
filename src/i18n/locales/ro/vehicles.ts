@@ -55,6 +55,7 @@ export default {
   validation: {
     yearRange: "Anul trebuie să fie între 1886 și 2200",
     mileageNonNegative: "Kilometrajul trebuie să fie zero sau mai mare",
+    mileageWholeNonNegative: "Kilometrajul trebuie să fie un număr întreg zero sau mai mare",
     displacementPositive: "Capacitatea cilindrică trebuie să fie mai mare decât zero",
     vinInvalid: "VIN-ul trebuie să conțină exact 17 caractere valide (A–Z și 0–9, fără I, O și Q)",
   },

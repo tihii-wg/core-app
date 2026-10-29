@@ -6,6 +6,7 @@ import type { Service } from "../../lib/types";
 import AddNewOrderForm from "./AddNewOrderForm";
 
 const createOrderMock = vi.hoisted(() => vi.fn());
+const persistMileageMock = vi.hoisted(() => vi.fn());
 
 const employeesState = vi.hoisted(() => ({
   employees: [] as { id: string; name: string; status: string; role: string; profile_id: string | null }[],
@@ -24,8 +25,8 @@ const vehiclesState = vi.hoisted(() => ({
     year: number | null;
     vin: string | null;
     licensePlate: string | null;
-    initialMileage: null;
-    currentMileage: null;
+    initialMileage: number | null;
+    currentMileage: number | null;
     engineDisplacement: null;
     fuelType: null;
     createdAt: string;
@@ -87,6 +88,14 @@ vi.mock("../workspaces/useWorkspaceSubscription", () => ({
   useWorkspaceSubscription: () => ({ canWrite: true }),
 }));
 
+vi.mock("./orderVehicleMileage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./orderVehicleMileage")>();
+  return {
+    ...actual,
+    persistOrderVehicleMileage: (...args: unknown[]) => persistMileageMock(...args),
+  };
+});
+
 async function addCustomService(user: ReturnType<typeof userEvent.setup>, name: string, price: string) {
   await user.type(screen.getByLabelText(/^Service$/), name);
   await user.type(screen.getByLabelText("Price"), price);
@@ -99,6 +108,8 @@ describe("AddNewOrderForm client validation", () => {
   beforeEach(() => {
     createOrderMock.mockReset();
     createOrderMock.mockResolvedValue({ id: "order-1" });
+    persistMileageMock.mockReset();
+    persistMileageMock.mockResolvedValue(null);
     employeesState.employees = [];
     employeesState.role = "owner";
     employeesState.industrySlug = "auto_repair";
@@ -192,11 +203,98 @@ describe("AddNewOrderForm client validation", () => {
     expect(createOrderMock).toHaveBeenCalledWith(
       expect.objectContaining({
         vehicleId: "veh-1",
-        device: "",
-        vin: "",
-        carNumber: "",
+        device: "Toyota Corolla 2018",
+        vin: "1HGBH41JXMN109186",
+        carNumber: "ABC123",
       }),
     );
+    expect(persistMileageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        formMileage: "",
+        vehicle: expect.objectContaining({ id: "veh-1" }),
+      }),
+    );
+  });
+
+  it("prefills and persists current mileage for the selected vehicle", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      {
+        id: "veh-1",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: "1HGBH41JXMN109186",
+        licensePlate: "ABC123",
+        initialMileage: null,
+        currentMileage: 45000,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+    renderWithQuery(
+      <AddNewOrderForm setCreateModalOpen={vi.fn()} searchQuery="" initialClientId="client-1" initialClientName="Ada" />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+
+    const mileage = await screen.findByLabelText(/^Current mileage$/i);
+    expect(mileage).toHaveValue("45000");
+    await user.clear(mileage);
+    await user.type(mileage, "46010");
+    await user.click(saveDraftButton());
+
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(persistMileageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        formMileage: "46010",
+        vehicle: expect.objectContaining({ id: "veh-1", currentMileage: 45000 }),
+      }),
+    );
+    expect(persistMileageMock.mock.invocationCallOrder[0]).toBeLessThan(createOrderMock.mock.invocationCallOrder[0]);
+  });
+
+  it("does not create the order when mileage persistence fails", async () => {
+    const user = userEvent.setup();
+    persistMileageMock.mockRejectedValue(new Error("mileage write failed"));
+    vehiclesState.vehicles = [
+      {
+        id: "veh-1",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: null,
+        licensePlate: "ABC123",
+        initialMileage: null,
+        currentMileage: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+    const setCreateModalOpen = vi.fn();
+    renderWithQuery(
+      <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" initialClientId="client-1" initialClientName="Ada" />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+    await user.type(screen.getByLabelText(/^Current mileage$/i), "100");
+    await user.click(saveDraftButton());
+
+    await vi.waitFor(() => expect(persistMileageMock).toHaveBeenCalled());
+    expect(createOrderMock).not.toHaveBeenCalled();
+    expect(setCreateModalOpen).not.toHaveBeenCalledWith(false);
   });
 
   it("asks for the phone and email of a new client with the client form's validation", async () => {

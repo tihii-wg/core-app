@@ -1,36 +1,74 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Control, FieldValues, Path, PathValue, UseFormSetValue } from "react-hook-form";
+import type { Control, FieldErrors, FieldValues, Path, PathValue, UseFormRegister, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
 import { Plus } from "lucide-react";
 import type { Vehicle } from "../../lib/types";
 import { Button } from "../../ui/Button";
+import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
-import { vehicleDisplayLabel, vehicleSummaryDetails } from "../../services/apiVehicles";
+import { orderAssetFieldsFromVehicle, vehicleDisplayLabel, vehicleSummaryDetails } from "../../services/apiVehicles";
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useCreateVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
 import { VehicleFieldsGrid } from "./OrderLinkedVehicleDetails";
+import { mileageFormValueFromVehicle, visitMileageValidate } from "./orderVehicleMileage";
 
 const NONE = "__none__";
 
 type OrderVehicleFieldsProps<T extends FieldValues> = {
   control: Control<T>;
   setValue: UseFormSetValue<T>;
+  register: UseFormRegister<T>;
+  errors?: FieldErrors;
   clientId: string;
   disabled?: boolean;
 };
 
-export function OrderVehicleFields<T extends FieldValues>({ control, setValue, clientId, disabled }: OrderVehicleFieldsProps<T>) {
+function applyOrderAssetSnapshot<T extends FieldValues>(setValue: UseFormSetValue<T>, vehicle: Vehicle | undefined) {
+  const snapshot = orderAssetFieldsFromVehicle(vehicle);
+  const options = { shouldDirty: true, shouldValidate: false } as const;
+  setValue("device" as Path<T>, snapshot.device as PathValue<T, Path<T>>, options);
+  setValue("carNumber" as Path<T>, snapshot.carNumber as PathValue<T, Path<T>>, options);
+  setValue("vin" as Path<T>, snapshot.vin as PathValue<T, Path<T>>, options);
+}
+
+function applyVisitMileage<T extends FieldValues>(
+  setValue: UseFormSetValue<T>,
+  vehicle: Vehicle | undefined,
+  options: { shouldDirty: boolean },
+) {
+  setValue(
+    "currentMileage" as Path<T>,
+    mileageFormValueFromVehicle(vehicle) as PathValue<T, Path<T>>,
+    { shouldDirty: options.shouldDirty, shouldValidate: false },
+  );
+}
+
+export function OrderVehicleFields<T extends FieldValues>({
+  control,
+  setValue,
+  register,
+  errors,
+  clientId,
+  disabled,
+}: OrderVehicleFieldsProps<T>) {
   const { t } = useTranslation();
   const vehicleIdPath = "vehicleId" as Path<T>;
   const selectedVehicleId = useWatch({ control, name: vehicleIdPath }) as string | undefined;
   const { vehicles, isLoading } = useGetClientVehicles(clientId || null);
   const createVehicle = useCreateVehicle(clientId);
   const [createOpen, setCreateOpen] = useState(false);
+  /** Skip the first sync so edit forms keep existing order snapshot columns until the user changes vehicle. */
+  const skipInitialAssetSync = useRef(true);
+  /** Last vehicle id we wrote device/carNumber/vin for (waits until the row is in `vehicles`). */
+  const syncedAssetVehicleId = useRef<string | null>(null);
+  /** Last vehicle id we prefilling currentMileage for (including edit mount). */
+  const syncedMileageVehicleId = useRef<string | null>(null);
 
   const selectedVehicle = selectedVehicleId ? vehicles.find((vehicle) => vehicle.id === selectedVehicleId) : undefined;
+  const mileageError = errors?.currentMileage as { message?: string } | undefined;
 
   useEffect(() => {
     if (!clientId) {
@@ -43,6 +81,38 @@ export function OrderVehicleFields<T extends FieldValues>({ control, setValue, c
       setValue(vehicleIdPath, "" as PathValue<T, Path<T>>);
     }
   }, [clientId, isLoading, selectedVehicleId, setValue, vehicleIdPath, vehicles]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const nextId = selectedVehicleId?.trim() || "";
+
+    if (skipInitialAssetSync.current) {
+      skipInitialAssetSync.current = false;
+      syncedAssetVehicleId.current = nextId;
+      return;
+    }
+
+    if (syncedAssetVehicleId.current === nextId) return;
+
+    // Id changed but the vehicle row is not in the list yet (e.g. just created) — wait.
+    if (nextId && !selectedVehicle) return;
+
+    syncedAssetVehicleId.current = nextId;
+    applyOrderAssetSnapshot(setValue, selectedVehicle);
+  }, [isLoading, selectedVehicle, selectedVehicleId, setValue]);
+
+  // Prefill visit mileage from vehicles.current_mileage whenever the selection changes (including edit open).
+  useEffect(() => {
+    if (isLoading) return;
+
+    const nextId = selectedVehicleId?.trim() || "";
+    if (syncedMileageVehicleId.current === nextId) return;
+    if (nextId && !selectedVehicle) return;
+
+    syncedMileageVehicleId.current = nextId;
+    applyVisitMileage(setValue, selectedVehicle, { shouldDirty: false });
+  }, [isLoading, selectedVehicle, selectedVehicleId, setValue]);
 
   if (!clientId) return null;
 
@@ -66,7 +136,7 @@ export function OrderVehicleFields<T extends FieldValues>({ control, setValue, c
             onValueChange={(value) => field.onChange(value === NONE ? "" : value)}
             disabled={disabled || isLoading}
           >
-            <SelectTrigger id="order-vehicle">
+            <SelectTrigger id="order-vehicle" className="w-full min-w-0">
               <SelectValue placeholder={isLoading ? t("common.loading") : t("vehicles.selectPlaceholder")} />
             </SelectTrigger>
             <SelectContent>
@@ -82,11 +152,29 @@ export function OrderVehicleFields<T extends FieldValues>({ control, setValue, c
       />
 
       {selectedVehicle ? (
-        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-2" data-testid="selected-vehicle-summary">
-          <p className="text-xs font-medium text-muted-foreground">{t("vehicles.selectedSummary")}</p>
-          <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{summary?.title}</p>
-          <VehicleFieldsGrid vehicle={selectedVehicle} empty={t("common.noValue")} />
-          <p className="text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-3" data-testid="selected-vehicle-summary">
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">{t("vehicles.selectedSummary")}</p>
+            <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{summary?.title}</p>
+            <VehicleFieldsGrid vehicle={selectedVehicle} empty={t("common.noValue")} />
+            <p className="text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
+          </div>
+
+          <div className="space-y-1.5 border-t border-border pt-3">
+            <Label htmlFor="order-vehicle-current-mileage">{t("vehicles.fields.currentMileage")}</Label>
+            <Input
+              id="order-vehicle-current-mileage"
+              inputMode="numeric"
+              className="w-full min-w-0 max-w-full sm:max-w-[12rem]"
+              placeholder={t("vehicles.placeholders.currentMileage")}
+              disabled={disabled}
+              {...register("currentMileage" as Path<T>, {
+                validate: (value) =>
+                  visitMileageValidate(String(value ?? ""), t("vehicles.validation.mileageWholeNonNegative")),
+              })}
+            />
+            {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
+          </div>
         </div>
       ) : null}
 
@@ -103,6 +191,11 @@ export function OrderVehicleFields<T extends FieldValues>({ control, setValue, c
         onSubmit={async (input) => {
           const created = await createVehicle.mutateAsync(input);
           setValue(vehicleIdPath, created.id as PathValue<T, Path<T>>, { shouldDirty: true });
+          syncedAssetVehicleId.current = created.id;
+          syncedMileageVehicleId.current = created.id;
+          skipInitialAssetSync.current = false;
+          applyOrderAssetSnapshot(setValue, created);
+          applyVisitMileage(setValue, created, { shouldDirty: false });
         }}
       />
     </div>

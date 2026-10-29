@@ -55,6 +55,7 @@ export default {
   validation: {
     yearRange: "Year must be between 1886 and 2200",
     mileageNonNegative: "Mileage must be zero or greater",
+    mileageWholeNonNegative: "Mileage must be a whole number zero or greater",
     displacementPositive: "Engine displacement must be greater than zero",
     vinInvalid: "VIN must contain exactly 17 valid characters (A–Z and 0–9, excluding I, O, and Q)",
   },

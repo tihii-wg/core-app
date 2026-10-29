@@ -45,7 +45,7 @@ const sampleVehicle: Vehicle = {
   vin: "1HGBH41JXMN109186",
   licensePlate: "ABC123",
   initialMileage: null,
-  currentMileage: null,
+  currentMileage: 45000,
   engineDisplacement: null,
   fuelType: null,
   createdAt: "",
@@ -58,19 +58,42 @@ type FormValues = {
   device: string;
   carNumber: string;
   vin: string;
+  currentMileage: string;
 };
 
 /** Mirrors Add/Edit order forms: vehicle industries always hide duplicate asset inputs. */
-function Harness({ clientId = "client-1", initialVehicleId = "" }: { clientId?: string; initialVehicleId?: string }) {
+function Harness({
+  clientId = "client-1",
+  initialVehicleId = "",
+  initialDevice = "",
+  initialCarNumber = "",
+  initialVin = "",
+  initialCurrentMileage = "",
+}: {
+  clientId?: string;
+  initialVehicleId?: string;
+  initialDevice?: string;
+  initialCarNumber?: string;
+  initialVin?: string;
+  initialCurrentMileage?: string;
+}) {
   const workflow = industryWorkflow("auto_repair");
   const copy = industryOrderCopy(workflow);
-  const { control, setValue, register, formState } = useForm<FormValues>({
-    defaultValues: { vehicleId: initialVehicleId, device: "", carNumber: "", vin: "" },
+  const { control, setValue, register, formState, watch, handleSubmit } = useForm<FormValues>({
+    mode: "onBlur",
+    defaultValues: {
+      vehicleId: initialVehicleId,
+      device: initialDevice,
+      carNumber: initialCarNumber,
+      vin: initialVin,
+      currentMileage: initialCurrentMileage,
+    },
   });
+  const values = watch();
 
   return (
     <div>
-      <OrderVehicleFields control={control} setValue={setValue} clientId={clientId} />
+      <OrderVehicleFields control={control} setValue={setValue} register={register} errors={formState.errors} clientId={clientId} />
       <OrderAssetFields
         register={register}
         errors={formState.errors}
@@ -79,23 +102,37 @@ function Harness({ clientId = "client-1", initialVehicleId = "" }: { clientId?: 
         preserveHiddenValues
         hideVisibleFields
       />
+      <button type="button" onClick={() => void handleSubmit(() => undefined)()}>
+        Save harness
+      </button>
+      <pre data-testid="asset-snapshot">{JSON.stringify({
+        vehicleId: values.vehicleId,
+        device: values.device,
+        carNumber: values.carNumber,
+        vin: values.vin,
+        currentMileage: values.currentMileage,
+      })}</pre>
     </div>
   );
+}
+
+function readSnapshot() {
+  return JSON.parse(screen.getByTestId("asset-snapshot").textContent || "{}") as FormValues;
 }
 
 describe("OrderVehicleFields without duplicate asset fields", () => {
   beforeEach(() => {
     vehiclesState.vehicles = [sampleVehicle];
     vehiclesState.createVehicle.mockReset();
-    vehiclesState.createVehicle.mockImplementation(async (input: { make?: string | null; vin?: string | null; licensePlate?: string | null }) => {
+    vehiclesState.createVehicle.mockImplementation(async (input: { make?: string | null; model?: string | null; vin?: string | null; licensePlate?: string | null }) => {
       const created: Vehicle = {
         ...sampleVehicle,
         id: "veh-new",
-        make: input.make ?? "Honda",
-        model: "Civic",
+        make: input.make?.trim() || "Honda",
+        model: input.model?.trim() || "Civic",
         year: 2020,
-        vin: input.vin ?? "2HGES16575H123456",
-        licensePlate: input.licensePlate ?? "XYZ999",
+        vin: input.vin?.trim() || "2HGES16575H123456",
+        licensePlate: input.licensePlate?.trim() || "XYZ999",
       };
       vehiclesState.vehicles = [...vehiclesState.vehicles, created];
       return created;
@@ -160,6 +197,14 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     await vi.waitFor(() => expect(vehiclesState.createVehicle).toHaveBeenCalled());
     expect(await screen.findByTestId("selected-vehicle-summary")).toBeInTheDocument();
     expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toMatchObject({
+        vehicleId: "veh-new",
+        device: "Honda Civic 2020",
+        carNumber: "XYZ999",
+        vin: "2HGES16575H123456",
+      });
+    });
   });
 
   it("shows a summary when editing an order that already has a vehicle_id", () => {
@@ -169,5 +214,166 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^License plate$/i)).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: tVehicleSelect })).toBeInTheDocument();
+  });
+
+  it("snapshots device, plate, and VIN when selecting an existing vehicle", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Harness />);
+
+    await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toEqual({
+        vehicleId: "veh-1",
+        device: "Toyota Corolla 2018",
+        carNumber: "ABC123",
+        vin: "1HGBH41JXMN109186",
+        currentMileage: "45000",
+      });
+    });
+    expect(screen.getByLabelText(/^Current mileage$/i)).toHaveValue("45000");
+  });
+
+  it("leaves current mileage empty when the vehicle has NULL mileage", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [{ ...sampleVehicle, currentMileage: null }];
+    renderWithQuery(<Harness />);
+
+    await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+
+    await vi.waitFor(() => expect(readSnapshot().currentMileage).toBe(""));
+    expect(screen.getByLabelText(/^Current mileage$/i)).toHaveValue("");
+  });
+
+  it("rejects negative and decimal mileage values", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Harness initialVehicleId="veh-1" />);
+
+    const mileage = await screen.findByLabelText(/^Current mileage$/i);
+    await user.clear(mileage);
+    await user.type(mileage, "-5");
+    await user.click(screen.getByRole("button", { name: /Save harness/i }));
+    expect(await screen.findByText(/whole number zero or greater|Mileage must be/i)).toBeInTheDocument();
+
+    await user.clear(mileage);
+    await user.type(mileage, "12.5");
+    await user.click(screen.getByRole("button", { name: /Save harness/i }));
+    expect(await screen.findByText(/whole number zero or greater|Mileage must be/i)).toBeInTheDocument();
+  });
+
+  it("leaves missing vehicle fields empty in the order snapshot", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      {
+        ...sampleVehicle,
+        id: "veh-sparse",
+        make: null,
+        model: null,
+        year: null,
+        vin: null,
+        licensePlate: null,
+        currentMileage: null,
+      },
+    ];
+    renderWithQuery(<Harness />);
+
+    await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
+    await user.click(await screen.findByRole("option", { name: /Untitled/i }));
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toEqual({
+        vehicleId: "veh-sparse",
+        device: "",
+        carNumber: "",
+        vin: "",
+        currentMileage: "",
+      });
+    });
+  });
+
+  it("replaces snapshot fields when the selected vehicle changes before save", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      sampleVehicle,
+      {
+        ...sampleVehicle,
+        id: "veh-2",
+        make: "Honda",
+        model: "Civic",
+        year: 2020,
+        vin: "2HGES16575H123456",
+        licensePlate: "XYZ999",
+        currentMileage: 12000,
+      },
+    ];
+    renderWithQuery(<Harness />);
+
+    await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+    await vi.waitFor(() => expect(readSnapshot().vehicleId).toBe("veh-1"));
+    expect(readSnapshot().currentMileage).toBe("45000");
+
+    await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
+    await user.click(await screen.findByRole("option", { name: /Honda Civic/i }));
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toEqual({
+        vehicleId: "veh-2",
+        device: "Honda Civic 2020",
+        carNumber: "XYZ999",
+        vin: "2HGES16575H123456",
+        currentMileage: "12000",
+      });
+    });
+  });
+
+  it("preserves existing order snapshot fields until the vehicle association changes", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      sampleVehicle,
+      {
+        ...sampleVehicle,
+        id: "veh-2",
+        make: "Honda",
+        model: "Civic",
+        year: null,
+        vin: null,
+        licensePlate: "XYZ999",
+        currentMileage: null,
+      },
+    ];
+    renderWithQuery(
+      <Harness
+        initialVehicleId="veh-1"
+        initialDevice="Legacy Device"
+        initialCarNumber="OLD1"
+        initialVin="1HGBH41JXMN109186"
+      />,
+    );
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toEqual({
+        vehicleId: "veh-1",
+        device: "Legacy Device",
+        carNumber: "OLD1",
+        vin: "1HGBH41JXMN109186",
+        currentMileage: "45000",
+      });
+    });
+
+    await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
+    await user.click(await screen.findByRole("option", { name: /Honda Civic/i }));
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toEqual({
+        vehicleId: "veh-2",
+        device: "Honda Civic",
+        carNumber: "XYZ999",
+        vin: "",
+        currentMileage: "",
+      });
+    });
   });
 });

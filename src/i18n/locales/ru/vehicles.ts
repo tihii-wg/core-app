@@ -55,6 +55,7 @@ export default {
   validation: {
     yearRange: "Год должен быть в диапазоне 1886–2200",
     mileageNonNegative: "Пробег не может быть отрицательным",
+    mileageWholeNonNegative: "Пробег должен быть целым числом не меньше нуля",
     displacementPositive: "Объём двигателя должен быть больше нуля",
     vinInvalid: "VIN должен содержать ровно 17 допустимых символов (A–Z и 0–9, без I, O и Q)",
   },

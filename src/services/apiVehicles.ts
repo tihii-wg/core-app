@@ -196,9 +196,16 @@ export async function assertVehicleAssignable(workspaceId: string, clientId: str
   return vehicleId;
 }
 
+/** Make / model / year joined the same way as vehicle list labels (empty when all missing). */
+export function vehicleMakeModelLabel(vehicle: Pick<Vehicle, "make" | "model" | "year">) {
+  return [vehicle.make, vehicle.model, vehicle.year != null ? String(vehicle.year) : null]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+}
+
 export function vehicleDisplayLabel(vehicle: Vehicle) {
-  const parts = [vehicle.make, vehicle.model, vehicle.year != null ? String(vehicle.year) : null].filter(Boolean);
-  const title = parts.join(" ").trim();
+  const title = vehicleMakeModelLabel(vehicle);
   const plate = vehicle.licensePlate?.trim();
   if (title && plate) return `${title} · ${plate}`;
   if (title) return title;
@@ -209,11 +216,27 @@ export function vehicleDisplayLabel(vehicle: Vehicle) {
 
 /** Compact identifying lines for a selected vehicle on order forms. */
 export function vehicleSummaryDetails(vehicle: Vehicle) {
-  const titleParts = [vehicle.make, vehicle.model, vehicle.year != null ? String(vehicle.year) : null].filter(Boolean);
-  const title = titleParts.join(" ").trim() || i18n.t("vehicles.untitled");
+  const title = vehicleMakeModelLabel(vehicle) || i18n.t("vehicles.untitled");
   const details = [
     vehicle.licensePlate ? `${i18n.t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
     vehicle.vin ? `${i18n.t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
   ].filter(Boolean) as string[];
   return { title, details };
+}
+
+/**
+ * Legacy order snapshot columns from a linked `vehicles` row.
+ * Missing vehicle fields become empty strings (API persists NULL via nullIfEmptyText).
+ */
+export function orderAssetFieldsFromVehicle(vehicle: Vehicle | null | undefined): {
+  device: string;
+  carNumber: string;
+  vin: string;
+} {
+  if (!vehicle) return { device: "", carNumber: "", vin: "" };
+  return {
+    device: vehicleMakeModelLabel(vehicle),
+    carNumber: vehicle.licensePlate?.trim() ?? "",
+    vin: vehicle.vin?.trim() ?? "",
+  };
 }
