@@ -27,6 +27,7 @@ const nav: Messages<typeof en> = {
     expandSidebar: "Развернуть боковую панель",
     collapseSidebar: "Свернуть боковую панель",
     collapse: "Свернуть",
+    countAria: "{{label}}, {{count}}",
   },
   workspace: {
     fallbackName: "Компания",

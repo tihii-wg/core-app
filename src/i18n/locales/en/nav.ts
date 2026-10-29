@@ -24,6 +24,7 @@ export default {
     expandSidebar: "Expand sidebar",
     collapseSidebar: "Collapse sidebar",
     collapse: "Collapse",
+    countAria: "{{label}}, {{count}}",
   },
   workspace: {
     fallbackName: "Company",

@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { languageFromPath } from "../i18n/languages";
 import { industryModuleLabel } from "../features/industries/industryWorkflow";
 import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
+import { useNavCounts } from "../features/nav/useNavCounts";
+import type { NavCountModule } from "../services/apiNavCounts";
 import { LogoMark } from "./Logo";
 
 interface NavItem {
@@ -46,12 +48,22 @@ const navGroups: NavGroup[] = [
 
 const settingsItem: NavItem = { module: "settings", labelKey: "nav.modules.settings", icon: Settings };
 
+const COUNTED_MODULES = new Set<AppModule>(["orders", "clients", "services", "inventory", "employees"]);
+
+function formatNavCount(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(count >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (count >= 10_000) return `${Math.round(count / 1000)}k`;
+  if (count >= 1_000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(count);
+}
+
 export function AppSidebar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const currentWorkspaceId = location.pathname.split("/")[2];
   const { workflow } = useIndustryWorkflow();
+  const { counts } = useNavCounts();
 
   const currentNavItem = location.pathname.split("/")[3];
 
@@ -69,13 +81,18 @@ export function AppSidebar() {
   const renderItem = ({ module, labelKey, icon: Icon, demo }: NavItem) => {
     const active = currentNavItem === module;
     const label = industryModuleLabel(workflow, module) || t(labelKey);
+    const count = COUNTED_MODULES.has(module) ? counts[module as NavCountModule] : undefined;
+    const showCount = !collapsed && typeof count === "number";
+    const accessibleLabel =
+      typeof count === "number" ? t("nav.sidebar.countAria", { label, count }) : collapsed ? label : undefined;
+
     return (
       <li key={module}>
         <button
           type="button"
           onClick={() => handleNavClick(module)}
           aria-current={active ? "page" : undefined}
-          aria-label={collapsed ? label : undefined}
+          aria-label={accessibleLabel}
           title={collapsed ? label : undefined}
           className={cn(
             "group relative flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium outline-none transition-colors duration-150 focus-visible:ring-[3px] focus-visible:ring-ring/35",
@@ -89,12 +106,27 @@ export function AppSidebar() {
             aria-hidden="true"
             className={cn("size-4 shrink-0 transition-colors", active ? "text-primary" : "text-subtle-foreground group-hover:text-foreground")}
           />
-          {!collapsed && <span className="truncate">{label}</span>}
+          {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
           {!collapsed && demo && (
             <span aria-hidden="true" className="ml-auto rounded px-1.5 py-px text-[10px] font-medium text-info ring-1 ring-info/25 ring-inset">
               {t("nav.sidebar.demo")}
             </span>
           )}
+          {showCount ? (
+            <span
+              data-testid={`nav-count-${module}`}
+              aria-hidden="true"
+              title={String(count)}
+              className={cn(
+                "ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-medium tabular-nums tracking-tight",
+                active
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-sidebar-accent text-subtle-foreground group-hover:text-foreground"
+              )}
+            >
+              {formatNavCount(count)}
+            </span>
+          ) : null}
         </button>
       </li>
     );
