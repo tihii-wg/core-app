@@ -47,7 +47,7 @@ import { isOrderOverdue, type DeadlineFilter } from "./orderVisibility";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { useGetPayments } from "../finance/usePayments";
-import { orderPaymentBalance } from "../finance/paymentCalculations";
+import { orderHasOutstandingBalance, orderPaymentBalance } from "../finance/paymentCalculations";
 
 const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
@@ -64,6 +64,8 @@ export function Orders() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
+  /** Toggle: when true, list only orders with ledger remaining > 0. */
+  const [awaitingPaymentFilter, setAwaitingPaymentFilter] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState(() => new Set<OrderToggleableColumn>(readOrderVisibleColumns()));
@@ -93,11 +95,15 @@ export function Orders() {
   };
 
   const hasActiveFilters =
-    Boolean(debouncedSearch) || statusFilter !== "all" || deadlineFilter !== "all" || employeeFilter !== "all";
+    Boolean(debouncedSearch) ||
+    statusFilter !== "all" ||
+    deadlineFilter !== "all" ||
+    employeeFilter !== "all" ||
+    awaitingPaymentFilter;
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, deadlineFilter, employeeFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, deadlineFilter, employeeFilter, awaitingPaymentFilter, pageSize]);
 
   const {
     orders,
@@ -134,8 +140,23 @@ export function Orders() {
     return map;
   }, [payments]);
 
+  const displayedOrders = useMemo(() => {
+    if (!awaitingPaymentFilter) return orders;
+    return orders.filter((order) => orderHasOutstandingBalance(order, payments));
+  }, [awaitingPaymentFilter, orders, payments]);
+
+  const displayedTotal = awaitingPaymentFilter ? displayedOrders.length : total;
+
   const awaitingPayment = useOrdersAwaitingPayment();
   const { canWrite: canCreateOrders } = useWorkspaceSubscription();
+
+  function deactivateAwaitingPaymentFilter() {
+    setAwaitingPaymentFilter(false);
+  }
+
+  function toggleAwaitingPaymentFilter() {
+    setAwaitingPaymentFilter((active) => !active);
+  }
 
   // Keep local page in sync when the server clamps (e.g. last row on a page was deleted).
   useEffect(() => {
@@ -299,10 +320,14 @@ export function Orders() {
     setStatusFilter("all");
     setDeadlineFilter("all");
     setEmployeeFilter("all");
+    setAwaitingPaymentFilter(false);
     setPage(1);
   };
 
   function emptyFilterState() {
+    if (awaitingPaymentFilter && !debouncedSearch && statusFilter === "all" && deadlineFilter === "all" && employeeFilter === "all") {
+      return <EmptyState title={t("orders.empty.noMatchesTitle")} description={t("orders.awaitingPayment.filterActiveHint")} />;
+    }
     if (deadlineFilter === "overdue" && !debouncedSearch && statusFilter === "all" && employeeFilter === "all") {
       return <EmptyState title={t("orders.empty.noOverdueTitle")} description={t("orders.empty.noOverdueDescription")} />;
     }
@@ -317,13 +342,17 @@ export function Orders() {
   }
 
   const headerDescription = hasActiveFilters
-    ? t("orders.matchingCount", { count: total })
-    : t("orders.totalCount", { count: total });
+    ? t("orders.matchingCount", { count: displayedTotal })
+    : t("orders.totalCount", { count: displayedTotal });
+
+  const listTotal = awaitingPaymentFilter ? displayedOrders.length : total;
+  const listRangeFrom = listTotal === 0 ? 0 : awaitingPaymentFilter ? (displayedOrders.length === 0 ? 0 : 1) : rangeFrom;
+  const listRangeTo = listTotal === 0 ? 0 : awaitingPaymentFilter ? displayedOrders.length : rangeTo;
 
   const paginationSummary =
-    total === 0
+    listTotal === 0
       ? null
-      : `${t("orders.pagination.showing", { from: rangeFrom, to: rangeTo, total })} · ${t("orders.pagination.pageOf", {
+      : `${t("orders.pagination.showing", { from: listRangeFrom, to: listRangeTo, total: listTotal })} · ${t("orders.pagination.pageOf", {
           page: resolvedPage,
           pageCount,
         })}`;
@@ -334,11 +363,23 @@ export function Orders() {
         title={t("orders.title")}
         description={headerDescription}
         aside={
-          <div className="flex h-[calc(3rem*1.5)] min-w-0 max-w-full items-center gap-3 rounded-lg border border-border bg-card px-3.5 shadow-xs sm:max-w-[16rem]">
+          <button
+            type="button"
+            aria-pressed={awaitingPaymentFilter}
+            aria-label={t("orders.awaitingPayment.filterLabel")}
+            title={awaitingPaymentFilter ? t("orders.awaitingPayment.filterActiveHint") : t("orders.awaitingPayment.filterLabel")}
+            onClick={toggleAwaitingPaymentFilter}
+            className={cn(
+              "flex h-[calc(3rem*1.5)] min-w-0 max-w-full cursor-pointer items-center gap-3 rounded-lg border px-3.5 text-left shadow-xs transition-colors sm:max-w-[16rem]",
+              awaitingPaymentFilter
+                ? "border-primary/40 bg-primary/10 ring-1 ring-primary/20"
+                : "border-border bg-card hover:bg-accent/40",
+            )}
+          >
             <span
               className={cn(
                 "flex size-8 shrink-0 items-center justify-center rounded-md",
-                statIconVariants[awaitingPayment.amount > 0 ? "primary" : "default"],
+                statIconVariants[awaitingPaymentFilter || awaitingPayment.amount > 0 ? "primary" : "default"],
               )}
             >
               <Banknote aria-hidden="true" className="size-4" />
@@ -360,7 +401,7 @@ export function Orders() {
                     : t("orders.awaitingPayment.allPaid")}
               </p>
             </div>
-          </div>
+          </button>
         }
         actions={
           canCreateOrders ? (
@@ -386,21 +427,30 @@ export function Orders() {
               label: t("common.status"),
               options: statusOptions,
               value: statusFilter,
-              onChange: (value) => setStatusFilter(value as OrderStatus | "all"),
+              onChange: (value) => {
+                deactivateAwaitingPaymentFilter();
+                setStatusFilter(value as OrderStatus | "all");
+              },
             },
             {
               key: "deadline",
               label: t("orders.filters.deadline"),
               options: deadlineOptions,
               value: deadlineFilter,
-              onChange: (value) => setDeadlineFilter(value as DeadlineFilter),
+              onChange: (value) => {
+                deactivateAwaitingPaymentFilter();
+                setDeadlineFilter(value as DeadlineFilter);
+              },
             },
             {
               key: "employee",
               label: t("orders.filters.employee"),
               options: employeeFilterOptions,
               value: employeeFilter,
-              onChange: setEmployeeFilter,
+              onChange: (value) => {
+                deactivateAwaitingPaymentFilter();
+                setEmployeeFilter(value);
+              },
             },
           ]}
           onClearFilters={clearFilters}
@@ -423,7 +473,7 @@ export function Orders() {
               </div>
             ))}
           </div>
-        ) : orders.length === 0 ? (
+        ) : displayedOrders.length === 0 ? (
           <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
             {ordersError ? (
               <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
@@ -435,7 +485,7 @@ export function Orders() {
           </div>
         ) : (
           <div className="space-y-2">
-            {orders.map((order) => (
+            {displayedOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
@@ -462,7 +512,7 @@ export function Orders() {
       ) : (
         <DataTable
           columns={columns}
-          data={orders}
+          data={displayedOrders}
           keyExtractor={(order) => order.id}
           onRowClick={orderDetails.openOrder}
           isLoading={ordersLoading}

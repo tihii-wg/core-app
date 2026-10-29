@@ -187,6 +187,16 @@ export function orderPaymentBalance(
   return computePaymentBalance(order.totalPrice, linked, legacyPaid);
 }
 
+/** True when a non-cancelled order still has ledger remaining due (unpaid or partial). */
+export function orderHasOutstandingBalance(
+  order: Pick<Order, "id" | "totalPrice" | "isPaid" | "status">,
+  payments: LedgerPayment[],
+  invoiceIdForOrder?: string | null,
+): boolean {
+  if (order.status === "cancelled") return false;
+  return orderPaymentBalance(order, payments, invoiceIdForOrder).remaining > MONEY_EPS;
+}
+
 /**
  * Invoice balance. When `orderId` is known, order-only ledger rows
  * (`order_id` set, `invoice_id` null) also reduce the invoice remaining —

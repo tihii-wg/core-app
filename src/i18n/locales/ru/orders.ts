@@ -15,6 +15,8 @@ const orders: Messages<typeof en> = {
     unpaidCount_other: "{{count}} неоплаченного заказа",
     allPaid: "Все заказы оплачены",
     loadFailed: "Не удалось загрузить сумму к оплате",
+    filterLabel: "Показать заказы, ожидающие оплаты",
+    filterActiveHint: "Показаны заказы с остатком к оплате. Нажмите ещё раз, чтобы сбросить фильтр.",
   },
   createOrder: "Создать заказ",
   searchPlaceholder: "Поиск заказов...",

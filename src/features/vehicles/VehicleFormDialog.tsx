@@ -42,6 +42,16 @@ export function VehicleFormDialog({ open, onOpenChange, title, description, init
     onOpenChange(false);
   }
 
+  // Avoid a nested <form> inside order/client forms: even portaled dialogs bubble
+  // submit through the React tree and can reset/submit the parent RHF form.
+  const save = handleSubmit(async (values) => {
+    try {
+      await submit(values);
+    } catch {
+      // Mutation hooks toast API errors; RHF shows field validation.
+    }
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -49,16 +59,15 @@ export function VehicleFormDialog({ open, onOpenChange, title, description, init
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form
+        <div
           className="space-y-4"
-          onSubmit={(event) => {
-            void handleSubmit(async (values) => {
-              try {
-                await submit(values);
-              } catch {
-                // Mutation hooks toast API errors; RHF shows field validation.
-              }
-            })(event);
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.tagName === "TEXTAREA") return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (!busy) void save();
           }}
         >
           <VehicleFields register={register} setValue={setValue} watch={watch} errors={errors} disabled={busy} />
@@ -67,11 +76,19 @@ export function VehicleFormDialog({ open, onOpenChange, title, description, init
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={busy}>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void save();
+              }}
+            >
               {busy ? <Spinner className="size-4" /> : t("common.save")}
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

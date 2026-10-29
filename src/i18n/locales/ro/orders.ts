@@ -13,6 +13,8 @@ const orders: Messages<typeof en> = {
     unpaidCount_other: "{{count}} de comenzi neachitate",
     allPaid: "Toate comenzile sunt plătite",
     loadFailed: "Totalul neachitat nu a putut fi încărcat",
+    filterLabel: "Afișează comenzile în așteptarea plății",
+    filterActiveHint: "Se afișează comenzile cu sold restant. Apăsați din nou pentru a anula filtrul.",
   },
   createOrder: "Creează comandă",
   searchPlaceholder: "Caută comenzi...",

@@ -6,7 +6,7 @@ import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
-import type { addNewOrderFormData, CreateMadalProps } from "../../lib/types";
+import type { addNewOrderFormData, CreateMadalProps, Vehicle } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import { catalogServiceToOrderLine, sumOrderServiceLines } from "../services/orderServiceLine";
@@ -27,7 +27,7 @@ import { industryClientCopy } from "../industries/industryWorkflow";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
+import { clientVehiclesQueryKey, useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
@@ -140,17 +140,28 @@ export default function AddNewOrderForm({
       const selectedVehicleId = data.vehicleId?.trim() || "";
       if (showVehicles && selectedVehicleId) {
         try {
-          const selectedVehicle = clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
-          if (!selectedVehicle) throw new Error(t("vehicles.errors.invalidSelection"));
-          guardWrite();
-          // Persist visit mileage before creating the order so a failed mileage write never reports order success.
-          await persistOrderVehicleMileage({
-            workspaceId,
-            clientId: selectedVehicle.clientId,
-            vehicle: selectedVehicle,
-            formMileage: data.currentMileage,
-            queryClient,
-          });
+          // Prefer the live hook list; fall back to cache for a vehicle just created inline
+          // before the parent form re-renders from query invalidation.
+          const cachedVehicles =
+            queryClient.getQueryData<Vehicle[]>(clientVehiclesQueryKey(workspaceId, selectedClientId)) ?? [];
+          const selectedVehicle =
+            clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ??
+            cachedVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+          const hasVisitMileage = Boolean(data.currentMileage?.trim());
+          if (!selectedVehicle) {
+            // Empty mileage needs no vehicle row write — keep the order create unblocked after inline create.
+            if (hasVisitMileage) throw new Error(t("vehicles.errors.invalidSelection"));
+          } else {
+            guardWrite();
+            // Persist visit mileage before creating the order so a failed mileage write never reports order success.
+            await persistOrderVehicleMileage({
+              workspaceId,
+              clientId: selectedVehicle.clientId,
+              vehicle: selectedVehicle,
+              formMileage: data.currentMileage,
+              queryClient,
+            });
+          }
         } catch (error) {
           toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
           throw error;

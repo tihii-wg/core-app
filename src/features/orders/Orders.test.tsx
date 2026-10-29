@@ -149,6 +149,36 @@ vi.mock("../invoices/useCreateInvoice", () => ({
   useCreateInvoice: () => ({ mutate: invoiceHooks.mutate, isPending: invoiceHooks.isPending }),
 }));
 
+const paymentsState = vi.hoisted(() => ({
+  payments: [] as {
+    id: string;
+    orderId: string | null;
+    invoiceId: string | null;
+    amount: number;
+    kind: "payment" | "refund";
+    currency: string;
+    paymentMethod: string;
+    paidAt: string;
+    relatedPaymentId: string | null;
+    notes: string | null;
+    createdBy: string | null;
+    createdAt: string;
+    workspaceId: string;
+  }[],
+}));
+
+vi.mock("../finance/usePayments", () => ({
+  useGetPayments: () => ({
+    payments: paymentsState.payments,
+    isLoading: false,
+    error: null,
+    isUnavailable: false,
+    refetch: vi.fn(),
+  }),
+  useRecordPayment: () => ({ mutate: vi.fn(), isPending: false }),
+  useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 beforeEach(() => {
   stubLocalStorage();
   invoiceHooks.invoices = [];
@@ -162,6 +192,10 @@ beforeEach(() => {
   order.createdById = "user-1";
   order.createdByName = "Olga Owner";
   order.clientPhone = "+37361111111";
+  order.status = "new";
+  order.isPaid = false;
+  order.paymentStatus = "unpaid";
+  order.totalPrice = 40;
   ordersState.list = [order];
   ordersState.total = 1;
   ordersState.page = 1;
@@ -171,6 +205,7 @@ beforeEach(() => {
   awaitingPaymentState.count = 1;
   awaitingPaymentState.isLoading = false;
   awaitingPaymentState.error = null;
+  paymentsState.payments = [];
 });
 
 function manyOrders(count: number): Order[] {
@@ -204,8 +239,77 @@ describe("Orders page", () => {
   it("shows an Awaiting Payment card next to the Orders heading", () => {
     renderWithQuery(<Orders />);
 
+    expect(screen.getByRole("button", { name: /Show orders awaiting payment/i })).toBeInTheDocument();
     expect(screen.getByText("Awaiting Payment")).toBeInTheDocument();
     expect(screen.getByText("1 unpaid order")).toBeInTheDocument();
+  });
+
+  it("toggles the Awaiting Payment filter on first click and off on second click", async () => {
+    const user = userEvent.setup();
+    const unpaid = { ...order, id: "unpaid-1", orderNumber: "ORD-UNPAID", totalPrice: 100, isPaid: false, paymentStatus: "unpaid" as const };
+    const paid = {
+      ...order,
+      id: "paid-1",
+      orderNumber: "ORD-PAID",
+      totalPrice: 80,
+      isPaid: true,
+      paymentStatus: "paid" as const,
+      status: "paid" as const,
+    };
+    const partial = { ...order, id: "partial-1", orderNumber: "ORD-PARTIAL", totalPrice: 100, isPaid: false, paymentStatus: "partial" as const };
+    ordersState.list = [unpaid, paid, partial];
+    ordersState.total = 3;
+    paymentsState.payments = [
+      {
+        id: "p-partial",
+        orderId: "partial-1",
+        invoiceId: null,
+        amount: 40,
+        kind: "payment",
+        currency: "MDL",
+        paymentMethod: "cash",
+        paidAt: "2026-01-01T00:00:00.000Z",
+        relatedPaymentId: null,
+        notes: null,
+        createdBy: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        workspaceId: "ws-1",
+      },
+    ];
+
+    renderWithQuery(<Orders />);
+    expect(screen.getByText("ORD-UNPAID")).toBeInTheDocument();
+    expect(screen.getByText("ORD-PAID")).toBeInTheDocument();
+    expect(screen.getByText("ORD-PARTIAL")).toBeInTheDocument();
+
+    const toggle = screen.getByRole("button", { name: /Show orders awaiting payment/i });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("ORD-UNPAID")).toBeInTheDocument();
+    expect(screen.getByText("ORD-PARTIAL")).toBeInTheDocument();
+    expect(screen.queryByText("ORD-PAID")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("ORD-UNPAID")).toBeInTheDocument();
+    expect(screen.getByText("ORD-PAID")).toBeInTheDocument();
+    expect(screen.getByText("ORD-PARTIAL")).toBeInTheDocument();
+  });
+
+  it("deactivates Awaiting Payment when another filter tab is selected", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Orders />);
+
+    const toggle = screen.getByRole("button", { name: /Show orders awaiting payment/i });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("combobox", { name: /^Status$/i }));
+    await user.click(await screen.findByRole("option", { name: /^New$/i }));
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   it("shows the server pagination summary, page controls, and page-size choices", () => {

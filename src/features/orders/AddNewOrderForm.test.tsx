@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,8 +77,13 @@ vi.mock("../vehicles/useGetClientVehicles", () => ({
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
 }));
 
+const createVehicleMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../vehicles/useVehicleMutations", () => ({
-  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateVehicle: () => ({
+    mutateAsync: createVehicleMock,
+    isPending: false,
+  }),
   useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -110,6 +115,28 @@ describe("AddNewOrderForm client validation", () => {
     createOrderMock.mockResolvedValue({ id: "order-1" });
     persistMileageMock.mockReset();
     persistMileageMock.mockResolvedValue(null);
+    createVehicleMock.mockReset();
+    createVehicleMock.mockImplementation(async (input: { make?: string | null; model?: string | null; vin?: string | null; licensePlate?: string | null }) => {
+      const created = {
+        id: "veh-new",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: input.make?.trim() || "Honda",
+        model: input.model?.trim() || "Civic",
+        year: 2020,
+        vin: input.vin?.trim() || "2HGES16575H123456",
+        licensePlate: input.licensePlate?.trim() || "XYZ999",
+        initialMileage: null,
+        currentMileage: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      };
+      vehiclesState.vehicles = [...vehiclesState.vehicles, created];
+      return created;
+    });
     employeesState.employees = [];
     employeesState.role = "owner";
     employeesState.industrySlug = "auto_repair";
@@ -126,8 +153,20 @@ describe("AddNewOrderForm client validation", () => {
     const setCreateModalOpen = vi.fn();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" />);
 
-    await user.click(saveDraftButton());
-
+    const draft = saveDraftButton();
+    await user.click(draft);
+    await new Promise((r) => setTimeout(r, 200));
+    if (createOrderMock.mock.calls.length === 0) {
+      throw new Error(
+        "no createOrder: " +
+          JSON.stringify({
+            disabled: (draft as HTMLButtonElement).disabled,
+            vehicles: vehiclesState.vehicles.map((v) => v.id),
+            summary: !!screen.queryByTestId("selected-vehicle-summary"),
+            body: document.body.innerText.slice(0, 1500),
+          }),
+      );
+    }
     await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(1));
     expect(createOrderMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -514,5 +553,77 @@ describe("AddNewOrderForm client validation", () => {
 
     expect(await screen.findByRole("option", { name: "Alexander" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Owner Name" })).not.toBeInTheDocument();
+  });
+
+  it("creates an inline vehicle without submitting the order, then creates the order only on explicit save", async () => {
+    employeesState.employees = [{ id: "emp-1", name: "Ada", status: "active", role: "technician", profile_id: "user-1" }];
+    const user = userEvent.setup();
+    const setCreateModalOpen = vi.fn();
+    renderWithQuery(
+      <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" initialClientId="client-1" initialClientName="Ada" />,
+    );
+
+    await addCustomService(user, "Oil change", "80");
+    await user.type(screen.getByLabelText(/^Description$/i), "Needs oil and filter");
+    const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });
+    await user.click(assignee);
+    await user.click(await screen.findByRole("option", { name: "Ada" }));
+
+    await user.click(screen.getByRole("button", { name: /Add vehicle/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/^Make$/), "Honda");
+    await user.type(within(dialog).getByLabelText(/^Model$/), "Civic");
+    await user.type(within(dialog).getByLabelText(/^VIN$/), "2HGES16575H123456");
+    await user.type(within(dialog).getByLabelText(/License plate/i), "XYZ999");
+    await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
+
+    await vi.waitFor(() => expect(createVehicleMock).toHaveBeenCalledTimes(1));
+    expect(createOrderMock).not.toHaveBeenCalled();
+    expect(setCreateModalOpen).not.toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("selected-vehicle-summary")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Needs oil and filter")).toBeInTheDocument();
+    expect(screen.getByText(/Oil change/i)).toBeInTheDocument();
+    expect(assignee).toHaveTextContent("Ada");
+
+    await user.click(saveDraftButton());
+
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(1));
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vehicleId: "veh-new",
+        device: "Honda Civic 2020",
+        carNumber: "XYZ999",
+        vin: "2HGES16575H123456",
+        clientId: "client-1",
+        services: [expect.objectContaining({ serviceName: "Oil change", price: 80 })],
+      }),
+    );
+    expect(setCreateModalOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps the order form open with entered values when inline vehicle creation fails", async () => {
+    createVehicleMock.mockRejectedValueOnce(new Error("vehicle create failed"));
+    const user = userEvent.setup();
+    const setCreateModalOpen = vi.fn();
+    renderWithQuery(
+      <AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" initialClientId="client-1" initialClientName="Ada" />,
+    );
+
+    await addCustomService(user, "Brake check", "50");
+    await user.type(screen.getByLabelText(/^Description$/i), "Squeaky brakes");
+
+    await user.click(screen.getByRole("button", { name: /Add vehicle/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/^Make$/), "Honda");
+    await user.type(within(dialog).getByLabelText(/^VIN$/), "2HGES16575H123456");
+    await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
+
+    await vi.waitFor(() => expect(createVehicleMock).toHaveBeenCalledTimes(1));
+    expect(createOrderMock).not.toHaveBeenCalled();
+    expect(setCreateModalOpen).not.toHaveBeenCalledWith(false);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Squeaky brakes")).toBeInTheDocument();
+    expect(screen.getByText(/Brake check/i)).toBeInTheDocument();
   });
 });

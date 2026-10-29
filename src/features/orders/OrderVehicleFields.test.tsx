@@ -70,6 +70,7 @@ function Harness({
   initialVin = "",
   initialCurrentMileage = "",
   mileageMode = "empty",
+  onParentSubmit,
 }: {
   clientId?: string;
   initialVehicleId?: string;
@@ -78,6 +79,7 @@ function Harness({
   initialVin?: string;
   initialCurrentMileage?: string;
   mileageMode?: "empty" | "vehicle";
+  onParentSubmit?: () => void;
 }) {
   const workflow = industryWorkflow("auto_repair");
   const copy = industryOrderCopy(workflow);
@@ -94,7 +96,13 @@ function Harness({
   const values = watch();
 
   return (
-    <div>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onParentSubmit?.();
+        void handleSubmit(() => undefined)(event);
+      }}
+    >
       <OrderVehicleFields
         control={control}
         setValue={setValue}
@@ -111,9 +119,7 @@ function Harness({
         preserveHiddenValues
         hideVisibleFields
       />
-      <button type="button" onClick={() => void handleSubmit(() => undefined)()}>
-        Save harness
-      </button>
+      <button type="submit">Save harness</button>
       <pre data-testid="asset-snapshot">{JSON.stringify({
         vehicleId: values.vehicleId,
         device: values.device,
@@ -121,7 +127,7 @@ function Harness({
         vin: values.vin,
         currentMileage: values.currentMileage,
       })}</pre>
-    </div>
+    </form>
   );
 }
 
@@ -194,7 +200,8 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
 
   it("shows a summary after creating a vehicle from the order form Add vehicle action", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<Harness />);
+    const onParentSubmit = vi.fn();
+    renderWithQuery(<Harness onParentSubmit={onParentSubmit} />);
 
     await user.click(screen.getByRole("button", { name: /Add vehicle/i }));
     const dialog = await screen.findByRole("dialog");
@@ -204,6 +211,8 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
 
     await vi.waitFor(() => expect(vehiclesState.createVehicle).toHaveBeenCalled());
+    expect(onParentSubmit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(await screen.findByTestId("selected-vehicle-summary")).toBeInTheDocument();
     expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
     await vi.waitFor(() => {
@@ -212,7 +221,66 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Honda Civic 2020",
         carNumber: "XYZ999",
         vin: "2HGES16575H123456",
+        currentMileage: "",
       });
+    });
+  });
+
+  it("keeps the order vehicle selection when create succeeds before the list includes the new row", async () => {
+    const user = userEvent.setup();
+    vehiclesState.createVehicle.mockImplementation(async (input: { make?: string | null; model?: string | null; vin?: string | null; licensePlate?: string | null }) => {
+      // Simulate a stale query that has not yet picked up the created vehicle.
+      return {
+        ...sampleVehicle,
+        id: "veh-pending",
+        make: input.make?.trim() || "Honda",
+        model: input.model?.trim() || "Civic",
+        year: 2020,
+        vin: input.vin?.trim() || "2HGES16575H123456",
+        licensePlate: input.licensePlate?.trim() || "XYZ999",
+        currentMileage: null,
+      };
+    });
+    renderWithQuery(<Harness />);
+
+    await user.click(screen.getByRole("button", { name: /Add vehicle/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/^Make$/), "Honda");
+    await user.type(within(dialog).getByLabelText(/^VIN$/), "2HGES16575H123456");
+    await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toMatchObject({
+        vehicleId: "veh-pending",
+        device: "Honda Civic 2020",
+        carNumber: "XYZ999",
+        vin: "2HGES16575H123456",
+      });
+    });
+    expect(screen.getByTestId("selected-vehicle-summary")).toBeInTheDocument();
+  });
+
+  it("leaves the order form selection unchanged when vehicle creation fails", async () => {
+    const user = userEvent.setup();
+    const onParentSubmit = vi.fn();
+    vehiclesState.createVehicle.mockRejectedValueOnce(new Error("create failed"));
+    renderWithQuery(<Harness onParentSubmit={onParentSubmit} />);
+
+    await user.click(screen.getByRole("button", { name: /Add vehicle/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/^Make$/), "Honda");
+    await user.type(within(dialog).getByLabelText(/^VIN$/), "2HGES16575H123456");
+    await user.click(within(dialog).getByRole("button", { name: /^Save$/i }));
+
+    await vi.waitFor(() => expect(vehiclesState.createVehicle).toHaveBeenCalled());
+    expect(onParentSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(readSnapshot()).toMatchObject({
+      vehicleId: "",
+      device: "",
+      carNumber: "",
+      vin: "",
+      currentMileage: "",
     });
   });
 

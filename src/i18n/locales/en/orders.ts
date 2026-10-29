@@ -8,6 +8,8 @@ export default {
     unpaidCount_other: "{{count}} unpaid orders",
     allPaid: "All orders paid",
     loadFailed: "Could not load unpaid total",
+    filterLabel: "Show orders awaiting payment",
+    filterActiveHint: "Showing orders with a balance due. Click again to clear.",
   },
   createOrder: "Create Order",
   searchPlaceholder: "Search orders...",

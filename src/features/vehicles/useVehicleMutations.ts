@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
-import type { VehicleInput } from "../../lib/types";
+import type { Vehicle, VehicleInput } from "../../lib/types";
 import { archiveVehicle, createVehicle, updateVehicle } from "../../services/apiVehicles";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
@@ -18,7 +18,13 @@ export function useCreateVehicle(clientId: string) {
       return createVehicle(workspaceId, clientId, input);
     },
     onMutate: () => toast.loading(i18n.t("vehicles.toast.creating"), { id: "vehicle-mutate" }),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      // Keep the new row available immediately so order forms can select it before refetch settles.
+      queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, clientId), (previous: Vehicle[] | undefined) => {
+        const list = previous ?? [];
+        if (list.some((vehicle) => vehicle.id === created.id)) return list;
+        return [created, ...list];
+      });
       void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId] });
       toast.success(i18n.t("vehicles.toast.created"), { id: "vehicle-mutate" });
     },

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { Control, FieldErrors, FieldValues, Path, PathValue, UseFormRegister, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
@@ -66,27 +67,66 @@ export function OrderVehicleFields<T extends FieldValues>({
   const { vehicles, isLoading } = useGetClientVehicles(clientId || null);
   const createVehicle = useCreateVehicle(clientId);
   const [createOpen, setCreateOpen] = useState(false);
+  /** Optimistic row so the selector/summary work before the client vehicles query settles. */
+  const [createdVehicle, setCreatedVehicle] = useState<Vehicle | null>(null);
   /** Skip the first sync so edit forms keep existing order snapshot columns until the user changes vehicle. */
   const skipInitialAssetSync = useRef(true);
   /** Last vehicle id we wrote device/carNumber/vin for (waits until the row is in `vehicles`). */
   const syncedAssetVehicleId = useRef<string | null>(null);
   /** Last vehicle id we synced currentMileage for. */
   const syncedMileageVehicleId = useRef<string | null>(null);
+  /** Protect a just-created selection from being cleared while the list refetches / Select resyncs. */
+  const pendingCreatedVehicleId = useRef<string | null>(null);
 
-  const selectedVehicle = selectedVehicleId ? vehicles.find((vehicle) => vehicle.id === selectedVehicleId) : undefined;
+  const vehiclesForSelect = useMemo(() => {
+    if (!createdVehicle) return vehicles;
+    if (vehicles.some((vehicle) => vehicle.id === createdVehicle.id)) return vehicles;
+    return [createdVehicle, ...vehicles];
+  }, [createdVehicle, vehicles]);
+
+  const selectedVehicle = selectedVehicleId
+    ? vehiclesForSelect.find((vehicle) => vehicle.id === selectedVehicleId)
+    : undefined;
   const mileageError = errors?.currentMileage as { message?: string } | undefined;
+
+  useEffect(() => {
+    if (!createdVehicle) return;
+    // Drop the optimistic row once the query list includes it. Keep pendingCreatedVehicleId
+    // until the selection is stable — Radix Select can emit a spurious clear while syncing.
+    if (vehicles.some((vehicle) => vehicle.id === createdVehicle.id)) {
+      setCreatedVehicle(null);
+    }
+  }, [createdVehicle, vehicles]);
+
+  useEffect(() => {
+    const pendingId = pendingCreatedVehicleId.current;
+    if (!pendingId) return;
+    if (selectedVehicleId === pendingId && vehicles.some((vehicle) => vehicle.id === pendingId)) {
+      pendingCreatedVehicleId.current = null;
+    }
+  }, [selectedVehicleId, vehicles]);
 
   useEffect(() => {
     if (!clientId) {
       setValue(vehicleIdPath, "" as PathValue<T, Path<T>>);
+      setCreatedVehicle(null);
+      pendingCreatedVehicleId.current = null;
       return;
     }
     // Wait until the client vehicle list has loaded so a brief empty array does not clear a valid selection.
     if (isLoading) return;
-    if (selectedVehicleId && !vehicles.some((vehicle) => vehicle.id === selectedVehicleId)) {
+    if (
+      selectedVehicleId &&
+      pendingCreatedVehicleId.current === selectedVehicleId &&
+      !vehiclesForSelect.some((vehicle) => vehicle.id === selectedVehicleId)
+    ) {
+      // Keep the just-created selection until the optimistic/cache row is available.
+      return;
+    }
+    if (selectedVehicleId && !vehiclesForSelect.some((vehicle) => vehicle.id === selectedVehicleId)) {
       setValue(vehicleIdPath, "" as PathValue<T, Path<T>>);
     }
-  }, [clientId, isLoading, selectedVehicleId, setValue, vehicleIdPath, vehicles]);
+  }, [clientId, isLoading, selectedVehicleId, setValue, vehicleIdPath, vehiclesForSelect]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -143,7 +183,15 @@ export function OrderVehicleFields<T extends FieldValues>({
         render={({ field }) => (
           <Select
             value={(field.value as string) || NONE}
-            onValueChange={(value) => field.onChange(value === NONE ? "" : value)}
+            onValueChange={(value) => {
+              const next = value === NONE ? "" : value;
+              // Radix Select (especially inside a parent <form>) can emit an empty value while
+              // options resync after an inline create — do not drop the new selection.
+              if (!next && pendingCreatedVehicleId.current && pendingCreatedVehicleId.current === field.value) {
+                return;
+              }
+              field.onChange(next);
+            }}
             disabled={disabled || isLoading}
           >
             <SelectTrigger id="order-vehicle" className="w-full min-w-0">
@@ -151,7 +199,7 @@ export function OrderVehicleFields<T extends FieldValues>({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>{t("vehicles.noneSelected")}</SelectItem>
-              {vehicles.map((vehicle: Vehicle) => (
+              {vehiclesForSelect.map((vehicle: Vehicle) => (
                 <SelectItem key={vehicle.id} value={vehicle.id}>
                   {vehicleDisplayLabel(vehicle)}
                 </SelectItem>
@@ -188,7 +236,7 @@ export function OrderVehicleFields<T extends FieldValues>({
         </div>
       ) : null}
 
-      {!isLoading && vehicles.length === 0 ? (
+      {!isLoading && vehiclesForSelect.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t("vehicles.emptyForOrder")}</p>
       ) : null}
 
@@ -200,6 +248,12 @@ export function OrderVehicleFields<T extends FieldValues>({
         submitting={createVehicle.isPending}
         onSubmit={async (input) => {
           const created = await createVehicle.mutateAsync(input);
+          pendingCreatedVehicleId.current = created.id;
+          // Ensure the new option exists in the Select before setting its value; otherwise Radix
+          // can emit an empty onValueChange while options catch up (worse inside a parent form).
+          flushSync(() => {
+            setCreatedVehicle(created);
+          });
           setValue(vehicleIdPath, created.id as PathValue<T, Path<T>>, { shouldDirty: true });
           syncedAssetVehicleId.current = created.id;
           syncedMileageVehicleId.current = created.id;

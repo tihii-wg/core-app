@@ -13,6 +13,7 @@ import {
   invoiceOrderLockDecision,
   ledgerCurrencyGate,
   normalizeCurrencyCode,
+  orderHasOutstandingBalance,
   orderPaymentBalance,
   paymentsAffectingInvoice,
   paymentsAffectingOrder,
@@ -107,6 +108,20 @@ describe("partial and full payments", () => {
     expect(orderPaymentBalance(o, [payment({ id: "p1", kind: "payment", amount: 40, orderId: "o1" }), payment({ id: "p2", kind: "payment", amount: 60, orderId: "o1" })]).status).toBe(
       "paid",
     );
+  });
+
+  it("orderHasOutstandingBalance keeps unpaid and partial, excludes paid and cancelled", () => {
+    const unpaid = order({ id: "o1", totalPrice: 100 });
+    const partialRows = [payment({ id: "p1", kind: "payment", amount: 40, orderId: "o1" })];
+    const paidRows = [
+      payment({ id: "p1", kind: "payment", amount: 40, orderId: "o1" }),
+      payment({ id: "p2", kind: "payment", amount: 60, orderId: "o1" }),
+    ];
+    expect(orderHasOutstandingBalance(unpaid, [])).toBe(true);
+    expect(orderHasOutstandingBalance(unpaid, partialRows)).toBe(true);
+    expect(orderHasOutstandingBalance(unpaid, paidRows)).toBe(false);
+    expect(orderHasOutstandingBalance({ ...unpaid, status: "cancelled" }, [])).toBe(false);
+    expect(orderHasOutstandingBalance({ ...unpaid, isPaid: true, status: "paid" }, [])).toBe(false);
   });
 
   it("reports overpayment separately and clamps remaining at zero", () => {
