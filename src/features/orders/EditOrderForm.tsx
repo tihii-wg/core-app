@@ -175,6 +175,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           errors={errors}
           clientId={order.clientId}
           disabled={isSubmitting}
+          mileageMode="vehicle"
         />
       ) : null}
 

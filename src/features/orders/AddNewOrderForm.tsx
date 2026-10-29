@@ -306,6 +306,7 @@ export default function AddNewOrderForm({
             errors={errors}
             clientId={selectedClientId}
             disabled={isSubmitting}
+            mileageMode="empty"
           />
         ) : null}
 

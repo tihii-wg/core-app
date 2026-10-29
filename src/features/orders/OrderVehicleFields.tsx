@@ -24,6 +24,12 @@ type OrderVehicleFieldsProps<T extends FieldValues> = {
   errors?: FieldErrors;
   clientId: string;
   disabled?: boolean;
+  /**
+   * How to initialize Current mileage when the selected vehicle changes.
+   * - `empty` (new orders): never carry over stored mileage; user enters visit mileage explicitly.
+   * - `vehicle` (edit orders): prefill from `vehicles.current_mileage`.
+   */
+  mileageMode?: "empty" | "vehicle";
 };
 
 function applyOrderAssetSnapshot<T extends FieldValues>(setValue: UseFormSetValue<T>, vehicle: Vehicle | undefined) {
@@ -36,14 +42,13 @@ function applyOrderAssetSnapshot<T extends FieldValues>(setValue: UseFormSetValu
 
 function applyVisitMileage<T extends FieldValues>(
   setValue: UseFormSetValue<T>,
-  vehicle: Vehicle | undefined,
+  value: string,
   options: { shouldDirty: boolean },
 ) {
-  setValue(
-    "currentMileage" as Path<T>,
-    mileageFormValueFromVehicle(vehicle) as PathValue<T, Path<T>>,
-    { shouldDirty: options.shouldDirty, shouldValidate: false },
-  );
+  setValue("currentMileage" as Path<T>, value as PathValue<T, Path<T>>, {
+    shouldDirty: options.shouldDirty,
+    shouldValidate: false,
+  });
 }
 
 export function OrderVehicleFields<T extends FieldValues>({
@@ -53,6 +58,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   errors,
   clientId,
   disabled,
+  mileageMode = "empty",
 }: OrderVehicleFieldsProps<T>) {
   const { t } = useTranslation();
   const vehicleIdPath = "vehicleId" as Path<T>;
@@ -64,7 +70,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   const skipInitialAssetSync = useRef(true);
   /** Last vehicle id we wrote device/carNumber/vin for (waits until the row is in `vehicles`). */
   const syncedAssetVehicleId = useRef<string | null>(null);
-  /** Last vehicle id we prefilling currentMileage for (including edit mount). */
+  /** Last vehicle id we synced currentMileage for. */
   const syncedMileageVehicleId = useRef<string | null>(null);
 
   const selectedVehicle = selectedVehicleId ? vehicles.find((vehicle) => vehicle.id === selectedVehicleId) : undefined;
@@ -102,7 +108,9 @@ export function OrderVehicleFields<T extends FieldValues>({
     applyOrderAssetSnapshot(setValue, selectedVehicle);
   }, [isLoading, selectedVehicle, selectedVehicleId, setValue]);
 
-  // Prefill visit mileage from vehicles.current_mileage whenever the selection changes (including edit open).
+  // Sync visit mileage when the selected vehicle changes.
+  // Create (`empty`): clear the field so stored mileage is never carried into a new visit.
+  // Edit (`vehicle`): prefill from vehicles.current_mileage.
   useEffect(() => {
     if (isLoading) return;
 
@@ -111,8 +119,10 @@ export function OrderVehicleFields<T extends FieldValues>({
     if (nextId && !selectedVehicle) return;
 
     syncedMileageVehicleId.current = nextId;
-    applyVisitMileage(setValue, selectedVehicle, { shouldDirty: false });
-  }, [isLoading, selectedVehicle, selectedVehicleId, setValue]);
+    const nextMileage =
+      mileageMode === "vehicle" ? mileageFormValueFromVehicle(selectedVehicle) : "";
+    applyVisitMileage(setValue, nextMileage, { shouldDirty: false });
+  }, [isLoading, mileageMode, selectedVehicle, selectedVehicleId, setValue]);
 
   if (!clientId) return null;
 
@@ -195,7 +205,11 @@ export function OrderVehicleFields<T extends FieldValues>({
           syncedMileageVehicleId.current = created.id;
           skipInitialAssetSync.current = false;
           applyOrderAssetSnapshot(setValue, created);
-          applyVisitMileage(setValue, created, { shouldDirty: false });
+          applyVisitMileage(
+            setValue,
+            mileageMode === "vehicle" ? mileageFormValueFromVehicle(created) : "",
+            { shouldDirty: false },
+          );
         }}
       />
     </div>

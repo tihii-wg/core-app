@@ -216,7 +216,7 @@ describe("AddNewOrderForm client validation", () => {
     );
   });
 
-  it("prefills and persists current mileage for the selected vehicle", async () => {
+  it("leaves current mileage empty on vehicle select and only persists an explicit entry", async () => {
     const user = userEvent.setup();
     vehiclesState.vehicles = [
       {
@@ -245,8 +245,7 @@ describe("AddNewOrderForm client validation", () => {
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
 
     const mileage = await screen.findByLabelText(/^Current mileage$/i);
-    expect(mileage).toHaveValue("45000");
-    await user.clear(mileage);
+    expect(mileage).toHaveValue("");
     await user.type(mileage, "46010");
     await user.click(saveDraftButton());
 
@@ -258,6 +257,40 @@ describe("AddNewOrderForm client validation", () => {
       }),
     );
     expect(persistMileageMock.mock.invocationCallOrder[0]).toBeLessThan(createOrderMock.mock.invocationCallOrder[0]);
+  });
+
+  it("does not persist stored mileage when the new-order field is left empty", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      {
+        id: "veh-1",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: "1HGBH41JXMN109186",
+        licensePlate: "ABC123",
+        initialMileage: null,
+        currentMileage: 45000,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+    renderWithQuery(
+      <AddNewOrderForm setCreateModalOpen={vi.fn()} searchQuery="" initialClientId="client-1" initialClientName="Ada" />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+    expect(await screen.findByLabelText(/^Current mileage$/i)).toHaveValue("");
+    await user.click(saveDraftButton());
+
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(persistMileageMock).toHaveBeenCalledWith(expect.objectContaining({ formMileage: "" }));
   });
 
   it("does not create the order when mileage persistence fails", async () => {
