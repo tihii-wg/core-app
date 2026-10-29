@@ -38,7 +38,9 @@ export function StatusBadge({ variant = 'default', children, className, dot = fa
   return (
     <span
       className={cn(
-        'inline-flex h-5.5 max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-medium leading-none ring-1 ring-inset',
+        // min-w-0 + wrap-friendly text so long EN/RO/RU labels stay inside narrow cards;
+        // min-h keeps the single-line look while multi-line labels grow vertically.
+        'inline-flex min-h-5.5 max-w-full min-w-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium leading-snug ring-1 ring-inset [overflow-wrap:anywhere]',
         variantStyles[variant],
         className
       )}

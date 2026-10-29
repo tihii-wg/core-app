@@ -30,6 +30,13 @@ vi.mock("./useUpdateOrder", () => ({
   }),
 }));
 
+vi.mock("./useDeleteOrder", () => ({
+  useDeleteOrder: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+}));
+
 vi.mock("./useGetOrders", () => ({
   useUpdateOrderTaxInvoiceNumber: () => ({
     mutateAsync: taxInvoiceHooks.mutateAsync,

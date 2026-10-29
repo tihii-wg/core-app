@@ -91,12 +91,12 @@ export function OrderCard({
         </div>
       )}
 
-      <div className="mt-2.5 flex items-end gap-3 border-t border-border pt-2.5">
-        <div className="flex min-w-0 flex-col items-start gap-1">
+      <div className="mt-2.5 flex min-w-0 items-end gap-3 overflow-hidden border-t border-border pt-2.5">
+        <div className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
           <OrderStatusBadge status={order.status} />
           <PaymentStatusBadge status={resolvedPaymentStatus} />
         </div>
-        <span className={cn("ml-auto shrink-0 text-right")}>
+        <span className={cn("shrink-0 text-right")}>
           <span className="block font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
           <span className="block text-[11px] tabular-nums text-muted-foreground">{order.createdAt || "—"}</span>
         </span>

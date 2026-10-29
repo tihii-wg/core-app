@@ -86,13 +86,15 @@ export function PaymentHistorySection({ target, order, invoice, payments, isLoad
           label={t("finance.payments.remaining")}
           value={formatMoney(balance.isLegacyUnreconciled ? 0 : balance.remaining)}
         />
-        <div>
+        <div className="min-w-0">
           <p className="text-xs text-muted-foreground">{t("orders.table.payment")}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <div className="mt-1 flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
             <PaymentStatusBadge status={balance.status} />
-            {balance.isLegacyUnreconciled ? <StatusBadge variant="warning">{t("finance.payments.legacyBadge")}</StatusBadge> : null}
+            {balance.isLegacyUnreconciled ? (
+              <StatusBadge variant="warning">{t("finance.payments.legacyBadge")}</StatusBadge>
+            ) : null}
             {balance.overpayment > 0 ? (
-              <span className="text-xs text-warning">
+              <span className="text-xs text-warning [overflow-wrap:anywhere]">
                 {t("finance.payments.overpayment")}: {formatMoney(balance.overpayment)}
               </span>
             ) : null}

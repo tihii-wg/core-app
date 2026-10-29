@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, Mail, Pencil, Phone, Save } from "lucide-react";
+import { Calendar, Mail, Pencil, Phone, Save, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../ui/Dialog";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -34,6 +42,7 @@ import { localDateKey } from "../../pages/dashboardStats";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import { useUpdateOrder } from "./useUpdateOrder";
+import { useDeleteOrder } from "./useDeleteOrder";
 import { useUpdateOrderTaxInvoiceNumber } from "./useGetOrders";
 import {
   hasTaxInvoiceNumber,
@@ -56,6 +65,10 @@ type OrderDetailPanelProps = {
   onOrderUpdated: (order: Order) => void;
   onStatusChange: (status: OrderStatus) => void;
   isStatusUpdating?: boolean;
+  /** Invoice number already created from this order, if any — blocks hard delete. */
+  invoiceNumber?: string;
+  /** Called after a successful delete so the parent can clear selection and return to the list. */
+  onDeleted?: (orderId: string) => void;
 };
 
 const orderStatuses: OrderStatus[] = ORDER_STATUSES;
@@ -67,9 +80,12 @@ export default function OrderDetailPanel({
   onOrderUpdated,
   onStatusChange,
   isStatusUpdating = false,
+  invoiceNumber,
+  onDeleted,
 }: OrderDetailPanelProps) {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
@@ -91,6 +107,11 @@ export default function OrderDetailPanel({
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
   const { payments, isLoading: paymentsLoading } = useGetPayments();
   const paymentBalance = selectedOrder ? orderPaymentBalance(selectedOrder, payments) : null;
+  const deleteOrder = useDeleteOrder();
+  const hasInvoice = Boolean(invoiceNumber);
+  const linkedPaymentCount = selectedOrder
+    ? payments.filter((payment) => payment.orderId === selectedOrder.id).length
+    : 0;
 
   if (selectedOrder?.id !== editingOrderId) {
     setEditingOrderId(selectedOrder?.id);
@@ -99,7 +120,10 @@ export default function OrderDetailPanel({
 
   function handleOpenChange(open: boolean) {
     setDetailPanelOpen(open);
-    if (!open) setIsEditing(false);
+    if (!open) {
+      setIsEditing(false);
+      setConfirmDeleteOpen(false);
+    }
   }
 
   async function handleAssigneeChange(assignedEmployeeId: string) {
@@ -415,9 +439,92 @@ export default function OrderDetailPanel({
                 {selectedOrder.updatedAt ? <p>{t("orders.detail.updated", { date: selectedOrder.updatedAt })}</p> : null}
               </div>
             )}
+
+            {canEditOrder ? (
+              <div className="border-t border-border pt-4">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="w-full min-w-0 sm:w-auto"
+                  disabled={hasInvoice || deleteOrder.isPending}
+                  title={hasInvoice ? t("orders.errors.cannotDeleteWithInvoice") : undefined}
+                  onClick={() => {
+                    if (hasInvoice) return;
+                    setConfirmDeleteOpen(true);
+                  }}
+                >
+                  <Trash2 className="size-4 shrink-0" />
+                  <span className="truncate">{t("orders.actions.delete")}</span>
+                </Button>
+                {hasInvoice ? (
+                  <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    {t("orders.errors.cannotDeleteWithInvoice")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
       </SheetContent>
+
+      {selectedOrder ? (
+        <Dialog
+          open={confirmDeleteOpen}
+          onOpenChange={(open) => {
+            if (deleteOrder.isPending) return;
+            setConfirmDeleteOpen(open);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("orders.delete.title")}</DialogTitle>
+              <DialogDescription>
+                {linkedPaymentCount > 0
+                  ? t("orders.delete.descriptionWithPayments", {
+                      number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
+                      count: linkedPaymentCount,
+                    })
+                  : t("orders.delete.description", {
+                      number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
+                    })}
+              </DialogDescription>
+            </DialogHeader>
+            {hasInvoice ? (
+              <p className="text-sm text-destructive" role="alert">
+                {t("orders.errors.cannotDeleteWithInvoice")}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmDeleteOpen(false)}
+                disabled={deleteOrder.isPending}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleteOrder.isPending || hasInvoice}
+                onClick={() => {
+                  if (hasInvoice || deleteOrder.isPending) return;
+                  void deleteOrder.mutateAsync(selectedOrder.id).then(() => {
+                    setConfirmDeleteOpen(false);
+                    onDeleted?.(selectedOrder.id);
+                  });
+                }}
+              >
+                {deleteOrder.isPending
+                  ? t("common.deleting")
+                  : linkedPaymentCount > 0
+                    ? t("orders.delete.confirmWithPayments", { count: linkedPaymentCount })
+                    : t("orders.actions.delete")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </Sheet>
   );
 }

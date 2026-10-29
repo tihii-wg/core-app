@@ -74,6 +74,30 @@ describe("OrderCard", () => {
     expect(orderStatus.compareDocumentPosition(paymentStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("keeps a long status label constrained inside the card footer", () => {
+    const { container } = renderCard({ status: "waiting-parts" });
+    const article = container.querySelector("article");
+    expect(article).not.toBeNull();
+
+    // Long RU-style label used as the overflow repro ("Старое (несверено)" / waiting-parts).
+    const badgeText = screen.getByText("Waiting Parts");
+    const badgeEl = badgeText.closest("span");
+    expect(badgeEl).not.toBeNull();
+    expect(badgeEl!.className).toMatch(/max-w-full/);
+    expect(badgeEl!.className).toMatch(/min-w-0/);
+    expect(badgeEl!.className).toMatch(/overflow-wrap:anywhere|\[overflow-wrap:anywhere\]/);
+    expect(badgeEl!.className).not.toMatch(/whitespace-nowrap/);
+    expect(badgeEl!.className).not.toMatch(/\bshrink-0\b/);
+
+    const footer = article!.querySelector(".border-t");
+    expect(footer).not.toBeNull();
+    expect(footer!.className).toMatch(/min-w-0/);
+    expect(footer!.className).toMatch(/overflow-hidden/);
+    expect(footer!.firstElementChild?.className).toMatch(/min-w-0/);
+    expect(footer!.firstElementChild?.className).toMatch(/max-w-full/);
+    expect(article!.contains(badgeEl)).toBe(true);
+  });
+
   it("falls back to VIN when there is no registration number", () => {
     renderCard({ carNumber: "" });
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();

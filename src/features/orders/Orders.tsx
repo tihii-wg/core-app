@@ -509,7 +509,18 @@ export function Orders() {
 
       <EditOrderDialog order={editingOrder} onClose={() => setEditingOrder(null)} onUpdated={orderDetails.syncOrder} />
 
-      <OrderDetailPanel {...orderDetails.panelProps} />
+      <OrderDetailPanel
+        {...orderDetails.panelProps}
+        invoiceNumber={
+          orderDetails.panelProps.selectedOrder
+            ? invoiceNumberByOrder.get(orderDetails.panelProps.selectedOrder.id)
+            : undefined
+        }
+        onDeleted={(orderId) => {
+          orderDetails.clearOrder(orderId);
+          setEditingOrder((current) => (current?.id === orderId ? null : current));
+        }}
+      />
     </div>
   );
 }
