@@ -60,14 +60,13 @@ type FormValues = {
   vin: string;
 };
 
+/** Mirrors Add/Edit order forms: vehicle industries always hide duplicate asset inputs. */
 function Harness({ clientId = "client-1", initialVehicleId = "" }: { clientId?: string; initialVehicleId?: string }) {
   const workflow = industryWorkflow("auto_repair");
   const copy = industryOrderCopy(workflow);
-  const { control, setValue, register, watch, formState } = useForm<FormValues>({
+  const { control, setValue, register, formState } = useForm<FormValues>({
     defaultValues: { vehicleId: initialVehicleId, device: "", carNumber: "", vin: "" },
   });
-  const vehicleId = watch("vehicleId");
-  const hideVisibleFields = Boolean(vehicleId?.trim());
 
   return (
     <div>
@@ -78,13 +77,13 @@ function Harness({ clientId = "client-1", initialVehicleId = "" }: { clientId?: 
         workflow={workflow}
         copy={copy}
         preserveHiddenValues
-        hideVisibleFields={hideVisibleFields}
+        hideVisibleFields
       />
     </div>
   );
 }
 
-describe("OrderVehicleFields with asset field visibility", () => {
+describe("OrderVehicleFields without duplicate asset fields", () => {
   beforeEach(() => {
     vehiclesState.vehicles = [sampleVehicle];
     vehiclesState.createVehicle.mockReset();
@@ -107,14 +106,14 @@ describe("OrderVehicleFields with asset field visibility", () => {
     Element.prototype.scrollIntoView = () => {};
   });
 
-  it("shows order vehicle entry fields until a vehicle is selected", async () => {
+  it("never shows order-level make/plate/VIN fields; selector stays optional", async () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness />);
 
     expect(screen.getByRole("combobox", { name: tVehicleSelect })).toBeInTheDocument();
-    expect(screen.getByLabelText(/^License plate$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^VIN$/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Make and model/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^License plate$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Make and model/i)).not.toBeInTheDocument();
     expect(screen.queryByTestId("selected-vehicle-summary")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
@@ -122,24 +121,21 @@ describe("OrderVehicleFields with asset field visibility", () => {
 
     expect(screen.getByTestId("selected-vehicle-summary")).toBeInTheDocument();
     expect(within(screen.getByTestId("selected-vehicle-summary")).getByText(/Toyota Corolla 2018/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^License plate$/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/Make and model/i)).not.toBeInTheDocument();
   });
 
-  it("restores vehicle entry fields when the selection is cleared", async () => {
+  it("keeps asset fields hidden when the vehicle selection is cleared", async () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness initialVehicleId="veh-1" />);
 
     expect(screen.getByTestId("selected-vehicle-summary")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
     await user.click(await screen.findByRole("option", { name: /No vehicle/i }));
 
     expect(screen.queryByTestId("selected-vehicle-summary")).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/^VIN$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^License plate$/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^License plate$/i)).not.toBeInTheDocument();
   });
 
   it("clears a vehicle that does not belong to the current client list", () => {
@@ -147,10 +143,10 @@ describe("OrderVehicleFields with asset field visibility", () => {
     renderWithQuery(<Harness initialVehicleId="veh-other" />);
 
     expect(screen.queryByTestId("selected-vehicle-summary")).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/^VIN$/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
   });
 
-  it("shows a summary after creating a vehicle from the order form", async () => {
+  it("shows a summary after creating a vehicle from the order form Add vehicle action", async () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness />);
 
@@ -166,7 +162,7 @@ describe("OrderVehicleFields with asset field visibility", () => {
     expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
   });
 
-  it("hides duplicate asset fields by default when editing an order that already has a vehicle", () => {
+  it("shows a summary when editing an order that already has a vehicle_id", () => {
     renderWithQuery(<Harness initialVehicleId="veh-1" />);
 
     expect(screen.getByTestId("selected-vehicle-summary")).toBeInTheDocument();

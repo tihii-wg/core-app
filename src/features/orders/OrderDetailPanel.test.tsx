@@ -83,6 +83,17 @@ vi.mock("../finance/usePayments", () => ({
   useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
 }));
@@ -202,51 +213,56 @@ describe("OrderDetailPanel", () => {
     warn.mockRestore();
   });
 
-  it("saves order edits and closes the details window", async () => {
+  it("saves order edits and closes the details window without clearing stored vehicle assets", async () => {
     const user = userEvent.setup();
     const onOrderUpdated = vi.fn();
     const setDetailPanelOpen = vi.fn();
-    updateOrderHooks.mutateAsync.mockResolvedValue({ ...order, device: "Audi" });
+    updateOrderHooks.mutateAsync.mockResolvedValue({ ...order, description: "Updated noise" });
 
     renderPanel(onOrderUpdated, setDetailPanelOpen);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    const deviceInput = screen.getByLabelText("Vehicle *");
-    await user.clear(deviceInput);
-    await user.type(deviceInput, "Audi");
+    expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Make and model/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /^Vehicle$/i })).toBeInTheDocument();
+
+    const description = screen.getByLabelText(/Description/i);
+    await user.clear(description);
+    await user.type(description, "Updated noise");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: "order-1",
-        device: "Audi",
+        device: "BMW",
         carNumber: "ABC123",
-        description: "Noise",
+        description: "Updated noise",
         assignedEmployeeId: "emp-1",
         vin: "1HGBH41JXMN109186",
       }),
     );
-    expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ device: "Audi" }));
+    expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ description: "Updated noise" }));
     expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
   });
 
-  it("saves an edited VIN and an added service", async () => {
+  it("preserves VIN on save while adding a service (no order-level VIN input)", async () => {
     const user = userEvent.setup();
-    updateOrderHooks.mutateAsync.mockResolvedValue({ ...order, vin: "2HGBH41JXMN109187" });
+    updateOrderHooks.mutateAsync.mockResolvedValue(order);
 
     renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    const vinInput = screen.getByLabelText("VIN *");
-    await user.clear(vinInput);
-    await user.type(vinInput, "2HGBH41JXMN109187");
+    expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
     await user.click(screen.getByPlaceholderText("Service"));
     await user.click(screen.getByRole("button", { name: /Tires/i }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
-        vin: "2HGBH41JXMN109187",
+        vin: "1HGBH41JXMN109186",
+        carNumber: "ABC123",
+        device: "BMW",
         services: [
           { id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 },
           expect.objectContaining({ serviceId: "svc-tires", serviceName: "Tires", price: 80 }),

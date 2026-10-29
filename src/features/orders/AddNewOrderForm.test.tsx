@@ -14,6 +14,26 @@ const employeesState = vi.hoisted(() => ({
   services: [] as Service[],
 }));
 
+const vehiclesState = vi.hoisted(() => ({
+  vehicles: [] as {
+    id: string;
+    workspaceId: string;
+    clientId: string;
+    make: string;
+    model: string;
+    year: number | null;
+    vin: string | null;
+    licensePlate: string | null;
+    initialMileage: null;
+    currentMileage: null;
+    engineDisplacement: null;
+    fuelType: null;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: null;
+  }[],
+}));
+
 vi.mock("./useCreateOrder", () => ({
   useCreateOrder: () => ({
     mutateAsync: createOrderMock,
@@ -52,7 +72,7 @@ vi.mock("../industries/useIndustryWorkflow", async () => {
 });
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
-  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  useGetClientVehicles: () => ({ vehicles: vehiclesState.vehicles, isLoading: false, isError: false }),
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
 }));
 
@@ -83,6 +103,7 @@ describe("AddNewOrderForm client validation", () => {
     employeesState.role = "owner";
     employeesState.industrySlug = "auto_repair";
     employeesState.services = [];
+    vehiclesState.vehicles = [];
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.setPointerCapture = () => {};
     Element.prototype.releasePointerCapture = () => {};
@@ -127,19 +148,55 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.queryByText("VIN is required")).not.toBeInTheDocument();
   });
 
-  it("keeps typed plate and VIN values when the industry switches away from auto_repair", async () => {
-    const user = userEvent.setup();
-    const { rerender } = renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+  it("does not show order-level plate/VIN/make on auto_repair (vehicles use client vehicle workflow)", () => {
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.type(screen.getByLabelText(/^VIN$/), "ABC123");
-    await user.type(screen.getByLabelText(/License plate/i), "ABC123");
-
-    employeesState.industrySlug = "home_services";
-    rerender(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
-
-    expect(screen.queryByLabelText(/^VIN$/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/Job \/ location/i)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Make and model/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the client vehicle selector (optional) and can select an existing vehicle", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      {
+        id: "veh-1",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: "1HGBH41JXMN109186",
+        licensePlate: "ABC123",
+        initialMileage: null,
+        currentMileage: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+    renderWithQuery(
+      <AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" initialClientId="client-1" initialClientName="Ada" />,
+    );
+
+    expect(screen.getByRole("combobox", { name: /^Vehicle$/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
+    await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
+    await user.click(saveDraftButton());
+
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vehicleId: "veh-1",
+        device: "",
+        vin: "",
+        carNumber: "",
+      }),
+    );
   });
 
   it("asks for the phone and email of a new client with the client form's validation", async () => {
@@ -181,27 +238,6 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.getByLabelText(/^Client$/)).toHaveValue("Fleet SRL");
     expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
-  });
-
-  it("requires the VIN to contain exactly 17 valid characters when provided", async () => {
-    const user = userEvent.setup();
-    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
-
-    await user.type(screen.getByLabelText(/^VIN$/), "ABC123");
-    await user.click(saveDraftButton());
-
-    expect(await screen.findByText(/VIN must contain exactly 17 valid characters/i)).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText(/^VIN$/));
-    await user.type(screen.getByLabelText(/^VIN$/), "IHGBH41JXMN109186");
-    await user.click(saveDraftButton());
-    expect(await screen.findByText(/VIN must contain exactly 17 valid characters/i)).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText(/^VIN$/));
-    await user.type(screen.getByLabelText(/^VIN$/), "1HGBH41JXMN109186");
-    await user.click(saveDraftButton());
-
-    expect(screen.queryByText(/VIN must contain exactly 17 valid characters/i)).not.toBeInTheDocument();
   });
 
   it("adds a custom service to the order", async () => {

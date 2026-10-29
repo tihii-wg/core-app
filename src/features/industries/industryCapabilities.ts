@@ -7,7 +7,11 @@ import type { IndustryWorkflow } from "./industryWorkflow";
 export type IndustryCapabilities = {
   /** Client-owned vehicles table + vehicle picker on orders. */
   clientVehicles: boolean;
-  /** Legacy order-level plate/VIN/device automotive labels (auto_repair pack). */
+  /**
+   * Automotive copy pack / historical order columns (device, plate, VIN).
+   * Order create/edit UIs no longer collect these when clientVehicles is on —
+   * use the client vehicle workflow instead. Detail views may still show stored values.
+   */
   automotiveOrderAssets: boolean;
 };
 

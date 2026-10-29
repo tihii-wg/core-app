@@ -93,13 +93,13 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const watchedServices = useWatch({ control, name: "services" });
   const watchedMaterials = useWatch({ control, name: "materials" });
-  const selectedVehicleId = useWatch({ control, name: "vehicleId" });
-  const hideVehicleAssetFields = showVehicles && Boolean(selectedVehicleId?.trim());
+  /** Client-vehicle industries: order-level make/plate/VIN inputs are removed; preserve stored values on save. */
+  const hideDuplicateVehicleAssetFields = showVehicles;
   const totalPrice = sumOrderServiceLines(watchedServices) + sumOrderMaterialLines(watchedMaterials);
 
   useEffect(() => {
-    if (hideVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
-  }, [clearErrors, hideVehicleAssetFields]);
+    if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
+  }, [clearErrors, hideDuplicateVehicleAssetFields]);
 
   function hasService(serviceId: string | null, serviceName: string) {
     return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
@@ -107,21 +107,20 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const onSubmit = async (data: EditOrderFormData) => {
     try {
-      // Preserve vehicle fields that are hidden for this industry (or replaced by a selected vehicle record).
-      const hideAssetsForSelectedVehicle = showVehicles && Boolean(data.vehicleId?.trim());
+      // When vehicle management is via client vehicles, never clear historical order asset columns from this form.
       const updatedOrder = await updateOrder({
         orderId: order.id,
         ...data,
         vehicleId: data.vehicleId || "",
         services: data.services ?? [],
         materials: data.materials,
-        carNumber:
-          workflow.orderFields.carNumber.visible && !hideAssetsForSelectedVehicle ? data.carNumber : order.carNumber,
-        vin: workflow.orderFields.vin.visible && !hideAssetsForSelectedVehicle ? data.vin : order.vin,
-        device:
-          workflow.orderFields.device.visible && !hideAssetsForSelectedVehicle
-            ? data.device
-            : order.device || data.device,
+        carNumber: showVehicles
+          ? order.carNumber
+          : workflow.orderFields.carNumber.visible
+            ? data.carNumber
+            : order.carNumber,
+        vin: showVehicles ? order.vin : workflow.orderFields.vin.visible ? data.vin : order.vin,
+        device: showVehicles ? order.device : workflow.orderFields.device.visible ? data.device : order.device || data.device,
       });
       onUpdated(updatedOrder);
     } catch {
@@ -143,7 +142,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         idPrefix="edit-order-"
         disabled={isSubmitting}
         preserveHiddenValues
-        hideVisibleFields={hideVehicleAssetFields}
+        hideVisibleFields={hideDuplicateVehicleAssetFields}
       />
 
       <div className="space-y-1.5">

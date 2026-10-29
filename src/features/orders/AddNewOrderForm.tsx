@@ -84,16 +84,16 @@ export default function AddNewOrderForm({
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
   const selectedClientId = useWatch({ control, name: "clientId" });
-  const selectedVehicleId = useWatch({ control, name: "vehicleId" });
-  const hideVehicleAssetFields = showVehicles && Boolean(selectedVehicleId?.trim());
+  /** Client-vehicle industries: order-level make/plate/VIN are obsolete — use the vehicle selector only. */
+  const hideDuplicateVehicleAssetFields = showVehicles;
   const typedClientName = clientName.trim();
   const isNewClient = typedClientName !== "" && !selectedClientId && !clients?.some((client) => client.name?.toLowerCase() === typedClientName.toLowerCase());
   const newClientType = useWatch({ control, name: "newClientType" });
   const isNewOrganization = isNewClient && newClientType === "organization";
 
   useEffect(() => {
-    if (hideVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
-  }, [clearErrors, hideVehicleAssetFields]);
+    if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
+  }, [clearErrors, hideDuplicateVehicleAssetFields]);
 
   const {
     fields: serviceField,
@@ -135,9 +135,10 @@ export default function AddNewOrderForm({
         clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
         vehicleId: data.vehicleId || null,
-        device: data.device?.trim() ?? "",
-        vin: workflow.orderFields.vin.visible ? data.vin : "",
-        carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : "",
+        // Vehicle industries store make/plate/VIN on client vehicles, not on the order form.
+        device: showVehicles ? "" : (data.device?.trim() ?? ""),
+        vin: showVehicles ? "" : workflow.orderFields.vin.visible ? data.vin : "",
+        carNumber: showVehicles ? "" : workflow.orderFields.carNumber.visible ? data.carNumber : "",
         description: data.description,
         services: data.services ?? [],
         materials: data.materials,
@@ -272,7 +273,7 @@ export default function AddNewOrderForm({
           workflow={workflow}
           copy={copy}
           preserveHiddenValues
-          hideVisibleFields={hideVehicleAssetFields}
+          hideVisibleFields={hideDuplicateVehicleAssetFields}
         />
 
         <div className="space-y-1.5">
