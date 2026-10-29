@@ -174,6 +174,33 @@ const finance: Messages<typeof en> = {
       payment: "Plată",
       refund: "Rambursare",
     },
+    actions: {
+      menuLabel: "Acțiuni pentru {{kind}}",
+      noActions: "Nicio acțiune disponibilă",
+    },
+    void: {
+      action: "Anulează plata eronată…",
+      dialogTitle: "Anulează plata eronată",
+      dialogDescription:
+        "Folosiți doar când plata a fost înregistrată din greșeală și banii nu au fost primiți niciodată. Aceasta nu este o rambursare.",
+      vsRefund:
+        "Rambursare = banii au fost primiți și returnați. Anulare eronată = corectare de înregistrare pentru bani care nu au ajuns. Nu folosiți anularea pentru rambursări reale.",
+      fields: {
+        reason: "Motivul anulării *",
+      },
+      validation: {
+        reasonRequired: "Motivul este obligatoriu",
+        reasonTooShort: "Motivul trebuie să aibă cel puțin 8 caractere",
+      },
+      confirm: "Confirmă anularea",
+      errors: {
+        schemaUnsupported:
+          "Anularea sigură a plății nu este disponibilă încă: registrul acceptă doar rânduri de tip plată și rambursare (doar adăugare). Ștergerea plăților nu este permisă. Este necesară o modificare de schemă revizuită înainte de a înregistra anulări.",
+        alreadyOffset:
+          "Această plată are deja rambursări sau compensări. Folosiți Înregistrează rambursarea pentru restul — nu o anulați ca eronată.",
+        notAPayment: "Doar rândurile de tip plată pot fi anulate. Rambursările nu pot fi anulate.",
+      },
+    },
   },
   expenses: {
     add: "Adaugă cheltuială",
@@ -184,6 +211,7 @@ const finance: Messages<typeof en> = {
       categoryPlaceholder: "ex. Piese, Chirie, Utilități",
       paymentMethod: "Metodă de plată",
       description: "Descriere",
+      descriptionPlaceholder: "Introduceți descrierea cheltuielii",
     },
     suggestedCategories: {
       parts: "Piese",

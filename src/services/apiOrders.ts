@@ -1,4 +1,7 @@
 import type { CreateOrderInput, Order, OrderMaterial, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
+import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
+import { assertValidOptionalVin } from "../lib/vin";
+import { assertVehicleAssignable } from "./apiVehicles";
 import { consolidateOrderMaterials } from "../features/inventory/orderMaterialLine";
 import {
   addCalendarDays,
@@ -60,11 +63,13 @@ function requireWorkspaceId(workspaceId: string | undefined) {
   return workspaceId;
 }
 
+/** Resolve client for create. Empty clientId + empty name → NULL (draft without client). */
 async function resolveClientId(workspaceId: string, { clientId, clientName, clientType, clientTaxId, clientContactPerson, clientEmail = "", clientPhone = "" }: CreateOrderInput) {
-  if (clientId) return clientId;
+  const existingId = nullIfEmptyUuid(clientId);
+  if (existingId) return existingId;
 
-  const name = clientName.trim();
-  if (!name) throw new Error(i18n.t("orders.validation.clientRequired"));
+  const name = clientName?.trim() ?? "";
+  if (!name) return null;
 
   const { data: existingClients, error: existingClientError } = await supabase.from("clients").select("id").eq("workspace_id", workspaceId).ilike("name", name).limit(1);
 
@@ -221,10 +226,9 @@ async function assignOrderNumber(workspaceId: string, order: Record<string, unkn
 // Clients/services created earlier in this call are not rolled back.
 export async function createOrder(input: CreateOrderInput, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  if (input.services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
 
   const resolvedServices = [];
-  for (const service of input.services) {
+  for (const service of input.services ?? []) {
     const resolved = await resolveService(targetWorkspaceId, service);
     resolvedServices.push({
       ...resolved,
@@ -235,6 +239,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
 
   const employeeId = await resolveAssignedEmployeeId(targetWorkspaceId, input.assignedEmployeeId);
   const clientId = await resolveClientId(targetWorkspaceId, input);
+  const vehicleId = await assertVehicleAssignable(targetWorkspaceId, clientId, nullIfEmptyUuid(input.vehicleId));
   const materials = consolidateOrderMaterials(input.materials ?? []);
 
   const {
@@ -247,28 +252,31 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   const serviceTotal = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
   const materialTotal = materials.reduce((total, line) => total + line.price * line.quantity, 0);
   const timeZone = await workspaceTimeZone(targetWorkspaceId);
-  const normalizedVin = input.vin?.trim().toUpperCase() ?? "";
+  const normalizedVin = assertValidOptionalVin(input.vin, "orders.validation.vinLength");
+  const device = nullIfEmptyText(input.device);
+  const carNumber = nullIfEmptyText(input.carNumber)?.toUpperCase() ?? null;
 
   const { data: insertedOrder, error: orderError } = await supabase
     .from("orders")
     .insert({
       workspace_id: targetWorkspaceId,
       client_id: clientId,
-      device: input.device.trim(),
-      car_number: input.carNumber?.trim() ?? "",
-      description: input.description?.trim() || null,
+      vehicle_id: vehicleId,
+      device,
+      car_number: carNumber,
+      description: nullIfEmptyText(input.description),
       employee_id: employeeId,
       // Do not write employee ids into assigned_to (auth.users FK). Clear default auth.uid().
       assigned_to: null,
       created_by: user.id,
-      ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : {}),
+      ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : { deadline: null }),
       total_price: serviceTotal + materialTotal,
       status: "new",
       is_paid: false,
       number: `ORD-PENDING-${crypto.randomUUID()}`,
-      vin: normalizedVin || null,
-      service_id: resolvedServices[0].id,
-      service: resolvedServices.map((service) => service.name).join(", "),
+      vin: normalizedVin,
+      service_id: resolvedServices[0]?.id ?? null,
+      service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
     })
     .select()
     .single();
@@ -283,22 +291,24 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     throw error;
   }
 
-  const { error: orderServicesError } = await supabase.from("order_services").insert(
-    resolvedServices.map((service) => ({
-      order_id: order.id,
-      service_id: service.id,
-      service_name: service.name,
-      price: service.price,
-      quantity: service.quantity,
-    })),
-  );
+  if (resolvedServices.length > 0) {
+    const { error: orderServicesError } = await supabase.from("order_services").insert(
+      resolvedServices.map((service) => ({
+        order_id: order.id,
+        service_id: service.id,
+        service_name: service.name,
+        price: service.price,
+        quantity: service.quantity,
+      })),
+    );
 
-  if (orderServicesError) {
-    const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-    if (rollbackError) {
-      throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
+    if (orderServicesError) {
+      const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+      if (rollbackError) {
+        throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
+      }
+      throw new Error(orderServicesError.message);
     }
-    throw new Error(orderServicesError.message);
   }
 
   if (materials.length > 0) {
@@ -428,6 +438,7 @@ function toOrder(
     ...(client.email ? { clientEmail: client.email } : {}),
     ...(client.phone ? { clientPhone: client.phone } : {}),
     orderNumber: typeof row.number === "string" ? row.number : "",
+    vehicleId: typeof row.vehicle_id === "string" ? row.vehicle_id : null,
     device: typeof row.device === "string" ? row.device : "",
     vin: readVin(row),
     carNumber: typeof row.car_number === "string" ? row.car_number : "",
@@ -846,25 +857,39 @@ export function readVin(row: Record<string, unknown>) {
 }
 
 export async function updateOrder(
-  { orderId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services, materials }: UpdateOrderDetails,
+  { orderId, vehicleId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services, materials }: UpdateOrderDetails,
   targetWorkspaceId: string | undefined,
 ) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
-  if (services && services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
   const employeeId = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
-  const normalizedVin = vin.trim().toUpperCase();
+  const normalizedVin = assertValidOptionalVin(vin, "orders.validation.vinLength");
 
-  if (normalizedVin && normalizedVin.length !== 17) throw new Error(i18n.t("orders.validation.vinLength"));
+  const { data: existingOrder, error: existingError } = await supabase
+    .from("orders")
+    .select("client_id")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existingOrder) throw new Error(orderPermissionMessage());
+
+  const clientId = typeof existingOrder.client_id === "string" ? existingOrder.client_id : null;
+  // Omit vehicleId from the payload to leave orders.vehicle_id unchanged (assignee-only updates).
+  const vehiclePatch =
+    vehicleId === undefined
+      ? {}
+      : { vehicle_id: await assertVehicleAssignable(workspaceId, clientId, nullIfEmptyUuid(vehicleId)) };
 
   const { data, error } = await supabase
     .from("orders")
     .update({
-      device: device.trim(),
-      car_number: carNumber.trim().toUpperCase(),
-      description: description.trim() || null,
+      ...vehiclePatch,
+      device: nullIfEmptyText(device),
+      car_number: nullIfEmptyText(carNumber)?.toUpperCase() ?? null,
+      description: nullIfEmptyText(description),
       employee_id: employeeId,
       deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
-      vin: normalizedVin || null,
+      vin: normalizedVin,
     })
     .eq("id", orderId)
     .eq("workspace_id", workspaceId)
@@ -1042,4 +1067,123 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage());
 
   return { lines, summary };
+}
+
+function isMissingRelationError(error: { code?: string } | null | undefined) {
+  return error?.code === "PGRST205" || error?.code === "42P01";
+}
+
+/** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
+export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {
+  const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  if (/order_delete:has_invoice/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
+  }
+  if (/order_delete:not_member|order_delete:not_authenticated/i.test(blob) || error.code === "42501") {
+    return new Error(i18n.t("orders.errors.deleteForbidden"));
+  }
+  if (/order_delete:not_found/i.test(blob)) {
+    return new Error(orderPermissionMessage());
+  }
+  if (error.code === "PGRST202" || error.code === "42883" || /could not find the function|function .* does not exist/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+  }
+  if (error.code === "23503" || /foreign key|violates foreign key/i.test(blob)) {
+    if (/payments_order_id_fkey|table ["']?payments["']?/i.test(blob)) {
+      return new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+    }
+    if (/invoices_.*order_id|table ["']?invoices["']?/i.test(blob)) {
+      return new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
+    }
+  }
+  return new Error(error.message || i18n.t("common.somethingWentWrong"));
+}
+
+export type DeleteOrderResult = {
+  id: string;
+  paymentsDeleted: number;
+};
+
+async function countOrderPayments(workspaceId: string, orderId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("payments")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .eq("order_id", orderId);
+  if (error) {
+    if (isMissingRelationError(error)) return 0;
+    throw new Error(error.message);
+  }
+  return count ?? 0;
+}
+
+/**
+ * Hard-delete an order in the active workspace.
+ * Invoices always block (nothing is deleted).
+ * Linked payments require the reviewed RPC `delete_order_with_payments` (append-only ledger:
+ * clients must not DELETE payments directly). Without that RPC, orders with payments cannot be removed.
+ * Order service/material lines follow DB CASCADE when present.
+ */
+export async function deleteOrder(orderId: string, workspaceId: string | undefined): Promise<DeleteOrderResult> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const id = orderId.trim();
+  if (!id) throw new Error(orderPermissionMessage());
+
+  const { data: invoices, error: invoiceError } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("workspace_id", targetWorkspaceId)
+    .eq("order_id", id)
+    .limit(1);
+  if (invoiceError) {
+    // Missing invoices table/relation should not block unrelated workspaces; only surface real errors.
+    if (!isMissingRelationError(invoiceError)) {
+      throw new Error(invoiceError.message);
+    }
+  } else if ((invoices ?? []).length > 0) {
+    throw new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
+  }
+
+  const paymentCount = await countOrderPayments(targetWorkspaceId, id);
+
+  // Atomic path: SECURITY DEFINER RPC deletes order-linked payments then the order.
+  // Always preferred so payment+order never split across client round-trips.
+  const { data: rpcData, error: rpcError } = await supabase.rpc("delete_order_with_payments", {
+    p_workspace_id: targetWorkspaceId,
+    p_order_id: id,
+  });
+
+  if (!rpcError) {
+    const payload = rpcData as { order_id?: string; payments_deleted?: number } | null;
+    return {
+      id: payload?.order_id ?? id,
+      paymentsDeleted: typeof payload?.payments_deleted === "number" ? payload.payments_deleted : paymentCount,
+    };
+  }
+
+  const rpcMissing =
+    rpcError.code === "PGRST202" ||
+    rpcError.code === "42883" ||
+    /could not find the function|function .* does not exist/i.test(rpcError.message ?? "");
+
+  if (!rpcMissing) {
+    throw mapOrderDeleteDbError(rpcError);
+  }
+
+  // RPC not installed yet: only allow plain order delete when no payment rows exist.
+  if (paymentCount > 0) {
+    throw new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+  }
+
+  const { data, error } = await supabase
+    .from("orders")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", targetWorkspaceId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw mapOrderDeleteDbError(error);
+  if (!data) throw new Error(orderPermissionMessage());
+  return { id, paymentsDeleted: 0 };
 }

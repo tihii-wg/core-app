@@ -171,6 +171,33 @@ export default {
       payment: "Payment",
       refund: "Refund",
     },
+    actions: {
+      menuLabel: "Actions for {{kind}}",
+      noActions: "No available actions",
+    },
+    void: {
+      action: "Void erroneous payment…",
+      dialogTitle: "Void erroneous payment",
+      dialogDescription:
+        "Use this only when the payment was recorded by mistake and money was never received. This is not a cash refund.",
+      vsRefund:
+        "Refund = money was received and returned. Void = data-entry correction for money that never arrived. Do not use void for real refunds.",
+      fields: {
+        reason: "Reason for void *",
+      },
+      validation: {
+        reasonRequired: "A reason is required",
+        reasonTooShort: "Reason must be at least 8 characters",
+      },
+      confirm: "Confirm void",
+      errors: {
+        schemaUnsupported:
+          "Safe payment void is not available yet: the payment ledger only supports payment and refund rows (append-only). Hard-deleting payments is not allowed. A reviewed schema change is required before void can be recorded.",
+        alreadyOffset:
+          "This payment already has refunds or offsets. Use Record refund for remaining money movement — do not void it as erroneous.",
+        notAPayment: "Only payment rows can be voided. Refunds cannot be voided.",
+      },
+    },
   },
   expenses: {
     add: "Add Expense",
@@ -181,6 +208,7 @@ export default {
       categoryPlaceholder: "e.g. Parts, Rent, Utilities",
       paymentMethod: "Payment method",
       description: "Description",
+      descriptionPlaceholder: "Enter expense description",
     },
     suggestedCategories: {
       parts: "Parts",

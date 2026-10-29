@@ -45,16 +45,51 @@ export interface Client {
   emailNotificationsConsent?: boolean;
 }
 
+/** Client-owned vehicle (public.vehicles). Soft-deleted via deleted_at. */
+export type Vehicle = {
+  id: string;
+  workspaceId: string;
+  clientId: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  vin: string | null;
+  licensePlate: string | null;
+  initialMileage: number | null;
+  currentMileage: number | null;
+  engineDisplacement: number | null;
+  fuelType: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+export type VehicleInput = {
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  vin?: string | null;
+  licensePlate?: string | null;
+  initialMileage?: number | null;
+  currentMileage?: number | null;
+  engineDisplacement?: number | null;
+  fuelType?: string | null;
+};
+
 export interface Order {
   id: string;
   workspace_id?: string;
+  /** Empty string when client_id is NULL (draft without client). */
   clientId: string;
   clientName: string;
   clientType?: ClientType | null;
   /** Present when the orders query embeds clients.email / clients.phone. */
   clientEmail?: string;
   clientPhone?: string;
+  /** Empty string when number is NULL (unexpected; create still assigns a number). */
   orderNumber: string;
+  /** Linked public.vehicles.id when set. */
+  vehicleId?: string | null;
   device: string;
   vin: string;
   carNumber: string;
@@ -101,6 +136,7 @@ export interface addNewOrderFormData {
   newClientContactPerson?: string;
   newClientEmail?: string;
   newClientPhone?: string;
+  vehicleId: string;
   device: string;
   vin: string;
   carNumber: string;
@@ -115,16 +151,19 @@ export interface addNewOrderFormData {
 
 export type CreateOrderInput = {
   clientId?: string;
-  clientName: string;
+  /** When empty and no clientId, order is saved with client_id NULL. */
+  clientName?: string;
   clientType?: ClientType;
   clientTaxId?: string;
   clientContactPerson?: string;
   clientEmail?: string;
   clientPhone?: string;
-  device: string;
+  vehicleId?: string | null;
+  device?: string;
   vin?: string;
   carNumber?: string;
   description?: string;
+  /** Empty array is allowed for draft orders. */
   services: OrderService[];
   /** When omitted or empty, the order is created with no material lines. */
   materials?: OrderMaterial[];
@@ -139,6 +178,8 @@ export type UpdateOrderInput = CreateOrderInput & {
 };
 
 export type EditOrderFormData = {
+  /** Empty string clears the vehicle; omit on partial updates to leave vehicle_id unchanged. */
+  vehicleId?: string;
   device: string;
   carNumber: string;
   vin: string;
@@ -151,7 +192,7 @@ export type EditOrderFormData = {
 
 export type UpdateOrderDetails = Omit<EditOrderFormData, "services" | "materials"> & {
   orderId: string;
-  /** The order's complete final service list; omit to leave the saved lines untouched. */
+  /** The order's complete final service list; omit to leave the saved lines untouched. Empty array clears lines when supported. */
   services?: OrderService[];
   /** The order's complete final material list; omit to leave saved materials untouched. Empty array removes all materials and restores stock. */
   materials?: OrderMaterial[];

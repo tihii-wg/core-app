@@ -8,7 +8,9 @@ import { Skeleton } from "../../ui/Skeleton";
 import ClientTypeBadge from "./ClientTypeBadge";
 import type { Client } from "../../lib/types";
 import { industryClientCopy, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
+import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { ClientVehiclesSection } from "../vehicles/ClientVehiclesSection";
 import EditClientForm from "./EditClientForm";
 import ClientSettlementDialog from "./ClientSettlementDialog";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -40,6 +42,7 @@ export default function ClientDetailPanel({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
+  const showVehicles = industrySupportsClientVehicles(workflow);
   const { formatMoney } = useWorkspaceMoney();
   const [isEditing, setIsEditing] = useState(false);
   const [settlementOpen, setSettlementOpen] = useState(false);
@@ -165,6 +168,8 @@ export default function ClientDetailPanel({
               <Calculator />
               {t("clients.settlement.button")}
             </Button>
+
+            {showVehicles ? <ClientVehiclesSection clientId={selectedClient.id} /> : null}
 
             <div>
               <div className="mb-3 flex items-center justify-between gap-2">

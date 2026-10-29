@@ -9,7 +9,7 @@ import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/DropdownMenu";
-import type { Expense, PaymentMethod, Transaction } from "../../lib/types";
+import type { Expense, PaymentMethod } from "../../lib/types";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageExpenses } from "../workspaces/workspaceRoles";
@@ -21,7 +21,11 @@ import { reportPeriod, type ReportRange } from "../reports/reportStats";
 import { useFinanceTransactions, type FinanceUiFilters } from "./useFinanceTransactions";
 import { ExpenseFormDialog } from "./ExpenseFormDialog";
 import { DeleteExpenseDialog } from "./DeleteExpenseDialog";
-import { ledgerPaymentMethods, type LedgerPaymentMethod } from "./paymentTypes";
+import { PaymentActionsMenu } from "./PaymentActionsMenu";
+import { PaymentVoidDialog } from "./PaymentVoidDialog";
+import type { FinanceLedgerTransaction } from "./paymentCalculations";
+import { ledgerPaymentMethods, type LedgerPayment, type LedgerPaymentMethod } from "./paymentTypes";
+import { RefundFormDialog } from "./RefundFormDialog";
 
 const paymentMethodIcons: Record<PaymentMethod, ElementType> = {
   cash: Banknote,
@@ -45,14 +49,20 @@ export function Finance() {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const { formatDate } = useReportFormatting();
+  const role = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
-  const canManage = withSubscriptionWriteAccess(canManageExpenses(useActiveWorkspaceRole()), subscriptionAllowsWrite);
+  const canManage = withSubscriptionWriteAccess(canManageExpenses(role), subscriptionAllowsWrite);
+  /** Same gate as PaymentHistorySection — any workspace member with write entitlement. */
+  const canRecordPayments = withSubscriptionWriteAccess(Boolean(role), subscriptionAllowsWrite);
+  const showActionsColumn = canManage || canRecordPayments;
   const [range, setRange] = useState<ReportRange>("last30");
   const [linkFilter, setLinkFilter] = useState<"all" | "invoice" | "no-invoice">("all");
   const [methodFilter, setMethodFilter] = useState<"all" | LedgerPaymentMethod>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [deleting, setDeleting] = useState<Expense | null>(null);
+  const [refundOriginal, setRefundOriginal] = useState<LedgerPayment | null>(null);
+  const [voidOriginal, setVoidOriginal] = useState<LedgerPayment | null>(null);
 
   const period = useMemo(() => reportPeriod(range, new Date()), [range]);
   const filters: FinanceUiFilters = useMemo(
@@ -65,6 +75,7 @@ export function Finance() {
   const {
     transactions,
     inPeriod,
+    payments,
     stats,
     legacyItems,
     isLoading,
@@ -87,7 +98,7 @@ export function Finance() {
     setFormOpen(true);
   }
 
-  const columns: Column<Transaction>[] = [
+  const columns: Column<FinanceLedgerTransaction>[] = [
     {
       key: "date",
       header: t("finance.transactions.columns.date"),
@@ -167,24 +178,40 @@ export function Finance() {
       ),
       className: "text-right",
     },
-    ...(canManage
+    ...(showActionsColumn
       ? [
           {
             key: "actions",
             header: t("common.actions"),
-            cell: (txn: Transaction) =>
-              txn.expense ? (
-                <ExpenseActionsMenu
-                  expense={txn.expense}
-                  onEdit={(expense) => {
-                    setEditing(expense);
-                    setFormOpen(true);
-                  }}
-                  onDelete={setDeleting}
-                />
-              ) : null,
+            cell: (txn: FinanceLedgerTransaction) => {
+              if (txn.expense && canManage) {
+                return (
+                  <ExpenseActionsMenu
+                    expense={txn.expense}
+                    onEdit={(expense) => {
+                      setEditing(expense);
+                      setFormOpen(true);
+                    }}
+                    onDelete={setDeleting}
+                  />
+                );
+              }
+              if (txn.source === "ledger" && txn.payment) {
+                return (
+                  <PaymentActionsMenu
+                    payment={txn.payment}
+                    allPayments={payments}
+                    canRecord={canRecordPayments && !paymentsUnavailable}
+                    onRefund={setRefundOriginal}
+                    onVoidErroneous={setVoidOriginal}
+                  />
+                );
+              }
+              return null;
+            },
             className: "w-10 text-right",
-          } satisfies Column<Transaction>,
+            stickyRight: true,
+          } satisfies Column<FinanceLedgerTransaction>,
         ]
       : []),
   ];
@@ -406,6 +433,19 @@ export function Finance() {
         }}
       />
       <DeleteExpenseDialog expense={deleting} onClose={() => setDeleting(null)} />
+      <RefundFormDialog
+        open={refundOriginal != null}
+        onOpenChange={(open) => !open && setRefundOriginal(null)}
+        original={refundOriginal}
+        allPayments={payments}
+      />
+      <PaymentVoidDialog
+        open={voidOriginal != null}
+        onOpenChange={(open) => !open && setVoidOriginal(null)}
+        payment={voidOriginal}
+        allPayments={payments}
+        canRecord={canRecordPayments && !paymentsUnavailable}
+      />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetClients } from "../clients/useGetClients";
 import { Textarea } from "../../ui/Textarea";
 import { Button } from "../../ui/Button";
@@ -14,7 +13,7 @@ import { catalogServiceToOrderLine, sumOrderServiceLines } from "../services/ord
 import { sumOrderMaterialLines } from "../inventory/orderMaterialLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -23,9 +22,12 @@ import { canManageServices } from "../workspaces/workspaceRoles";
 import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
 import ClientTypeSelect from "../clients/ClientTypeSelect";
 import { industryClientCopy } from "../industries/industryWorkflow";
+import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
+import OrderAssigneeSelect from "./OrderAssigneeSelect";
+import { OrderVehicleFields } from "./OrderVehicleFields";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 
@@ -44,6 +46,7 @@ export default function AddNewOrderForm({
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
+  const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const [clientName, setClientName] = useState(initialClientName);
   const submitLockRef = useRef(false);
@@ -65,6 +68,7 @@ export default function AddNewOrderForm({
   } = useForm<addNewOrderFormData>({
     defaultValues: {
       clientId: initialClientId,
+      vehicleId: "",
       device: "",
       vin: "",
       carNumber: "",
@@ -80,10 +84,16 @@ export default function AddNewOrderForm({
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
   const selectedClientId = useWatch({ control, name: "clientId" });
+  const selectedVehicleId = useWatch({ control, name: "vehicleId" });
+  const hideVehicleAssetFields = showVehicles && Boolean(selectedVehicleId?.trim());
   const typedClientName = clientName.trim();
   const isNewClient = typedClientName !== "" && !selectedClientId && !clients?.some((client) => client.name?.toLowerCase() === typedClientName.toLowerCase());
   const newClientType = useWatch({ control, name: "newClientType" });
   const isNewOrganization = isNewClient && newClientType === "organization";
+
+  useEffect(() => {
+    if (hideVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
+  }, [clearErrors, hideVehicleAssetFields]);
 
   const {
     fields: serviceField,
@@ -92,13 +102,6 @@ export default function AddNewOrderForm({
   } = useFieldArray({
     control,
     name: "services",
-    rules: {
-      required: t("orders.validation.serviceRequired"),
-      minLength: {
-        value: 1,
-        message: t("orders.validation.serviceRequired"),
-      },
-    },
   });
 
   const {
@@ -131,11 +134,12 @@ export default function AddNewOrderForm({
         clientContactPerson: data.newClientContactPerson,
         clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
+        vehicleId: data.vehicleId || null,
         device: data.device?.trim() ?? "",
         vin: workflow.orderFields.vin.visible ? data.vin : "",
         carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : "",
         description: data.description,
-        services: data.services,
+        services: data.services ?? [],
         materials: data.materials,
         assignedEmployeeId: data.assignedEmployeeId || undefined,
         deadline: data.deadline,
@@ -156,9 +160,6 @@ export default function AddNewOrderForm({
           <Controller
             name="clientId"
             control={control}
-            rules={{
-              validate: (clientId) => clientId.trim() !== "" || clientName.trim() !== "" || t("orders.validation.clientRequired"),
-            }}
             render={({ field }) => (
               <ClientCombobox
                 inputRef={field.ref}
@@ -166,23 +167,24 @@ export default function AddNewOrderForm({
                 clients={clients ?? []}
                 value={clientName}
                 onChange={(value) => {
-                  // clientName = value;
                   setClientName(value);
                   field.onChange("");
+                  setValue("vehicleId", "");
                   if (isSubmitted) {
                     void trigger("clientId");
                   }
                 }}
                 onSelect={(client) => {
-                  // clientName = client.name;
                   setClientName(client.name);
                   field.onChange(client.id);
+                  setValue("vehicleId", "");
                 }}
               />
             )}
           />
 
           {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>}
+          <p className="text-xs text-muted-foreground">{t("orders.form.draftHint")}</p>
 
           {isNewClient && (
             <div className="space-y-4 pt-1.5">
@@ -202,11 +204,11 @@ export default function AddNewOrderForm({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="newClientTaxId">{t("orders.form.idnoLabel")}</Label>
-                    <Input id="newClientTaxId" {...register("newClientTaxId", { shouldUnregister: true })} placeholder={t("common.optional")} />
+                    <Input id="newClientTaxId" {...register("newClientTaxId", { shouldUnregister: true })} placeholder={t("clients.form.taxIdPlaceholder")} />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="newClientContactPerson">{t("orders.form.contactNameLabel")}</Label>
-                    <Input id="newClientContactPerson" {...register("newClientContactPerson", { shouldUnregister: true })} placeholder={t("common.optional")} />
+                    <Input id="newClientContactPerson" {...register("newClientContactPerson", { shouldUnregister: true })} placeholder={t("clients.form.contactPersonPlaceholder")} />
                   </div>
                 </div>
               )}
@@ -216,7 +218,7 @@ export default function AddNewOrderForm({
                   <Input
                     id="newClientPhone"
                     {...register("newClientPhone", { ...clientPhoneRules(), shouldUnregister: true })}
-                    placeholder="+37300000000"
+                    placeholder={t("clients.form.phonePlaceholder")}
                     className={errors.newClientPhone ? "border-destructive" : ""}
                   />
                   {errors.newClientPhone && <p className="text-xs text-destructive">{errors.newClientPhone.message}</p>}
@@ -227,7 +229,7 @@ export default function AddNewOrderForm({
                     id="newClientEmail"
                     type="email"
                     {...register("newClientEmail", { ...clientEmailRules(), shouldUnregister: true })}
-                    placeholder="email@example.com"
+                    placeholder={t("clients.form.emailPlaceholder")}
                     className={errors.newClientEmail ? "border-destructive" : ""}
                   />
                   {errors.newClientEmail && <p className="text-xs text-destructive">{errors.newClientEmail.message}</p>}
@@ -260,7 +262,18 @@ export default function AddNewOrderForm({
           {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>} */}
         </div>
 
-        <OrderAssetFields register={register} errors={errors} workflow={workflow} copy={copy} preserveHiddenValues />
+        {showVehicles && selectedClientId ? (
+          <OrderVehicleFields control={control} setValue={setValue} clientId={selectedClientId} disabled={isSubmitting} />
+        ) : null}
+
+        <OrderAssetFields
+          register={register}
+          errors={errors}
+          workflow={workflow}
+          copy={copy}
+          preserveHiddenValues
+          hideVisibleFields={hideVehicleAssetFields}
+        />
 
         <div className="space-y-1.5">
           <Label htmlFor="service">{t("orders.form.serviceLabel")}</Label>
@@ -340,38 +353,29 @@ export default function AddNewOrderForm({
           <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="assignedEmployeeId">{copy.assignedEmployeeRequiredLabel}</Label>
-            <Controller
-              name="assignedEmployeeId"
-              control={control}
-              rules={{
-                required: t("orders.validation.assignedEmployeeRequired"),
-              }}
-              render={({ field }) => (
-                <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                  <SelectTrigger className={errors.assignedEmployeeId ? "border-destructive" : ""}>
-                    <SelectValue placeholder={t("orders.form.selectPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {technicianOptions.map((technician) => (
-                      <SelectItem key={technician.id} value={technician.id}>
-                        {technician.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {techniciansError && (
-              <p className="text-xs text-destructive">{techniciansError instanceof Error ? techniciansError.message : t("orders.form.techniciansLoadFailed")}</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Controller
+            name="assignedEmployeeId"
+            control={control}
+            render={({ field }) => (
+              <OrderAssigneeSelect
+                id="assignedEmployeeId"
+                label={copy.assignedEmployeeLabel}
+                value={field.value ?? ""}
+                options={technicianOptions}
+                disabled={isSubmitting}
+                errorMessage={
+                  techniciansError instanceof Error ? techniciansError.message : techniciansError ? t("orders.form.techniciansLoadFailed") : null
+                }
+                emptyHint={
+                  !techniciansError && !employeesLoading && employees && technicianOptions.length === 0
+                    ? t("orders.form.noLinkedTechnicians")
+                    : null
+                }
+                onChange={field.onChange}
+              />
             )}
-            {!techniciansError && !employeesLoading && employees && technicianOptions.length === 0 && (
-              <p className="text-xs text-muted-foreground">{t("orders.form.noLinkedTechnicians")}</p>
-            )}
-            {errors.assignedEmployeeId && <p className="text-xs text-destructive">{errors.assignedEmployeeId.message}</p>}
-          </div>
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="deadline">{copy.deadlineLabel}</Label>
@@ -392,7 +396,7 @@ export default function AddNewOrderForm({
           {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("orders.createOrder")}
+          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("orders.form.saveDraft")}
         </Button>
       </div>
     </form>

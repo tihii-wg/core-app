@@ -68,7 +68,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
       {showMiddleName && !isOrganization ? (
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-middle-name`}>{t("clients.form.middleNameLabel")}</Label>
-          <Input id={`${idPrefix}-middle-name`} {...register("middleName")} placeholder={t("common.optional")} disabled={disabled} />
+          <Input id={`${idPrefix}-middle-name`} {...register("middleName")} placeholder={t("clients.form.middleNamePlaceholder")} disabled={disabled} />
         </div>
       ) : null}
 
@@ -76,11 +76,11 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-tax-id`}>{t("clients.form.taxIdLabel")}</Label>
-            <Input id={`${idPrefix}-tax-id`} {...register("taxId")} placeholder={t("common.optional")} disabled={disabled} />
+            <Input id={`${idPrefix}-tax-id`} {...register("taxId")} placeholder={t("clients.form.taxIdPlaceholder")} disabled={disabled} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-contact`}>{t("clients.form.contactPersonLabel")}</Label>
-            <Input id={`${idPrefix}-contact`} {...register("contactPerson")} placeholder={t("common.optional")} disabled={disabled} />
+            <Input id={`${idPrefix}-contact`} {...register("contactPerson")} placeholder={t("clients.form.contactPersonPlaceholder")} disabled={disabled} />
           </div>
         </div>
       )}
@@ -92,7 +92,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
             id={`${idPrefix}-email`}
             type="email"
             {...register("email", clientEmailRules())}
-            placeholder="email@example.com"
+            placeholder={t("clients.form.emailPlaceholder")}
             className={errors.email ? "border-destructive" : ""}
             disabled={disabled}
           />
@@ -103,7 +103,7 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
           <Input
             id={`${idPrefix}-phone`}
             {...register("phone", clientPhoneRules())}
-            placeholder="+37300000000"
+            placeholder={t("clients.form.phonePlaceholder")}
             className={errors.phone ? "border-destructive" : ""}
             disabled={disabled}
           />

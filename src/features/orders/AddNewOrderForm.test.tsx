@@ -51,11 +51,29 @@ vi.mock("../industries/useIndustryWorkflow", async () => {
   };
 });
 
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useGuardSubscriptionWrite: () => () => {},
+  useWorkspaceSubscription: () => ({ canWrite: true }),
+}));
+
 async function addCustomService(user: ReturnType<typeof userEvent.setup>, name: string, price: string) {
-  await user.type(screen.getByLabelText("Service *"), name);
+  await user.type(screen.getByLabelText(/^Service$/), name);
   await user.type(screen.getByLabelText("Price"), price);
   await user.click(screen.getByRole("button", { name: "Add" }));
 }
+
+const saveDraftButton = () => screen.getByRole("button", { name: "Save draft order" });
 
 describe("AddNewOrderForm client validation", () => {
   beforeEach(() => {
@@ -71,16 +89,25 @@ describe("AddNewOrderForm client validation", () => {
     Element.prototype.scrollIntoView = () => {};
   });
 
-  it("marks the client field when Create Order is clicked with an empty form", async () => {
+  it("saves an empty draft without requiring client, vehicle, or services", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+    const setCreateModalOpen = vi.fn();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" />);
 
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
+    await user.click(saveDraftButton());
 
-    expect(await screen.findByText("Client is required")).toBeInTheDocument();
-    expect(screen.getByLabelText("Client *")).toHaveClass("border-destructive");
-    expect(screen.getByText("Vehicle is required")).toBeInTheDocument();
-    expect(screen.getByText("License plate is required")).toBeInTheDocument();
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(1));
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: undefined,
+        clientName: "",
+        vehicleId: null,
+        services: [],
+      }),
+    );
+    expect(setCreateModalOpen).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("Client is required")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vehicle is required")).not.toBeInTheDocument();
   });
 
   it("hides automotive fields for home_services and does not require them", async () => {
@@ -92,40 +119,27 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Job \/ location/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
+    await user.click(saveDraftButton());
 
-    expect(await screen.findByText("Client is required")).toBeInTheDocument();
-    expect(screen.getByText("Job or location is required")).toBeInTheDocument();
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Job or location is required")).not.toBeInTheDocument();
     expect(screen.queryByText("License plate is required")).not.toBeInTheDocument();
     expect(screen.queryByText("VIN is required")).not.toBeInTheDocument();
   });
 
-  it("clears automotive validation when the industry switches away from auto_repair", async () => {
+  it("keeps typed plate and VIN values when the industry switches away from auto_repair", async () => {
     const user = userEvent.setup();
     const { rerender } = renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
-    expect(await screen.findByText("VIN is required")).toBeInTheDocument();
-    expect(screen.getByText("License plate is required")).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/^VIN$/), "ABC123");
+    await user.type(screen.getByLabelText(/License plate/i), "ABC123");
 
     employeesState.industrySlug = "home_services";
     rerender(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    expect(screen.queryByText("VIN is required")).not.toBeInTheDocument();
-    expect(screen.queryByText("License plate is required")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^VIN$/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Job \/ location/i)).toBeInTheDocument();
-  });
-
-  it("clears the client warning after a name is entered", async () => {
-    const user = userEvent.setup();
-    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
-
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
-    expect(await screen.findByText("Client is required")).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText("Client *"), "Ada");
-
-    expect(screen.queryByText("Client is required")).not.toBeInTheDocument();
   });
 
   it("asks for the phone and email of a new client with the client form's validation", async () => {
@@ -134,16 +148,15 @@ describe("AddNewOrderForm client validation", () => {
 
     expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("Client *"), "Nina New");
+    await user.type(screen.getByLabelText(/^Client$/), "Nina New");
     expect(screen.getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
     await user.type(screen.getByLabelText("Phone *"), "069123456");
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
+    await user.click(saveDraftButton());
 
     expect(await screen.findByText("Phone must be in format +37300000000")).toBeInTheDocument();
     expect(screen.getByText("Email is required")).toBeInTheDocument();
-    expect(screen.queryByText("Client is required")).not.toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("Client *"));
+    await user.clear(screen.getByLabelText(/^Client$/));
     expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
     expect(screen.queryByText("Email is required")).not.toBeInTheDocument();
   });
@@ -152,38 +165,43 @@ describe("AddNewOrderForm client validation", () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.type(screen.getByLabelText("Client *"), "Fleet SRL");
+    await user.type(screen.getByLabelText(/^Client$/), "Fleet SRL");
     expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: "Client type *" }));
     await user.click(await screen.findByRole("option", { name: "Organization" }));
 
-    expect(screen.getByLabelText("Organization name *")).toHaveValue("Fleet SRL");
+    expect(screen.getByLabelText(/^Organization name$/)).toHaveValue("Fleet SRL");
     expect(screen.getByLabelText("IDNO")).toBeInTheDocument();
     expect(screen.getByLabelText("Contact name")).toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: "Client type *" }));
     await user.click(await screen.findByRole("option", { name: "Individual" }));
 
-    expect(screen.getByLabelText("Client *")).toHaveValue("Fleet SRL");
+    expect(screen.getByLabelText(/^Client$/)).toHaveValue("Fleet SRL");
     expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
   });
 
-  it("requires the VIN to contain exactly 17 characters", async () => {
+  it("requires the VIN to contain exactly 17 valid characters when provided", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.type(screen.getByLabelText("VIN *"), "ABC123");
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
+    await user.type(screen.getByLabelText(/^VIN$/), "ABC123");
+    await user.click(saveDraftButton());
 
-    expect(await screen.findByText("VIN must contain exactly 17 characters")).toBeInTheDocument();
+    expect(await screen.findByText(/VIN must contain exactly 17 valid characters/i)).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("VIN *"));
-    await user.type(screen.getByLabelText("VIN *"), "1HGBH41JXMN109186");
-    await user.click(screen.getByRole("button", { name: "Create Order" }));
+    await user.clear(screen.getByLabelText(/^VIN$/));
+    await user.type(screen.getByLabelText(/^VIN$/), "IHGBH41JXMN109186");
+    await user.click(saveDraftButton());
+    expect(await screen.findByText(/VIN must contain exactly 17 valid characters/i)).toBeInTheDocument();
 
-    expect(screen.queryByText("VIN must contain exactly 17 characters")).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/^VIN$/));
+    await user.type(screen.getByLabelText(/^VIN$/), "1HGBH41JXMN109186");
+    await user.click(saveDraftButton());
+
+    expect(screen.queryByText(/VIN must contain exactly 17 valid characters/i)).not.toBeInTheDocument();
   });
 
   it("adds a custom service to the order", async () => {
@@ -241,7 +259,7 @@ describe("AddNewOrderForm client validation", () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.click(screen.getByLabelText("Service *"));
+    await user.click(screen.getByLabelText(/^Service$/));
     await user.click(await screen.findByRole("button", { name: /Oil change/i }));
 
     expect(screen.getByText("Oil change")).toBeInTheDocument();
@@ -253,7 +271,7 @@ describe("AddNewOrderForm client validation", () => {
       <AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="Ada Alpha" initialClientId="client-1" initialClientName="Ada Alpha" />,
     );
 
-    expect(screen.getByLabelText("Client *")).toHaveValue("Ada Alpha");
+    expect(screen.getByLabelText(/^Client$/)).toHaveValue("Ada Alpha");
   });
 
   it("prevents duplicate submissions while create is in flight", async () => {
@@ -276,12 +294,11 @@ describe("AddNewOrderForm client validation", () => {
     await user.type(screen.getByLabelText("Email *"), "ada@example.com");
     await user.type(screen.getByLabelText(/Job \/ location/i), "Kitchen");
     await addCustomService(user, "Install sink", "100");
-    const assignee = screen.getAllByRole("combobox").find((el) => el.textContent?.includes("Select"));
-    expect(assignee).toBeTruthy();
-    await user.click(assignee!);
+    const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });
+    await user.click(assignee);
     await user.click(await screen.findByRole("option", { name: "Ada" }));
 
-    const submit = screen.getByRole("button", { name: "Create Order" });
+    const submit = saveDraftButton();
     await user.click(submit);
     await user.click(submit);
 
@@ -297,7 +314,7 @@ describe("AddNewOrderForm client validation", () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.type(screen.getByLabelText("Service *"), "Wheel alignment");
+    await user.type(screen.getByLabelText(/^Service$/), "Wheel alignment");
 
     expect(screen.queryByText(/Create:/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
@@ -309,10 +326,11 @@ describe("AddNewOrderForm client validation", () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.click(screen.getByRole("combobox"));
+    const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });
+    await user.click(assignee);
     await user.click(await screen.findByRole("option", { name: "Ada" }));
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Ada");
+    expect(assignee).toHaveTextContent("Ada");
     expect(consoleError.mock.calls.flat().join(" ")).not.toContain("uncontrolled");
     consoleError.mockRestore();
   });
@@ -325,7 +343,7 @@ describe("AddNewOrderForm client validation", () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("combobox", { name: /Assigned technician/i }));
 
     expect(await screen.findByRole("option", { name: "Alexander" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Owner Name" })).not.toBeInTheDocument();

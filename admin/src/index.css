@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root,
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8;
+  --bg-elevated: #ffffff;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --primary: #0f766e;
+  --primary-fg: #f0fdfa;
+  --danger: #b91c1c;
+  --warning: #b45309;
+  --success: #047857;
+  --sidebar: #0b1220;
+  --sidebar-fg: #e2e8f0;
+  --sidebar-muted: #94a3b8;
+  --overlay: rgb(15 23 42 / 0.4);
+  --ring: color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #090e16;
+  --bg-elevated: #111827;
+  --fg: #e5eef8;
+  --muted: #94a3b8;
+  --border: #1f2937;
+  --primary: #2dd4bf;
+  --primary-fg: #042f2e;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --success: #34d399;
+  --sidebar: #060a12;
+  --sidebar-fg: #e2e8f0;
+  --sidebar-muted: #94a3b8;
+  --overlay: rgb(0 0 0 / 0.55);
+  --ring: color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+html {
+  /* Match Core App globals.css --font-sans */
+  font-family: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

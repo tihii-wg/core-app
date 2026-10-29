@@ -6,7 +6,22 @@ import { Finance } from "./Finance";
 
 const financeState = vi.hoisted(() => ({
   isLoading: false,
-  inPeriod: [] as { id: string; type: string; category: string; description: string; amount: number; date: string }[],
+  inPeriod: [] as Record<string, unknown>[],
+  payments: [] as {
+    id: string;
+    workspaceId: string;
+    orderId: string | null;
+    invoiceId: string | null;
+    relatedPaymentId: string | null;
+    kind: "payment" | "refund";
+    amount: number;
+    currencyCode: string;
+    paymentMethod: "cash" | "card" | "bank_transfer" | "other";
+    paidAt: string;
+    note: string;
+    createdBy: string | null;
+    createdAt: string;
+  }[],
   stats: {
     grossReceipts: 0,
     invoiceLinkedReceipts: 0,
@@ -35,6 +50,7 @@ vi.mock("./useFinanceTransactions", () => ({
   useFinanceTransactions: () => ({
     transactions: financeState.inPeriod,
     inPeriod: financeState.inPeriod,
+    payments: financeState.payments,
     stats: financeState.stats,
     legacyItems: financeState.legacyItems,
     isLoading: financeState.isLoading,
@@ -48,6 +64,9 @@ vi.mock("./useFinanceTransactions", () => ({
     refetch: financeState.refetch,
   }),
 }));
+
+vi.mock("./RefundFormDialog", () => ({ RefundFormDialog: () => null }));
+vi.mock("./PaymentVoidDialog", () => ({ PaymentVoidDialog: () => null }));
 
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}`, currency: "MDL" }),
@@ -80,6 +99,7 @@ describe("Finance page", () => {
   beforeEach(() => {
     financeState.isLoading = false;
     financeState.inPeriod = [];
+    financeState.payments = [];
     financeState.legacyItems = [];
     financeState.stats = {
       grossReceipts: 120,
@@ -157,4 +177,77 @@ describe("Finance page", () => {
     expect(screen.getByText(/Unreconciled legacy records/i)).toBeInTheDocument();
     expect(screen.getByText(/INV-1/)).toBeInTheDocument();
   });
+
+  it("shows a three-dot actions menu on payment rows with refund when supported", async () => {
+    const user = userEvent.setup();
+    const ledgerPayment = {
+      id: "pay-1",
+      workspaceId: "ws-1",
+      orderId: "ord-1",
+      invoiceId: null as string | null,
+      relatedPaymentId: null as string | null,
+      kind: "payment" as const,
+      amount: 80,
+      currencyCode: "MDL",
+      paymentMethod: "cash" as const,
+      paidAt: "2026-03-10T10:00:00.000Z",
+      note: "",
+      createdBy: null as string | null,
+      createdAt: "2026-03-10T10:00:00.000Z",
+    };
+    const refundRow = {
+      ...ledgerPayment,
+      id: "ref-1",
+      kind: "refund" as const,
+      amount: 20,
+      relatedPaymentId: "pay-1",
+    };
+    financeState.payments = [ledgerPayment, refundRow];
+    financeState.inPeriod = [
+      {
+        id: "payment-pay-1",
+        type: "income",
+        category: "Order payment",
+        description: "Order #1",
+        amount: 80,
+        date: "2026-03-10",
+        paymentMethod: "cash",
+        kind: "payment",
+        source: "ledger",
+        payment: ledgerPayment,
+      },
+      {
+        id: "payment-ref-1",
+        type: "refund",
+        category: "Refund",
+        description: "Order #1",
+        amount: 20,
+        date: "2026-03-11",
+        paymentMethod: "cash",
+        kind: "refund",
+        source: "ledger",
+        payment: refundRow,
+      },
+    ];
+
+    renderWithQuery(<Finance />);
+
+    const paymentMenu = screen.getByRole("button", { name: /Actions for Payment/i });
+    const refundMenu = screen.getByRole("button", { name: /Actions for Refund/i });
+    expect(paymentMenu).toBeInTheDocument();
+    expect(refundMenu).toBeInTheDocument();
+
+    await user.click(paymentMenu);
+    expect(screen.getByRole("menuitem", { name: /Record refund/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Void erroneous payment/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /edit/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /^delete$/i })).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(refundMenu);
+    expect(screen.queryByRole("menuitem", { name: /Record refund/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Void erroneous/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /No available actions/i })).toHaveAttribute("aria-disabled", "true");
+  });
 });
+

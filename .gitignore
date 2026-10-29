@@ -12,10 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Admin app (same repo; own install/build/env — never nest a .git here)
+admin/node_modules
+admin/dist
+
 # Environment files (real values live in Vercel / local only)
 .env
 .env.*
 !.env.example
+!admin/.env.example
 
 # Editor directories and files
 .vscode/*

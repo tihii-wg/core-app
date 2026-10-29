@@ -141,7 +141,7 @@ function ExpenseForm({ expense, knownCategories, onDone }: { expense: Expense | 
 
         <div className="space-y-1.5">
           <Label htmlFor="expense-description">{t("finance.expenses.fields.description")}</Label>
-          <Textarea id="expense-description" rows={3} placeholder={t("common.optional")} {...register("description", { maxLength: { value: 500, message: t("finance.expenses.validation.descriptionTooLong") } })} disabled={saving} />
+          <Textarea id="expense-description" rows={3} placeholder={t("finance.expenses.fields.descriptionPlaceholder")} {...register("description", { maxLength: { value: 500, message: t("finance.expenses.validation.descriptionTooLong") } })} disabled={saving} />
           <FieldError message={errors.description?.message} />
         </div>
 

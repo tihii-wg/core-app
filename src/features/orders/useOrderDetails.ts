@@ -59,6 +59,14 @@ export function useOrderDetails() {
       return resolveOrderForTaxGate(order, current);
     });
 
+  const clearOrder = (orderId: string) => {
+    setSelectedOrder((current) => {
+      if (current?.id !== orderId) return current;
+      return null;
+    });
+    setDetailPanelOpen(false);
+  };
+
   const applyStatusLocally = (orderId: string, newStatus: OrderStatus) => {
     setSelectedOrder((current) => {
       if (current?.id !== orderId) return current;
@@ -112,6 +120,7 @@ export function useOrderDetails() {
   return {
     openOrder,
     syncOrder,
+    clearOrder,
     changeStatus,
     isStatusUpdating,
     requireTaxInvoiceNumber,

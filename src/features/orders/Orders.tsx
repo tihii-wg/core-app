@@ -125,6 +125,15 @@ export function Orders() {
     return map;
   }, [orders, payments]);
 
+  const paymentCountByOrder = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of payments) {
+      if (!row.orderId) continue;
+      map.set(row.orderId, (map.get(row.orderId) ?? 0) + 1);
+    }
+    return map;
+  }, [payments]);
+
   const awaitingPayment = useOrdersAwaitingPayment();
   const { canWrite: canCreateOrders } = useWorkspaceSubscription();
 
@@ -245,6 +254,7 @@ export function Orders() {
           <OrderActionsMenu
             order={order}
             invoiceNumber={invoiceNumberByOrder.get(order.id)}
+            linkedPaymentCount={paymentCountByOrder.get(order.id) ?? 0}
             invoicesUnavailable={invoicesUnavailable}
             isCreatingInvoice={createInvoice.isPending}
             isStatusUpdating={orderDetails.isStatusUpdating}
@@ -253,6 +263,10 @@ export function Orders() {
             onEdit={setEditingOrder}
             onStatusChange={orderDetails.changeStatus}
             onCreateInvoice={handleCreateInvoice}
+            onDeleted={(orderId) => {
+              orderDetails.clearOrder(orderId);
+              setEditingOrder((current) => (current?.id === orderId ? null : current));
+            }}
           />
         </div>
       ),
@@ -426,6 +440,7 @@ export function Orders() {
                 key={order.id}
                 order={order}
                 invoiceNumber={invoiceNumberByOrder.get(order.id)}
+                linkedPaymentCount={paymentCountByOrder.get(order.id) ?? 0}
                 invoicesUnavailable={invoicesUnavailable}
                 isCreatingInvoice={createInvoice.isPending}
                 isStatusUpdating={orderDetails.isStatusUpdating}
@@ -436,6 +451,10 @@ export function Orders() {
                 onEdit={setEditingOrder}
                 onStatusChange={orderDetails.changeStatus}
                 onCreateInvoice={handleCreateInvoice}
+                onDeleted={(orderId) => {
+                  orderDetails.clearOrder(orderId);
+                  setEditingOrder((current) => (current?.id === orderId ? null : current));
+                }}
               />
             ))}
           </div>

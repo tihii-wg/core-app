@@ -7,6 +7,7 @@ import { OrderActionsMenu } from "./OrderActionsMenu";
 type OrderCardProps = {
   order: Order;
   invoiceNumber?: string;
+  linkedPaymentCount?: number;
   invoicesUnavailable?: boolean;
   isCreatingInvoice?: boolean;
   isStatusUpdating?: boolean;
@@ -18,6 +19,7 @@ type OrderCardProps = {
   onEdit: (order: Order) => void;
   onStatusChange: (order: Order, status: OrderStatus) => void;
   onCreateInvoice: (order: Order) => void;
+  onDeleted?: (orderId: string) => void;
 };
 
 /**
@@ -28,6 +30,7 @@ type OrderCardProps = {
 export function OrderCard({
   order,
   invoiceNumber,
+  linkedPaymentCount = 0,
   invoicesUnavailable = false,
   isCreatingInvoice = false,
   isStatusUpdating = false,
@@ -38,6 +41,7 @@ export function OrderCard({
   onEdit,
   onStatusChange,
   onCreateInvoice,
+  onDeleted,
 }: OrderCardProps) {
   const { t } = useTranslation();
   const registration = order.carNumber?.trim() || order.vin?.trim() || "";
@@ -58,6 +62,7 @@ export function OrderCard({
         <OrderActionsMenu
           order={order}
           invoiceNumber={invoiceNumber}
+          linkedPaymentCount={linkedPaymentCount}
           invoicesUnavailable={invoicesUnavailable}
           isCreatingInvoice={isCreatingInvoice}
           isStatusUpdating={isStatusUpdating}
@@ -66,6 +71,7 @@ export function OrderCard({
           onEdit={onEdit}
           onStatusChange={onStatusChange}
           onCreateInvoice={onCreateInvoice}
+          onDeleted={onDeleted}
           triggerClassName="size-10 shrink-0"
         />
       </div>

@@ -1,5 +1,6 @@
 import i18n from "../../i18n";
 import type { OrderStatus, serviceCategory } from "../../lib/types";
+import { isValidOptionalVin, normalizeVin } from "../../lib/vin";
 
 /** Stored order.status values (application constants; DB column is unconstrained text). */
 export const ORDER_STATUSES: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
@@ -58,26 +59,27 @@ const autoServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "u
 const deviceServiceCategories: ServiceCategoryValue[] = ["repair", "software", "data", "update", "assesment"];
 const fieldServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
 
+/** Automotive fields remain visible for auto_repair but are optional so empty drafts can be saved. */
 const automotiveFields: IndustryOrderFields = {
-  device: { visible: true, required: true },
-  carNumber: { visible: true, required: true },
-  vin: { visible: true, required: true, exactLength: 17 },
+  device: { visible: true, required: false },
+  carNumber: { visible: true, required: false },
+  vin: { visible: true, required: false, exactLength: 17 },
 };
 
 const repairDeviceFields: IndustryOrderFields = {
-  device: { visible: true, required: true },
+  device: { visible: true, required: false },
   carNumber: { visible: false, required: false },
   vin: { visible: false, required: false },
 };
 
 const fieldServiceFields: IndustryOrderFields = {
-  device: { visible: true, required: true },
+  device: { visible: true, required: false },
   carNumber: { visible: false, required: false },
   vin: { visible: false, required: false },
 };
 
 const defaultFields: IndustryOrderFields = {
-  device: { visible: true, required: true },
+  device: { visible: true, required: false },
   carNumber: { visible: false, required: false },
   vin: { visible: false, required: false },
 };
@@ -248,8 +250,8 @@ export function industryInventoryCopy(workflow: IndustryWorkflow) {
     detailFallbackTitle: text("detailFallbackTitle", "inventory.detail.fallbackTitle"),
     detailDescription: text("detailDescription", "inventory.detail.description"),
     namePlaceholder: text("namePlaceholder", "inventory.form.namePlaceholder"),
-    categoryPlaceholder: text("categoryPlaceholder", "common.optional"),
-    locationPlaceholder: text("locationPlaceholder", "common.optional"),
+    categoryPlaceholder: text("categoryPlaceholder", "inventory.form.categoryPlaceholder"),
+    locationPlaceholder: text("locationPlaceholder", "inventory.form.locationPlaceholder"),
   };
 }
 
@@ -378,8 +380,12 @@ export function orderAssetFieldRules(field: OrderAssetFieldConfig, messages: { r
     ...(field.exactLength
       ? {
           validate: (value: string) => {
-            const trimmed = value?.trim() ?? "";
+            const trimmed = normalizeVin(value);
             if (!trimmed) return field.required ? messages.required : true;
+            // Automotive VIN (exactLength 17): enforce ISO 3779 charset (no I/O/Q).
+            if (field.exactLength === 17) {
+              return isValidOptionalVin(trimmed) || messages.length || true;
+            }
             return trimmed.length === field.exactLength || messages.length || true;
           },
         }

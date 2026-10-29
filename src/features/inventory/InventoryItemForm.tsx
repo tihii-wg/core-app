@@ -91,7 +91,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="inventory-sku">{t("inventory.fields.sku")}</Label>
-            <Input id="inventory-sku" {...register("sku")} placeholder={t("common.optional")} />
+            <Input id="inventory-sku" {...register("sku")} placeholder={t("inventory.form.skuPlaceholder")} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inventory-category">{t("inventory.fields.category")}</Label>
@@ -101,7 +101,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
 
         <div className="space-y-1.5">
           <Label htmlFor="inventory-description">{t("inventory.fields.description")}</Label>
-          <Textarea id="inventory-description" {...register("description")} rows={3} placeholder={t("common.optional")} />
+          <Textarea id="inventory-description" {...register("description")} rows={3} placeholder={t("inventory.form.descriptionPlaceholder")} />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -208,7 +208,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                     field.onChange(purchasePrice);
                     applyMarkup(markupText, purchasePrice);
                   }}
-                  placeholder={t("common.optional")}
+                  placeholder={t("inventory.form.purchasePricePlaceholder")}
                   className={errors.purchasePrice ? "border-destructive" : ""}
                 />
               )}
@@ -231,7 +231,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
                   step="0.01"
                   value={field.value ?? ""}
                   onChange={(event) => field.onChange(event.target.value === "" ? null : Number(event.target.value))}
-                  placeholder={t("common.optional")}
+                  placeholder={t("inventory.form.sellingPricePlaceholder")}
                   className={errors.sellingPrice ? "border-destructive" : ""}
                 />
               )}
@@ -243,7 +243,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="inventory-supplier">{t("inventory.fields.supplier")}</Label>
-            <Input id="inventory-supplier" {...register("supplier")} placeholder={t("common.optional")} />
+            <Input id="inventory-supplier" {...register("supplier")} placeholder={t("inventory.form.supplierPlaceholder")} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="inventory-location">{t("inventory.fields.location")}</Label>

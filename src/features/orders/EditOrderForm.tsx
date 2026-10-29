@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -16,10 +17,12 @@ import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
+import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderAssetFields from "./OrderAssetFields";
+import { OrderVehicleFields } from "./OrderVehicleFields";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 
@@ -37,6 +40,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
+  const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const activeServices = services?.filter((service) => service.status === "active");
   const activeInventory = inventoryItems.filter((item) => item.isActive);
@@ -54,6 +58,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     formState: { errors, isSubmitting, isSubmitted },
   } = useForm<EditOrderFormData>({
     defaultValues: {
+      vehicleId: order.vehicleId ?? "",
       device: order.device,
       carNumber: order.carNumber,
       vin: order.vin,
@@ -75,13 +80,6 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     control,
     name: "services",
     keyName: "fieldKey",
-    rules: {
-      required: t("orders.validation.serviceRequired"),
-      minLength: {
-        value: 1,
-        message: t("orders.validation.serviceRequired"),
-      },
-    },
   });
 
   const {
@@ -95,7 +93,13 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const watchedServices = useWatch({ control, name: "services" });
   const watchedMaterials = useWatch({ control, name: "materials" });
+  const selectedVehicleId = useWatch({ control, name: "vehicleId" });
+  const hideVehicleAssetFields = showVehicles && Boolean(selectedVehicleId?.trim());
   const totalPrice = sumOrderServiceLines(watchedServices) + sumOrderMaterialLines(watchedMaterials);
+
+  useEffect(() => {
+    if (hideVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
+  }, [clearErrors, hideVehicleAssetFields]);
 
   function hasService(serviceId: string | null, serviceName: string) {
     return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
@@ -103,15 +107,21 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const onSubmit = async (data: EditOrderFormData) => {
     try {
-      // Preserve vehicle fields that are hidden for this industry so historical values are not wiped.
+      // Preserve vehicle fields that are hidden for this industry (or replaced by a selected vehicle record).
+      const hideAssetsForSelectedVehicle = showVehicles && Boolean(data.vehicleId?.trim());
       const updatedOrder = await updateOrder({
         orderId: order.id,
         ...data,
-        services: data.services,
+        vehicleId: data.vehicleId || "",
+        services: data.services ?? [],
         materials: data.materials,
-        carNumber: workflow.orderFields.carNumber.visible ? data.carNumber : order.carNumber,
-        vin: workflow.orderFields.vin.visible ? data.vin : order.vin,
-        device: workflow.orderFields.device.visible ? data.device : order.device || data.device,
+        carNumber:
+          workflow.orderFields.carNumber.visible && !hideAssetsForSelectedVehicle ? data.carNumber : order.carNumber,
+        vin: workflow.orderFields.vin.visible && !hideAssetsForSelectedVehicle ? data.vin : order.vin,
+        device:
+          workflow.orderFields.device.visible && !hideAssetsForSelectedVehicle
+            ? data.device
+            : order.device || data.device,
       });
       onUpdated(updatedOrder);
     } catch {
@@ -121,7 +131,20 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <OrderAssetFields register={register} errors={errors} workflow={workflow} copy={copy} idPrefix="edit-order-" disabled={isSubmitting} preserveHiddenValues />
+      {showVehicles && order.clientId ? (
+        <OrderVehicleFields control={control} setValue={setValue} clientId={order.clientId} disabled={isSubmitting} />
+      ) : null}
+
+      <OrderAssetFields
+        register={register}
+        errors={errors}
+        workflow={workflow}
+        copy={copy}
+        idPrefix="edit-order-"
+        disabled={isSubmitting}
+        preserveHiddenValues
+        hideVisibleFields={hideVehicleAssetFields}
+      />
 
       <div className="space-y-1.5">
         <Label htmlFor="service">{t("orders.form.addServiceLabel")}</Label>
@@ -184,7 +207,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         <Textarea id="edit-order-description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} disabled={isSubmitting} />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Controller
           name="assignedEmployeeId"
           control={control}

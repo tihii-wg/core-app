@@ -16,5 +16,6 @@ import reports from "./reports";
 import finance from "./finance";
 import invoices from "./invoices";
 import onboarding from "./onboarding";
+import vehicles from "./vehicles";
 
-export const en = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, employees, settings, team, reports, finance, invoices, onboarding };
+export const en = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, employees, settings, team, reports, finance, invoices, onboarding, vehicles };

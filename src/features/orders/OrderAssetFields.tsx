@@ -18,6 +18,11 @@ type OrderAssetFieldsProps<T extends AssetFields> = {
   disabled?: boolean;
   /** Keep hidden fields registered so edit submits preserve stored values. */
   preserveHiddenValues?: boolean;
+  /**
+   * Hide visible device/plate/VIN inputs (e.g. when an order vehicle is selected).
+   * Values stay registered as hidden inputs when preserveHiddenValues is true.
+   */
+  hideVisibleFields?: boolean;
 };
 
 export default function OrderAssetFields<T extends AssetFields>({
@@ -28,15 +33,21 @@ export default function OrderAssetFields<T extends AssetFields>({
   idPrefix = "",
   disabled = false,
   preserveHiddenValues = false,
+  hideVisibleFields = false,
 }: OrderAssetFieldsProps<T>) {
   const deviceId = `${idPrefix}device`;
   const carNumberId = `${idPrefix}carNumber`;
   const vinId = `${idPrefix}vin`;
   const { device, carNumber, vin } = workflow.orderFields;
 
+  const showDevice = device.visible && !hideVisibleFields;
+  const showCarNumber = carNumber.visible && !hideVisibleFields;
+  const showVin = vin.visible && !hideVisibleFields;
+  const keepHidden = preserveHiddenValues || hideVisibleFields;
+
   return (
     <>
-      {device.visible ? (
+      {showDevice ? (
         <div className="space-y-1.5">
           <Label htmlFor={deviceId}>{copy.deviceLabel}</Label>
           <Input
@@ -48,11 +59,11 @@ export default function OrderAssetFields<T extends AssetFields>({
           />
           {errors.device && <p className="text-xs text-destructive">{errors.device.message}</p>}
         </div>
-      ) : preserveHiddenValues ? (
+      ) : keepHidden && (device.visible || preserveHiddenValues) ? (
         <input type="hidden" {...register("device" as never)} />
       ) : null}
 
-      {carNumber.visible ? (
+      {showCarNumber ? (
         <div className="space-y-1.5">
           <Label htmlFor={carNumberId}>{copy.carNumberLabel}</Label>
           <Input
@@ -72,11 +83,11 @@ export default function OrderAssetFields<T extends AssetFields>({
           />
           {errors.carNumber && <p className="text-xs text-destructive">{errors.carNumber.message}</p>}
         </div>
-      ) : preserveHiddenValues ? (
+      ) : keepHidden && (carNumber.visible || preserveHiddenValues) ? (
         <input type="hidden" {...register("carNumber" as never)} />
       ) : null}
 
-      {vin.visible ? (
+      {showVin ? (
         <div className="space-y-1.5">
           <Label htmlFor={vinId}>{copy.vinLabel}</Label>
           <Input
@@ -97,7 +108,7 @@ export default function OrderAssetFields<T extends AssetFields>({
           />
           {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
         </div>
-      ) : preserveHiddenValues ? (
+      ) : keepHidden && (vin.visible || preserveHiddenValues) ? (
         <input type="hidden" {...register("vin" as never)} />
       ) : null}
     </>

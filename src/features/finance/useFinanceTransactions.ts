@@ -112,6 +112,8 @@ export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end
   return {
     transactions,
     inPeriod,
+    /** Full workspace payment list (for refundable balance / refund dialog). */
+    payments,
     stats,
     legacyItems,
     isLoading,

@@ -36,6 +36,26 @@ vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
 }));
 
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useGuardSubscriptionWrite: () => () => {},
+  useWorkspaceSubscription: () => ({ canWrite: true }),
+}));
+
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1", isLoading: false, error: null }),
+}));
+
 const client: Client = {
   id: "client-1",
   name: "Ada Lovelace",

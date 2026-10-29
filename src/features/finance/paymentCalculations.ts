@@ -438,6 +438,8 @@ export type FinanceLedgerTransaction = Transaction & {
   linkCategory?: "invoice" | "no-invoice";
   currencyCode?: string;
   relatedPaymentId?: string;
+  /** Source ledger row when this transaction is a payment/refund (for row actions). */
+  payment?: LedgerPayment;
   /** Confirmed ledger row — never a synthetic legacy aggregate. */
   source: "ledger" | "expense";
 };
@@ -467,6 +469,7 @@ export function paymentToTransaction(
     linkCategory: paymentLinkCategory(row),
     currencyCode: row.currencyCode,
     ...(row.relatedPaymentId ? { relatedPaymentId: row.relatedPaymentId } : {}),
+    payment: row,
     source: "ledger",
   };
 }

@@ -1,0 +1,54 @@
+-- =============================================================================
+-- PROPOSAL ONLY — DO NOT APPLY without explicit operator review.
+-- This file was NOT executed against any database by the authoring process.
+-- It is not a migration. Do not auto-run it.
+--
+-- Problem
+-- -------
+-- Mistaken payment rows cannot be safely cancelled today:
+--   1) public.payments is append-only for anon/authenticated (no UPDATE/DELETE).
+--   2) payments_kind_check (and the integrity trigger) allow only kind ∈
+--      {payment, refund}. There is no void / cancellation kind.
+--   3) There is no voided_at, cancelled_at, status, or deleted_at on payments.
+--   4) Using kind=refund for "money never received" conflates cash refunds with
+--      data-entry corrections and is rejected by product rules.
+--   5) Hard-deleting an order is blocked by payments_order_id_fkey while ANY
+--      payment/refund row still references the order — even after a full refund.
+--      Weakening that FK or cascading deletes is out of scope / disallowed.
+--
+-- Smallest schema change for void accounting (Finance balances)
+-- -------------------------------------------------------------
+-- A) Expand kind allowlist to include 'void':
+--      ALTER … DROP CONSTRAINT payments_kind_check;
+--      ALTER … ADD CONSTRAINT payments_kind_check
+--        CHECK (kind = ANY (ARRAY['payment','refund','void']));
+--    (Prefer a carefully reviewed replace of harden_payment_ledger.sql @v2
+--     rather than ad-hoc ALTER in production.)
+--
+-- B) Integrity trigger rules for NEW.kind = 'void':
+--    - related_payment_id MUST reference an existing kind='payment' row
+--      in the same workspace
+--    - Copy order_id / invoice_id / currency from the original (same as refund)
+--    - Reject void-against-void / void-against-refund
+--    - Amount must equal the original payment amount (full void only), OR
+--      equal refundable remaining if partial voids are later approved
+--    - Require note (reason) with a minimum length (app uses >= 8 chars)
+--    - Subtract from net collected like refunds for order/invoice remaining
+--    - Do NOT treat voids as refunds in reporting labels (app distinguishes)
+--
+-- C) Keep append-only: void is an INSERT, never UPDATE/DELETE of the original.
+--
+-- Order deletion after “resolution” (separate decision)
+-- ----------------------------------------------------
+-- Even with voids, hard DELETE FROM orders still fails while ledger rows keep
+-- order_id. Smallest safe options (pick one; do not cascade):
+--   Option 1 (recommended for audit): keep hard-delete blocked when any ledger
+--     row exists; operators cancel the order status instead of deleting.
+--   Option 2: add orders.deleted_at and soft-delete (hide) orders that have
+--     ledger history — requires app + RLS list filters; payments stay linked.
+--
+-- App gate
+-- --------
+-- src/features/finance/paymentVoid.ts sets PAYMENT_VOID_SCHEMA_SUPPORTED=false
+-- until this proposal (or equivalent) is applied and verified.
+-- =============================================================================

@@ -16,9 +16,9 @@ import {
 describe("industryWorkflow", () => {
   it("shows automotive fields for auto_repair", () => {
     const workflow = industryWorkflow("auto_repair");
-    expect(workflow.orderFields.device).toEqual({ visible: true, required: true });
-    expect(workflow.orderFields.carNumber).toEqual({ visible: true, required: true });
-    expect(workflow.orderFields.vin).toEqual({ visible: true, required: true, exactLength: 17 });
+    expect(workflow.orderFields.device).toEqual({ visible: true, required: false });
+    expect(workflow.orderFields.carNumber).toEqual({ visible: true, required: false });
+    expect(workflow.orderFields.vin).toEqual({ visible: true, required: false, exactLength: 17 });
     expect(workflow.copyPack).toBe("auto_repair");
   });
 
