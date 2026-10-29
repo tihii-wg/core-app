@@ -19,7 +19,7 @@ export function useCreateVehicle(clientId: string) {
     },
     onMutate: () => toast.loading(i18n.t("vehicles.toast.creating"), { id: "vehicle-mutate" }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, clientId) });
+      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId] });
       toast.success(i18n.t("vehicles.toast.created"), { id: "vehicle-mutate" });
     },
     onError: (error: Error) => {
@@ -39,8 +39,9 @@ export function useUpdateVehicle(clientId: string) {
       return updateVehicle(workspaceId, vehicleId, input);
     },
     onMutate: () => toast.loading(i18n.t("vehicles.toast.updating"), { id: "vehicle-mutate" }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, clientId) });
+      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId, "id", variables.vehicleId] });
       toast.success(i18n.t("vehicles.toast.updated"), { id: "vehicle-mutate" });
     },
     onError: (error: Error) => {
@@ -60,8 +61,9 @@ export function useArchiveVehicle(clientId: string) {
       return archiveVehicle(workspaceId, vehicleId);
     },
     onMutate: () => toast.loading(i18n.t("vehicles.toast.archiving"), { id: "vehicle-mutate" }),
-    onSuccess: () => {
+    onSuccess: (_data, vehicleId) => {
       void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, clientId) });
+      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId, "id", vehicleId] });
       void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       toast.success(i18n.t("vehicles.toast.archived"), { id: "vehicle-mutate" });
     },

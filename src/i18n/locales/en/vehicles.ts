@@ -18,6 +18,7 @@ export default {
   noneSelected: "No vehicle",
   selectedSummary: "Selected vehicle",
   selectedSummaryHint: "Vehicle details are taken from this record. Change or clear the selection above if needed.",
+  orderDetailsTitle: "Vehicle",
   untitled: "Untitled vehicle",
   loadFailed: "Could not load vehicles",
   fields: {

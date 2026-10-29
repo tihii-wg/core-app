@@ -84,7 +84,11 @@ vi.mock("../finance/usePayments", () => ({
 }));
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
-  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  useGetClientVehicles: () => ({
+    vehicles: linkedVehicleState.vehicle ? [linkedVehicleState.vehicle] : [],
+    isLoading: false,
+    isError: false,
+  }),
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
 }));
 
@@ -92,6 +96,39 @@ vi.mock("../vehicles/useVehicleMutations", () => ({
   useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+const linkedVehicleState = vi.hoisted(() => ({
+  vehicle: null as {
+    id: string;
+    workspaceId: string;
+    clientId: string;
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    vin: string | null;
+    licensePlate: string | null;
+    initialMileage: number | null;
+    currentMileage: number | null;
+    engineDisplacement: number | null;
+    fuelType: string | null;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+  } | null,
+}));
+
+vi.mock("../vehicles/useGetVehicle", () => ({
+  useGetVehicle: (vehicleId: string | null | undefined) => ({
+    vehicle: vehicleId ? linkedVehicleState.vehicle : null,
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: null,
+    notFound: Boolean(vehicleId && !linkedVehicleState.vehicle),
+    refetch: vi.fn(),
+  }),
+  vehicleQueryKey: (workspaceId: string | undefined, vehicleId: string) => ["vehicles", workspaceId, "id", vehicleId],
 }));
 
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
@@ -122,6 +159,7 @@ const order: Order = {
   clientEmail: "ada@example.com",
   clientPhone: "+37361111111",
   orderNumber: "ORD-2026-003",
+  vehicleId: "veh-1",
   device: "BMW",
   vin: "1HGBH41JXMN109186",
   carNumber: "ABC123",
@@ -193,6 +231,23 @@ beforeEach(() => {
   taxInvoiceHooks.isPending = false;
   taxInvoiceHooks.mutateAsync.mockReset();
   workspaceState.requireTaxInvoiceNumber = false;
+  linkedVehicleState.vehicle = {
+    id: "veh-1",
+    workspaceId: "ws-1",
+    clientId: "client-1",
+    make: "Toyota",
+    model: "Corolla",
+    year: 2018,
+    vin: "1HGBH41JXMN109186",
+    licensePlate: "ABC123",
+    initialMileage: 12000,
+    currentMileage: 45000,
+    engineDisplacement: 2,
+    fuelType: "diesel",
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  };
 });
 
 describe("OrderDetailPanel", () => {
@@ -235,6 +290,7 @@ describe("OrderDetailPanel", () => {
     expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: "order-1",
+        vehicleId: "veh-1",
         device: "BMW",
         carNumber: "ABC123",
         description: "Updated noise",
@@ -246,11 +302,15 @@ describe("OrderDetailPanel", () => {
     expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
   });
 
-  it("preserves VIN on save while adding a service (no order-level VIN input)", async () => {
+  it("preserves vehicle_id on save while adding a service (no order-level VIN input)", async () => {
     const user = userEvent.setup();
     updateOrderHooks.mutateAsync.mockResolvedValue(order);
 
     renderPanel();
+
+    expect(screen.getByTestId("order-linked-vehicle")).toBeInTheDocument();
+    expect(screen.getByText("Toyota")).toBeInTheDocument();
+    expect(screen.getByText("Diesel")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
@@ -260,6 +320,7 @@ describe("OrderDetailPanel", () => {
 
     expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
+        vehicleId: "veh-1",
         vin: "1HGBH41JXMN109186",
         carNumber: "ABC123",
         device: "BMW",
@@ -271,6 +332,13 @@ describe("OrderDetailPanel", () => {
     );
   });
 
+  it("hides linked vehicle details when the order has no vehicle_id", async () => {
+    renderPanel(vi.fn(), vi.fn(), { order: { ...order, vehicleId: null } });
+    expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("order-linked-vehicle")).not.toBeInTheDocument();
+    expect(screen.queryByText("Toyota")).not.toBeInTheDocument();
+  });
+
   it("preserves historical VIN and plate when editing under home_services", async () => {
     industryState.slug = "home_services";
     const user = userEvent.setup();
@@ -280,6 +348,7 @@ describe("OrderDetailPanel", () => {
 
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
     expect(screen.getByText("ABC123")).toBeInTheDocument();
+    expect(screen.queryByTestId("order-linked-vehicle")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.queryByLabelText(/^VIN/i)).not.toBeInTheDocument();
@@ -319,7 +388,7 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByRole("columnheader", { name: "Services" })).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("Oil filter")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("MDL 70.00").length).toBeGreaterThanOrEqual(1);
   });
 

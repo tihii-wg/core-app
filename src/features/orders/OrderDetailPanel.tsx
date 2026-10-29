@@ -11,8 +11,10 @@ import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/Stat
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
+import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { industryOrderStatusLabel, ORDER_STATUSES, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageWarehouse, canManageWorkspace } from "../workspaces/workspaceRoles";
@@ -71,6 +73,7 @@ export default function OrderDetailPanel({
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
+  const showClientVehicles = industrySupportsClientVehicles(workflow);
   const workspaceRole = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
   const canWarehouse = withSubscriptionWriteAccess(canManageWarehouse(workspaceRole), subscriptionAllowsWrite);
@@ -245,16 +248,18 @@ export default function OrderDetailPanel({
                 </div>
               ) : null}
 
-              {shouldShowOrderAssetValue(workflow.orderFields.device, selectedOrder.device, "device") && (
+              {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.device, selectedOrder.device, "device") ? (
                 <DetailItem label={copy.deviceDetail} value={selectedOrder.device} />
-              )}
-              {shouldShowOrderAssetValue(workflow.orderFields.carNumber, selectedOrder.carNumber, "carNumber") && (
+              ) : null}
+              {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.carNumber, selectedOrder.carNumber, "carNumber") ? (
                 <DetailItem label={copy.carNumberDetail} value={selectedOrder.carNumber} />
-              )}
-              {shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin, "vin") && (
+              ) : null}
+              {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin, "vin") ? (
                 <DetailItem label={copy.vinDetail} value={selectedOrder.vin} mono />
-              )}
+              ) : null}
             </dl>
+
+            {showClientVehicles ? <OrderLinkedVehicleDetails vehicleId={selectedOrder.vehicleId} /> : null}
 
             <div className="border-t border-border pt-5">
               <OrderAssigneeSelect

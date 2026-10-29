@@ -18,6 +18,7 @@ export default {
   noneSelected: "Без транспорта",
   selectedSummary: "Выбранный транспорт",
   selectedSummaryHint: "Данные транспорта берутся из этой записи. При необходимости измените или снимите выбор выше.",
+  orderDetailsTitle: "Транспорт",
   untitled: "Транспорт без названия",
   loadFailed: "Не удалось загрузить транспорт",
   fields: {

@@ -11,6 +11,7 @@ import { vehicleDisplayLabel, vehicleSummaryDetails } from "../../services/apiVe
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useCreateVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
+import { VehicleFieldsGrid } from "./OrderLinkedVehicleDetails";
 
 const NONE = "__none__";
 
@@ -80,14 +81,12 @@ export function OrderVehicleFields<T extends FieldValues>({ control, setValue, c
         )}
       />
 
-      {summary ? (
-        <div className="rounded-md border border-border bg-muted/40 px-3 py-2" data-testid="selected-vehicle-summary">
+      {selectedVehicle ? (
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 space-y-2" data-testid="selected-vehicle-summary">
           <p className="text-xs font-medium text-muted-foreground">{t("vehicles.selectedSummary")}</p>
-          <p className="mt-0.5 text-sm font-medium text-foreground [overflow-wrap:anywhere]">{summary.title}</p>
-          {summary.details.length > 0 ? (
-            <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">{summary.details.join(" · ")}</p>
-          ) : null}
-          <p className="mt-1 text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
+          <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{summary?.title}</p>
+          <VehicleFieldsGrid vehicle={selectedVehicle} empty={t("common.noValue")} />
+          <p className="text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
         </div>
       ) : null}
 

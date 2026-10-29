@@ -18,6 +18,7 @@ export default {
   noneSelected: "Fără vehicul",
   selectedSummary: "Vehicul selectat",
   selectedSummaryHint: "Detaliile vehiculului sunt preluate din această înregistrare. Schimbați sau goliți selecția de mai sus dacă este necesar.",
+  orderDetailsTitle: "Vehicul",
   untitled: "Vehicul fără denumire",
   loadFailed: "Vehiculele nu au putut fi încărcate",
   fields: {
