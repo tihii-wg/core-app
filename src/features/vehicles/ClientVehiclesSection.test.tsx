@@ -20,13 +20,15 @@ vi.mock("./useVehicleMutations", () => ({
   useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("react-router-dom", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-router-dom")>();
-  return {
-    ...actual,
-    useParams: () => ({ locale: "en", workspaceId: "ws-1" }),
-  };
-});
+vi.mock("./VehicleDetailPanel", () => ({
+  VehicleDetailPanel: ({
+    open,
+    vehicleId,
+  }: {
+    open: boolean;
+    vehicleId: string | null;
+  }) => (open ? <div data-testid="vehicle-detail-panel">vehicle:{vehicleId}</div> : null),
+}));
 
 const sampleVehicle: Vehicle = {
   id: "veh-1",
@@ -55,23 +57,26 @@ describe("ClientVehiclesSection", () => {
     expect(screen.getAllByRole("button", { name: "Add vehicle" }).length).toBeGreaterThan(0);
   });
 
-  it("lists all vehicles with make, model, year, VIN, plate, and mileage, and links to details", () => {
+  it("lists vehicles and opens the vehicle details drawer without navigating", async () => {
     vehiclesState.vehicles = [
       sampleVehicle,
       { ...sampleVehicle, id: "veh-2", make: "VW", model: "Golf", year: 2020, vin: null, licensePlate: "XYZ999", currentMileage: 12000 },
     ];
+    const user = userEvent.setup();
     renderWithQuery(<ClientVehiclesSection clientId="client-1" />);
 
-    const first = screen.getByRole("link", { name: /Toyota Corolla 2018/i });
-    expect(first).toHaveAttribute("href", "/en/ws-1/vehicles/veh-1");
+    const first = screen.getByRole("button", { name: /Toyota Corolla 2018/i });
     expect(first).toHaveTextContent("VIN: 1HGBH41JXMN109186");
     expect(first).toHaveTextContent("License plate: ABC123");
     expect(first).toHaveTextContent("Current mileage: 45200");
+    expect(screen.queryByTestId("vehicle-detail-panel")).not.toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: /VW Golf 2020/i })).toHaveAttribute("href", "/en/ws-1/vehicles/veh-2");
+    await user.click(first);
+    expect(screen.getByTestId("vehicle-detail-panel")).toHaveTextContent("vehicle:veh-1");
+    expect(screen.queryByRole("link", { name: /Toyota Corolla 2018/i })).not.toBeInTheDocument();
   });
 
-  it("keeps edit and archive actions available beside the link", async () => {
+  it("keeps edit and archive actions available beside the vehicle button", async () => {
     vehiclesState.vehicles = [sampleVehicle];
     const user = userEvent.setup();
     renderWithQuery(<ClientVehiclesSection clientId="client-1" />);

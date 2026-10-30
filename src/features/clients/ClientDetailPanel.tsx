@@ -169,7 +169,9 @@ export default function ClientDetailPanel({
               {t("clients.settlement.button")}
             </Button>
 
-            {showVehicles ? <ClientVehiclesSection clientId={selectedClient.id} /> : null}
+            {showVehicles ? (
+              <ClientVehiclesSection clientId={selectedClient.id} onOpenOrder={onOpenOrder} />
+            ) : null}
 
             <div>
               <div className="mb-3 flex items-center justify-between gap-2">

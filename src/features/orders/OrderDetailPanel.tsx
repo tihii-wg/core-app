@@ -283,7 +283,14 @@ export default function OrderDetailPanel({
               ) : null}
             </dl>
 
-            {showClientVehicles ? <OrderLinkedVehicleDetails vehicleId={selectedOrder.vehicleId} /> : null}
+            {showClientVehicles ? (
+              <OrderLinkedVehicleDetails
+                vehicleId={selectedOrder.vehicleId}
+                onOpenRelatedOrder={(order) => {
+                  onOrderUpdated(order);
+                }}
+              />
+            ) : null}
 
             <div className="border-t border-border pt-5">
               <OrderAssigneeSelect

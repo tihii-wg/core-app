@@ -13,7 +13,7 @@ import { orderAssetFieldsFromVehicle, vehicleDisplayLabel, vehicleSummaryDetails
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useCreateVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
-import { VehicleFieldsGrid } from "./OrderLinkedVehicleDetails";
+import { VehicleFieldsGrid } from "./VehicleFieldsGrid";
 import { mileageFormValueFromVehicle, visitMileageValidate } from "./orderVehicleMileage";
 
 const NONE = "__none__";

@@ -5,6 +5,8 @@ import type { Client, Order, Vehicle } from "../../lib/types";
 import { renderWithQuery } from "../../tests/renderQuery";
 import { VehicleDetailsPage } from "./VehicleDetailsPage";
 
+const navigate = vi.hoisted(() => vi.fn());
+
 const vehicleState = vi.hoisted(() => ({
   vehicle: null as Vehicle | null,
   isLoading: false,
@@ -31,6 +33,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
   return {
     ...actual,
     useParams: () => ({ locale: "en", workspaceId: "ws-1", vehicleId: "veh-1" }),
+    useNavigate: () => navigate,
   };
 });
 
@@ -114,6 +117,20 @@ vi.mock("../orders/useOrderDetails", () => ({
   }),
 }));
 
+vi.mock("../clients/ClientDetailsHost", () => ({
+  ClientDetailsHost: () => null,
+}));
+
+vi.mock("../clients/useOpenClientDetails", () => ({
+  useOpenClientDetails: () => ({
+    selectedClient: null,
+    detailPanelOpen: false,
+    setDetailPanelOpen: vi.fn(),
+    openClient: vi.fn(),
+    onClientUpdated: vi.fn(),
+  }),
+}));
+
 const vehicle: Vehicle = {
   id: "veh-1",
   workspaceId: "ws-1",
@@ -171,6 +188,7 @@ const order: Order = {
 
 describe("VehicleDetailsPage", () => {
   beforeEach(() => {
+    navigate.mockReset();
     vehicleState.vehicle = vehicle;
     vehicleState.isLoading = false;
     vehicleState.isError = false;
@@ -185,22 +203,23 @@ describe("VehicleDetailsPage", () => {
     updateVehicle.mockResolvedValue({ ...vehicle, currentMileage: 46000 });
   });
 
-  it("renders vehicle fields, owner link, and an empty order history", () => {
+  it("opens vehicle details in a side drawer with owner and empty order history", () => {
     renderWithQuery(<VehicleDetailsPage />);
 
+    expect(screen.getByTestId("vehicle-detail-panel")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Toyota Corolla 2018/i })).toBeInTheDocument();
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ada Lovelace" })).toBeInTheDocument();
     expect(screen.getByText("No orders yet")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Back to orders" })).toHaveAttribute("href", "/en/ws-1/orders");
+    expect(screen.queryByRole("link", { name: "Back to orders" })).not.toBeInTheDocument();
   });
 
-  it("falls back to the orders list from the missing-vehicle state", () => {
+  it("shows not-found inside the drawer for a missing vehicle", () => {
     vehicleState.vehicle = null;
     vehicleState.notFound = true;
     renderWithQuery(<VehicleDetailsPage />);
 
-    expect(screen.getByRole("link", { name: "Back to orders" })).toHaveAttribute("href", "/en/ws-1/orders");
+    expect(screen.getByTestId("vehicle-detail-panel")).toBeInTheDocument();
     expect(screen.getByText("Vehicle was not found or you do not have permission")).toBeInTheDocument();
   });
 
@@ -226,5 +245,13 @@ describe("VehicleDetailsPage", () => {
       vehicleId: "veh-1",
       input: expect.objectContaining({ currentMileage: 46000, make: "Toyota", vin: "1HGBH41JXMN109186" }),
     });
+  });
+
+  it("navigates back to the orders list when the drawer closes", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<VehicleDetailsPage />);
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(navigate).toHaveBeenCalledWith("/en/ws-1/orders", { replace: true });
   });
 });

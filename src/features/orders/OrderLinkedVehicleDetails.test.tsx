@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../tests/renderQuery";
 import type { Vehicle } from "../../lib/types";
@@ -24,6 +25,30 @@ vi.mock("../vehicles/useGetVehicle", () => ({
   vehicleQueryKey: (workspaceId: string | undefined, vehicleId: string) => ["vehicles", workspaceId, "id", vehicleId],
 }));
 
+vi.mock("../vehicles/VehicleDetailPanel", () => ({
+  VehicleDetailPanel: ({
+    open,
+    vehicleId,
+  }: {
+    open: boolean;
+    vehicleId: string | null;
+  }) => (open ? <div data-testid="vehicle-detail-panel">vehicle:{vehicleId}</div> : null),
+}));
+
+vi.mock("../clients/ClientDetailsHost", () => ({
+  ClientDetailsHost: () => null,
+}));
+
+vi.mock("../clients/useOpenClientDetails", () => ({
+  useOpenClientDetails: () => ({
+    selectedClient: null,
+    detailPanelOpen: false,
+    setDetailPanelOpen: vi.fn(),
+    openClient: vi.fn(),
+    onClientUpdated: vi.fn(),
+  }),
+}));
+
 const fullVehicle: Vehicle = {
   id: "veh-1",
   workspaceId: "ws-1",
@@ -43,21 +68,26 @@ const fullVehicle: Vehicle = {
 };
 
 describe("OrderLinkedVehicleDetails", () => {
+  const onOpenRelatedOrder = vi.fn();
+
   beforeEach(() => {
     vehicleState.vehicle = fullVehicle;
     vehicleState.isLoading = false;
     vehicleState.isError = false;
     vehicleState.notFound = false;
+    onOpenRelatedOrder.mockReset();
   });
 
   it("renders nothing when the order has no vehicle_id", () => {
-    const { container } = renderWithQuery(<OrderLinkedVehicleDetails vehicleId={null} />);
+    const { container } = renderWithQuery(
+      <OrderLinkedVehicleDetails vehicleId={null} onOpenRelatedOrder={onOpenRelatedOrder} />,
+    );
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByTestId("order-linked-vehicle")).not.toBeInTheDocument();
   });
 
   it("loads all vehicle fields from the associated vehicle record", () => {
-    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" />);
+    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
 
     expect(screen.getByTestId("order-linked-vehicle")).toBeInTheDocument();
     expect(screen.getByText("Make")).toBeInTheDocument();
@@ -74,6 +104,16 @@ describe("OrderLinkedVehicleDetails", () => {
     expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   });
 
+  it("opens vehicle details in a side drawer instead of navigating", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
+
+    expect(screen.queryByTestId("vehicle-detail-panel")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View vehicle details" }));
+    expect(screen.getByTestId("vehicle-detail-panel")).toHaveTextContent("vehicle:veh-1");
+    expect(screen.queryByRole("link", { name: "View vehicle details" })).not.toBeInTheDocument();
+  });
+
   it("shows the empty-value dash for missing vehicle fields", () => {
     vehicleState.vehicle = {
       ...fullVehicle,
@@ -87,7 +127,7 @@ describe("OrderLinkedVehicleDetails", () => {
       engineDisplacement: null,
       fuelType: null,
     };
-    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" />);
+    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
 
     const dashes = screen.getAllByText("—");
     expect(dashes.length).toBe(9);
@@ -97,7 +137,7 @@ describe("OrderLinkedVehicleDetails", () => {
   it("surfaces load failures without substituting another vehicle", () => {
     vehicleState.vehicle = null;
     vehicleState.isError = true;
-    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" />);
+    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/Could not load vehicles/i);
     expect(screen.queryByText("Toyota")).not.toBeInTheDocument();
   });
@@ -105,7 +145,7 @@ describe("OrderLinkedVehicleDetails", () => {
   it("surfaces a missing vehicle without falling back to order columns", () => {
     vehicleState.vehicle = null;
     vehicleState.notFound = true;
-    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-missing" />);
+    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-missing" onOpenRelatedOrder={onOpenRelatedOrder} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/not found|permission/i);
   });
 });

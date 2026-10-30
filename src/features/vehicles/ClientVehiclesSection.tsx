@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Car, Pencil, Plus, Trash2 } from "lucide-react";
-import type { Vehicle } from "../../lib/types";
+import type { Order, Vehicle } from "../../lib/types";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -14,18 +13,19 @@ import {
 } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
 import { vehicleDisplayLabel } from "../../services/apiVehicles";
-import { vehicleDetailsPath } from "./vehicleRoutes";
 import { useGetClientVehicles } from "./useGetClientVehicles";
 import { useArchiveVehicle, useCreateVehicle, useUpdateVehicle } from "./useVehicleMutations";
+import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { VehicleFormDialog } from "./VehicleFormDialog";
 
 type ClientVehiclesSectionProps = {
   clientId: string;
+  /** Reuse the parent Client Details → Order Details flow when present. */
+  onOpenOrder?: (orderId: string) => void;
 };
 
-export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) {
+export function ClientVehiclesSection({ clientId, onOpenOrder }: ClientVehiclesSectionProps) {
   const { t } = useTranslation();
-  const { locale = "en", workspaceId = "" } = useParams();
   const { vehicles, isLoading, isError } = useGetClientVehicles(clientId);
   const createVehicle = useCreateVehicle(clientId);
   const updateVehicle = useUpdateVehicle(clientId);
@@ -34,6 +34,25 @@ export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Vehicle | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [vehicleOpen, setVehicleOpen] = useState(false);
+
+  function openVehicle(vehicleId: string) {
+    setSelectedVehicleId(vehicleId);
+    setVehicleOpen(true);
+  }
+
+  function handleOpenOrder(order: Order) {
+    setVehicleOpen(false);
+    onOpenOrder?.(order.id);
+  }
+
+  function handleOpenClient(ownerClientId: string) {
+    // Client Details for this owner is already open underneath — only dismiss the vehicle drawer.
+    if (ownerClientId === clientId) {
+      setVehicleOpen(false);
+    }
+  }
 
   return (
     <section className="space-y-3">
@@ -82,9 +101,10 @@ export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) 
         <ul className="divide-y divide-border rounded-lg border border-border">
           {vehicles.map((vehicle) => (
             <li key={vehicle.id} className="flex items-start justify-between gap-3 px-3 py-3">
-              <Link
-                to={vehicleDetailsPath(locale, workspaceId, vehicle.id)}
-                className="min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+              <button
+                type="button"
+                onClick={() => openVehicle(vehicle.id)}
+                className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
               >
                 <p className="text-sm font-medium text-primary [overflow-wrap:anywhere] hover:underline">
                   {vehicleDisplayLabel(vehicle)}
@@ -103,7 +123,7 @@ export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) 
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-              </Link>
+              </button>
               <div className="flex shrink-0 gap-1">
                 <Button
                   type="button"
@@ -176,6 +196,14 @@ export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <VehicleDetailPanel
+        vehicleId={selectedVehicleId}
+        open={vehicleOpen}
+        onOpenChange={setVehicleOpen}
+        onOpenClient={handleOpenClient}
+        onOpenOrder={onOpenOrder ? handleOpenOrder : undefined}
+      />
     </section>
   );
 }
