@@ -34,6 +34,7 @@ export default {
     ordersLoadFailed: "Comenzile nu au putut fi încărcate",
     backToClient: "Înapoi la client",
     backToClients: "Înapoi la clienți",
+    backToOrders: "Înapoi la comenzi",
     breadcrumb: "Locația vehiculului",
     view: "Vezi detaliile vehiculului",
   },

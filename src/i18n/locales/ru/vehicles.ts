@@ -34,6 +34,7 @@ export default {
     ordersLoadFailed: "Не удалось загрузить заказы",
     backToClient: "Назад к клиенту",
     backToClients: "Назад к клиентам",
+    backToOrders: "Назад к заказам",
     breadcrumb: "Расположение транспорта",
     view: "Открыть карточку транспорта",
   },

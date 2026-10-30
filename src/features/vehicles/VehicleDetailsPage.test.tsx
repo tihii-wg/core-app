@@ -192,6 +192,16 @@ describe("VehicleDetailsPage", () => {
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ada Lovelace" })).toBeInTheDocument();
     expect(screen.getByText("No orders yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to orders" })).toHaveAttribute("href", "/en/ws-1/orders");
+  });
+
+  it("falls back to the orders list from the missing-vehicle state", () => {
+    vehicleState.vehicle = null;
+    vehicleState.notFound = true;
+    renderWithQuery(<VehicleDetailsPage />);
+
+    expect(screen.getByRole("link", { name: "Back to orders" })).toHaveAttribute("href", "/en/ws-1/orders");
+    expect(screen.getByText("Vehicle was not found or you do not have permission")).toBeInTheDocument();
   });
 
   it("lists linked orders newest-first content", () => {
@@ -216,13 +226,5 @@ describe("VehicleDetailsPage", () => {
       vehicleId: "veh-1",
       input: expect.objectContaining({ currentMileage: 46000, make: "Toyota", vin: "1HGBH41JXMN109186" }),
     });
-  });
-
-  it("shows a missing-vehicle state", () => {
-    vehicleState.vehicle = null;
-    vehicleState.notFound = true;
-    renderWithQuery(<VehicleDetailsPage />);
-
-    expect(screen.getByText("Vehicle was not found or you do not have permission")).toBeInTheDocument();
   });
 });

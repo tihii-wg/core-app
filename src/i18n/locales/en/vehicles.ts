@@ -34,6 +34,7 @@ export default {
     ordersLoadFailed: "Could not load orders",
     backToClient: "Back to client",
     backToClients: "Back to clients",
+    backToOrders: "Back to orders",
     breadcrumb: "Vehicle location",
     view: "View vehicle details",
   },

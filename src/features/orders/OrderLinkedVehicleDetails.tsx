@@ -66,8 +66,17 @@ export function OrderLinkedVehicleDetails({ vehicleId }: OrderLinkedVehicleDetai
   );
 }
 
-export function VehicleFieldsGrid({ vehicle, empty }: { vehicle: Vehicle; empty: string }) {
+export function VehicleFieldsGrid({
+  vehicle,
+  empty,
+  hideKeys = [],
+}: {
+  vehicle: Vehicle;
+  empty: string;
+  hideKeys?: string[];
+}) {
   const { t } = useTranslation();
+  const hidden = new Set(hideKeys);
   const rows: { key: string; label: string; value: string; mono?: boolean }[] = [
     { key: "make", label: t("vehicles.fields.make"), value: displayValue(vehicle.make, empty) },
     { key: "model", label: t("vehicles.fields.model"), value: displayValue(vehicle.model, empty) },
@@ -82,10 +91,10 @@ export function VehicleFieldsGrid({ vehicle, empty }: { vehicle: Vehicle; empty:
       value: displayValue(vehicle.engineDisplacement, empty),
     },
     { key: "fuelType", label: t("vehicles.fields.fuelType"), value: fuelLabel(vehicle.fuelType, empty, (key) => t(key as never)) },
-  ];
+  ].filter((row) => !hidden.has(row.key));
 
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm" data-testid="vehicle-fields-grid">
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm" data-testid="vehicle-fields-grid">
       {rows.map((row) => (
         <div key={row.key} className="min-w-0">
           <dt className="text-xs font-medium text-muted-foreground">{row.label}</dt>
