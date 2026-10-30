@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { legacyChromiumColorsPlugin } from './vite-plugin-legacy-chromium-colors'
 
 
 export default defineConfig(({ mode }) => {
@@ -16,9 +17,16 @@ export default defineConfig(({ mode }) => {
   const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || ''
 
   return {
+    // Chrome 109 = last Google Chrome / Chromium Edge on Windows 7.
+    // Keep modern syntax elsewhere; Vite downlevels only what this target needs.
+    build: {
+      target: 'chrome109',
+      cssTarget: 'chrome109',
+    },
     plugins: [
       react(),
       tailwindcss(),
+      legacyChromiumColorsPlugin(),
     ],
     resolve: {
       alias: {
