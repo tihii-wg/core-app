@@ -49,7 +49,7 @@ export function VehicleFieldsGrid({
           <dd
             className={
               row.mono
-                ? "mt-1 font-mono text-[13px] [overflow-wrap:anywhere] text-foreground"
+                ? "mt-1 font-mono text-[13px] font-semibold [overflow-wrap:anywhere] text-foreground"
                 : "mt-1 font-medium [overflow-wrap:anywhere] text-foreground"
             }
           >
