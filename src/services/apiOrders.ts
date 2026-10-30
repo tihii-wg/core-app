@@ -601,6 +601,25 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
 }
 
+/** Orders linked through `orders.vehicle_id`, newest first. Workspace-scoped. */
+export async function getVehicleOrders(workspaceId: string | undefined, vehicleId: string) {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const id = vehicleId.trim();
+  if (!id) return [] as Order[];
+
+  const { data, error } = await supabase
+    .from("orders")
+    .select(orderColumns)
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("vehicle_id", id)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+}
+
 /**
  * Server-paginated orders for the Orders page.
  * Filters and stable sort (created_at desc, id desc) run before `.range()`.

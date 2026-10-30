@@ -1,7 +1,9 @@
+import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { Vehicle } from "../../lib/types";
 import { Skeleton } from "../../ui/Skeleton";
 import { useGetVehicle } from "../vehicles/useGetVehicle";
+import { vehicleDetailsPath } from "../vehicles/vehicleRoutes";
 
 type OrderLinkedVehicleDetailsProps = {
   vehicleId: string | null | undefined;
@@ -23,6 +25,7 @@ function fuelLabel(fuelType: string | null, empty: string, translate: (key: stri
 /** Read-only vehicle fields from `vehicles` via `orders.vehicle_id`. Never mutates the vehicle. */
 export function OrderLinkedVehicleDetails({ vehicleId }: OrderLinkedVehicleDetailsProps) {
   const { t } = useTranslation();
+  const { locale = "en", workspaceId = "" } = useParams();
   const empty = t("common.noValue");
   const id = vehicleId?.trim() || "";
   const { vehicle, isLoading, isError, notFound } = useGetVehicle(id || null);
@@ -47,7 +50,17 @@ export function OrderLinkedVehicleDetails({ vehicleId }: OrderLinkedVehicleDetai
           {t("vehicles.errors.notFound")}
         </p>
       ) : (
-        <VehicleFieldsGrid vehicle={vehicle} empty={empty} />
+        <>
+          <VehicleFieldsGrid vehicle={vehicle} empty={empty} />
+          {workspaceId ? (
+            <Link
+              to={vehicleDetailsPath(locale, workspaceId, vehicle.id)}
+              className="inline-flex text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+            >
+              {t("vehicles.details.view")}
+            </Link>
+          ) : null}
+        </>
       )}
     </section>
   );

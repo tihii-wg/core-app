@@ -13,6 +13,7 @@ import { LoginPage } from "./pages/LoginPage";
 import Dashboard from "./pages/Dashboard";
 import { Orders } from "./features/orders/Orders";
 import { Clients } from "./features/clients/Clients";
+import { VehicleDetailsPage } from "./features/vehicles/VehicleDetailsPage";
 import { Employees } from "./features/employees/Employees";
 import { Inventory } from "./features/inventory/Inventory";
 import { Services } from "./features/services/Services";
@@ -53,6 +54,7 @@ export function AppRoutes() {
           <Route path="/:locale/:workspaceId/dashboard" element={<Dashboard />} />
           <Route path="/:locale/:workspaceId/orders" element={<Orders />} />
           <Route path="/:locale/:workspaceId/clients" element={<Clients />} />
+          <Route path="/:locale/:workspaceId/vehicles/:vehicleId" element={<VehicleDetailsPage />} />
           <Route path="/:locale/:workspaceId/employees" element={<Employees />} />
           <Route path="/:locale/:workspaceId/inventory" element={<Inventory />} />
           <Route path="/:locale/:workspaceId/services" element={<Services />} />

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Plus, Phone, Mail, Pencil } from "lucide-react";
 import { Button } from "../../ui/Button";
@@ -28,6 +29,8 @@ import OrderDetailPanel from "../orders/OrderDetailPanel";
 import { useOrderDetails } from "../orders/useOrderDetails";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { getClient } from "../../services/apiClients";
 
 export function Clients() {
   const { t } = useTranslation();
@@ -38,7 +41,9 @@ export function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [clientType, setClientType] = useState<ClientListFilter>("all");
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const debounceSearch = useDebounce(searchQuery, 400);
+  const { workspaceId } = useActiveWorkspaceId();
   const { isLoading, clients = [], isPending, error: clientsError, refetch: refetchClients } = useGetClients(debounceSearch, clientType);
   const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
   const { formatMoney } = useWorkspaceMoney();
@@ -51,6 +56,25 @@ export function Clients() {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
+
+  useEffect(() => {
+    const clientId = searchParams.get("client")?.trim();
+    if (!clientId) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("client");
+    setSearchParams(next, { replace: true });
+    const listed = clients.find((client) => client.id === clientId);
+    if (listed) {
+      setSelectedClient(listed);
+      setDetailPanelOpen(true);
+      return;
+    }
+    void getClient(workspaceId, clientId).then((client) => {
+      if (!client) return;
+      setSelectedClient(client);
+      setDetailPanelOpen(true);
+    });
+  }, [clients, searchParams, setSearchParams, workspaceId]);
 
   function handleOpenHistoricalOrder(orderId: string) {
     const order = orders.find((item) => item.id === orderId);

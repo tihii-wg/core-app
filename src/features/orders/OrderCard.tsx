@@ -3,6 +3,7 @@ import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
 import { OrderActionsMenu } from "./OrderActionsMenu";
+import { OrderClientName } from "./OrderClientName";
 
 type OrderCardProps = {
   order: Order;
@@ -16,6 +17,7 @@ type OrderCardProps = {
   paymentStatus?: PaymentStatus;
   formatMoney: (value: number) => string;
   onView: (order: Order) => void;
+  onOpenClient?: (clientId: string) => void;
   onEdit: (order: Order) => void;
   onStatusChange: (order: Order, status: OrderStatus) => void;
   onCreateInvoice: (order: Order) => void;
@@ -38,6 +40,7 @@ export function OrderCard({
   paymentStatus,
   formatMoney,
   onView,
+  onOpenClient,
   onEdit,
   onStatusChange,
   onCreateInvoice,
@@ -55,8 +58,12 @@ export function OrderCard({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="break-all font-semibold text-primary tabular-nums">{order.orderNumber}</p>
-          <p className="mt-0.5 truncate font-medium text-foreground" title={order.clientName}>
-            {order.clientName}
+          <p className="mt-0.5 truncate font-medium text-foreground">
+            {onOpenClient ? (
+              <OrderClientName clientId={order.clientId} clientName={order.clientName} onOpenClient={onOpenClient} />
+            ) : (
+              <span title={order.clientName}>{order.clientName}</span>
+            )}
           </p>
         </div>
         <OrderActionsMenu

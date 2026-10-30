@@ -48,6 +48,10 @@ import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { useGetPayments } from "../finance/usePayments";
 import { orderHasOutstandingBalance, orderPaymentBalance } from "../finance/paymentCalculations";
+import { OrderClientName } from "./OrderClientName";
+import { ClientDetailsHost } from "../clients/ClientDetailsHost";
+import { useOpenClientDetails } from "../clients/useOpenClientDetails";
+import type { Client } from "../../lib/types";
 
 const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
@@ -57,7 +61,14 @@ export function Orders() {
   const { workflow, copy } = useIndustryWorkflow();
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
+  const clientDetails = useOpenClientDetails();
+  const [orderForClient, setOrderForClient] = useState<Client | null>(null);
   const today = localDateKey(new Date());
+
+  function openClientFromOrder(clientId: string) {
+    orderDetails.panelProps.setDetailPanelOpen(false);
+    void clientDetails.openClient(clientId);
+  }
 
   // Filters / pagination (server-side via getOrdersPage)
   const [searchQuery, setSearchQuery] = useState("");
@@ -181,8 +192,8 @@ export function Orders() {
         const phone = order.clientPhone?.trim() || "—";
         return (
           <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
-            <div className="truncate font-medium" title={order.clientName}>
-              {order.clientName}
+            <div className="truncate font-medium">
+              <OrderClientName clientId={order.clientId} clientName={order.clientName} onOpenClient={openClientFromOrder} />
             </div>
             <div className="truncate text-xs text-muted-foreground" title={phone}>
               {phone}
@@ -498,6 +509,7 @@ export function Orders() {
                 paymentStatus={paymentStatusByOrder.get(order.id)}
                 formatMoney={formatMoney}
                 onView={orderDetails.openOrder}
+                onOpenClient={openClientFromOrder}
                 onEdit={setEditingOrder}
                 onStatusChange={orderDetails.changeStatus}
                 onCreateInvoice={handleCreateInvoice}
@@ -555,7 +567,29 @@ export function Orders() {
         </div>
       ) : null}
 
-      <CreateOrderDialog open={createModalOpen} onOpenChange={setCreateModalOpen} searchQuery={searchQuery} />
+      <CreateOrderDialog
+        open={createModalOpen || Boolean(orderForClient)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateModalOpen(false);
+            setOrderForClient(null);
+          }
+        }}
+        searchQuery={orderForClient ? "" : searchQuery}
+        initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+      />
+
+      <ClientDetailsHost
+        selectedClient={clientDetails.selectedClient}
+        detailPanelOpen={clientDetails.detailPanelOpen}
+        setDetailPanelOpen={clientDetails.setDetailPanelOpen}
+        onClientUpdated={clientDetails.onClientUpdated}
+        onOpenOrder={(order) => {
+          clientDetails.setDetailPanelOpen(false);
+          orderDetails.openOrder(order);
+        }}
+        onCreateOrder={setOrderForClient}
+      />
 
       <EditOrderDialog order={editingOrder} onClose={() => setEditingOrder(null)} onUpdated={orderDetails.syncOrder} />
 

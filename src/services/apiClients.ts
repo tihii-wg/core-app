@@ -149,6 +149,22 @@ export async function getClients(search: string, workspaceId: string | undefined
   return ((clients ?? []) as Record<string, unknown>[]).map(toClient);
 }
 
+export async function getClient(workspaceId: string | undefined, clientId: string) {
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+  const id = clientId.trim();
+  if (!id) return null;
+
+  let { data, error } = await supabase.from("clients").select("*").eq("workspace_id", workspaceId).eq("id", id).is("deleted_at", null).maybeSingle();
+
+  if (error && (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("deleted_at")) {
+    ({ data, error } = await supabase.from("clients").select("*").eq("workspace_id", workspaceId).eq("id", id).maybeSingle());
+  }
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return toClient(data as Record<string, unknown>);
+}
+
 export async function updateClient(
   { clientId, clientName, email, phone, address, notes, clientType, taxId, contactPerson, middleName, phoneNotificationsConsent, emailNotificationsConsent }: UpdateClientInput,
   workspaceId: string | undefined,

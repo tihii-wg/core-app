@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Car, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Vehicle } from "../../lib/types";
@@ -13,6 +14,7 @@ import {
 } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
 import { vehicleDisplayLabel } from "../../services/apiVehicles";
+import { vehicleDetailsPath } from "./vehicleRoutes";
 import { useGetClientVehicles } from "./useGetClientVehicles";
 import { useArchiveVehicle, useCreateVehicle, useUpdateVehicle } from "./useVehicleMutations";
 import { VehicleFormDialog } from "./VehicleFormDialog";
@@ -23,6 +25,7 @@ type ClientVehiclesSectionProps = {
 
 export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) {
   const { t } = useTranslation();
+  const { locale = "en", workspaceId = "" } = useParams();
   const { vehicles, isLoading, isError } = useGetClientVehicles(clientId);
   const createVehicle = useCreateVehicle(clientId);
   const updateVehicle = useUpdateVehicle(clientId);
@@ -79,20 +82,28 @@ export function ClientVehiclesSection({ clientId }: ClientVehiclesSectionProps) 
         <ul className="divide-y divide-border rounded-lg border border-border">
           {vehicles.map((vehicle) => (
             <li key={vehicle.id} className="flex items-start justify-between gap-3 px-3 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{vehicleDisplayLabel(vehicle)}</p>
+              <Link
+                to={vehicleDetailsPath(locale, workspaceId, vehicle.id)}
+                className="min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+              >
+                <p className="text-sm font-medium text-primary [overflow-wrap:anywhere] hover:underline">
+                  {vehicleDisplayLabel(vehicle)}
+                </p>
                 <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                   {[
+                    vehicle.make ? `${t("vehicles.fields.make")}: ${vehicle.make}` : null,
+                    vehicle.model ? `${t("vehicles.fields.model")}: ${vehicle.model}` : null,
+                    vehicle.year != null ? `${t("vehicles.fields.year")}: ${vehicle.year}` : null,
                     vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
+                    vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
                     vehicle.currentMileage != null
                       ? `${t("vehicles.fields.currentMileage")}: ${vehicle.currentMileage}`
                       : null,
-                    vehicle.fuelType ? t(`vehicles.fuel.${vehicle.fuelType}`, { defaultValue: vehicle.fuelType }) : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-              </div>
+              </Link>
               <div className="flex shrink-0 gap-1">
                 <Button
                   type="button"

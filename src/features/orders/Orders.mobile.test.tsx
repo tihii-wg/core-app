@@ -33,10 +33,51 @@ const order: Order = {
 
 const ordersState = vi.hoisted(() => ({ list: [] as Order[], total: 0, page: 1, pageSize: 25, pageCount: 1 }));
 
+const getClientMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    id: "client-1",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    phone: "+37361111111",
+    address: "",
+    balance: 0,
+    created_at: "2024-07-01T10:00:00.000Z",
+    notes: "",
+    client_type: "individual" as const,
+    tax_id: null,
+    contact_person: null,
+  })),
+);
+
+vi.mock("../../services/apiClients", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/apiClients")>();
+  return {
+    ...actual,
+    getClient: getClientMock,
+  };
+});
+
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1", isLoading: false, error: null }),
+  useGetProfile: () => ({ data: undefined, isLoading: false }),
+}));
+
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  clientVehiclesQueryKey: () => ["vehicles"],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("./useGetOrders", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./useGetOrders")>();
   return {
     ...actual,
+    useGetOrders: () => ({ orders: [], isLoading: false, error: null, refetch: vi.fn() }),
     useOrdersPage: () => ({
       orders: ordersState.list,
       total: ordersState.total,
@@ -113,6 +154,16 @@ describe("Orders page on a phone viewport", () => {
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("BMW X5")).toBeInTheDocument();
     expect(screen.getByText("ABC123")).toBeInTheDocument();
+  });
+
+  it("opens client details from the client name without opening the order", async () => {
+    stubMobileViewport();
+    const user = userEvent.setup();
+    renderWithQuery(<Orders />);
+
+    await user.click(screen.getByRole("button", { name: "Ada Lovelace" }));
+    expect(await screen.findByText("Contact Information")).toBeInTheDocument();
+    expect(screen.queryByText("Noise")).not.toBeInTheDocument();
   });
 
   it("opens the order detail from a card tap, but not from the actions button", async () => {

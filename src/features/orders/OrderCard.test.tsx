@@ -41,19 +41,21 @@ const longOrder: Order = {
   updatedAt: "2026-10-22",
 };
 
-function renderCard(overrides: Partial<Order> = {}) {
+function renderCard(overrides: Partial<Order> = {}, extra: { onOpenClient?: (clientId: string) => void } = {}) {
   const onView = vi.fn();
+  const onOpenClient = extra.onOpenClient ?? vi.fn();
   const utils = renderWithQuery(
     <OrderCard
       order={{ ...longOrder, ...overrides }}
       formatMoney={(value) => `MDL ${value.toFixed(2)}`}
       onView={onView}
+      onOpenClient={extra.onOpenClient ? onOpenClient : undefined}
       onEdit={vi.fn()}
       onStatusChange={vi.fn()}
       onCreateInvoice={vi.fn()}
     />,
   );
-  return { onView, ...utils };
+  return { onView, onOpenClient, ...utils };
 }
 
 describe("OrderCard", () => {
@@ -109,6 +111,16 @@ describe("OrderCard", () => {
 
     await user.click(screen.getByText("Alexandru Constantin Popescu-Mare"));
     expect(onView).toHaveBeenCalledWith(expect.objectContaining({ id: "order-1" }));
+  });
+
+  it("opens the client from the name without opening the order", async () => {
+    const user = userEvent.setup();
+    const onOpenClient = vi.fn();
+    const { onView } = renderCard({}, { onOpenClient });
+
+    await user.click(screen.getByRole("button", { name: "Alexandru Constantin Popescu-Mare" }));
+    expect(onOpenClient).toHaveBeenCalledWith("client-1");
+    expect(onView).not.toHaveBeenCalled();
   });
 
   it("keeps the actions menu independent from the card click, with a 40px touch target", async () => {

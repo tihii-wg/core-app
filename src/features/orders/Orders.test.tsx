@@ -37,6 +37,22 @@ const statusHooks = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const getClientMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    id: "client-1",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    phone: "+37361111111",
+    address: "",
+    balance: 0,
+    created_at: "2024-07-01T10:00:00.000Z",
+    notes: "",
+    client_type: "individual" as const,
+    tax_id: null,
+    contact_person: null,
+  })),
+);
+
 const workspaceState = vi.hoisted(() => ({
   requireTaxInvoiceNumber: false,
   role: "member" as string,
@@ -86,10 +102,35 @@ const awaitingPaymentState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1", isLoading: false, error: null }),
+  useGetProfile: () => ({ data: undefined, isLoading: false }),
+}));
+
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../../services/apiClients", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/apiClients")>();
+  return {
+    ...actual,
+    getClient: getClientMock,
+  };
+});
+
 vi.mock("./useGetOrders", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./useGetOrders")>();
   return {
     ...actual,
+    useGetOrders: () => ({ orders: [], isLoading: false, error: null, refetch: vi.fn() }),
     useOrdersPage: () => ({
       orders: ordersState.list,
       total: ordersState.total,
@@ -206,6 +247,20 @@ beforeEach(() => {
   awaitingPaymentState.isLoading = false;
   awaitingPaymentState.error = null;
   paymentsState.payments = [];
+  getClientMock.mockReset();
+  getClientMock.mockResolvedValue({
+    id: "client-1",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    phone: "+37361111111",
+    address: "",
+    balance: 0,
+    created_at: "2024-07-01T10:00:00.000Z",
+    notes: "",
+    client_type: "individual" as const,
+    tax_id: null,
+    contact_person: null,
+  });
 });
 
 function manyOrders(count: number): Order[] {
@@ -234,6 +289,25 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("opens client details from the client name without opening the order", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Orders />);
+
+    await user.click(screen.getByRole("button", { name: "Ada Lovelace" }));
+
+    expect(await screen.findByText("Contact Information")).toBeInTheDocument();
+    expect(getClientMock).toHaveBeenCalled();
+    expect(screen.queryByText("Noise")).not.toBeInTheDocument();
+  });
+
+  it("does not link a client name when the order has no client", () => {
+    ordersState.list = [{ ...order, clientId: "", clientName: "Walk-in" }];
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByText("Walk-in")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Walk-in" })).not.toBeInTheDocument();
   });
 
   it("shows an Awaiting Payment card next to the Orders heading", () => {
@@ -471,7 +545,8 @@ describe("Orders page", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("menu")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "View details" })).toHaveFocus();
-    await user.keyboard("{End}{Enter}");
+    screen.getByRole("menuitem", { name: "Create Invoice" }).focus();
+    await user.keyboard("{Enter}");
 
     expect(invoiceHooks.mutate).toHaveBeenCalledExactlyOnceWith("order-1");
   });

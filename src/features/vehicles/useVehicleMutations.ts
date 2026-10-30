@@ -6,6 +6,7 @@ import { archiveVehicle, createVehicle, updateVehicle } from "../../services/api
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { clientVehiclesQueryKey } from "./useGetClientVehicles";
+import { vehicleQueryKey } from "./useGetVehicle";
 
 export function useCreateVehicle(clientId: string) {
   const queryClient = useQueryClient();
@@ -45,9 +46,10 @@ export function useUpdateVehicle(clientId: string) {
       return updateVehicle(workspaceId, vehicleId, input);
     },
     onMutate: () => toast.loading(i18n.t("vehicles.toast.updating"), { id: "vehicle-mutate" }),
-    onSuccess: (_data, variables) => {
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData(vehicleQueryKey(workspaceId, variables.vehicleId), updated);
       void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, clientId) });
-      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId, "id", variables.vehicleId] });
+      void queryClient.invalidateQueries({ queryKey: vehicleQueryKey(workspaceId, variables.vehicleId) });
       toast.success(i18n.t("vehicles.toast.updated"), { id: "vehicle-mutate" });
     },
     onError: (error: Error) => {
