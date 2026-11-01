@@ -181,15 +181,17 @@ describe("workspace routing and switching", () => {
     expect(screen.queryByText("Ada Alpha")).not.toBeInTheDocument();
     expect(row("profiles", USERS.owner.id)?.active_workspace_id).toBe(WS.B);
 
-    const pages: [string, string, string][] = [
-      ["Orders", "Beta Service car", "Alpha Garage car"],
-      ["Services", "Beta wash", "Oil change"],
-      ["Inventory", "Beta filter", "Alpha brake pads"],
-      ["Employees", "Bert Beta", "Tom Tech"],
+    // Nav buttons include live counts in their accessible name (e.g. "Orders, 1").
+    // Auto-repair labels the inventory module "Parts" while the route stays /inventory.
+    const pages: [RegExp, string, string, string][] = [
+      [/^Orders/, "orders", "Beta Service car", "Alpha Garage car"],
+      [/^Services/, "services", "Beta wash", "Oil change"],
+      [/^Parts/, "inventory", "Beta filter", "Alpha brake pads"],
+      [/^Employees/, "employees", "Bert Beta", "Tom Tech"],
     ];
-    for (const [page, visible, hidden] of pages) {
+    for (const [page, path, visible, hidden] of pages) {
       await user.click(within(screen.getByRole("navigation")).getByRole("button", { name: page }));
-      await waitFor(() => expect(location.pathname).toBe(`/en/${WS.B}/${page.toLowerCase()}`));
+      await waitFor(() => expect(location.pathname).toBe(`/en/${WS.B}/${path}`));
       expect(await screen.findByText(visible)).toBeInTheDocument();
       expect(screen.queryByText(hidden)).not.toBeInTheDocument();
     }

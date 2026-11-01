@@ -60,9 +60,64 @@ const orderVariants: Record<OrderStatus, BadgeVariant> = {
   cancelled: 'muted',
 };
 
-export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+/** Custom status chip: tinted plate + readable foreground (docs §5.17). */
+export function EntityStatusBadge({
+  name,
+  color,
+  className,
+}: {
+  name: string;
+  color?: string | null;
+  className?: string;
+}) {
+  const safeColor = color && /^#[0-9A-Fa-f]{3,8}$/.test(color.trim()) ? color.trim() : null;
+  if (!safeColor) {
+    return (
+      <StatusBadge variant="default" dot className={className}>
+        {name}
+      </StatusBadge>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex min-h-5.5 max-w-full min-w-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium leading-snug text-foreground ring-1 ring-inset ring-border-strong/40 [overflow-wrap:anywhere]",
+        className,
+      )}
+      style={{ background: `color-mix(in srgb, ${safeColor} 14%, var(--card))` }}
+    >
+      <span
+        aria-hidden="true"
+        className="size-1.5 shrink-0 rounded-full dark:hidden"
+        style={{ background: `color-mix(in srgb, ${safeColor} 80%, black)` }}
+      />
+      <span
+        aria-hidden="true"
+        className="hidden size-1.5 shrink-0 rounded-full dark:inline-block"
+        style={{ background: `color-mix(in srgb, ${safeColor} 65%, white)` }}
+      />
+      {name}
+    </span>
+  );
+}
+
+export function OrderStatusBadge({
+  status,
+  customStatus,
+}: {
+  status: OrderStatus;
+  customStatus?: { name: string; color?: string | null } | null;
+}) {
   const { workflow } = useIndustryWorkflow();
-  return <StatusBadge variant={orderVariants[status]} dot>{industryOrderStatusLabel(workflow, status)}</StatusBadge>;
+  if (customStatus?.name) {
+    return <EntityStatusBadge name={customStatus.name} color={customStatus.color} />;
+  }
+  return (
+    <StatusBadge variant={orderVariants[status]} dot>
+      {industryOrderStatusLabel(workflow, status)}
+    </StatusBadge>
+  );
 }
 
 const paymentVariants: Record<PaymentStatus, BadgeVariant> = { unpaid: 'danger', partial: 'warning', paid: 'success' };

@@ -54,9 +54,18 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import OrderWarehouseActions from "./OrderWarehouseActions";
 import OrderAttachmentsSection from "./OrderAttachmentsSection";
+import OrderFeedSection from "./OrderFeedSection";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
+import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
+import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
+
+function systemStatusToOrderStatus(value: string | null | undefined): OrderStatus | null {
+  if (!value) return null;
+  const normalized = value.trim().replace(/_/g, "-");
+  return (ORDER_STATUSES as readonly string[]).includes(normalized) ? (normalized as OrderStatus) : null;
+}
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -96,8 +105,11 @@ export default function OrderDetailPanel({
   const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
+  const { mutate: moveOnBoard, isPending: isCustomStatusUpdating } = useMoveOrderOnBoard();
+  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
+  const activeCustomStatuses = orderStatusDefinitions.filter((status) => status.isActive);
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
   // Owner role unlocks Paid status controls; admin/manager do not. API re-checks owner_id.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
@@ -133,6 +145,9 @@ export default function OrderDetailPanel({
     try {
       const updated = await updateOrder({
         orderId: selectedOrder.id,
+        // Preserve linked vehicle; omitting vehicleId also leaves it unchanged, but
+        // passing the current id makes assignee-only updates explicit.
+        vehicleId: selectedOrder.vehicleId ?? undefined,
         device: selectedOrder.device,
         carNumber: selectedOrder.carNumber,
         vin: selectedOrder.vin,
@@ -170,7 +185,7 @@ export default function OrderDetailPanel({
         <SheetHeader className="pr-24">
           <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
             {selectedOrder?.orderNumber}
-            {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} />}
+            {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />}
           </SheetTitle>
           {selectedOrder && !isEditing && canEditOrder && (
             <button
@@ -241,6 +256,18 @@ export default function OrderDetailPanel({
               <div className="shrink-0 text-right">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(selectedOrder.totalPrice)}</p>
+                {(selectedOrder.discountTotal ?? 0) > 0 ? (
+                  <dl className="mt-1 space-y-0.5 text-xs text-muted-foreground tabular-nums" data-testid="order-detail-discount">
+                    <div className="flex justify-end gap-2">
+                      <dt>{t("orders.detail.subtotal")}</dt>
+                      <dd>{formatMoney(selectedOrder.subtotal ?? selectedOrder.totalPrice + (selectedOrder.discountTotal ?? 0))}</dd>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <dt>{t("orders.detail.discount")}</dt>
+                      <dd>−{formatMoney(selectedOrder.discountTotal ?? 0)}</dd>
+                    </div>
+                  </dl>
+                ) : null}
                 <div className="mt-2">
                   <PaymentStatusBadge status={paymentBalance?.status ?? selectedOrder.paymentStatus} />
                 </div>
@@ -319,7 +346,14 @@ export default function OrderDetailPanel({
                   <tbody className="divide-y divide-border">
                     {serviceLines.map((line, index) => (
                       <tr key={line.id ?? `${line.serviceId}-${index}`}>
-                        <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">{line.serviceName}</td>
+                        <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
+                          {line.serviceName}
+                          {line.kind ? (
+                            <StatusBadge variant="muted" className="ml-2 align-middle">
+                              {t(`orders.form.lineKind.${line.kind}`)}
+                            </StatusBadge>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(line.price * line.quantity)}</td>
@@ -395,6 +429,8 @@ export default function OrderDetailPanel({
 
             <OrderAttachmentsSection orderId={selectedOrder.id} enabled={detailPanelOpen} />
 
+            <OrderFeedSection orderId={selectedOrder.id} enabled={detailPanelOpen} canComment={canEditOrder} />
+
             <div className="border-t border-border pt-5">
               <Label htmlFor="order-status" className="mb-2 block">
                 {paidStatusLocked ? t("orders.actions.statusLocked") : t("orders.detail.updateStatus")}
@@ -409,7 +445,7 @@ export default function OrderDetailPanel({
                   if (next === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
                   onStatusChange(next);
                 }}
-                disabled={!canEditOrder || isStatusUpdating || isAssigneeUpdating || paidStatusLocked}
+                disabled={!canEditOrder || isStatusUpdating || isCustomStatusUpdating || isAssigneeUpdating || paidStatusLocked}
               >
                 <SelectTrigger id="order-status" className="w-full min-w-0">
                   <SelectValue />
@@ -433,6 +469,66 @@ export default function OrderDetailPanel({
                   ))}
                 </SelectContent>
               </Select>
+              {activeCustomStatuses.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <Label htmlFor="order-custom-status" className="block">
+                    {t("orders.detail.customStatus")}
+                  </Label>
+                  <Select
+                    value={selectedOrder.customStatusId ?? "__none__"}
+                    onValueChange={(value) => {
+                      if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
+                      const nextCustomId = value === "__none__" ? null : value;
+                      if ((selectedOrder.customStatusId ?? null) === nextCustomId) return;
+                      const definition = nextCustomId
+                        ? activeCustomStatuses.find((item) => item.id === nextCustomId)
+                        : null;
+                      const nextSystem =
+                        systemStatusToOrderStatus(definition?.systemStatus) ?? selectedOrder.status;
+                      if (nextSystem === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
+                      moveOnBoard(
+                        {
+                          orderId: selectedOrder.id,
+                          status: nextSystem,
+                          customStatusId: nextCustomId,
+                          currentStatus: selectedOrder.status,
+                        },
+                        {
+                          onSuccess: () => {
+                            onOrderUpdated({
+                              ...selectedOrder,
+                              status: nextSystem,
+                              customStatusId: nextCustomId,
+                              customStatus: definition
+                                ? { name: definition.name, color: definition.color }
+                                : null,
+                              ...(nextSystem === "paid"
+                                ? { isPaid: true, paymentStatus: "paid" as const }
+                                : (selectedOrder.status as string) === "paid"
+                                  ? { isPaid: false, paymentStatus: "unpaid" as const }
+                                  : {}),
+                            });
+                          },
+                        },
+                      );
+                    }}
+                    disabled={!canEditOrder || isStatusUpdating || isCustomStatusUpdating || isAssigneeUpdating || paidStatusLocked}
+                  >
+                    <SelectTrigger id="order-custom-status" className="w-full min-w-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">{t("orders.detail.customStatusNone")}</SelectItem>
+                      {activeCustomStatuses.map((status) => (
+                        <SelectItem key={status.id} value={status.id}>
+                          {status.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.detail.customStatusHint")}</p>
+                </div>
+              ) : null}
               {paidStatusLocked ? (
                 <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.actions.paidStatusImmutable")}</p>
               ) : paidStatusBlocked ? (

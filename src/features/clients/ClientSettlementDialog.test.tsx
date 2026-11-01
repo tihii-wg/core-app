@@ -1,10 +1,35 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { renderWithQuery } from "../../tests/renderQuery";
 import type { Client } from "../../lib/types";
 import ClientDetailPanel from "./ClientDetailPanel";
 import ClientSettlementDialog from "./ClientSettlementDialog";
 import type { ClientOrderSummary } from "./clientOrders";
+
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false, isFetched: true }),
+  clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useGuardSubscriptionWrite: () => () => {},
+  useWorkspaceSubscription: () => ({ canWrite: true }),
+}));
+
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1", isLoading: false, error: null }),
+}));
+
+vi.mock("./ClientExtrasSection", () => ({
+  ClientExtrasSection: () => null,
+}));
 
 function stubViewport(width: number) {
   const isMobile = width < 768;
@@ -226,7 +251,7 @@ describe("ClientDetailPanel settlement entry point", () => {
       contact_person: null,
     };
 
-    render(
+    renderWithQuery(
       <ClientDetailPanel
         selectedClient={client}
         detailPanelOpen

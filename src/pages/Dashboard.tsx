@@ -186,7 +186,7 @@ export default function Dashboard() {
     {
       key: "status",
       header: t("common.status"),
-      cell: (order) => <OrderStatusBadge status={order.status} />,
+      cell: (order) => <OrderStatusBadge status={order.status} customStatus={order.customStatus} />,
     },
     {
       key: "payment",

@@ -68,7 +68,7 @@ export function SettlementOrderCard({ row, formatMoney, onOpen }: SettlementOrde
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-2.5">
-        <OrderStatusBadge status={row.status} />
+        <OrderStatusBadge status={row.status} customStatus={row.customStatus} />
         <PaymentStatusBadge status={row.isPaid ? "paid" : "unpaid"} />
         <span className="ml-auto min-w-0 max-w-full text-right">
           <span className="block text-[11px] font-medium text-muted-foreground">{t("clients.settlement.columns.remaining")}</span>

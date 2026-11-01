@@ -42,6 +42,18 @@ async function expectClosedOnDashboard(location: { pathname: string }) {
   expect(screen.getByText("Quick Actions")).toBeInTheDocument();
 }
 
+/** Auto-repair orders use a linked vehicle record instead of free-text Vehicle/plate/VIN fields. */
+async function addVehicleOnOrderForm(user: User, dialog: HTMLElement, opts: { make: string; model: string; plate: string; vin: string }) {
+  await user.click(within(dialog).getByRole("button", { name: /Add vehicle/i }));
+  const vehicleDialog = await screen.findByRole("dialog", { name: /Add vehicle/i });
+  await user.type(within(vehicleDialog).getByLabelText(/^Make$/i), opts.make);
+  await user.type(within(vehicleDialog).getByLabelText(/^Model$/i), opts.model);
+  await user.type(within(vehicleDialog).getByLabelText(/^License plate$/i), opts.plate);
+  await user.type(within(vehicleDialog).getByLabelText(/^VIN$/i), opts.vin);
+  await user.click(within(vehicleDialog).getByRole("button", { name: /^Save$/i }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: /Add vehicle/i })).not.toBeInTheDocument());
+}
+
 describe("dashboard quick actions", () => {
   it.each([
     ["Create Order", "Create New Order"],
@@ -64,42 +76,41 @@ describe("dashboard quick actions", () => {
 
     await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
     await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
-    await user.type(within(dialog).getByLabelText("Vehicle *"), "Golf IV");
-    await user.type(within(dialog).getByLabelText("License plate *"), "abc123");
-    await user.type(within(dialog).getByLabelText("VIN *"), VIN.toLowerCase());
+    await addVehicleOnOrderForm(user, dialog, { make: "VW", model: "Golf IV", plate: "abc123", vin: VIN.toLowerCase() });
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
-    await user.click(within(dialog).getByRole("combobox"));
+    await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
     await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
     await expectClosedOnDashboard(location);
-    expect(fake.all("orders").find((order) => order.device === "Golf IV")).toMatchObject({ workspace_id: WS.A, client_id: "client-a1" });
-    expect(await screen.findByText("Golf IV")).toBeInTheDocument();
+    expect(fake.all("orders").find((order) => order.device === "VW Golf IV")).toMatchObject({ workspace_id: WS.A, client_id: "client-a1" });
+    expect(await screen.findByText("VW Golf IV")).toBeInTheDocument();
   });
 
   it("creates an order with a new client and its contact details from the dashboard", async () => {
     const { user, location } = await openDashboard();
     const dialog = await openQuickAction(user, "Create Order", "Create New Order");
 
-    await user.click(within(dialog).getByRole("combobox"));
+    await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
     await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
     await user.type(within(dialog).getByPlaceholderText("Client"), "Nina New");
     expect(within(dialog).getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
     expect(within(dialog).queryByLabelText("IDNO")).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
     await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
-    await user.type(within(dialog).getByLabelText("Vehicle *"), "Golf IV");
-    await user.type(within(dialog).getByLabelText("License plate *"), "abc123");
-    await user.type(within(dialog).getByLabelText("VIN *"), VIN);
+    // New clients have no id until save; vehicle picker needs an existing client, so skip vehicle here.
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
     await expectClosedOnDashboard(location);
     const newClients = fake.all("clients").filter((client) => client.name === "Nina New");
     expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, client_type: "individual", tax_id: null, contact_person: null, phone: "+37369000001", email: "nina@example.com" })]);
-    expect(fake.all("orders").find((order) => order.device === "Golf IV")?.client_id).toBe(newClients[0].id);
+    const created = fake.all("orders").find((order) => order.client_id === newClients[0].id);
+    expect(created).toMatchObject({ workspace_id: WS.A, total_price: 40 });
+    // Order number can appear in the recent-orders table and nav/badge copy.
+    expect((await screen.findAllByText(String(created?.number))).length).toBeGreaterThan(0);
   });
 
   it("creates a client from the dashboard and closes the dialog", async () => {
@@ -164,19 +175,19 @@ describe("dashboard quick actions", () => {
     const panel = await screen.findByRole("dialog");
     expect(within(panel).getByText(orderNumber)).toBeInTheDocument();
     expect(within(panel).getByText("Update Status")).toBeInTheDocument();
+    // Vehicle industries hide free-text vehicle fields on the detail panel too.
     expect(within(panel).queryByLabelText("Vehicle *")).not.toBeInTheDocument();
 
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    const device = await within(panel).findByLabelText("Vehicle *");
-    expect(device).toHaveValue("Alpha Garage car");
-    await user.clear(device);
-    await user.type(device, "Alpha van");
-    await user.type(within(panel).getByLabelText("VIN *"), VIN);
+    expect(within(panel).queryByLabelText("Vehicle *")).not.toBeInTheDocument();
+    const description = await within(panel).findByLabelText("Description");
+    await user.clear(description);
+    await user.type(description, "Updated dashboard note");
     await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
 
     await expectClosedOnDashboard(location);
-    expect(row("orders", "order-a1")).toMatchObject({ device: "Alpha van", vin: VIN, workspace_id: WS.A });
-    expect(await screen.findByText("Alpha van")).toBeInTheDocument();
+    expect(row("orders", "order-a1")).toMatchObject({ description: "Updated dashboard note", workspace_id: WS.A });
+    expect(await screen.findByText("Alpha Garage car")).toBeInTheDocument();
   });
 
   it("returns to the order details when editing is cancelled, without saving", async () => {
@@ -185,12 +196,14 @@ describe("dashboard quick actions", () => {
     await user.click(await screen.findByText("Alpha Garage car"));
     const panel = await screen.findByRole("dialog");
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    await user.clear(await within(panel).findByLabelText("Vehicle *"));
+    const description = await within(panel).findByLabelText("Description");
+    await user.clear(description);
+    await user.type(description, "Should not save");
     await user.click(within(panel).getByRole("button", { name: "Cancel" }));
 
     expect(within(panel).getByText("Update Status")).toBeInTheDocument();
     expect(location.pathname).toBe(dashboardPath);
-    expect(row("orders", "order-a1")?.device).toBe("Alpha Garage car");
+    expect(row("orders", "order-a1")?.description).toBe("Noise");
     expect(fake.requests.filter((request) => request.table === "orders" && request.op === "update")).toHaveLength(0);
   });
 

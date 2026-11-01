@@ -2,10 +2,11 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Toaster } from "react-hot-toast";
 
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppProvider } from "./lib/appContext";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 
 import { PublicRoute } from "./ui/PublicRoute";
 import ProtectedRoute from "./ui/ProtectedRoute";
@@ -22,6 +23,11 @@ import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { QuickReportPage } from "./features/reports/QuickReportPage";
 import { SettingsModule } from "./features/settings/Settings";
+import { Leads } from "./features/leads/Leads";
+import { Estimates } from "./features/estimates/Estimates";
+import { Tasks } from "./features/tasks/Tasks";
+import { Bookings } from "./features/bookings/Bookings";
+import { PublicOrderPage } from "./features/public/PublicOrderPage";
 import { AppLayout } from "./ui/AppLayout";
 import Dashboardredirect from "./ui/DashboardRedirect";
 import { BusinessSetupPage } from "./features/onboarding/BusinessSetupPage";
@@ -29,8 +35,18 @@ import { AuthSession } from "./features/auth/AuthSession";
 import { isInvalidSessionError } from "./services/apiAuth";
 import supabase from "./services/supabase";
 import { useUrlLanguage } from "./i18n/useUrlLanguage";
+import { urlIndicatesPasswordRecovery } from "./features/auth/passwordRecovery";
 
 export const DEFAULT_LOCALE = "en";
+
+/** Root entry: never strip a recovery callback into `/en/login` without the reset route. */
+function RootEntryRedirect() {
+  const location = useLocation();
+  if (urlIndicatesPasswordRecovery(location.search, location.hash, location.pathname)) {
+    return <Navigate to={`/${DEFAULT_LOCALE}/reset-password${location.search}${location.hash}`} replace />;
+  }
+  return <Navigate to={`/${DEFAULT_LOCALE}/login`} replace />;
+}
 
 export function AppRoutes() {
   useUrlLanguage();
@@ -38,13 +54,19 @@ export function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/" element={<Navigate to={`/${DEFAULT_LOCALE}/login`} replace />} />
+      <Route path="/" element={<RootEntryRedirect />} />
 
       <Route element={<PublicRoute />}>
         <Route path="/:locale/login" element={<LoginPage />} />
         <Route path="/:locale/register" element={<RegisterPage />} />
         <Route path="/:locale/forgot-password" element={<ForgotPasswordPage />} />
       </Route>
+
+      {/* Recovery callback: outside PublicRoute so a recovery session is not redirected to the dashboard. */}
+      <Route path="/:locale/reset-password" element={<ResetPasswordPage />} />
+
+      {/* Public read-only order status by public_links token (no sign-in; the token is the only credential). */}
+      <Route path="/:locale/public/:token" element={<PublicOrderPage />} />
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
@@ -62,6 +84,12 @@ export function AppRoutes() {
           <Route path="/:locale/:workspaceId/finance" element={<Finance />} />
           <Route path="/:locale/:workspaceId/reports" element={<ReportsModule />} />
           <Route path="/:locale/:workspaceId/reports/:reportType" element={<QuickReportPage />} />
+          {/* Stage 9 (P2) read-only stubs; reached from Settings → Modules (no sidebar entries yet). */}
+          <Route path="/:locale/:workspaceId/leads" element={<Leads />} />
+          <Route path="/:locale/:workspaceId/estimates" element={<Estimates />} />
+          <Route path="/:locale/:workspaceId/tasks" element={<Tasks />} />
+          <Route path="/:locale/:workspaceId/bookings" element={<Bookings />} />
+          <Route path="/:locale/:workspaceId/schedule" element={<Bookings />} />
           <Route path="/:locale/:workspaceId/settings" element={<SettingsModule />} />
         </Route>
       </Route>

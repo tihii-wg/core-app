@@ -1,4 +1,5 @@
 import { useCallback, useState, type ElementType, type ReactElement, type ReactNode } from "react";
+import toast from "react-hot-toast";
 import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, Wallet, Package, Calendar, Download, FileText, PieChart, Activity, ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
@@ -33,9 +34,14 @@ import {
   summaryStatsWithLedger,
   type ReportRange,
 } from "./reportStats";
+import { PERMISSION_KEYS } from "../roles/permissions";
+import { useMyPermissions } from "../roles/useMyPermissions";
+import { ActivityLogPanel } from "./ActivityLogPanel";
 import { ExportReportDialog } from "./ExportReportDialog";
 import { ReportPrintRoot, type ReportPrintJob } from "./ReportPrintRoot";
-import { rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
+import { downloadCsv, rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
+import { ordersSummaryCsv } from "./csvExport";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { chartAxisProps, chartColors, chartGridProps, chartLegendProps, chartTooltipProps } from "./chartTheme";
 
 function ReportChart({ height, children }: { height: number; children: ReactElement }) {
@@ -82,11 +88,14 @@ export function ReportsModule() {
   const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
   const [dateRange, setDateRange] = useState<ReportRange>("last30");
+  const { can } = useMyPermissions();
+  const canViewActivityLog = can(PERMISSION_KEYS.reportsActivityLog);
   const [activeTab, setActiveTab] = useState("overview");
   const [exportOpen, setExportOpen] = useState(false);
   const [printJob, setPrintJob] = useState<ReportPrintJob | null>(null);
   const finishPrint = useCallback(() => setPrintJob(null), []);
-  const { formatDate } = useReportFormatting();
+  const { formatDate, formatDateTime, workspaceName } = useReportFormatting();
+  const { industrySlug } = useIndustryWorkflow();
   const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
   const navigate = useNavigate();
 
@@ -114,6 +123,23 @@ export function ReportsModule() {
     payments,
     currency,
   );
+  const exportOrdersSummary = () => {
+    const generated = new Date();
+    const csv = ordersSummaryCsv(
+      orders,
+      clients.map((client) => clientCreatedAt(client)),
+      period,
+      {
+        title: t("reports.ordersSummary.title"),
+        workspace: workspaceName,
+        period: `${formatDate(period.start)} – ${formatDate(period.end)}`,
+        generated: formatDateTime(generated),
+      },
+      industrySlug,
+    );
+    downloadCsv(`orders-summary_${period.start}_${period.end}.csv`, csv);
+    toast.success(t("reports.toast.exported"), { id: "export-orders-summary" });
+  };
   const operations = operationsStats(orders, period, today);
   const series = revenueSeriesWithLedger(orders, period, payments, currency);
   const services = serviceDistribution(orders, period);
@@ -192,6 +218,10 @@ export function ReportsModule() {
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" disabled={ordersLoading || Boolean(ordersError)} onClick={exportOrdersSummary}>
+              <FileText />
+              {t("reports.ordersSummary.button")}
+            </Button>
             <Button variant="outline" onClick={() => setExportOpen(true)}>
               <Download />
               {t("reports.page.export")}
@@ -260,6 +290,12 @@ export function ReportsModule() {
             <Package />
             {t("reports.tabs.inventory")}
           </TabsTrigger>
+          {canViewActivityLog ? (
+            <TabsTrigger value="activity">
+              <Activity />
+              {t("reports.tabs.activity")}
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -510,6 +546,12 @@ export function ReportsModule() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canViewActivityLog ? (
+          <TabsContent value="activity" className="mt-4">
+            <ActivityLogPanel />
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       {/* Quick Reports */}

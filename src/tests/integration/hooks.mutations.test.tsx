@@ -33,6 +33,7 @@ import { useLogOut } from "../../features/auth/useLogOut";
 import { useLogin } from "../../features/auth/useLogIn";
 import { useChangePassword } from "../../features/auth/useChangePassword";
 import { useUploadWorkspaceAvatar } from "../../features/workspaces/useWorkspaceAvatar";
+import { useWorkspaceSubscription } from "../../features/workspaces/useWorkspaceSubscription";
 import { fake } from "../fakeSupabase";
 import { PASSWORD, USERS, WS, membership, row, seedCoreApp } from "../coreAppDb";
 import { cachedKeys, createHookWrapper } from "../hookHarness";
@@ -73,6 +74,12 @@ async function settle<T>(run: () => Promise<T>) {
     }
   });
   return outcome;
+}
+
+/** Mutations call useGuardSubscriptionWrite — wait on the same hook tree's entitlement. */
+async function waitUntilWritable(getEntitlement: () => { isEntitlementResolved: boolean; workspaceId: string | null }) {
+  await waitFor(() => expect(getEntitlement().isEntitlementResolved).toBe(true));
+  await waitFor(() => expect(getEntitlement().workspaceId).toBeTruthy());
 }
 
 describe("client mutations", () => {
@@ -124,8 +131,9 @@ describe("employee mutations", () => {
   });
 
   it("a missing workspace is reported as an error toast", async () => {
-    const { result } = setup(() => useCreateNewEmployee());
-    await settle(() => result.current.mutateAsync({ name: "Eve", email: "", phone: "", role: "technician", status: "active", profile_id: null }));
+    const { result } = setup(() => ({ create: useCreateNewEmployee(), entitlement: useWorkspaceSubscription() }));
+    await waitUntilWritable(() => result.current.entitlement);
+    await settle(() => result.current.create.mutateAsync({ name: "Eve", email: "", phone: "", role: "technician", status: "active", profile_id: null }));
     expect(toast.error).toHaveBeenCalledWith("No active workspace", { id: "create-employee" });
   });
 });
@@ -271,7 +279,13 @@ describe("team mutations", () => {
 
   it("a member's attempts are refused with toasts", async () => {
     fake.signInAs(USERS.member.id);
-    const { result } = setup(() => ({ add: useAddWorkspaceMember(), role: useUpdateWorkspaceMemberRole(), remove: useRemoveWorkspaceMember() }));
+    const { result } = setup(() => ({
+      add: useAddWorkspaceMember(),
+      role: useUpdateWorkspaceMemberRole(),
+      remove: useRemoveWorkspaceMember(),
+      entitlement: useWorkspaceSubscription(),
+    }));
+    await waitUntilWritable(() => result.current.entitlement);
     await settle(() => result.current.add.mutateAsync({ workspaceId: WS.A, email: USERS.newbie.email, role: "member" }));
     await settle(() => result.current.role.mutateAsync({ workspaceId: WS.A, userId: USERS.manager.id, role: "member" }));
     await settle(() => result.current.remove.mutateAsync({ workspaceId: WS.A, userId: USERS.manager.id }));
@@ -293,8 +307,9 @@ describe("workspace and profile mutations", () => {
 
   it("a non-owner's company update shows the owner-only toast", async () => {
     fake.signInAs(USERS.admin.id);
-    const { result } = setup(() => useUpdateWorkspace());
-    await settle(() => result.current.mutateAsync({ workspaceId: WS.A, name: "X", industryId: "auto_repair", inventoryMarkup: 1 }));
+    const { result } = setup(() => ({ update: useUpdateWorkspace(), entitlement: useWorkspaceSubscription() }));
+    await waitUntilWritable(() => result.current.entitlement);
+    await settle(() => result.current.update.mutateAsync({ workspaceId: WS.A, name: "X", industryId: "auto_repair", inventoryMarkup: 1 }));
     expect(toast.error).toHaveBeenCalledWith("Only the workspace owner can change company settings.", { id: "update-workspace" });
   });
 
@@ -355,8 +370,9 @@ describe("workspace and profile mutations", () => {
 
   it("a logo upload by a non-member shows the access error", async () => {
     fake.signInAs(USERS.member.id);
-    const { result } = setup(() => useUploadWorkspaceAvatar());
-    await settle(() => result.current.mutateAsync({ workspaceId: WS.C, file: new Blob(["x"]) }));
+    const { result } = setup(() => ({ upload: useUploadWorkspaceAvatar(), entitlement: useWorkspaceSubscription() }));
+    await waitUntilWritable(() => result.current.entitlement);
+    await settle(() => result.current.upload.mutateAsync({ workspaceId: WS.C, file: new Blob(["x"]) }));
     expect(toast.error).toHaveBeenCalledWith("You do not have access to this workspace");
   });
 });

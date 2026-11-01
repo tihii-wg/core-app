@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Check, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Pencil, Trash2 } from "lucide-react";
+import { Check, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Link2, Pencil, Printer, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
+import i18n from "../../i18n";
 import { Button } from "../../ui/Button";
+import { createPublicOrderLink, publicOrderStatusUrl } from "../../services/apiPublicLinks";
+import { MissingRpcError } from "../../services/missingRpc";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +28,8 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
+import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useDeleteOrder } from "./useDeleteOrder";
 
@@ -75,9 +81,38 @@ export function OrderActionsMenu({
   const paidLocked = isOrderPaidLocked(order, isWorkspaceOwner);
   const paidBlocked = isPaidStatusOptionBlocked(order, requireTaxInvoiceNumber);
   const deleteOrder = useDeleteOrder();
+  const printOrder = usePrintOrderDocument();
+  const { data: templates = [] } = useGetDocumentTemplates();
+  const printTemplates = templates.filter((template) => template.isActive && template.bodyHtml.trim());
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [copyingPublicLink, setCopyingPublicLink] = useState(false);
   const hasInvoice = Boolean(invoiceNumber);
   const paymentCount = Math.max(0, linkedPaymentCount);
+
+  async function copyPublicStatusLink() {
+    if (copyingPublicLink) return;
+    setCopyingPublicLink(true);
+    const toastId = "public-order-link";
+    try {
+      const link = await createPublicOrderLink(order.id);
+      const url = publicOrderStatusUrl(link.token, i18n.language);
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        throw new Error("clipboard unavailable");
+      }
+      toast.success(t("orders.actions.publicLinkCopied"), { id: toastId });
+    } catch (error) {
+      if (error instanceof MissingRpcError) {
+        toast.error(error.message || t("orders.actions.publicLinkUnavailable"), { id: toastId });
+      } else {
+        const message = error instanceof Error && error.message ? error.message : t("orders.actions.publicLinkCopyFailed");
+        toast.error(message, { id: toastId });
+      }
+    } finally {
+      setCopyingPublicLink(false);
+    }
+  }
 
   return (
     <>
@@ -158,6 +193,31 @@ export function OrderActionsMenu({
               {isCreatingInvoice ? t("orders.actions.creatingInvoice") : t("orders.actions.createInvoice")}
             </DropdownMenuItem>
           )}
+
+          <DropdownMenuSeparator />
+          {printTemplates.length === 0 ? (
+            <DropdownMenuItem onSelect={() => toast.error(i18n.t("orders.print.unavailable"))}>
+              <Printer />
+              {t("orders.print.action")}
+            </DropdownMenuItem>
+          ) : (
+            printTemplates.map((template) => (
+              <DropdownMenuItem
+                key={template.id}
+                disabled={printOrder.isPending}
+                onSelect={() => printOrder.mutate({ orderId: order.id, templateId: template.id })}
+              >
+                <Printer />
+                <span className="truncate">{t("orders.print.withTemplate", { name: template.name })}</span>
+              </DropdownMenuItem>
+            ))
+          )}
+          {canWrite ? (
+            <DropdownMenuItem disabled={copyingPublicLink} onSelect={() => void copyPublicStatusLink()}>
+              <Link2 />
+              {t("orders.actions.copyPublicLink")}
+            </DropdownMenuItem>
+          ) : null}
 
           {canWrite ? (
             <>

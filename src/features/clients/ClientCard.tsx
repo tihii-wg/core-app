@@ -91,7 +91,7 @@ export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit }:
         </span>
         <span className="ml-auto text-right">
           <span className="block text-[11px] text-muted-foreground">{t("clients.table.balance")}</span>
-          <span className={client.balance > 0 ? "font-semibold text-destructive tabular-nums" : "font-semibold text-foreground tabular-nums"}>
+          <span className={client.balance > 0 ? "font-semibold text-success tabular-nums" : "font-semibold text-foreground tabular-nums"}>
             {formatMoney(client.balance)}
           </span>
         </span>

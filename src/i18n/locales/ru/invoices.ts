@@ -110,6 +110,11 @@ const invoices: Messages<typeof en> = {
     body: "Здравствуйте!\n\nВо вложении счёт {{number}}.\n\nСпасибо!",
   },
   detail: {
+    vat: {
+      net: "Сумма без НДС",
+      recorded: "НДС",
+      estimated: "НДС включён (расчёт {{rate}}%)",
+    },
     fallbackTitle: "Счёт",
     srDescription: "Данные счёта, услуги в нём и статус оплаты.",
     loadErrorTitle: "Не удалось загрузить этот счёт",

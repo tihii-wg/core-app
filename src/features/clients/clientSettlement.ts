@@ -50,6 +50,7 @@ export type ClientSettlementRow = {
   isPaid: boolean;
   /** Display-only fields for mobile cards; unused in money totals. */
   status: OrderStatus;
+  customStatus?: { name: string; color: string | null } | null;
   device: string;
   carNumber: string;
   service: string;
@@ -110,6 +111,7 @@ export function computeClientSettlement(orders: ClientOrderSummary[], storedBala
       remaining,
       isPaid: Boolean(order.isPaid),
       status: order.status,
+      ...(order.customStatus ? { customStatus: order.customStatus } : {}),
       device: order.device ?? "",
       carNumber: order.carNumber ?? "",
       service: order.service ?? "",

@@ -35,6 +35,8 @@ export type RecordPaymentInput = {
   paymentMethod: LedgerPaymentMethod;
   paidAt: string;
   note?: string;
+  /** Optional `finance_accounts.id` (payments.account_id, Appendix A). Dropped if the column is absent. */
+  accountId?: string | null;
 };
 
 export type RecordRefundInput = {

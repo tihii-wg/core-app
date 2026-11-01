@@ -10,12 +10,17 @@ import { Textarea } from "../../ui/Textarea";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { roundMoney } from "./paymentCalculations";
 import { ledgerPaymentMethods, type LedgerPaymentMethod, type PaymentBalance } from "./paymentTypes";
+import { useFinanceAccounts } from "./useFinanceAccounts";
 import { useRecordPayment } from "./usePayments";
+import { DEFAULT_VAT_RATE_PERCENT, vatIncludedAmount } from "./vat";
+
+const NO_ACCOUNT = "none";
 
 type PaymentFormValues = {
   amount: number;
   paidAt: string;
   paymentMethod: LedgerPaymentMethod;
+  accountId: string;
   note: string;
 };
 
@@ -81,19 +86,24 @@ function PaymentForm({
   const { currency, formatMoney } = useWorkspaceMoney();
   const { mutate: record, isPending } = useRecordPayment();
   const remaining = balance.remaining;
+  const { data: financeAccounts = [] } = useFinanceAccounts();
+  const accountOptions = financeAccounts.filter((account) => account.isActive && account.currencyCode === currency);
   const {
     control,
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<PaymentFormValues>({
     defaultValues: {
       amount: remaining > 0 ? remaining : undefined as unknown as number,
       paidAt: defaultPaidAt(),
       paymentMethod: "cash",
+      accountId: NO_ACCOUNT,
       note: "",
     },
   });
+  const enteredAmount = watch("amount");
 
   function onSubmit(values: PaymentFormValues) {
     if (isPending) return;
@@ -106,6 +116,7 @@ function PaymentForm({
         paymentMethod: values.paymentMethod,
         paidAt: new Date(values.paidAt).toISOString(),
         note: values.note,
+        accountId: values.accountId && values.accountId !== NO_ACCOUNT ? values.accountId : null,
       },
       { onSuccess: onDone },
     );
@@ -154,6 +165,14 @@ function PaymentForm({
               disabled={isPending || remaining <= 0}
             />
             <FieldError message={errors.amount?.message} />
+            {Number.isFinite(enteredAmount) && enteredAmount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t("finance.payments.vatIncluded", {
+                  rate: DEFAULT_VAT_RATE_PERCENT,
+                  amount: formatMoney(vatIncludedAmount(enteredAmount)),
+                })}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="payment-paid-at">{t("finance.payments.fields.paidAt")}</Label>
@@ -190,6 +209,31 @@ function PaymentForm({
             )}
           />
         </div>
+
+        {accountOptions.length > 0 ? (
+          <div className="space-y-1.5">
+            <Label>{t("finance.payments.fields.account")}</Label>
+            <Controller
+              control={control}
+              name="accountId"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange} disabled={isPending}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_ACCOUNT}>{t("finance.payments.fields.accountNone")}</SelectItem>
+                    {accountOptions.map((account) => (
+                      <SelectItem key={account.id} value={account.id}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        ) : null}
 
         <div className="space-y-1.5">
           <Label htmlFor="payment-note">{t("finance.payments.fields.note")}</Label>

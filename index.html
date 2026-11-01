@@ -11,11 +11,16 @@
       (function () {
         try {
           var path = window.location.pathname;
-          if (path === "/" || /\/(login|register|forgot-password)\/?$/.test(path)) return;
+          if (path === "/" || /\/(login|register|forgot-password|reset-password)\/?$/.test(path)) return;
           var theme = window.localStorage.getItem("coreapp-theme");
           if (theme !== "light" && theme !== "dark" && theme !== "system") return;
           var dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            var background = getComputedStyle(document.documentElement).getPropertyValue("--background").trim();
+            if (background) meta.setAttribute("content", background);
+          }
         } catch (error) {}
       })();
     </script>

@@ -32,6 +32,28 @@ export function passwordChangeMessage(message: string) {
   return i18n.t("auth.password.errors.changeFailed");
 }
 
+export function passwordResetRequestMessage(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("rate") || text.includes("too many") || text.includes("429")) {
+    return i18n.t("auth.forgotPassword.errors.rateLimited");
+  }
+  if (text.includes("email")) {
+    return i18n.t("auth.forgotPassword.errors.sendFailed");
+  }
+  return i18n.t("auth.forgotPassword.errors.sendFailed");
+}
+
+export function passwordRecoverySessionMessage(message: string) {
+  const text = message.toLowerCase();
+  if (text.includes("expired") || text.includes("otp_expired") || text.includes("flow_state_expired")) {
+    return i18n.t("auth.resetPassword.errors.linkExpired");
+  }
+  if (text.includes("invalid") || text.includes("malformed") || text.includes("token")) {
+    return i18n.t("auth.resetPassword.errors.linkInvalid");
+  }
+  return i18n.t("auth.resetPassword.errors.linkInvalid");
+}
+
 export function mfaVerifyMessage(message: string) {
   const text = message.toLowerCase();
   if (text.includes("expired")) return i18n.t("auth.mfa.errors.codeExpired");

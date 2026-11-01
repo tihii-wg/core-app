@@ -101,7 +101,7 @@ describe("updateClient", () => {
     await updateClient({ clientId: "client-a1", ...clientForm }, WS.A);
     const request = fake.requests.find((item) => item.table === "clients" && item.op === "update");
     expect(request?.values).not.toHaveProperty("workspace_id");
-    expect(request?.filters).toEqual(["id=eq.client-a1", `workspace_id=eq.${WS.A}`]);
+    expect(request?.filters).toEqual(["id=eq.client-a1", `workspace_id=eq.${WS.A}`, "deleted_at=is.null"]);
   });
 
   it("requires a workspace and surfaces Supabase errors", async () => {

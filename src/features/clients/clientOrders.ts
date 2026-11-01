@@ -9,6 +9,7 @@ export type ClientOrderSummary = {
   service: string;
   totalPrice: number;
   status: OrderStatus;
+  customStatus?: { name: string; color: string | null } | null;
   isPaid: boolean;
   createdAt: string;
 };
@@ -26,6 +27,7 @@ export function clientOrderSummaries(orders: Order[], clientId: string): ClientO
       service: order.service,
       totalPrice: order.totalPrice,
       status: order.status,
+      ...(order.customStatus ? { customStatus: order.customStatus } : {}),
       isPaid: Boolean(order.isPaid),
       createdAt: order.createdAt,
     }))

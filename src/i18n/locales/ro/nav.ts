@@ -64,6 +64,10 @@ const nav: Messages<typeof en> = {
   userMenu: {
     account: "Cont",
     profile: "Profil",
+    theme: "Temă",
+    themeLight: "Deschisă",
+    themeDark: "Întunecată",
+    themeSystem: "Sistem",
     logOut: "Deconectare",
   },
 };

@@ -103,6 +103,11 @@ export default {
     body: "Hello,\n\nPlease find attached invoice {{number}}.\n\nThank you!",
   },
   detail: {
+    vat: {
+      net: "Amount without VAT",
+      recorded: "VAT",
+      estimated: "VAT included (est. {{rate}}%)",
+    },
     fallbackTitle: "Invoice",
     srDescription: "Invoice details, the services it bills and its payment status.",
     loadErrorTitle: "Could not load this invoice",

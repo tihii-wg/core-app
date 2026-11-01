@@ -253,6 +253,8 @@ describe("services page permissions", () => {
   });
 
   it("refuses deleting a service used by orders and deletes an unused one", async () => {
+    // Seed marks Brake check inactive; the services table defaults to the Active filter.
+    row("services", "service-a2")!.status = "active";
     const { user } = await openServices(USERS.owner.id);
 
     await user.click(await screen.findByRole("button", { name: "Delete Oil change" }));

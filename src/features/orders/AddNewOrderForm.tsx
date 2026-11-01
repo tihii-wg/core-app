@@ -9,8 +9,7 @@ import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, CreateMadalProps, Vehicle } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine, sumOrderServiceLines } from "../services/orderServiceLine";
-import { sumOrderMaterialLines } from "../inventory/orderMaterialLine";
+import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useEffect, useRef, useState } from "react";
@@ -36,6 +35,10 @@ import { OrderVehicleFields } from "./OrderVehicleFields";
 import { persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
+import OrderServiceKindSelect from "./OrderServiceKindSelect";
+import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
+import OrderTotalsSummary from "./OrderTotalsSummary";
+import { previewOrderMoney } from "./orderMoneyPreview";
 
 export default function AddNewOrderForm({
   setCreateModalOpen,
@@ -126,7 +129,9 @@ export default function AddNewOrderForm({
 
   const watchedServices = useWatch({ control, name: "services" });
   const watchedMaterials = useWatch({ control, name: "materials" });
-  const totalPrice = sumOrderServiceLines(watchedServices) + sumOrderMaterialLines(watchedMaterials);
+  // Same math createOrder persists: the client's service_order / product_order percent is stamped onto the lines.
+  const { rows: clientDiscounts } = useGetClientDiscounts(selectedClientId || null, Boolean(selectedClientId));
+  const orderMoney = previewOrderMoney(watchedServices, watchedMaterials, clientDiscounts);
 
   function handleCancel() {
     setCreateModalOpen(false);
@@ -192,6 +197,7 @@ export default function AddNewOrderForm({
         deadline: data.deadline,
       });
     } catch {
+      // useCreateOrder already toasts API failures.
       submitLockRef.current = false;
       return;
     }
@@ -372,6 +378,12 @@ export default function AddNewOrderForm({
                       <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
                       <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(unitPrice)}</p>
                     </div>
+                    <OrderServiceKindSelect
+                      value={watchedServices?.[index]?.kind}
+                      lineName={field.serviceName}
+                      disabled={isSubmitting}
+                      onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
+                    />
                     <Button
                       type="button"
                       variant="outline"
@@ -440,10 +452,11 @@ export default function AddNewOrderForm({
           </div>
         </div>
 
-        <div className="flex justify-between border-t pt-3">
-          <span className="text-lg font-semibold">{t("orders.form.totalPrice")}</span>
-          <span className="tabular-nums">{formatMoney(totalPrice)}</span>
-        </div>
+        <OrderTotalsSummary
+          money={orderMoney}
+          formatMoney={formatMoney}
+          clientDiscountPercents={{ services: orderMoney.servicePercent, products: orderMoney.productPercent }}
+        />
       </div>
 
       <div className="flex w-full  shrink-0 justify-end gap-2 border-t bg-card pt-3">

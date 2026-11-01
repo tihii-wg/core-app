@@ -1,4 +1,4 @@
-import type { CreateOrderInput, Order, OrderMaterial, OrderService, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
+import type { CreateOrderInput, Order, OrderMaterial, OrderService, OrderServiceKind, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
 import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
 import { assertValidOptionalVin } from "../lib/vin";
 import { assertVehicleAssignable } from "./apiVehicles";
@@ -10,8 +10,26 @@ import {
   type DeadlineFilter,
 } from "../features/orders/orderVisibility";
 import { isLegalEntityCustomer, taxInvoiceNumberPresent } from "../features/orders/taxInvoice";
+import {
+  computeOrderMoney,
+  isLineDiscountType,
+  lineHasDiscount,
+  roundMoney,
+  stampClientDiscountsOnLines,
+  uniformPercentOf,
+  clientDiscountPercent,
+  type ClientDiscountLike,
+  type LineDiscountType,
+  type MoneyLine,
+  type OrderMoney,
+} from "../features/orders/orderTotals";
+import { getClientDiscounts } from "./apiClientDiscounts";
 import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
+import { getStatusDefinitionsByIds } from "./apiStatusDefinitions";
+import { recordActivity } from "./apiActivityLog";
+import { recordStatusChangeEvents } from "./apiOrderEvents";
+import { isMissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
 import i18n from "../i18n";
@@ -227,13 +245,22 @@ async function assignOrderNumber(workspaceId: string, order: Record<string, unkn
 export async function createOrder(input: CreateOrderInput, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
 
-  const resolvedServices = [];
+  if (!nullIfEmptyUuid(input.clientId) && !(input.clientName?.trim())) {
+    throw new Error(i18n.t("orders.validation.clientRequired"));
+  }
+  if (!(input.services?.length)) throw new Error(i18n.t("orders.validation.serviceRequired"));
+
+  const resolvedServices: ResolvedServiceLine[] = [];
   for (const service of input.services ?? []) {
     const resolved = await resolveService(targetWorkspaceId, service);
     resolvedServices.push({
       ...resolved,
       price: service.price,
       quantity: service.quantity,
+      ...(service.kind ? { kind: service.kind } : {}),
+      ...(isLineDiscountType(service.discountType) && Number(service.discountValue) > 0
+        ? { discountType: service.discountType, discountValue: Number(service.discountValue) }
+        : {}),
     });
   }
 
@@ -249,14 +276,27 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   if (userError) throw new Error(userError.message);
   if (!user) throw new Error(i18n.t("clients.errors.notAuthenticated"));
 
-  const serviceTotal = resolvedServices.reduce((total, service) => total + service.price * service.quantity, 0);
-  const materialTotal = materials.reduce((total, line) => total + line.price * line.quantity, 0);
+  // Client discounts (service_order / product_order) are stamped onto the lines once, here. Lines that already
+  // carry a discount are left alone, so a discount can never be applied twice.
+  const clientDiscounts = clientId && orderLineDiscountSupported ? await loadClientDiscounts(targetWorkspaceId, clientId) : [];
+  const stampedServices = stampClientDiscountsOnLines(
+    resolvedServices,
+    materials.map((line) => ({ ...line })),
+    clientDiscounts,
+  );
+  const stampedLines = stampedServices.services;
+  const productPercent = uniformPercentOf(stampedServices.materials);
+  const expectedMoney = computeOrderMoney({
+    services: stampedLines.map(serviceInputToMoneyLine),
+    materials: stampedServices.materials.map(materialToMoneyLine),
+  });
   const timeZone = await workspaceTimeZone(targetWorkspaceId);
   const normalizedVin = assertValidOptionalVin(input.vin, "orders.validation.vinLength");
   const device = nullIfEmptyText(input.device);
   const carNumber = nullIfEmptyText(input.carNumber)?.toUpperCase() ?? null;
 
-  const { data: insertedOrder, error: orderError } = await supabase
+  const { data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+    supabase
     .from("orders")
     .insert({
       workspace_id: targetWorkspaceId,
@@ -270,7 +310,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       assigned_to: null,
       created_by: user.id,
       ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : { deadline: null }),
-      total_price: serviceTotal + materialTotal,
+      total_price: expectedMoney.total,
+      ...orderDiscountFields(expectedMoney, uniformPercentOf([...stampedLines, ...stampedServices.materials])),
       status: "new",
       is_paid: false,
       number: `ORD-PENDING-${crypto.randomUUID()}`,
@@ -279,7 +320,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
     })
     .select()
-    .single();
+    .single(),
+  );
 
   if (orderError) throw new Error(orderError.message);
 
@@ -291,16 +333,25 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     throw error;
   }
 
+  // Discount metadata actually written on the service lines (the column may be missing on this database).
+  let writtenServiceLines: ResolvedServiceLine[] = stampedLines;
   if (resolvedServices.length > 0) {
-    const { error: orderServicesError } = await supabase.from("order_services").insert(
-      resolvedServices.map((service) => ({
-        order_id: order.id,
-        service_id: service.id,
-        service_name: service.name,
-        price: service.price,
-        quantity: service.quantity,
-      })),
+    const { error: orderServicesError } = await withLineDiscountColumns(() =>
+      withOrderServiceKind((_columns, withKind) =>
+        supabase.from("order_services").insert(
+          stampedLines.map((service) => ({
+            order_id: order.id,
+            service_id: service.id,
+            service_name: service.name,
+            price: service.price,
+            quantity: service.quantity,
+            ...(withKind && service.kind ? { kind: service.kind } : {}),
+            ...(orderLineDiscountSupported && lineHasDiscount(service) ? { discount_type: service.discountType, discount_value: service.discountValue } : {}),
+          })),
+        ),
+      ),
     );
+    if (!orderLineDiscountSupported) writtenServiceLines = stampedLines.map(stripServiceDiscount);
 
     if (orderServicesError) {
       const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
@@ -311,9 +362,13 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     }
   }
 
+  let writtenMaterialLines: OrderMaterial[] = [];
   if (materials.length > 0) {
     try {
-      await syncOrderMaterialsRpc(String(order.id), materials);
+      // The RPC takes the item's selling price and rewrites orders.total_price as the GROSS sum; the
+      // persisted lines (not the form) are therefore the source of truth for the final total below.
+      const syncedMaterials = await syncOrderMaterialsRpc(String(order.id), materials);
+      writtenMaterialLines = await stampMaterialLineDiscounts(String(order.id), syncedMaterials, productPercent ?? 0, new Set());
     } catch (error) {
       const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
       const syncMessage = error instanceof Error ? error.message : String(error);
@@ -324,7 +379,65 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     }
   }
 
+  // Re-persist only when what was written can differ from the insert-time totals: the materials RPC rewrote
+  // total_price (gross), or the discount columns turned out to be missing on the service lines.
+  const servicesDiscountDowngraded = stampedLines.some(lineHasDiscount) && writtenServiceLines.every((line) => !lineHasDiscount(line));
+  if (materials.length > 0 || servicesDiscountDowngraded) {
+    const patch = await persistOrderTotals(targetWorkspaceId, String(order.id), writtenServiceLines.map(serviceInputToMoneyLine), writtenMaterialLines.map(materialToMoneyLine));
+    return { ...order, ...patch };
+  }
+
   return order;
+}
+
+type ResolvedServiceLine = {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  kind?: OrderServiceKind;
+  discountType?: LineDiscountType | null;
+  discountValue?: number | null;
+};
+
+function stripServiceDiscount(line: ResolvedServiceLine): ResolvedServiceLine {
+  const { discountType: _type, discountValue: _value, ...rest } = line;
+  void _type;
+  void _value;
+  return rest;
+}
+
+function serviceInputToMoneyLine(line: ResolvedServiceLine): MoneyLine {
+  return { price: Number(line.price) || 0, qty: Number(line.quantity) || 0, discountType: line.discountType ?? null, discountValue: line.discountValue ?? null };
+}
+
+function materialToMoneyLine(line: Pick<OrderMaterial, "price" | "quantity" | "discountType" | "discountValue">): MoneyLine {
+  return { price: Number(line.price) || 0, qty: Number(line.quantity) || 0, discountType: line.discountType ?? null, discountValue: line.discountValue ?? null };
+}
+
+function lineToMoney(line: { price: number; quantity: number; discountType?: LineDiscountType | null; discountValue?: number | null }): MoneyLine {
+  return { price: line.price, qty: line.quantity, discountType: line.discountType ?? null, discountValue: line.discountValue ?? null };
+}
+
+function toLineDiscountType(value: unknown): LineDiscountType | null {
+  return isLineDiscountType(value) ? value : null;
+}
+
+function toDiscountValue(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+/** Client discounts for stamping new lines. Never throws: a missing table / RLS / network problem means "no discount". */
+async function loadClientDiscounts(workspaceId: string, clientId: string | null): Promise<ClientDiscountLike[]> {
+  if (!clientId) return [];
+  try {
+    const { rows } = await getClientDiscounts(workspaceId, clientId);
+    return rows;
+  } catch {
+    return [];
+  }
 }
 
 const orderStatuses = new Set<OrderStatus>(["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"]);
@@ -344,7 +457,17 @@ function clientFromRow(clients: unknown) {
   };
 }
 
-type OrderServiceLine = { id?: string; order_id?: string; service_id?: string; service_name?: string; price?: number; quantity?: number };
+type OrderServiceLine = {
+  id?: string;
+  order_id?: string;
+  service_id?: string;
+  service_name?: string;
+  price?: number;
+  quantity?: number;
+  kind?: string | null;
+  discount_type?: string | null;
+  discount_value?: number | string | null;
+};
 type OrderMaterialLine = {
   id?: string;
   order_id?: string;
@@ -354,13 +477,223 @@ type OrderMaterialLine = {
   quantity?: number;
   quantity_issued?: number;
   quantity_returned?: number;
+  discount_type?: string | null;
+  discount_value?: number | string | null;
 };
 
 // Explicit tax_invoice_number so PostgREST always returns it even if a stale
 // schema-cache expansion of `*` ever omitted a newly added column.
 const orderColumns = "*,tax_invoice_number,clients(name,client_type,email,phone)";
-const orderServiceColumns = "id, order_id, service_id, service_name, price, quantity";
-const orderMaterialColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
+const orderServiceBaseColumns = "id, order_id, service_id, service_name, price, quantity";
+
+// `order_services.kind` ('labor' | 'service') comes from crm_ro_v1 or 20261101050000_order_line_kind.PRODUCTION.sql.
+// Until the column exists every request is retried once without it and the answer is remembered for the page lifetime.
+let orderServiceKindSupported = true;
+
+/** Test hook: forget the cached "kind column missing" state. */
+export function resetOrderServiceKindSupport() {
+  orderServiceKindSupported = true;
+}
+
+// Discount columns (crm_ro_v1 / 20261101060000_orders_discount_header.PRODUCTION.sql). Each answer is remembered for the
+// page lifetime; a missing-column error flips the flag and the request is retried without the column.
+//  - order_services / order_materials .discount_type + .discount_value  (crm_ro_v1)
+//  - orders.discount_total                                              (crm_ro_v1)
+//  - orders.discount_type + orders.discount_value  (header metadata)    (20261101060000_orders_discount_header)
+let orderLineDiscountSupported = true;
+let orderDiscountTotalSupported = true;
+let orderHeaderDiscountSupported = true;
+// order_materials is SELECT-only for the browser (20261018170000_order_materials_stock), so material line discounts
+// are written through the SECURITY DEFINER RPC `crm_set_order_line_discounts`
+// (20261101070000_order_line_discounts_rpc.PRODUCTION.sql). Nothing is cached for it: when the RPC is missing the
+// save fails loudly (see stampMaterialLineDiscounts) instead of persisting totals that differ from the preview.
+const SET_LINE_DISCOUNTS_RPC = "crm_set_order_line_discounts";
+
+/** Test hook: forget every cached discount-column answer. */
+export function resetOrderDiscountSupport() {
+  orderLineDiscountSupported = true;
+  orderDiscountTotalSupported = true;
+  orderHeaderDiscountSupported = true;
+}
+
+type DbError = { code?: string; message?: string } | null | undefined;
+
+function isMissingColumnNamed(error: DbError, names: RegExp) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!names.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
+}
+
+function isMissingLineDiscountColumn(error: DbError) {
+  return isMissingColumnNamed(error, /\bdiscount_(type|value)\b/i);
+}
+
+/** Runs `run`; when the line discount columns are missing, remembers that and retries once without them. */
+async function withLineDiscountColumns<T extends { error: DbError }>(run: () => PromiseLike<T>): Promise<T> {
+  const first = await run();
+  if (orderLineDiscountSupported && isMissingLineDiscountColumn(first.error)) {
+    orderLineDiscountSupported = false;
+    return run();
+  }
+  return first;
+}
+
+/** Runs an `orders` write that includes discount_total / header discount fields; retries without a missing column. */
+async function withOrderDiscountColumns<T extends { error: DbError }>(run: () => PromiseLike<T>): Promise<T> {
+  let result = await run();
+  for (let attempt = 0; attempt < 3 && result.error; attempt += 1) {
+    if (orderDiscountTotalSupported && isMissingColumnNamed(result.error, /\bdiscount_total\b/i)) {
+      orderDiscountTotalSupported = false;
+    } else if (orderHeaderDiscountSupported && isMissingColumnNamed(result.error, /\bdiscount_(type|value)\b/i)) {
+      orderHeaderDiscountSupported = false;
+    } else break;
+    result = await run();
+  }
+  return result;
+}
+
+/**
+ * orders columns to write next to `total_price`: `discount_total` always (when the column exists) and the header
+ * `discount_type` / `discount_value` only for a single uniform percent (otherwise explicitly cleared to NULL).
+ */
+function orderDiscountFields(money: OrderMoney, uniformPercent: number | null): Record<string, unknown> {
+  return {
+    ...(orderDiscountTotalSupported ? { discount_total: money.discountTotal } : {}),
+    ...(orderHeaderDiscountSupported
+      ? uniformPercent !== null
+        ? { discount_type: "percent", discount_value: uniformPercent }
+        : { discount_type: null, discount_value: null }
+      : {}),
+  };
+}
+
+/**
+ * Writes `total_price` (net) + discount fields for one order from its persisted lines. Throws on any database
+ * error or when no row was updated — a total is never silently left stale.
+ * Returns the columns written so callers can merge them into the order they return.
+ */
+async function persistOrderTotals(
+  workspaceId: string,
+  orderId: string,
+  serviceLines: readonly MoneyLine[],
+  materialLines: readonly MoneyLine[],
+  extraPatch: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  const money = computeOrderMoney({ services: serviceLines, materials: materialLines });
+  const uniformPercent = uniformPercentOf([...serviceLines, ...materialLines]);
+  let patch: Record<string, unknown> = {};
+  const { data, error } = await withOrderDiscountColumns(() => {
+    patch = { ...extraPatch, total_price: money.total, ...orderDiscountFields(money, uniformPercent) };
+    return supabase.from("orders").update(patch).eq("id", orderId).eq("workspace_id", workspaceId).select("id");
+  });
+  if (error) throw new Error(error.message ?? i18n.t("common.somethingWentWrong"));
+  if (!data || data.length === 0) throw new Error(orderPermissionMessage());
+  return patch;
+}
+
+/** Material discount writes failed for a reason the user must act on (never swallowed). */
+function materialDiscountError(error: DbError) {
+  return new Error(error?.message || i18n.t("orders.errors.materialDiscountFailed"));
+}
+
+/**
+ * Stamps `percent` onto freshly created material lines (those not in `existingIds` that carry no discount) and
+ * returns the lines with the discount applied.
+ *
+ * The write goes through `crm_set_order_line_discounts`, which also recalculates orders.total_price /
+ * discount_total in the same transaction. When that RPC is not installed a direct UPDATE is attempted (works only
+ * where the database grants it). If neither can write, this THROWS a clear error: the form previewed the discounted
+ * total, so silently saving lines without it would leave preview and saved totals apart.
+ */
+async function stampMaterialLineDiscounts(orderId: string, lines: OrderMaterial[], percent: number, existingIds: ReadonlySet<string>): Promise<OrderMaterial[]> {
+  if (!(percent > 0) || !orderLineDiscountSupported) return lines;
+  const ids = lines.filter((line) => line.id && !existingIds.has(line.id) && !lineHasDiscount(line)).map((line) => String(line.id));
+  if (ids.length === 0) return lines;
+
+  const applyTo = (updated: ReadonlySet<string>) =>
+    lines.map((line) => (line.id && updated.has(line.id) ? { ...line, discountType: "percent" as const, discountValue: percent } : line));
+
+  const { error: rpcError } = await supabase.rpc(SET_LINE_DISCOUNTS_RPC, {
+    p_order_id: orderId,
+    p_lines: ids.map((id) => ({ order_material_id: id, discount_type: "percent", discount_value: percent })),
+  });
+  if (!rpcError) return applyTo(new Set(ids));
+
+  if (!isMissingRpcError(rpcError, SET_LINE_DISCOUNTS_RPC)) {
+    // The RPC reports absent discount columns as 42703: the database has no line discounts at all.
+    if (rpcError.code === "42703") {
+      orderLineDiscountSupported = false;
+      return lines;
+    }
+    throw materialDiscountError(rpcError);
+  }
+
+  const { data, error } = await supabase.from("order_materials").update({ discount_type: "percent", discount_value: percent }).eq("order_id", orderId).in("id", ids).select("id");
+  if (error) {
+    if (isMissingLineDiscountColumn(error)) {
+      orderLineDiscountSupported = false;
+      return lines;
+    }
+    // Permission denied (SELECT-only table) and every other failure: the RPC is the way, and it is missing.
+    throw new Error(i18n.t("orders.errors.materialDiscountRpcMissing"));
+  }
+  const updated = new Set(((data ?? []) as { id?: unknown }[]).map((row) => String(row.id)));
+  // RLS can turn a forbidden UPDATE into "0 rows" instead of an error.
+  if (updated.size !== ids.length) throw new Error(i18n.t("orders.errors.materialDiscountRpcMissing"));
+  return applyTo(updated);
+}
+
+function orderServiceColumns() {
+  const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
+  return `${orderServiceKindSupported ? `${orderServiceBaseColumns}, kind` : orderServiceBaseColumns}${discount}`;
+}
+
+function isMissingOrderServiceKindColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/\bkind\b/i.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
+}
+
+/** Runs `run` with the kind column when supported; on a missing-column error retries without it. */
+async function withOrderServiceKind<T extends { error: { code?: string; message?: string } | null }>(
+  run: (columns: string, withKind: boolean) => PromiseLike<T>,
+): Promise<T> {
+  const first = await run(orderServiceColumns(), orderServiceKindSupported);
+  if (orderServiceKindSupported && isMissingOrderServiceKindColumn(first.error)) {
+    orderServiceKindSupported = false;
+    return run(orderServiceColumns(), false);
+  }
+  return first;
+}
+
+/**
+ * Cheap read-only probe: does `order_services.kind` exist? Any non-missing-column outcome (including RLS or
+ * network errors) counts as "unknown -> not offered" except a clean read. Never throws.
+ */
+export async function probeOrderServiceKindSupport(): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("order_services").select("kind").limit(1);
+    if (!error) {
+      orderServiceKindSupported = true;
+      return true;
+    }
+    if (isMissingOrderServiceKindColumn(error)) orderServiceKindSupported = false;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function toOrderServiceKind(value: unknown): OrderServiceKind | null {
+  return value === "labor" || value === "service" ? value : null;
+}
+const orderMaterialBaseColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
+
+function orderMaterialColumns() {
+  return orderLineDiscountSupported ? `${orderMaterialBaseColumns}, discount_type, discount_value` : orderMaterialBaseColumns;
+}
 
 /** Reads orders.tax_invoice_number; coerces unexpected non-null types instead of dropping them. */
 export function readTaxInvoiceNumber(row: Record<string, unknown>) {
@@ -377,6 +710,8 @@ function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
     serviceName: String(line.service_name ?? ""),
     price: Number(line.price ?? 0),
     quantity: Number(line.quantity ?? 1),
+    ...(toOrderServiceKind(line.kind) ? { kind: toOrderServiceKind(line.kind) } : {}),
+    ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
   }));
 }
 
@@ -389,6 +724,7 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
     quantity: Number(line.quantity ?? 1),
     quantityIssued: Number(line.quantity_issued ?? 0),
     quantityReturned: Number(line.quantity_returned ?? 0),
+    ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
   }));
 }
 
@@ -413,6 +749,7 @@ function toOrder(
   serviceLines: OrderServiceLine[] = [],
   memberNames: Map<string, string> = new Map(),
   materialLines: OrderMaterialLine[] = [],
+  customStatuses: Map<string, { name: string; color: string | null }> = new Map(),
 ): Order {
   const employeeId = typeof row.employee_id === "string" ? row.employee_id.trim() : "";
   const legacyAssignedTo = typeof row.assigned_to === "string" ? row.assigned_to.trim() : "";
@@ -421,11 +758,20 @@ function toOrder(
     (legacyAssignedTo ? employees.find((item) => String(item.id) === legacyAssignedTo) : undefined) ??
     (legacyAssignedTo ? employees.find((item) => item.profile_id != null && String(item.profile_id) === legacyAssignedTo) : undefined);
   const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
+  const customStatusId = typeof row.custom_status_id === "string" ? row.custom_status_id : null;
+  const customStatus = customStatusId ? customStatuses.get(customStatusId) ?? null : null;
   const isPaid = Boolean(row.is_paid);
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
   const client = clientFromRow(row.clients);
   const services = mapServiceLines(serviceLines);
   const materials = mapMaterialLines(materialLines);
+  const totalPrice = Number(row.total_price ?? 0);
+  // orders.discount_total (crm_ro_v1) is authoritative; without it fall back to what the discounted lines add up to.
+  const discountTotal =
+    row.discount_total != null && Number.isFinite(Number(row.discount_total))
+      ? Math.max(0, roundMoney(Number(row.discount_total)))
+      : computeOrderMoney({ services: services.map(lineToMoney), materials: materials.map(lineToMoney) }).discountTotal;
+  const headerDiscountType = toLineDiscountType(row.discount_type);
   const fallbackAssigneeId = employeeId || legacyAssignedTo;
   const createdById = typeof row.created_by === "string" ? row.created_by.trim() : "";
 
@@ -447,11 +793,16 @@ function toOrder(
     materials,
     description: typeof row.description === "string" ? row.description : "",
     status,
+    customStatusId,
+    customStatus,
     // Canonical: employees.id via orders.employee_id; legacy assigned_to only when employee_id is empty.
     assignedEmployeeId: employee?.id ?? fallbackAssigneeId,
     assignedEmployeeName: employee?.name || memberNames.get(legacyAssignedTo) || "",
     deadline: formatOrderDate(row.deadline),
-    totalPrice: Number(row.total_price ?? 0),
+    totalPrice,
+    subtotal: roundMoney(totalPrice + discountTotal),
+    discountTotal,
+    ...(headerDiscountType ? { discountType: headerDiscountType, discountValue: toDiscountValue(row.discount_value) } : {}),
     isPaid,
     paymentStatus,
     taxInvoiceNumber: readTaxInvoiceNumber(row),
@@ -510,17 +861,32 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
   const memberNames = await assigneeDisplayNames(workspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]);
   let serviceLines: OrderServiceLine[] = [];
   let materialLines: OrderMaterialLine[] = [];
+  const customStatusIds = rows
+    .map((row) => (typeof row.custom_status_id === "string" ? row.custom_status_id.trim() : ""))
+    .filter(Boolean);
+  const customStatuses = new Map<string, { name: string; color: string | null }>();
 
   if (orderIds.length > 0) {
     const [{ data: lines, error: linesError }, { data: materials, error: materialsError }] = await Promise.all([
-      supabase.from("order_services").select(orderServiceColumns).in("order_id", orderIds).order("created_at", { ascending: true }),
-      supabase.from("order_materials").select(orderMaterialColumns).in("order_id", orderIds).order("created_at", { ascending: true }),
+      withLineDiscountColumns(() =>
+        withOrderServiceKind((columns) =>
+          supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
+        ),
+      ),
+      withLineDiscountColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true })),
     ]);
 
     if (linesError) throw new Error(linesError.message);
     if (materialsError) throw new Error(materialsError.message);
-    serviceLines = lines ?? [];
-    materialLines = materials ?? [];
+    serviceLines = (lines ?? []) as unknown as OrderServiceLine[];
+    materialLines = (materials ?? []) as unknown as OrderMaterialLine[];
+  }
+
+  if (customStatusIds.length > 0) {
+    const statuses = await getStatusDefinitionsByIds(workspaceId, customStatusIds);
+    for (const [id, status] of statuses) {
+      customStatuses.set(id, { name: status.name, color: status.color });
+    }
   }
 
   return rows.map((row) =>
@@ -530,6 +896,7 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
       serviceLines.filter((line) => line.order_id === row.id),
       memberNames,
       materialLines.filter((line) => line.order_id === row.id),
+      customStatuses,
     ),
   );
 }
@@ -786,7 +1153,13 @@ async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
  * `workspaces.owner_id === auth.uid()` may move a Paid order to another status.
  * Non-owner updates keep `.neq("status","paid")` so a concurrent Paid write cannot be overwritten.
  */
-export async function updateOrderStatus(orderId: string, status: OrderStatus, workspaceId: string | undefined) {
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  workspaceId: string | undefined,
+  /** Callers that write their own combined audit entry (board moves) pass `recordActivity: false`. */
+  options?: { recordActivity?: boolean },
+) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
 
   const { data: existing, error: loadError } = await supabase
@@ -849,6 +1222,17 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus, wo
     }
     throw new Error(orderPermissionMessage());
   }
+
+  if (options?.recordActivity !== false) {
+    await recordActivity({
+      workspaceId: targetWorkspaceId,
+      entityType: "order",
+      entityId: orderId,
+      event: "order.status_changed",
+      details: { from: currentStatus || null, to: status },
+    });
+    await recordStatusChangeEvents({ orderId, source: "app", from: currentStatus || null, to: status });
+  }
 }
 
 /** Saves (or clears, when blank) the tax invoice number of one order. Trims whitespace. */
@@ -880,6 +1264,9 @@ export async function updateOrder(
   targetWorkspaceId: string | undefined,
 ) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  // Reject empty service lists before any DB write so validation stays a pure client-side failure.
+  if (services && services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
+
   const employeeId = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = assertValidOptionalVin(vin, "orders.validation.vinLength");
 
@@ -918,64 +1305,75 @@ export async function updateOrder(
   if (error) throw new Error(error.message);
   if (!data) throw new Error(orderPermissionMessage());
 
+  // Saved lines keep their stored discounts (matched by id); only NEW lines receive the client's discount.
+  // Discounts are loaded lazily — assignee-only updates (no line changes) never touch client_discounts.
+  const hasNewServiceLines = (services ?? []).some((service) => !service.id);
+  const hasMaterialSync = materials !== undefined && materials.length > 0;
+  const clientDiscounts =
+    clientId && orderLineDiscountSupported && (hasNewServiceLines || hasMaterialSync) ? await loadClientDiscounts(workspaceId, clientId) : [];
+
   let lines: OrderServiceLine[] = [];
   let summary: Record<string, unknown> | null = null;
   if (services) {
-    ({ lines, summary } = await syncOrderServices(workspaceId, orderId, services));
+    ({ lines, summary } = await syncOrderServices(workspaceId, orderId, services, clientDiscounts));
   } else {
     // Assignee-only (and other partial) updates must keep existing service lines on the returned order.
-    const { data: existingLines, error: linesError } = await supabase
-      .from("order_services")
-      .select(orderServiceColumns)
-      .eq("order_id", orderId)
-      .order("created_at", { ascending: true });
+    const { data: existingLines, error: linesError } = await withLineDiscountColumns(() =>
+      withOrderServiceKind((columns) =>
+        supabase.from("order_services").select(columns).eq("order_id", orderId).order("created_at", { ascending: true }),
+      ),
+    );
     if (linesError) throw new Error(linesError.message);
-    lines = existingLines ?? [];
+    lines = (existingLines ?? []) as unknown as OrderServiceLine[];
   }
 
   let materialLines: OrderMaterial[] = [];
+  // sync_order_materials rewrites orders.total_price as the gross sum, so after it ran the net total is re-written below.
+  let materialsRpcRan = false;
+  const readExistingMaterials = async () => {
+    const { data: existingMaterials, error: materialsError } = await withLineDiscountColumns(() =>
+      supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId).order("created_at", { ascending: true }),
+    );
+    if (materialsError) throw new Error(materialsError.message);
+    return (existingMaterials ?? []) as unknown as OrderMaterialLine[];
+  };
   if (materials !== undefined) {
     const desiredMaterials = consolidateOrderMaterials(materials);
     if (desiredMaterials.length > 0) {
       // Non-empty: must sync via RPC. Failure throws — do not treat the update as fully successful.
+      const percent = clientDiscountPercent(clientDiscounts, "product_order");
+      const productPercent = percent > 0 && orderLineDiscountSupported ? percent : null;
+      // Lines already on the order keep their stored discount; the ones the RPC inserts are new.
+      const existingMaterialIds = productPercent !== null ? new Set((await readExistingMaterials()).map((line) => String(line.id))) : new Set<string>();
       materialLines = await syncOrderMaterialsRpc(orderId, desiredMaterials);
+      materialsRpcRan = true;
+      if (productPercent !== null) {
+        try {
+          materialLines = await stampMaterialLineDiscounts(orderId, materialLines, productPercent, existingMaterialIds);
+        } catch (stampError) {
+          // sync_order_materials already reset total_price to the gross sum: restore the net total of the lines as
+          // persisted (new material lines undiscounted) so the order is never left with a stale total, then report.
+          await persistOrderTotals(workspaceId, orderId, lines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine)).catch(() => undefined);
+          throw stampError;
+        }
+      }
     } else {
-      const { data: existingMaterials, error: materialsError } = await supabase
-        .from("order_materials")
-        .select(orderMaterialColumns)
-        .eq("order_id", orderId)
-        .order("created_at", { ascending: true });
-      if (materialsError) throw new Error(materialsError.message);
-      if ((existingMaterials ?? []).length > 0) {
+      const existing = await readExistingMaterials();
+      if (existing.length > 0) {
         // Clearing saved lines still requires sync_order_materials; surface RPC errors (no silent success).
         materialLines = await syncOrderMaterialsRpc(orderId, []);
+        materialsRpcRan = true;
       } else {
         materialLines = [];
       }
     }
   } else {
-    const { data: existingMaterials, error: materialsError } = await supabase
-      .from("order_materials")
-      .select(orderMaterialColumns)
-      .eq("order_id", orderId)
-      .order("created_at", { ascending: true });
-    if (materialsError) throw new Error(materialsError.message);
-    materialLines = mapMaterialLines(existingMaterials ?? []);
+    materialLines = mapMaterialLines(await readExistingMaterials());
   }
 
-  // If only services changed, refresh total so material amounts are not wiped.
-  if (materials === undefined && summary) {
-    const materialTotal = materialLines.reduce((total, line) => total + line.price * line.quantity, 0);
-    const serviceTotal = lines.reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
-    summary = { ...summary, total_price: serviceTotal + materialTotal };
-    const { data: updatedRows, error: totalError } = await supabase
-      .from("orders")
-      .update({ total_price: summary.total_price })
-      .eq("id", orderId)
-      .eq("workspace_id", workspaceId)
-      .select("id");
-    if (totalError) throw new Error(totalError.message);
-    if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage());
+  if (materialsRpcRan) {
+    const patch = await persistOrderTotals(workspaceId, orderId, lines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine));
+    summary = { ...(summary ?? {}), ...patch };
   }
 
   const { data: refreshed, error: refreshError } = await supabase.from("orders").select(orderColumns).eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle();
@@ -1002,7 +1400,18 @@ export async function updateOrder(
     quantity: line.quantity,
     quantity_issued: line.quantityIssued,
     quantity_returned: line.quantityReturned,
+    discount_type: line.discountType ?? null,
+    discount_value: line.discountValue ?? null,
   })));
+}
+
+function serviceLineToMoney(line: OrderServiceLine): MoneyLine {
+  return {
+    price: Number(line.price ?? 0),
+    qty: Number(line.quantity ?? 1),
+    discountType: toLineDiscountType(line.discount_type),
+    discountValue: toDiscountValue(line.discount_value),
+  };
 }
 
 function isSameService(line: OrderServiceLine, service: OrderService) {
@@ -1012,22 +1421,42 @@ function isSameService(line: OrderServiceLine, service: OrderService) {
 // Makes the order's lines exactly match `services`: saved lines are matched by id, removed ones are
 // deleted (the global service stays), unsaved ones are inserted once. Not atomic: new lines are
 // inserted before removed ones are deleted, and saving the same form again converges.
-async function syncOrderServices(workspaceId: string, orderId: string, services: OrderService[]) {
-  const { data: existingLines, error: existingLinesError } = await supabase.from("order_services").select(orderServiceColumns).eq("order_id", orderId).order("created_at", { ascending: true });
+async function syncOrderServices(workspaceId: string, orderId: string, services: OrderService[], clientDiscounts: readonly ClientDiscountLike[] = []) {
+  const { data: existingLines, error: existingLinesError } = await withLineDiscountColumns(() =>
+    withOrderServiceKind((columns) =>
+      supabase.from("order_services").select(columns).eq("order_id", orderId).order("created_at", { ascending: true }),
+    ),
+  );
 
   if (existingLinesError) throw new Error(existingLinesError.message);
 
-  const unclaimed: OrderServiceLine[] = [...(existingLines ?? [])];
+  const unclaimed: OrderServiceLine[] = [...((existingLines ?? []) as unknown as OrderServiceLine[])];
   const kept: OrderServiceLine[] = [];
   const unsaved: OrderService[] = [];
+  const kindChanges: { id: string; kind: OrderServiceKind | null }[] = [];
 
   for (const service of services) {
     const index = service.id ? unclaimed.findIndex((line) => line.id === service.id) : -1;
-    if (index >= 0) kept.push(...unclaimed.splice(index, 1));
-    else unsaved.push(service);
+    if (index >= 0) {
+      const [line] = unclaimed.splice(index, 1);
+      kept.push(line);
+      // `kind` undefined = the caller does not manage kinds (keep whatever is stored).
+      if (service.kind !== undefined && orderServiceKindSupported && (toOrderServiceKind(line.kind) ?? null) !== (service.kind ?? null)) {
+        kindChanges.push({ id: String(line.id), kind: service.kind ?? null });
+      }
+    } else unsaved.push(service);
   }
 
-  const newLines: { order_id: string; service_id: string; service_name: string; price: number; quantity: number }[] = [];
+  const newLines: {
+    order_id: string;
+    service_id: string;
+    service_name: string;
+    price: number;
+    quantity: number;
+    kind?: OrderServiceKind;
+    discount_type?: LineDiscountType;
+    discount_value?: number;
+  }[] = [];
 
   for (const service of unsaved) {
     if (!service.serviceName.trim()) continue;
@@ -1042,12 +1471,16 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     const resolved = await resolveService(workspaceId, service);
     if ([...kept, ...newLines].some((line) => line.service_id === resolved.id)) continue;
 
+    // New lines get the client's service_order discount (unless they already carry one).
+    const [stamped] = orderLineDiscountSupported ? stampClientDiscountsOnLines([service], [], clientDiscounts).services : [service];
     newLines.push({
       order_id: orderId,
       service_id: resolved.id,
       service_name: resolved.name,
       price: service.price,
       quantity: service.quantity,
+      ...(service.kind ? { kind: service.kind } : {}),
+      ...(stamped && lineHasDiscount(stamped) ? { discount_type: stamped.discountType as LineDiscountType, discount_value: Number(stamped.discountValue) } : {}),
     });
   }
 
@@ -1055,9 +1488,22 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   let inserted: OrderServiceLine[] = [];
 
   if (newLines.length > 0) {
-    const { data: insertedLines, error: insertError } = await supabase.from("order_services").insert(newLines).select(orderServiceColumns);
+    const { data: insertedLines, error: insertError } = await withLineDiscountColumns(() =>
+      withOrderServiceKind((columns, withKind) =>
+        supabase
+          .from("order_services")
+          .insert(
+            newLines.map(({ kind, discount_type, discount_value, ...rest }) => ({
+              ...rest,
+              ...(withKind && kind ? { kind } : {}),
+              ...(orderLineDiscountSupported && discount_type ? { discount_type, discount_value } : {}),
+            })),
+          )
+          .select(columns),
+      ),
+    );
     if (insertError) throw new Error(insertError.message);
-    inserted = insertedLines ?? [];
+    inserted = (insertedLines ?? []) as unknown as OrderServiceLine[];
   }
 
   if (removedIds.length > 0) {
@@ -1066,24 +1512,45 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     if (!deletedLines || deletedLines.length !== removedIds.length) throw new Error(orderPermissionMessage());
   }
 
+  // Kind edits on lines that already exist. A missing column silently skips the edit (metadata only).
+  for (const change of kindChanges) {
+    if (!orderServiceKindSupported) break;
+    const { error: kindError } = await supabase.from("order_services").update({ kind: change.kind }).eq("id", change.id).eq("order_id", orderId);
+    if (kindError) {
+      if (isMissingOrderServiceKindColumn(kindError)) {
+        orderServiceKindSupported = false;
+        break;
+      }
+      throw new Error(kindError.message);
+    }
+    const line = kept.find((item) => item.id === change.id);
+    if (line) line.kind = change.kind;
+  }
+
   const lines = [...kept, ...inserted];
   if (newLines.length === 0 && removedIds.length === 0) return { lines, summary: null };
 
-  const serviceTotal = lines.reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
-  const { data: materialRows, error: materialRowsError } = await supabase.from("order_materials").select("price, quantity").eq("order_id", orderId);
+  const { data: materialRows, error: materialRowsError } = await withLineDiscountColumns(() =>
+    supabase.from("order_materials").select(orderLineDiscountSupported ? "price, quantity, discount_type, discount_value" : "price, quantity").eq("order_id", orderId),
+  );
   if (materialRowsError) throw new Error(materialRowsError.message);
-  const materialTotal = (materialRows ?? []).reduce((total, line) => total + Number(line.price ?? 0) * Number(line.quantity ?? 1), 0);
 
-  const summary = {
-    service: lines.map((line) => String(line.service_name ?? "")).join(", "),
-    service_id: lines[0]?.service_id ?? null,
-    total_price: serviceTotal + materialTotal,
-  };
-
-  const { data: updatedRows, error: summaryError } = await supabase.from("orders").update(summary).eq("id", orderId).eq("workspace_id", workspaceId).select("id");
-
-  if (summaryError) throw new Error(summaryError.message);
-  if (!updatedRows || updatedRows.length === 0) throw new Error(orderPermissionMessage());
+  // Net total from the persisted lines (kept lines keep their stored discounts). Throws on any database error.
+  const summary = await persistOrderTotals(
+    workspaceId,
+    orderId,
+    lines.map(serviceLineToMoney),
+    ((materialRows ?? []) as unknown as OrderMaterialLine[]).map((line) => ({
+      price: Number(line.price ?? 0),
+      qty: Number(line.quantity ?? 1),
+      discountType: toLineDiscountType(line.discount_type),
+      discountValue: toDiscountValue(line.discount_value),
+    })),
+    {
+      service: lines.map((line) => String(line.service_name ?? "")).join(", "),
+      service_id: lines[0]?.service_id ?? null,
+    },
+  );
 
   return { lines, summary };
 }

@@ -10,7 +10,17 @@ import { Textarea } from "../../ui/Textarea";
 import { parseOrderMaterialQuantity } from "../inventory/orderMaterialLine";
 import { remainingToIssue, remainingToReturn } from "../inventory/warehouseMaterialStatus";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import { issueOrderMaterials, returnOrderMaterials } from "../../services/apiWarehouse";
+import {
+  issueOrderMaterials,
+  issueOrderMaterialsFromWarehouse,
+  returnOrderMaterials,
+  returnOrderMaterialsToWarehouse,
+} from "../../services/apiWarehouse";
+import { MissingRpcError } from "../../services/missingRpc";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
+import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { defaultIssueWarehouseId, issuableWarehouses, linesExceedingWarehouseStock, warehouseStockOf } from "./issueWarehouse";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { getOrder } from "../../services/apiOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
@@ -30,11 +40,16 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [warehouseId, setWarehouseId] = useState("");
   const submitLock = useRef(false);
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const queryClient = useQueryClient();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
+
+  const { data: warehouseRows } = useGetWarehouses();
+  const { data: warehouseStock, isSuccess: warehouseStockLoaded } = useGetWarehouseStock();
+  const warehouses = useMemo(() => issuableWarehouses(warehouseRows), [warehouseRows]);
 
   const materials = order.materials ?? [];
   const issueable = useMemo(() => materials.filter((line) => remainingToIssue(line) > 0), [materials]);
@@ -49,6 +64,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     }
     setQuantities(initial);
     setReason("");
+    setWarehouseId(defaultIssueWarehouseId(warehouseRows));
     setMode(next);
   }
 
@@ -88,6 +104,11 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       return;
     }
 
+    if (mode === "issue" && warehouseId && warehouseStockLoaded && linesExceedingWarehouseStock(lines, warehouseStock, warehouseId).length > 0) {
+      toast.error(t("orders.errors.insufficientWarehouseStock"));
+      return;
+    }
+
     submitLock.current = true;
     setBusy(true);
     const toastId = mode === "issue" ? "issue-materials" : "return-materials";
@@ -96,8 +117,28 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     try {
       guardWrite();
       const idempotencyKey = crypto.randomUUID();
+      let globalOnly = false;
       if (mode === "issue") {
-        await issueOrderMaterials(order.id, lines, idempotencyKey);
+        if (warehouseId) {
+          try {
+            await issueOrderMaterialsFromWarehouse(order.id, lines, warehouseId, idempotencyKey);
+          } catch (error) {
+            if (!(error instanceof MissingRpcError)) throw error;
+            // The warehouse RPC is not installed: issue with the legacy RPC (global stock only) and say so.
+            await issueOrderMaterials(order.id, lines, idempotencyKey);
+            globalOnly = true;
+          }
+        } else {
+          await issueOrderMaterials(order.id, lines, idempotencyKey);
+        }
+      } else if (warehouseId) {
+        try {
+          await returnOrderMaterialsToWarehouse(order.id, lines, warehouseId, reason, idempotencyKey);
+        } catch (error) {
+          if (!(error instanceof MissingRpcError)) throw error;
+          await returnOrderMaterials(order.id, lines, reason, idempotencyKey);
+          globalOnly = true;
+        }
       } else {
         await returnOrderMaterials(order.id, lines, reason, idempotencyKey);
       }
@@ -106,7 +147,15 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       await queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] });
-      toast.success(mode === "issue" ? t("orders.toast.issued") : t("orders.toast.returned"), { id: toastId });
+      await queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] });
+      if (globalOnly) {
+        toast.dismiss(toastId);
+        toast(mode === "issue" ? t("orders.warehouse.globalOnlyWarning") : t("orders.warehouse.globalOnlyReturnWarning"), {
+          duration: 8000,
+        });
+      } else {
+        toast.success(mode === "issue" ? t("orders.toast.issued") : t("orders.toast.returned"), { id: toastId });
+      }
       setMode(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("common.somethingWentWrong");
@@ -140,6 +189,31 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
           </DialogHeader>
 
           <div className="space-y-3">
+            {warehouses.length > 0 ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="order-warehouse">
+                  {mode === "issue" ? t("orders.warehouse.warehouseLabel") : t("orders.warehouse.returnWarehouseLabel")}
+                </Label>
+                <Select value={warehouseId} onValueChange={setWarehouseId} disabled={busy}>
+                  <SelectTrigger
+                    id="order-warehouse"
+                    aria-label={mode === "issue" ? t("orders.warehouse.warehouseLabel") : t("orders.warehouse.returnWarehouseLabel")}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {mode === "issue" ? t("orders.warehouse.warehouseHint") : t("orders.warehouse.returnWarehouseHint")}
+                </p>
+              </div>
+            ) : null}
             {(mode === "issue" ? issueable : returnable).map((line) => (
               <WarehouseLineEditor
                 key={line.inventoryItemId}
@@ -147,6 +221,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
                 mode={mode!}
                 value={quantities[line.inventoryItemId] ?? ""}
                 stock={inventoryItems.find((item) => item.id === line.inventoryItemId)?.quantity}
+                warehouseStock={mode === "issue" && warehouseId && warehouseStockLoaded ? warehouseStockOf(warehouseStock, warehouseId, line.inventoryItemId) : undefined}
                 onChange={(value) => setQuantities((prev) => ({ ...prev, [line.inventoryItemId]: value }))}
                 disabled={busy}
               />
@@ -187,6 +262,7 @@ function WarehouseLineEditor({
   mode,
   value,
   stock,
+  warehouseStock,
   onChange,
   disabled,
 }: {
@@ -194,6 +270,7 @@ function WarehouseLineEditor({
   mode: Mode;
   value: string;
   stock?: number;
+  warehouseStock?: number;
   onChange: (value: string) => void;
   disabled: boolean;
 }) {
@@ -215,6 +292,9 @@ function WarehouseLineEditor({
           <p className="text-[13px] text-muted-foreground tabular-nums">
             {t("orders.form.availableStock")}: {stock}
           </p>
+        ) : null}
+        {mode === "issue" && warehouseStock != null ? (
+          <p className="text-[13px] text-muted-foreground tabular-nums">{t("orders.warehouse.warehouseStock", { count: warehouseStock })}</p>
         ) : null}
       </div>
       <div className="flex items-center gap-2">

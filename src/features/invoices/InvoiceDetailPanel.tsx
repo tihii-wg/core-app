@@ -12,6 +12,7 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoice } from "./useGetInvoices";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
+import { useInvoiceVat } from "./useInvoiceVat";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 import { InvoiceEmailDialog } from "./InvoiceEmailDialog";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
@@ -39,6 +40,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
   const { payments, isLoading: paymentsLoading } = useGetPayments();
   const { canWrite } = useWorkspaceSubscription();
   const canRecord = withSubscriptionWriteAccess(Boolean(useActiveWorkspaceRole()), canWrite);
+  const vat = useInvoiceVat(invoice?.id, invoice?.total);
   const paymentBalance = invoice ? invoicePaymentBalance(invoice, payments) : null;
 
   const startPrint = () => {
@@ -133,6 +135,24 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                   ))}
                 </tbody>
                 <tfoot className="border-t border-border font-medium">
+                  {vat ? (
+                    <>
+                      <tr className="text-xs font-normal">
+                        <td colSpan={3} className="px-3 pt-2 text-right text-muted-foreground">
+                          {t("invoices.detail.vat.net")}
+                        </td>
+                        <td className="px-3 pt-2 text-right tabular-nums text-muted-foreground">{formatMoney(vat.net)}</td>
+                      </tr>
+                      <tr className="text-xs font-normal">
+                        <td colSpan={3} className="px-3 pb-1 text-right text-muted-foreground">
+                          {vat.kind === "estimated"
+                            ? t("invoices.detail.vat.estimated", { rate: vat.ratePercent })
+                            : t("invoices.detail.vat.recorded")}
+                        </td>
+                        <td className="px-3 pb-1 text-right tabular-nums text-muted-foreground">{formatMoney(vat.vat)}</td>
+                      </tr>
+                    </>
+                  ) : null}
                   <tr>
                     <td colSpan={3} className="px-3 py-2 text-right text-muted-foreground">
                       {t("common.total")}

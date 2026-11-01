@@ -12,6 +12,14 @@ import {
   Palette,
   Save,
   FileSpreadsheet,
+  Tags,
+  MapPin,
+  KeyRound,
+  Warehouse,
+  Printer,
+  Percent,
+  DatabaseZap,
+  Blocks,
 } from "lucide-react";
 import {
   Card,
@@ -45,6 +53,15 @@ import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../
 import { TeamSettings } from "./TeamSettings";
 import { SubscriptionStatusCard } from "./SubscriptionStatusCard";
 import { ImportDataDemo } from "./ImportDataDemo";
+import { StatusesSettings } from "./StatusesSettings";
+import { LocationsSettings } from "./LocationsSettings";
+import { RolesSettings } from "./RolesSettings";
+import { PrintTemplatesSettings } from "./PrintTemplatesSettings";
+import { TaxesSettings } from "./TaxesSettings";
+import { NotificationRulesSettings } from "./NotificationRulesSettings";
+import { WarehousesSettings } from "./WarehousesSettings";
+import { ComingModulesSettings } from "./ComingModulesSettings";
+import { MigrationSettings } from "../migration/MigrationSettings";
 
 export function SettingsModule() {
   const { t } = useTranslation();
@@ -109,9 +126,41 @@ export function SettingsModule() {
             <Palette />
             {t("settings.tabs.appearance")}
           </TabsTrigger>
+          <TabsTrigger value="statuses">
+            <Tags />
+            {t("settings.tabs.statuses")}
+          </TabsTrigger>
+          <TabsTrigger value="locations">
+            <MapPin />
+            {t("settings.tabs.locations")}
+          </TabsTrigger>
+          <TabsTrigger value="warehouses">
+            <Warehouse />
+            {t("settings.tabs.warehouses")}
+          </TabsTrigger>
+          <TabsTrigger value="roles">
+            <KeyRound />
+            {t("settings.tabs.roles")}
+          </TabsTrigger>
+          <TabsTrigger value="printTemplates">
+            <Printer />
+            {t("settings.tabs.printTemplates")}
+          </TabsTrigger>
+          <TabsTrigger value="taxes">
+            <Percent />
+            {t("settings.tabs.taxes")}
+          </TabsTrigger>
           <TabsTrigger value="import">
             <FileSpreadsheet />
             {t("settings.tabs.import")}
+          </TabsTrigger>
+          <TabsTrigger value="migration">
+            <DatabaseZap />
+            {t("settings.tabs.migration")}
+          </TabsTrigger>
+          <TabsTrigger value="modules">
+            <Blocks />
+            {t("settings.tabs.modules")}
           </TabsTrigger>
         </TabsList>
 
@@ -233,6 +282,8 @@ export function SettingsModule() {
               </div>
             </CardContent>
           </Card>
+
+          <NotificationRulesSettings />
         </TabsContent>
 
         <TabsContent value="security" className="mt-5 space-y-5">
@@ -261,10 +312,43 @@ export function SettingsModule() {
 
         <TabsContent value="appearance" className="mt-5 space-y-5">
           <AppearanceSettings />
+          <ContrastReviewCard />
+        </TabsContent>
+
+        <TabsContent value="statuses" className="mt-5 space-y-5">
+          <StatusesSettings />
+        </TabsContent>
+
+        <TabsContent value="locations" className="mt-5 space-y-5">
+          <LocationsSettings />
+        </TabsContent>
+
+        <TabsContent value="warehouses" className="mt-5 space-y-5">
+          <WarehousesSettings />
+        </TabsContent>
+
+        <TabsContent value="roles" className="mt-5 space-y-5">
+          <RolesSettings />
+        </TabsContent>
+
+        <TabsContent value="printTemplates" className="mt-5 space-y-5">
+          <PrintTemplatesSettings />
+        </TabsContent>
+
+        <TabsContent value="taxes" className="mt-5 space-y-5">
+          <TaxesSettings />
         </TabsContent>
 
         <TabsContent value="import" className="mt-5 space-y-5">
           <ImportDataDemo />
+        </TabsContent>
+
+        <TabsContent value="migration" className="mt-5 space-y-5">
+          <MigrationSettings />
+        </TabsContent>
+
+        <TabsContent value="modules" className="mt-5 space-y-5">
+          <ComingModulesSettings />
         </TabsContent>
       </Tabs>
     </div>
@@ -276,6 +360,50 @@ const themeOptions = [
   { value: "dark", labelKey: "settings.appearance.themes.dark" },
   { value: "system", labelKey: "settings.appearance.themes.system" },
 ] as const satisfies readonly { value: ProfileTheme; labelKey: string }[];
+
+const contrastReviewRows = [
+  { pair: "--subtle-foreground / --muted", theme: "light", current: "3.22 / 2.89", proposed: "#686e77 → 5.14 / 4.62" },
+  { pair: "--subtle-foreground / --muted", theme: "dark", current: "4.11 / 3.73", proposed: "#8a919c → 5.60 / 5.09" },
+  { pair: "white on --primary", theme: "dark", current: "3.68", proposed: "--primary-foreground: #0e1014 → 5.18" },
+  { pair: "white on --destructive", theme: "dark", current: "3.46", proposed: "--destructive-foreground: #0e1014 → 5.51" },
+] as const;
+
+function ContrastReviewCard() {
+  const { t } = useTranslation();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("settings.appearance.contrastReview.title")}</CardTitle>
+        <CardDescription>{t("settings.appearance.contrastReview.description")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[36rem] text-left text-sm">
+            <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">{t("settings.appearance.contrastReview.pair")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.appearance.contrastReview.theme")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.appearance.contrastReview.current")}</th>
+                <th className="px-3 py-2 font-medium">{t("settings.appearance.contrastReview.proposed")}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {contrastReviewRows.map((row) => (
+                <tr key={`${row.pair}-${row.theme}`}>
+                  <td className="px-3 py-2 font-mono text-xs text-foreground">{row.pair}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{row.theme}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{row.current}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{row.proposed}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">{t("settings.appearance.contrastReview.note")}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function AppearanceSettings() {
   const { t } = useTranslation();

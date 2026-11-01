@@ -65,6 +65,7 @@ vi.mock("./useFinanceTransactions", () => ({
   }),
 }));
 
+vi.mock("./FinanceAccountsSection", () => ({ FinanceAccountsSection: () => null }));
 vi.mock("./RefundFormDialog", () => ({ RefundFormDialog: () => null }));
 vi.mock("./PaymentVoidDialog", () => ({ PaymentVoidDialog: () => null }));
 

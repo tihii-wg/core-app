@@ -132,7 +132,7 @@ export function Clients() {
     {
       key: "balance",
       header: t("clients.table.balance"),
-      cell: (client) => <span className={client.balance > 0 ? "font-medium text-destructive tabular-nums" : "text-foreground tabular-nums"}>{formatMoney(client.balance)}</span>,
+      cell: (client) => <span className={client.balance > 0 ? "font-medium text-success tabular-nums" : "text-foreground tabular-nums"}>{formatMoney(client.balance)}</span>,
       className: "text-right whitespace-nowrap",
     },
     {

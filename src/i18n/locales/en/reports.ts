@@ -46,6 +46,23 @@ export default {
     services: "Services",
     employees: "Employees",
     inventory: "Inventory",
+    activity: "Activity log",
+  },
+  activity: {
+    exportCsv: "Export CSV",
+    exportDescription: "Latest {{count}} activity entries.",
+    shortLabel: "activity log",
+    title: "Activity log",
+    description: "Latest changes recorded in this workspace. Read-only; requires the activity log permission.",
+    unavailable: "The activity log is not available yet. It appears after the Stage 1 SQL (crm_ro_v1) is applied.",
+    empty: "No activity recorded yet, or you do not have access to the activity log.",
+    system: "System",
+    columns: {
+      when: "When",
+      actor: "Who",
+      entity: "Entity",
+      event: "Event",
+    },
   },
   charts: {
     noData: "No data available yet",
@@ -122,7 +139,16 @@ export default {
     copyFailed: "Could not copy the report link",
     exported: "Report exported",
   },
+  ordersSummary: {
+    button: "Orders summary CSV",
+    title: "Orders summary",
+  },
   exportDialog: {
+    activity: {
+      label: "Activity log",
+      description: "Add the latest {{count}} activity entries as an extra section.",
+      preview: "Latest {{count}} entries",
+    },
     title: "Export report",
     description: "Build a comprehensive report for <range>{{range}}</range> ({{period}}).",
     includeInReport: "Include in report",

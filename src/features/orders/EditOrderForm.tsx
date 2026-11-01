@@ -11,8 +11,7 @@ import { Textarea } from "../../ui/Textarea";
 import type { EditOrderFormData, Order } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine, sumOrderServiceLines } from "../services/orderServiceLine";
-import { sumOrderMaterialLines } from "../inventory/orderMaterialLine";
+import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
@@ -23,6 +22,9 @@ import { industrySupportsClientVehicles } from "../industries/industryCapabiliti
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
+import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
+import OrderTotalsSummary from "./OrderTotalsSummary";
+import { previewOrderMoney } from "./orderMoneyPreview";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
@@ -31,6 +33,7 @@ import { OrderVehicleFields } from "./OrderVehicleFields";
 import { persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
+import OrderServiceKindSelect from "./OrderServiceKindSelect";
 
 type EditOrderFormProps = {
   order: Order;
@@ -106,7 +109,9 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const watchedMaterials = useWatch({ control, name: "materials" });
   /** Client-vehicle industries: order-level make/plate/VIN inputs are removed; preserve stored values on save. */
   const hideDuplicateVehicleAssetFields = showVehicles;
-  const totalPrice = sumOrderServiceLines(watchedServices) + sumOrderMaterialLines(watchedMaterials);
+  // Saved lines keep their stored discount; lines added in this form get the client discount (as updateOrder stamps them).
+  const { rows: clientDiscounts } = useGetClientDiscounts(order.clientId || null, Boolean(order.clientId));
+  const orderMoney = previewOrderMoney(watchedServices, watchedMaterials, clientDiscounts, { skipSaved: true });
 
   useEffect(() => {
     if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
@@ -161,6 +166,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       });
       onUpdated(updatedOrder);
     } catch {
+      // useUpdateOrder already toasts API failures.
       return;
     }
   };
@@ -223,9 +229,17 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                   <p className="font-medium">{field.serviceName}</p>
                   <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
                 </div>
-                <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={t("orders.form.removeService", { name: field.serviceName })}>
-                  {t("orders.form.remove")}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <OrderServiceKindSelect
+                    value={watchedServices?.[index]?.kind}
+                    lineName={field.serviceName}
+                    disabled={isSubmitting}
+                    onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
+                  />
+                  <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={t("orders.form.removeService", { name: field.serviceName })}>
+                    {t("orders.form.remove")}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -281,10 +295,11 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         </div>
       </div>
 
-      <div className="flex justify-between border-t pt-3">
-        <span className="text-lg font-semibold">{t("orders.form.totalPrice")}</span>
-        <span className="tabular-nums">{formatMoney(totalPrice)}</span>
-      </div>
+      <OrderTotalsSummary
+        money={orderMoney}
+        formatMoney={formatMoney}
+        clientDiscountPercents={{ services: orderMoney.servicePercent, products: orderMoney.productPercent }}
+      />
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>

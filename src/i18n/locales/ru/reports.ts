@@ -49,6 +49,23 @@ const reports: Messages<typeof en> = {
     services: "Услуги",
     employees: "Сотрудники",
     inventory: "Склад",
+    activity: "Журнал действий",
+  },
+  activity: {
+    exportCsv: "Экспорт CSV",
+    exportDescription: "Последние записи журнала, до {{count}} шт.",
+    shortLabel: "журнал действий",
+    title: "Журнал действий",
+    description: "Последние изменения в этом рабочем пространстве. Только чтение; нужно право на журнал действий.",
+    unavailable: "Журнал действий пока недоступен. Он появится после применения SQL Этапа 1 (crm_ro_v1).",
+    empty: "Действий пока нет, либо у вас нет доступа к журналу.",
+    system: "Система",
+    columns: {
+      when: "Когда",
+      actor: "Кто",
+      entity: "Сущность",
+      event: "Событие",
+    },
   },
   charts: {
     noData: "Данных пока нет",
@@ -125,7 +142,16 @@ const reports: Messages<typeof en> = {
     copyFailed: "Не удалось скопировать ссылку на отчёт",
     exported: "Отчёт экспортирован",
   },
+  ordersSummary: {
+    button: "Сводка по заказам (CSV)",
+    title: "Сводка по заказам",
+  },
   exportDialog: {
+    activity: {
+      label: "Журнал действий",
+      description: "Добавить последние записи журнала (до {{count}}) отдельным разделом.",
+      preview: "Последние записи, до {{count}}",
+    },
     title: "Экспорт отчёта",
     description: "Сформируйте сводный отчёт за период «<range>{{range}}</range>» ({{period}}).",
     includeInReport: "Включить в отчёт",

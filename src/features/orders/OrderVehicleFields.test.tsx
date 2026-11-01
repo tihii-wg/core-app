@@ -14,7 +14,12 @@ const vehiclesState = vi.hoisted(() => ({
 }));
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
-  useGetClientVehicles: () => ({ vehicles: vehiclesState.vehicles, isLoading: false, isError: false }),
+  useGetClientVehicles: () => ({
+    vehicles: vehiclesState.vehicles,
+    isLoading: false,
+    isFetched: true,
+    isError: false,
+  }),
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
 }));
 

@@ -342,25 +342,36 @@ export async function recordPayment(input: RecordPaymentInput, workspaceId: stri
     assertWithinRemaining(amount, remaining);
   }
 
-  const { data, error } = await supabase
-    .from("payments")
-    .insert({
-      workspace_id: targetWorkspaceId,
-      order_id: links.orderId,
-      invoice_id: links.invoiceId,
-      related_payment_id: null,
-      kind: "payment",
-      amount,
-      currency_code: currencyCode,
-      payment_method: paymentMethod,
-      paid_at: paidAt,
-      note: note || null,
-    })
-    .select(paymentColumns)
-    .single();
+  const baseRow = {
+    workspace_id: targetWorkspaceId,
+    order_id: links.orderId,
+    invoice_id: links.invoiceId,
+    related_payment_id: null,
+    kind: "payment",
+    amount,
+    currency_code: currencyCode,
+    payment_method: paymentMethod,
+    paid_at: paidAt,
+    note: note || null,
+  };
+
+  const accountId = input.accountId?.trim() || null;
+  const insertRow = (row: Record<string, unknown>) => supabase.from("payments").insert(row).select(paymentColumns).single();
+
+  let { data, error } = await insertRow(accountId ? { ...baseRow, account_id: accountId } : baseRow);
+  // payments.account_id is optional (Appendix A): retry without it when the column is not applied yet.
+  if (error && accountId && isMissingAccountColumnError(error)) {
+    ({ data, error } = await insertRow(baseRow));
+  }
 
   if (error) throw mapPaymentDbError(error);
   return toLedgerPayment(data as Record<string, unknown>);
+}
+
+/** PGRST204 (column not in schema cache) / 42703 (undefined_column) for `payments.account_id`. */
+export function isMissingAccountColumnError(error: DbError) {
+  if (error.code === "PGRST204" || error.code === "42703") return true;
+  return /account_id/i.test(error.message ?? "") && /schema cache|does not exist/i.test(error.message ?? "");
 }
 
 /**

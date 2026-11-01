@@ -172,6 +172,7 @@ export function useUpdateOrderStatus() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
     },
     onError: (error) => {
       toast.error(error.message || i18n.t("orders.toast.statusUpdateFailed"), { id: "update-order-status" });

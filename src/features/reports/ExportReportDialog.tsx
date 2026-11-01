@@ -11,11 +11,18 @@ import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { reportPeriod, type ReportRange } from "./reportStats";
-import { reportCsv } from "./quickReports";
+import { reportCsv, type ReportSection } from "./quickReports";
 import { comprehensiveReport, comprehensiveReportDescription, comprehensiveReportTitle, exportNeeds, exportPreview, exportSectionDescription, exportSectionKeys, exportSectionLabel, usesPeriod, type ExportSectionKey } from "./comprehensiveReport";
 import { downloadCsv, rangeLabel, useReportFormatting } from "./reportFormatting";
 import type { ReportPrintJob } from "./ReportPrintRoot";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { getActivityLog } from "../../services/apiActivityLog";
+import { PERMISSION_KEYS } from "../roles/permissions";
+import { useMyPermissions } from "../roles/useMyPermissions";
+import { activityLogSection } from "./csvExport";
+
+/** Max activity rows included when the activity log is added to an export. */
+const ACTIVITY_EXPORT_LIMIT = 1000;
 
 type ExportFormat = "pdf" | "csv";
 
@@ -72,6 +79,10 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
   const { t } = useTranslation();
   const [selected, setSelected] = useState<ExportSectionKey[]>(exportSectionKeys);
   const [format, setFormat] = useState<ExportFormat>("pdf");
+  const [includeActivity, setIncludeActivity] = useState(false);
+  const { can } = useMyPermissions();
+  const canExportActivity = can(PERMISSION_KEYS.reportsActivityLog);
+  const withActivity = canExportActivity && includeActivity;
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -122,7 +133,16 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       const generatedAt = new Date();
       const exportPeriod = reportPeriod(range, generatedAt);
       const today = localDateKey(generatedAt);
-      const model = comprehensiveReport({ orders, clients, employees, items }, ordered, exportPeriod, today, industrySlug);
+      const baseModel = comprehensiveReport({ orders, clients, employees, items }, ordered, exportPeriod, today, industrySlug);
+      let model = baseModel;
+      if (withActivity) {
+        const log = await getActivityLog(workspaceId, ACTIVITY_EXPORT_LIMIT);
+        if (!isOpen.current) return;
+        const section: ReportSection = log.isUnavailable
+          ? { kind: "unavailable", title: t("reports.activity.title"), description: t("reports.activity.unavailable") }
+          : activityLogSection(log.entries, formatDateTime);
+        model = { ...baseModel, sections: [...baseModel.sections, section] };
+      }
       const withPeriod = usesPeriod(ordered);
       const exportPeriodLabel = withPeriod ? `${formatDate(exportPeriod.start)} – ${formatDate(exportPeriod.end)}` : t("reports.asOf", { date: formatDate(today) });
       const generatedLabel = formatDateTime(generatedAt);
@@ -135,7 +155,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       } else {
         onPrint({
           title,
-          description: comprehensiveReportDescription(ordered),
+          description: [comprehensiveReportDescription(ordered), withActivity ? t("reports.activity.shortLabel") : ""].filter(Boolean).join(", "),
           workspaceName,
           periodLabel: exportPeriodLabel,
           generatedLabel,
@@ -204,6 +224,20 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
             </div>
           </fieldset>
 
+          {canExportActivity ? (
+            <fieldset className="space-y-2" disabled={isGenerating}>
+              <label
+                className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${includeActivity ? "border-primary/60 bg-accent/60" : "border-border hover:border-border-strong hover:bg-muted/60"} focus-within:ring-[3px] focus-within:ring-ring/30`}
+              >
+                <input type="checkbox" className="mt-0.5 size-4 shrink-0 cursor-pointer accent-primary" checked={includeActivity} onChange={(event) => setIncludeActivity(event.target.checked)} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-foreground">{t("reports.exportDialog.activity.label")}</span>
+                  <span className="block text-xs text-muted-foreground">{t("reports.exportDialog.activity.description", { count: ACTIVITY_EXPORT_LIMIT })}</span>
+                </span>
+              </label>
+            </fieldset>
+          ) : null}
+
           <fieldset className="space-y-2" disabled={isGenerating}>
             <legend className="text-sm font-semibold text-foreground">{t("reports.exportDialog.format")}</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -249,7 +283,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
             </div>
           </dl>
           <div className="mt-4 border-t border-border pt-3">
-            {ordered.length === 0 ? (
+            {ordered.length === 0 && !withActivity ? (
               <p className="text-xs text-muted-foreground">{t("reports.exportDialog.selectAtLeastOne")}</p>
             ) : (
               <ol className="space-y-2">
@@ -262,6 +296,15 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
                     </span>
                   </li>
                 ))}
+                {withActivity ? (
+                  <li className="flex gap-2 text-xs">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary">{ordered.length + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">{t("reports.exportDialog.activity.label")}</span>
+                      <span className="block text-muted-foreground">{t("reports.exportDialog.activity.preview", { count: ACTIVITY_EXPORT_LIMIT })}</span>
+                    </span>
+                  </li>
+                ) : null}
               </ol>
             )}
           </div>
@@ -282,7 +325,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
         <Button type="button" variant="outline" onClick={onClose}>
           {t("common.cancel")}
         </Button>
-        <Button type="button" onClick={generate} disabled={isGenerating || ordered.length === 0 || !workspaceId}>
+        <Button type="button" onClick={generate} disabled={isGenerating || (ordered.length === 0 && !withActivity) || !workspaceId}>
           {isGenerating ? (
             <>
               <Loader2 aria-hidden="true" className="animate-spin" />

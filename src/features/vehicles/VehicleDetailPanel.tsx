@@ -202,7 +202,7 @@ export function VehicleDetailPanel({
                               <span className="min-w-0 flex-1">
                                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                   <span className="text-sm font-medium text-primary tabular-nums">{order.orderNumber}</span>
-                                  <OrderStatusBadge status={order.status} />
+                                  <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
                                 </span>
                                 {order.createdAt ? (
                                   <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">{order.createdAt}</span>

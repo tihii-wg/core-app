@@ -1,4 +1,21 @@
-export const settingsTabs = ["general", "profile", "notifications", "security", "billing", "team", "appearance", "import"] as const;
+export const settingsTabs = [
+  "general",
+  "profile",
+  "notifications",
+  "security",
+  "billing",
+  "team",
+  "appearance",
+  "statuses",
+  "locations",
+  "warehouses",
+  "roles",
+  "printTemplates",
+  "taxes",
+  "import",
+  "migration",
+  "modules",
+] as const;
 
 export type SettingsTab = (typeof settingsTabs)[number];
 

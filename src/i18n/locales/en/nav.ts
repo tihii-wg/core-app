@@ -60,6 +60,10 @@ export default {
   userMenu: {
     account: "Account",
     profile: "Profile",
+    theme: "Theme",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeSystem: "System",
     logOut: "Log out",
   },
 };

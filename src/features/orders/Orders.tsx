@@ -36,6 +36,10 @@ import { useIsMobile } from "../../hooks/use-mobile";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderCard } from "./OrderCard";
 import { OrderColumnsMenu } from "./OrderColumnsMenu";
+import { OrdersBoard } from "./OrdersBoard";
+import { OrdersCalendar } from "./OrdersCalendar";
+import { OrderViewToggle } from "./OrderViewToggle";
+import { readOrderViewMode, writeOrderViewMode, type OrderViewMode } from "./orderBoard";
 import {
   readOrderVisibleColumns,
   writeOrderVisibleColumns,
@@ -80,6 +84,14 @@ export function Orders() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState(() => new Set<OrderToggleableColumn>(readOrderVisibleColumns()));
+  const [viewMode, setViewMode] = useState<OrderViewMode>(() => readOrderViewMode());
+  const isBoard = viewMode === "board";
+  const isCalendar = viewMode === "calendar";
+
+  const handleViewModeChange = (mode: OrderViewMode) => {
+    setViewMode(mode);
+    writeOrderViewMode(mode);
+  };
 
   const debouncedSearch = useDebounce(searchQuery, 400);
 
@@ -132,7 +144,7 @@ export function Orders() {
     today,
     page,
     pageSize,
-  });
+  }, { enabled: !isBoard && !isCalendar });
 
   const paymentStatusByOrder = useMemo(() => {
     const map = new Map<string, ReturnType<typeof orderPaymentBalance>["status"]>();
@@ -166,6 +178,8 @@ export function Orders() {
   }
 
   function toggleAwaitingPaymentFilter() {
+    // The payment filter only applies to the table; switch back so the click has a visible effect.
+    if (isBoard || isCalendar) handleViewModeChange("table");
     setAwaitingPaymentFilter((active) => !active);
   }
 
@@ -228,7 +242,7 @@ export function Orders() {
       header: t("common.status"),
       cell: (order) => (
         <div className="flex min-w-0 flex-col items-start gap-1">
-          <OrderStatusBadge status={order.status} />
+          <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
           <PaymentStatusBadge status={paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
         </div>
       ),
@@ -372,7 +386,7 @@ export function Orders() {
     <div className="space-y-5">
       <PageHeader
         title={t("orders.title")}
-        description={headerDescription}
+        description={isBoard || isCalendar ? undefined : headerDescription}
         aside={
           <button
             type="button"
@@ -433,16 +447,21 @@ export function Orders() {
           onSearchChange={setSearchQuery}
           searchPlaceholder={t("orders.searchPlaceholder")}
           filters={[
-            {
-              key: "status",
-              label: t("common.status"),
-              options: statusOptions,
-              value: statusFilter,
-              onChange: (value) => {
-                deactivateAwaitingPaymentFilter();
-                setStatusFilter(value as OrderStatus | "all");
-              },
-            },
+            // Board columns already are the statuses (and the calendar lists every status), so the status filter is table-only.
+            ...(isBoard || isCalendar
+              ? []
+              : [
+                  {
+                    key: "status",
+                    label: t("common.status"),
+                    options: statusOptions,
+                    value: statusFilter,
+                    onChange: (value: string) => {
+                      deactivateAwaitingPaymentFilter();
+                      setStatusFilter(value as OrderStatus | "all");
+                    },
+                  },
+                ]),
             {
               key: "deadline",
               label: t("orders.filters.deadline"),
@@ -466,14 +485,39 @@ export function Orders() {
           ]}
           onClearFilters={clearFilters}
         />
-        <OrderColumnsMenu
-          visibleColumns={visibleColumns}
-          onVisibleColumnsChange={handleVisibleColumnsChange}
-          deviceColumnLabel={copy.deviceServiceColumn}
-        />
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">
+          <OrderViewToggle value={viewMode} onChange={handleViewModeChange} />
+          {isBoard || isCalendar ? null : (
+            <OrderColumnsMenu
+              visibleColumns={visibleColumns}
+              onVisibleColumnsChange={handleVisibleColumnsChange}
+              deviceColumnLabel={copy.deviceServiceColumn}
+            />
+          )}
+        </div>
       </div>
 
-      {isMobile ? (
+      {isBoard ? (
+        <OrdersBoard
+          search={debouncedSearch}
+          employeeFilter={employeeFilter}
+          deadlineFilter={deadlineFilter}
+          today={today}
+          isWorkspaceOwner={orderDetails.isWorkspaceOwner}
+          requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
+          formatMoney={formatMoney}
+          onOpenOrder={orderDetails.openOrder}
+        />
+      ) : isCalendar ? (
+        <OrdersCalendar
+          search={debouncedSearch}
+          employeeFilter={employeeFilter}
+          deadlineFilter={deadlineFilter}
+          today={today}
+          formatMoney={formatMoney}
+          onOpenOrder={orderDetails.openOrder}
+        />
+      ) : isMobile ? (
         ordersLoading ? (
           <div className="space-y-2" aria-busy="true">
             {Array.from({ length: 4 }).map((_, index) => (
@@ -540,7 +584,7 @@ export function Orders() {
         />
       )}
 
-      {!ordersLoading && total > 0 ? (
+      {!isBoard && !isCalendar && !ordersLoading && total > 0 ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <ListPagination
             className="min-w-0 flex-1 sm:justify-between"

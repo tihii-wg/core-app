@@ -49,6 +49,23 @@ const reports: Messages<typeof en> = {
     services: "Servicii",
     employees: "Angajați",
     inventory: "Stoc",
+    activity: "Jurnal de activitate",
+  },
+  activity: {
+    exportCsv: "Exportă CSV",
+    exportDescription: "Ultimele {{count}} înregistrări de activitate.",
+    shortLabel: "jurnal de activitate",
+    title: "Jurnal de activitate",
+    description: "Ultimele modificări din acest spațiu de lucru. Doar citire; necesită permisiunea pentru jurnalul de activitate.",
+    unavailable: "Jurnalul de activitate nu este disponibil încă. Apare după aplicarea SQL-ului din Etapa 1 (crm_ro_v1).",
+    empty: "Nu există activitate înregistrată sau nu aveți acces la jurnalul de activitate.",
+    system: "Sistem",
+    columns: {
+      when: "Când",
+      actor: "Cine",
+      entity: "Entitate",
+      event: "Eveniment",
+    },
   },
   charts: {
     noData: "Încă nu există date",
@@ -125,7 +142,16 @@ const reports: Messages<typeof en> = {
     copyFailed: "Linkul raportului nu a putut fi copiat",
     exported: "Raportul a fost exportat",
   },
+  ordersSummary: {
+    button: "Rezumat comenzi (CSV)",
+    title: "Rezumat comenzi",
+  },
   exportDialog: {
+    activity: {
+      label: "Jurnal de activitate",
+      description: "Adaugă ultimele {{count}} înregistrări ca secțiune suplimentară.",
+      preview: "Ultimele {{count}} înregistrări",
+    },
     title: "Exportă raportul",
     description: "Generează un raport complet pentru <range>{{range}}</range> ({{period}}).",
     includeInReport: "Include în raport",

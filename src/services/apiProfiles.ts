@@ -25,9 +25,17 @@ export function normalizeProfileTheme(value: unknown): ProfileTheme {
   return value === "light" || value === "dark" || value === "system" ? value : "system";
 }
 
+export function syncThemeColorMeta() {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!(meta instanceof HTMLMetaElement)) return;
+  const background = getComputedStyle(document.documentElement).getPropertyValue("--background").trim();
+  if (background) meta.content = background;
+}
+
 export function applyProfileTheme(theme: ProfileTheme, prefersDark: boolean) {
   const dark = theme === "dark" || (theme === "system" && prefersDark);
   document.documentElement.classList.toggle("dark", dark);
+  syncThemeColorMeta();
 }
 
 // Read by the inline script in index.html before the app loads; keep the key in sync.
@@ -57,6 +65,7 @@ export function resetProfileTheme() {
     // Nothing cached to clear.
   }
   document.documentElement.classList.remove("dark");
+  syncThemeColorMeta();
 }
 
 function isMissingThemeColumn(error: { code?: string; message?: string }) {

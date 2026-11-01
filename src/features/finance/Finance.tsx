@@ -20,6 +20,7 @@ import { rangeLabel, reportRanges, useReportFormatting } from "../reports/report
 import { reportPeriod, type ReportRange } from "../reports/reportStats";
 import { useFinanceTransactions, type FinanceUiFilters } from "./useFinanceTransactions";
 import { ExpenseFormDialog } from "./ExpenseFormDialog";
+import { FinanceAccountsSection } from "./FinanceAccountsSection";
 import { DeleteExpenseDialog } from "./DeleteExpenseDialog";
 import { PaymentActionsMenu } from "./PaymentActionsMenu";
 import { PaymentVoidDialog } from "./PaymentVoidDialog";
@@ -422,6 +423,8 @@ export function Finance() {
           />
         </div>
       </div>
+
+      <FinanceAccountsSection />
 
       <ExpenseFormDialog
         open={formOpen}

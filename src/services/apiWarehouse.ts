@@ -1,5 +1,6 @@
 import type { InventoryMovement, InventoryMovementType, WarehouseMaterialLineInput } from "../lib/types";
 import i18n from "../i18n";
+import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 
 function requireWorkspaceId(workspaceId: string | undefined) {
@@ -9,7 +10,10 @@ function requireWorkspaceId(workspaceId: string | undefined) {
 
 function warehouseError(error: { message?: string; code?: string } | null, fallback: string) {
   const message = error?.message ?? "";
+  if (message.includes("insufficient_warehouse_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_stock")) return i18n.t("orders.errors.insufficientStock");
+  if (message.includes("warehouse_stock table is missing")) return i18n.t("orders.errors.warehouseStockMissing");
+  if (message.includes("Warehouse not found")) return i18n.t("orders.errors.warehouseInvalid");
   if (message.includes("remaining requested")) return i18n.t("orders.errors.issueExceedsRemaining");
   if (message.includes("outstanding issued")) return i18n.t("orders.errors.returnExceedsOutstanding");
   if (message.includes("permission to issue") || message.includes("permission to return")) {
@@ -71,6 +75,34 @@ export async function issueOrderMaterials(orderId: string, lines: WarehouseMater
   return ((data ?? []) as MovementRow[]).map(toInventoryMovement);
 }
 
+export const ISSUE_FROM_WAREHOUSE_RPC = "issue_order_materials_from_warehouse";
+
+/**
+ * Issues materials AND decreases `warehouse_stock` of the chosen warehouse (manual SQL
+ * 20261101080000_issue_order_materials_warehouse). Throws `MissingRpcError` when that SQL is not applied so the
+ * caller can fall back to the global-only `issueOrderMaterials` and tell the user.
+ */
+export async function issueOrderMaterialsFromWarehouse(
+  orderId: string,
+  lines: WarehouseMaterialLineInput[],
+  warehouseId: string,
+  idempotencyKey?: string,
+) {
+  const { data, error } = await supabase.rpc(ISSUE_FROM_WAREHOUSE_RPC, {
+    p_order_id: orderId,
+    p_lines: linePayload(lines),
+    p_warehouse_id: warehouseId,
+    p_idempotency_key: idempotencyKey ?? null,
+  });
+  if (error) {
+    if (isMissingRpcError(error, ISSUE_FROM_WAREHOUSE_RPC)) {
+      throw new MissingRpcError(ISSUE_FROM_WAREHOUSE_RPC, i18n.t("orders.errors.issueFromWarehouseRpcMissing"));
+    }
+    throw new Error(warehouseError(error, i18n.t("orders.errors.issueFailed")));
+  }
+  return ((data ?? []) as MovementRow[]).map(toInventoryMovement);
+}
+
 export async function returnOrderMaterials(orderId: string, lines: WarehouseMaterialLineInput[], reason?: string, idempotencyKey?: string) {
   const { data, error } = await supabase.rpc("return_order_materials", {
     p_order_id: orderId,
@@ -79,6 +111,36 @@ export async function returnOrderMaterials(orderId: string, lines: WarehouseMate
     p_idempotency_key: idempotencyKey ?? null,
   });
   if (error) throw new Error(warehouseError(error, i18n.t("orders.errors.returnFailed")));
+  return ((data ?? []) as MovementRow[]).map(toInventoryMovement);
+}
+
+export const RETURN_TO_WAREHOUSE_RPC = "return_order_materials_to_warehouse";
+
+/**
+ * Returns materials AND increases `warehouse_stock` of the chosen warehouse (manual SQL
+ * 20261101100000_return_order_materials_warehouse). Throws `MissingRpcError` when that SQL is not applied so the
+ * caller can fall back to the global-only `returnOrderMaterials` and tell the user.
+ */
+export async function returnOrderMaterialsToWarehouse(
+  orderId: string,
+  lines: WarehouseMaterialLineInput[],
+  warehouseId: string,
+  reason?: string,
+  idempotencyKey?: string,
+) {
+  const { data, error } = await supabase.rpc(RETURN_TO_WAREHOUSE_RPC, {
+    p_order_id: orderId,
+    p_lines: linePayload(lines),
+    p_warehouse_id: warehouseId,
+    p_reason: reason?.trim() || null,
+    p_idempotency_key: idempotencyKey ?? null,
+  });
+  if (error) {
+    if (isMissingRpcError(error, RETURN_TO_WAREHOUSE_RPC)) {
+      throw new MissingRpcError(RETURN_TO_WAREHOUSE_RPC, i18n.t("orders.errors.returnToWarehouseRpcMissing"));
+    }
+    throw new Error(warehouseError(error, i18n.t("orders.errors.returnFailed")));
+  }
   return ((data ?? []) as MovementRow[]).map(toInventoryMovement);
 }
 

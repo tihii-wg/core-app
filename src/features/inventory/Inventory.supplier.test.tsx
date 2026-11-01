@@ -75,6 +75,8 @@ vi.mock("../industries/useIndustryWorkflow", async () => {
 });
 
 vi.mock("./StockAttentionPanel", () => ({ StockAttentionPanel: () => null }));
+vi.mock("./CategoriesPanel", () => ({ CategoriesPanel: () => null }));
+vi.mock("./WarehouseOpsPanel", () => ({ WarehouseOpsPanel: () => null }));
 vi.mock("./AddInventoryItemDialog", () => ({ AddInventoryItemDialog: () => null }));
 vi.mock("./EditInventoryItemDialog", () => ({ EditInventoryItemDialog: () => null }));
 vi.mock("./DeleteInventoryItemDialog", () => ({ DeleteInventoryItemDialog: () => null }));

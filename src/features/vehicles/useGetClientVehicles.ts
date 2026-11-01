@@ -19,6 +19,8 @@ export function useGetClientVehicles(clientId: string | null | undefined) {
   return {
     vehicles: query.data ?? [],
     isLoading: query.isLoading,
+    /** True after the first successful or failed fetch for this client. */
+    isFetched: query.isFetched,
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,

@@ -27,6 +27,8 @@ import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
 import { StockAttentionPanel } from "./StockAttentionPanel";
+import { CategoriesPanel } from "./CategoriesPanel";
+import { WarehouseOpsPanel } from "./WarehouseOpsPanel";
 import { effectiveStockStatus } from "./stockStatus";
 import { industryInventoryCopy, industryInventoryItemCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -237,6 +239,10 @@ export function Inventory() {
         onOpenItem={(item) => setDetailId(item.id)}
         onRetry={() => refetchAttention()}
       />
+
+      <CategoriesPanel />
+
+      <WarehouseOpsPanel />
 
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <SearchAndFilters

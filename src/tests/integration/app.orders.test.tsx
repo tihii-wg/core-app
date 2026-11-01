@@ -29,17 +29,27 @@ type User = ReturnType<typeof renderApp>["user"];
 async function fillNewOrder(user: User, dialog: HTMLElement) {
   await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
   await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
-  await user.type(within(dialog).getByLabelText("Vehicle *"), "Golf IV");
-  await user.type(within(dialog).getByLabelText("License plate *"), "abc123");
-  await user.type(within(dialog).getByLabelText("VIN *"), VIN.toLowerCase());
+  // Vehicle industries use a linked vehicle record (not free-text Vehicle/plate/VIN fields).
+  await user.click(within(dialog).getByRole("button", { name: /Add vehicle/i }));
+  const vehicleDialog = await screen.findByRole("dialog", { name: /Add vehicle/i });
+  await user.type(within(vehicleDialog).getByLabelText(/^Make$/i), "VW");
+  await user.type(within(vehicleDialog).getByLabelText(/^Model$/i), "Golf IV");
+  await user.type(within(vehicleDialog).getByLabelText(/^License plate$/i), "abc123");
+  await user.type(within(vehicleDialog).getByLabelText(/^VIN$/i), VIN.toLowerCase());
+  await user.click(within(vehicleDialog).getByRole("button", { name: /^Save$/i }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: /Add vehicle/i })).not.toBeInTheDocument());
   await user.click(within(dialog).getByPlaceholderText("Service"));
   await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
-  await user.click(within(dialog).getByRole("combobox"));
+  const assignee = within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i });
+  await user.click(assignee);
   await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
 }
 
 async function openOrderPanel(user: User) {
-  await user.click(screen.getByText("Ada Alpha"));
+  // Client name opens the client panel; open the order via its number / actions instead.
+  const orderNumber = `ORD-${new Date().getFullYear()}-001`;
+  const orderCell = screen.queryByText(orderNumber) ?? screen.getByRole("button", { name: `Actions for order ${orderNumber}` });
+  await user.click(orderCell);
   return screen.findByRole("dialog");
 }
 
@@ -79,11 +89,11 @@ describe("orders page", () => {
     const dialog = await screen.findByRole("dialog");
     await fillNewOrder(user, dialog);
 
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Order created successfully")).toBeInTheDocument();
-    const created = fake.all("orders").find((order) => order.device === "Golf IV");
+    const created = fake.all("orders").find((order) => order.device === "VW Golf IV");
     expect(created).toMatchObject({
       workspace_id: WS.A,
       client_id: "client-a1",
@@ -95,7 +105,7 @@ describe("orders page", () => {
       created_by: USERS.member.id,
     });
     expect(fake.all("order_services").filter((line) => line.order_id === created?.id)).toEqual([expect.objectContaining({ service_id: "service-a1", price: 40, quantity: 1 })]);
-    expect(await screen.findByText("Golf IV")).toBeInTheDocument();
+    expect(await screen.findByText("VW Golf IV")).toBeInTheDocument();
     expect(await screen.findByText(USERS.member.name)).toBeInTheDocument();
   });
 
@@ -103,27 +113,29 @@ describe("orders page", () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
-    await fillNewOrder(user, dialog);
-    const client = within(dialog).getByPlaceholderText("Client");
-    await user.clear(client);
-    await user.type(client, "Nina New");
+    await user.type(within(dialog).getByPlaceholderText("Client"), "Nina New");
     await user.click(within(dialog).getByRole("combobox", { name: "Client type *" }));
     await user.click(await screen.findByRole("option", { name: "Organization" }));
-    expect(within(dialog).getByLabelText("Organization name *")).toHaveValue("Nina New");
+    expect(within(dialog).getByLabelText(/^Organization name/i)).toHaveValue("Nina New");
     await user.type(within(dialog).getByLabelText("IDNO"), "1002600000001");
     await user.type(within(dialog).getByLabelText("Contact name"), "Ion Popescu");
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
     await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
+    // New clients have no id until save; vehicle picker needs a selected existing client, so skip vehicle here.
+    await user.click(within(dialog).getByPlaceholderText("Service"));
+    await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
+    await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
+    await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
 
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    const created = fake.all("orders").find((order) => order.device === "Golf IV");
     const newClients = fake.all("clients").filter((item) => item.name === "Nina New");
     expect(newClients).toEqual([
       expect.objectContaining({ workspace_id: WS.A, client_type: "organization", tax_id: "1002600000001", contact_person: "Ion Popescu", phone: "+37369000001", email: "nina@example.com" }),
     ]);
-    expect(created?.client_id).toBe(newClients[0].id);
+    const created = fake.all("orders").find((order) => order.client_id === newClients[0].id);
+    expect(created).toMatchObject({ workspace_id: WS.A, total_price: 40 });
     expect(await screen.findByText("Nina New")).toBeInTheDocument();
   });
 
@@ -137,12 +149,14 @@ describe("orders page", () => {
     await user.type(client, "ada alpha");
     expect(within(dialog).queryByLabelText("Phone *")).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
+    // Re-select Ada so vehicle fields stay tied to the existing client.
+    await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
     const clientsBefore = fake.all("clients").length;
 
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(fake.all("orders").find((order) => order.device === "Golf IV")?.client_id).toBe("client-a1");
+    expect(fake.all("orders").find((order) => order.device === "VW Golf IV")?.client_id).toBe("client-a1");
     expect(fake.all("clients")).toHaveLength(clientsBefore);
   });
 
@@ -151,15 +165,12 @@ describe("orders page", () => {
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
 
-    await user.type(within(dialog).getByLabelText("VIN *"), "SHORT");
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
-    expect(await within(dialog).findByText("Client is required")).toBeInTheDocument();
-    expect(within(dialog).getByText("Vehicle is required")).toBeInTheDocument();
-    expect(within(dialog).getByText("License plate is required")).toBeInTheDocument();
-    expect(within(dialog).getByText("VIN must contain exactly 17 characters")).toBeInTheDocument();
-    expect(within(dialog).getByText("Service is required")).toBeInTheDocument();
-    expect(within(dialog).getByText("Assigned employee is required")).toBeInTheDocument();
+    // Create form allows empty drafts in the UI; the API still requires a client/service and toasts.
+    expect(await screen.findByText("Client is required")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Vehicle *")).not.toBeInTheDocument();
     expect(fake.requests.filter((request) => request.table === "orders" && request.op === "insert")).toHaveLength(0);
   });
 
@@ -170,12 +181,12 @@ describe("orders page", () => {
     await fillNewOrder(user, dialog);
     fake.failNext("orders", "insert", { code: "42501", message: 'new row violates row-level security policy for table "orders"' });
 
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
 
-    expect(await screen.findByText('new row violates row-level security policy for table "orders"')).toBeInTheDocument();
+    expect((await screen.findAllByText('new row violates row-level security policy for table "orders"')).length).toBeGreaterThan(0);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Vehicle *")).toHaveValue("Golf IV");
-    expect(fake.all("orders").some((order) => order.device === "Golf IV")).toBe(false);
+    expect(within(dialog).getByTestId("selected-vehicle-summary")).toHaveTextContent(/VW Golf IV/i);
+    expect(fake.all("orders").some((order) => order.device === "VW Golf IV")).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(unhandled.rejections).toEqual([]);
   });
@@ -186,18 +197,13 @@ describe("orders page", () => {
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
 
-    await user.type(within(panel).getByLabelText("VIN *"), VIN);
-    const device = within(panel).getByLabelText("Vehicle *");
-    await user.clear(device);
-    await user.type(device, "Alpha van");
     await user.click(within(panel).getByPlaceholderText("Service"));
     await user.click(await within(panel).findByRole("button", { name: /Brake check/i }));
     await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(row("orders", "order-a1")).toMatchObject({ device: "Alpha van", vin: VIN, total_price: 65, service: "Oil change, Brake check", workspace_id: WS.A });
+    expect(row("orders", "order-a1")).toMatchObject({ total_price: 65, service: "Oil change, Brake check", workspace_id: WS.A });
     expect(fake.all("order_services").filter((line) => line.order_id === "order-a1").map((line) => line.service_name)).toEqual(["Oil change", "Brake check"]);
-    expect(await screen.findByText("Alpha van")).toBeInTheDocument();
     expect(screen.getByText("Oil change, Brake check")).toBeInTheDocument();
   });
 
@@ -206,7 +212,6 @@ describe("orders page", () => {
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    await user.type(within(panel).getByLabelText("VIN *"), VIN);
     const total = () => within(panel).getByText("Total Price").nextElementSibling?.textContent ?? "";
     expect(total()).toMatch(/40/);
 
@@ -235,7 +240,6 @@ describe("orders page", () => {
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    await user.type(within(panel).getByLabelText("VIN *"), VIN);
 
     await user.click(within(panel).getByPlaceholderText("Service"));
     await user.click(await within(panel).findByRole("button", { name: /Brake check/i }));
@@ -251,12 +255,12 @@ describe("orders page", () => {
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    await user.type(within(panel).getByLabelText("VIN *"), VIN);
 
     await user.click(within(panel).getByRole("button", { name: "Remove Oil change" }));
     await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
 
-    expect(await within(panel).findByText("Service is required")).toBeInTheDocument();
+    expect((await screen.findAllByText("Service is required")).length).toBeGreaterThan(0);
+    expect(within(panel).getByRole("button", { name: "Save Changes" })).toBeInTheDocument();
     expect(fake.requests.filter((request) => ["orders", "order_services"].includes(request.table) && request.op !== "select")).toHaveLength(0);
     expect(fake.all("order_services").filter((line) => line.order_id === "order-a1")).toHaveLength(1);
   });
@@ -270,16 +274,14 @@ describe("orders page", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(`Edit Order ${orderNumber}`)).toBeInTheDocument();
-    const device = within(dialog).getByLabelText("Vehicle *");
-    expect(device).toHaveValue("Alpha Garage car");
-    await user.clear(device);
-    await user.type(device, "Alpha van");
-    await user.type(within(dialog).getByLabelText("VIN *"), VIN);
+    // Linked-vehicle industries hide free-text device/VIN; change description instead.
+    const description = within(dialog).getByLabelText(/^Description$/i);
+    await user.clear(description);
+    await user.type(description, "Edited from menu");
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(row("orders", "order-a1")).toMatchObject({ device: "Alpha van", vin: VIN, workspace_id: WS.A });
-    expect(await screen.findByText("Alpha van")).toBeInTheDocument();
+    expect(row("orders", "order-a1")).toMatchObject({ description: "Edited from menu", workspace_id: WS.A });
     expect(location.pathname).toBe(`/en/${WS.A}/orders`);
   });
 
@@ -289,7 +291,6 @@ describe("orders page", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
     const dialog = await screen.findByRole("dialog");
     expect(screen.getAllByRole("dialog")).toEqual([dialog]);
-    await user.clear(within(dialog).getByLabelText("Vehicle *"));
 
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
@@ -348,14 +349,16 @@ describe("orders page", () => {
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    await user.type(within(panel).getByLabelText("VIN *"), VIN);
+    const description = within(panel).getByLabelText(/^Description$/i);
+    await user.clear(description);
+    await user.type(description, "Should not persist");
     fake.failNext("orders", "update", { code: "PGRST000", message: "Network request failed" });
 
     await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
 
-    expect(await screen.findByText("Network request failed")).toBeInTheDocument();
+    expect((await screen.findAllByText("Network request failed")).length).toBeGreaterThan(0);
     expect(within(panel).getByRole("button", { name: "Save Changes" })).toBeInTheDocument();
-    expect(row("orders", "order-a1")?.vin).toBeUndefined();
+    expect(row("orders", "order-a1")?.description).not.toBe("Should not persist");
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(unhandled.rejections).toEqual([]);
   });
@@ -392,10 +395,10 @@ describe("orders page", () => {
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
 
-    await user.click(within(dialog).getByRole("combobox"));
+    await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
     await screen.findByRole("option", { name: "Tom Tech" });
 
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Tina Tech", "Tom Tech", "Una Unlinked"]);
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Unassigned", "Tina Tech", "Tom Tech", "Una Unlinked"]);
     expect(within(dialog).queryByText(/No active technicians available/)).not.toBeInTheDocument();
   });
 
@@ -406,8 +409,10 @@ describe("orders page", () => {
     const dialog = await screen.findByRole("dialog");
 
     expect(await within(dialog).findByText("No active technicians available. Add a technician in Employees first.")).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Create Order" }));
-    expect(await within(dialog).findByText("Assigned employee is required")).toBeInTheDocument();
+    // Assignee is optional on drafts; an empty save still fails API client/service checks and stays open.
+    await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
+    expect(await screen.findByText("Client is required")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(fake.requests.filter((request) => request.table === "orders" && request.op === "insert")).toHaveLength(0);
   });
 
@@ -435,9 +440,8 @@ describe("orders page", () => {
     expect(within(orderRow).getAllByRole("cell")[clientTypeColumn]).toHaveTextContent(/^Organization$/);
     expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/Ada Alpha/);
 
-    await user.click(screen.getByText("Ada Alpha"));
-    const panel = await screen.findByRole("dialog");
-    expect(within(panel).getByText("Client Type").parentElement).toHaveTextContent("Client TypeOrganization");
+    const panel = await openOrderPanel(user);
+    expect(within(panel).getByText("Client Type").parentElement).toHaveTextContent(/Organization/);
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 

@@ -12,6 +12,7 @@ import { industrySupportsClientVehicles } from "../industries/industryCapabiliti
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { ClientVehiclesSection } from "../vehicles/ClientVehiclesSection";
 import EditClientForm from "./EditClientForm";
+import { ClientExtrasSection } from "./ClientExtrasSection";
 import ClientSettlementDialog from "./ClientSettlementDialog";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { clientOrderHistoryLine, type ClientOrderSummary } from "./clientOrders";
@@ -159,15 +160,18 @@ export default function ClientDetailPanel({
 
             <div className="rounded-lg border border-border bg-muted/50 p-4">
               <p className="text-xs font-medium text-muted-foreground">{t("clients.detail.currentBalance")}</p>
-              <p className={`mt-1 truncate text-2xl font-semibold tracking-tight tabular-nums ${selectedClient.balance > 0 ? "text-destructive" : "text-foreground"}`}>
+              <p className={`mt-1 truncate text-2xl font-semibold tracking-tight tabular-nums ${selectedClient.balance > 0 ? "text-success" : "text-foreground"}`}>
                 {formatMoney(selectedClient.balance)}
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("clients.detail.balanceHint")}</p>
             </div>
 
             <Button type="button" variant="outline" className="w-full" onClick={() => setSettlementOpen(true)}>
               <Calculator />
               {t("clients.settlement.button")}
             </Button>
+
+            <ClientExtrasSection clientId={selectedClient.id} />
 
             {showVehicles ? (
               <ClientVehiclesSection clientId={selectedClient.id} onOpenOrder={onOpenOrder} />
@@ -214,7 +218,7 @@ export default function ClientDetailPanel({
                         <span className="min-w-0 flex-1">
                           <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="text-sm font-medium text-primary tabular-nums">{order.orderNumber}</span>
-                            <OrderStatusBadge status={order.status} />
+                            <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
                           </span>
                           {order.createdAt ? <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">{order.createdAt}</span> : null}
                           {historyLine ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{historyLine}</span> : null}

@@ -43,20 +43,21 @@ describe("reports page", () => {
     Object.assign(row("orders", "order-b1")!, { created_at: daysAgo(0), is_paid: true, total_price: 999 });
     const { user } = await openReports();
 
-    await waitFor(() => expect(statValue("Total Orders")).toBe("1"));
+    await waitFor(() => expect(statValue("Orders created")).toBe("1"));
     expect(statValue("New Clients")).toBe("1");
-    expect(statValue("Total Revenue")).toMatch(/40/);
-    expect(statValue("Avg Order Value")).toMatch(/40/);
-    expect(statValue("Total Revenue")).not.toMatch(/999/);
+    // Revenue collected comes from the payments ledger (none seeded here), not order.total_price.
+    expect(statValue("Revenue collected")).toMatch(/0/);
+    expect(statValue("Avg order value")).toMatch(/40/);
+    expect(statValue("Avg order value")).not.toMatch(/999/);
 
     const rangeSelect = within(screen.getByRole("main")).getByRole("combobox");
     expect(rangeSelect).toHaveTextContent("Last 30 days");
     await user.click(rangeSelect);
     await user.click(await screen.findByRole("option", { name: "Last 90 days" }));
 
-    expect(statValue("Total Orders")).toBe("2");
-    expect(statValue("Avg Order Value")).toMatch(/50/);
-    expect(screen.getByText("Weekly Revenue")).toBeInTheDocument();
+    expect(statValue("Orders created")).toBe("2");
+    expect(statValue("Avg order value")).toMatch(/50/);
+    expect(screen.getByText("Weekly revenue collected")).toBeInTheDocument();
     expect(unhandled.rejections).toEqual([]);
   });
 
@@ -65,7 +66,7 @@ describe("reports page", () => {
 
     expect(await screen.findAllByText("No data available yet")).toHaveLength(2);
     expect(screen.getAllByText("No orders were created in this period.")).toHaveLength(2);
-    expect(statValue("Total Orders")).toBe("0");
+    expect(statValue("Orders created")).toBe("0");
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(4);
   });
 
@@ -93,7 +94,7 @@ describe("reports page", () => {
     const { user } = await openReports();
 
     await user.click(await screen.findByRole("tab", { name: /Employees/ }));
-    const card = screen.getByText("Employee Performance").closest("[data-slot=card]") as HTMLElement;
+    const card = screen.getByText("Completed jobs by employee").closest("[data-slot=card]") as HTMLElement;
     await waitFor(() => expect(card.querySelector(".recharts-responsive-container")).not.toBeNull());
     expect(within(card).queryByText(/No orders assigned/)).not.toBeInTheDocument();
     expect(within(card).queryByText("No data available yet")).not.toBeInTheDocument();

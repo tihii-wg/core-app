@@ -64,7 +64,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   const { t } = useTranslation();
   const vehicleIdPath = "vehicleId" as Path<T>;
   const selectedVehicleId = useWatch({ control, name: vehicleIdPath }) as string | undefined;
-  const { vehicles, isLoading } = useGetClientVehicles(clientId || null);
+  const { vehicles, isLoading, isFetched, isError } = useGetClientVehicles(clientId || null);
   const createVehicle = useCreateVehicle(clientId);
   const [createOpen, setCreateOpen] = useState(false);
   /** Optimistic row so the selector/summary work before the client vehicles query settles. */
@@ -113,8 +113,11 @@ export function OrderVehicleFields<T extends FieldValues>({
       pendingCreatedVehicleId.current = null;
       return;
     }
-    // Wait until the client vehicle list has loaded so a brief empty array does not clear a valid selection.
-    if (isLoading) return;
+    // Wait until the client vehicle list has settled. Clearing on a brief empty
+    // array (loading / error / refetch) left device/plate/VIN snapshots in place
+    // while wiping vehicleId — orders then appeared in Client history but not on
+    // the Vehicle card (which filters by orders.vehicle_id).
+    if (isLoading || !isFetched || isError) return;
     if (
       selectedVehicleId &&
       pendingCreatedVehicleId.current === selectedVehicleId &&
@@ -126,7 +129,7 @@ export function OrderVehicleFields<T extends FieldValues>({
     if (selectedVehicleId && !vehiclesForSelect.some((vehicle) => vehicle.id === selectedVehicleId)) {
       setValue(vehicleIdPath, "" as PathValue<T, Path<T>>);
     }
-  }, [clientId, isLoading, selectedVehicleId, setValue, vehicleIdPath, vehiclesForSelect]);
+  }, [clientId, isError, isFetched, isLoading, selectedVehicleId, setValue, vehicleIdPath, vehiclesForSelect]);
 
   useEffect(() => {
     if (isLoading) return;

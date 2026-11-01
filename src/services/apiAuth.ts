@@ -2,6 +2,17 @@ import type { User } from "@supabase/supabase-js";
 import supabase from "./supabase";
 import i18n, { currentLanguage } from "../i18n";
 import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage } from "./apiWorkspaces";
+import {
+  clearPasswordRecoveryFlag,
+  isConfirmedRecoveryForUser,
+  normalizeRecoveryLocale,
+  passwordResetRedirectUrl,
+} from "../features/auth/passwordRecovery";
+import { passwordChangeMessage, passwordMinimum, passwordResetRequestMessage } from "./authMessages";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export { passwordResetPath, passwordResetRedirectUrl } from "../features/auth/passwordRecovery";
 
 export function isInvalidSessionError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -131,8 +142,61 @@ export async function logOut() {
   if (error) throw new Error(error.message);
 }
 
-export async function FogotPasword() {
-  console.log("fogot password");
+/**
+ * Requests a Supabase Auth password recovery email.
+ * Always resolves the same way to callers after a successful Auth response — UI must not
+ * reveal whether the address is registered (Auth also avoids leaking that).
+ */
+export async function requestPasswordReset(email: string, locale: string) {
+  const trimmed = email.trim();
+  if (!trimmed) throw new Error(i18n.t("auth.validation.emailRequired"));
+  if (!EMAIL_PATTERN.test(trimmed)) throw new Error(i18n.t("auth.validation.emailInvalid"));
+
+  const safeLocale = normalizeRecoveryLocale(locale);
+  const redirectTo = passwordResetRedirectUrl(safeLocale);
+
+  const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+    redirectTo,
+  });
+
+  if (error) throw new Error(passwordResetRequestMessage(error.message));
+}
+
+/**
+ * Sets a new password only during a confirmed password-recovery flow.
+ * Requires both an Auth session and a recovery marker bound to that user
+ * (set only after Supabase `PASSWORD_RECOVERY`).
+ */
+export async function updateRecoveredPassword(password: string) {
+  if (password.length < passwordMinimum) {
+    throw new Error(passwordChangeMessage("password should be at least 6 characters"));
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  if (sessionError || !session?.user?.id) {
+    throw new Error(i18n.t("auth.resetPassword.errors.noSession"));
+  }
+
+  if (!isConfirmedRecoveryForUser(session.user.id)) {
+    throw new Error(i18n.t("auth.resetPassword.errors.noSession"));
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw new Error(passwordChangeMessage(error.message));
+}
+
+/**
+ * Ends the recovery session after a successful password update (user must sign in again).
+ * Uses default global sign-out so recovery invalidates refresh tokens across devices.
+ */
+export async function endPasswordRecoverySession() {
+  clearPasswordRecoveryFlag();
+  const { error } = await supabase.auth.signOut();
+  if (error) throw new Error(error.message);
 }
 
 export async function login({ email, password }: loginProps) {

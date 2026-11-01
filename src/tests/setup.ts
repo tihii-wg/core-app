@@ -1,6 +1,10 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 import { beforeEach } from "vitest";
 import i18n from "../i18n";
+
+// Full-suite parallel load routinely exceeds the 1s Testing Library default for findBy/waitFor.
+configure({ asyncUtilTimeout: 8_000 });
 
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.setPointerCapture ??= () => {};

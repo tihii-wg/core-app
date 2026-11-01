@@ -24,4 +24,27 @@ describe("settings tabs", () => {
   it("opens the import data demo tab", () => {
     expect(settingsTabFromSearch("import")).toBe("import");
   });
+
+  it("opens the warehouses tab", () => {
+    expect(settingsTabFromSearch("warehouses")).toBe("warehouses");
+  });
+
+  it("opens stage-1 settings tabs", () => {
+    expect(settingsTabFromSearch("statuses")).toBe("statuses");
+    expect(settingsTabFromSearch("locations")).toBe("locations");
+    expect(settingsTabFromSearch("roles")).toBe("roles");
+  });
+
+  it("opens the stage-5 print templates tab", () => {
+    expect(settingsTabFromSearch("printTemplates")).toBe("printTemplates");
+  });
+
+  it("opens the taxes tab", () => {
+    expect(settingsTabFromSearch("taxes")).toBe("taxes");
+  });
+
+  it("opens the stage 7-9 migration and modules tabs", () => {
+    expect(settingsTabFromSearch("migration")).toBe("migration");
+    expect(settingsTabFromSearch("modules")).toBe("modules");
+  });
 });

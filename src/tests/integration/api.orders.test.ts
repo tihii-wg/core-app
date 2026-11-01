@@ -118,7 +118,8 @@ describe("createOrder", () => {
   });
 
   it("validates input and the workspace", async () => {
-    await expect(createOrder({ clientName: "", device: "Car", services: [] }, WS.A)).rejects.toThrow("Service is required");
+    await expect(createOrder({ clientName: "", device: "Car", services: [] }, WS.A)).rejects.toThrow("Client is required");
+    await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [] }, WS.A)).rejects.toThrow("Service is required");
     await expect(createOrder({ clientName: "", device: "Car", services: [oilChange] }, WS.A)).rejects.toThrow("Client is required");
     await expect(createOrder({ clientName: "X", device: "Car", services: [oilChange] }, undefined)).rejects.toThrow("No active workspace selected");
   });
@@ -444,7 +445,9 @@ describe("updateOrder", () => {
   });
 
   it("validates the VIN length", async () => {
-    await expect(updateOrder({ ...details, vin: "SHORT" }, WS.A)).rejects.toThrow("VIN must contain exactly 17 characters");
+    await expect(updateOrder({ ...details, vin: "SHORT" }, WS.A)).rejects.toThrow(
+      "VIN must contain exactly 17 valid characters (A–Z and 0–9, excluding I, O, and Q)",
+    );
   });
 
   it("stores a valid VIN in upper case", async () => {

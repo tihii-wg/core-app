@@ -95,7 +95,7 @@ function DeadlineOrderList({
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="font-medium text-primary tabular-nums text-[13px]">{order.orderNumber}</span>
-                  <OrderStatusBadge status={order.status} />
+                  <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
                 </span>
                 <span className="mt-0.5 block truncate text-[13px] text-foreground" title={order.clientName}>
                   {order.clientName}

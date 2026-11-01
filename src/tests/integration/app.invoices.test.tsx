@@ -123,7 +123,8 @@ describe("invoices page", () => {
 
     await user.click(within(panel).getByRole("button", { name: "Mark as paid" }));
 
-    expect(await within(panel).findByText("Paid")).toBeInTheDocument();
+    // Status badge, paid-on label, and related copy can all include "Paid".
+    expect((await within(panel).findAllByText("Paid")).length).toBeGreaterThan(0);
     expect(within(panel).getByRole("button", { name: "Mark as unpaid" })).toBeInTheDocument();
     expect(row("invoices", invoice.id)).toMatchObject({ status: "paid" });
   });

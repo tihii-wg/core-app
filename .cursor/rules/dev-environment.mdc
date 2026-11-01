@@ -1,0 +1,39 @@
+---
+description: Core App current development environment — MAIN Supabase only; TEST preserved inactive; no remote SQL/deploy/commit without explicit authorization.
+alwaysApply: true
+---
+
+# Core App — Current Development Environment Rules
+
+## Active Supabase project (ONLY)
+
+- **MAIN / ACTIVE:** `pundggjzzaqzbvykbxvo`
+- All current development uses the existing main project via root `.env`.
+- Do not change `.env` / credentials / CLI project link unless the owner explicitly authorizes it.
+
+## TEST project — preserve, do not use yet
+
+- **TEST (inactive):** `hnfvrlgcnpykncixxqha` (`core-app-test`)
+- Do not connect to it, switch the CLI link to it, use its credentials, execute SQL against it, or create a separate TEST environment.
+- Do not delete, modify, reset, or migrate it.
+- Keep existing references intact; leave them inactive until the owner explicitly starts the testing phase.
+
+## Fast development phase
+
+- Implement features directly in Core App against MAIN.
+- Prioritize speed and preservation of existing functionality.
+- Do not introduce a separate testing workflow or delay with unnecessary testing procedures.
+- Perform only checks needed for technically sound local changes.
+- No mocks/placeholders instead of real functionality; reuse existing architecture and schema.
+
+## Safety (even on MAIN)
+
+- No remote SQL / migrations / schema or data changes without explicit authorization.
+- No Vercel (or other) deploy without explicit authorization.
+- No git commit or push unless explicitly requested.
+- Prepare SQL locally when needed; never execute remotely without permission.
+- No destructive operations; no extra Production credentials.
+
+## Before finishing a task
+
+Briefly report: what was implemented, files changed, whether DB changes are required, whether any remote operations were performed.

@@ -38,7 +38,7 @@ function ResultContent({ result }: { result: SearchResult }) {
   if (result.type === "order") {
     const { order } = result;
     title = <span className="font-medium text-primary">{order.orderNumber}</span>;
-    badge = <OrderStatusBadge status={order.status} />;
+    badge = <OrderStatusBadge status={order.status} customStatus={order.customStatus} />;
     subtitle = details([order.clientName, order.device, order.carNumber, order.vin]);
   } else if (result.type === "client") {
     const { client } = result;

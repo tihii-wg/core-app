@@ -99,11 +99,23 @@ export interface Order {
   materials?: OrderMaterial[];
   description: string;
   status: OrderStatus;
+  /** Nullable FK to status_definitions when custom statuses are enabled. */
+  customStatusId?: string | null;
+  /** Resolved status_definitions row for badge display. */
+  customStatus?: { name: string; color: string | null } | null;
   /** employees.id from orders.employee_id (legacy assigned_to only when employee_id is empty). */
   assignedEmployeeId: string;
   assignedEmployeeName: string;
   deadline: string;
+  /** Final (net) amount = subtotal - discountTotal; what `orders.total_price` stores. */
   totalPrice: number;
+  /** Sum of line gross amounts (price * qty). Falls back to totalPrice + discountTotal when lines are not loaded. */
+  subtotal?: number;
+  /** `orders.discount_total` (crm_ro_v1); 0 when absent. */
+  discountTotal?: number;
+  /** Header `orders.discount_type` / `discount_value` (20261101060000); set only for a single uniform percent. */
+  discountType?: "percent" | "amount" | null;
+  discountValue?: number | null;
   isPaid: boolean;
   paymentStatus: PaymentStatus;
   /** Tax (fiscal) invoice number from orders.tax_invoice_number; absent on legacy fixtures — treat as "". Not the app invoice number. */
@@ -414,6 +426,9 @@ export type Profile = {
   theme?: "light" | "dark" | "system";
 };
 
+/** `order_services.kind` (crm_ro_v1 / 20261101050000_order_line_kind): labor line vs. service line. */
+export type OrderServiceKind = "labor" | "service";
+
 export type OrderService = {
   /** order_services.id; absent for a line that has not been saved yet. */
   id?: string;
@@ -421,6 +436,14 @@ export type OrderService = {
   serviceName: string;
   price: number;
   quantity: number;
+  /**
+   * Optional line kind. `undefined` = not managed by the caller (stored value is kept),
+   * `null` = explicitly unclassified. Ignored when the column is absent in the database.
+   */
+  kind?: OrderServiceKind | null;
+  /** `order_services.discount_type` / `discount_value` (crm_ro_v1). Absent when the columns do not exist. */
+  discountType?: "percent" | "amount" | null;
+  discountValue?: number | null;
 };
 
 export type OrderMaterial = {
@@ -435,6 +458,9 @@ export type OrderMaterial = {
   quantityIssued?: number;
   /** Cumulative quantity returned to the warehouse. */
   quantityReturned?: number;
+  /** `order_materials.discount_type` / `discount_value` (crm_ro_v1). Absent when the columns do not exist. */
+  discountType?: "percent" | "amount" | null;
+  discountValue?: number | null;
 };
 
 export type InventoryMovementType = "issue" | "return" | "adjustment";

@@ -21,15 +21,17 @@ afterEach(() => unhandled.stop());
 
 type User = ReturnType<typeof renderApp>["user"];
 
+const searchInputName = /Search orders, clients and (inventory|parts)/i;
+
 async function openApp(path = servicesPath) {
   fake.signInAs(USERS.owner.id);
   const app = renderApp(path);
-  await screen.findByRole("combobox", { name: "Search orders, clients and inventory" });
+  await screen.findByRole("combobox", { name: searchInputName });
   return app;
 }
 
 async function search(user: User, text: string) {
-  await user.type(screen.getByRole("combobox", { name: "Search orders, clients and inventory" }), text);
+  await user.type(screen.getByRole("combobox", { name: searchInputName }), text);
   return screen.findByRole("listbox", { name: "Search results" });
 }
 
@@ -52,10 +54,11 @@ describe("global search", () => {
     const { user } = await openApp();
     const listbox = await search(user, "alpha");
 
-    expect(groupLabels(listbox)).toEqual(["Orders", "Clients", "Inventory"]);
+    // Auto-repair workspaces label the inventory module "Parts".
+    expect(groupLabels(listbox)).toEqual(["Orders", "Clients", "Parts"]);
     expect(within(group(listbox, "Orders")).getByRole("option", { name: new RegExp(orderNumber) })).toBeInTheDocument();
     expect(within(group(listbox, "Clients")).getByRole("option", { name: /Ada Alpha/ })).toBeInTheDocument();
-    expect(within(group(listbox, "Inventory")).getByRole("option", { name: /Alpha brake pads/ })).toBeInTheDocument();
+    expect(within(group(listbox, "Parts")).getByRole("option", { name: /Alpha brake pads/ })).toBeInTheDocument();
   });
 
   it.each([
@@ -63,8 +66,8 @@ describe("global search", () => {
     ["an order's description", () => "Noise", ["Orders"]],
     ["a client's phone, which also finds that client's orders", () => "+3736111", ["Orders", "Clients"]],
     ["a client's email", () => "ada@example", ["Orders", "Clients"]],
-    ["an inventory SKU", () => "AP-1", ["Inventory"]],
-    ["an inventory category", () => "Parts", ["Inventory"]],
+    ["an inventory SKU", () => "AP-1", ["Parts"]],
+    ["an inventory category", () => "Parts", ["Parts"]],
   ])("searches beyond the name: %s", async (_label, term, groups) => {
     const { user } = await openApp();
     const listbox = await search(user, term());
@@ -74,7 +77,7 @@ describe("global search", () => {
 
   it("only searches the active workspace", async () => {
     const { user } = await openApp();
-    await user.type(screen.getByRole("combobox", { name: "Search orders, clients and inventory" }), "Beta");
+    await user.type(screen.getByRole("combobox", { name: searchInputName }), "Beta");
 
     expect(await screen.findByText('No results for "Beta"')).toBeInTheDocument();
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
@@ -94,7 +97,7 @@ describe("global search", () => {
 
   it("waits for at least two characters before querying", async () => {
     const { user } = await openApp();
-    await user.type(screen.getByRole("combobox", { name: "Search orders, clients and inventory" }), "a");
+    await user.type(screen.getByRole("combobox", { name: searchInputName }), "a");
 
     expect(screen.getByText("Type at least 2 characters to search.")).toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 400));
@@ -135,7 +138,7 @@ describe("global search", () => {
     const panel = await screen.findByRole("dialog");
     await user.click(await within(panel).findByRole("button", { name: "Edit" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Edit Inventory Item" });
+    const dialog = await screen.findByRole("dialog", { name: /Edit (Inventory Item|Part)/i });
     const quantity = await within(dialog).findByLabelText("Quantity *");
     await user.clear(quantity);
     await user.type(quantity, "30");

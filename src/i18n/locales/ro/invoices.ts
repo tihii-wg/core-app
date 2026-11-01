@@ -108,6 +108,11 @@ const invoices: Messages<typeof en> = {
     body: "Bună ziua,\n\nGăsiți atașată factura {{number}}.\n\nVă mulțumim!",
   },
   detail: {
+    vat: {
+      net: "Sumă fără TVA",
+      recorded: "TVA",
+      estimated: "TVA inclus (est. {{rate}}%)",
+    },
     fallbackTitle: "Factură",
     srDescription: "Detaliile facturii, serviciile facturate și starea plății.",
     loadErrorTitle: "Factura nu a putut fi încărcată",
