@@ -1,7 +1,8 @@
-# Core App — Current state (read-only audit)
+# Core App — Current state (post–P0.4 refresh)
 
-**Audit date:** 2026-11-01  
-**Method:** Source-code + local documentation inspection only. **No** remote DB access, SQL apply, deploy, or tests.  
+**Audit date:** 2026-11-01 (refreshed after password recovery completion)  
+**Method:** Source-code + local documentation inspection; password recovery also **owner-verified** via real email.  
+**No** remote DB SQL apply, deploy, or app code changes in this documentation pass.  
 **Environment rules:** `.cursor/rules/dev-environment.mdc`
 
 ## Development environment
@@ -13,51 +14,59 @@
 | Phase | Fast feature development on MAIN only |
 | Remote SQL / deploy / commit | Forbidden unless explicitly authorized |
 
-## What is already implemented (local code)
+## What is already implemented
 
 Core App is a working multi-tenant Vite/React/Supabase CRM with:
 
-- Auth (login, register, forgot password, session, MFA settings UI), workspaces, team roles, subscription write gating.
+- **Auth:** login, register, **password recovery (COMPLETE — real-world verified)**, session handling, MFA settings UI, workspaces, team roles, subscription write gating.
 - Dashboard, sidebar nav, global search, EN/RO/RU i18n, theme.
-- Full CRUD-style modules: **Orders** (list/board/calendar, create/edit, vehicles, materials issue/return UI, discounts, comments/events UI, print templates hook-up), **Clients** (extras, discounts, settlement), **Services**, **Employees**, **Inventory** (items + ops UI), **Invoices**, **Finance** (expenses, payments, accounts/transfer UI), **Reports** (KPIs, charts, CSV, activity log gate).
-- Settings tabs: company/regional, profile, security/MFA, team, statuses, locations, warehouses, roles, print templates, taxes, notifications (dry-run), migration preview, modules.
-- Stage-9 modules with real list/CRUD wiring: leads, estimates, tasks, bookings (routed; not full RO parity).
-- Public order status route + link-mint UI (needs SQL RPCs on DB).
-- Large set of **prepared** manual SQL under `supabase/manual/` (crm_ro_v1 + RPC patches) — **not verified as applied** on MAIN.
+- Strong CRUD modules: **Orders** (list/board/calendar, create/edit, vehicles, materials issue/return UI, discounts, comments/events UI, print), **Clients**, **Services**, **Employees**, **Inventory** (items + ops UI), **Invoices**, **Finance** (expenses, payments, accounts/transfer UI), **Reports** (KPIs, charts, CSV).
+- Settings: company/regional, profile, security/MFA, team, statuses, locations, warehouses (read-only), roles, print templates, taxes, notifications (dry-run), migration preview, modules.
+- Stage-9 CRM: leads, estimates, tasks, bookings (thin CRUD; not full RO parity).
+- Public order status + link-mint UI (needs SQL RPCs on DB — **UNVERIFIED** whether applied on MAIN).
+- Prepared manual SQL under `supabase/manual/` — **not claimed applied** on MAIN in this audit.
+
+### P0.4 Password recovery — COMPLETE
+
+Verified scenario (owner):
+
+1. Request reset → recovery email received.  
+2. Link opens localized reset page.  
+3. New password saved.  
+4. Old password fails; login with new password succeeds.
+
+Implementation highlights: `resetPasswordForEmail` with `/{locale}/reset-password` `redirectTo`; callback bootstrap if Site URL fallback; user-bound recovery marker; global sign-out after success.
 
 ## Audit snapshot (capability rows)
 
 | Status | Count |
 | --- | --- |
-| COMPLETE | 39 |
+| COMPLETE | 40 |
 | PARTIAL | 50 |
 | MISSING | 6 |
-| PLACEHOLDER | 9 |
+| PLACEHOLDER | 8 |
 | DOCUMENTATION ONLY | 1 |
 | BLOCKED | 5 |
 | **Total** | **110** |
 
-Detail: `docs/core-app-feature-audit.md`. Roadmap: `docs/core-app-development-roadmap.md`.  
-Reconciled with deep passes: [Audit CRM and orders features](c6b501e3-383a-4cab-8b26-a4ab0bd02f11), [Audit inventory finance reports](6952a190-e6f2-4e7a-8b27-be4c0957e78f).
+Detail: `docs/core-app-feature-audit.md`. Roadmap: `docs/core-app-development-roadmap.md`.
 
-## What remains
+## What remains (highest leverage)
 
-1. **Password recovery is a PLACEHOLDER** (`ForgotPasswordPage` simulates send; `FogotPasword` only logs) — wire real Supabase reset before treating auth complete.
-2. **Owner-authorized SQL cutover** on MAIN (see `supabase/manual/MIGRATION_CUTOVER.md`) so warehouse/discount/public/events RPCs and RO tables exist remotely.
-3. **RO business parity gaps:** warranty/serial UX, auto SMS on status, full form editor, sales/messages/calls, import **apply**, real message providers, payment providers/void, public rate limiting.
-4. **Stage-9 / CRM depth:** leads/estimates lack edit/lines/convert; bookings thin; estimate_lines unused in app.
-5. **Live verification** of RLS and schema (explicitly out of scope until testing phase).
-
-**Highest-priority next (app-only):** real password recovery (`P0.4`).  
-**Highest-priority next (after cutover SQL):** order material issue/return RPCs (`P1.1`).
+1. **Owner SQL cutover / MAIN schema inventory** — unlock warehouse post RPCs, issue/return-from-warehouse, public links, events, discounts, soft-delete RLS (`supabase/manual/MIGRATION_CUTOVER.md`).
+2. **Inventory integrity** — multi-warehouse stock must not rely on global issue fallback; post RPCs required for receipt/transfer/write-off.
+3. **Finance integrity** — payments ↔ cash accounts (`finance_transactions`); payment void blocked; settlement still partly `is_paid`-coupled.
+4. **CRM depth** — estimate lines, lead/estimate→order, booking edit/calendar.
+5. **Integrations** — messaging dry-run only; invoice email = mailto; import apply blocked.
 
 ## Critical known limitations
 
-- App code **degrades** when RPCs/tables are missing (`MissingRpcError`, dry-run, Apply disabled) — do not treat UI presence as live DB readiness.
-- Notifications: **dry-run only** (`apiMessageDispatch`); invoice “email” opens `mailto:` after PDF download.
-- Import: browser preview only; **Apply intentionally blocked**.
-- CLI `.temp` may still name TEST — ignore for app runtime; do not use during this phase.
-- Nothing requiring live RO schema is claimed “remotely verified.”
+- App **degrades** when RPCs/tables missing (`MissingRpcError`, dry-run, Apply disabled).
+- Warehouse/finance multi-ledger guarantees on MAIN are **UNVERIFIED** until cutover confirmed.
+- Notifications: dry-run only; invoice email: mailto.
+- Import: preview only.
+- CLI `.temp` may name TEST — ignore for app runtime.
+- Soft-deleted workspace RLS helper SQL prepared; remote apply **unverified**.
 
 ## Related docs
 

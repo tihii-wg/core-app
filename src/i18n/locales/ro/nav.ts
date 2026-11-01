@@ -8,6 +8,7 @@ const nav: Messages<typeof en> = {
     clients: "Clienți",
     services: "Servicii",
     inventory: "Stoc",
+    warehouses: "Depozite",
     employees: "Angajați",
     invoices: "Facturi",
     finance: "Finanțe",

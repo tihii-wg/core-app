@@ -23,6 +23,7 @@ const moduleLabelKeys: Record<string, `nav.modules.${AppModule}` | undefined> = 
   clients: "nav.modules.clients",
   employees: "nav.modules.employees",
   inventory: "nav.modules.inventory",
+  warehouses: "nav.modules.warehouses",
   services: "nav.modules.services",
   invoices: "nav.modules.invoices",
   finance: "nav.modules.finance",

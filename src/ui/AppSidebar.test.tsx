@@ -100,6 +100,16 @@ describe("AppSidebar nav counts", () => {
     expect(navigate).toHaveBeenCalledWith("/en/ws-1/orders");
   });
 
+  it("shows Warehouses in the sidebar and navigates to the warehouses module", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    const warehouses = screen.getByRole("button", { name: /^Warehouses$/i });
+    await user.click(warehouses);
+
+    expect(navigate).toHaveBeenCalledWith("/en/ws-1/warehouses");
+  });
+
   it("hides badges while counts are loading instead of showing zero", () => {
     navCounts.counts = {};
     navCounts.isLoading = true;

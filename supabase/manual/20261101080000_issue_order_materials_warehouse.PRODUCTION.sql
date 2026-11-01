@@ -8,8 +8,9 @@
 -- WHY: the existing issue_order_materials(uuid, jsonb, text) only decreases the company-wide
 -- inventory_items.quantity. With the RO-style multi-warehouse model (public.warehouse_stock,
 -- crm_ro_v1) the stock must also leave ONE warehouse. This is a NEW function; the 3-arg
--- issue_order_materials is NOT touched and keeps working (the app falls back to it when this
--- function is not installed).
+-- issue_order_materials is NOT touched (still used when no warehouse is selected).
+-- The Core App UI does NOT fall back to global issue when a warehouse is selected —
+-- apply this file before warehouse-aware issue works (otherwise the UI shows an error).
 --
 -- Contract (same as issue_order_materials, plus the warehouse):
 --   p_lines: [{ "inventory_item_id": "<uuid>", "quantity": <positive int> }, ...]  (duplicates rejected)
@@ -417,6 +418,14 @@ begin
       raise exception 'insufficient_warehouse_stock' using errcode = 'P0001';
     end if;
 
+    -- FIFO batch consume when stock_batches rows exist (helper from 20261101210000_…).
+    -- Legacy stock with zero batches: helper returns no rows and is a no-op.
+    if to_regprocedure('public.crm_consume_batches_fifo(uuid, uuid, uuid, numeric)') is not null then
+      perform 1 from public.crm_consume_batches_fifo(
+        v_workspace_id, p_warehouse_id, v_item_id, v_qty::numeric
+      );
+    end if;
+
     update public.inventory_items
     set quantity = quantity - v_qty::numeric,
         updated_at = now()
@@ -487,6 +496,9 @@ revoke all on function public.issue_order_materials_from_warehouse(uuid, jsonb, 
   from public, anon, authenticated, service_role;
 grant execute on function public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)
   to authenticated;
+
+-- PostgREST picks up new functions after a schema reload.
+notify pgrst, 'reload schema';
 
 commit;
 

@@ -300,6 +300,7 @@ export default {
     returnWarehouseLabel: "Return to warehouse",
     returnWarehouseHint: "Returned quantity is added to this warehouse and to the item total.",
     warehouseStock: "In this warehouse: {{count}}",
+    warehouseRequired: "Select a warehouse before confirming.",
     globalOnlyWarning: "Materials were issued, but per-warehouse stock was not reduced: the warehouse issue SQL is not applied (stock is tracked globally only).",
     globalOnlyReturnWarning:
       "Materials were returned to the company total, but per-warehouse stock was not updated: the warehouse return SQL is not applied.",

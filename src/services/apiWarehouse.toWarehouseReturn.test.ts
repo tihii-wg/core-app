@@ -32,7 +32,7 @@ describe("returnOrderMaterialsToWarehouse", () => {
     seedWarehouse(WS.A, "wh-small", { "item-a1": 2 });
   });
 
-  it("throws MissingRpcError when the SQL is not applied so callers can fall back", async () => {
+  it("throws MissingRpcError when the SQL is not applied (no silent global fallback)", async () => {
     installIssueFromWarehouseRpc();
     const order = await createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [{ serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }], materials: [brakePads] }, WS.A);
     fake.signInAs(USERS.manager.id);

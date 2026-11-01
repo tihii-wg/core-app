@@ -5,6 +5,7 @@ export default {
     clients: "Clients",
     services: "Services",
     inventory: "Inventory",
+    warehouses: "Warehouses",
     employees: "Employees",
     invoices: "Invoices",
     finance: "Finance",

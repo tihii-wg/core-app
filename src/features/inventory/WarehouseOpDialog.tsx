@@ -87,7 +87,7 @@ function OpForm({
 
   const [warehouseId, setWarehouseId] = useState(activeWarehouses.find((w) => w.isDefault)?.id ?? activeWarehouses[0]?.id ?? "");
   const [toWarehouseId, setToWarehouseId] = useState("");
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState("other");
   const [comment, setComment] = useState("");
   const [lines, setLines] = useState<DraftLine[]>(() => [newLine()]);
   const [error, setError] = useState<string | null>(null);
@@ -202,7 +202,18 @@ function OpForm({
         {kind === "writeOff" ? (
           <div className="space-y-1.5">
             <Label htmlFor="op-reason">{t("inventory.ops.fields.reason")}</Label>
-            <Input id="op-reason" maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} />
+            <Select value={reason || "other"} onValueChange={setReason} disabled={isPending}>
+              <SelectTrigger id="op-reason" aria-label={t("inventory.ops.fields.reason")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="damaged">{t("inventory.ops.reasons.damaged")}</SelectItem>
+                <SelectItem value="lost">{t("inventory.ops.reasons.lost")}</SelectItem>
+                <SelectItem value="internal_use">{t("inventory.ops.reasons.internalUse")}</SelectItem>
+                <SelectItem value="expired">{t("inventory.ops.reasons.expired")}</SelectItem>
+                <SelectItem value="other">{t("inventory.ops.reasons.other")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         ) : null}
 

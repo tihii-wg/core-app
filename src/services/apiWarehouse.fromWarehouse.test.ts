@@ -39,10 +39,10 @@ describe("issueOrderMaterialsFromWarehouse", () => {
     seedWarehouse(WS.A, "wh-small", { "item-a1": 2 });
   });
 
-  it("throws MissingRpcError when the SQL is not applied so callers can fall back", async () => {
+  it("throws MissingRpcError when the SQL is not applied (no silent global fallback)", async () => {
     const order = await orderWithMaterials();
     await expect(issueOrderMaterialsFromWarehouse(order, issue(1), "wh-main", "k0")).rejects.toBeInstanceOf(MissingRpcError);
-    // the legacy 3-arg RPC keeps working
+    // Legacy 3-arg RPC remains available for callers that did not select a warehouse.
     await issueOrderMaterials(order, issue(1), "k0-legacy");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(19);
     expect(stockOf("wh-main")).toBe(10);
@@ -59,6 +59,32 @@ describe("issueOrderMaterialsFromWarehouse", () => {
     expect(stockOf("wh-small")).toBe(2);
     expect(fake.all("inventory_movements")[0]).toMatchObject({ warehouse_id: "wh-main", movement_type: "issue", quantity: 3 });
     expect(fake.all("order_materials").find((line) => line.order_id === order)).toMatchObject({ quantity_issued: 3 });
+  });
+
+  it("consumes stock_batches FIFO when batches exist for the warehouse", async () => {
+    installIssueFromWarehouseRpc();
+    fake.all("stock_batches").push(
+      {
+        id: "batch-old",
+        workspace_id: WS.A,
+        warehouse_id: "wh-main",
+        inventory_item_id: "item-a1",
+        quantity_left: 2,
+        received_at: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "batch-new",
+        workspace_id: WS.A,
+        warehouse_id: "wh-main",
+        inventory_item_id: "item-a1",
+        quantity_left: 8,
+        received_at: "2026-02-01T00:00:00.000Z",
+      },
+    );
+    const order = await orderWithMaterials();
+    await issueOrderMaterialsFromWarehouse(order, issue(3), "wh-main", "k-fifo");
+    expect(Number(fake.all("stock_batches").find((row) => row.id === "batch-old")?.quantity_left)).toBe(0);
+    expect(Number(fake.all("stock_batches").find((row) => row.id === "batch-new")?.quantity_left)).toBe(7);
   });
 
   it("rejects an issue above the warehouse stock without touching any stock (never negative)", async () => {

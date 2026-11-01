@@ -388,7 +388,18 @@ export interface AuthState {
   user: User | null;
 }
 
-export type AppModule = "dashboard" | "orders" | "clients" | "employees" | "inventory" | "services" | "invoices" | "finance" | "reports" | "settings";
+export type AppModule =
+  | "dashboard"
+  | "orders"
+  | "clients"
+  | "employees"
+  | "inventory"
+  | "warehouses"
+  | "services"
+  | "invoices"
+  | "finance"
+  | "reports"
+  | "settings";
 
 export type Workspace = {
   id: string;
@@ -471,6 +482,8 @@ export type InventoryMovement = {
   inventoryItemId: string;
   orderId: string | null;
   orderMaterialId: string | null;
+  /** Present when inventory_movements.warehouse_id exists (crm_ro_v1). */
+  warehouseId: string | null;
   movementType: InventoryMovementType;
   quantity: number;
   reason: string | null;

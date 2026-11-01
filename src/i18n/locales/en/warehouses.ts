@@ -1,0 +1,38 @@
+export default {
+  title: "Warehouses",
+  description: "Stock by warehouse, receiving, transfers, write-offs, and movement history.",
+  loading: "Loading warehouses...",
+  loadError: "Could not load warehouses.",
+  emptyTitle: "No warehouses yet",
+  emptyDescription: "Create a warehouse to track stock by location, then receive goods into it.",
+  selectorLabel: "Warehouse",
+  allWarehouses: "All warehouses",
+  currentWarehouse: "Current: {{name}}",
+  manage: "Manage warehouses",
+  openInventory: "Open inventory catalog",
+  summary: {
+    products: "Products with stock",
+    lowStock: "Low stock",
+    outOfStock: "Out of stock",
+    warehouses: "Active warehouses",
+  },
+  actions: {
+    receive: "Receive goods",
+    transfer: "Transfer stock",
+    writeOff: "Write off",
+    history: "Movement history",
+  },
+  stock: {
+    title: "Stock in this warehouse",
+    titleAll: "Stock across warehouses",
+    empty: "No stock rows for this selection yet.",
+    product: "Product",
+    quantity: "Qty",
+    min: "Min",
+  },
+  inventoryLink: {
+    title: "Warehouse operations moved here",
+    description: "Receiving, transfers, write-offs and warehouse stock live on the Warehouses page.",
+    open: "Open Warehouses",
+  },
+};

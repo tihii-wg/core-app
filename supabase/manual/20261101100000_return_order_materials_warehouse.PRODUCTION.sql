@@ -9,14 +9,16 @@
 -- WHY: after issue_order_materials_from_warehouse decreases warehouse_stock,
 -- the 4-arg return_order_materials only restores inventory_items.quantity.
 -- This NEW function restores BOTH the company total and the chosen warehouse.
--- The existing return_order_materials is NOT touched (app falls back when missing).
+-- The existing return_order_materials is NOT touched (kept for global-only returns when no
+-- warehouse is selected). The Core App UI does NOT fall back to global return when a
+-- warehouse is selected — apply this file before warehouse-aware returns work.
 --
 -- Contract (mirrors return_order_materials + warehouse):
 --   p_lines: [{ "inventory_item_id": "<uuid>", "quantity": <positive int> }, ...]
 --   Permission: workspace member with role owner / admin / manager.
 --   Warehouse: active, same workspace, not deleted.
 --   Per line: inventory_items.quantity += qty;
---             warehouse_stock.quantity += qty (INSERT row at qty if missing);
+--             warehouse_stock.quantity += qty (UPSERT on warehouse_id+inventory_item_id);
 --             order_materials.quantity_returned += qty (never above quantity_issued);
 --             inventory_movements 'return' with warehouse_id when the column exists.
 --
@@ -107,7 +109,6 @@ declare
   v_rowcount integer;
   v_mov_has_wh boolean;
   v_wh_ok boolean;
-  v_stock_id uuid;
 begin
   if p_order_id is null then
     raise exception 'order_id is required' using errcode = '22023';
@@ -381,24 +382,46 @@ begin
       raise exception 'Inventory item is unavailable in this workspace' using errcode = 'P0001';
     end if;
 
-    select ws.id into v_stock_id
-    from public.warehouse_stock ws
-    where ws.warehouse_id = p_warehouse_id
-      and ws.workspace_id = v_workspace_id
-      and ws.inventory_item_id = v_item_id
-    for update;
+    -- Upsert so concurrent returns into an empty warehouse cannot race on the unique key.
+    insert into public.warehouse_stock (
+      workspace_id, warehouse_id, inventory_item_id, quantity, updated_at
+    ) values (
+      v_workspace_id, p_warehouse_id, v_item_id, v_qty::numeric, now()
+    )
+    on conflict (warehouse_id, inventory_item_id)
+    do update set
+      quantity = public.warehouse_stock.quantity + excluded.quantity,
+      updated_at = now();
 
-    if found then
-      update public.warehouse_stock
-      set quantity = quantity + v_qty::numeric,
-          updated_at = now()
-      where id = v_stock_id;
-    else
-      insert into public.warehouse_stock (
-        workspace_id, warehouse_id, inventory_item_id, quantity, updated_at
-      ) values (
-        v_workspace_id, p_warehouse_id, v_item_id, v_qty::numeric, now()
-      );
+    -- Return-batch strategy (when helper from 20261101210000_… is installed):
+    -- 1) Prefer inventory_movements.batch_id from the latest matching ISSUE for this
+    --    order_material + warehouse (restore original batch when recorded).
+    -- 2) Otherwise create a NEW return batch at this warehouse (never invent a
+    --    fake reference to a missing batch id).
+    -- batch_id is read via to_jsonb so CREATE OR REPLACE still works if the column
+    -- is not present yet (crm_ro_v1 not applied).
+    if to_regprocedure('public.crm_restore_or_create_batch(uuid, uuid, uuid, numeric, uuid, numeric, date, uuid, uuid)') is not null then
+      declare
+        v_src_batch uuid;
+      begin
+        select (to_jsonb(m) ->> 'batch_id')::uuid into v_src_batch
+        from public.inventory_movements m
+        where m.workspace_id = v_workspace_id
+          and m.order_material_id = v_line.id
+          and m.movement_type = 'issue'
+          and (
+            not v_mov_has_wh
+            or (to_jsonb(m) ->> 'warehouse_id') is not distinct from p_warehouse_id::text
+          )
+          and (to_jsonb(m) ->> 'batch_id') is not null
+        order by m.created_at desc, m.id desc
+        limit 1;
+
+        perform public.crm_restore_or_create_batch(
+          v_workspace_id, p_warehouse_id, v_item_id, v_qty::numeric,
+          v_src_batch, 0, null, null, null
+        );
+      end;
     end if;
 
     if v_mov_has_wh then
@@ -437,4 +460,24 @@ revoke all on function public.return_order_materials_to_warehouse(uuid, jsonb, u
 grant execute on function public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)
   to authenticated;
 
+-- PostgREST picks up new functions after a schema reload.
+notify pgrst, 'reload schema';
+
 commit;
+
+-- =====================================================================
+-- Post-install verification (read-only; run separately after apply)
+--
+--   select p.proname, p.prosecdef, pg_get_function_identity_arguments(p.oid)
+--   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public'
+--     and p.proname in ('return_order_materials', 'return_order_materials_to_warehouse')
+--   order by 1;
+--   -- expected: both present, prosecdef = true
+--
+--   select has_function_privilege('authenticated',
+--            'public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)', 'execute'),
+--          has_function_privilege('anon',
+--            'public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)', 'execute');
+--   -- expected: true, false
+-- =====================================================================

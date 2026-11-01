@@ -1,128 +1,187 @@
-# Core App — Development roadmap (post-audit)
+# Core App — Development roadmap (post–P0.4 refresh)
 
-**Date:** 2026-11-01  
-**Goal:** Fast feature completion on Core App against **MAIN** Supabase only (`pundggjzzaqzbvykbxvo`).  
+**Date:** 2026-11-01 (refreshed)  
+**Goal:** Fast, integrity-first feature completion on Core App against **MAIN** only (`pundggjzzaqzbvykbxvo`).  
 **TEST** (`hnfvrlgcnpykncixxqha`) stays inactive until explicitly authorized.  
-**Basis:** `docs/core-app-feature-audit.md` (source + docs inspection; no remote verification).
+**Basis:** `docs/core-app-feature-audit.md`.
 
 Principles:
 
-1. Prefer finishing wired PARTIAL features over new architecture.
-2. Owner SQL cutover unlocks many PARTIAL→COMPLETE transitions without large UI rewrites.
-3. Do **not** turn on real SMS/email/Telegram until providers + consent + rate limits are chosen.
-4. Do **not** enable Import Apply without a sandbox RPC + TEST authorization.
+1. Prefer finishing wired PARTIAL features that protect **stock and money** over new surface area.
+2. Owner SQL cutover unlocks many PARTIAL→COMPLETE transitions without UI rewrites.
+3. Do **not** enable real SMS/email/Telegram/WhatsApp until providers + consent + rate limits are chosen.
+4. Do **not** enable Import Apply without sandbox RPC + TEST authorization.
 5. No TEST project work, env flips, or deploys unless requested.
 
 ---
 
-## P0 — Critical
+## Closed / completed
 
-| # | Feature | Implement | Why | Files / modules | Deps | Scope | SQL? | Order |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0.1 | Soft-deleted workspace RLS | Owner apply `crm_permitted_workspaces` fix; smoke membership | Security: deleted WS must not remain accessible | SQL 2.1a; membership queries | Owner MAIN access | Small (SQL + smoke) | Yes | **1st** |
-| P0.2 | Confirm MAIN schema baseline | Inventory which cutover scripts already applied; fill gaps | Prevents app “ghost” features and wrong COMPLETE claims | Cutover guide; matrix | Owner | Medium (ops) | Yes (apply missing) | **2nd** |
-| P0.3 | Warehouse stock post RPCs | Ensure `crm_post_*` present; fix any MissingRpc paths | Ops UI otherwise cannot post stock safely | `apiWarehouseOps`, SQL 2.1c | crm_ro_v1 | Medium | Yes | After P0.2 |
-| P0.4 | Password recovery (real) | Wire `ForgotPasswordPage` → `supabase.auth.resetPasswordForEmail`; remove stub | Auth UX is currently a fake success path | `ForgotPasswordPage.tsx`, `apiAuth.FogotPasword` | Auth email templates on project | Small | No (Auth config) | **Parallel with P0.1** |
-| P0.5 | Subscription write gates regression | Keep guards on every new mutate path | Billing/abuse control already designed | `useGuardSubscriptionWrite` | — | Ongoing | No | Continuous |
-
-**Sequence:** P0.1 → P0.2 → P0.3. P0.4 can run in parallel (app-only). P0.5 continuous.
+| # | Feature | Outcome |
+| --- | --- | --- |
+| **P0.4** | Password recovery | **COMPLETE** — real Auth flow + localized reset route + security marker; **owner real-world verified** (email → reset → login with new password). Do not reopen. |
 
 ---
 
-## P1 — High (essential business)
+## Next 3–5 concrete development tasks (recommended order)
 
-| # | Feature | Implement | Why | Modules | Deps | Scope | SQL? | Independent? |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| P1.1 | Order issue/return from warehouse | Apply 2.1h/2.1j; remove reliance on global fallback | Correct stock + order linkage | `apiWarehouse`, OrderWarehouseActions | P0.2, warehouses | Medium | Yes | After P0 |
-| P1.2 | Material line discounts RPC | Apply 2.1g; exercise UI path | Parity with service discounts | `apiOrders`, orderTotals | 2.1f optional | Small–med | Yes | After P0.2 |
-| P1.3 | Public order links | Apply 2.1i + 2.1k; mint + status page E2E on MAIN | Client self-serve status | `apiPublicLinks`, PublicOrderPage | Token SELECT revoke | Medium | Yes | After P0.2 |
-| P1.4 | Order events write RPC | Apply 2.1d; board/status writers | Audit trail integrity | `apiOrderEvents`, feed | — | Small | Yes | Independent after P0.2 |
-| P1.5 | Roles seed + gates | Apply 2.2; verify Settings → Roles | Access control for CRM modules | RolesSettings, permissions | crm_ro_v1 | Medium | Yes | After P0.2 |
-| P1.6 | Custom statuses seed | Apply 2.3; board transitions | Kanban/custom status happy path | StatusesSettings, board | Status tables | Small | Yes | Independent after P0.2 |
-| P1.7 | Locations seed | Apply 2.4 | Warehouse ops locations | LocationsSettings | Warehouses | Small | Yes | Independent |
-| P1.8 | Message template seed | Apply 2.5 (templates only) | Dry-run notify needs templates | NotificationRulesSettings | Rules table | Small | Yes | Independent |
-| P1.9 | Finance accounts on MAIN | Confirm tables/columns; payment account_id | Cash register / transfers | FinanceAccounts*, apiFinanceAccounts | Schema | Medium | Maybe | Parallel with P1.1 |
-| P1.10 | Expenses table on MAIN | Ensure expenses SQL applied | Finance expenses already in UI | Finance, expenses SQL | — | Small | Yes if missing | Parallel |
-| P1.11 | Lead / estimate → order | Conversion actions + status | Close CRM funnel gap | Leads, Estimates, apiOrders | CRM tables | Medium–large | Maybe | After CRM tables confirmed |
-| P1.12 | Client mutual settlement depth | Align with RO settlement semantics | Money accuracy | clientSettlement* | Payments | Medium | Maybe | Parallel |
+### 1. P0.1 — Soft-deleted workspace RLS (security)
 
-**Recommended app-side next after owner SQL batch:** **P1.1 + P1.3** (warehouse issue/return + public links) — highest user-visible unlock for already-built UI.
+| | |
+| --- | --- |
+| **Priority** | P0 |
+| **Status** | PARTIAL (SQL prepared; MAIN apply **UNVERIFIED**) |
+| **Business value** | Prevents access to soft-deleted workspaces — multi-tenant safety. |
+| **Implement** | Owner apply `…010000_crm_permitted_workspaces_deleted_at`; smoke membership for deleted WS. |
+| **Files** | SQL 2.1a; workspace membership queries |
+| **Deps** | Owner MAIN access |
+| **Class** | **C** (database) |
+| **Acceptance** | Deleted workspace not reachable via permitted-workspaces helper; members cannot select it. |
+| **Risks** | Mis-apply could lock legitimate members — follow cutover notes. |
+
+### 2. P0.2 — Confirm MAIN schema / cutover inventory (ops)
+
+| | |
+| --- | --- |
+| **Priority** | P0 |
+| **Status** | Process gap |
+| **Business value** | Stops “ghost COMPLETE” claims; unblocks all warehouse/CRM PARTIAL features. |
+| **Implement** | Inventory which cutover scripts are already on MAIN; list gaps vs `MIGRATION_CUTOVER.md`. |
+| **Files** | Cutover guide; matrix |
+| **Class** | **C** (ops / SQL apply as needed) — not an app coding task |
+| **Acceptance** | Written checklist: applied vs missing for 2.1* RPCs + `crm_ro_v1` + seeds. |
+| **Risks** | Applying wrong script order; use transactional scripts only with owner approval. |
+
+### 3. P0.3 + P1.1 — Warehouse stock integrity (receipt/transfer/write-off + order issue/return)
+
+| | |
+| --- | --- |
+| **Priority** | P0 / P1 |
+| **Status** | PARTIAL |
+| **Business value** | Daily shop ops: stock must move only through successful posts; orders must deplete the correct warehouse. |
+| **Implement** | Ensure `crm_post_*` + `issue_order_materials_from_warehouse` / `return_order_materials_to_warehouse` on MAIN; remove reliance on silent global fallback for warehouse-scoped flows (or fail closed with clear UX). |
+| **Files** | `apiWarehouseOps.ts`, `apiWarehouse.ts`, `OrderWarehouseActions.tsx`, WarehouseOps UI, SQL 2.1c/h/j |
+| **Deps** | P0.2, `crm_ro_v1`, warehouses |
+| **Class** | **B+C** (SQL required for happy path; app already wired) |
+| **Acceptance** | Receipt increases stock only after post; issue decreases chosen warehouse; return restores it; MissingRpc does not pretend warehouse-scoped success. |
+| **Risks** | Concurrent ops; fallback to global issue can diverge `warehouse_stock` vs `inventory_items.quantity`. |
+
+### 4. P1.9 — Payments → cash accounts / finance_transactions
+
+| | |
+| --- | --- |
+| **Priority** | P1 |
+| **Status** | PARTIAL |
+| **Business value** | Cash drawer balances must match payment history. |
+| **Implement** | On payment create/refund (and transfer), write/link `finance_transactions` so account balances move; confirm tables on MAIN. |
+| **Files** | `apiPayments.ts`, `apiFinanceAccounts.ts`, Finance UI |
+| **Deps** | `finance_accounts` / `finance_transactions` (crm_ro_v1 or equivalent) |
+| **Class** | **B+C** (may need column/RPC if missing) |
+| **Acceptance** | Payment with account updates running balance; transfer moves between accounts; reports/balances reconcile. |
+| **Risks** | Double-posting if both client and trigger write; void remains BLOCKED. |
+
+### 5. P1.3 — Public order links (mint + status)
+
+| | |
+| --- | --- |
+| **Priority** | P1 |
+| **Status** | PARTIAL (runtime blocked without RPC) |
+| **Business value** | Clients check order status without accounts. |
+| **Implement** | Apply 2.1i + 2.1k; smoke mint + anon status page. |
+| **Files** | `apiPublicLinks.ts`, `PublicOrderPage.tsx`, OrderActionsMenu |
+| **Deps** | P0.2 |
+| **Class** | **B+C** |
+| **Acceptance** | Copy link works; public page shows whitelisted fields; missing RPC surfaces unavailable (not crash). |
+| **Risks** | Token leakage; rate limiting still MISSING (P3 infra). |
+
+**While waiting for owner SQL (app-only options, lower than stock/money):**
+
+| Task | Notes | Class |
+| --- | --- | --- |
+| P1.12 Client settlement vs payments ledger | Prefer ledger over `orders.is_paid` where possible | **A** (mostly) |
+| P2.9 ComingModules honesty | Remove stale “planned” badges | **A** |
+| P1.11 Lead/estimate → order | Only if CRM tables already on MAIN | **A/B** |
 
 ---
 
-## P2 — Medium
+## Full priority backlog (updated)
 
-| # | Feature | Implement | Why | Modules | SQL? |
-| --- | --- | --- | --- | --- | --- |
-| P2.1 | Categories full tree UX | Match RO category management | Inventory | CategoriesPanel | Maybe |
-| P2.2 | Stock movement history UI | Ops history browser | Warehouse | WarehouseOps / inventory | No/light |
-| P2.3 | Invoice works/materials separation polish | Clearer invoice lines | Invoices | Maybe |
-| P2.4 | VAT fiscal packaging | Beyond display helpers | Taxes / invoices | Maybe |
-| P2.5 | Reports export depth | Broader CSV/print packs | Reports, csvExport | No |
-| P2.6 | Activity log writers completeness | Cover more mutations | apiActivityLog callers | No |
-| P2.7 | Vehicles serial/warranty on lines | §1 vehicle depth | Orders, vehicles | Maybe |
-| P2.8 | Attachments UX completeness | Upload/list/delete polish | Order attachments | Storage |
-| P2.9 | ComingModules copy sync | Remove “planned” where CRUD exists | ComingModulesSettings | No |
-| P2.10 | Notification rules editor depth | CRUD rules beyond list/dry-run | Notifications settings | Maybe |
+### P0 — Critical
 
----
+| # | Feature | Status | Class | Notes |
+| --- | --- | --- | --- | --- |
+| P0.1 | Soft-deleted workspace RLS | PARTIAL | C | Next security SQL |
+| P0.2 | MAIN schema inventory | Process | C | Prerequisite |
+| P0.3 | Warehouse stock post RPCs | PARTIAL | C | Integrity |
+| ~~P0.4~~ | ~~Password recovery~~ | **COMPLETE** | — | Closed |
+| P0.5 | Subscription write gates | Ongoing | A | Continuous |
 
-## P3 — Low / deferred
+### P1 — Essential business
+
+| # | Feature | Status | Class | SQL? |
+| --- | --- | --- | --- | --- |
+| P1.1 | Order issue/return from warehouse | PARTIAL | B+C | Yes (2.1h/j) |
+| P1.2 | Material line discounts RPC | PARTIAL | B+C | Yes (2.1g) |
+| P1.3 | Public order links | PARTIAL | B+C | Yes (2.1i/k) |
+| P1.4 | Order events write RPC | PARTIAL | B+C | Yes (2.1d) |
+| P1.5–P1.8 | Roles / statuses / locations / message seeds | PARTIAL | C | Seeds 2.2–2.5 |
+| P1.9 | Finance accounts + payment linkage | PARTIAL | B+C | Maybe |
+| P1.10 | Expenses table on MAIN | PARTIAL | C | If missing |
+| P1.11 | Lead / estimate → order | MISSING | A/B | Maybe |
+| P1.12 | Client mutual settlement depth | PARTIAL | A/B | Maybe |
+
+### P2 — Medium
+
+Categories tree, stock history UI, invoice line polish, VAT persist, reports export depth, activity writers, vehicles warranty, attachments, ComingModules sync, notification rules editor.
+
+### P3 — Deferred / blocked
 
 | # | Feature | Notes |
 | --- | --- | --- |
-| P3.1 | Real SMS/email/Telegram/WhatsApp | **Blocked** until provider + consent + rate limit design |
-| P3.2 | Import Apply | **Blocked** until sandbox RPC + TEST authorization |
-| P3.3 | Online payment providers | Explicitly out of scope until chosen |
-| P3.4 | Full RO report designer | Large; keep Core charts/CSV |
-| P3.5 | Sales/calls/messages modules | Matrix stage 9 optional |
-| P3.6 | Order types / custom forms (В.2–В.3) | Docs-heavy; defer |
-| P3.7 | Public link Edge rate limiting | Infra (WAF/Edge), not app-only |
-| P3.8 | MFA project-level confirmation | Ops checklist |
-| P3.9 | TEST project cutover & CI | Only when explicitly authorized |
+| P3.1 | Real SMS/email/Telegram/WhatsApp | **D** + policy; dry-run only today |
+| P3.2 | Import Apply | **BLOCKED** until sandbox RPC + TEST |
+| P3.3 | Online payment providers | **D** |
+| P3.4 | Full RO report designer | Large |
+| P3.5 | Sales/calls/messages modules | Optional |
+| P3.6 | Order types / custom forms | Docs-heavy |
+| P3.7 | Public link rate limiting | Infra |
+| P3.8 | MFA project confirmation | Ops |
+| P3.9 | TEST project cutover | Explicit auth only |
+| — | Payment void | **BLOCKED** (`PAYMENT_VOID_SCHEMA_SUPPORTED = false`) |
 
 ---
 
-## Parallel vs sequential
+## Sequence diagram
 
 ```
-P0.1 soft-delete RLS
+P0.4 password recovery ✅ DONE
+P0.1 soft-delete RLS (SQL)
    └─► P0.2 MAIN schema inventory / apply missing cutover
-          ├─► P1.1 issue/return (2.1h/j)     ─┐
-          ├─► P1.2 discounts (2.1g)            │ can parallel after P0.2
-          ├─► P1.3 public links (2.1i/k)      │
-          ├─► P1.4 events (2.1d)               │
-          ├─► P1.5–P1.8 seeds (2.2–2.5)      ─┘
-          ├─► P1.9–P1.10 finance schema
-          └─► P1.11–P1.12 CRM conversion / settlement (app work)
-P2.* polish (parallel)
+          ├─► P0.3 + P1.1 warehouse integrity     ─┐
+          ├─► P1.9 payments ↔ cash accounts         │ parallel after P0.2
+          ├─► P1.3 public links                     │
+          ├─► P1.2 / P1.4 discounts + events        │
+          └─► P1.5–P1.8 seeds                       ─┘
+App-only parallel (lower priority): P1.12 settlement, P2.9 ComingModules
 P3.* gated / deferred
 ```
 
-Independent after schema known: seeds (2.2–2.5), events RPC, public links (vs warehouse), finance accounts (vs warehouse).
+---
 
-Must sequence: soft-delete RLS before trusting multi-tenant QA; warehouse stock RPCs before claiming warehouse COMPLETE; providers before real notify; TEST auth before Import Apply.
+## Definition: feature completion
+
+1. UI + service path used in routes/menus.  
+2. Required tables/RPCs exist on **MAIN** (owner-confirmed) when the happy path needs them.  
+3. Workspace isolation and role/subscription guards on writes.  
+4. No silent MissingRpc success for warehouse-scoped stock.  
+5. EN/RO/RU for user-facing strings.
 
 ---
 
-## Definition: “feature completion” for a module
+## Immediate recommendation
 
-A feature may be marked COMPLETE in product sense only when:
+1. **Owner:** P0.1 + P0.2 (SQL/ops).  
+2. **Dev after schema known:** **P0.3 + P1.1 warehouse stock integrity** (highest daily business risk).  
+3. **Then:** P1.9 cash-ledger linkage, then P1.3 public links.
 
-1. UI + service path exists and is used in routes/menus.  
-2. Required tables/RPCs exist on **MAIN** (owner-confirmed).  
-3. Workspace isolation and role/subscription guards hold for writes.  
-4. No silent MissingRpc fallback that mis-states success.  
-5. i18n covers EN/RO/RU for user-facing strings.
-
-This roadmap does **not** start testing/deployment phases; those remain separate instructions.
-
----
-
-## Suggested immediate next feature (app)
-
-**If owner SQL is not yet available:** implement **P0.4 password recovery** (real Supabase reset) — small, unblocks a critical PLACEHOLDER, no schema cutover required.
-
-**After cutover SQL for warehouse issue/return or public links:** harden **order material issue/return against warehouse RPCs** (P1.1) — UI already exists; largest operational gap for shops using inventory + orders together.
-
-Also queue: payment void stays **BLOCKED** until schema decision (`propose_payment_void.sql` is do-not-apply); do not treat dialog as shippable.
+Do not reopen P0.4. Do not start messaging providers or Import Apply without explicit authorization.

@@ -11,6 +11,7 @@ function requireWorkspaceId(workspaceId: string | undefined) {
 function warehouseError(error: { message?: string; code?: string } | null, fallback: string) {
   const message = error?.message ?? "";
   if (message.includes("insufficient_warehouse_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
+  if (message.includes("insufficient_batch_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_stock")) return i18n.t("orders.errors.insufficientStock");
   if (message.includes("warehouse_stock table is missing")) return i18n.t("orders.errors.warehouseStockMissing");
   if (message.includes("Warehouse not found")) return i18n.t("orders.errors.warehouseInvalid");
@@ -33,6 +34,7 @@ type MovementRow = {
   inventory_item_id?: string;
   order_id?: string | null;
   order_material_id?: string | null;
+  warehouse_id?: string | null;
   movement_type?: string;
   quantity?: number;
   reason?: string | null;
@@ -42,6 +44,11 @@ type MovementRow = {
 
 const movementTypes = new Set<InventoryMovementType>(["issue", "return", "adjustment"]);
 
+const movementColumnsWithWarehouse =
+  "id, workspace_id, inventory_item_id, order_id, order_material_id, warehouse_id, movement_type, quantity, reason, created_by, created_at";
+const movementColumnsLegacy =
+  "id, workspace_id, inventory_item_id, order_id, order_material_id, movement_type, quantity, reason, created_by, created_at";
+
 export function toInventoryMovement(row: MovementRow): InventoryMovement {
   const movementType = movementTypes.has(row.movement_type as InventoryMovementType) ? (row.movement_type as InventoryMovementType) : "adjustment";
   return {
@@ -50,6 +57,7 @@ export function toInventoryMovement(row: MovementRow): InventoryMovement {
     inventoryItemId: String(row.inventory_item_id ?? ""),
     orderId: row.order_id ? String(row.order_id) : null,
     orderMaterialId: row.order_material_id ? String(row.order_material_id) : null,
+    warehouseId: row.warehouse_id ? String(row.warehouse_id) : null,
     movementType,
     quantity: Number(row.quantity ?? 0),
     reason: typeof row.reason === "string" ? row.reason : null,
@@ -79,8 +87,8 @@ export const ISSUE_FROM_WAREHOUSE_RPC = "issue_order_materials_from_warehouse";
 
 /**
  * Issues materials AND decreases `warehouse_stock` of the chosen warehouse (manual SQL
- * 20261101080000_issue_order_materials_warehouse). Throws `MissingRpcError` when that SQL is not applied so the
- * caller can fall back to the global-only `issueOrderMaterials` and tell the user.
+ * 20261101080000_issue_order_materials_warehouse). Throws `MissingRpcError` when that SQL is not
+ * applied — callers that selected a warehouse must NOT fall back to global-only issue.
  */
 export async function issueOrderMaterialsFromWarehouse(
   orderId: string,
@@ -118,8 +126,8 @@ export const RETURN_TO_WAREHOUSE_RPC = "return_order_materials_to_warehouse";
 
 /**
  * Returns materials AND increases `warehouse_stock` of the chosen warehouse (manual SQL
- * 20261101100000_return_order_materials_warehouse). Throws `MissingRpcError` when that SQL is not applied so the
- * caller can fall back to the global-only `returnOrderMaterials` and tell the user.
+ * 20261101100000_return_order_materials_warehouse). Throws `MissingRpcError` when that SQL is not
+ * applied — callers that selected a warehouse must NOT fall back to global-only return.
  */
 export async function returnOrderMaterialsToWarehouse(
   orderId: string,
@@ -144,19 +152,37 @@ export async function returnOrderMaterialsToWarehouse(
   return ((data ?? []) as MovementRow[]).map(toInventoryMovement);
 }
 
+function isMissingWarehouseIdColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  return /warehouse_id/i.test(message) && (/column/i.test(message) || error.code === "42703" || error.code === "PGRST204");
+}
+
 export async function getInventoryMovements(workspaceId: string | undefined, options?: { inventoryItemId?: string; orderId?: string; limit?: number }) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
-  let query = supabase
-    .from("inventory_movements")
-    .select("id, workspace_id, inventory_item_id, order_id, order_material_id, movement_type, quantity, reason, created_by, created_at")
-    .eq("workspace_id", resolvedWorkspaceId)
-    .order("created_at", { ascending: false });
 
-  if (options?.inventoryItemId) query = query.eq("inventory_item_id", options.inventoryItemId);
-  if (options?.orderId) query = query.eq("order_id", options.orderId);
-  if (options?.limit) query = query.limit(options.limit);
+  async function run(columns: string) {
+    let query = supabase
+      .from("inventory_movements")
+      .select(columns)
+      .eq("workspace_id", resolvedWorkspaceId)
+      .order("created_at", { ascending: false });
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message || i18n.t("inventory.errors.loadFailed"));
-  return ((data ?? []) as MovementRow[]).map(toInventoryMovement);
+    if (options?.inventoryItemId) query = query.eq("inventory_item_id", options.inventoryItemId);
+    if (options?.orderId) query = query.eq("order_id", options.orderId);
+    if (options?.limit) query = query.limit(options.limit);
+    return query;
+  }
+
+  const primary = await run(movementColumnsWithWarehouse);
+  if (!primary.error) {
+    return ((primary.data ?? []) as MovementRow[]).map(toInventoryMovement);
+  }
+  if (!isMissingWarehouseIdColumn(primary.error)) {
+    throw new Error(primary.error.message || i18n.t("inventory.errors.loadFailed"));
+  }
+
+  const fallback = await run(movementColumnsLegacy);
+  if (fallback.error) throw new Error(fallback.error.message || i18n.t("inventory.errors.loadFailed"));
+  return ((fallback.data ?? []) as MovementRow[]).map(toInventoryMovement);
 }

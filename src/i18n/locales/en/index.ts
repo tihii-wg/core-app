@@ -9,6 +9,7 @@ import orders from "./orders";
 import clients from "./clients";
 import services from "./services";
 import inventory from "./inventory";
+import warehouses from "./warehouses";
 import employees from "./employees";
 import settings from "./settings";
 import team from "./team";
@@ -19,4 +20,4 @@ import onboarding from "./onboarding";
 import vehicles from "./vehicles";
 import stage9 from "./stage9";
 
-export const en = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, employees, settings, team, reports, finance, invoices, onboarding, vehicles, stage9 };
+export const en = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, warehouses, employees, settings, team, reports, finance, invoices, onboarding, vehicles, stage9 };

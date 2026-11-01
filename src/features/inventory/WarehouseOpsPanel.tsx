@@ -5,6 +5,7 @@ import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { ErrorState } from "../../ui/EmptyState";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Skeleton } from "../../ui/Skeleton";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
@@ -58,6 +59,8 @@ export function WarehouseOpsPanel() {
   const [tab, setTab] = useState<WarehouseOpKind>("receipt");
   const [createKind, setCreateKind] = useState<WarehouseOpKind | null>(null);
   const [toPost, setToPost] = useState<WarehouseOpRecord | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "posted">("all");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
 
   const receipts = useGetGoodsReceipts();
   const transfers = useGetStockTransfers();
@@ -122,12 +125,31 @@ export function WarehouseOpsPanel() {
         </p>
       );
     }
-    const rows = query.data.rows;
-    if (rows.length === 0) {
+    const rows = query.data.rows.filter((op) => {
+      if (statusFilter === "draft" && op.posted) return false;
+      if (statusFilter === "posted" && !op.posted) return false;
+      if (warehouseFilter !== "all") {
+        const matches =
+          op.kind === "transfer"
+            ? op.fromWarehouseId === warehouseFilter || op.toWarehouseId === warehouseFilter
+            : op.warehouseId === warehouseFilter;
+        if (!matches) return false;
+      }
+      return true;
+    });
+    if (query.data.rows.length === 0) {
       return (
         <div className="py-6 text-center">
           <p className="text-sm font-medium text-foreground">{t(`inventory.ops.${kind}.emptyTitle`)}</p>
           <p className="mt-1 text-sm text-muted-foreground">{t(`inventory.ops.${kind}.emptyDescription`)}</p>
+        </div>
+      );
+    }
+    if (rows.length === 0) {
+      return (
+        <div className="py-6 text-center">
+          <p className="text-sm font-medium text-foreground">{t("inventory.ops.filters.emptyTitle")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("inventory.ops.filters.emptyDescription")}</p>
         </div>
       );
     }
@@ -191,6 +213,33 @@ export function WarehouseOpsPanel() {
               </TabsTrigger>
             ))}
           </TabsList>
+          {activeAvailable ? (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "all" | "draft" | "posted")}>
+                <SelectTrigger className="h-9 w-full text-[13px] sm:w-40" aria-label={t("inventory.ops.filters.status")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("inventory.ops.filters.allStatuses")}</SelectItem>
+                  <SelectItem value="draft">{t("inventory.ops.status.draft")}</SelectItem>
+                  <SelectItem value="posted">{t("inventory.ops.status.posted")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={warehouseFilter} onValueChange={setWarehouseFilter}>
+                <SelectTrigger className="h-9 w-full text-[13px] sm:w-52" aria-label={t("inventory.ops.filters.warehouse")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("inventory.ops.filters.allWarehouses")}</SelectItem>
+                  {(warehousesQuery.data ?? []).map((warehouse) => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           {kinds.map((kind) => (
             <TabsContent key={kind} value={kind} className="pt-2">
               {renderList(kind)}

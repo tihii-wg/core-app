@@ -16,7 +16,6 @@ import {
   returnOrderMaterials,
   returnOrderMaterialsToWarehouse,
 } from "../../services/apiWarehouse";
-import { MissingRpcError } from "../../services/missingRpc";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { defaultIssueWarehouseId, issuableWarehouses, linesExceedingWarehouseStock, warehouseStockOf } from "./issueWarehouse";
@@ -104,6 +103,12 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       return;
     }
 
+    // When active warehouses exist, issue/return must pick one so stock accounting stays warehouse-aware.
+    if (warehouses.length > 0 && !warehouseId) {
+      toast.error(t("orders.warehouse.warehouseRequired"));
+      return;
+    }
+
     if (mode === "issue" && warehouseId && warehouseStockLoaded && linesExceedingWarehouseStock(lines, warehouseStock, warehouseId).length > 0) {
       toast.error(t("orders.errors.insufficientWarehouseStock"));
       return;
@@ -117,28 +122,16 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     try {
       guardWrite();
       const idempotencyKey = crypto.randomUUID();
-      let globalOnly = false;
+      // When a warehouse is selected, only the warehouse-aware RPCs run — never fall back to
+      // global issue/return (that would desync inventory_items.quantity vs warehouse_stock).
       if (mode === "issue") {
         if (warehouseId) {
-          try {
-            await issueOrderMaterialsFromWarehouse(order.id, lines, warehouseId, idempotencyKey);
-          } catch (error) {
-            if (!(error instanceof MissingRpcError)) throw error;
-            // The warehouse RPC is not installed: issue with the legacy RPC (global stock only) and say so.
-            await issueOrderMaterials(order.id, lines, idempotencyKey);
-            globalOnly = true;
-          }
+          await issueOrderMaterialsFromWarehouse(order.id, lines, warehouseId, idempotencyKey);
         } else {
           await issueOrderMaterials(order.id, lines, idempotencyKey);
         }
       } else if (warehouseId) {
-        try {
-          await returnOrderMaterialsToWarehouse(order.id, lines, warehouseId, reason, idempotencyKey);
-        } catch (error) {
-          if (!(error instanceof MissingRpcError)) throw error;
-          await returnOrderMaterials(order.id, lines, reason, idempotencyKey);
-          globalOnly = true;
-        }
+        await returnOrderMaterialsToWarehouse(order.id, lines, warehouseId, reason, idempotencyKey);
       } else {
         await returnOrderMaterials(order.id, lines, reason, idempotencyKey);
       }
@@ -148,14 +141,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       await queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] });
-      if (globalOnly) {
-        toast.dismiss(toastId);
-        toast(mode === "issue" ? t("orders.warehouse.globalOnlyWarning") : t("orders.warehouse.globalOnlyReturnWarning"), {
-          duration: 8000,
-        });
-      } else {
-        toast.success(mode === "issue" ? t("orders.toast.issued") : t("orders.toast.returned"), { id: toastId });
-      }
+      toast.success(mode === "issue" ? t("orders.toast.issued") : t("orders.toast.returned"), { id: toastId });
       setMode(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : t("common.somethingWentWrong");

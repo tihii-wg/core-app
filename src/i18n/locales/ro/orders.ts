@@ -306,6 +306,7 @@ const orders: Messages<typeof en> = {
     returnWarehouseLabel: "Returnare în depozit",
     returnWarehouseHint: "Cantitatea returnată se adaugă în acest depozit și în totalul articolului.",
     warehouseStock: "În acest depozit: {{count}}",
+    warehouseRequired: "Selectați un depozit înainte de confirmare.",
     globalOnlyWarning: "Materialele au fost eliberate, dar stocul pe depozit nu a scăzut: SQL-ul de eliberare din depozit nu este aplicat (stocul este ținut doar global).",
     globalOnlyReturnWarning:
       "Materialele au fost returnate în totalul companiei, dar stocul pe depozit nu a fost actualizat: SQL-ul de returnare în depozit nu este aplicat.",

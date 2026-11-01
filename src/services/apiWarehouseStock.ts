@@ -43,13 +43,19 @@ export function toWarehouseStock(row: Record<string, unknown>, itemNames: Map<st
  * Per-warehouse stock for the workspace. Returns [] when `warehouse_stock` is not applied yet.
  * Item names come from a second `inventory_items` lookup (no FK embed, so a missing relation never breaks the read).
  */
-export async function getWarehouseStock(workspaceId: string | undefined) {
+export async function getWarehouseStock(
+  workspaceId: string | undefined,
+  options?: { inventoryItemId?: string },
+) {
   const resolved = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase
+  let query = supabase
     .from("warehouse_stock")
     .select(stockColumns)
     .eq("workspace_id", resolved)
     .order("warehouse_id", { ascending: true });
+  if (options?.inventoryItemId) query = query.eq("inventory_item_id", options.inventoryItemId);
+
+  const { data, error } = await query;
 
   if (error) {
     if (isMissingTableError(error, "warehouse_stock")) return [] as WarehouseStockRecord[];

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
@@ -9,6 +10,8 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
+import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { useInventoryMovements } from "./useInventoryMovements";
 import { effectiveStockStatus } from "./stockStatus";
 
@@ -39,6 +42,29 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { data: movements = [], isLoading: movementsLoading } = useInventoryMovements(item?.id, open && Boolean(item?.id));
+  const { data: warehouses = [] } = useGetWarehouses();
+  const { data: itemStock = [], isLoading: stockLoading } = useGetWarehouseStock(item?.id, open && Boolean(item?.id));
+
+  const warehouseNames = useMemo(
+    () => new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name])),
+    [warehouses],
+  );
+
+  const warehouseRows = useMemo(() => {
+    if (!item) return [];
+    return itemStock
+      .filter((row) => row.inventoryItemId === item.id && row.quantity !== 0)
+      .map((row) => ({
+        ...row,
+        name: warehouseNames.get(row.warehouseId) ?? t("inventory.detail.unknownWarehouse"),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [item, itemStock, t, warehouseNames]);
+
+  const warehouseStockTotal = useMemo(
+    () => warehouseRows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0),
+    [warehouseRows],
+  );
 
   function movementLabel(type: InventoryMovementType) {
     if (type === "issue") return t("inventory.detail.movementIssue");
@@ -94,6 +120,45 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
             </div>
 
             <div>
+              <h3 className="mb-2 text-xs font-medium text-muted-foreground">{t("inventory.detail.warehouseStock")}</h3>
+              {stockLoading ? (
+                <div className="flex justify-center py-4">
+                  <Spinner className="h-4 w-4" />
+                </div>
+              ) : warehouses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("inventory.detail.warehouseStockNoWarehouses")}</p>
+              ) : warehouseRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("inventory.detail.warehouseStockEmpty")}</p>
+              ) : (
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {warehouseRows.map((row) => (
+                    <li key={row.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[13px]">
+                      <span className="min-w-0 truncate text-foreground">{row.name}</span>
+                      <span
+                        className={
+                          row.minQuantity != null && row.quantity < row.minQuantity
+                            ? "shrink-0 tabular-nums font-medium text-destructive"
+                            : "shrink-0 tabular-nums font-medium text-foreground"
+                        }
+                      >
+                        {row.quantity} {item.unit}
+                      </span>
+                    </li>
+                  ))}
+                  <li className="flex items-center justify-between gap-3 px-3 py-2 text-[13px] text-muted-foreground">
+                    <span>{t("inventory.detail.warehouseStockTotal")}</span>
+                    <span className="tabular-nums font-medium text-foreground">
+                      {warehouseStockTotal} {item.unit}
+                    </span>
+                  </li>
+                </ul>
+              )}
+              {warehouseRows.length > 0 && Math.abs(warehouseStockTotal - item.quantity) > 0.0005 ? (
+                <p className="mt-2 text-xs text-warning">{t("inventory.detail.warehouseStockMismatch")}</p>
+              ) : null}
+            </div>
+
+            <div>
               <h3 className="mb-2 text-xs font-medium text-muted-foreground">{t("inventory.detail.movements")}</h3>
               {movementsLoading ? (
                 <div className="flex justify-center py-4">
@@ -105,12 +170,16 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
                 <ul className="divide-y divide-border rounded-md border border-border">
                   {movements.map((movement) => {
                     const sign = movement.movementType === "return" || movement.movementType === "adjustment" ? "+" : "−";
+                    const warehouseName = movement.warehouseId
+                      ? warehouseNames.get(movement.warehouseId) ?? t("inventory.detail.unknownWarehouse")
+                      : null;
                     return (
                       <li key={movement.id} className="flex items-start justify-between gap-3 px-3 py-2 text-[13px]">
                         <div className="min-w-0 space-y-0.5">
                           <p className="font-medium text-foreground">{movementLabel(movement.movementType)}</p>
                           <p className="text-muted-foreground tabular-nums">
                             {formatWorkspaceDate(movement.createdAt, workspace?.dateFormat, workspace?.timezone)}
+                            {warehouseName ? ` · ${warehouseName}` : ""}
                             {movement.orderId ? ` · ${movement.orderId.slice(0, 8)}` : ""}
                           </p>
                           {movement.reason ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{movement.reason}</p> : null}

@@ -1,22 +1,24 @@
 # Core App — Feature readiness audit
 
-**Audit date:** 2026-11-01  
+**Audit date:** 2026-11-01 (refreshed post–P0.4)  
 **Scope:** Repository-wide readiness vs RO→Core migration requirements.  
-**Evidence basis:** Application source (`src/`), services, prepared SQL (`supabase/manual/`, `supabase/migrations/`), and local docs (`docs/ro-app-*.md`).  
-**Not done:** Remote Supabase queries, RLS live checks, full Vitest/E2E, or any code/SQL changes.
+**Evidence basis:** Application source (`src/`), services, prepared SQL (`supabase/manual/`, `supabase/migrations/`), local docs (`docs/ro-app-*.md`), and **owner-confirmed real email recovery test** for password reset.  
+**Not done in this audit pass:** Remote Supabase queries, RLS live checks, full Vitest/E2E suite, or any application/SQL/env changes.
 
 **Status key**
 
 | Status | Meaning |
 | --- | --- |
-| COMPLETE | Required behaviour implemented in app code (local). Live DB may still need owner SQL. |
-| PARTIAL | Meaningful implementation; important RO/parity or SQL wiring missing. |
+| COMPLETE | Essential end-to-end behaviour implemented with real backend paths (and verified where noted). |
+| PARTIAL | Meaningful implementation; important business logic, SQL wiring, or edge cases missing. |
 | MISSING | Required (or clearly planned) capability absent. |
-| PLACEHOLDER | UI/copy exists without operational backend path. |
+| PLACEHOLDER | UI exists but operation is mocked, local-only, or not genuinely connected. |
 | DOCUMENTATION ONLY | Described in docs/SQL notes; no usable app path. |
-| BLOCKED | Depends on unresolved schema, provider, or policy decision. |
+| BLOCKED | Cannot ship safely without schema/provider/policy decision. |
 
-> **COMPLETE ≠ “verified on MAIN.”** Remote apply of cutover SQL is owner-gated. Features that need RPCs are noted under Dependencies.
+> **COMPLETE ≠ “every RO cutover RPC verified on MAIN.”** Features that still need owner SQL are marked PARTIAL/BLOCKED with dependency class A–D below.
+
+**Dependency classes (for unfinished items):** A = app-only · B = existing backend integration · C = DB migration/SQL · D = external service.
 
 Requirement sources: `docs/ro-app-migration.md`, §1 checklist, implementation matrix, cutover guide.
 
@@ -28,7 +30,7 @@ Requirement sources: `docs/ro-app-migration.md`, §1 checklist, implementation m
 | --- | --- | --- | --- | --- |
 | Login | COMPLETE | `pages/LoginPage`, `features/auth`, `apiAuth` | Email/password via Supabase Auth | Auth (MAIN) |
 | Registration | COMPLETE | `RegisterPage`, `RegisterForm` | Creates account + company flow | Auth |
-| Password recovery | PLACEHOLDER | `ForgotPasswordPage`, `apiAuth.FogotPasword` | UI simulates delay then “sent”; **no** `resetPasswordForEmail` (stub `console.log`) | Auth stub |
+| Password recovery | COMPLETE | `ForgotPasswordPage`, `ResetPasswordPage`, `requestPasswordReset` / `updateRecoveredPassword`, `passwordRecovery.ts`, `AuthSession`, `main.tsx` bootstrap | Real `resetPasswordForEmail` + localized `/{locale}/reset-password` `redirectTo`; user-bound recovery marker; callback rewrite if Site URL fallback; **real-world verified** (email → reset → new password → old fails → login OK) | Auth (MAIN); Dashboard redirect allow-list for path URLs recommended |
 | Auth session / invalid session logout | COMPLETE | `AuthSession`, `App.tsx` QueryClient | Signs out on invalid session | Auth |
 | MFA (enroll/verify/disable UI) | COMPLETE | `TwoFactorSettings`, `apiMfa`, hooks | Real TOTP enroll/verify/disable in code; project MFA flag still owner-ops | Auth factors |
 | User profile edit | COMPLETE | `ProfileSettings`, `apiProfiles` | Name/phone/theme | `profiles` |
@@ -188,35 +190,52 @@ Requirement sources: `docs/ro-app-migration.md`, §1 checklist, implementation m
 
 ---
 
+## Inventory & financial integrity (code evidence)
+
+| Guarantee | Verdict | Evidence |
+| --- | --- | --- |
+| Stock ↑ only after successful receiving post | **PARTIAL / UNVERIFIED on MAIN** | App drafts + calls `crm_post_goods_receipt`; client never writes `warehouse_stock` directly (`apiWarehouseOps`). RPC presence on MAIN **unverified**. |
+| Stock ↓ only after issue/write-off post | **PARTIAL / UNVERIFIED on MAIN** | Write-off via `crm_post_write_off`; order issue prefers `issue_order_materials_from_warehouse`, falls back to global `issue_order_materials` on `MissingRpcError` (toast warning). |
+| Transfers preserve total stock | **PARTIAL / UNVERIFIED on MAIN** | Depends on `crm_post_stock_transfer` semantics in prepared SQL. |
+| Returns restore stock | **PARTIAL** | Prefers `return_order_materials_to_warehouse`; global fallback if RPC missing. |
+| Concurrent qty safety | **UNVERIFIED** | Relies on server RPC transactions; not re-proven in this audit. |
+| Payments reflected in finance | **PARTIAL** | Payments ledger COMPLETE; optional `account_id` does **not** write `finance_transactions` → cash account balances may not move. |
+| Refunds / transfers | **PARTIAL** | Refunds append to `payments`; cash transfers UI exists when tables present; void **BLOCKED**. |
+| Client advances ≠ customer debt | **PARTIAL** | Settlement logic improved but still interacts with `orders.is_paid` / ledger mismatch risk. |
+
+**Do not mark warehouse/finance workflows COMPLETE for multi-warehouse integrity until owner confirms cutover RPCs on MAIN and cash-ledger linkage is wired.**
+
+---
+
 ## Backend / SQL static review
 
 ### Prepared but not claimed applied (owner cutover)
 
 See `supabase/manual/MIGRATION_CUTOVER.md`. Critical RPCs for app features:
 
-| Script | Why app needs it |
-| --- | --- |
-| `crm_ro_v1.PRODUCTION.sql` | RO tables (stock ops, statuses, public_links, activity, etc.) |
-| `…010000_crm_permitted_workspaces_deleted_at` | Soft-delete WS security |
-| `…030000_warehouse_ops_rpcs` | Post receipt/transfer/write-off |
-| `…040000_order_events_rpc` | Event writes |
-| `…070000_order_line_discounts_rpc` | Material discounts |
-| `…080000` / `…100000` | Issue/return from warehouse |
-| `…090000` / `…110000` | Public status + link mint |
-| Seeds 2.2–2.5 | Roles, statuses, locations, message templates |
-| Vehicles / expenses / warehouse baseline | Prerequisites for crm_ro_v1 / finance |
+| Script | Why app needs it | Class |
+| --- | --- | --- |
+| `crm_ro_v1.PRODUCTION.sql` | RO tables (stock ops, statuses, public_links, activity, etc.) | C |
+| `…010000_crm_permitted_workspaces_deleted_at` | Soft-delete WS security | C |
+| `…030000_warehouse_ops_rpcs` | Post receipt/transfer/write-off | C |
+| `…040000_order_events_rpc` | Event writes | C |
+| `…070000_order_line_discounts_rpc` | Material discounts | C |
+| `…080000` / `…100000` | Issue/return from warehouse | C |
+| `…090000` / `…110000` | Public status + link mint | C |
+| Seeds 2.2–2.5 | Roles, statuses, locations, message templates | C |
+| Vehicles / expenses / warehouse baseline | Prerequisites for crm_ro_v1 / finance | C |
 
 ### App ↔ schema risk patterns (code-confirmed)
 
 - **MissingRpc / MissingTable** handlers: warehouse issue/return, warehouse ops post, public links, discounts — app fails closed or falls back with warnings (not silent corruption for discounts).
 - **SELECT-only** client paths for `warehouse_stock` and event inserts (correct).
 - **Legacy permission mode** when RO permission tables absent — intentional.
-- Live RLS / column presence on MAIN: **unverified** in this audit.
+- Live RLS / column presence on MAIN: **unverified** in this audit (except password recovery Auth flow, owner-tested).
 
 ### Destructive / conflict notes
 
 - Cutover scripts are designed transactional/idempotent where documented; vehicle backfill ships `ROLLBACK` until owner commits.
-- Do not run CLI `db push` against whatever `.temp` links — CLI currently names TEST; app uses MAIN.
+- Do not run CLI `db push` against whatever `.temp` links — CLI may name TEST; app uses MAIN.
 
 ---
 
@@ -224,32 +243,32 @@ See `supabase/manual/MIGRATION_CUTOVER.md`. Critical RPCs for app features:
 
 Feature rows in sections A–H (primary statuses only; dual labels use the stricter primary):
 
-| Status | Count |
-| --- | --- |
-| COMPLETE | 39 |
-| PARTIAL | 50 |
-| MISSING | 6 |
-| PLACEHOLDER | 9 |
-| DOCUMENTATION ONLY | 1 |
-| BLOCKED | 5 |
-| **Total audited** | **110** |
+| Status | Count | Δ vs prior audit (110 rows) |
+| --- | --- | --- |
+| COMPLETE | 40 | +1 (password recovery) |
+| PARTIAL | 50 | — |
+| MISSING | 6 | — |
+| PLACEHOLDER | 8 | −1 |
+| DOCUMENTATION ONLY | 1 | — |
+| BLOCKED | 5 | — |
+| **Total audited** | **110** | — |
 
-*(Machine-recounted from §A–H tables after follow-up reconciliation. Dual labels use the stricter primary status.)*
+### Changelog vs prior audit
 
-### Follow-up corrections (2026-11-01)
+| Item | Was | Now | Evidence |
+| --- | --- | --- | --- |
+| Password recovery | PLACEHOLDER | **COMPLETE** | Real Auth APIs + localized reset route + security marker; **owner real-world email test succeeded** |
+| Warehouse / finance integrity section | (absent) | Added | Explicit UNVERIFIED/PARTIAL matrix |
+| P0.4 roadmap task | Open | Closed | See `core-app-development-roadmap.md` |
 
-From [Audit CRM and orders features](c6b501e3-383a-4cab-8b26-a4ab0bd02f11) and [Audit inventory finance reports](6952a190-e6f2-4e7a-8b27-be4c0957e78f), verified in source:
-
-- Password recovery is a **simulated** UI (`ForgotPasswordPage` delay + `FogotPasword` console.log) → **PLACEHOLDER** (was wrongly COMPLETE).
-- Warehouses/categories settings are **read-only**; estimates are **header-only** (`estimate_lines` unused); leads/bookings lack edit.
-- Payment void is schema-**BLOCKED**; payments do not move cash account balances; notification/`emailInvoices` toggles are local state only.
-- Inventory trends chart and Coming Modules badges are stubs/stale placeholders.
+Historical notes retained: warehouses/categories read-only; estimates header-only; payment void blocked; messaging dry-run; import apply blocked.
 
 ---
 
 ## Audit integrity
 
-- Source inspected: `src/App.tsx` routes, feature modules, `src/services/*`, settings, migration/import, message dispatch, public links, warehouse/orders finance paths.
+- Source inspected: `src/App.tsx` routes, auth recovery modules, feature modules, `src/services/*`, settings, migration/import, message dispatch, public links, warehouse/orders finance paths.
 - Docs cross-checked: implementation matrix, §1 checklist, security audit, cutover.
-- Deep-pass agents: CRM/Orders + Inventory/Finance/Settings (read-only); findings merged above.
-- Producing/updating these audit markdown files only; **no** application source, SQL, env, remote DB, deploy, commit, or push.
+- Password recovery: source + **owner-confirmed production email flow**.
+- Other MAIN schema/RLS claims remain **unverified** remotely.
+- This documentation refresh only; **no** application source, SQL, env, remote DB, deploy, commit, or push.

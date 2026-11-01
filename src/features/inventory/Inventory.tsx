@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Pencil, Plus, Trash2, Warehouse } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { PageHeader } from "../../pages/PageHeader";
@@ -28,12 +28,13 @@ import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
 import { quantityClass } from "./inventoryDisplay";
 import { StockAttentionPanel } from "./StockAttentionPanel";
 import { CategoriesPanel } from "./CategoriesPanel";
-import { WarehouseOpsPanel } from "./WarehouseOpsPanel";
 import { effectiveStockStatus } from "./stockStatus";
 import { industryInventoryCopy, industryInventoryItemCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
+import { languageFromPath } from "../../i18n/languages";
+import { Card, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 
 /** Fixed sort for the attention query so it stays cacheable while the table sort changes. */
 const attentionSort: InventorySort = { field: "quantity", ascending: true };
@@ -53,6 +54,8 @@ const sortOptions: { value: string; labelKey: SortLabelKey; field: InventorySort
 export function Inventory() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { workspaceId } = useActiveWorkspaceId();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
@@ -242,7 +245,29 @@ export function Inventory() {
 
       <CategoriesPanel />
 
-      <WarehouseOpsPanel />
+      <Card>
+        <CardHeader className="gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Warehouse className="size-4" aria-hidden />
+              {t("warehouses.inventoryLink.title")}
+            </CardTitle>
+            <CardDescription>{t("warehouses.inventoryLink.description")}</CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              const locale = languageFromPath(location.pathname);
+              navigate(`/${locale}/${workspaceId}/warehouses`);
+            }}
+          >
+            {t("warehouses.inventoryLink.open")}
+          </Button>
+        </CardHeader>
+      </Card>
 
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
         <SearchAndFilters

@@ -132,6 +132,22 @@ export function installIssueFromWarehouseRpc() {
       const stock = ctx.fake.all("warehouse_stock").find((row) => row.warehouse_id === warehouse.id && row.inventory_item_id === itemId);
       if (!stock || Number(stock.quantity) < quantity) return rollback("insufficient_warehouse_stock");
 
+      const batches = ctx.fake
+        .all("stock_batches")
+        .filter((row) => row.warehouse_id === warehouse.id && row.inventory_item_id === itemId && Number(row.quantity_left) > 0)
+        .sort((a, b) => String(a.received_at ?? a.created_at ?? "").localeCompare(String(b.received_at ?? b.created_at ?? "")) || String(a.id).localeCompare(String(b.id)));
+      if (batches.length > 0) {
+        const batchSum = batches.reduce((sum, row) => sum + Number(row.quantity_left), 0);
+        if (batchSum < quantity) return rollback("insufficient_batch_stock");
+        let left = quantity;
+        for (const batch of batches) {
+          if (left <= 0) break;
+          const take = Math.min(Number(batch.quantity_left), left);
+          batch.quantity_left = Number(batch.quantity_left) - take;
+          left -= take;
+        }
+      }
+
       item.quantity = Number(item.quantity) - quantity;
       stock.quantity = Number(stock.quantity) - quantity;
       line.quantity_issued = Number(line.quantity_issued ?? 0) + quantity;

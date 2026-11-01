@@ -1,5 +1,5 @@
 import i18n from "../i18n";
-import { isMissingTableError } from "./apiWarehouses";
+import { isMissingTableError } from "./missingTable";
 import supabase from "./supabase";
 
 export type CategoryScope = "service" | "product" | "bundle";
