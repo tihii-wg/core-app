@@ -1,6 +1,22 @@
-import type { AddNewEmployeesFormData, EmployeeRole } from "../lib/types";
+import type { AddNewEmployeesFormData, Employee, EmployeeRole, UpdateEmployeeInput } from "../lib/types";
 import i18n from "../i18n";
 import supabase from "./supabase";
+
+function toEmployee(row: Record<string, unknown>): Employee {
+  const role = row.role;
+  const status = row.status === "inactive" ? "inactive" : "active";
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    email: String(row.email ?? ""),
+    phone: String(row.phone ?? ""),
+    role: role === "admin" || role === "manager" || role === "technician" || role === "receptionist" ? role : "technician",
+    status,
+    profile_id: row.profile_id == null || row.profile_id === "" ? null : String(row.profile_id),
+    assignedTasks: Number(row.assignedTasks ?? row.assigned_tasks ?? 0) || 0,
+    completedTasks: Number(row.completedTasks ?? row.completed_tasks ?? 0) || 0,
+  };
+}
 
 async function requireActiveWorkspaceMember(workspaceId: string, userId: string) {
   const { data, error } = await supabase
@@ -62,6 +78,48 @@ export async function getEmployees(search: string, roleFilter: EmployeeRole | nu
   if (error) throw new Error(error.message);
 
   return employees ?? [];
+}
+
+/**
+ * Updates employee contact/role/status in the active workspace.
+ * Does not change workspace_id or profile_id (Auth link stays untouched).
+ * Does not rewrite historical orders or related records.
+ */
+export async function updateEmployee(
+  { employeeId, name, email, phone, role, status }: UpdateEmployeeInput,
+  workspaceId: string | undefined,
+) {
+  if (!workspaceId) throw new Error(i18n.t("employees.errors.noActiveWorkspace"));
+  const id = employeeId.trim();
+  if (!id) throw new Error(i18n.t("employees.errors.notFoundOrForbidden"));
+
+  const trimmedName = name.trim();
+  if (!trimmedName) throw new Error(i18n.t("employees.form.nameRequired"));
+  if (role !== "admin" && role !== "manager" && role !== "technician" && role !== "receptionist") {
+    throw new Error(i18n.t("employees.form.roleRequired"));
+  }
+  if (status !== "active" && status !== "inactive") {
+    throw new Error(i18n.t("employees.errors.notFoundOrForbidden"));
+  }
+
+  const { data, error } = await supabase
+    .from("employees")
+    .update({
+      name: trimmedName,
+      email: email.trim(),
+      phone: phone.trim(),
+      role,
+      status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(i18n.t("employees.errors.notFoundOrForbidden"));
+  return toEmployee(data as Record<string, unknown>);
 }
 
 /**

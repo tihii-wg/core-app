@@ -43,6 +43,20 @@ vi.mock("./AddNewEmployeesForm", () => ({
   default: () => <div>Create form</div>,
 }));
 
+vi.mock("./EditEmployeeForm", () => ({
+  default: ({ employee }: { employee: Employee }) => <div>Edit form for {employee.name}</div>,
+}));
+
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useWorkspaceSubscription: () => ({ canWrite: true, isEntitlementPending: false }),
+  useGuardSubscriptionWrite: () => () => undefined,
+  SubscriptionReadOnlyNotice: () => null,
+}));
+
+vi.mock("../workspaces/SubscriptionReadOnlyNotice", () => ({
+  SubscriptionReadOnlyNotice: () => null,
+}));
+
 function employee(partial: Partial<Employee> = {}): Employee {
   return {
     id: "emp-1",
@@ -167,5 +181,24 @@ describe("Employees", () => {
     expect(
       await screen.findByText(/Inactive employees stay on historical assignments but are not offered for new order assignments/i),
     ).toBeInTheDocument();
+  });
+
+  it("opens the edit dialog from the pencil without opening the detail panel", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    employeeHooks.employees = [
+      employee({ id: "emp-1", name: "Ada Tech", profile_id: null }),
+      employee({ id: "emp-2", name: "Bob Idle", status: "inactive" }),
+    ];
+
+    renderWithQuery(<Employees />);
+
+    expect(screen.getByRole("button", { name: "Edit employee Ada Tech" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit employee Bob Idle" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit employee Ada Tech" }));
+
+    expect(await screen.findByText("Edit Employee")).toBeInTheDocument();
+    expect(screen.getByText("Edit form for Ada Tech")).toBeInTheDocument();
+    expect(screen.queryByText("Current workload")).not.toBeInTheDocument();
   });
 });

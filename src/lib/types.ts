@@ -567,6 +567,19 @@ export type CreateEmployeeData = AddNewEmployeesFormData & {
   profile_id: string | null;
 };
 
+/** Editable employee fields. Does not include workspace_id or profile_id. */
+export type EditEmployeeFormData = {
+  name: string;
+  email: string;
+  phone: string;
+  role: EmployeeRole;
+  status: "active" | "inactive";
+};
+
+export type UpdateEmployeeInput = EditEmployeeFormData & {
+  employeeId: string;
+};
+
 export type Industry = {
   id: string;
   name: string;

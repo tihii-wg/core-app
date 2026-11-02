@@ -9,6 +9,8 @@ const employees: Messages<typeof en> = {
   memberCount_many: "{{count}} сотрудников",
   memberCount_other: "{{count}} сотрудника",
   addEmployee: "Добавить сотрудника",
+  editEmployee: "Редактировать сотрудника",
+  editEmployeeLabel: "Редактировать сотрудника {{name}}",
   searchPlaceholder: "Поиск сотрудников...",
   loadError: "Не удалось загрузить сотрудников",
   roles: {
@@ -48,6 +50,8 @@ const employees: Messages<typeof en> = {
   dialogs: {
     createTitle: "Новый сотрудник",
     createDescription: "Заполните данные сотрудника.",
+    editTitle: "Редактировать сотрудника",
+    editDescription: "Измените данные выбранного сотрудника.",
   },
   delete: {
     title: "Удалить сотрудника",
@@ -81,6 +85,7 @@ const employees: Messages<typeof en> = {
     membersLoadError: "Не удалось загрузить участников рабочего пространства",
     linkedUserHint: "При необходимости свяжите учётную запись рабочего пространства, под которой входит этот сотрудник. Активных техников можно назначать на заказы и без связанного входа.",
     profileNotFound: "Профиль не найден",
+    editUnlinkedHint: "У этого сотрудника нет связанной учётной записи. Редактирование не создаёт её и не требует её.",
   },
   detail: {
     contactInformation: "Контактная информация",
@@ -100,6 +105,8 @@ const employees: Messages<typeof en> = {
   toast: {
     creating: "Создание сотрудника",
     created: "Сотрудник успешно создан",
+    updating: "Обновление сотрудника...",
+    updated: "Сотрудник успешно обновлён",
     genericError: "Что-то пошло не так",
     deleting: "Удаление сотрудника...",
     deleted: "Сотрудник успешно деактивирован",

@@ -4,6 +4,8 @@ export default {
   memberCount_one: "{{count}} team members",
   memberCount_other: "{{count}} team members",
   addEmployee: "Add Employee",
+  editEmployee: "Edit employee",
+  editEmployeeLabel: "Edit employee {{name}}",
   searchPlaceholder: "Search employees...",
   loadError: "Could not load employees",
   roles: {
@@ -43,6 +45,8 @@ export default {
   dialogs: {
     createTitle: "Add New Employee",
     createDescription: "Fill in the employee information below.",
+    editTitle: "Edit Employee",
+    editDescription: "Update the selected employee's details.",
   },
   delete: {
     title: "Delete employee",
@@ -76,6 +80,7 @@ export default {
     membersLoadError: "Workspace members could not be loaded",
     linkedUserHint: "Optionally link the workspace account this employee signs in with. Active technicians can be assigned to orders without a linked login.",
     profileNotFound: "Profile not found",
+    editUnlinkedHint: "This employee has no linked login account. Editing does not create or require one.",
   },
   detail: {
     contactInformation: "Contact Information",
@@ -95,6 +100,8 @@ export default {
   toast: {
     creating: "Creating employee",
     created: "Employee created succesfully",
+    updating: "Updating employee...",
+    updated: "Employee updated successfully",
     genericError: "Somthing went wrong",
     deleting: "Deleting employee...",
     deleted: "Employee deactivated successfully",

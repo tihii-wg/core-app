@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient, getClients, updateClient } from "../../services/apiClients";
-import { createEmployee, getEmployees } from "../../services/apiEmployees";
+import { createEmployee, getEmployees, updateEmployee } from "../../services/apiEmployees";
 import { fake } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
 
@@ -152,5 +152,69 @@ describe("employees", () => {
     await expect(getEmployees("", null, undefined)).rejects.toThrow("No active workspace");
     fake.failNext("employees", "select", { code: "PGRST000", message: "offline" });
     await expect(getEmployees("", null, WS.A)).rejects.toThrow("offline");
+  });
+
+  it("updates an existing employee without creating a duplicate or touching profile_id", async () => {
+    const created = await createEmployee({
+      name: "Una Unlinked",
+      email: "una@example.com",
+      phone: "+37362222223",
+      role: "technician",
+      status: "inactive",
+      workspace_id: WS.A,
+      profile_id: null,
+    });
+    const id = String(created?.[0].id);
+    const beforeCount = fake.all("employees").length;
+
+    const updated = await updateEmployee(
+      {
+        employeeId: id,
+        name: "Una Updated",
+        email: "una.updated@example.com",
+        phone: "+37362222224",
+        role: "manager",
+        status: "inactive",
+      },
+      WS.A,
+    );
+
+    expect(updated).toMatchObject({
+      id,
+      name: "Una Updated",
+      email: "una.updated@example.com",
+      phone: "+37362222224",
+      role: "manager",
+      status: "inactive",
+      profile_id: null,
+    });
+    expect(fake.all("employees")).toHaveLength(beforeCount);
+    expect(row("employees", id)).toMatchObject({
+      workspace_id: WS.A,
+      profile_id: null,
+      status: "inactive",
+      name: "Una Updated",
+    });
+    const request = fake.requests.find((item) => item.table === "employees" && item.op === "update");
+    expect(request?.values).not.toHaveProperty("workspace_id");
+    expect(request?.values).not.toHaveProperty("profile_id");
+    expect(request?.filters).toEqual([`id=eq.${id}`, `workspace_id=eq.${WS.A}`]);
+  });
+
+  it("refuses updating an employee from another workspace", async () => {
+    await expect(
+      updateEmployee(
+        {
+          employeeId: "employee-b1",
+          name: "Hacker",
+          email: "hack@example.com",
+          phone: "+37360000000",
+          role: "technician",
+          status: "active",
+        },
+        WS.A,
+      ),
+    ).rejects.toThrow(/not found|permission|row-level security/i);
+    expect(row("employees", "employee-b1")?.name).not.toBe("Hacker");
   });
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Phone } from "lucide-react";
+import { Mail, Pencil, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Employee, EmployeeRole } from "../../lib/types";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
@@ -8,6 +8,7 @@ import { Button } from "../../ui/Button";
 import { cn } from "../../lib/utils";
 import type { EmployeeWorkloadCounts } from "./employeeWorkload";
 import { DeleteEmployeeDialog } from "./DeleteEmployeeDialog";
+import EditEmployeeForm from "./EditEmployeeForm";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 
 type EmployeeDetailPanelProps = {
@@ -16,6 +17,7 @@ type EmployeeDetailPanelProps = {
   selectedEmployee: Employee | null;
   roleLabels: Record<EmployeeRole, string>;
   workload: EmployeeWorkloadCounts;
+  onEmployeeUpdated?: (employee: Employee) => void;
   onEmployeeDeleted?: (employeeId: string) => void;
 };
 
@@ -25,15 +27,23 @@ export default function EmployeeDetailPanel({
   selectedEmployee,
   roleLabels,
   workload,
+  onEmployeeUpdated,
   onEmployeeDeleted,
 }: EmployeeDetailPanelProps) {
   const { t } = useTranslation();
   const { canWrite: canMutateEmployees } = useWorkspaceSubscription();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const inactive = selectedEmployee?.status === "inactive";
 
   return (
-    <Sheet open={detailPanelOpen} onOpenChange={setDetailPanelOpen}>
+    <Sheet
+      open={detailPanelOpen}
+      onOpenChange={(open) => {
+        if (!open) setIsEditing(false);
+        setDetailPanelOpen(open);
+      }}
+    >
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle className="flex min-w-0 items-center gap-3">
@@ -49,10 +59,35 @@ export default function EmployeeDetailPanel({
               {selectedEmployee?.name}
             </span>
           </SheetTitle>
+          {selectedEmployee && canMutateEmployees && !isEditing ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              aria-label={t("employees.editEmployeeLabel", { name: selectedEmployee.name })}
+              title={t("employees.editEmployee")}
+              className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
+            >
+              <Pencil className="size-4" />
+            </button>
+          ) : null}
           <SheetDescription className="sr-only">{t("employees.detail.panelDescription")}</SheetDescription>
         </SheetHeader>
 
-        {selectedEmployee && (
+        {selectedEmployee && isEditing ? (
+          <div className="px-5 py-5">
+            <EditEmployeeForm
+              key={selectedEmployee.id}
+              employee={selectedEmployee}
+              onCancel={() => setIsEditing(false)}
+              onUpdated={(employee) => {
+                onEmployeeUpdated?.(employee);
+                setIsEditing(false);
+              }}
+            />
+          </div>
+        ) : null}
+
+        {selectedEmployee && !isEditing && (
           <div className="space-y-6 px-5 py-5">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge variant="info">{roleLabels[selectedEmployee.role]}</StatusBadge>

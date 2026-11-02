@@ -8,6 +8,8 @@ const employees: Messages<typeof en> = {
   memberCount_few: "{{count}} membri ai echipei",
   memberCount_other: "{{count}} de membri ai echipei",
   addEmployee: "Adaugă angajat",
+  editEmployee: "Editează angajatul",
+  editEmployeeLabel: "Editează angajatul {{name}}",
   searchPlaceholder: "Caută angajați...",
   loadError: "Angajații nu au putut fi încărcați",
   roles: {
@@ -47,6 +49,8 @@ const employees: Messages<typeof en> = {
   dialogs: {
     createTitle: "Adaugă angajat nou",
     createDescription: "Completează mai jos informațiile despre angajat.",
+    editTitle: "Editează angajatul",
+    editDescription: "Actualizează datele angajatului selectat.",
   },
   delete: {
     title: "Șterge angajatul",
@@ -80,6 +84,7 @@ const employees: Messages<typeof en> = {
     membersLoadError: "Membrii spațiului de lucru nu au putut fi încărcați",
     linkedUserHint: "Opțional, asociază contul din spațiul de lucru cu care se autentifică acest angajat. Tehnicienii activi pot fi atribuiți comenzilor și fără cont asociat.",
     profileNotFound: "Profilul nu a fost găsit",
+    editUnlinkedHint: "Acest angajat nu are un cont de autentificare asociat. Editarea nu creează și nu necesită unul.",
   },
   detail: {
     contactInformation: "Date de contact",
@@ -99,6 +104,8 @@ const employees: Messages<typeof en> = {
   toast: {
     creating: "Se creează angajatul",
     created: "Angajatul a fost creat cu succes",
+    updating: "Se actualizează angajatul...",
+    updated: "Angajatul a fost actualizat cu succes",
     genericError: "Ceva nu a funcționat",
     deleting: "Se șterge angajatul...",
     deleted: "Angajatul a fost dezactivat cu succes",

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, UserRoundX } from "lucide-react";
+import { Pencil, Plus, UserRoundX } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PageHeader } from "../../pages/PageHeader";
@@ -9,6 +9,7 @@ import { DataTable, type Column } from "../../ui/DataTable";
 import { StatusBadge } from "../../ui/StatusBadge";
 import type { Employee, EmployeeRole } from "../../lib/types";
 import AddNewEmployeesForm from "./AddNewEmployeesForm";
+import EditEmployeeForm from "./EditEmployeeForm";
 import EmployeeDetailPanel from "./EmployeeDetailPanel";
 import useGetEmployees from "./useGetEmployees";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -50,6 +51,7 @@ export function Employees() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
   const today = localDateKey(new Date());
   const roster = employees ?? emptyEmployees;
@@ -147,12 +149,43 @@ export function Employees() {
       },
       className: "hidden md:table-cell text-right whitespace-nowrap",
     },
+    ...(canMutateEmployees
+      ? [
+          {
+            key: "actions",
+            header: t("common.actions"),
+            className: "w-[72px] text-right",
+            cell: (emp: Employee) => (
+              <div className="flex justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("employees.editEmployeeLabel", { name: emp.name })}
+                  title={t("employees.editEmployee")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setEditingEmployee(emp);
+                  }}
+                >
+                  <Pencil />
+                </Button>
+              </div>
+            ),
+          } satisfies Column<Employee>,
+        ]
+      : []),
   ];
 
   const handleRowClick = (emp: Employee) => {
     setSelectedEmployee(emp);
     setDetailPanelOpen(true);
   };
+
+  function handleEmployeeUpdated(employee: Employee) {
+    setSelectedEmployee((current) => (current?.id === employee.id ? { ...current, ...employee } : current));
+    setEditingEmployee(null);
+  }
 
   return (
     <div className="space-y-5">
@@ -270,12 +303,35 @@ export function Employees() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={Boolean(editingEmployee)}
+        onOpenChange={(open) => {
+          if (!open) setEditingEmployee(null);
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("employees.dialogs.editTitle")}</DialogTitle>
+            <DialogDescription>{t("employees.dialogs.editDescription")}</DialogDescription>
+          </DialogHeader>
+          {editingEmployee ? (
+            <EditEmployeeForm
+              key={editingEmployee.id}
+              employee={editingEmployee}
+              onCancel={() => setEditingEmployee(null)}
+              onUpdated={handleEmployeeUpdated}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <EmployeeDetailPanel
         detailPanelOpen={detailPanelOpen}
         setDetailPanelOpen={setDetailPanelOpen}
         selectedEmployee={selectedEmployee}
         roleLabels={roleLabels}
         workload={selectedWorkload}
+        onEmployeeUpdated={handleEmployeeUpdated}
         onEmployeeDeleted={(employeeId) => {
           setSelectedEmployee((current) => {
             if (!current || current.id !== employeeId) return current;
