@@ -41,7 +41,8 @@ export function alreadyInvoicedMessage(invoiceNumber?: string) {
 const invoiceStatuses = new Set<InvoiceStatus>(["draft", "sent", "paid", "overdue"]);
 const invoiceColumns =
   "id, workspace_id, order_id, client_id, number, status, client_name, order_number, device, car_number, vin, description, subtotal, total, due_date, paid_at, created_by, created_at, updated_at";
-const invoiceListColumns = `${invoiceColumns},clients(phone)`;
+// Disambiguate: invoices has two FKs to clients (client_id + payer_client_id from crm_ro_v1).
+const invoiceListColumns = `${invoiceColumns},clients!invoices_client_id_fkey(phone)`;
 const invoiceItemColumns = "id, invoice_id, service_id, service_name, price, quantity, position, created_at";
 
 function text(value: unknown) {
