@@ -208,6 +208,7 @@ const orders: Messages<typeof en> = {
     createNewMaterial: "+ Создать новый материал",
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Доступный остаток",
+    receiveStock: "Оприходовать на склад",
     availableStockValue: "{{count}} {{unit}} на складе",
     quantityLabel: "Количество",
     quantityForMaterial: "Количество для {{name}}",

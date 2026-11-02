@@ -205,6 +205,7 @@ const orders: Messages<typeof en> = {
     createNewMaterial: "+ Creează material nou",
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Stoc disponibil",
+    receiveStock: "Recepționează stoc în depozit",
     availableStockValue: "{{count}} {{unit}} în stoc",
     quantityLabel: "Cantitate",
     quantityForMaterial: "Cantitate pentru {{name}}",

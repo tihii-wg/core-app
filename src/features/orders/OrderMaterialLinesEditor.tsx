@@ -10,6 +10,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { AddInventoryItemDialog } from "../inventory/AddInventoryItemDialog";
 import InventoryItemCombobox from "../inventory/InventoryItemCombobox";
+import { QuickGoodsReceiptDialog } from "../inventory/QuickGoodsReceiptDialog";
 import {
   catalogItemToOrderMaterial,
   freeformOrderMaterial,
@@ -17,8 +18,10 @@ import {
   parseOrderMaterialQuantity,
   resolveMaterialSupplySource,
 } from "../inventory/orderMaterialLine";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { orderLineAmount } from "../services/orderServiceLine";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
 
 type MaterialsFormSlice = { materials: OrderMaterial[] };
 
@@ -78,14 +81,22 @@ export default function OrderMaterialLinesEditor({
 }: OrderMaterialLinesEditorProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
+  const { data: warehouses = [] } = useGetWarehouses();
+  const { supported: freeformSupported, ready: freeformReady } = useOrderMaterialFreeformSupport();
+  const canReceiveStock = warehouses.some((warehouse) => warehouse.isActive);
   const watched = useWatch({ control, name: "materials" });
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialName, setCreateInitialName] = useState("");
+  const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
+  const [receiveDefaultQty, setReceiveDefaultQty] = useState(1);
   const [addMode, setAddMode] = useState<AddMode>("catalog");
   const [freeName, setFreeName] = useState("");
   const [freePrice, setFreePrice] = useState("0");
   const [freeQty, setFreeQty] = useState("1");
   const [freeError, setFreeError] = useState("");
+
+  // Stay on catalog when freeform is unavailable on this database (PART E not applied).
+  const effectiveAddMode: AddMode = !freeformSupported && addMode !== "catalog" ? "catalog" : addMode;
 
   function adjustQuantity(index: number, delta: number) {
     const current = parseOrderMaterialQuantity(getValues(`materials.${index}.quantity`)) ?? 0;
@@ -103,12 +114,28 @@ export default function OrderMaterialLinesEditor({
     append(catalogItemToOrderMaterial(item, 1));
   }
 
+  function handleCreated(item: InventoryItem) {
+    handleSelect(item);
+    // Optional receive step — never forced. Only offered when warehouses exist.
+    if (canReceiveStock) {
+      setReceiveDefaultQty(1);
+      setReceiveItem(item);
+    }
+  }
+
+  function openReceiveForLine(item: InventoryItem, quantity: number) {
+    if (!canReceiveStock || disabled) return;
+    setReceiveDefaultQty(quantity > 0 ? quantity : 1);
+    setReceiveItem(item);
+  }
+
   function handleCreateRequest(searchQuery: string) {
     setCreateInitialName(searchQuery);
     setCreateOpen(true);
   }
 
   function handleAddOneTimeRequest(searchQuery: string) {
+    if (!freeformSupported) return;
     setAddMode("one_time");
     setFreeName(searchQuery);
     setFreePrice("0");
@@ -146,30 +173,36 @@ export default function OrderMaterialLinesEditor({
             ["one_time", "orders.form.materialSourceOneTime"],
             ["customer", "orders.form.materialSourceCustomer"],
           ] as const
-        ).map(([mode, labelKey]) => (
-          <Button
-            key={mode}
-            type="button"
-            size="sm"
-            variant={addMode === mode ? "default" : "outline"}
-            disabled={disabled}
-            onClick={() => {
-              setAddMode(mode);
-              setFreeError("");
-            }}
-          >
-            {t(labelKey)}
-          </Button>
-        ))}
+        )
+          .filter(([mode]) => mode === "catalog" || freeformSupported)
+          .map(([mode, labelKey]) => (
+            <Button
+              key={mode}
+              type="button"
+              size="sm"
+              variant={effectiveAddMode === mode ? "default" : "outline"}
+              disabled={disabled || (mode !== "catalog" && !freeformReady)}
+              onClick={() => {
+                setAddMode(mode);
+                setFreeError("");
+              }}
+            >
+              {t(labelKey)}
+            </Button>
+          ))}
       </div>
 
-      {addMode === "catalog" ? (
+      {freeformReady && !freeformSupported ? (
+        <p className="text-xs text-muted-foreground">{t("orders.errors.freeformMaterialsUnsupported")}</p>
+      ) : null}
+
+      {effectiveAddMode === "catalog" ? (
         <>
           <InventoryItemCombobox
             items={inventoryItems}
             onSelect={handleSelect}
             onCreateRequest={disabled ? undefined : handleCreateRequest}
-            onAddOneTimeRequest={disabled ? undefined : handleAddOneTimeRequest}
+            onAddOneTimeRequest={disabled || !freeformSupported ? undefined : handleAddOneTimeRequest}
             errors={!!errors?.root}
           />
           <p className="text-xs text-muted-foreground">{t("orders.form.materialsRequestHint")}</p>
@@ -177,13 +210,13 @@ export default function OrderMaterialLinesEditor({
             open={createOpen}
             onOpenChange={setCreateOpen}
             initialName={createInitialName}
-            onCreated={handleSelect}
+            onCreated={handleCreated}
           />
         </>
       ) : (
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-xs text-muted-foreground">
-            {addMode === "customer" ? t("orders.form.customerPartHint") : t("orders.form.oneTimePartHint")}
+            {effectiveAddMode === "customer" ? t("orders.form.customerPartHint") : t("orders.form.oneTimePartHint")}
           </p>
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="space-y-1 sm:col-span-2">
@@ -211,7 +244,7 @@ export default function OrderMaterialLinesEditor({
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="free-material-price">
-                {addMode === "customer" ? t("orders.form.customerPartPrice") : t("orders.form.oneTimePartPrice")}
+                {effectiveAddMode === "customer" ? t("orders.form.customerPartPrice") : t("orders.form.oneTimePartPrice")}
               </Label>
               <Input
                 id="free-material-price"
@@ -228,7 +261,7 @@ export default function OrderMaterialLinesEditor({
               <Button
                 type="button"
                 disabled={disabled}
-                onClick={() => addFreeformLine(addMode === "customer" ? "customer" : "one_time")}
+                onClick={() => addFreeformLine(effectiveAddMode === "customer" ? "customer" : "one_time")}
               >
                 {t("orders.form.addFreeformLine")}
               </Button>
@@ -324,6 +357,23 @@ export default function OrderMaterialLinesEditor({
                         {t("orders.form.availableStock")}: <span className="tabular-nums">{stock}</span>
                       </p>
                     )}
+                    {catalog && canReceiveStock ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto px-0 text-xs"
+                        disabled={disabled}
+                        onClick={() => {
+                          const catalogItem = inventoryItems.find(
+                            (entry) => entry.id === (line?.inventoryItemId ?? field.inventoryItemId),
+                          );
+                          if (catalogItem) openReceiveForLine(catalogItem, parsedQty ?? 1);
+                        }}
+                      >
+                        {t("orders.form.receiveStock")}
+                      </Button>
+                    ) : null}
                   </div>
                   <Button
                     type="button"
@@ -405,6 +455,15 @@ export default function OrderMaterialLinesEditor({
           })}
         </div>
       )}
+
+      <QuickGoodsReceiptDialog
+        open={Boolean(receiveItem)}
+        onOpenChange={(next) => {
+          if (!next) setReceiveItem(null);
+        }}
+        item={receiveItem}
+        defaultQuantity={receiveDefaultQty}
+      />
     </div>
   );
 }

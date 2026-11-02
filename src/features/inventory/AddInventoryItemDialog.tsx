@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { InventoryItem } from "../../lib/types";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
-import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import InventoryItemForm from "./InventoryItemForm";
 import { DEFAULT_INVENTORY_MIN_QUANTITY } from "./inventoryDefaults";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
@@ -39,8 +38,7 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
   const inventoryCopy = industryInventoryCopy(workflow);
   const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
-  const { data: warehouses = [], isSuccess: warehousesLoaded } = useGetWarehouses();
-  const lockQuantity = warehousesLoaded && warehouses.length > 0;
+  // Create always starts at zero stock — warehouses optional; receipt is a separate step.
   const formKey = open ? `create-${initialName}` : "closed";
 
   return (
@@ -64,12 +62,12 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
             markupPercent={markupPercent}
             submitLabel={inventoryCopy.addItem}
             isSubmitting={isCreating}
-            lockQuantity={lockQuantity}
+            lockQuantity
             isCreate
             onCancel={() => onOpenChange(false)}
             onMarkupCommit={commitMarkup}
             onSubmit={(data) => {
-              createItem({ ...data, quantity: lockQuantity ? 0 : data.quantity }, {
+              createItem({ ...data, quantity: 0 }, {
                 onSuccess: (item) => {
                   onCreated?.(item);
                   onOpenChange(false);

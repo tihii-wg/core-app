@@ -79,6 +79,16 @@ export default {
     toast: {
       created: "Draft saved",
       posted: "Document posted — stock updated",
+      received: "Stock received — warehouse quantity updated",
+    },
+    quickReceipt: {
+      title: "Receive into warehouse",
+      description: "Record incoming stock for this catalog item. Stock increases only after the receipt is posted.",
+      currentStock: "Current stock: {{count}} {{unit}}",
+      commentPlaceholder: "Optional note",
+      postHint: "Creates a goods receipt and posts it immediately using the same warehouse operations as Inventory → Warehouses.",
+      receive: "Receive stock",
+      receiving: "Receiving...",
     },
     fields: {
       warehouse: "Warehouse",

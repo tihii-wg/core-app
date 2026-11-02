@@ -1,0 +1,180 @@
+{
+  "prefix": "QA_E2E_20261102_",
+  "workspaceId": "cdbf8d72-28d7-4b94-8b76-738108d4bed1",
+  "workspaceName": "Sans",
+  "appUrl": "http://localhost:5173",
+  "projectRef": "pundggjzzaqzbvykbxvo",
+  "authEmail": "vladimirpodolian@gmail.com",
+  "created": [
+    {
+      "type": "client_individual",
+      "id": "d28e2d2f-5147-40f7-9578-5541b8a12507",
+      "name": "QA_E2E_20261102_Individual_A",
+      "phone": "+37361102001"
+    },
+    {
+      "type": "client_individual",
+      "id": "8060a12c-c599-4dc8-96f0-340ab9e8443f",
+      "name": "QA_E2E_20261102_Individual_B",
+      "phone": "+37361102002"
+    },
+    {
+      "type": "client_organization",
+      "id": "71eb323b-5c0a-45b7-b1df-e665d23f9d86",
+      "name": "QA_E2E_20261102_Org_A SRL"
+    },
+    {
+      "type": "service",
+      "id": "5ae1bbc4-d84f-4676-8f09-2232789621a1",
+      "name": "QA_E2E_20261102_Service_Oil",
+      "price": 350
+    },
+    {
+      "type": "order",
+      "id": "f9768b39-f924-4ece-bcee-f3481a3fd5a1",
+      "number": "ORD-2026-001",
+      "clientId": "d28e2d2f-5147-40f7-9578-5541b8a12507",
+      "total": 350,
+      "notes": "services-only"
+    },
+    {
+      "type": "inventory_item",
+      "id": "6a513d59-5c07-4a07-a236-8ef8e0cf5674",
+      "name": "QA_E2E_20261102_Oil_Filter",
+      "sku": "QA-OF-001",
+      "quantity": 10,
+      "selling_price": 80,
+      "purchase_price": 50
+    },
+    {
+      "type": "order",
+      "id": "5cb74571-55f0-45df-a2c7-7b297f89e826",
+      "number": "ORD-2026-002",
+      "clientId": "8060a12c-c599-4dc8-96f0-340ab9e8443f",
+      "total": 430,
+      "notes": "service+catalog material Oil_Filter qty1; stock unchanged at create"
+    },
+    {
+      "type": "order",
+      "id": "6b4ed907-1c9f-4552-9f67-5528dc578a8d",
+      "number": "ORD-2026-003",
+      "clientId": "71eb323b-5c0a-45b7-b1df-e665d23f9d86",
+      "total": 350,
+      "notes": "org services-only"
+    }
+  ],
+  "results": [
+    {
+      "scenario": "Auth + workspace Sans on MAIN pundggjzzaqzbvykbxvo",
+      "result": "PASS",
+      "detail": "vladimirpodolian@gmail.com"
+    },
+    {
+      "scenario": "Create individual client A",
+      "result": "PASS",
+      "id": "d28e2d2f-5147-40f7-9578-5541b8a12507"
+    },
+    {
+      "scenario": "Create individual client B",
+      "result": "PASS",
+      "id": "8060a12c-c599-4dc8-96f0-340ab9e8443f"
+    },
+    {
+      "scenario": "Create organization client Org A SRL",
+      "result": "PASS",
+      "id": "71eb323b-5c0a-45b7-b1df-e665d23f9d86"
+    },
+    {
+      "scenario": "Create service Oil 350",
+      "result": "PASS",
+      "id": "5ae1bbc4-d84f-4676-8f09-2232789621a1"
+    },
+    {
+      "scenario": "Create order ORD-2026-001 services-only for Individual_A",
+      "result": "PASS",
+      "id": "f9768b39-f924-4ece-bcee-f3481a3fd5a1",
+      "detail": "total 350, reopen OK"
+    },
+    {
+      "scenario": "Create order with one-time (freeform) material on MAIN",
+      "result": "FAIL",
+      "detail": "UI accepts line; sync_order_materials RPC 400 code 22023 message inventory_item_id is required; order insert rolled back. PART E SQL not applied on MAIN."
+    },
+    {
+      "scenario": "Create order with customer-supplied material on MAIN",
+      "result": "FAIL",
+      "detail": "UI accepts line; sync_order_materials RPC 400 code 22023 message inventory_item_id is required; order rolled back. Same PART E block as one-time."
+    },
+    {
+      "scenario": "Create inventory QA Oil Filter qty 10 sell 80",
+      "result": "PASS",
+      "id": "6a513d59-5c07-4a07-a236-8ef8e0cf5674"
+    },
+    {
+      "scenario": "Create order ORD-2026-002 service+catalog material for Individual_B",
+      "result": "PASS",
+      "id": "5cb74571-55f0-45df-a2c7-7b297f89e826",
+      "detail": "total 430; order_materials=1; inventory qty remains 10 (no auto-issue)"
+    },
+    {
+      "scenario": "Create order ORD-2026-003 services-only for Org_A SRL",
+      "result": "PASS",
+      "id": "6b4ed907-1c9f-4552-9f67-5528dc578a8d",
+      "detail": "total 350; unpaid header sum became MDL 1130"
+    },
+    {
+      "scenario": "Finance unpaid total on orders list",
+      "result": "PASS",
+      "detail": "UI shows Ожидает оплаты MDL 1 130,00 for 3 unpaid QA orders (350+430+350)"
+    },
+    {
+      "scenario": "Reopen ORD-2026-002 detail panel",
+      "result": "PASS",
+      "detail": "client B, total 430, catalog Oil_Filter line visible, issued 0 before issue"
+    },
+    {
+      "scenario": "Issue 1x catalog Oil_Filter from ORD-2026-002",
+      "result": "PASS",
+      "detail": "issue_order_materials RPC 200; quantity_issued=1; inventory quantity 10->9; UI Полностью выдано"
+    },
+    {
+      "scenario": "FIFO stock_batches after UI inventory create+issue",
+      "result": "BLOCKED",
+      "detail": "No stock_batches rows for QA Oil_Filter; warehouse_stock empty. Simple inventory create set inventory_items.quantity only. Cannot prove batch FIFO on MAIN without goods receipt / batch seeding."
+    },
+    {
+      "scenario": "Return issued Oil_Filter to stock (ORD-2026-002)",
+      "result": "BLOCKED",
+      "detail": "Return dialog opened with qty 1; Confirm clicks produced no RPC/network and DB stayed quantity_issued=1,quantity_returned=0. Possibly modal stacking with ghost Новый заказ overlay. Stock remains 9."
+    },
+    {
+      "scenario": "Edit order matrix (full reopen/edit save)",
+      "result": "BLOCKED",
+      "detail": "Detail panel reopen PASS; Изменить button intermittently pointer-events:none under overlays; not completed this run."
+    },
+    {
+      "scenario": "Cleanup QA_E2E_20261102_* artifacts",
+      "result": "BLOCKED",
+      "detail": "Not completed: ORD-2026-002 still has outstanding issued qty 1 (stock 9). Safe cleanup requires successful return then UI deletes of orders/inventory/clients/service. No remote DELETE executed."
+    }
+  ],
+  "leftover": {
+    "orders": [
+      "ORD-2026-001",
+      "ORD-2026-002",
+      "ORD-2026-003"
+    ],
+    "inventory": {
+      "id": "6a513d59-5c07-4a07-a236-8ef8e0cf5674",
+      "name": "QA_E2E_20261102_Oil_Filter",
+      "quantity": 9,
+      "note": "1 unit issued on ORD-2026-002"
+    },
+    "clients": [
+      "QA_E2E_20261102_Individual_A",
+      "QA_E2E_20261102_Individual_B",
+      "QA_E2E_20261102_Org_A SRL"
+    ],
+    "service": "QA_E2E_20261102_Service_Oil"
+  }
+}

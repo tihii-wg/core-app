@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanRpcMessage,
+  createAndPostGoodsReceipt,
   createGoodsReceipt,
   getGoodsReceipts,
   isMissingRpcError,
@@ -92,5 +93,27 @@ describe("apiWarehouseOps", () => {
     ]);
     expect(from).not.toHaveBeenCalledWith("warehouse_stock");
     expect(from).not.toHaveBeenCalledWith("inventory_items");
+  });
+
+  it("createAndPostGoodsReceipt creates a draft then posts via the same RPC", async () => {
+    const insert = vi.fn();
+    const result = chain({ data: { id: "r2" }, error: null });
+    from.mockImplementation((table: string) => ({
+      insert: (payload: unknown) => {
+        insert(table, payload);
+        return result;
+      },
+    }));
+    rpc.mockResolvedValueOnce({ data: {}, error: null });
+
+    await expect(
+      createAndPostGoodsReceipt(
+        { warehouseId: "wh", lines: [{ inventoryItemId: "i1", itemName: "Filter", quantity: 1, unitCost: 4 }] },
+        "ws",
+      ),
+    ).resolves.toBe("r2");
+
+    expect(insert.mock.calls.map(([table]) => table)).toEqual(["goods_receipts", "goods_receipt_lines"]);
+    expect(rpc).toHaveBeenCalledWith("crm_post_goods_receipt", { p_receipt_id: "r2" });
   });
 });

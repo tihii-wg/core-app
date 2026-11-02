@@ -200,6 +200,7 @@ export default {
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Available stock",
     availableStockValue: "{{count}} {{unit}} in stock",
+    receiveStock: "Receive stock into warehouse",
     quantityLabel: "Quantity",
     quantityForMaterial: "Quantity for {{name}}",
     decreaseQuantity: "Decrease quantity for {{name}}",

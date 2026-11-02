@@ -308,6 +308,23 @@ async function postOp(kind: WarehouseOpKind, id: string) {
 
 /** Posts a draft receipt: warehouse_stock and inventory_items.quantity increase (server side only). */
 export const postGoodsReceipt = (receiptId: string) => postOp("receipt", receiptId);
+
+/**
+ * Creates a draft goods receipt and immediately posts it via the same RPCs as the
+ * standalone Warehouse → Operations flow. Stock changes only inside `crm_post_goods_receipt`.
+ * Returns the receipt id. Does not invent client-side quantity updates.
+ */
+export async function createAndPostGoodsReceipt(input: CreateGoodsReceiptInput, workspaceId: string | undefined) {
+  const receiptId = await createGoodsReceipt(input, workspaceId);
+  try {
+    await postGoodsReceipt(receiptId);
+  } catch (error) {
+    // Best-effort: leave the draft so the user can retry Post from Warehouse operations
+    // instead of silently losing the receipt document after a post failure.
+    throw error;
+  }
+  return receiptId;
+}
 /** Moves stock between warehouses; inventory_items.quantity is unchanged. */
 export const postStockTransfer = (transferId: string) => postOp("transfer", transferId);
 /** Decreases warehouse_stock and inventory_items.quantity. */

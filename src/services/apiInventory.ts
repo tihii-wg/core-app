@@ -174,11 +174,13 @@ export async function getInventoryItem(inventoryItemId: string, targetWorkspaceI
 export async function createInventoryItem(input: InventoryItemFormData, workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
+  // Catalog cards never create stock. Quantity always starts at 0; goods receipt (or
+  // other warehouse ops) is the only path that increases inventory_items.quantity.
   const { data, error } = await supabase
     .from("inventory_items")
     .insert({
       workspace_id: resolvedWorkspaceId,
-      ...itemPayload(input),
+      ...itemPayload({ ...input, quantity: 0 }),
     })
     .select("id")
     .maybeSingle();

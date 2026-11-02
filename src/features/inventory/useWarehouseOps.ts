@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import {
+  createAndPostGoodsReceipt,
   createGoodsReceipt,
   createStockTransfer,
   createWriteOff,
@@ -71,6 +72,35 @@ function useCreateOp<TInput>(kind: WarehouseOpKind, create: (input: TInput, work
 export const useCreateGoodsReceipt = () => useCreateOp<CreateGoodsReceiptInput>("receipt", createGoodsReceipt);
 export const useCreateStockTransfer = () => useCreateOp<CreateStockTransferInput>("transfer", createStockTransfer);
 export const useCreateWriteOff = () => useCreateOp<CreateWriteOffInput>("writeOff", createWriteOff);
+
+/**
+ * Integrated receive: draft + post in one mutation using the same create/post APIs as
+ * Warehouse → Operations. Invalidates receipt list, inventory quantities, and warehouse stock.
+ */
+export function useCreateAndPostGoodsReceipt() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+
+  return useMutation({
+    mutationFn: (input: CreateGoodsReceiptInput) => {
+      guardWrite();
+      return createAndPostGoodsReceipt(input, workspaceId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [OPS_KEY, "receipt", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] }),
+      ]);
+      toast.success(i18n.t("inventory.ops.toast.received"));
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("inventory.ops.errors.postFailed"));
+    },
+  });
+}
 
 function usePostOp(kind: WarehouseOpKind, post: (id: string) => Promise<void>) {
   const queryClient = useQueryClient();

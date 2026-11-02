@@ -25,6 +25,8 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
 import { EditInventoryItemDialog } from "./EditInventoryItemDialog";
 import { DeleteInventoryItemDialog } from "./DeleteInventoryItemDialog";
+import { QuickGoodsReceiptDialog } from "./QuickGoodsReceiptDialog";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { quantityClass } from "./inventoryDisplay";
 import { StockAttentionPanel } from "./StockAttentionPanel";
 import { CategoriesPanel } from "./CategoriesPanel";
@@ -69,6 +71,9 @@ export function Inventory() {
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
+  const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
+  const { data: warehouses = [] } = useGetWarehouses();
+  const canReceiveStock = warehouses.some((warehouse) => warehouse.isActive);
 
   useEffect(() => {
     const itemId = searchParams.get("item")?.trim();
@@ -361,7 +366,22 @@ export function Inventory() {
         />
       )}
 
-      <AddInventoryItemDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <AddInventoryItemDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(item) => {
+          if (canReceiveStock) setReceiveItem(item);
+        }}
+      />
+
+      <QuickGoodsReceiptDialog
+        open={Boolean(receiveItem)}
+        onOpenChange={(next) => {
+          if (!next) setReceiveItem(null);
+        }}
+        item={receiveItem}
+        defaultQuantity={1}
+      />
 
       <EditInventoryItemDialog itemId={editId} onClose={() => setEditId(null)} />
 

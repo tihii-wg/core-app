@@ -522,12 +522,20 @@ const SET_LINE_DISCOUNTS_RPC = "crm_set_order_line_discounts";
 /** Optional `order_materials.supply_source` (one_time / customer / catalog). Absent until PART E SQL is applied. */
 let orderMaterialSupplySourceSupported = true;
 
+/**
+ * Cached freeform (one-time / customer) support. PART E adds `supply_source` and nullable
+ * `inventory_item_id` together; absence of the column means freeform sync is unavailable.
+ * `null` = not probed yet.
+ */
+let orderMaterialFreeformSupported: boolean | null = null;
+
 /** Test hook: forget every cached discount-column answer. */
 export function resetOrderDiscountSupport() {
   orderLineDiscountSupported = true;
   orderDiscountTotalSupported = true;
   orderHeaderDiscountSupported = true;
   orderMaterialSupplySourceSupported = true;
+  orderMaterialFreeformSupported = null;
 }
 
 type DbError = { code?: string; message?: string } | null | undefined;
@@ -700,6 +708,34 @@ export async function probeOrderServiceKindSupport(): Promise<boolean> {
   }
 }
 
+/**
+ * Read-only probe: can this database persist one-time / customer-supplied order materials?
+ * Uses presence of `order_materials.supply_source` (added in PART E with nullable inventory_item_id).
+ * Never throws; caches the answer for the page lifetime.
+ */
+export async function probeOrderMaterialFreeformSupport(): Promise<boolean> {
+  if (orderMaterialFreeformSupported != null) return orderMaterialFreeformSupported;
+  try {
+    const { error } = await supabase.from("order_materials").select("supply_source").limit(1);
+    if (!error) {
+      orderMaterialSupplySourceSupported = true;
+      orderMaterialFreeformSupported = true;
+      return true;
+    }
+    if (isMissingSupplySourceColumn(error)) {
+      orderMaterialSupplySourceSupported = false;
+      orderMaterialFreeformSupported = false;
+      return false;
+    }
+    // Unknown error (RLS/network): do not offer freeform until we know the column exists.
+    orderMaterialFreeformSupported = false;
+    return false;
+  } catch {
+    orderMaterialFreeformSupported = false;
+    return false;
+  }
+}
+
 export function toOrderServiceKind(value: unknown): OrderServiceKind | null {
   return value === "labor" || value === "service" ? value : null;
 }
@@ -774,7 +810,16 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
 }
 
 async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]) {
-  const payload = consolidateOrderMaterials(materials).map((line) => {
+  const consolidated = consolidateOrderMaterials(materials);
+  const hasFreeform = consolidated.some((line) => !line.inventoryItemId?.trim());
+  if (hasFreeform) {
+    const freeformOk = await probeOrderMaterialFreeformSupport();
+    if (!freeformOk) {
+      throw new Error(i18n.t("orders.errors.freeformMaterialsUnsupported"));
+    }
+  }
+
+  const payload = consolidated.map((line) => {
     const itemId = line.inventoryItemId?.trim();
     if (itemId) {
       return { inventory_item_id: itemId, quantity: line.quantity, supply_source: "catalog" };

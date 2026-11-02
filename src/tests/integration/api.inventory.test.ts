@@ -16,23 +16,31 @@ beforeEach(() => {
 });
 
 describe("inventory items", () => {
-  it("creates an item with trimmed fields and a computed stock status", async () => {
+  it("creates an item with trimmed fields at zero stock (catalog card ≠ receipt)", async () => {
     const item = await createInventoryItem(form, WS.A);
-    expect(item).toMatchObject({ name: "Spark plug", sku: "SP-1", workspaceId: WS.A, stockStatus: "in_stock", supplier: "", minQuantity: 2 });
-    expect(row("inventory_items", item.id)).toMatchObject({ supplier: null, workspace_id: WS.A, min_quantity: 2 });
+    expect(item).toMatchObject({
+      name: "Spark plug",
+      sku: "SP-1",
+      workspaceId: WS.A,
+      quantity: 0,
+      stockStatus: "out_of_stock",
+      supplier: "",
+      minQuantity: 2,
+    });
+    expect(row("inventory_items", item.id)).toMatchObject({ supplier: null, workspace_id: WS.A, min_quantity: 2, quantity: 0 });
   });
 
   it("defaults minQuantity to 10 when the create payload omits a valid minimum", async () => {
     const beforeSeedMin = row("inventory_items", "item-a1")?.min_quantity;
     const item = await createInventoryItem({ ...form, sku: "DEF-10", minQuantity: Number.NaN }, WS.A);
-    expect(item).toMatchObject({ minQuantity: 10, stockStatus: "low_stock" }); // qty 8 <= min 10
+    expect(item).toMatchObject({ minQuantity: 10, quantity: 0, stockStatus: "out_of_stock" });
     expect(row("inventory_items", item.id)?.min_quantity).toBe(10);
     expect(row("inventory_items", "item-a1")?.min_quantity).toBe(beforeSeedMin);
   });
 
-  it("keeps an explicit minimum of 0 (alerts only when empty)", async () => {
+  it("keeps an explicit minimum of 0 and still forces create quantity to 0", async () => {
     const item = await createInventoryItem({ ...form, sku: "MIN-0", quantity: 5, minQuantity: 0 }, WS.A);
-    expect(item).toMatchObject({ minQuantity: 0, quantity: 5, stockStatus: "in_stock" });
+    expect(item).toMatchObject({ minQuantity: 0, quantity: 0, stockStatus: "out_of_stock" });
     expect(row("inventory_items", item.id)?.min_quantity).toBe(0);
   });
 
@@ -54,10 +62,15 @@ describe("inventory items", () => {
     await createInventoryItem({ ...form, name: "Old bulb", sku: "OB-1", quantity: 0, isActive: false }, WS.A);
 
     expect((await getInventoryItems("", "all", sortByName, WS.A)).map((item) => item.name)).toEqual(["Alpha brake pads", "Old bulb", "Spark plug"]);
-    expect((await getInventoryItems("", "all", { field: "quantity", ascending: false }, WS.A)).map((item) => item.name)).toEqual(["Spark plug", "Alpha brake pads", "Old bulb"]);
+    // Create always stores quantity 0 — Alpha (seeded stock) sorts first when descending by quantity.
+    expect((await getInventoryItems("", "all", { field: "quantity", ascending: false }, WS.A)).map((item) => item.name)).toEqual([
+      "Alpha brake pads",
+      "Spark plug",
+      "Old bulb",
+    ]);
     expect((await getInventoryItems("spark", "all", sortByName, WS.A)).map((item) => item.name)).toEqual(["Spark plug"]);
     expect((await getInventoryItems("", "low_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Alpha brake pads"]);
-    expect((await getInventoryItems("", "out_of_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Old bulb"]);
+    expect((await getInventoryItems("", "out_of_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Old bulb", "Spark plug"]);
     expect((await getInventoryItems("", "inactive", sortByName, WS.A)).map((item) => item.name)).toEqual(["Old bulb"]);
     expect(await getInventoryItems("", "all", sortByName, WS.C)).toEqual([]);
   });

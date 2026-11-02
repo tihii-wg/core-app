@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
@@ -12,7 +12,9 @@ import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFo
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useInventoryMovements } from "./useInventoryMovements";
+import { QuickGoodsReceiptDialog } from "./QuickGoodsReceiptDialog";
 import { effectiveStockStatus } from "./stockStatus";
 
 type InventoryDetailPanelProps = {
@@ -44,6 +46,9 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
   const { data: movements = [], isLoading: movementsLoading } = useInventoryMovements(item?.id, open && Boolean(item?.id));
   const { data: warehouses = [] } = useGetWarehouses();
   const { data: itemStock = [], isLoading: stockLoading } = useGetWarehouseStock(item?.id, open && Boolean(item?.id));
+  const { canWrite } = useWorkspaceSubscription();
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const canReceive = canWrite && warehouses.some((warehouse) => warehouse.isActive);
 
   const warehouseNames = useMemo(
     () => new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name])),
@@ -194,7 +199,12 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
               )}
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {canReceive ? (
+                <Button type="button" variant="secondary" onClick={() => setReceiveOpen(true)}>
+                  {t("inventory.ops.quickReceipt.receive")}
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={onEdit}>
                 {t("common.edit")}
               </Button>
@@ -205,6 +215,8 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
           </div>
         )}
       </SheetContent>
+
+      <QuickGoodsReceiptDialog open={receiveOpen} onOpenChange={setReceiveOpen} item={item} defaultQuantity={1} />
     </Sheet>
   );
 }

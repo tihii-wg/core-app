@@ -86,6 +86,16 @@ const inventory: Messages<typeof en> = {
     toast: {
       created: "Ciorna a fost salvată",
       posted: "Document postat — stocul a fost actualizat",
+      received: "Recepție înregistrată — stocul din depozit a fost actualizat",
+    },
+    quickReceipt: {
+      title: "Recepție în depozit",
+      description: "Înregistrează stocul primit pentru acest articol din catalog. Stocul crește doar după postarea recepției.",
+      currentStock: "Stoc curent: {{count}} {{unit}}",
+      commentPlaceholder: "Notă opțională",
+      postHint: "Creează o recepție de bunuri și o postează imediat, folosind aceleași operațiuni ca în Inventar → Depozite.",
+      receive: "Recepționează stoc",
+      receiving: "Se recepționează...",
     },
     fields: {
       warehouse: "Depozit",
