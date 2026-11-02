@@ -38,6 +38,7 @@ function statusAccent(status: InvoiceDocument["status"]) {
     case "paid":
       return { bg: "#dcfce7", text: "#15803d", border: "#86efac" };
     case "overdue":
+    case "erroneous":
       return { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" };
     case "sent":
       return { bg: TINT_STRONG, text: PRIMARY_DARK, border: "#93c5fd" };

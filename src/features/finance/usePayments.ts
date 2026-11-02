@@ -2,10 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import {
+  deleteFullyVoidedPayment,
   getPayments,
   PaymentsUnavailableError,
   recordPayment,
+  recordPaymentVoid,
   recordRefund,
+  type RecordVoidInput,
 } from "../../services/apiPayments";
 import type { PaymentListFilters, RecordPaymentInput, RecordRefundInput } from "./paymentTypes";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -92,6 +95,54 @@ export function useRecordRefund() {
     },
     onError: (error: Error) => {
       toast.error(error.message || i18n.t("finance.payments.errors.saveFailed"), { id: toastId });
+    },
+  });
+}
+
+export function useRecordPaymentVoid() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+  const toastId = "record-payment-void";
+
+  return useMutation({
+    mutationFn: (input: RecordVoidInput) => {
+      guardWrite();
+      return recordPaymentVoid(input, workspaceId);
+    },
+    onMutate: () => {
+      toast.loading(i18n.t("finance.payments.void.toast.recording"), { id: toastId });
+    },
+    onSuccess: () => {
+      invalidatePaymentViews(queryClient, workspaceId);
+      toast.success(i18n.t("finance.payments.void.toast.recorded"), { id: toastId });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("finance.payments.errors.saveFailed"), { id: toastId });
+    },
+  });
+}
+
+export function useDeleteFullyVoidedPayment() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+  const toastId = "delete-fully-voided-payment";
+
+  return useMutation({
+    mutationFn: (paymentId: string) => {
+      guardWrite();
+      return deleteFullyVoidedPayment(paymentId, workspaceId);
+    },
+    onMutate: () => {
+      toast.loading(i18n.t("finance.payments.void.toast.deleting"), { id: toastId });
+    },
+    onSuccess: () => {
+      invalidatePaymentViews(queryClient, workspaceId);
+      toast.success(i18n.t("finance.payments.void.toast.deleted"), { id: toastId });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("finance.payments.void.errors.deleteFailed"), { id: toastId });
     },
   });
 }

@@ -4,8 +4,10 @@
  * (fail-closed). TypeScript tests do not prove PostgreSQL syntax.
  */
 
-/** Must match COMMENT ON FUNCTION in harden_payment_ledger.sql (exact string). */
+/** Must match COMMENT ON FUNCTION in harden / void SQL (exact string). Prefer v2-void when applied. */
 export const PAYMENTS_ENFORCE_INTEGRITY_MANAGED_MARKER =
+  "managed-object: core-app/payments_enforce_integrity@v2-void";
+export const PAYMENTS_ENFORCE_INTEGRITY_MANAGED_MARKER_V1 =
   "managed-object: core-app/payments_enforce_integrity@v1";
 
 /** Strip whitespace and common `pg_get_constraintdef` casts. Optionally lower-case. */
@@ -31,14 +33,19 @@ function permutations(values: string[]): string[][] {
   return out;
 }
 
-/** Exact normalized allowlist for kind ∈ {payment, refund} — mirrors SQL. */
+/** Exact normalized allowlist for kind ∈ {payment, refund} or {payment, refund, void} — mirrors SQL. */
 export function kindCheckAllowlist(): Set<string> {
   const set = new Set<string>();
-  for (const perm of permutations(["payment", "refund"])) {
-    const q = perm.map((v) => `'${v}'`).join(",");
-    set.add(`check((kind=any(array[${q}])))`);
-    set.add(`check((kind=any('{${perm.join(",")}}')))`);
-    set.add(`check((kindin(${q})))`);
+  for (const values of [
+    ["payment", "refund"],
+    ["payment", "refund", "void"],
+  ]) {
+    for (const perm of permutations(values)) {
+      const q = perm.map((v) => `'${v}'`).join(",");
+      set.add(`check((kind=any(array[${q}])))`);
+      set.add(`check((kind=any('{${perm.join(",")}}')))`);
+      set.add(`check((kindin(${q})))`);
+    }
   }
   return set;
 }
@@ -61,7 +68,7 @@ export function isAcceptedPaymentsAmountCheck(def: string): boolean {
   return n === "check((amount>0))" || n === "check((amount>(0)))" || n === "check(amount>0)";
 }
 
-/** Intended rule: kind ∈ {payment, refund} via exact allowlist. */
+/** Intended rule: kind ∈ {payment, refund} or {payment, refund, void} via exact allowlist. */
 export function isAcceptedPaymentsKindCheck(def: string): boolean {
   return kindCheckAllowlist().has(normalizePgCheckDef(def));
 }

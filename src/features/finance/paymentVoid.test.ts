@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessDeleteFullyVoidedPayment,
   assessErroneousPaymentVoid,
   PAYMENT_VOID_SCHEMA_SUPPORTED,
   validatePaymentVoidReason,
 } from "./paymentVoid";
-import { netCollected, orderPaymentBalance, refundableRemaining } from "./paymentCalculations";
+import { isFullyVoidedPayment, netCollected, orderPaymentBalance, refundableRemaining } from "./paymentCalculations";
 import type { LedgerPayment } from "./paymentTypes";
 
 function payment(overrides: Partial<LedgerPayment> = {}): LedgerPayment {
@@ -27,13 +28,10 @@ function payment(overrides: Partial<LedgerPayment> = {}): LedgerPayment {
 }
 
 describe("assessErroneousPaymentVoid", () => {
-  it("blocks void while schema support is missing (no inventing void rows)", () => {
-    expect(PAYMENT_VOID_SCHEMA_SUPPORTED).toBe(false);
+  it("allows void when schema support is enabled and the payment is clean", () => {
+    expect(PAYMENT_VOID_SCHEMA_SUPPORTED).toBe(true);
     const row = payment();
-    expect(assessErroneousPaymentVoid(row, [row])).toEqual({
-      allowed: false,
-      reason: "schema_unsupported",
-    });
+    expect(assessErroneousPaymentVoid(row, [row])).toEqual({ allowed: true });
   });
 
   it("rejects voiding refund rows and already-offset payments", () => {
@@ -63,6 +61,24 @@ describe("assessErroneousPaymentVoid", () => {
   });
 });
 
+describe("assessDeleteFullyVoidedPayment", () => {
+  it("allows cleanup only after a full void with no refunds", () => {
+    const original = payment({ id: "pay-1", amount: 100 });
+    const voidRow = payment({
+      id: "void-1",
+      kind: "void",
+      amount: 100,
+      relatedPaymentId: "pay-1",
+    });
+    expect(isFullyVoidedPayment(original, [original, voidRow])).toBe(true);
+    expect(assessDeleteFullyVoidedPayment(original, [original, voidRow])).toEqual({ allowed: true });
+    expect(assessDeleteFullyVoidedPayment(original, [original])).toEqual({
+      allowed: false,
+      reason: "not_fully_voided",
+    });
+  });
+});
+
 describe("validatePaymentVoidReason", () => {
   it("requires a reason of at least 8 characters", () => {
     expect(validatePaymentVoidReason("")).toBe("required");
@@ -73,7 +89,7 @@ describe("validatePaymentVoidReason", () => {
 });
 
 describe("real payment refund vs erroneous void (balances)", () => {
-  it("keeps refunds as the only supported offset and recalculates balances", () => {
+  it("keeps refunds as money return and voids as erroneous offsets", () => {
     const original = payment({ id: "pay-1", amount: 100, orderId: "ord-1" });
     const refund = payment({
       id: "ref-1",
@@ -90,10 +106,7 @@ describe("real payment refund vs erroneous void (balances)", () => {
       orderPaymentBalance({ id: "ord-1", totalPrice: 100, isPaid: false, status: "new" }, rows),
     ).toMatchObject({ netPaid: 60, remaining: 40, status: "partial", hasLedger: true });
 
-    // Void must not be simulated as an automatic refund — candidate stays schema-blocked.
-    expect(assessErroneousPaymentVoid(original, [original])).toEqual({
-      allowed: false,
-      reason: "schema_unsupported",
-    });
+    const clean = payment({ id: "pay-2", amount: 50, orderId: "ord-1" });
+    expect(assessErroneousPaymentVoid(clean, [clean])).toEqual({ allowed: true });
   });
 });

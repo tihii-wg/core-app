@@ -2,6 +2,7 @@ import i18n from "../i18n";
 import supabase from "./supabase";
 import {
   assertWorkspaceCurrencyMatch,
+  isFullyVoidedPayment,
   isNormalizedCurrencyCode,
   isValidLedgerPayment,
   ledgerAmount,
@@ -24,6 +25,12 @@ import {
   type RecordPaymentInput,
   type RecordRefundInput,
 } from "../features/finance/paymentTypes";
+import { PAYMENT_VOID_SCHEMA_SUPPORTED } from "../features/finance/paymentVoid";
+import { isMissingRpcError, MissingRpcError } from "./missingRpc";
+
+/** Manual SQL enabling kind=void + cleanup RPC. */
+export const PAYMENT_VOID_SQL = "20261102140000_payment_void_erroneous_cleanup.PRODUCTION.sql";
+export const DELETE_FULLY_VOIDED_PAYMENT_RPC = "delete_fully_voided_payment";
 
 const paymentColumns =
   "id, workspace_id, order_id, invoice_id, related_payment_id, kind, amount, currency_code, payment_method, paid_at, note, created_by, created_at";
@@ -58,6 +65,9 @@ export function mapPaymentDbError(error: DbError): Error {
       return new Error(i18n.t("finance.payments.validation.currencyRequired"));
     case "method_invalid":
       return new Error(i18n.t("finance.payments.validation.methodInvalid"));
+    case "kind_invalid":
+      // Distinct from payment_method validation (void-aware integrity trigger).
+      return new Error(i18n.t("finance.payments.void.errors.schemaUnsupported", { file: PAYMENT_VOID_SQL }));
     case "workspace_mismatch":
       return new Error(i18n.t("finance.payments.errors.workspaceMismatch"));
     case "invoice_order_mismatch":
@@ -86,6 +96,15 @@ export function mapPaymentDbError(error: DbError): Error {
       return new Error(i18n.t("finance.payments.errors.refundExceedsRemaining", { remaining: "?" }));
     case "refund_links_mismatch":
       return new Error(i18n.t("finance.payments.errors.refundLinksMismatch"));
+    case "void_invalid_original":
+    case "void_against_non_payment":
+      return new Error(i18n.t("finance.payments.void.errors.notAPayment"));
+    case "void_already_offset":
+      return new Error(i18n.t("finance.payments.void.errors.alreadyOffset"));
+    case "void_reason_required":
+      return new Error(i18n.t("finance.payments.void.validation.reasonTooShort"));
+    case "void_amount_mismatch":
+      return new Error(i18n.t("finance.payments.void.errors.amountMismatch"));
     default:
       return new Error(error.message || i18n.t("finance.payments.errors.saveFailed"));
   }
@@ -241,12 +260,20 @@ async function resolvePaymentLinks(
   if (invoiceId) {
     const { data: invoice, error } = await supabase
       .from("invoices")
-      .select("id, order_id, total, workspace_id")
+      .select("id, order_id, total, workspace_id, status, number")
       .eq("id", invoiceId)
       .eq("workspace_id", workspaceId)
       .maybeSingle();
     if (error) throw mapPaymentDbError(error);
     if (!invoice) throw new Error(i18n.t("finance.payments.errors.invoiceNotFound"));
+
+    if ((invoice as { status?: unknown }).status === "erroneous") {
+      throw new Error(
+        i18n.t("finance.payments.errors.erroneousInvoice", {
+          number: typeof (invoice as { number?: unknown }).number === "string" ? (invoice as { number: string }).number : invoiceId,
+        }),
+      );
+    }
 
     const invOrderId = typeof (invoice as { order_id?: unknown }).order_id === "string" ? (invoice as { order_id: string }).order_id : null;
     invoiceTotal = Number((invoice as { total?: unknown }).total ?? 0);
@@ -428,4 +455,145 @@ export async function recordRefund(input: RecordRefundInput, workspaceId: string
 
   if (error) throw mapPaymentDbError(error);
   return toLedgerPayment(data as Record<string, unknown>);
+}
+
+export type RecordVoidInput = {
+  originalPaymentId: string;
+  reason: string;
+  paidAt?: string;
+};
+
+/**
+ * Marks an erroneous payment (money never received) by inserting kind=void.
+ * Append-only: the original payment row is retained until optional cleanup delete.
+ * Does not delete invoices or orders.
+ */
+export async function recordPaymentVoid(input: RecordVoidInput, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  await requireAuthenticatedUser();
+
+  const reason = (input.reason ?? "").trim();
+  if (reason.length < 8) {
+    throw new Error(i18n.t("finance.payments.void.validation.reasonTooShort"));
+  }
+
+  const original = await getPaymentById(input.originalPaymentId, targetWorkspaceId);
+  if (original.kind !== "payment") {
+    throw new Error(i18n.t("finance.payments.void.errors.notAPayment"));
+  }
+  if (!isValidLedgerPayment(original)) {
+    throw new Error(i18n.t("finance.payments.errors.originalInvalid"));
+  }
+
+  const currencyCode = normalizeCurrencyCode(original.currencyCode);
+  await requireWorkspaceCurrency(targetWorkspaceId, currencyCode);
+
+  const siblings = await getPayments(targetWorkspaceId, {});
+  const remaining = refundableRemaining(original, siblings);
+  if (remaining < original.amount - 0.005) {
+    throw new Error(i18n.t("finance.payments.void.errors.alreadyOffset"));
+  }
+
+  const paidAt = input.paidAt?.trim() || new Date().toISOString();
+  const { data, error } = await supabase
+    .from("payments")
+    .insert({
+      workspace_id: targetWorkspaceId,
+      order_id: original.orderId,
+      invoice_id: original.invoiceId,
+      related_payment_id: original.id,
+      kind: "void",
+      amount: original.amount,
+      currency_code: currencyCode,
+      // Copy the already-persisted method; void never asks the user for a method.
+      payment_method: original.paymentMethod,
+      paid_at: paidAt,
+      note: reason,
+    })
+    .select(paymentColumns)
+    .single();
+
+  if (error) throw mapVoidInsertDbError(error);
+  return toLedgerPayment(data as Record<string, unknown>);
+}
+
+/**
+ * Maps void-insert failures.
+ *
+ * Schema gap (show apply-SQL message) only when the DB rejects `kind=void`:
+ * - `payments_validation:kind_invalid` (void-aware trigger)
+ * - CHECK `payments_kind_check` without void
+ * - Legacy harden trigger: `method_invalid` for unknown kinds — only while
+ *   PAYMENT_VOID_SCHEMA_SUPPORTED is false
+ *
+ * With void applied, `method_invalid` / other 23514 are real validation errors
+ * (not "SQL missing").
+ */
+export function mapVoidInsertDbError(error: DbError): Error {
+  const message = error.message ?? "";
+  if (/payments_validation:kind_invalid/i.test(message) || /payments_kind_check/i.test(message)) {
+    return new Error(i18n.t("finance.payments.void.errors.schemaUnsupported", { file: PAYMENT_VOID_SQL }));
+  }
+  // Legacy: unknown kinds raised method_invalid before kind_invalid existed.
+  if (/payments_validation:method_invalid/i.test(message) && !PAYMENT_VOID_SCHEMA_SUPPORTED) {
+    return new Error(i18n.t("finance.payments.void.errors.schemaUnsupported", { file: PAYMENT_VOID_SQL }));
+  }
+  return mapPaymentDbError(error);
+}
+
+/**
+ * Maps cleanup-delete RPC failures. Never asks for / validates a payment method.
+ */
+export function mapDeleteFullyVoidedPaymentError(error: DbError): Error {
+  const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  if (/refund rows still reference/i.test(blob)) {
+    return new Error(i18n.t("finance.payments.void.errors.deleteBlockedByRefunds"));
+  }
+  if (/not fully marked erroneous|not fully.*void/i.test(blob)) {
+    return new Error(i18n.t("finance.payments.void.errors.deleteRequiresFullVoid"));
+  }
+  if (/Only original payment rows/i.test(blob)) {
+    return new Error(i18n.t("finance.payments.void.errors.notAPayment"));
+  }
+  if (error.code === "42501" || /Not authenticated|permission/i.test(blob)) {
+    return new Error(i18n.t("finance.payments.errors.noPermission"));
+  }
+  if (/P0002|was not found/i.test(blob)) {
+    return new Error(i18n.t("finance.payments.errors.noPermission"));
+  }
+  // Insert-time validation codes must never leak through the delete path.
+  if (/payments_validation:method_invalid/i.test(blob) || /payments_validation:kind_invalid/i.test(blob)) {
+    return new Error(i18n.t("finance.payments.void.errors.deleteFailed"));
+  }
+  return new Error(error.message || i18n.t("finance.payments.void.errors.deleteFailed"));
+}
+
+/**
+ * After a full void, optionally removes the original payment + void rows.
+ * Does not delete invoices or orders. Does not validate or collect a payment method.
+ */
+export async function deleteFullyVoidedPayment(paymentId: string, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  await requireAuthenticatedUser();
+
+  const original = await getPaymentById(paymentId, targetWorkspaceId);
+  if (original.kind !== "payment") {
+    throw new Error(i18n.t("finance.payments.void.errors.notAPayment"));
+  }
+  const siblings = await getPayments(targetWorkspaceId, {});
+  if (!isFullyVoidedPayment(original, siblings)) {
+    throw new Error(i18n.t("finance.payments.void.errors.deleteRequiresFullVoid"));
+  }
+
+  const { error } = await supabase.rpc(DELETE_FULLY_VOIDED_PAYMENT_RPC, { p_payment_id: paymentId });
+  if (error) {
+    if (isMissingRpcError(error, DELETE_FULLY_VOIDED_PAYMENT_RPC)) {
+      throw new MissingRpcError(
+        DELETE_FULLY_VOIDED_PAYMENT_RPC,
+        i18n.t("finance.payments.void.errors.deleteRpcMissing", { file: PAYMENT_VOID_SQL }),
+      );
+    }
+    throw mapDeleteFullyVoidedPaymentError(error);
+  }
+  return { paymentId: original.id };
 }

@@ -8,11 +8,15 @@ import {
   normalizePgCheckDef,
   paymentMethodCheckAllowlist,
   PAYMENTS_ENFORCE_INTEGRITY_MANAGED_MARKER,
+  PAYMENTS_ENFORCE_INTEGRITY_MANAGED_MARKER_V1,
 } from "./paymentLedgerSqlGuards";
 
 describe("managed function marker", () => {
-  it("uses the versioned COMMENT string expected by harden_payment_ledger.sql", () => {
+  it("uses the void-aware COMMENT string from payment_void SQL (v1 retained for legacy)", () => {
     expect(PAYMENTS_ENFORCE_INTEGRITY_MANAGED_MARKER).toBe(
+      "managed-object: core-app/payments_enforce_integrity@v2-void",
+    );
+    expect(PAYMENTS_ENFORCE_INTEGRITY_MANAGED_MARKER_V1).toBe(
       "managed-object: core-app/payments_enforce_integrity@v1",
     );
   });
@@ -42,11 +46,14 @@ describe("amount CHECK allowlist", () => {
 });
 
 describe("kind CHECK allowlist", () => {
-  it("accepts complete payment|refund set in either order / form", () => {
+  it("accepts complete payment|refund and payment|refund|void sets", () => {
     expect(isAcceptedPaymentsKindCheck("CHECK ((kind = ANY (ARRAY['payment'::text, 'refund'::text])))")).toBe(true);
     expect(isAcceptedPaymentsKindCheck("CHECK ((kind = ANY (ARRAY['refund'::text, 'payment'::text])))")).toBe(true);
     expect(isAcceptedPaymentsKindCheck("CHECK ((kind = ANY ('{payment,refund}'::text[])))")).toBe(true);
     expect(isAcceptedPaymentsKindCheck("CHECK ((kind IN ('payment'::text, 'refund'::text)))")).toBe(true);
+    expect(
+      isAcceptedPaymentsKindCheck("CHECK ((kind = ANY (ARRAY['payment'::text, 'refund'::text, 'void'::text])))"),
+    ).toBe(true);
   });
 
   it("rejects incomplete, weaker, or self-referential kind rules", () => {
@@ -68,8 +75,8 @@ describe("kind CHECK allowlist", () => {
     );
   });
 
-  it("allowlist size matches SQL (2 perms × 3 forms)", () => {
-    expect(kindCheckAllowlist().size).toBe(6);
+  it("allowlist size matches SQL (2!×3 + 3!×3 forms)", () => {
+    expect(kindCheckAllowlist().size).toBe(24);
   });
 });
 

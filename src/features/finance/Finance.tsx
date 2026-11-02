@@ -23,6 +23,8 @@ import { ExpenseFormDialog } from "./ExpenseFormDialog";
 import { FinanceAccountsSection } from "./FinanceAccountsSection";
 import { DeleteExpenseDialog } from "./DeleteExpenseDialog";
 import { PaymentActionsMenu } from "./PaymentActionsMenu";
+import { isFullyVoidedPayment } from "./paymentCalculations";
+import { DeleteFullyVoidedPaymentDialog } from "./DeleteFullyVoidedPaymentDialog";
 import { PaymentVoidDialog } from "./PaymentVoidDialog";
 import type { FinanceLedgerTransaction } from "./paymentCalculations";
 import { ledgerPaymentMethods, type LedgerPayment, type LedgerPaymentMethod } from "./paymentTypes";
@@ -64,6 +66,7 @@ export function Finance() {
   const [deleting, setDeleting] = useState<Expense | null>(null);
   const [refundOriginal, setRefundOriginal] = useState<LedgerPayment | null>(null);
   const [voidOriginal, setVoidOriginal] = useState<LedgerPayment | null>(null);
+  const [cleanupOriginal, setCleanupOriginal] = useState<LedgerPayment | null>(null);
 
   const period = useMemo(() => reportPeriod(range, new Date()), [range]);
   const filters: FinanceUiFilters = useMemo(
@@ -114,6 +117,11 @@ export function Finance() {
             <ArrowUpRight className="h-4 w-4 text-success" />
             <span className="text-success">{t("finance.transactions.types.income")}</span>
           </div>
+        ) : txn.payment?.kind === "void" ? (
+          <div className="flex items-center gap-2">
+            <ArrowDownRight className="h-4 w-4 text-destructive" />
+            <span className="text-destructive">{t("finance.transactions.types.void")}</span>
+          </div>
         ) : txn.type === "refund" ? (
           <div className="flex items-center gap-2">
             <ArrowDownRight className="h-4 w-4 text-warning" />
@@ -129,7 +137,17 @@ export function Finance() {
     {
       key: "category",
       header: t("finance.transactions.columns.category"),
-      cell: (txn) => <StatusBadge variant="default">{txn.category}</StatusBadge>,
+      cell: (txn) => {
+        const voided =
+          txn.payment?.kind === "payment" && isFullyVoidedPayment(txn.payment, payments);
+        const voidKind = txn.payment?.kind === "void";
+        return (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge variant={voidKind || voided ? "danger" : "default"}>{txn.category}</StatusBadge>
+            {voided ? <StatusBadge variant="danger">{t("finance.payments.void.badge")}</StatusBadge> : null}
+          </div>
+        );
+      },
       className: "hidden sm:table-cell",
     },
     {
@@ -205,6 +223,7 @@ export function Finance() {
                     canRecord={canRecordPayments && !paymentsUnavailable}
                     onRefund={setRefundOriginal}
                     onVoidErroneous={setVoidOriginal}
+                    onDeleteErroneous={setCleanupOriginal}
                   />
                 );
               }
@@ -446,6 +465,13 @@ export function Finance() {
         open={voidOriginal != null}
         onOpenChange={(open) => !open && setVoidOriginal(null)}
         payment={voidOriginal}
+        allPayments={payments}
+        canRecord={canRecordPayments && !paymentsUnavailable}
+      />
+      <DeleteFullyVoidedPaymentDialog
+        open={cleanupOriginal != null}
+        onOpenChange={(open) => !open && setCleanupOriginal(null)}
+        payment={cleanupOriginal}
         allPayments={payments}
         canRecord={canRecordPayments && !paymentsUnavailable}
       />

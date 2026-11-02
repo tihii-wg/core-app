@@ -4,7 +4,7 @@ export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" 
 
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 
-export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue";
+export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "erroneous";
 
 export type EmployeeRole = "admin" | "manager" | "technician" | "receptionist";
 

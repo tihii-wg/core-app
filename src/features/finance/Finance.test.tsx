@@ -68,6 +68,7 @@ vi.mock("./useFinanceTransactions", () => ({
 vi.mock("./FinanceAccountsSection", () => ({ FinanceAccountsSection: () => null }));
 vi.mock("./RefundFormDialog", () => ({ RefundFormDialog: () => null }));
 vi.mock("./PaymentVoidDialog", () => ({ PaymentVoidDialog: () => null }));
+vi.mock("./DeleteFullyVoidedPaymentDialog", () => ({ DeleteFullyVoidedPaymentDialog: () => null }));
 
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}`, currency: "MDL" }),
@@ -240,14 +241,14 @@ describe("Finance page", () => {
 
     await user.click(paymentMenu);
     expect(screen.getByRole("menuitem", { name: /Record refund/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Void erroneous payment/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Mark as erroneous/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /edit/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /^delete$/i })).not.toBeInTheDocument();
 
     await user.keyboard("{Escape}");
     await user.click(refundMenu);
     expect(screen.queryByRole("menuitem", { name: /Record refund/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Void erroneous/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Mark as erroneous/i })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /No available actions/i })).toHaveAttribute("aria-disabled", "true");
   });
 });

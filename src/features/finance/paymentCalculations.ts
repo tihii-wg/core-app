@@ -23,18 +23,48 @@ export function ledgerAmount(value: unknown): number | null {
 }
 
 export function isValidLedgerPayment(row: Pick<LedgerPayment, "kind" | "amount" | "paidAt" | "currencyCode">): boolean {
-  if (row.kind !== "payment" && row.kind !== "refund") return false;
+  if (row.kind !== "payment" && row.kind !== "refund" && row.kind !== "void") return false;
   if (ledgerAmount(row.amount) == null) return false;
   if (!financeDateKey(row.paidAt)) return false;
   if (!(row.currencyCode ?? "").trim()) return false;
   return true;
 }
 
-/** Signed contribution: payments add, refunds subtract. Invalid rows contribute 0 and are skipped by callers. */
+/** Signed contribution: payments add; refunds and voids subtract. Invalid rows contribute 0 and are skipped by callers. */
 export function signedLedgerAmount(row: Pick<LedgerPayment, "kind" | "amount">): number | null {
   const amount = ledgerAmount(row.amount);
   if (amount == null) return null;
-  return row.kind === "refund" ? -amount : amount;
+  return row.kind === "refund" || row.kind === "void" ? -amount : amount;
+}
+
+/** True when a payment is fully offset by void row(s) and has no refunds. */
+export function isFullyVoidedPayment(original: LedgerPayment, allPayments: LedgerPayment[]): boolean {
+  if (original.kind !== "payment") return false;
+  const amount = ledgerAmount(original.amount);
+  if (amount == null) return false;
+  let voided = 0;
+  for (const row of allPayments) {
+    if (row.relatedPaymentId !== original.id) continue;
+    if (!isValidLedgerPayment(row)) continue;
+    if (row.kind === "refund") return false;
+    if (row.kind === "void") {
+      const part = ledgerAmount(row.amount);
+      if (part == null) continue;
+      voided += part;
+    }
+  }
+  return voided + MONEY_EPS >= amount;
+}
+
+/** Payments that still block deleting an erroneous invoice (active money / unfinished offsets). */
+export function activePaymentsBlockingInvoice(payments: LedgerPayment[], invoiceId: string): LedgerPayment[] {
+  const linked = payments.filter((row) => row.invoiceId === invoiceId);
+  return linked.filter((row) => {
+    if (row.kind === "void") return false;
+    if (row.kind === "refund") return true;
+    if (row.kind !== "payment") return false;
+    return !isFullyVoidedPayment(row, linked);
+  });
 }
 
 export function paymentsForCurrency(payments: LedgerPayment[], currencyCode: string) {
@@ -73,7 +103,7 @@ export function netByLinkCategory(payments: LedgerPayment[]): { invoiceLinked: n
     const amount = ledgerAmount(row.amount);
     if (amount == null) continue;
 
-    if (row.kind === "refund") {
+    if (row.kind === "refund" || row.kind === "void") {
       refunds = roundMoney(refunds + amount);
       const signed = -amount;
       if (paymentLinkCategory(row) === "invoice") invoiceLinked += signed;
@@ -218,7 +248,7 @@ export function refundableRemaining(original: LedgerPayment, allPayments: Ledger
   if (amount == null) return 0;
   let refunded = 0;
   for (const row of allPayments) {
-    if (row.kind !== "refund") continue;
+    if (row.kind !== "refund" && row.kind !== "void") continue;
     if (row.relatedPaymentId !== original.id) continue;
     if (!isValidLedgerPayment(row)) continue;
     const part = ledgerAmount(row.amount);
@@ -456,7 +486,7 @@ export type FinanceLedgerTransaction = Transaction & {
 
 export function paymentToTransaction(
   row: LedgerPayment,
-  labels: { paymentCategory: string; refundCategory: string; description: string },
+  labels: { paymentCategory: string; refundCategory: string; voidCategory?: string; description: string },
 ): FinanceLedgerTransaction | null {
   if (!isValidLedgerPayment(row)) return null;
   const amount = ledgerAmount(row.amount);
@@ -464,11 +494,17 @@ export function paymentToTransaction(
   const date = financeDateKey(row.paidAt);
   if (!date) return null;
 
-  const isRefund = row.kind === "refund";
+  const isOffset = row.kind === "refund" || row.kind === "void";
+  const category =
+    row.kind === "void"
+      ? (labels.voidCategory ?? labels.refundCategory)
+      : row.kind === "refund"
+        ? labels.refundCategory
+        : labels.paymentCategory;
   return {
     id: `payment-${row.id}`,
-    type: isRefund ? "refund" : "income",
-    category: isRefund ? labels.refundCategory : labels.paymentCategory,
+    type: isOffset ? "refund" : "income",
+    category,
     description: labels.description,
     amount,
     paymentMethod: ledgerMethodToExpenseMethod(row.paymentMethod),

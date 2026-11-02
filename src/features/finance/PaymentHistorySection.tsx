@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, RotateCcw } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
@@ -8,9 +8,18 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { financeDateKey } from "./financeStats";
-import { invoicePaymentBalance, orderPaymentBalance, paymentsForInvoice, paymentsForOrder, refundableRemaining } from "./paymentCalculations";
+import {
+  invoicePaymentBalance,
+  isFullyVoidedPayment,
+  orderPaymentBalance,
+  paymentsForInvoice,
+  paymentsForOrder,
+} from "./paymentCalculations";
 import type { LedgerPayment, PaymentBalance } from "./paymentTypes";
+import { DeleteFullyVoidedPaymentDialog } from "./DeleteFullyVoidedPaymentDialog";
+import { PaymentActionsMenu } from "./PaymentActionsMenu";
 import { PaymentFormDialog } from "./PaymentFormDialog";
+import { PaymentVoidDialog } from "./PaymentVoidDialog";
 import { RefundFormDialog } from "./RefundFormDialog";
 import type { Invoice, Order } from "../../lib/types";
 import { useReportFormatting } from "../reports/reportFormatting";
@@ -24,6 +33,12 @@ type PaymentHistorySectionProps = {
   canRecord?: boolean;
 };
 
+function kindBadgeVariant(kind: LedgerPayment["kind"]): "success" | "warning" | "danger" {
+  if (kind === "refund") return "warning";
+  if (kind === "void") return "danger";
+  return "success";
+}
+
 export function PaymentHistorySection({ target, order, invoice, payments, isLoading, canRecord: canRecordProp }: PaymentHistorySectionProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
@@ -34,6 +49,8 @@ export function PaymentHistorySection({ target, order, invoice, payments, isLoad
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [refundOriginal, setRefundOriginal] = useState<LedgerPayment | null>(null);
+  const [voidOriginal, setVoidOriginal] = useState<LedgerPayment | null>(null);
+  const [cleanupOriginal, setCleanupOriginal] = useState<LedgerPayment | null>(null);
 
   const linked = useMemo(() => {
     if (target === "order" && order) return paymentsForOrder(payments, order.id);
@@ -109,29 +126,38 @@ export function PaymentHistorySection({ target, order, invoice, payments, isLoad
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {linked.map((row) => {
-            const refundable = row.kind === "payment" ? refundableRemaining(row, payments) : 0;
+            const voided = row.kind === "payment" && isFullyVoidedPayment(row, payments);
+            const isOffset = row.kind === "refund" || row.kind === "void";
             return (
               <li key={row.id} className="flex flex-wrap items-start justify-between gap-2 px-3 py-2.5 text-sm">
                 <div className="min-w-0 space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <StatusBadge variant={row.kind === "refund" ? "warning" : "success"}>
+                    <StatusBadge variant={kindBadgeVariant(row.kind)}>
                       {t(`finance.payments.kinds.${row.kind}`)}
                     </StatusBadge>
+                    {voided ? (
+                      <StatusBadge variant="danger">{t("finance.payments.void.badge")}</StatusBadge>
+                    ) : null}
                     <span className="text-muted-foreground">{formatDate(financeDateKey(row.paidAt))}</span>
                     <span className="text-muted-foreground">{t(`finance.paymentMethods.short.${row.paymentMethod}`)}</span>
                   </div>
                   {row.note ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{row.note}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className={`font-medium tabular-nums ${row.kind === "refund" ? "text-destructive" : "text-success"}`}>
-                    {row.kind === "refund" ? "-" : "+"}
+                  <span className={`font-medium tabular-nums ${isOffset ? "text-destructive" : "text-success"}`}>
+                    {isOffset ? "-" : "+"}
                     {formatMoney(row.amount)}
                   </span>
-                  {canRecord && row.kind === "payment" && refundable > 0 && (
-                    <Button type="button" variant="ghost" size="icon-sm" aria-label={t("finance.payments.refund")} onClick={() => setRefundOriginal(row)}>
-                      <RotateCcw className="size-3.5" />
-                    </Button>
-                  )}
+                  {row.kind === "payment" ? (
+                    <PaymentActionsMenu
+                      payment={row}
+                      allPayments={payments}
+                      canRecord={canRecord}
+                      onRefund={setRefundOriginal}
+                      onVoidErroneous={setVoidOriginal}
+                      onDeleteErroneous={setCleanupOriginal}
+                    />
+                  ) : null}
                 </div>
               </li>
             );
@@ -148,6 +174,20 @@ export function PaymentHistorySection({ target, order, invoice, payments, isLoad
         balance={recordableBalance}
       />
       <RefundFormDialog open={refundOriginal != null} onOpenChange={(open) => !open && setRefundOriginal(null)} original={refundOriginal} allPayments={payments} />
+      <PaymentVoidDialog
+        open={voidOriginal != null}
+        onOpenChange={(open) => !open && setVoidOriginal(null)}
+        payment={voidOriginal}
+        allPayments={payments}
+        canRecord={canRecord}
+      />
+      <DeleteFullyVoidedPaymentDialog
+        open={cleanupOriginal != null}
+        onOpenChange={(open) => !open && setCleanupOriginal(null)}
+        payment={cleanupOriginal}
+        allPayments={payments}
+        canRecord={canRecord}
+      />
     </div>
   );
 }

@@ -57,9 +57,9 @@ describe("PaymentActionsMenu", () => {
 
     await user.click(screen.getByRole("button", { name: /Actions for Payment/i }));
     expect(screen.getByRole("menuitem", { name: /Record refund/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Void erroneous payment/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Mark as erroneous/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /edit/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /^delete$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Delete erroneous record/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("menuitem", { name: /Record refund/i }));
     expect(onRefund).toHaveBeenCalledWith(original);
@@ -87,7 +87,7 @@ describe("PaymentActionsMenu", () => {
     await user.click(screen.getByRole("button", { name: /Actions for Refund/i }));
     expect(screen.getByRole("menuitem", { name: /No available actions/i })).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByRole("menuitem", { name: /Record refund/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /Void erroneous/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Mark as erroneous/i })).not.toBeInTheDocument();
   });
 
   it("hides refund for fully refunded payments but still offers void entry (explains already offset)", async () => {
@@ -112,8 +112,35 @@ describe("PaymentActionsMenu", () => {
     );
     await user.click(screen.getByRole("button", { name: /Actions for Payment/i }));
     expect(screen.queryByRole("menuitem", { name: /Record refund/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("menuitem", { name: /Void erroneous payment/i }));
+    await user.click(screen.getByRole("menuitem", { name: /Mark as erroneous/i }));
     expect(onVoid).toHaveBeenCalledWith(original);
+  });
+
+  it("offers delete erroneous after a full void", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    const original = payment({ id: "pay-1", amount: 50 });
+    const voidRow = payment({
+      id: "void-1",
+      kind: "void",
+      amount: 50,
+      relatedPaymentId: "pay-1",
+    });
+
+    renderWithQuery(
+      <PaymentActionsMenu
+        payment={original}
+        allPayments={[original, voidRow]}
+        canRecord
+        onRefund={vi.fn()}
+        onVoidErroneous={noopVoid}
+        onDeleteErroneous={onDelete}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Actions for Payment/i }));
+    expect(screen.queryByRole("menuitem", { name: /Mark as erroneous/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: /Delete erroneous record/i }));
+    expect(onDelete).toHaveBeenCalledWith(original);
   });
 
   it("disables void when the user cannot record payments", async () => {
@@ -130,6 +157,6 @@ describe("PaymentActionsMenu", () => {
     );
     await user.click(screen.getByRole("button", { name: /Actions for Payment/i }));
     expect(screen.queryByRole("menuitem", { name: /Record refund/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Void erroneous payment/i })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("menuitem", { name: /Mark as erroneous/i })).toHaveAttribute("aria-disabled", "true");
   });
 });

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Invoice, Order } from "../../lib/types";
 import {
+  activePaymentsBlockingInvoice,
   combinedOutstanding,
   computePaymentBalance,
   filterPayments,
   findLegacyUnreconciled,
   invoicePaymentBalance,
+  isFullyVoidedPayment,
   netByLinkCategory,
   netCollected,
   netReceiptsOnDate,
@@ -354,5 +356,36 @@ describe("invalid amounts", () => {
     expect(netCollected([payment({ id: "1", kind: "payment", amount: 0 })])).toBe(0);
     expect(netCollected([payment({ id: "2", kind: "payment", amount: -10 })])).toBe(0);
     expect(wouldExceedRemaining(100, [], Number.NaN)).toBe(true);
+  });
+});
+
+describe("erroneous void vs invoice blockers", () => {
+  it("treats a payment covered only by void rows as fully voided", () => {
+    const original = payment({ id: "p1", kind: "payment", amount: 80, invoiceId: "inv-1" });
+    const voidRow = payment({ id: "v1", kind: "void", amount: 80, invoiceId: "inv-1", relatedPaymentId: "p1" });
+    expect(isFullyVoidedPayment(original, [original, voidRow])).toBe(true);
+    expect(isFullyVoidedPayment(original, [original])).toBe(false);
+  });
+
+  it("does not treat refunded payments as fully voided", () => {
+    const original = payment({ id: "p1", kind: "payment", amount: 80, invoiceId: "inv-1" });
+    const refund = payment({ id: "r1", kind: "refund", amount: 80, invoiceId: "inv-1", relatedPaymentId: "p1" });
+    expect(isFullyVoidedPayment(original, [original, refund])).toBe(false);
+  });
+
+  it("blocks invoice delete only for active payments and refunds, not fully voided ones", () => {
+    const active = payment({ id: "p-active", kind: "payment", amount: 40, invoiceId: "inv-1" });
+    const voided = payment({ id: "p-voided", kind: "payment", amount: 60, invoiceId: "inv-1" });
+    const voidRow = payment({
+      id: "v1",
+      kind: "void",
+      amount: 60,
+      invoiceId: "inv-1",
+      relatedPaymentId: "p-voided",
+    });
+    const refund = payment({ id: "r1", kind: "refund", amount: 10, invoiceId: "inv-1", relatedPaymentId: "p-active" });
+    const rows = [active, voided, voidRow, refund];
+    const blocking = activePaymentsBlockingInvoice(rows, "inv-1");
+    expect(blocking.map((row) => row.id).sort()).toEqual(["p-active", "r1"]);
   });
 });

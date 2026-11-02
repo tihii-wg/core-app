@@ -9,6 +9,7 @@ type InvoiceCardProps = {
   formatMoney: (value: number) => string;
   onView: (invoice: Invoice) => void;
   onStatusChange: (invoice: Invoice, status: InvoiceStatus) => void;
+  onErroneousDeleted?: () => void;
 };
 
 /**
@@ -16,7 +17,7 @@ type InvoiceCardProps = {
  * surface opens the invoice detail; print and the actions menu stay
  * independent controls and never trigger the card click.
  */
-export function InvoiceCard({ invoice, isUpdating = false, formatMoney, onView, onStatusChange }: InvoiceCardProps) {
+export function InvoiceCard({ invoice, isUpdating = false, formatMoney, onView, onStatusChange, onErroneousDeleted }: InvoiceCardProps) {
   return (
     <article
       onClick={() => onView(invoice)}
@@ -34,7 +35,13 @@ export function InvoiceCard({ invoice, isUpdating = false, formatMoney, onView, 
         </div>
         <div className="flex shrink-0 items-center" onClick={(event) => event.stopPropagation()}>
           <InvoicePrintButton invoice={invoice} triggerClassName="size-10" />
-          <InvoiceActionsMenu invoice={invoice} isUpdating={isUpdating} onStatusChange={onStatusChange} triggerClassName="size-10" />
+          <InvoiceActionsMenu
+            invoice={invoice}
+            isUpdating={isUpdating}
+            onStatusChange={onStatusChange}
+            onErroneousDeleted={onErroneousDeleted}
+            triggerClassName="size-10"
+          />
         </div>
       </div>
 

@@ -82,6 +82,7 @@ export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end
         return {
           paymentCategory: row.invoiceId ? t("finance.categories.invoicePayment") : t("finance.categories.orderPayment"),
           refundCategory: t("finance.categories.refund"),
+          voidCategory: t("finance.categories.void"),
           description: t("finance.paymentDescription", { label }),
         };
       }, currency),

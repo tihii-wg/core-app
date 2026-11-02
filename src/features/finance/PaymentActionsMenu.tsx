@@ -1,9 +1,9 @@
-import { Ban, EllipsisVertical, RotateCcw } from "lucide-react";
+import { Ban, EllipsisVertical, RotateCcw, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../../ui/DropdownMenu";
-import { refundableRemaining } from "./paymentCalculations";
-import { assessErroneousPaymentVoid } from "./paymentVoid";
+import { isFullyVoidedPayment, refundableRemaining } from "./paymentCalculations";
+import { assessDeleteFullyVoidedPayment, assessErroneousPaymentVoid } from "./paymentVoid";
 import type { LedgerPayment } from "./paymentTypes";
 
 type PaymentActionsMenuProps = {
@@ -12,14 +12,16 @@ type PaymentActionsMenuProps = {
   canRecord: boolean;
   onRefund: (payment: LedgerPayment) => void;
   onVoidErroneous: (payment: LedgerPayment) => void;
+  onDeleteErroneous?: (payment: LedgerPayment) => void;
   /** Extra classes for the trigger (e.g. a larger touch target on mobile). */
   triggerClassName?: string;
 };
 
 /**
  * Finance ledger payment/refund row menu.
- * - Record refund: money was received and returned (supported).
- * - Void erroneous: money was never received (dialog explains schema gate; no silent delete).
+ * - Record refund: money was received and returned.
+ * - Void erroneous: money was never received (mark as erroneous).
+ * - Delete erroneous: optional cleanup after a full void (payment + void rows only).
  */
 export function PaymentActionsMenu({
   payment,
@@ -27,6 +29,7 @@ export function PaymentActionsMenu({
   canRecord,
   onRefund,
   onVoidErroneous,
+  onDeleteErroneous,
   triggerClassName,
 }: PaymentActionsMenuProps) {
   const { t } = useTranslation();
@@ -34,12 +37,18 @@ export function PaymentActionsMenu({
   const refundable = payment.kind === "payment" ? refundableRemaining(payment, allPayments) : 0;
   const canRefund = canRecord && payment.kind === "payment" && refundable > 0;
   const voidAssessment = assessErroneousPaymentVoid(payment, allPayments, { canRecord });
+  const cleanupAssessment = assessDeleteFullyVoidedPayment(payment, allPayments, { canRecord });
+  const fullyVoided = payment.kind === "payment" && isFullyVoidedPayment(payment, allPayments);
+
   const showVoidEntry =
     payment.kind === "payment" &&
+    !fullyVoided &&
     (voidAssessment.allowed ||
       voidAssessment.reason === "schema_unsupported" ||
       voidAssessment.reason === "already_offset" ||
       voidAssessment.reason === "no_permission");
+
+  const showDeleteEntry = Boolean(onDeleteErroneous) && payment.kind === "payment" && fullyVoided;
 
   return (
     <DropdownMenu modal={false}>
@@ -78,7 +87,20 @@ export function PaymentActionsMenu({
           </>
         ) : null}
 
-        {!canRefund && !showVoidEntry ? (
+        {showDeleteEntry ? (
+          <>
+            {canRefund || showVoidEntry ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuItem
+              disabled={cleanupAssessment.allowed === false}
+              onSelect={() => onDeleteErroneous?.(payment)}
+            >
+              <Trash2 />
+              {t("finance.payments.void.deleteAction")}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+
+        {!canRefund && !showVoidEntry && !showDeleteEntry ? (
           <DropdownMenuItem disabled>{t("finance.payments.actions.noActions")}</DropdownMenuItem>
         ) : null}
       </DropdownMenuContent>

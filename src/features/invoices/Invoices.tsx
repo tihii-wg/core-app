@@ -37,10 +37,13 @@ export function Invoices() {
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;
-  const unpaidTotal = invoices.filter((i) => i.status === "sent" || i.status === "overdue").reduce((sum, i) => sum + i.amount, 0);
+  const unpaidTotal = invoices
+    .filter((i) => i.status === "sent" || i.status === "overdue")
+    .reduce((sum, i) => sum + i.amount, 0);
 
   const invoiceableOrders = useMemo(() => {
-    const invoicedOrderIds = new Set(invoices.map((invoice) => invoice.orderId));
+    // Erroneous invoices still occupy order_id until deleted (partial unique index).
+    const invoicedOrderIds = new Set(invoices.map((invoice) => invoice.orderId).filter(Boolean));
     return orders.filter((order) => order.status !== "cancelled" && order.services.length > 0 && !invoicedOrderIds.has(order.id));
   }, [invoices, orders]);
 
@@ -184,7 +187,14 @@ export function Invoices() {
       cell: (invoice) => (
         <div className="flex items-center justify-end gap-1">
           <InvoicePrintButton invoice={invoice} />
-          <InvoiceActionsMenu invoice={invoice} isUpdating={updateStatus.isPending} onStatusChange={handleStatusChange} />
+          <InvoiceActionsMenu
+            invoice={invoice}
+            isUpdating={updateStatus.isPending}
+            onStatusChange={handleStatusChange}
+            onErroneousDeleted={() => {
+              if (openInvoiceId === invoice.id) setOpenInvoiceId(null);
+            }}
+          />
         </div>
       ),
     },
@@ -196,6 +206,7 @@ export function Invoices() {
     { value: "sent", label: t("status.invoice.sent") },
     { value: "paid", label: t("status.invoice.paid") },
     { value: "overdue", label: t("status.invoice.overdue") },
+    { value: "erroneous", label: t("status.invoice.erroneous") },
   ];
 
   const isFiltered = searchQuery !== "" || statusFilter !== "all";
@@ -290,6 +301,9 @@ export function Invoices() {
                 formatMoney={formatMoney}
                 onView={(selected) => setOpenInvoiceId(selected.id)}
                 onStatusChange={handleStatusChange}
+                onErroneousDeleted={() => {
+                  if (openInvoiceId === invoice.id) setOpenInvoiceId(null);
+                }}
               />
             ))}
           </div>

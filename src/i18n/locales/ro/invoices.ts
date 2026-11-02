@@ -51,10 +51,26 @@ const invoices: Messages<typeof en> = {
     markSent: "Marchează ca trimisă",
     markUnpaid: "Marchează ca neachitată",
     markPaid: "Marchează ca achitată",
+    markErroneous: "Marchează ca trimisă din greșeală",
+    deleteErroneous: "Șterge factura eronată",
     downloadPdf: "Descarcă factura PDF",
     previewPrint: "Previzualizare / Tipărire",
     sendEmail: "Trimite prin e-mail",
     print: "Tipărește",
+  },
+  erroneous: {
+    banner:
+      "Această factură este marcată ca trimisă din greșeală. Nu este o factură validă. Plățile noi și trimiterea pe e-mail sunt blocate. Comanda asociată rămâne neschimbată.",
+    markTitle: "Marchezi factura ca trimisă din greșeală?",
+    markDescription: "Factura {{number}} va fi marcată ca trimisă din greșeală. Numărul și istoricul se păstrează.",
+    markPointPreserve: "Numărul facturii și detaliile istorice rămân vizibile.",
+    markPointInvalid: "Nu va mai fi tratată ca factură validă neachitată sau de încasat.",
+    markPointOrder: "Comanda asociată nu este ștearsă și nu este modificată.",
+    deleteTitle: "Ștergi factura eronată?",
+    deleteDescription: "Șterge doar factura {{number}}. Acțiunea nu poate fi anulată.",
+    deletePointInvoiceOnly: "Se elimină doar această factură și liniile ei.",
+    deletePointOrderKept: "Comanda asociată rămâne în sistem, neschimbată. Șterge comanda separat dacă este necesar.",
+    deletePointNumber: "Numărul facturii nu va fi reutilizat.",
   },
   document: {
     title: "Factura {{number}}",
@@ -144,8 +160,11 @@ const invoices: Messages<typeof en> = {
       sent: "Factura {{number}} a fost marcată ca trimisă",
       paid: "Factura {{number}} a fost marcată ca achitată",
       overdue: "Factura {{number}} a fost marcată ca restantă",
+      erroneous: "Factura {{number}} a fost marcată ca trimisă din greșeală",
     },
     statusFailed: "Starea facturii nu a putut fi actualizată",
+    erroneousDeleted: "Factura {{number}} a fost ștearsă. Comanda asociată nu a fost modificată.",
+    erroneousDeleteFailed: "Factura eronată nu a putut fi ștearsă",
   },
   errors: {
     unavailable: "Facturile nu sunt încă configurate în această bază de date. Mai întâi trebuie aplicată migrarea pentru facturi.",
@@ -155,6 +174,16 @@ const invoices: Messages<typeof en> = {
     orderHasNoServices: "Această comandă nu are servicii de facturat.",
     alreadyInvoiced: "Factura {{number}} există deja pentru această comandă.",
     alreadyInvoicedUnknown: "Pentru această comandă există deja o factură.",
+    invalidStatus: "Această stare a facturii nu este suportată.",
+    erroneousImmutable:
+      "O factură marcată ca trimisă din greșeală nu poate fi trecută în altă stare. Șterge-o sau las-o ca istoric.",
+    deleteRequiresErroneous: "În acest fel pot fi șterse doar facturile marcate ca trimise din greșeală.",
+    deleteBlockedByPayments:
+      "Nu se poate șterge factura {{number}}: {{count}} înregistrare/înregistrări din registrul de plăți încă o referă. În Finanțe marchează plățile eronate ca anulate și șterge acele înregistrări (sau rezolvă rambursările), apoi reîncearcă. Comanda rămâne neschimbată.",
+    erroneousStatusSqlRequired:
+      "Marcare ca trimisă din greșeală necesită aplicarea {{file}} în baza de date (cu autorizarea proprietarului).",
+    deleteRpcMissing:
+      "Ștergerea unei facturi eronate necesită aplicarea {{file}} în baza de date (cu autorizarea proprietarului).",
   },
 };
 

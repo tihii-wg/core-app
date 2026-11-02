@@ -7,7 +7,7 @@
 export const ledgerPaymentMethods = ["cash", "card", "bank_transfer", "other"] as const;
 export type LedgerPaymentMethod = (typeof ledgerPaymentMethods)[number];
 
-export const paymentKinds = ["payment", "refund"] as const;
+export const paymentKinds = ["payment", "refund", "void"] as const;
 export type PaymentKind = (typeof paymentKinds)[number];
 
 /** One row from `public.payments`. */

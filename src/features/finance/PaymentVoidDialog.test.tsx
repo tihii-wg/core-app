@@ -1,12 +1,19 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../tests/renderQuery";
 import { PaymentVoidDialog } from "./PaymentVoidDialog";
 import type { LedgerPayment } from "./paymentTypes";
 
+const mutate = vi.fn();
+
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}`, currency: "MDL" }),
+}));
+
+vi.mock("./usePayments", () => ({
+  useRecordPaymentVoid: () => ({ mutate, isPending: false }),
+  useDeleteFullyVoidedPayment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function payment(overrides: Partial<LedgerPayment> = {}): LedgerPayment {
@@ -29,23 +36,30 @@ function payment(overrides: Partial<LedgerPayment> = {}): LedgerPayment {
 }
 
 describe("PaymentVoidDialog", () => {
-  it("distinguishes void from refund and refuses to record without schema support", async () => {
+  beforeEach(() => {
+    mutate.mockReset();
+  });
+
+  it("distinguishes void from refund and records a void with a reason", async () => {
     const user = userEvent.setup();
+    const onOpenChange = vi.fn();
     const row = payment();
     renderWithQuery(
-      <PaymentVoidDialog open onOpenChange={vi.fn()} payment={row} allPayments={[row]} canRecord />,
+      <PaymentVoidDialog open onOpenChange={onOpenChange} payment={row} allPayments={[row]} canRecord />,
     );
 
-    expect(screen.getByRole("heading", { name: /Void erroneous payment/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Mark payment as erroneous/i })).toBeInTheDocument();
     expect(screen.getByText(/Refund = money was received/i)).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/not available yet/i);
 
     await user.type(screen.getByLabelText(/Reason for void/i), "mistyped amount");
     await user.click(screen.getByRole("button", { name: /Confirm void/i }));
-    expect(screen.getAllByText(/not available yet/i).length).toBeGreaterThanOrEqual(1);
+    expect(mutate).toHaveBeenCalledWith(
+      { originalPaymentId: "pay-1", reason: "mistyped amount" },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
   });
 
-  it("validates required reason before the schema gate", async () => {
+  it("validates required reason before submit", async () => {
     const user = userEvent.setup();
     const row = payment();
     renderWithQuery(
@@ -53,6 +67,7 @@ describe("PaymentVoidDialog", () => {
     );
     await user.click(screen.getByRole("button", { name: /Confirm void/i }));
     expect(screen.getByText(/A reason is required/i)).toBeInTheDocument();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("explains already-offset payments must use refund instead", () => {

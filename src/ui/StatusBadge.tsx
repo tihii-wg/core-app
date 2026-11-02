@@ -127,7 +127,13 @@ export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
   return <StatusBadge variant={paymentVariants[status]}>{t(`status.payment.${status}`)}</StatusBadge>;
 }
 
-const invoiceVariants: Record<InvoiceStatus, BadgeVariant> = { draft: 'muted', sent: 'info', paid: 'success', overdue: 'danger' };
+const invoiceVariants: Record<InvoiceStatus, BadgeVariant> = {
+  draft: "muted",
+  sent: "info",
+  paid: "success",
+  overdue: "danger",
+  erroneous: "danger",
+};
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   const { t } = useTranslation();

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleCheck, Download, Mail, Printer, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, CircleCheck, Download, Mail, Printer, RotateCcw, Send, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { ErrorState } from "../../ui/EmptyState";
@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Spinner } from "../../ui/Spinner";
 import { InvoiceStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import type { Invoice, InvoiceStatus } from "../../lib/types";
+import { isErroneousInvoiceStatus } from "../../services/apiInvoices";
 import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -15,6 +16,8 @@ import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
 import { useInvoiceVat } from "./useInvoiceVat";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 import { InvoiceEmailDialog } from "./InvoiceEmailDialog";
+import { DeleteErroneousInvoiceDialog } from "./DeleteErroneousInvoiceDialog";
+import { MarkErroneousInvoiceDialog } from "./MarkErroneousInvoiceDialog";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
 import { invoicePaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
@@ -37,11 +40,15 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
   const documentData = useInvoiceDocumentData(invoice ?? null);
   const [printJob, setPrintJob] = useState<InvoicePrintJob | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [markErroneousOpen, setMarkErroneousOpen] = useState(false);
+  const [deleteErroneousOpen, setDeleteErroneousOpen] = useState(false);
   const { payments, isLoading: paymentsLoading } = useGetPayments();
   const { canWrite } = useWorkspaceSubscription();
   const canRecord = withSubscriptionWriteAccess(Boolean(useActiveWorkspaceRole()), canWrite);
   const vat = useInvoiceVat(invoice?.id, invoice?.total);
   const paymentBalance = invoice ? invoicePaymentBalance(invoice, payments) : null;
+  const erroneous = invoice ? isErroneousInvoiceStatus(invoice.status) : false;
+  const canRecordPayments = canRecord && !erroneous;
 
   const startPrint = () => {
     if (!invoice) return;
@@ -163,24 +170,49 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
               </table>
             </div>
 
-            <PaymentHistorySection target="invoice" invoice={invoice} payments={payments} isLoading={paymentsLoading} canRecord={canRecord} />
+            {erroneous ? (
+              <div role="status" className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {t("invoices.erroneous.banner")}
+              </div>
+            ) : null}
+
+            <PaymentHistorySection
+              target="invoice"
+              invoice={invoice}
+              payments={payments}
+              isLoading={paymentsLoading}
+              canRecord={canRecordPayments}
+            />
 
             <div className="flex flex-wrap gap-2 border-t border-border pt-5">
-              {invoice.status === "draft" && (
+              {!erroneous && invoice.status === "draft" && (
                 <Button variant="outline" size="sm" disabled={isUpdating} onClick={() => onStatusChange(invoice, "sent")}>
                   <Send />
                   {t("invoices.actions.markSent")}
                 </Button>
               )}
-              {invoice.status === "paid" ? (
-                <Button variant="outline" size="sm" disabled={isUpdating} onClick={() => onStatusChange(invoice, "sent")}>
-                  <RotateCcw />
-                  {t("invoices.actions.markUnpaid")}
+              {!erroneous &&
+                (invoice.status === "paid" ? (
+                  <Button variant="outline" size="sm" disabled={isUpdating} onClick={() => onStatusChange(invoice, "sent")}>
+                    <RotateCcw />
+                    {t("invoices.actions.markUnpaid")}
+                  </Button>
+                ) : (
+                  <Button size="sm" disabled={isUpdating} onClick={() => onStatusChange(invoice, "paid")}>
+                    <CircleCheck />
+                    {t("invoices.actions.markPaid")}
+                  </Button>
+                ))}
+              {!erroneous && (
+                <Button variant="outline" size="sm" disabled={isUpdating} onClick={() => setMarkErroneousOpen(true)}>
+                  <AlertTriangle />
+                  {t("invoices.actions.markErroneous")}
                 </Button>
-              ) : (
-                <Button size="sm" disabled={isUpdating} onClick={() => onStatusChange(invoice, "paid")}>
-                  <CircleCheck />
-                  {t("invoices.actions.markPaid")}
+              )}
+              {erroneous && (
+                <Button variant="destructive" size="sm" disabled={isUpdating} onClick={() => setDeleteErroneousOpen(true)}>
+                  <Trash2 />
+                  {t("invoices.actions.deleteErroneous")}
                 </Button>
               )}
             </div>
@@ -194,7 +226,12 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                 <Printer />
                 {t("invoices.actions.previewPrint")}
               </Button>
-              <Button variant="outline" size="sm" disabled={documentData.isLoading} onClick={() => setEmailOpen(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={documentData.isLoading || erroneous}
+                onClick={() => setEmailOpen(true)}
+              >
                 <Mail />
                 {t("invoices.actions.sendEmail")}
               </Button>
@@ -203,7 +240,18 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
         )}
       </SheetContent>
       {printJob ? <InvoicePrintRoot job={printJob} onDone={() => setPrintJob(null)} /> : null}
-      {emailOpen && invoice ? <InvoiceEmailDialog invoice={invoice} onClose={() => setEmailOpen(false)} onDownloadPdf={startPrint} /> : null}
+      {emailOpen && invoice && !erroneous ? (
+        <InvoiceEmailDialog invoice={invoice} onClose={() => setEmailOpen(false)} onDownloadPdf={startPrint} />
+      ) : null}
+      <MarkErroneousInvoiceDialog
+        invoice={markErroneousOpen && invoice ? invoice : null}
+        onClose={() => setMarkErroneousOpen(false)}
+      />
+      <DeleteErroneousInvoiceDialog
+        invoice={deleteErroneousOpen && invoice ? invoice : null}
+        onClose={() => setDeleteErroneousOpen(false)}
+        onDeleted={onClose}
+      />
     </Sheet>
   );
 }

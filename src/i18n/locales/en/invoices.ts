@@ -46,10 +46,25 @@ export default {
     markSent: "Mark as sent",
     markUnpaid: "Mark as unpaid",
     markPaid: "Mark as paid",
+    markErroneous: "Mark as sent in error",
+    deleteErroneous: "Delete erroneous invoice",
     downloadPdf: "Download Invoice PDF",
     previewPrint: "Preview / Print",
     sendEmail: "Send by Email",
     print: "Print",
+  },
+  erroneous: {
+    banner: "This invoice is marked as sent in error. It is not a valid bill. New payments and email send are blocked. The linked order is unchanged.",
+    markTitle: "Mark invoice as sent in error?",
+    markDescription: "Invoice {{number}} will be flagged as sent in error. Its number and history are kept.",
+    markPointPreserve: "The invoice number and historical details stay visible.",
+    markPointInvalid: "It will no longer count as a valid unpaid or payable invoice.",
+    markPointOrder: "The associated order is not deleted or changed.",
+    deleteTitle: "Delete erroneous invoice?",
+    deleteDescription: "Delete invoice {{number}} only. This cannot be undone.",
+    deletePointInvoiceOnly: "Only this invoice and its invoice line items will be removed.",
+    deletePointOrderKept: "The associated order stays in the system, unchanged. Delete the order separately if you need to.",
+    deletePointNumber: "The invoice number will not be reused.",
   },
   document: {
     title: "Invoice {{number}}",
@@ -139,8 +154,11 @@ export default {
       sent: "Invoice {{number}} marked as sent",
       paid: "Invoice {{number}} marked as paid",
       overdue: "Invoice {{number}} marked as overdue",
+      erroneous: "Invoice {{number}} marked as sent in error",
     },
     statusFailed: "Could not update the invoice status",
+    erroneousDeleted: "Invoice {{number}} deleted. The associated order was not changed.",
+    erroneousDeleteFailed: "Could not delete the erroneous invoice",
   },
   errors: {
     unavailable: "Invoices are not set up in this database yet. The invoices migration has to be applied first.",
@@ -150,5 +168,14 @@ export default {
     orderHasNoServices: "This order has no services to invoice.",
     alreadyInvoiced: "Invoice {{number}} already exists for this order.",
     alreadyInvoicedUnknown: "An invoice already exists for this order.",
+    invalidStatus: "That invoice status is not supported.",
+    erroneousImmutable: "An invoice marked as sent in error cannot be changed to another status. Delete it, or leave it as historical.",
+    deleteRequiresErroneous: "Only invoices marked as sent in error can be deleted this way.",
+    deleteBlockedByPayments:
+      "Cannot delete invoice {{number}}: {{count}} payment ledger row(s) still reference it. In Finance, mark erroneous payments as void and delete those records (or resolve refunds), then retry. The order is unchanged.",
+    erroneousStatusSqlRequired:
+      "Marking an invoice as sent in error requires applying {{file}} on the database (owner authorization).",
+    deleteRpcMissing:
+      "Deleting an erroneous invoice requires applying {{file}} on the database (owner authorization).",
   },
 };

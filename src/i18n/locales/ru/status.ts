@@ -34,6 +34,7 @@ const status: Messages<typeof en> = {
     sent: "Отправлен",
     paid: "Оплачен",
     overdue: "Просрочен",
+    erroneous: "Отправлен по ошибке",
   },
   inventory: {
     in_stock: "В наличии",

@@ -34,6 +34,7 @@ const status: Messages<typeof en> = {
     sent: "Trimisă",
     paid: "Achitată",
     overdue: "Restantă",
+    erroneous: "Trimisă din greșeală",
   },
   inventory: {
     in_stock: "În stoc",

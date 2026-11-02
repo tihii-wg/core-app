@@ -31,6 +31,7 @@ export default {
     sent: "Sent",
     paid: "Paid",
     overdue: "Overdue",
+    erroneous: "Sent in error",
   },
   inventory: {
     in_stock: "In Stock",

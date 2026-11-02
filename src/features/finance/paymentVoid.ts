@@ -1,21 +1,20 @@
 /**
  * Erroneous-payment void / cancellation support.
  *
- * Current `public.payments` (see apiPayments columns + harden_payment_ledger.sql):
- * - Append-only for anon/authenticated (no UPDATE/DELETE)
- * - kind ∈ {payment, refund} only
- * - No voided_at / status / cancelled columns
- * - payments.order_id FK blocks hard-deleting orders that have any ledger row
+ * Schema (after applying 20261102140000_payment_void_erroneous_cleanup.PRODUCTION.sql):
+ * - Append-only for anon/authenticated except cleanup RPC for fully voided rows
+ * - kind ∈ {payment, refund, void}
+ * - Void = money never received (distinct from refund)
+ * - Optional delete_fully_voided_payment removes payment+void only (invoice/order untouched)
  *
- * Until a reviewed schema change lands (see supabase/manual-sql/propose_payment_void.sql),
- * the app must not insert a void kind, hard-delete payments, or treat refunds as voids.
+ * App UI is enabled; if SQL is not applied yet, inserts/RPCs fail with a clear schema message.
  */
 
-import { refundableRemaining } from "./paymentCalculations";
+import { isFullyVoidedPayment, refundableRemaining } from "./paymentCalculations";
 import type { LedgerPayment } from "./paymentTypes";
 
-/** Flip only after the reviewed void kind (or equivalent) is live in the database. */
-export const PAYMENT_VOID_SCHEMA_SUPPORTED = false;
+/** App supports void once SQL is applied; API maps missing constraint/RPC to schema errors. */
+export const PAYMENT_VOID_SCHEMA_SUPPORTED = true;
 
 export type PaymentVoidBlockReason =
   | "schema_unsupported"
@@ -50,6 +49,24 @@ export function assessErroneousPaymentVoid(
     return { allowed: false, reason: "schema_unsupported" };
   }
 
+  return { allowed: true };
+}
+
+export type PaymentCleanupAssessment =
+  | { allowed: true }
+  | { allowed: false; reason: "not_a_payment" | "not_fully_voided" | "no_permission" };
+
+/** Cleanup delete is only for payments already fully marked erroneous via void (no refunds). */
+export function assessDeleteFullyVoidedPayment(
+  payment: LedgerPayment,
+  allPayments: LedgerPayment[],
+  options: { canRecord: boolean } = { canRecord: true },
+): PaymentCleanupAssessment {
+  if (!options.canRecord) return { allowed: false, reason: "no_permission" };
+  if (payment.kind !== "payment") return { allowed: false, reason: "not_a_payment" };
+  if (!isFullyVoidedPayment(payment, allPayments)) {
+    return { allowed: false, reason: "not_fully_voided" };
+  }
   return { allowed: true };
 }
 

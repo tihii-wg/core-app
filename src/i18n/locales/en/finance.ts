@@ -43,12 +43,14 @@ export default {
       income: "Payment",
       expense: "Expense",
       refund: "Refund",
+      void: "Void (erroneous)",
     },
   },
   categories: {
     invoicePayment: "Invoice payment",
     orderPayment: "Order payment",
     refund: "Refund",
+    void: "Erroneous void",
   },
   invoiceDescription: "{{number}} · {{client}}",
   orderDescription: "Order {{number}}",
@@ -145,6 +147,7 @@ export default {
       saveFailed: "The payment could not be saved",
       orderNotFound: "Order was not found in this workspace.",
       invoiceNotFound: "Invoice was not found in this workspace.",
+      erroneousInvoice: "Invoice {{number}} is marked as sent in error. New payments against it are blocked.",
       invoiceOrderMismatch: "The invoice is not linked to the selected order.",
       refundAgainstRefund: "A refund cannot be issued against another refund.",
       currencyMismatch: "Currency must match the workspace and existing ledger entries for this balance.",
@@ -173,18 +176,23 @@ export default {
     kinds: {
       payment: "Payment",
       refund: "Refund",
+      void: "Void (erroneous)",
     },
     actions: {
       menuLabel: "Actions for {{kind}}",
       noActions: "No available actions",
     },
     void: {
-      action: "Void erroneous payment…",
-      dialogTitle: "Void erroneous payment",
+      action: "Mark as erroneous…",
+      badge: "Erroneous",
+      dialogTitle: "Mark payment as erroneous",
       dialogDescription:
         "Use this only when the payment was recorded by mistake and money was never received. This is not a cash refund.",
       vsRefund:
         "Refund = money was received and returned. Void = data-entry correction for money that never arrived. Do not use void for real refunds.",
+      pointHistory: "The original payment row is kept for audit until you delete the erroneous record separately.",
+      pointInvoiceOrder: "The linked invoice and order are not deleted or modified.",
+      pointDeleteLater: "After voiding, you can optionally delete the erroneous payment record from Finance.",
       fields: {
         reason: "Reason for void *",
       },
@@ -193,12 +201,32 @@ export default {
         reasonTooShort: "Reason must be at least 8 characters",
       },
       confirm: "Confirm void",
+      deleteAction: "Delete erroneous record…",
+      deleteTitle: "Delete erroneous payment?",
+      deleteDescription: "Remove the voided payment of {{amount}} and its void offset rows from the ledger.",
+      deletePointPaymentOnly: "Only this payment and its void rows will be deleted.",
+      deletePointInvoiceKept: "The linked invoice is not deleted — mark and delete it separately in Invoices if needed.",
+      deletePointOrderKept: "The linked order is not deleted or changed.",
+      deleteConfirm: "Delete erroneous record",
+      toast: {
+        recording: "Marking payment as erroneous…",
+        recorded: "Payment marked as erroneous",
+        deleting: "Deleting erroneous payment…",
+        deleted: "Erroneous payment deleted. Invoice and order were not changed.",
+      },
       errors: {
         schemaUnsupported:
-          "Safe payment void is not available yet: the payment ledger only supports payment and refund rows (append-only). Hard-deleting payments is not allowed. A reviewed schema change is required before void can be recorded.",
+          "Safe payment void requires applying {{file}} on the database (owner authorization). Until then the ledger only supports payment and refund rows.",
         alreadyOffset:
           "This payment already has refunds or offsets. Use Record refund for remaining money movement — do not void it as erroneous.",
         notAPayment: "Only payment rows can be voided. Refunds cannot be voided.",
+        amountMismatch: "Void amount must match the original payment amount.",
+        deleteRequiresFullVoid: "Delete is only available after the payment is fully marked erroneous (voided) with no refunds.",
+        deleteBlockedByRefunds:
+          "Cannot delete this payment: refund rows still reference it. Resolve refunds first — do not treat a real refund as an erroneous void.",
+        deleteRpcMissing:
+          "Deleting a fully voided payment requires applying {{file}} on the database (owner authorization).",
+        deleteFailed: "Could not delete the erroneous payment",
       },
     },
   },

@@ -46,12 +46,14 @@ const finance: Messages<typeof en> = {
       income: "Plată",
       expense: "Cheltuială",
       refund: "Rambursare",
+      void: "Anulare (eronată)",
     },
   },
   categories: {
     invoicePayment: "Plată factură",
     orderPayment: "Plată comandă",
     refund: "Rambursare",
+    void: "Anulare eronată",
   },
   invoiceDescription: "{{number}} · {{client}}",
   orderDescription: "Comanda {{number}}",
@@ -148,6 +150,7 @@ const finance: Messages<typeof en> = {
       saveFailed: "Plata nu a putut fi salvată",
       orderNotFound: "Comanda nu a fost găsită în acest workspace.",
       invoiceNotFound: "Factura nu a fost găsită în acest workspace.",
+      erroneousInvoice: "Factura {{number}} este marcată ca trimisă din greșeală. Plățile noi pe ea sunt blocate.",
       invoiceOrderMismatch: "Factura nu este legată de comanda selectată.",
       refundAgainstRefund: "Nu se poate emite o rambursare pentru o altă rambursare.",
       currencyMismatch: "Moneda trebuie să coincidă cu workspace-ul și înregistrările din registru pentru acest sold.",
@@ -176,18 +179,23 @@ const finance: Messages<typeof en> = {
     kinds: {
       payment: "Plată",
       refund: "Rambursare",
+      void: "Anulare (eronată)",
     },
     actions: {
       menuLabel: "Acțiuni pentru {{kind}}",
       noActions: "Nicio acțiune disponibilă",
     },
     void: {
-      action: "Anulează plata eronată…",
-      dialogTitle: "Anulează plata eronată",
+      action: "Marchează ca eronată…",
+      badge: "Eronată",
+      dialogTitle: "Marchează plata ca eronată",
       dialogDescription:
         "Folosiți doar când plata a fost înregistrată din greșeală și banii nu au fost primiți niciodată. Aceasta nu este o rambursare.",
       vsRefund:
         "Rambursare = banii au fost primiți și returnați. Anulare eronată = corectare de înregistrare pentru bani care nu au ajuns. Nu folosiți anularea pentru rambursări reale.",
+      pointHistory: "Rândul original al plății rămâne pentru audit până ștergeți separat înregistrarea eronată.",
+      pointInvoiceOrder: "Factura și comanda asociate nu sunt șterse și nu sunt modificate.",
+      pointDeleteLater: "După anulare, puteți șterge opțional înregistrarea eronată din Finanțe.",
       fields: {
         reason: "Motivul anulării *",
       },
@@ -196,12 +204,33 @@ const finance: Messages<typeof en> = {
         reasonTooShort: "Motivul trebuie să aibă cel puțin 8 caractere",
       },
       confirm: "Confirmă anularea",
+      deleteAction: "Șterge înregistrarea eronată…",
+      deleteTitle: "Ștergeți plata eronată?",
+      deleteDescription: "Eliminați plata anulată de {{amount}} și rândurile de anulare din registru.",
+      deletePointPaymentOnly: "Vor fi șterse doar această plată și rândurile sale de anulare.",
+      deletePointInvoiceKept: "Factura asociată nu este ștearsă — marcați-o și ștergeți-o separat în Facturi dacă e necesar.",
+      deletePointOrderKept: "Comanda asociată nu este ștearsă și nu este modificată.",
+      deleteConfirm: "Șterge înregistrarea eronată",
+      toast: {
+        recording: "Se marchează plata ca eronată…",
+        recorded: "Plata a fost marcată ca eronată",
+        deleting: "Se șterge plata eronată…",
+        deleted: "Plata eronată a fost ștearsă. Factura și comanda nu au fost modificate.",
+      },
       errors: {
         schemaUnsupported:
-          "Anularea sigură a plății nu este disponibilă încă: registrul acceptă doar rânduri de tip plată și rambursare (doar adăugare). Ștergerea plăților nu este permisă. Este necesară o modificare de schemă revizuită înainte de a înregistra anulări.",
+          "Anularea sigură a plății necesită aplicarea {{file}} în baza de date (autorizarea proprietarului). Până atunci registrul acceptă doar rânduri de tip plată și rambursare.",
         alreadyOffset:
           "Această plată are deja rambursări sau compensări. Folosiți Înregistrează rambursarea pentru restul — nu o anulați ca eronată.",
         notAPayment: "Doar rândurile de tip plată pot fi anulate. Rambursările nu pot fi anulate.",
+        amountMismatch: "Suma anulării trebuie să coincidă cu suma plății originale.",
+        deleteRequiresFullVoid:
+          "Ștergerea este disponibilă doar după ce plata este complet marcată ca eronată (anulată) și fără rambursări.",
+        deleteBlockedByRefunds:
+          "Nu se poate șterge această plată: există rânduri de rambursare care o referă. Rezolvă rambursările mai întâi — nu trata o rambursare reală ca anulare eronată.",
+        deleteRpcMissing:
+          "Ștergerea unei plăți complet anulate necesită aplicarea {{file}} în baza de date (autorizarea proprietarului).",
+        deleteFailed: "Nu s-a putut șterge plata eronată",
       },
     },
   },

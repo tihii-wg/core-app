@@ -1,10 +1,19 @@
 import i18n from "../i18n";
 import type { Invoice, InvoiceDocument, InvoiceItem, InvoiceStatus } from "../lib/types";
 import { readVin } from "./apiOrders";
+import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 
 const pendingNumberPrefix = "INV-PENDING-";
 const issueNumberRequest = "INV-NEXT";
+
+/** Manual SQL: status check + delete_erroneous_invoice RPC. */
+export const ERRONEOUS_INVOICE_SQL = "20261102120000_erroneous_invoice_status_and_delete.PRODUCTION.sql";
+/** Follow-up SQL: void kind + cleanup RPC (invoice delete still blocks on any payment rows after entitlement migration). */
+export const ERRONEOUS_INVOICE_PAYMENT_VOID_SQL = "20261102140000_payment_void_erroneous_cleanup.PRODUCTION.sql";
+/** Entitlement hardening for delete_erroneous_invoice (subscription + permissions; any-payment block). */
+export const ERRONEOUS_INVOICE_ENTITLEMENT_SQL = "20261102160000_delete_erroneous_invoice_entitlement.PRODUCTION.sql";
+export const DELETE_ERRONEOUS_INVOICE_RPC = "delete_erroneous_invoice";
 
 function invoicePermissionMessage() {
   return i18n.t("invoices.errors.noPermission");
@@ -24,9 +33,24 @@ export class InvoicesUnavailableError extends Error {
 
 type DbError = { code?: string; message: string };
 
+function isErroneousStatusNotAllowedError(error: DbError) {
+  const message = error.message ?? "";
+  return (
+    /invoices_status_check|check constraint/i.test(message) &&
+    (/erroneous/i.test(message) || error.code === "23514")
+  );
+}
+
 function toInvoiceError(error: DbError) {
   if (error.code === "PGRST205" || error.code === "42P01") return new InvoicesUnavailableError();
+  if (isErroneousStatusNotAllowedError(error)) {
+    return new Error(i18n.t("invoices.errors.erroneousStatusSqlRequired", { file: ERRONEOUS_INVOICE_SQL }));
+  }
   return new Error(error.message);
+}
+
+export function isErroneousInvoiceStatus(status: InvoiceStatus | string | null | undefined) {
+  return status === "erroneous";
 }
 
 function requireWorkspaceId(workspaceId: string | undefined) {
@@ -38,7 +62,7 @@ export function alreadyInvoicedMessage(invoiceNumber?: string) {
   return invoiceNumber ? i18n.t("invoices.errors.alreadyInvoiced", { number: invoiceNumber }) : i18n.t("invoices.errors.alreadyInvoicedUnknown");
 }
 
-const invoiceStatuses = new Set<InvoiceStatus>(["draft", "sent", "paid", "overdue"]);
+const invoiceStatuses = new Set<InvoiceStatus>(["draft", "sent", "paid", "overdue", "erroneous"]);
 const invoiceColumns =
   "id, workspace_id, order_id, client_id, number, status, client_name, order_number, device, car_number, vin, description, subtotal, total, due_date, paid_at, created_by, created_at, updated_at";
 // Disambiguate: invoices has two FKs to clients (client_id + payer_client_id from crm_ro_v1).
@@ -180,6 +204,25 @@ export async function getInvoice(invoiceId: string, workspaceId: string | undefi
 /** Moves an invoice to another status; paid_at is set when it becomes paid and cleared otherwise. */
 export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStatus, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  if (!invoiceStatuses.has(status)) throw new Error(i18n.t("invoices.errors.invalidStatus"));
+
+  const { data: current, error: currentError } = await supabase
+    .from("invoices")
+    .select(invoiceColumns)
+    .eq("id", invoiceId)
+    .eq("workspace_id", targetWorkspaceId)
+    .maybeSingle();
+  if (currentError) throw toInvoiceError(currentError);
+  if (!current) throw new Error(invoicePermissionMessage());
+
+  const currentStatus = text((current as { status?: unknown }).status);
+  if (isErroneousInvoiceStatus(currentStatus) && status !== "erroneous") {
+    throw new Error(i18n.t("invoices.errors.erroneousImmutable"));
+  }
+  if (status === "erroneous" && isErroneousInvoiceStatus(currentStatus)) {
+    return toInvoice(current as Record<string, unknown>);
+  }
+
   const { data, error } = await supabase
     .from("invoices")
     .update({ status, paid_at: status === "paid" ? new Date().toISOString() : null })
@@ -191,6 +234,64 @@ export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStat
   if (error) throw toInvoiceError(error);
   if (!data) throw new Error(invoicePermissionMessage());
   return toInvoice(data as Record<string, unknown>);
+}
+
+/** Marks an invoice as sent in error. Preserves number and history; does not touch the order. */
+export async function markInvoiceSentInError(invoiceId: string, workspaceId: string | undefined) {
+  return updateInvoiceStatus(invoiceId, "erroneous", workspaceId);
+}
+
+/**
+ * Deletes an invoice that is already marked erroneous.
+ * Server RPC enforces membership, status, and financial blockers; the order is never modified.
+ */
+export async function deleteErroneousInvoice(invoiceId: string, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+
+  const { data: current, error: currentError } = await supabase
+    .from("invoices")
+    .select("id, number, status, order_id")
+    .eq("id", invoiceId)
+    .eq("workspace_id", targetWorkspaceId)
+    .maybeSingle();
+  if (currentError) throw toInvoiceError(currentError);
+  if (!current) throw new Error(invoicePermissionMessage());
+
+  const row = current as { id: string; number?: string; status?: string; order_id?: string | null };
+  if (!isErroneousInvoiceStatus(row.status)) {
+    throw new Error(i18n.t("invoices.errors.deleteRequiresErroneous"));
+  }
+
+  // Client pre-check (RPC repeats): ANY payment ledger row blocks delete (append-only).
+  // Fully voided payments must be removed via delete_fully_voided_payment first.
+  const { count: paymentCount, error: paymentError } = await supabase
+    .from("payments")
+    .select("id", { count: "exact", head: true })
+    .eq("invoice_id", invoiceId);
+  if (paymentError) {
+    if (paymentError.code !== "PGRST205" && paymentError.code !== "42P01") throw toInvoiceError(paymentError);
+  } else if ((paymentCount ?? 0) > 0) {
+    throw new Error(
+      i18n.t("invoices.errors.deleteBlockedByPayments", {
+        number: text(row.number),
+        count: paymentCount ?? 0,
+        file: ERRONEOUS_INVOICE_ENTITLEMENT_SQL,
+      }),
+    );
+  }
+
+  const { error } = await supabase.rpc(DELETE_ERRONEOUS_INVOICE_RPC, { p_invoice_id: invoiceId });
+  if (error) {
+    if (isMissingRpcError(error, DELETE_ERRONEOUS_INVOICE_RPC)) {
+      throw new MissingRpcError(
+        DELETE_ERRONEOUS_INVOICE_RPC,
+        i18n.t("invoices.errors.deleteRpcMissing", { file: ERRONEOUS_INVOICE_SQL }),
+      );
+    }
+    throw toInvoiceError(error);
+  }
+
+  return { invoiceId, invoiceNumber: text(row.number), orderId: row.order_id ? String(row.order_id) : null };
 }
 
 // The database replaces 'INV-NEXT' with the next 'INV-YYYY-NNN' of the workspace: the year of the
