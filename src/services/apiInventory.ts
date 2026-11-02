@@ -21,8 +21,20 @@ function requireWorkspaceId(workspaceId: string | undefined) {
 }
 
 function inventoryError(error: { code?: string; message?: string }, fallback: string) {
+  const message = error.message ?? "";
   if (error.code === "23505") return new Error(i18n.t("inventory.errors.duplicateSku"));
-  if (error.code === "42501" || error.message?.toLowerCase().includes("row-level security")) return new Error(i18n.t("inventory.errors.permission"));
+  if (/inventory_item_delete:has_movements|inventory_movements_inventory_item_id_fkey/i.test(message)) {
+    return new Error(i18n.t("inventory.errors.deleteHasMovements"));
+  }
+  if (/inventory_item_delete:has_order_materials|order_materials_inventory_item_id_fkey/i.test(message)) {
+    return new Error(i18n.t("inventory.errors.deleteHasOrderMaterials"));
+  }
+  if (/inventory_item_delete:has_serial_history/i.test(message)) {
+    return new Error(i18n.t("inventory.errors.deleteHasSerialHistory"));
+  }
+  if (error.code === "42501" || /row-level security|permission denied/i.test(message)) {
+    return new Error(i18n.t("inventory.errors.permission"));
+  }
   return new Error(fallback);
 }
 

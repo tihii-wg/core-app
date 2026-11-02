@@ -67,6 +67,16 @@ function materialsSyncError(error: { message?: string; code?: string } | null) {
   if (code === "PGRST202" || /could not find the function|function .* does not exist/i.test(message)) {
     return i18n.t("orders.errors.materialsSyncFailed");
   }
+  if (code === "42501" || /row-level security|permission denied|not a workspace member/i.test(message)) {
+    return i18n.t("orders.errors.notFoundOrForbidden");
+  }
+  // Live DB still has NOT NULL inventory_item_id / old sync_order_materials until PART E SQL is applied.
+  if (/inventory_item_id is required|null value in column ["']?inventory_item_id/i.test(message)) {
+    return i18n.t("orders.errors.freeformMaterialsUnsupported");
+  }
+  if (/item_name is required for non-catalog/i.test(message)) {
+    return i18n.t("orders.errors.freeformNameRequired");
+  }
   if (message.includes("outstanding issued") || message.includes("already issued")) {
     return i18n.t("orders.errors.cannotReduceBelowIssued");
   }
@@ -471,12 +481,13 @@ type OrderServiceLine = {
 type OrderMaterialLine = {
   id?: string;
   order_id?: string;
-  inventory_item_id?: string;
+  inventory_item_id?: string | null;
   item_name?: string;
   price?: number;
   quantity?: number;
   quantity_issued?: number;
   quantity_returned?: number;
+  supply_source?: string | null;
   discount_type?: string | null;
   discount_value?: number | string | null;
 };
@@ -510,11 +521,15 @@ let orderHeaderDiscountSupported = true;
 // save fails loudly (see stampMaterialLineDiscounts) instead of persisting totals that differ from the preview.
 const SET_LINE_DISCOUNTS_RPC = "crm_set_order_line_discounts";
 
+/** Optional `order_materials.supply_source` (one_time / customer / catalog). Absent until PART E SQL is applied. */
+let orderMaterialSupplySourceSupported = true;
+
 /** Test hook: forget every cached discount-column answer. */
 export function resetOrderDiscountSupport() {
   orderLineDiscountSupported = true;
   orderDiscountTotalSupported = true;
   orderHeaderDiscountSupported = true;
+  orderMaterialSupplySourceSupported = true;
 }
 
 type DbError = { code?: string; message?: string } | null | undefined;
@@ -692,8 +707,28 @@ export function toOrderServiceKind(value: unknown): OrderServiceKind | null {
 }
 const orderMaterialBaseColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
 
+function isMissingSupplySourceColumn(error: DbError) {
+  return isMissingColumnNamed(error, /\bsupply_source\b/i);
+}
+
 function orderMaterialColumns() {
-  return orderLineDiscountSupported ? `${orderMaterialBaseColumns}, discount_type, discount_value` : orderMaterialBaseColumns;
+  const supply = orderMaterialSupplySourceSupported ? ", supply_source" : "";
+  const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
+  return `${orderMaterialBaseColumns}${supply}${discount}`;
+}
+
+/** Runs an order_materials select; retries without missing optional columns (supply_source / discounts). */
+async function withOrderMaterialColumns<T extends { error: DbError }>(run: () => PromiseLike<T>): Promise<T> {
+  let result = await run();
+  if (orderMaterialSupplySourceSupported && isMissingSupplySourceColumn(result.error)) {
+    orderMaterialSupplySourceSupported = false;
+    result = await run();
+  }
+  if (orderLineDiscountSupported && isMissingLineDiscountColumn(result.error)) {
+    orderLineDiscountSupported = false;
+    result = await run();
+  }
+  return result;
 }
 
 /** Reads orders.tax_invoice_number; coerces unexpected non-null types instead of dropping them. */
@@ -717,23 +752,44 @@ function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
 }
 
 function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
-  return materialLines.map((line) => ({
-    ...(line.id ? { id: String(line.id) } : {}),
-    inventoryItemId: String(line.inventory_item_id ?? ""),
-    itemName: String(line.item_name ?? ""),
-    price: Number(line.price ?? 0),
-    quantity: Number(line.quantity ?? 1),
-    quantityIssued: Number(line.quantity_issued ?? 0),
-    quantityReturned: Number(line.quantity_returned ?? 0),
-    ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
-  }));
+  return materialLines.map((line) => {
+    const inventoryItemId = line.inventory_item_id == null || line.inventory_item_id === "" ? undefined : String(line.inventory_item_id);
+    const rawSource = typeof line.supply_source === "string" ? line.supply_source : undefined;
+    const supplySource =
+      rawSource === "one_time" || rawSource === "customer" || rawSource === "catalog"
+        ? rawSource
+        : inventoryItemId
+          ? ("catalog" as const)
+          : ("one_time" as const);
+    return {
+      ...(line.id ? { id: String(line.id) } : {}),
+      ...(inventoryItemId ? { inventoryItemId } : {}),
+      itemName: String(line.item_name ?? ""),
+      price: Number(line.price ?? 0),
+      quantity: Number(line.quantity ?? 1),
+      quantityIssued: Number(line.quantity_issued ?? 0),
+      quantityReturned: Number(line.quantity_returned ?? 0),
+      supplySource,
+      ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
+    };
+  });
 }
 
 async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]) {
-  const payload = consolidateOrderMaterials(materials).map((line) => ({
-    inventory_item_id: line.inventoryItemId,
-    quantity: line.quantity,
-  }));
+  const payload = consolidateOrderMaterials(materials).map((line) => {
+    const itemId = line.inventoryItemId?.trim();
+    if (itemId) {
+      return { inventory_item_id: itemId, quantity: line.quantity, supply_source: "catalog" };
+    }
+    return {
+      ...(line.id ? { line_id: line.id } : {}),
+      inventory_item_id: null,
+      item_name: line.itemName,
+      price: line.price,
+      quantity: line.quantity,
+      supply_source: line.supplySource === "customer" ? "customer" : "one_time",
+    };
+  });
 
   const { data, error } = await supabase.rpc("sync_order_materials", {
     p_order_id: orderId,
@@ -874,7 +930,7 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
           supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
         ),
       ),
-      withLineDiscountColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true })),
+      withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true })),
     ]);
 
     if (linesError) throw new Error(linesError.message);
@@ -1332,7 +1388,7 @@ export async function updateOrder(
   // sync_order_materials rewrites orders.total_price as the gross sum, so after it ran the net total is re-written below.
   let materialsRpcRan = false;
   const readExistingMaterials = async () => {
-    const { data: existingMaterials, error: materialsError } = await withLineDiscountColumns(() =>
+    const { data: existingMaterials, error: materialsError } = await withOrderMaterialColumns(() =>
       supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId).order("created_at", { ascending: true }),
     );
     if (materialsError) throw new Error(materialsError.message);
@@ -1395,12 +1451,13 @@ export async function updateOrder(
   return toOrder({ ...row, ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames, materialLines.map((line) => ({
     id: line.id,
     order_id: orderId,
-    inventory_item_id: line.inventoryItemId,
+    inventory_item_id: line.inventoryItemId ?? null,
     item_name: line.itemName,
     price: line.price,
     quantity: line.quantity,
     quantity_issued: line.quantityIssued,
     quantity_returned: line.quantityReturned,
+    supply_source: line.supplySource ?? null,
     discount_type: line.discountType ?? null,
     discount_value: line.discountValue ?? null,
   })));

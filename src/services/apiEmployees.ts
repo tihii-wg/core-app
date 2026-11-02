@@ -63,3 +63,30 @@ export async function getEmployees(search: string, roleFilter: EmployeeRole | nu
 
   return employees ?? [];
 }
+
+/**
+ * Archives an employee by setting `status = 'inactive'`.
+ * There is no `employees.deleted_at` column; hard DELETE would CASCADE wipe
+ * payroll/timesheet/group rows and SET NULL historical order assignees.
+ * Inactive technicians are already omitted from new order assignment pickers
+ * (`assignableTechnicians`) while remaining visible on historical orders.
+ * Does not touch Auth users or `profile_id`.
+ */
+export async function deactivateEmployee(workspaceId: string | undefined, employeeId: string) {
+  if (!workspaceId) throw new Error(i18n.t("employees.errors.noActiveWorkspace"));
+  const id = employeeId.trim();
+  if (!id) throw new Error(i18n.t("employees.errors.notFoundOrForbidden"));
+
+  const { data, error } = await supabase
+    .from("employees")
+    .update({ status: "inactive", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .neq("status", "inactive")
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(i18n.t("employees.errors.notFoundOrForbidden"));
+  return { id };
+}

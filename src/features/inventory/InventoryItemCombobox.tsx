@@ -11,9 +11,11 @@ type InventoryItemComboboxProps = {
   onSelect?: (item: InventoryItem) => void;
   /** Opens inventory creation when the filtered list is empty. */
   onCreateRequest?: (searchQuery: string) => void;
+  /** Prefills the one-time / order-only material form when the filtered list is empty. */
+  onAddOneTimeRequest?: (searchQuery: string) => void;
 };
 
-export default function InventoryItemCombobox({ items, errors, onSelect, onCreateRequest }: InventoryItemComboboxProps) {
+export default function InventoryItemCombobox({ items, errors, onSelect, onCreateRequest, onAddOneTimeRequest }: InventoryItemComboboxProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const [open, setOpen] = useState(false);
@@ -41,6 +43,7 @@ export default function InventoryItemCombobox({ items, errors, onSelect, onCreat
   });
 
   const showCreate = Boolean(onCreateRequest) && filtered.length === 0;
+  const showOneTime = Boolean(onAddOneTimeRequest) && filtered.length === 0 && query.trim().length > 0;
 
   return (
     <div ref={containerRef} className="relative">
@@ -63,6 +66,20 @@ export default function InventoryItemCombobox({ items, errors, onSelect, onCreat
           {filtered.length === 0 ? (
             <div className="space-y-2 px-3 py-3">
               <p className="text-sm text-muted-foreground">{t("orders.form.materialEmpty")}</p>
+              {showOneTime ? (
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                  onClick={() => {
+                    onAddOneTimeRequest?.(query.trim());
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                >
+                  <Plus className="size-4" aria-hidden />
+                  {t("orders.form.addAsOneTimePart")}
+                </button>
+              ) : null}
               {showCreate ? (
                 <button
                   type="button"

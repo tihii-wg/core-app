@@ -128,6 +128,78 @@ describe("inventory items", () => {
     expect(row("inventory_items", "item-c1")).toBeDefined();
   });
 
+  it("lets an active member delete an item that still has workspace-scoped live stock children", async () => {
+    fake.all("warehouse_stock").push(
+      { id: "ws-a1", workspace_id: WS.A, warehouse_id: "wh-a", inventory_item_id: "item-a1", quantity: 2 },
+      { id: "ws-c1", workspace_id: WS.C, warehouse_id: "wh-c", inventory_item_id: "item-c1", quantity: 9 },
+    );
+    fake.all("stock_batches").push({ id: "batch-a1", workspace_id: WS.A, inventory_item_id: "item-a1", quantity_left: 2 });
+    fake.all("stock_serials").push({ id: "serial-a1", workspace_id: WS.A, inventory_item_id: "item-a1", serial_number: "S1", status: "in_stock" });
+
+    await deleteInventoryItem("item-a1", WS.A);
+
+    expect(row("inventory_items", "item-a1")).toBeUndefined();
+    expect(fake.all("warehouse_stock").map((row) => row.id)).toEqual(["ws-c1"]);
+    expect(fake.all("stock_batches")).toEqual([]);
+    expect(fake.all("stock_serials")).toEqual([]);
+    expect(row("inventory_items", "item-c1")).toBeDefined();
+  });
+
+  it("lets the workspace owner delete an eligible item with stock children under the same membership rule", async () => {
+    fake.signInAs(USERS.owner.id);
+    fake.all("warehouse_stock").push({ id: "ws-a1", workspace_id: WS.A, warehouse_id: "wh-a", inventory_item_id: "item-a1", quantity: 1 });
+    await deleteInventoryItem("item-a1", WS.A);
+    expect(row("inventory_items", "item-a1")).toBeUndefined();
+    expect(fake.all("warehouse_stock")).toEqual([]);
+  });
+
+  it("blocks delete when inventory_movements history still references the item", async () => {
+    fake.all("warehouse_stock").push({ id: "ws-a1", workspace_id: WS.A, warehouse_id: "wh-a", inventory_item_id: "item-a1", quantity: 1 });
+    fake.all("inventory_movements").push({
+      id: "mov-a1",
+      workspace_id: WS.A,
+      inventory_item_id: "item-a1",
+      movement_type: "issue",
+      quantity: 1,
+      created_at: "2026-03-01T00:00:00.000Z",
+    });
+
+    await expect(deleteInventoryItem("item-a1", WS.A)).rejects.toThrow(/movement history|cannot be deleted/i);
+    expect(row("inventory_items", "item-a1")).toBeDefined();
+    expect(fake.all("inventory_movements")).toHaveLength(1);
+    expect(fake.all("warehouse_stock")).toHaveLength(1);
+  });
+
+  it("blocks delete when order_materials still reference the item", async () => {
+    fake.all("order_materials").push({
+      id: "om-block",
+      order_id: "order-a1",
+      inventory_item_id: "item-a1",
+      item_name: "Alpha brake pads",
+      price: 12,
+      quantity: 1,
+      quantity_issued: 0,
+      quantity_returned: 0,
+      created_at: "2026-02-10T10:00:00.000Z",
+    });
+
+    await expect(deleteInventoryItem("item-a1", WS.A)).rejects.toThrow(/used on one or more orders|cannot be deleted/i);
+    expect(row("inventory_items", "item-a1")).toBeDefined();
+    expect(fake.all("order_materials").some((row) => row.id === "om-block")).toBe(true);
+  });
+
+  it("keeps authenticated from deleting protected stock tables directly", async () => {
+    fake.all("warehouse_stock").push({ id: "ws-a1", workspace_id: WS.A, warehouse_id: "wh-a", inventory_item_id: "item-a1", quantity: 1 });
+    const denied = await fake.client.from("warehouse_stock").delete().eq("id", "ws-a1");
+    expect(denied.error).toMatchObject({ code: "42501", message: "permission denied for table warehouse_stock" });
+    expect(fake.all("warehouse_stock")).toHaveLength(1);
+  });
+
+  it("maps stock-cascade privilege denial to the inventory permission message", async () => {
+    fake.failNext("inventory_items", "delete", { code: "42501", message: "permission denied for table warehouse_stock" });
+    await expect(deleteInventoryItem("item-a1", WS.A)).rejects.toThrow("You do not have permission to change inventory in this workspace.");
+  });
+
   it("requires a workspace and hides raw database errors behind a retry message", async () => {
     await expect(getInventoryItems("", "all", sortByName, undefined)).rejects.toThrow("No active workspace selected");
     fake.failNext("inventory_items_with_status", "select", { code: "PGRST000", message: "internal detail" });

@@ -49,5 +49,10 @@ export function useOpenClientDetails() {
     setDetailPanelOpen,
     openClient,
     onClientUpdated: setSelectedClient,
+    onClientDeleted: (clientId: string) => {
+      setSelectedClient((current) => (current?.id === clientId ? null : current));
+      setDetailPanelOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+    },
   };
 }

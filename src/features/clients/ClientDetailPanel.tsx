@@ -14,7 +14,9 @@ import { ClientVehiclesSection } from "../vehicles/ClientVehiclesSection";
 import EditClientForm from "./EditClientForm";
 import { ClientExtrasSection } from "./ClientExtrasSection";
 import ClientSettlementDialog from "./ClientSettlementDialog";
+import { DeleteClientDialog } from "./DeleteClientDialog";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { clientOrderHistoryLine, type ClientOrderSummary } from "./clientOrders";
 
 type ClientDetailPanelProps = {
@@ -22,6 +24,7 @@ type ClientDetailPanelProps = {
   detailPanelOpen: boolean;
   setDetailPanelOpen: (open: boolean) => void;
   onClientUpdated: (client: Client) => void;
+  onClientDeleted?: (clientId: string) => void;
   getClientOrders: (clientId: string) => ClientOrderSummary[];
   ordersLoading?: boolean;
   ordersError?: boolean;
@@ -34,6 +37,7 @@ export default function ClientDetailPanel({
   detailPanelOpen,
   setDetailPanelOpen,
   onClientUpdated,
+  onClientDeleted,
   getClientOrders,
   ordersLoading = false,
   ordersError = false,
@@ -45,18 +49,24 @@ export default function ClientDetailPanel({
   const clientCopy = industryClientCopy(workflow);
   const showVehicles = industrySupportsClientVehicles(workflow);
   const { formatMoney } = useWorkspaceMoney();
+  const { canWrite: canMutateClients } = useWorkspaceSubscription();
   const [isEditing, setIsEditing] = useState(false);
   const [settlementOpen, setSettlementOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [editingClientId, setEditingClientId] = useState(selectedClient?.id);
 
   if (selectedClient?.id !== editingClientId) {
     setEditingClientId(selectedClient?.id);
     setIsEditing(false);
+    setDeleteOpen(false);
   }
 
   function handleOpenChange(open: boolean) {
     setDetailPanelOpen(open);
-    if (!open) setIsEditing(false);
+    if (!open) {
+      setIsEditing(false);
+      setDeleteOpen(false);
+    }
   }
 
   const email = selectedClient?.email?.trim() ?? "";
@@ -259,6 +269,14 @@ export default function ClientDetailPanel({
                 <p>{clientCopy.clientSince(selectedClient.created_at.split("T")[0] ?? "")}</p>
               </div>
             ) : null}
+
+            {canMutateClients ? (
+              <div className="flex justify-end border-t border-border pt-4">
+                <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
+                  {t("common.delete")}
+                </Button>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -275,6 +293,15 @@ export default function ClientDetailPanel({
             onOpenOrder={onOpenOrder}
           />
         )}
+
+        <DeleteClientDialog
+          client={deleteOpen ? selectedClient : null}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={(clientId) => {
+            onClientDeleted?.(clientId);
+            setDetailPanelOpen(false);
+          }}
+        />
       </SheetContent>
     </Sheet>
   );

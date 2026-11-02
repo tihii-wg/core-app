@@ -76,6 +76,7 @@ export function OrderLinkedVehicleDetails({ vehicleId, onOpenRelatedOrder }: Ord
           detailPanelOpen={clientDetails.detailPanelOpen}
           setDetailPanelOpen={clientDetails.setDetailPanelOpen}
           onClientUpdated={clientDetails.onClientUpdated}
+          onClientDeleted={clientDetails.onClientDeleted}
           onOpenOrder={(order) => {
             clientDetails.setDetailPanelOpen(false);
             setDetailOpen(false);

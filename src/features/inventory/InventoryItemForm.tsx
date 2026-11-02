@@ -20,6 +20,10 @@ type InventoryItemFormProps = {
   onSubmit: (data: InventoryItemFormData) => void;
   onCancel: () => void;
   onMarkupCommit: (markupPercent: number) => void;
+  /** When warehouses are enabled, quantity is read-only / forced to create-at-zero. */
+  lockQuantity?: boolean;
+  /** True when creating a new catalog item (shows create-at-zero hint). */
+  isCreate?: boolean;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -27,7 +31,17 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-destructive">{message}</p>;
 }
 
-export default function InventoryItemForm({ defaultValues, markupPercent, submitLabel, isSubmitting, onSubmit, onCancel, onMarkupCommit }: InventoryItemFormProps) {
+export default function InventoryItemForm({
+  defaultValues,
+  markupPercent,
+  submitLabel,
+  isSubmitting,
+  onSubmit,
+  onCancel,
+  onMarkupCommit,
+  lockQuantity = false,
+  isCreate = false,
+}: InventoryItemFormProps) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
@@ -70,7 +84,7 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
         const parsed = parseMarkupPercent(markupText);
         if (parsed == null) return;
         onMarkupCommit(parsed);
-        onSubmit(data);
+        onSubmit(lockQuantity ? { ...data, quantity: isCreate ? 0 : defaultValues.quantity } : data);
       })}
     >
       <div className="space-y-4 py-2">
@@ -112,6 +126,8 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               type="number"
               min={0}
               step="any"
+              readOnly={lockQuantity}
+              disabled={lockQuantity}
               {...register("quantity", {
                 valueAsNumber: true,
                 required: t("inventory.form.quantityRequired"),
@@ -120,6 +136,11 @@ export default function InventoryItemForm({ defaultValues, markupPercent, submit
               })}
               className={errors.quantity ? "border-destructive" : ""}
             />
+            {lockQuantity ? (
+              <p className="text-xs text-muted-foreground">
+                {isCreate ? t("inventory.form.quantityCreateZeroHint") : t("inventory.form.quantityLockedHint")}
+              </p>
+            ) : null}
             <FieldError message={errors.quantity?.message} />
           </div>
           <div className="space-y-1.5">

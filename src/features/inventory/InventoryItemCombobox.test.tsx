@@ -43,6 +43,18 @@ describe("InventoryItemCombobox", () => {
     expect(onCreateRequest).toHaveBeenCalledWith("Synthetic oil");
   });
 
+  it("offers add-as-one-time when search has no matches", async () => {
+    const user = userEvent.setup();
+    const onAddOneTimeRequest = vi.fn();
+    renderWithQuery(<InventoryItemCombobox items={[pads]} onAddOneTimeRequest={onAddOneTimeRequest} />);
+
+    await user.click(screen.getByPlaceholderText("Search parts and materials..."));
+    await user.type(screen.getByPlaceholderText("Search parts and materials..."), "Special gasket");
+
+    await user.click(screen.getByRole("button", { name: /Add as one-time part/i }));
+    expect(onAddOneTimeRequest).toHaveBeenCalledWith("Special gasket");
+  });
+
   it("does not show create-new when matches exist", async () => {
     const user = userEvent.setup();
     renderWithQuery(<InventoryItemCombobox items={[pads]} onCreateRequest={vi.fn()} />);

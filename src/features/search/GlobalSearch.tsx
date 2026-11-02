@@ -288,6 +288,10 @@ export default function GlobalSearch() {
           detailPanelOpen={clientPanelOpen}
           setDetailPanelOpen={setClientPanelOpen}
           onClientUpdated={setSelectedClient}
+          onClientDeleted={() => {
+            setSelectedClient(null);
+            setClientPanelOpen(false);
+          }}
           getClientOrders={(clientId) => clientOrderSummaries(clientOrders, clientId)}
           onOpenOrder={(orderId) => {
             const order = clientOrders.find((item) => item.id === orderId);

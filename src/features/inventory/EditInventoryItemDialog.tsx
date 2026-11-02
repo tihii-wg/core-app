@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { EmptyState } from "../../ui/EmptyState";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import InventoryItemForm from "./InventoryItemForm";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
@@ -15,6 +16,8 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
   const editQuery = useGetInventoryItem(itemId);
   const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const { mutate: updateItem, isPending: isUpdating } = useUpdateInventoryItem();
+  const { data: warehouses = [], isSuccess: warehousesLoaded } = useGetWarehouses();
+  const lockQuantity = warehousesLoaded && warehouses.length > 0;
 
   const editDefaults = editQuery.item
     ? {
@@ -60,12 +63,18 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
             markupPercent={markupPercent}
             submitLabel={t("common.saveChanges")}
             isSubmitting={isUpdating}
+            lockQuantity={lockQuantity}
             onCancel={onClose}
             onMarkupCommit={commitMarkup}
             onSubmit={(data) => {
               if (!editQuery.item) return;
               updateItem(
-                { id: editQuery.item.id, ...data },
+                {
+                  id: editQuery.item.id,
+                  ...data,
+                  // Preserve stored quantity when warehouses own stock truth.
+                  ...(lockQuantity ? { quantity: editQuery.item.quantity } : {}),
+                },
                 {
                   onSuccess: onClose,
                 },

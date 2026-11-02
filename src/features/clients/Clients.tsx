@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus, Phone, Mail, Pencil } from "lucide-react";
+import { Plus, Phone, Mail, Pencil, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 
 import { PageHeader } from "../../pages/PageHeader";
@@ -12,6 +12,7 @@ import type { Client, ClientListFilter } from "../../lib/types";
 import ClientTypeBadge from "./ClientTypeBadge";
 import { AddClientDialog } from "./AddClientDialog";
 import EditClientForm from "./EditClientForm";
+import { DeleteClientDialog } from "./DeleteClientDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -54,6 +55,7 @@ export function Clients() {
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [deletingClient, setDeletingClient] = useState<Client | null>(null);
 
   const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
 
@@ -144,7 +146,7 @@ export function Clients() {
     {
       key: "actions",
       header: t("common.actions"),
-      className: "w-[80px] text-right",
+      className: "w-[100px] text-right",
       cell: (client) => (
         <div className="flex justify-end gap-1">
           <Button
@@ -159,6 +161,20 @@ export function Clients() {
           >
             <Pencil />
           </Button>
+          {canMutateClients ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("clients.deleteClientLabel", { name: client.name })}
+              onClick={(event) => {
+                event.stopPropagation();
+                setDeletingClient(client);
+              }}
+            >
+              <Trash2 />
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -237,6 +253,7 @@ export function Clients() {
                 formatMoney={formatMoney}
                 onView={handleRowClick}
                 onEdit={setEditingClient}
+                onDelete={canMutateClients ? setDeletingClient : undefined}
               />
             ))}
           </div>
@@ -301,10 +318,24 @@ export function Clients() {
         detailPanelOpen={detailPanelOpen}
         getClientOrders={getClientOrders}
         onClientUpdated={setSelectedClient}
+        onClientDeleted={(clientId) => {
+          setSelectedClient((current) => (current?.id === clientId ? null : current));
+          setEditingClient((current) => (current?.id === clientId ? null : current));
+        }}
         ordersLoading={ordersLoading}
         ordersError={Boolean(ordersError)}
         onOpenOrder={handleOpenHistoricalOrder}
-        onCreateOrder={setOrderForClient}
+        onCreateOrder={canMutateClients ? setOrderForClient : undefined}
+      />
+
+      <DeleteClientDialog
+        client={deletingClient}
+        onClose={() => setDeletingClient(null)}
+        onDeleted={(clientId) => {
+          setSelectedClient((current) => (current?.id === clientId ? null : current));
+          setEditingClient((current) => (current?.id === clientId ? null : current));
+          setDetailPanelOpen(false);
+        }}
       />
 
       <OrderDetailPanel {...orderDetails.panelProps} />

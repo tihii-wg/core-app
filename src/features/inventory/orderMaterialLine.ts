@@ -1,4 +1,4 @@
-import type { InventoryItem, OrderMaterial } from "../../lib/types";
+import type { InventoryItem, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
 import { orderLineAmount } from "../services/orderServiceLine";
 
 /**
@@ -20,6 +20,18 @@ export function normalizeOrderMaterialQuantity(value: unknown): number {
   return parseOrderMaterialQuantity(value) ?? 0;
 }
 
+export function resolveMaterialSupplySource(line: Pick<OrderMaterial, "inventoryItemId" | "supplySource">): OrderMaterialSupplySource {
+  if (line.supplySource === "one_time" || line.supplySource === "customer" || line.supplySource === "catalog") {
+    return line.supplySource;
+  }
+  return line.inventoryItemId?.trim() ? "catalog" : "one_time";
+}
+
+/** True when the line is linked to the inventory catalog and can participate in warehouse issue/return. */
+export function isCatalogOrderMaterial(line: Pick<OrderMaterial, "inventoryItemId" | "supplySource">): boolean {
+  return resolveMaterialSupplySource(line) === "catalog" && Boolean(line.inventoryItemId?.trim());
+}
+
 /**
  * Snapshots the inventory item's current name and selling price onto a new order material line.
  * Later catalog edits must not rewrite this line — order_materials stores its own price/name.
@@ -34,32 +46,76 @@ export function catalogItemToOrderMaterial(item: Pick<InventoryItem, "id" | "nam
     itemName: item.name,
     price: item.sellingPrice ?? 0,
     quantity: qty,
+    supplySource: "catalog",
   };
 }
 
+/** Order-only material: no catalog id, no warehouse stock impact. */
+export function freeformOrderMaterial(input: {
+  itemName: string;
+  price: number;
+  quantity?: number;
+  supplySource: Exclude<OrderMaterialSupplySource, "catalog">;
+}): OrderMaterial {
+  const name = input.itemName.trim();
+  if (!name) throw new Error("Material name is required");
+  const qty = parseOrderMaterialQuantity(input.quantity ?? 1);
+  if (qty == null) throw new Error("Material quantity must be a positive whole number");
+  const price = Number(input.price);
+  if (!Number.isFinite(price) || price < 0) throw new Error("Material price cannot be negative");
+  return {
+    itemName: name,
+    price,
+    quantity: qty,
+    supplySource: input.supplySource,
+  };
+}
+
+/**
+ * Consolidates catalog lines by inventory item id; keeps one-time/customer lines separate
+ * (merged only when they already share the same saved order_materials.id).
+ */
 export function consolidateOrderMaterials(materials: OrderMaterial[]): OrderMaterial[] {
-  const byItem = new Map<string, OrderMaterial>();
+  const catalogByItem = new Map<string, OrderMaterial>();
+  const freeform: OrderMaterial[] = [];
+
   for (const line of materials) {
-    const itemId = line.inventoryItemId?.trim();
-    if (!itemId) continue;
     const quantity = parseOrderMaterialQuantity(line.quantity);
     if (quantity == null) continue;
-    const existing = byItem.get(itemId);
-    if (existing) {
-      existing.quantity = existing.quantity + quantity;
+    const source = resolveMaterialSupplySource(line);
+    const itemId = line.inventoryItemId?.trim() ?? "";
+
+    if (source === "catalog" && itemId) {
+      const existing = catalogByItem.get(itemId);
+      if (existing) {
+        existing.quantity = existing.quantity + quantity;
+        continue;
+      }
+      catalogByItem.set(itemId, {
+        ...(line.id ? { id: line.id } : {}),
+        inventoryItemId: itemId,
+        itemName: line.itemName,
+        price: Number(line.price) || 0,
+        quantity,
+        supplySource: "catalog",
+        ...(line.quantityIssued != null ? { quantityIssued: line.quantityIssued } : {}),
+        ...(line.quantityReturned != null ? { quantityReturned: line.quantityReturned } : {}),
+      });
       continue;
     }
-    byItem.set(itemId, {
+
+    freeform.push({
       ...(line.id ? { id: line.id } : {}),
-      inventoryItemId: itemId,
-      itemName: line.itemName,
+      itemName: line.itemName.trim(),
       price: Number(line.price) || 0,
       quantity,
+      supplySource: source === "customer" ? "customer" : "one_time",
       ...(line.quantityIssued != null ? { quantityIssued: line.quantityIssued } : {}),
       ...(line.quantityReturned != null ? { quantityReturned: line.quantityReturned } : {}),
     });
   }
-  return [...byItem.values()];
+
+  return [...catalogByItem.values(), ...freeform];
 }
 
 export function sumOrderMaterialLines(lines: Array<Pick<OrderMaterial, "price" | "quantity">> | undefined): number {

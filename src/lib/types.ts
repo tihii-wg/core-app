@@ -457,10 +457,17 @@ export type OrderService = {
   discountValue?: number | null;
 };
 
+/** How an order material line is sourced. Catalog lines link to inventory_items; others are order-only snapshots. */
+export type OrderMaterialSupplySource = "catalog" | "one_time" | "customer";
+
 export type OrderMaterial = {
   /** order_materials.id; absent for a line that has not been saved yet. */
   id?: string;
-  inventoryItemId: string;
+  /**
+   * Catalog inventory item id. Empty/absent for one-time and customer-supplied lines
+   * (requires nullable order_materials.inventory_item_id on the database).
+   */
+  inventoryItemId?: string;
   itemName: string;
   price: number;
   /** Requested quantity (planning). Does not change warehouse stock by itself. */
@@ -469,6 +476,8 @@ export type OrderMaterial = {
   quantityIssued?: number;
   /** Cumulative quantity returned to the warehouse. */
   quantityReturned?: number;
+  /** catalog (default) | one_time | customer. Absent when column not applied yet. */
+  supplySource?: OrderMaterialSupplySource;
   /** `order_materials.discount_type` / `discount_value` (crm_ro_v1). Absent when the columns do not exist. */
   discountType?: "percent" | "amount" | null;
   discountValue?: number | null;

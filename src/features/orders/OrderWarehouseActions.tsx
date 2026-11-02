@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
-import { parseOrderMaterialQuantity } from "../inventory/orderMaterialLine";
+import { isCatalogOrderMaterial, parseOrderMaterialQuantity } from "../inventory/orderMaterialLine";
 import { remainingToIssue, remainingToReturn } from "../inventory/warehouseMaterialStatus";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import {
@@ -51,15 +51,19 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const warehouses = useMemo(() => issuableWarehouses(warehouseRows), [warehouseRows]);
 
   const materials = order.materials ?? [];
-  const issueable = useMemo(() => materials.filter((line) => remainingToIssue(line) > 0), [materials]);
-  const returnable = useMemo(() => materials.filter((line) => remainingToReturn(line) > 0), [materials]);
+  // One-time / customer-supplied lines never touch warehouse stock.
+  const stockMaterials = useMemo(() => materials.filter((line) => isCatalogOrderMaterial(line)), [materials]);
+  const issueable = useMemo(() => stockMaterials.filter((line) => remainingToIssue(line) > 0), [stockMaterials]);
+  const returnable = useMemo(() => stockMaterials.filter((line) => remainingToReturn(line) > 0), [stockMaterials]);
 
   function openDialog(next: Mode) {
     const lines = next === "issue" ? issueable : returnable;
     const initial: Record<string, string> = {};
     for (const line of lines) {
+      const itemId = line.inventoryItemId?.trim();
+      if (!itemId) continue;
       const max = next === "issue" ? remainingToIssue(line) : remainingToReturn(line);
-      initial[line.inventoryItemId] = String(max);
+      initial[itemId] = String(max);
     }
     setQuantities(initial);
     setReason("");
@@ -77,7 +81,9 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     const source = mode === "issue" ? issueable : returnable;
     const lines: WarehouseMaterialLineInput[] = [];
     for (const line of source) {
-      const raw = quantities[line.inventoryItemId] ?? "";
+      const itemId = line.inventoryItemId?.trim();
+      if (!itemId) continue;
+      const raw = quantities[itemId] ?? "";
       if (String(raw).trim() === "") continue;
       const qty = parseOrderMaterialQuantity(raw);
       if (qty == null) {
@@ -96,7 +102,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
         toast.error(mode === "issue" ? t("orders.errors.issueExceedsRemaining") : t("orders.errors.returnExceedsOutstanding"));
         return;
       }
-      lines.push({ inventoryItemId: line.inventoryItemId, quantity: qty });
+      lines.push({ inventoryItemId: itemId, quantity: qty });
     }
     if (lines.length === 0) {
       toast.error(t("orders.warehouse.noQuantitySelected"));
@@ -152,7 +158,8 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     }
   }
 
-  if (!canManage || materials.length === 0) return null;
+  // Freeform (one-time / customer) lines never participate in warehouse issue/return.
+  if (!canManage || stockMaterials.length === 0) return null;
 
   return (
     <>
@@ -200,18 +207,22 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
                 </p>
               </div>
             ) : null}
-            {(mode === "issue" ? issueable : returnable).map((line) => (
-              <WarehouseLineEditor
-                key={line.inventoryItemId}
-                line={line}
-                mode={mode!}
-                value={quantities[line.inventoryItemId] ?? ""}
-                stock={inventoryItems.find((item) => item.id === line.inventoryItemId)?.quantity}
-                warehouseStock={mode === "issue" && warehouseId && warehouseStockLoaded ? warehouseStockOf(warehouseStock, warehouseId, line.inventoryItemId) : undefined}
-                onChange={(value) => setQuantities((prev) => ({ ...prev, [line.inventoryItemId]: value }))}
-                disabled={busy}
-              />
-            ))}
+            {(mode === "issue" ? issueable : returnable).map((line) => {
+              const itemId = line.inventoryItemId?.trim();
+              if (!itemId) return null;
+              return (
+                <WarehouseLineEditor
+                  key={itemId}
+                  line={{ ...line, inventoryItemId: itemId }}
+                  mode={mode!}
+                  value={quantities[itemId] ?? ""}
+                  stock={inventoryItems.find((item) => item.id === itemId)?.quantity}
+                  warehouseStock={mode === "issue" && warehouseId && warehouseStockLoaded ? warehouseStockOf(warehouseStock, warehouseId, itemId) : undefined}
+                  onChange={(value) => setQuantities((prev) => ({ ...prev, [itemId]: value }))}
+                  disabled={busy}
+                />
+              );
+            })}
 
             {mode === "return" ? (
               <div className="space-y-1.5">

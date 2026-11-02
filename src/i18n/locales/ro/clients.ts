@@ -10,9 +10,16 @@ const clients: Messages<typeof en> = {
   addClient: "Adaugă client",
   searchPlaceholder: "Caută după nume, cod fiscal, persoană de contact, email, telefon sau adresă...",
   editClientLabel: "Editează {{name}}",
+  deleteClientLabel: "Șterge {{name}}",
   actions: {
     menuLabel: "Acțiuni pentru clientul {{name}}",
     viewDetails: "Vezi detalii",
+  },
+  delete: {
+    title: "Șterge clientul",
+    description:
+      "Clientul va fi arhivat (șters logic), nu șters definitiv. Comenzile, facturile, plățile și soldurile existente rămân în istoric. Clientul nu va mai apărea în liste sau la selectarea pentru comenzi noi.",
+    confirm: "Arhivezi <strong>{{name}}</strong>?",
   },
   types: {
     individual: "Persoană fizică",
@@ -186,11 +193,15 @@ const clients: Messages<typeof en> = {
     createdButVehicleFailed: "Clientul a fost creat, dar vehiculul nu a putut fi salvat. Deschideți profilul clientului pentru a adăuga vehiculul.",
     updating: "Se actualizează clientul...",
     updated: "Clientul a fost actualizat cu succes",
+    deleting: "Se șterge clientul...",
+    deleted: "Clientul a fost arhivat cu succes",
   },
   errors: {
     loadFailed: "Clienții nu au putut fi încărcați",
     notAuthenticated: "Utilizatorul nu este autentificat",
     notFoundOrForbidden: "Clientul nu a fost găsit sau nu aveți permisiunea de a-l edita.",
+    deleteRequiresDeletedAt:
+      "Ștergerea clientului necesită coloana clients.deleted_at în baza de date. Ștergerea logică nu poate rula până când coloana există.",
   },
   byIndustry: {
     auto_repair: {

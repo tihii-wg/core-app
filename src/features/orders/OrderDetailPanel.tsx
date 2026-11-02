@@ -36,6 +36,7 @@ import {
   warehouseMaterialStatus,
   warehouseStatusBadgeVariant,
 } from "../inventory/warehouseMaterialStatus";
+import { isCatalogOrderMaterial, resolveMaterialSupplySource } from "../inventory/orderMaterialLine";
 import useGetEmployees from "../employees/useGetEmployees";
 import { isOrderOverdue } from "./orderVisibility";
 import { localDateKey } from "../../pages/dashboardStats";
@@ -380,23 +381,38 @@ export default function OrderDetailPanel({
                     </thead>
                     <tbody className="divide-y divide-border">
                       {materialLines.map((line, index) => {
-                        const status = warehouseMaterialStatus(line);
+                        const catalog = isCatalogOrderMaterial(line);
+                        const source = resolveMaterialSupplySource(line);
+                        const sourceLabel =
+                          source === "customer"
+                            ? t("orders.form.materialSourceCustomer")
+                            : source === "one_time"
+                              ? t("orders.form.materialSourceOneTime")
+                              : t("orders.form.materialSourceCatalog");
+                        const status = catalog ? warehouseMaterialStatus(line) : null;
                         return (
-                          <tr key={line.id ?? `${line.inventoryItemId}-${index}`}>
+                          <tr key={line.id ?? `${line.inventoryItemId ?? "free"}-${index}`}>
                             <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
                               <div className="space-y-1">
                                 <p>{line.itemName}</p>
-                                <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
-                                  {t(`orders.warehouse.status.${status}`)}
-                                </StatusBadge>
-                                <p className="text-[11px] text-muted-foreground tabular-nums">
-                                  {t("orders.warehouse.fulfillmentSummary", {
-                                    issued: materialIssued(line),
-                                    returned: materialReturned(line),
-                                    remaining: remainingToIssue(line),
-                                    net: netOutsideWarehouse(line),
-                                  })}
-                                </p>
+                                <p className="text-[11px] text-muted-foreground">{sourceLabel}</p>
+                                {status ? (
+                                  <>
+                                    <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
+                                      {t(`orders.warehouse.status.${status}`)}
+                                    </StatusBadge>
+                                    <p className="text-[11px] text-muted-foreground tabular-nums">
+                                      {t("orders.warehouse.fulfillmentSummary", {
+                                        issued: materialIssued(line),
+                                        returned: materialReturned(line),
+                                        remaining: remainingToIssue(line),
+                                        net: netOutsideWarehouse(line),
+                                      })}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p className="text-[11px] text-muted-foreground">{t("orders.form.freeformNoStockImpact")}</p>
+                                )}
                               </div>
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>

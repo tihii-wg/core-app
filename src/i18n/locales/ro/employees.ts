@@ -48,6 +48,12 @@ const employees: Messages<typeof en> = {
     createTitle: "Adaugă angajat nou",
     createDescription: "Completează mai jos informațiile despre angajat.",
   },
+  delete: {
+    title: "Șterge angajatul",
+    description:
+      "Angajatul va fi dezactivat (arhivat), nu șters definitiv. Comenzile și atribuirile istorice rămân intacte. Nu va mai apărea în listele de atribuire a tehnicienilor. Conturile de autentificare nu sunt eliminate.",
+    confirm: "Dezactivezi <strong>{{name}}</strong>?",
+  },
   form: {
     fullNameLabel: "Nume complet *",
     namePlaceholder: "Numele angajatului",
@@ -94,10 +100,13 @@ const employees: Messages<typeof en> = {
     creating: "Se creează angajatul",
     created: "Angajatul a fost creat cu succes",
     genericError: "Ceva nu a funcționat",
+    deleting: "Se șterge angajatul...",
+    deleted: "Angajatul a fost dezactivat cu succes",
   },
   errors: {
     noActiveWorkspace: "Niciun spațiu de lucru activ",
     notActiveMember: "Utilizatorul selectat nu este un membru activ al acestui spațiu de lucru",
+    notFoundOrForbidden: "Angajatul nu a fost găsit sau nu aveți permisiunea de a-l modifica.",
   },
 };
 

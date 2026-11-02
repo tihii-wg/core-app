@@ -133,6 +133,33 @@ describe("createOrder", () => {
     fake.failNext("order_services", "insert", { code: "42501", message: "permission denied for table order_services" });
     await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [oilChange] }, WS.A)).rejects.toThrow("permission denied for table order_services");
   });
+
+  it("creates an order with a freeform material and leaves inventory quantity unchanged", async () => {
+    const beforeQty = Number(row("inventory_items", "item-a1")?.quantity ?? 0);
+    const order = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [oilChange],
+        materials: [{ itemName: "Ad-hoc seal", price: 4, quantity: 3, supplySource: "one_time" }],
+      },
+      WS.A,
+    );
+
+    const lines = fake.all("order_materials").filter((line) => line.order_id === order.id);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      inventory_item_id: null,
+      item_name: "Ad-hoc seal",
+      price: 4,
+      quantity: 3,
+      supply_source: "one_time",
+      quantity_issued: 0,
+    });
+    expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeQty);
+    expect(Number(order.total_price)).toBe(40 + 12);
+  });
 });
 
 describe("order numbers", () => {
@@ -463,5 +490,50 @@ describe("updateOrder", () => {
   it("surfaces an error when appending lines fails", async () => {
     fake.failNext("order_services", "insert", { code: "PGRST000", message: "insert failed" });
     await expect(updateOrder({ ...details, services: [{ serviceId: "service-a2", serviceName: "Brake check", price: 25, quantity: 1 }] }, WS.A)).rejects.toThrow("insert failed");
+  });
+
+  it("saves catalog and freeform materials together without inventing catalog ids for freeform lines", async () => {
+    const beforeQty = Number(row("inventory_items", "item-a1")?.quantity ?? 0);
+    const order = await updateOrder(
+      {
+        ...details,
+        services: [savedOilChange],
+        materials: [
+          { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 2, supplySource: "catalog" },
+          { itemName: " Special gasket ", price: 7.5, quantity: 1, supplySource: "one_time" },
+          { itemName: "Customer rotor", price: 0, quantity: 1, supplySource: "customer" },
+        ],
+      },
+      WS.A,
+    );
+
+    const lines = fake.all("order_materials").filter((line) => line.order_id === "order-a1");
+    expect(lines).toHaveLength(3);
+    expect(lines.find((line) => line.inventory_item_id === "item-a1")).toMatchObject({
+      quantity: 2,
+      supply_source: "catalog",
+      price: 12,
+    });
+    expect(lines.find((line) => line.supply_source === "one_time")).toMatchObject({
+      inventory_item_id: null,
+      item_name: "Special gasket",
+      price: 7.5,
+      quantity: 1,
+      quantity_issued: 0,
+    });
+    expect(lines.find((line) => line.supply_source === "customer")).toMatchObject({
+      inventory_item_id: null,
+      item_name: "Customer rotor",
+      price: 0,
+    });
+    expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeQty);
+    expect(order.materials).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ inventoryItemId: "item-a1", supplySource: "catalog", quantity: 2 }),
+        expect.objectContaining({ itemName: "Special gasket", supplySource: "one_time", price: 7.5 }),
+        expect.objectContaining({ itemName: "Customer rotor", supplySource: "customer", price: 0 }),
+      ]),
+    );
+    expect(order.materials.filter((line) => line.supplySource !== "catalog").every((line) => !line.inventoryItemId)).toBe(true);
   });
 });

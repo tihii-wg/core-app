@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { Mail, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Employee, EmployeeRole } from "../../lib/types";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { StatusBadge } from "../../ui/StatusBadge";
+import { Button } from "../../ui/Button";
 import { cn } from "../../lib/utils";
 import type { EmployeeWorkloadCounts } from "./employeeWorkload";
+import { DeleteEmployeeDialog } from "./DeleteEmployeeDialog";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 
 type EmployeeDetailPanelProps = {
   detailPanelOpen: boolean;
@@ -12,6 +16,7 @@ type EmployeeDetailPanelProps = {
   selectedEmployee: Employee | null;
   roleLabels: Record<EmployeeRole, string>;
   workload: EmployeeWorkloadCounts;
+  onEmployeeDeleted?: (employeeId: string) => void;
 };
 
 export default function EmployeeDetailPanel({
@@ -20,8 +25,11 @@ export default function EmployeeDetailPanel({
   selectedEmployee,
   roleLabels,
   workload,
+  onEmployeeDeleted,
 }: EmployeeDetailPanelProps) {
   const { t } = useTranslation();
+  const { canWrite: canMutateEmployees } = useWorkspaceSubscription();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const inactive = selectedEmployee?.status === "inactive";
 
   return (
@@ -114,8 +122,25 @@ export default function EmployeeDetailPanel({
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{t("employees.detail.workloadHint")}</p>
             </div>
+
+            {canMutateEmployees && !inactive ? (
+              <div className="flex justify-end border-t border-border pt-4">
+                <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
+                  {t("common.delete")}
+                </Button>
+              </div>
+            ) : null}
           </div>
         )}
+
+        <DeleteEmployeeDialog
+          employee={deleteOpen ? selectedEmployee : null}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={(employeeId) => {
+            onEmployeeDeleted?.(employeeId);
+            setDetailPanelOpen(false);
+          }}
+        />
       </SheetContent>
     </Sheet>
   );

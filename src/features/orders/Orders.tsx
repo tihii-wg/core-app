@@ -628,6 +628,7 @@ export function Orders() {
         detailPanelOpen={clientDetails.detailPanelOpen}
         setDetailPanelOpen={clientDetails.setDetailPanelOpen}
         onClientUpdated={clientDetails.onClientUpdated}
+        onClientDeleted={clientDetails.onClientDeleted}
         onOpenOrder={(order) => {
           clientDetails.setDetailPanelOpen(false);
           orderDetails.openOrder(order);

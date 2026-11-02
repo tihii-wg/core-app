@@ -6,9 +6,16 @@ export default {
   addClient: "Add Client",
   searchPlaceholder: "Search by name, tax ID, contact, email, phone, or address...",
   editClientLabel: "Edit {{name}}",
+  deleteClientLabel: "Delete {{name}}",
   actions: {
     menuLabel: "Actions for client {{name}}",
     viewDetails: "View details",
+  },
+  delete: {
+    title: "Delete client",
+    description:
+      "The client will be archived (soft-deleted), not erased. Existing orders, invoices, payments, and balances stay in history. The client will no longer appear in lists or new-order pickers.",
+    confirm: "Archive <strong>{{name}}</strong>?",
   },
   types: {
     individual: "Individual",
@@ -182,11 +189,15 @@ export default {
     createdButVehicleFailed: "Client was created, but the vehicle could not be saved. Open the client profile to add the vehicle.",
     updating: "Updating client...",
     updated: "Client updated successfully",
+    deleting: "Deleting client...",
+    deleted: "Client archived successfully",
   },
   errors: {
     loadFailed: "Could not load clients",
     notAuthenticated: "User is not authenticated",
     notFoundOrForbidden: "Client was not found or you do not have permission to edit it.",
+    deleteRequiresDeletedAt:
+      "Client deletion needs the database column clients.deleted_at. Soft-delete cannot run until that column exists.",
   },
   byIndustry: {
     auto_repair: {

@@ -199,3 +199,33 @@ export async function updateClient(
 
   return toClient(updatedClient as Record<string, unknown>);
 }
+
+/**
+ * Soft-deletes a client (`deleted_at`). Historical orders/invoices stay intact —
+ * hard DELETE is unsafe because `orders.client_id` is ON DELETE CASCADE.
+ * Soft-deleted clients are already excluded from lists and new-order pickers.
+ */
+export async function softDeleteClient(workspaceId: string | undefined, clientId: string) {
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+  const id = clientId.trim();
+  if (!id) throw new Error(i18n.t("clients.errors.notFoundOrForbidden"));
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("clients")
+    .update({ deleted_at: now, updated_at: now })
+    .eq("id", id)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if ((error.code === "42703" || error.code === "PGRST204") && error.message?.includes("deleted_at")) {
+      throw new Error(i18n.t("clients.errors.deleteRequiresDeletedAt"));
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error(i18n.t("clients.errors.notFoundOrForbidden"));
+  return { id };
+}

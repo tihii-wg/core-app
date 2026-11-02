@@ -276,6 +276,12 @@ export function Employees() {
         selectedEmployee={selectedEmployee}
         roleLabels={roleLabels}
         workload={selectedWorkload}
+        onEmployeeDeleted={(employeeId) => {
+          setSelectedEmployee((current) => {
+            if (!current || current.id !== employeeId) return current;
+            return { ...current, status: "inactive" };
+          });
+        }}
       />
     </div>
   );

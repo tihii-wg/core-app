@@ -1,4 +1,4 @@
-import { EllipsisVertical, Eye, Mail, Pencil, Phone } from "lucide-react";
+import { EllipsisVertical, Eye, Mail, Pencil, Phone, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Client } from "../../lib/types";
 import { Button } from "../../ui/Button";
@@ -16,13 +16,14 @@ type ClientCardProps = {
   formatMoney: (value: number) => string;
   onView: (client: Client) => void;
   onEdit: (client: Client) => void;
+  onDelete?: (client: Client) => void;
 };
 
 /**
  * Compact phone layout for one client (below the md breakpoint). The whole
  * surface opens the client detail panel; the actions menu is independent.
  */
-export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit }: ClientCardProps) {
+export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, onDelete }: ClientCardProps) {
   const { t } = useTranslation();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
@@ -62,6 +63,12 @@ export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit }:
               <Pencil />
               {t("common.edit")}
             </DropdownMenuItem>
+            {onDelete ? (
+              <DropdownMenuItem variant="destructive" onSelect={() => onDelete(client)}>
+                <Trash2 />
+                {t("common.delete")}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

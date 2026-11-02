@@ -8,6 +8,7 @@ type ClientDetailsHostProps = {
   detailPanelOpen: boolean;
   setDetailPanelOpen: (open: boolean) => void;
   onClientUpdated: (client: Client) => void;
+  onClientDeleted?: (clientId: string) => void;
   onOpenOrder?: (order: Order) => void;
   onCreateOrder?: (client: Client) => void;
 };
@@ -18,6 +19,7 @@ export function ClientDetailsHost({
   detailPanelOpen,
   setDetailPanelOpen,
   onClientUpdated,
+  onClientDeleted,
   onOpenOrder,
   onCreateOrder,
 }: ClientDetailsHostProps) {
@@ -29,6 +31,7 @@ export function ClientDetailsHost({
       detailPanelOpen={detailPanelOpen}
       setDetailPanelOpen={setDetailPanelOpen}
       onClientUpdated={onClientUpdated}
+      onClientDeleted={onClientDeleted}
       getClientOrders={(clientId) => clientOrderSummaries(orders, clientId)}
       ordersLoading={isLoading}
       ordersError={Boolean(error)}

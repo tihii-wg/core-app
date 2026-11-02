@@ -10,6 +10,7 @@ function requireWorkspaceId(workspaceId: string | undefined) {
 
 function warehouseError(error: { message?: string; code?: string } | null, fallback: string) {
   const message = error?.message ?? "";
+  const code = error?.code ?? "";
   if (message.includes("insufficient_warehouse_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_batch_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_stock")) return i18n.t("orders.errors.insufficientStock");
@@ -17,7 +18,12 @@ function warehouseError(error: { message?: string; code?: string } | null, fallb
   if (message.includes("Warehouse not found")) return i18n.t("orders.errors.warehouseInvalid");
   if (message.includes("remaining requested")) return i18n.t("orders.errors.issueExceedsRemaining");
   if (message.includes("outstanding issued")) return i18n.t("orders.errors.returnExceedsOutstanding");
-  if (message.includes("permission to issue") || message.includes("permission to return")) {
+  if (
+    code === "42501" ||
+    /row-level security|permission denied/i.test(message) ||
+    message.includes("permission to issue") ||
+    message.includes("permission to return")
+  ) {
     return i18n.t("orders.errors.warehousePermission");
   }
   if (message.includes("not on this order") || message.includes("unavailable")) {

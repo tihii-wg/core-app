@@ -44,6 +44,12 @@ export default {
     createTitle: "Add New Employee",
     createDescription: "Fill in the employee information below.",
   },
+  delete: {
+    title: "Delete employee",
+    description:
+      "The employee will be deactivated (archived), not permanently erased. Historical orders and assignments stay intact. They will no longer appear in new technician assignment lists. Login accounts are not removed.",
+    confirm: "Deactivate <strong>{{name}}</strong>?",
+  },
   form: {
     fullNameLabel: "Full Name *",
     namePlaceholder: "Employee name",
@@ -90,9 +96,12 @@ export default {
     creating: "Creating employee",
     created: "Employee created succesfully",
     genericError: "Somthing went wrong",
+    deleting: "Deleting employee...",
+    deleted: "Employee deactivated successfully",
   },
   errors: {
     noActiveWorkspace: "No active workspace",
     notActiveMember: "Selected user is not an active member of this workspace",
+    notFoundOrForbidden: "Employee was not found or you do not have permission to change it.",
   },
 };

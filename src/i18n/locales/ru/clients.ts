@@ -11,9 +11,16 @@ const clients: Messages<typeof en> = {
   addClient: "Добавить клиента",
   searchPlaceholder: "Поиск по имени, налоговому коду, контактному лицу, email, телефону или адресу...",
   editClientLabel: "Редактировать {{name}}",
+  deleteClientLabel: "Удалить {{name}}",
   actions: {
     menuLabel: "Действия для клиента {{name}}",
     viewDetails: "Подробнее",
+  },
+  delete: {
+    title: "Удалить клиента",
+    description:
+      "Клиент будет архивирован (мягкое удаление), а не стёрт. Существующие заказы, счета, платежи и балансы останутся в истории. Клиент больше не появится в списках и при выборе для новых заказов.",
+    confirm: "Архивировать <strong>{{name}}</strong>?",
   },
   types: {
     individual: "Физическое лицо",
@@ -187,11 +194,15 @@ const clients: Messages<typeof en> = {
     createdButVehicleFailed: "Клиент создан, но транспорт сохранить не удалось. Откройте профиль клиента, чтобы добавить транспорт.",
     updating: "Обновление клиента...",
     updated: "Клиент успешно обновлён",
+    deleting: "Удаление клиента...",
+    deleted: "Клиент успешно архивирован",
   },
   errors: {
     loadFailed: "Не удалось загрузить клиентов",
     notAuthenticated: "Пользователь не авторизован",
     notFoundOrForbidden: "Клиент не найден или у вас нет прав на его редактирование.",
+    deleteRequiresDeletedAt:
+      "Для удаления клиента нужна колонка clients.deleted_at в базе. Мягкое удаление недоступно, пока этой колонки нет.",
   },
   byIndustry: {
     auto_repair: {
