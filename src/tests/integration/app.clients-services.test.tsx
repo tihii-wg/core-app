@@ -25,7 +25,6 @@ async function openClients(userId: string) {
 
 async function fillClientForm(user: ReturnType<typeof renderApp>["user"], dialog: HTMLElement) {
   await user.type(within(dialog).getByLabelText("Full name *"), "Carla Client");
-  await user.type(within(dialog).getByLabelText("Email *"), "carla@example.com");
   await user.type(within(dialog).getByLabelText("Phone *"), "+37369123456");
 }
 
@@ -53,7 +52,8 @@ describe("clients page", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add Client" }));
 
     expect(await within(dialog).findByText("Full name is required")).toBeInTheDocument();
-    expect(within(dialog).getByText("Email is required")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Email is required")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("textbox", { name: /Email/i })).not.toBeInTheDocument();
     expect(within(dialog).getByText("Phone must be in format +37300000000")).toBeInTheDocument();
     expect(fake.requests.filter((request) => request.table === "clients" && request.op === "insert")).toHaveLength(0);
   });

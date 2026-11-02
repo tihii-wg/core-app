@@ -69,7 +69,6 @@ describe("AddNewClientForm optional vehicle", () => {
     expect(screen.queryByLabelText(/^Make$/)).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/^Full name/i), "Ada Lovelace");
-    await user.type(screen.getByLabelText(/^Email \*$/), "ada@example.com");
     await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
     await user.click(screen.getByRole("button", { name: /Add Client/i }));
 
@@ -86,7 +85,6 @@ describe("AddNewClientForm optional vehicle", () => {
     expect(screen.getByLabelText(/^Make$/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/^Full name/i), "Ada Lovelace");
-    await user.type(screen.getByLabelText(/^Email \*$/), "ada@example.com");
     await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
     await user.type(screen.getByLabelText(/^Make$/), "Toyota");
     await user.type(screen.getByLabelText(/^VIN$/), "1HGBH41JXMN109186");
@@ -115,7 +113,6 @@ describe("AddNewClientForm optional vehicle", () => {
 
     await user.click(screen.getByLabelText("Add a vehicle"));
     await user.type(screen.getByLabelText(/^Full name/i), "Ada Lovelace");
-    await user.type(screen.getByLabelText(/^Email \*$/), "ada@example.com");
     await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
     await user.type(screen.getByLabelText(/^VIN$/), "ABC123");
     await user.click(screen.getByRole("button", { name: /Add Client/i }));

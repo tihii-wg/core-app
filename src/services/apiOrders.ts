@@ -92,7 +92,7 @@ function requireWorkspaceId(workspaceId: string | undefined) {
 }
 
 /** Resolve client for create. Empty clientId + empty name → NULL (draft without client). */
-async function resolveClientId(workspaceId: string, { clientId, clientName, clientType, clientTaxId, clientContactPerson, clientEmail = "", clientPhone = "" }: CreateOrderInput) {
+async function resolveClientId(workspaceId: string, { clientId, clientName, clientType, clientTaxId, clientContactPerson, clientPhone = "" }: CreateOrderInput) {
   const existingId = nullIfEmptyUuid(clientId);
   if (existingId) return existingId;
 
@@ -110,7 +110,6 @@ async function resolveClientId(workspaceId: string, { clientId, clientName, clie
     clientType,
     taxId: clientTaxId,
     contactPerson: clientContactPerson,
-    email: clientEmail,
     phone: clientPhone,
     address: "",
     notes: "",

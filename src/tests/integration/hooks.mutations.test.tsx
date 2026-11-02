@@ -44,7 +44,7 @@ vi.mock("react-hot-toast", () => {
   return { default: toast, toast };
 });
 
-const clientForm = { clientType: "individual" as const, clientName: "Hook Client", taxId: "", contactPerson: "", email: "", phone: "+37360000000", address: "", notes: "" };
+const clientForm = { clientType: "individual" as const, clientName: "Hook Client", taxId: "", contactPerson: "", phone: "+37360000000", address: "", notes: "" };
 const inventoryForm = { name: "Wiper", sku: "WP-1", description: "", category: "", quantity: 3, minQuantity: 1, unit: "pcs", purchasePrice: 1, sellingPrice: 2, supplier: "", location: "", isActive: true };
 const sortByName = { field: "name" as const, ascending: true };
 
@@ -126,14 +126,14 @@ describe("employee mutations", () => {
   it("creating an employee refreshes the employees list", async () => {
     const { result } = setup(() => ({ list: useGetEmployees(), create: useCreateNewEmployee() }));
     await waitFor(() => expect(result.current.list.employees).toHaveLength(2));
-    await settle(() => result.current.create.mutateAsync({ workspace_id: WS.A, profile_id: USERS.member.id, name: "Eve", email: "", phone: "", role: "technician", status: "active" }));
+    await settle(() => result.current.create.mutateAsync({ workspace_id: WS.A, profile_id: USERS.member.id, name: "Eve", phone: "", role: "technician", status: "active" }));
     await waitFor(() => expect(result.current.list.employees).toHaveLength(3));
   });
 
   it("a missing workspace is reported as an error toast", async () => {
     const { result } = setup(() => ({ create: useCreateNewEmployee(), entitlement: useWorkspaceSubscription() }));
     await waitUntilWritable(() => result.current.entitlement);
-    await settle(() => result.current.create.mutateAsync({ name: "Eve", email: "", phone: "", role: "technician", status: "active", profile_id: null }));
+    await settle(() => result.current.create.mutateAsync({ name: "Eve", phone: "", role: "technician", status: "active", profile_id: null }));
     expect(toast.error).toHaveBeenCalledWith("No active workspace", { id: "create-employee" });
   });
 });

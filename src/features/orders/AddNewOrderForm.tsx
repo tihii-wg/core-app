@@ -20,7 +20,7 @@ import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
-import { clientEmailRules, clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
+import { clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
 import ClientTypeSelect from "../clients/ClientTypeSelect";
 import { industryClientCopy } from "../industries/industryWorkflow";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
@@ -179,7 +179,6 @@ export default function AddNewOrderForm({
         clientType: data.newClientType,
         clientTaxId: data.newClientTaxId,
         clientContactPerson: data.newClientContactPerson,
-        clientEmail: data.newClientEmail,
         clientPhone: data.newClientPhone,
         vehicleId: data.vehicleId || null,
         // Vehicle industries: OrderVehicleFields snapshots device/plate/VIN from the selected vehicle.
@@ -265,28 +264,15 @@ export default function AddNewOrderForm({
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="newClientPhone">{t("clients.form.phoneLabel")}</Label>
-                  <Input
-                    id="newClientPhone"
-                    {...register("newClientPhone", { ...clientPhoneRules(), shouldUnregister: true })}
-                    placeholder={t("clients.form.phonePlaceholder")}
-                    className={errors.newClientPhone ? "border-destructive" : ""}
-                  />
-                  {errors.newClientPhone && <p className="text-xs text-destructive">{errors.newClientPhone.message}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newClientEmail">{t("clients.form.emailLabel")}</Label>
-                  <Input
-                    id="newClientEmail"
-                    type="email"
-                    {...register("newClientEmail", { ...clientEmailRules(), shouldUnregister: true })}
-                    placeholder={t("clients.form.emailPlaceholder")}
-                    className={errors.newClientEmail ? "border-destructive" : ""}
-                  />
-                  {errors.newClientEmail && <p className="text-xs text-destructive">{errors.newClientEmail.message}</p>}
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="newClientPhone">{t("clients.form.phoneLabel")}</Label>
+                <Input
+                  id="newClientPhone"
+                  {...register("newClientPhone", { ...clientPhoneRules(), shouldUnregister: true })}
+                  placeholder={t("clients.form.phonePlaceholder")}
+                  className={errors.newClientPhone ? "border-destructive" : ""}
+                />
+                {errors.newClientPhone && <p className="text-xs text-destructive">{errors.newClientPhone.message}</p>}
               </div>
             </div>
           )}

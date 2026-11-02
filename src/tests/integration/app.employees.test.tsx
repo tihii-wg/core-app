@@ -27,7 +27,6 @@ async function fillEmployee(user: ReturnType<typeof renderApp>["user"]) {
   await user.click(screen.getByRole("button", { name: /Add Employee/ }));
   const dialog = await screen.findByRole("dialog");
   await user.type(within(dialog).getByLabelText("Full Name *"), "Eve Electric");
-  await user.type(within(dialog).getByLabelText("Email *"), "eve@example.com");
   await user.type(within(dialog).getByLabelText("Phone *"), "+37369111111");
   await user.click(within(dialog).getByRole("combobox", { name: "Role *" }));
   await user.click(await screen.findByRole("option", { name: "Technician" }));

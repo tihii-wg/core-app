@@ -109,7 +109,7 @@ describe("orders page", () => {
     expect(await screen.findByText(USERS.member.name)).toBeInTheDocument();
   });
 
-  it("creates a new client with phone and email from the order form and links it to the order", async () => {
+  it("creates a new client with phone from the order form and links it to the order", async () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
@@ -120,7 +120,7 @@ describe("orders page", () => {
     await user.type(within(dialog).getByLabelText("IDNO"), "1002600000001");
     await user.type(within(dialog).getByLabelText("Contact name"), "Ion Popescu");
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
-    await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
+    expect(within(dialog).queryByLabelText(/Email/i)).not.toBeInTheDocument();
     // New clients have no id until save; vehicle picker needs a selected existing client, so skip vehicle here.
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
@@ -132,8 +132,9 @@ describe("orders page", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     const newClients = fake.all("clients").filter((item) => item.name === "Nina New");
     expect(newClients).toEqual([
-      expect.objectContaining({ workspace_id: WS.A, client_type: "organization", tax_id: "1002600000001", contact_person: "Ion Popescu", phone: "+37369000001", email: "nina@example.com" }),
+      expect.objectContaining({ workspace_id: WS.A, client_type: "organization", tax_id: "1002600000001", contact_person: "Ion Popescu", phone: "+37369000001" }),
     ]);
+    expect(newClients[0]?.email == null || newClients[0]?.email === "").toBe(true);
     const created = fake.all("orders").find((order) => order.client_id === newClients[0].id);
     expect(created).toMatchObject({ workspace_id: WS.A, total_price: 40 });
     expect(await screen.findByText("Nina New")).toBeInTheDocument();

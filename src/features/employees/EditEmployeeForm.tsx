@@ -29,7 +29,6 @@ export default function EditEmployeeForm({ employee, onCancel, onUpdated }: Edit
   } = useForm<EditEmployeeFormData>({
     defaultValues: {
       name: employee.name,
-      email: employee.email ?? "",
       phone: employee.phone ?? "",
       role: employee.role,
       status: employee.status === "inactive" ? "inactive" : "active",
@@ -43,7 +42,6 @@ export default function EditEmployeeForm({ employee, onCancel, onUpdated }: Edit
       const updated = await updateEmployee({
         employeeId: employee.id,
         name: data.name,
-        email: data.email,
         phone: data.phone,
         role: data.role,
         status: data.status,
@@ -71,43 +69,22 @@ export default function EditEmployeeForm({ employee, onCancel, onUpdated }: Edit
           {errors.name && <p className="text-xs text-destructive">{t("employees.form.nameRequired")}</p>}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-employee-email">{t("employees.form.emailLabel")}</Label>
-            <Input
-              id="edit-employee-email"
-              type="email"
-              placeholder="email@company.com"
-              disabled={busy}
-              {...register("email", {
-                required: t("employees.form.emailRequired"),
-                pattern: {
-                  value: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
-                  message: t("employees.form.emailInvalid"),
-                },
-              })}
-              className={errors.email ? "border-destructive focus:border-destructive focus:ring-0" : "hover:border-primary focus:ring-primary"}
-            />
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-employee-phone">{t("employees.form.phoneLabel")}</Label>
-            <Input
-              id="edit-employee-phone"
-              placeholder="+1 (555) 000-0000"
-              disabled={busy}
-              {...register("phone", {
-                required: t("employees.form.phoneRequired"),
-                pattern: {
-                  value: /^\+373\d{8}$/,
-                  message: t("employees.form.phoneInvalid"),
-                },
-              })}
-              className={errors.phone ? "border-destructive focus:border-destructive focus:ring-0" : "hover:border-primary focus:ring-primary"}
-            />
-            {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-employee-phone">{t("employees.form.phoneLabel")}</Label>
+          <Input
+            id="edit-employee-phone"
+            placeholder="+1 (555) 000-0000"
+            disabled={busy}
+            {...register("phone", {
+              required: t("employees.form.phoneRequired"),
+              pattern: {
+                value: /^\+373\d{8}$/,
+                message: t("employees.form.phoneInvalid"),
+              },
+            })}
+            className={errors.phone ? "border-destructive focus:border-destructive focus:ring-0" : "hover:border-primary focus:ring-primary"}
+          />
+          {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -81,21 +81,23 @@ describe("createOrder", () => {
     expect(row("clients", String(created.client_id))).toMatchObject({ name: "Walk In", workspace_id: WS.A });
   });
 
-  it("creates a missing client with the entered phone and email, and ignores them for an existing client", async () => {
+  it("creates a missing client with the entered phone and ignores contact fields for an existing client", async () => {
     const created = await createOrder(
-      { clientName: " Nina New ", clientType: "organization", clientTaxId: " 1002600000001 ", clientContactPerson: " Ion ", clientPhone: " +37369000001 ", clientEmail: " nina@example.com ", device: "Car", services: [oilChange] },
+      { clientName: " Nina New ", clientType: "organization", clientTaxId: " 1002600000001 ", clientContactPerson: " Ion ", clientPhone: " +37369000001 ", device: "Car", services: [oilChange] },
       WS.A,
     );
-    expect(row("clients", String(created.client_id))).toMatchObject({ name: "Nina New", client_type: "organization", tax_id: "1002600000001", contact_person: "Ion", phone: "+37369000001", email: "nina@example.com", workspace_id: WS.A });
+    expect(row("clients", String(created.client_id))).toMatchObject({ name: "Nina New", client_type: "organization", tax_id: "1002600000001", contact_person: "Ion", phone: "+37369000001", workspace_id: WS.A });
+    expect(row("clients", String(created.client_id))?.email == null || row("clients", String(created.client_id))?.email === "").toBe(true);
 
-    const walkIn = await createOrder({ clientName: "Walk In Two", clientTaxId: "999", clientContactPerson: "Nobody", clientPhone: "+37369000003", clientEmail: "walk@example.com", device: "Car", services: [oilChange] }, WS.A);
+    const walkIn = await createOrder({ clientName: "Walk In Two", clientTaxId: "999", clientContactPerson: "Nobody", clientPhone: "+37369000003", device: "Car", services: [oilChange] }, WS.A);
     expect(row("clients", String(walkIn.client_id))).toMatchObject({ client_type: "individual", tax_id: null, contact_person: null });
 
     const clientsBefore = fake.all("clients").length;
-    const existing = await createOrder({ clientName: "nina new", clientPhone: "+37369000002", clientEmail: "other@example.com", device: "Car", services: [oilChange] }, WS.A);
+    Object.assign(row("clients", String(created.client_id))!, { email: "legacy@example.com" });
+    const existing = await createOrder({ clientName: "nina new", clientPhone: "+37369000002", device: "Car", services: [oilChange] }, WS.A);
     expect(existing.client_id).toBe(created.client_id);
     expect(fake.all("clients")).toHaveLength(clientsBefore);
-    expect(row("clients", String(created.client_id))).toMatchObject({ phone: "+37369000001", email: "nina@example.com" });
+    expect(row("clients", String(created.client_id))).toMatchObject({ phone: "+37369000001", email: "legacy@example.com" });
   });
 
   it("resolves a service by name inside the workspace and ignores a service id from another workspace", async () => {
@@ -527,13 +529,14 @@ describe("updateOrder", () => {
       price: 0,
     });
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeQty);
-    expect(order.materials).toEqual(
+    const materials = order.materials ?? [];
+    expect(materials).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ inventoryItemId: "item-a1", supplySource: "catalog", quantity: 2 }),
         expect.objectContaining({ itemName: "Special gasket", supplySource: "one_time", price: 7.5 }),
         expect.objectContaining({ itemName: "Customer rotor", supplySource: "customer", price: 0 }),
       ]),
     );
-    expect(order.materials.filter((line) => line.supplySource !== "catalog").every((line) => !line.inventoryItemId)).toBe(true);
+    expect(materials.filter((line) => line.supplySource !== "catalog").every((line) => !line.inventoryItemId)).toBe(true);
   });
 });

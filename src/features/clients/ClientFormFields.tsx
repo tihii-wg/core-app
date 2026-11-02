@@ -9,7 +9,7 @@ import { industryClientCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { clientEmailRules, clientPhoneRules, clientTypeRules } from "./clientValidation";
+import { clientPhoneRules, clientTypeRules } from "./clientValidation";
 import ClientTypeSelect from "./ClientTypeSelect";
 
 type ClientFormFieldsProps = {
@@ -85,30 +85,16 @@ export default function ClientFormFields({ idPrefix, control, register, errors, 
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-email`}>{t("clients.form.emailLabel")}</Label>
-          <Input
-            id={`${idPrefix}-email`}
-            type="email"
-            {...register("email", clientEmailRules())}
-            placeholder={t("clients.form.emailPlaceholder")}
-            className={errors.email ? "border-destructive" : ""}
-            disabled={disabled}
-          />
-          <FieldError message={errors.email?.message} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-phone`}>{t("clients.form.phoneLabel")}</Label>
-          <Input
-            id={`${idPrefix}-phone`}
-            {...register("phone", clientPhoneRules())}
-            placeholder={t("clients.form.phonePlaceholder")}
-            className={errors.phone ? "border-destructive" : ""}
-            disabled={disabled}
-          />
-          <FieldError message={errors.phone?.message} />
-        </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-phone`}>{t("clients.form.phoneLabel")}</Label>
+        <Input
+          id={`${idPrefix}-phone`}
+          {...register("phone", clientPhoneRules())}
+          placeholder={t("clients.form.phonePlaceholder")}
+          className={errors.phone ? "border-destructive" : ""}
+          disabled={disabled}
+        />
+        <FieldError message={errors.phone?.message} />
       </div>
 
       <div className="space-y-1.5">

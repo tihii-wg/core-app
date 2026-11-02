@@ -85,45 +85,22 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
           {errors.name && <p className="text-xs text-destructive">{t("employees.form.nameRequired")}</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">{t("employees.form.emailLabel")}</Label>
-            <Input
-              id="email"
-              type="email"
-              autoFocus={true}
-              placeholder="email@company.com"
-              disabled={isSubmitting}
-              {...register("email", {
-                required: t("employees.form.emailRequired"),
-                pattern: {
-                  value: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
-                  message: t("employees.form.emailInvalid"),
-                },
-              })}
-              className={errors.email ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
-            />
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="phone">{t("employees.form.phoneLabel")}</Label>
-            <Input
-              id="phone"
-              autoFocus={true}
-              placeholder="+1 (555) 000-0000"
-              disabled={isSubmitting}
-              {...register("phone", {
-                required: t("employees.form.phoneRequired"),
-                pattern: {
-                  value: /^\+373\d{8}$/,
-                  message: t("employees.form.phoneInvalid"),
-                },
-              })}
-              className={errors.phone ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
-            />
-            {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="phone">{t("employees.form.phoneLabel")}</Label>
+          <Input
+            id="phone"
+            placeholder="+1 (555) 000-0000"
+            disabled={isSubmitting}
+            {...register("phone", {
+              required: t("employees.form.phoneRequired"),
+              pattern: {
+                value: /^\+373\d{8}$/,
+                message: t("employees.form.phoneInvalid"),
+              },
+            })}
+            className={errors.phone ? "focus:border-destructive border-destructive focus:ring-0 " : "hover:border-primary focus:ring-primary"}
+          />
+          {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

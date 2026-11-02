@@ -518,7 +518,6 @@ export type ClientFormValues = {
   middleName?: string;
   taxId: string;
   contactPerson: string;
-  email: string;
   phone: string;
   address?: string;
   notes?: string;
@@ -534,7 +533,6 @@ export type AddNewClientFormData = ClientFormValues & {
 export type CreateClientInput = {
   workspace_id: string;
   clientName: string;
-  email: string;
   phone: string;
   address?: string;
   notes?: string;
@@ -559,7 +557,6 @@ export type AddNewEmployeesFormData = {
   role: EmployeeRole | "";
   status: string;
   phone: string;
-  email: string;
 };
 
 export type CreateEmployeeData = AddNewEmployeesFormData & {
@@ -567,10 +564,9 @@ export type CreateEmployeeData = AddNewEmployeesFormData & {
   profile_id: string | null;
 };
 
-/** Editable employee fields. Does not include workspace_id or profile_id. */
+/** Editable employee fields. Does not include workspace_id, profile_id, or email. */
 export type EditEmployeeFormData = {
   name: string;
-  email: string;
   phone: string;
   role: EmployeeRole;
   status: "active" | "inactive";

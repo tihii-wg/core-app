@@ -369,7 +369,7 @@ describe("AddNewOrderForm client validation", () => {
     expect(setCreateModalOpen).not.toHaveBeenCalledWith(false);
   });
 
-  it("asks for the phone and email of a new client with the client form's validation", async () => {
+  it("asks for the phone of a new client with the client form's validation", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
@@ -377,15 +377,14 @@ describe("AddNewOrderForm client validation", () => {
     expect(screen.queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/^Client$/), "Nina New");
     expect(screen.getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
+    expect(screen.queryByLabelText(/Email/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Phone *"), "069123456");
     await user.click(saveDraftButton());
 
     expect(await screen.findByText("Phone must be in format +37300000000")).toBeInTheDocument();
-    expect(screen.getByText("Email is required")).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText(/^Client$/));
     expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
-    expect(screen.queryByText("Email is required")).not.toBeInTheDocument();
   });
 
   it("shows the organization name, IDNO and contact name fields only for a new organization", async () => {
@@ -497,7 +496,6 @@ describe("AddNewOrderForm client validation", () => {
 
     await user.type(screen.getByLabelText(/Client|Customer/i), "Ada");
     await user.type(screen.getByLabelText("Phone *"), "+37369123456");
-    await user.type(screen.getByLabelText("Email *"), "ada@example.com");
     await user.type(screen.getByLabelText(/Job \/ location/i), "Kitchen");
     await addCustomService(user, "Install sink", "100");
     const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });

@@ -98,7 +98,7 @@ describe("dashboard quick actions", () => {
     expect(within(dialog).getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
     expect(within(dialog).queryByLabelText("IDNO")).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
-    await user.type(within(dialog).getByLabelText("Email *"), "nina@example.com");
+    expect(within(dialog).queryByLabelText(/Email/i)).not.toBeInTheDocument();
     // New clients have no id until save; vehicle picker needs an existing client, so skip vehicle here.
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
@@ -106,7 +106,8 @@ describe("dashboard quick actions", () => {
 
     await expectClosedOnDashboard(location);
     const newClients = fake.all("clients").filter((client) => client.name === "Nina New");
-    expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, client_type: "individual", tax_id: null, contact_person: null, phone: "+37369000001", email: "nina@example.com" })]);
+    expect(newClients).toEqual([expect.objectContaining({ workspace_id: WS.A, client_type: "individual", tax_id: null, contact_person: null, phone: "+37369000001" })]);
+    expect(newClients[0]?.email == null || newClients[0]?.email === "").toBe(true);
     const created = fake.all("orders").find((order) => order.client_id === newClients[0].id);
     expect(created).toMatchObject({ workspace_id: WS.A, total_price: 40 });
     // Order number can appear in the recent-orders table and nav/badge copy.
@@ -118,7 +119,6 @@ describe("dashboard quick actions", () => {
     const dialog = await openQuickAction(user, "Add Client", "Add New Client");
 
     await user.type(within(dialog).getByLabelText("Full name *"), "Carla Client");
-    await user.type(within(dialog).getByLabelText("Email *"), "carla@example.com");
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369123456");
     await user.click(within(dialog).getByRole("button", { name: "Add Client" }));
 
@@ -142,7 +142,6 @@ describe("dashboard quick actions", () => {
     const { user, location } = await openDashboard();
     const dialog = await openQuickAction(user, "Add Client", "Add New Client");
     await user.type(within(dialog).getByLabelText("Full name *"), "Carla Client");
-    await user.type(within(dialog).getByLabelText("Email *"), "carla@example.com");
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369123456");
     fake.failNext("clients", "insert", { code: "42501", message: 'new row violates row-level security policy for table "clients"' });
 

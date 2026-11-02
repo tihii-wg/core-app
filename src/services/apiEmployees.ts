@@ -31,17 +31,17 @@ async function requireActiveWorkspaceMember(workspaceId: string, userId: string)
   if (!data) throw new Error(i18n.t("employees.errors.notActiveMember"));
 }
 
-export async function createEmployee({ role, email, name, phone, profile_id, status, workspace_id }: AddNewEmployeesFormData) {
+export async function createEmployee({ role, name, phone, profile_id, status, workspace_id }: AddNewEmployeesFormData) {
   if (!workspace_id) throw new Error(i18n.t("employees.errors.noActiveWorkspace"));
 
   if (profile_id) await requireActiveWorkspaceMember(workspace_id, profile_id);
 
+  // Email is not collected on create/edit forms — omit so DB keeps NULL (never write "").
   const { data, error } = await supabase
     .from("employees")
     .insert([
       {
         role,
-        email,
         name,
         phone,
         profile_id: profile_id || null,
@@ -86,7 +86,7 @@ export async function getEmployees(search: string, roleFilter: EmployeeRole | nu
  * Does not rewrite historical orders or related records.
  */
 export async function updateEmployee(
-  { employeeId, name, email, phone, role, status }: UpdateEmployeeInput,
+  { employeeId, name, phone, role, status }: UpdateEmployeeInput,
   workspaceId: string | undefined,
 ) {
   if (!workspaceId) throw new Error(i18n.t("employees.errors.noActiveWorkspace"));
@@ -102,11 +102,11 @@ export async function updateEmployee(
     throw new Error(i18n.t("employees.errors.notFoundOrForbidden"));
   }
 
+  // Do not touch email — forms no longer edit it, so existing values must stay intact.
   const { data, error } = await supabase
     .from("employees")
     .update({
       name: trimmedName,
-      email: email.trim(),
       phone: phone.trim(),
       role,
       status,

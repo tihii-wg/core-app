@@ -28,7 +28,6 @@ export default function EditClientForm({ client, onCancel, onUpdated }: EditClie
       middleName: client.middleName ?? "",
       taxId: client.tax_id ?? "",
       contactPerson: client.contact_person ?? "",
-      email: client.email ?? "",
       phone: client.phone ?? "",
       address: client.address ?? "",
       notes: client.notes ?? "",

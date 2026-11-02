@@ -35,9 +35,9 @@ export function toClient(row: Record<string, unknown>): Client {
   };
 }
 
+/** Writable client fields for create/update. Email is intentionally omitted so existing values are never cleared. */
 function clientRecord(input: {
   clientName: string;
-  email: string;
   phone: string;
   address?: string;
   notes?: string;
@@ -52,7 +52,6 @@ function clientRecord(input: {
 
   return {
     name: input.clientName.trim(),
-    email: input.email.trim(),
     phone: input.phone.trim(),
     address: input.address?.trim() ?? "",
     notes: input.notes?.trim() ?? "",
@@ -68,7 +67,6 @@ function clientRecord(input: {
 export async function createClient({
   workspace_id,
   clientName,
-  email,
   phone,
   address,
   notes,
@@ -95,7 +93,6 @@ export async function createClient({
         workspace_id,
         ...clientRecord({
           clientName,
-          email,
           phone,
           address,
           notes,
@@ -166,7 +163,7 @@ export async function getClient(workspaceId: string | undefined, clientId: strin
 }
 
 export async function updateClient(
-  { clientId, clientName, email, phone, address, notes, clientType, taxId, contactPerson, middleName, phoneNotificationsConsent, emailNotificationsConsent }: UpdateClientInput,
+  { clientId, clientName, phone, address, notes, clientType, taxId, contactPerson, middleName, phoneNotificationsConsent, emailNotificationsConsent }: UpdateClientInput,
   workspaceId: string | undefined,
 ) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
@@ -176,7 +173,6 @@ export async function updateClient(
     .update(
       clientRecord({
         clientName,
-        email,
         phone,
         address,
         notes,

@@ -38,7 +38,6 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
     middleName: "",
     taxId: "",
     contactPerson: "",
-    email: "",
     phone: "",
     address: "",
     notes: "",

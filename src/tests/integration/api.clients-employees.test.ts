@@ -6,7 +6,7 @@ import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
 
 vi.mock("../../services/supabase", async () => ({ default: (await import("../fakeSupabase")).fakeClient }));
 
-const clientForm = { clientType: "individual" as const, clientName: "  New Person ", taxId: "", contactPerson: "", email: " new@example.com ", phone: "+37360000000", address: "", notes: "" };
+const clientForm = { clientType: "individual" as const, clientName: "  New Person ", taxId: "", contactPerson: "", phone: "+37360000000", address: "", notes: "" };
 
 beforeEach(() => {
   seedCoreApp();
@@ -17,7 +17,12 @@ describe("createClient", () => {
   it("inserts a trimmed client in the given workspace, stamped with the current user", async () => {
     const [created] = await createClient({ workspace_id: WS.A, ...clientForm });
 
-    expect(created).toMatchObject({ name: "New Person", email: "new@example.com", client_type: "individual", tax_id: null });
+    expect(created).toMatchObject({ name: "New Person", client_type: "individual", tax_id: null });
+    expect(row("clients", created.id)).not.toHaveProperty("email", "new@example.com");
+    const clientInsert = fake.requests.find((item) => item.table === "clients" && item.op === "insert")?.values;
+    const clientInsertRows = Array.isArray(clientInsert) ? clientInsert : clientInsert != null ? [clientInsert] : [];
+    expect(clientInsertRows[0]).toBeDefined();
+    expect(clientInsertRows[0]).not.toHaveProperty("email");
     expect(row("clients", created.id)).toMatchObject({ workspace_id: WS.A, added_by: USERS.member.id });
   });
 
@@ -97,11 +102,14 @@ describe("updateClient", () => {
     expect(row("clients", "client-c1")?.name).toBe("Gus Gamma");
   });
 
-  it("never sends workspace_id in the update payload", async () => {
+  it("never sends workspace_id or email in the update payload and preserves existing email", async () => {
+    Object.assign(row("clients", "client-a1")!, { email: "keep-me@example.com" });
     await updateClient({ clientId: "client-a1", ...clientForm }, WS.A);
     const request = fake.requests.find((item) => item.table === "clients" && item.op === "update");
     expect(request?.values).not.toHaveProperty("workspace_id");
+    expect(request?.values).not.toHaveProperty("email");
     expect(request?.filters).toEqual(["id=eq.client-a1", `workspace_id=eq.${WS.A}`, "deleted_at=is.null"]);
+    expect(row("clients", "client-a1")?.email).toBe("keep-me@example.com");
   });
 
   it("requires a workspace and surfaces Supabase errors", async () => {
@@ -112,7 +120,7 @@ describe("updateClient", () => {
 });
 
 describe("employees", () => {
-  const employee = { name: "Nick New", email: "nick@example.com", phone: "+37363333333", role: "technician" as const, status: "active" };
+  const employee = { name: "Nick New", phone: "+37363333333", role: "technician" as const, status: "active" };
 
   it("creates an unlinked employee with profile_id null", async () => {
     const created = await createEmployee({ ...employee, workspace_id: WS.A, profile_id: null });
@@ -154,10 +162,9 @@ describe("employees", () => {
     await expect(getEmployees("", null, WS.A)).rejects.toThrow("offline");
   });
 
-  it("updates an existing employee without creating a duplicate or touching profile_id", async () => {
+  it("updates an existing employee without creating a duplicate or touching profile_id or email", async () => {
     const created = await createEmployee({
       name: "Una Unlinked",
-      email: "una@example.com",
       phone: "+37362222223",
       role: "technician",
       status: "inactive",
@@ -165,13 +172,14 @@ describe("employees", () => {
       profile_id: null,
     });
     const id = String(created?.[0].id);
+    // Seed a legacy email so update must leave it alone.
+    Object.assign(row("employees", id)!, { email: "legacy@example.com" });
     const beforeCount = fake.all("employees").length;
 
     const updated = await updateEmployee(
       {
         employeeId: id,
         name: "Una Updated",
-        email: "una.updated@example.com",
         phone: "+37362222224",
         role: "manager",
         status: "inactive",
@@ -182,7 +190,7 @@ describe("employees", () => {
     expect(updated).toMatchObject({
       id,
       name: "Una Updated",
-      email: "una.updated@example.com",
+      email: "legacy@example.com",
       phone: "+37362222224",
       role: "manager",
       status: "inactive",
@@ -194,20 +202,35 @@ describe("employees", () => {
       profile_id: null,
       status: "inactive",
       name: "Una Updated",
+      email: "legacy@example.com",
     });
     const request = fake.requests.find((item) => item.table === "employees" && item.op === "update");
     expect(request?.values).not.toHaveProperty("workspace_id");
     expect(request?.values).not.toHaveProperty("profile_id");
+    expect(request?.values).not.toHaveProperty("email");
     expect(request?.filters).toEqual([`id=eq.${id}`, `workspace_id=eq.${WS.A}`]);
   });
 
-  it("refuses updating an employee from another workspace", async () => {
+  it("creates employees without writing email and refuses cross-workspace updates", async () => {
+    const created = await createEmployee({
+      name: "No Mail",
+      phone: "+37362222225",
+      role: "technician",
+      status: "active",
+      workspace_id: WS.A,
+      profile_id: null,
+    });
+    const employeeInsert = fake.requests.find((item) => item.table === "employees" && item.op === "insert")?.values;
+    const employeeInsertRows = Array.isArray(employeeInsert) ? employeeInsert : employeeInsert != null ? [employeeInsert] : [];
+    expect(employeeInsertRows[0]).toBeDefined();
+    expect(employeeInsertRows[0]).not.toHaveProperty("email");
+    expect(row("employees", String(created?.[0].id))?.email == null || row("employees", String(created?.[0].id))?.email === "").toBe(true);
+
     await expect(
       updateEmployee(
         {
           employeeId: "employee-b1",
           name: "Hacker",
-          email: "hack@example.com",
           phone: "+37360000000",
           role: "technician",
           status: "active",
