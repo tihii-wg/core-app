@@ -653,6 +653,7 @@ const settings: Messages<typeof en> = {
         year: "An fabricație",
         initial_mileage: "Rulaj la înregistrare",
         current_mileage: "Rulaj curent",
+        mileage_unit: "Unitate kilometraj",
         engine_displacement: "Capacitate motor",
         fuel_type: "Tip combustibil",
         kind: "Tip",

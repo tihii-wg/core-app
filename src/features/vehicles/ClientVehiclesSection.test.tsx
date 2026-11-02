@@ -41,6 +41,7 @@ const sampleVehicle: Vehicle = {
   licensePlate: "ABC123",
   initialMileage: 10000,
   currentMileage: 45200,
+  mileageUnit: null,
   engineDisplacement: 1.8,
   fuelType: "petrol",
   createdAt: "",
@@ -68,7 +69,7 @@ describe("ClientVehiclesSection", () => {
     const first = screen.getByRole("button", { name: /Toyota Corolla 2018/i });
     expect(first).toHaveTextContent("VIN: 1HGBH41JXMN109186");
     expect(first).toHaveTextContent("License plate: ABC123");
-    expect(first).toHaveTextContent("Current mileage: 45200");
+    expect(first).toHaveTextContent(/Current odometer reading: 45,?200/);
     expect(screen.queryByTestId("vehicle-detail-panel")).not.toBeInTheDocument();
 
     await user.click(first);

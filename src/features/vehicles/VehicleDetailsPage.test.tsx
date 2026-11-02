@@ -142,6 +142,7 @@ const vehicle: Vehicle = {
   licensePlate: "ABC123",
   initialMileage: 10000,
   currentMileage: 45200,
+  mileageUnit: null,
   engineDisplacement: 1.8,
   fuelType: "petrol",
   createdAt: "",
@@ -236,7 +237,7 @@ describe("VehicleDetailsPage", () => {
     const user = userEvent.setup();
     renderWithQuery(<VehicleDetailsPage />);
 
-    const input = screen.getByLabelText("Current mileage");
+    const input = screen.getByLabelText(/Current odometer reading/i);
     await user.clear(input);
     await user.type(input, "46000");
     await user.click(screen.getByRole("button", { name: "Save" }));

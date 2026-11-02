@@ -60,6 +60,7 @@ const fullVehicle: Vehicle = {
   licensePlate: "ABC123",
   initialMileage: 10000,
   currentMileage: 45200,
+  mileageUnit: null,
   engineDisplacement: 1.8,
   fuelType: "petrol",
   createdAt: "",
@@ -96,10 +97,11 @@ describe("OrderLinkedVehicleDetails", () => {
     expect(screen.getByText("2018")).toBeInTheDocument();
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
     expect(screen.getByText("ABC123")).toBeInTheDocument();
-    expect(screen.getByText("10000")).toBeInTheDocument();
-    expect(screen.getByText("45200")).toBeInTheDocument();
+    expect(screen.getByText(/10,?000/)).toBeInTheDocument();
+    expect(screen.getByText(/45,?200/)).toBeInTheDocument();
     expect(screen.getByText("1.8")).toBeInTheDocument();
     expect(screen.getByText("Petrol")).toBeInTheDocument();
+    expect(screen.getByText("Mileage unit")).toBeInTheDocument();
     expect(screen.queryByText("null")).not.toBeInTheDocument();
     expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   });
@@ -124,13 +126,14 @@ describe("OrderLinkedVehicleDetails", () => {
       licensePlate: null,
       initialMileage: null,
       currentMileage: null,
+      mileageUnit: null,
       engineDisplacement: null,
       fuelType: null,
     };
     renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
 
     const dashes = screen.getAllByText("—");
-    expect(dashes.length).toBe(9);
+    expect(dashes.length).toBe(10);
     expect(screen.queryByText("null")).not.toBeInTheDocument();
   });
 

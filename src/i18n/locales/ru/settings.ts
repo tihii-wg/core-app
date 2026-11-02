@@ -655,6 +655,7 @@ const settings: Messages<typeof en> = {
         year: "Год выпуска",
         initial_mileage: "Пробег при регистрации",
         current_mileage: "Текущий пробег",
+        mileage_unit: "Единица пробега",
         engine_displacement: "Объём двигателя",
         fuel_type: "Тип топлива",
         kind: "Тип",

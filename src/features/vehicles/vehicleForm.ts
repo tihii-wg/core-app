@@ -1,7 +1,8 @@
-import type { Vehicle, VehicleInput } from "../../lib/types";
+import type { MileageUnit, Vehicle, VehicleInput } from "../../lib/types";
 import { parseOptionalVehicleNumber } from "../../services/apiVehicles";
 import { normalizeVin, optionalVinValidate } from "../../lib/vin";
 import i18n from "../../i18n";
+import { isMileageUnit } from "./vehicleMileage";
 
 export const VEHICLE_FUEL_TYPES = ["petrol", "diesel", "hybrid", "electric", "lpg", "other"] as const;
 
@@ -13,6 +14,8 @@ export type VehicleFormValues = {
   licensePlate: string;
   initialMileage: string;
   currentMileage: string;
+  /** "" = unset / unknown — never invent km or mi. */
+  mileageUnit: "" | MileageUnit;
   engineDisplacement: string;
   fuelType: string;
 };
@@ -26,6 +29,7 @@ export function emptyVehicleFormValues(): VehicleFormValues {
     licensePlate: "",
     initialMileage: "",
     currentMileage: "",
+    mileageUnit: "",
     engineDisplacement: "",
     fuelType: "",
   };
@@ -41,6 +45,7 @@ export function vehicleToFormValues(vehicle?: Vehicle | null): VehicleFormValues
     licensePlate: vehicle.licensePlate ?? "",
     initialMileage: vehicle.initialMileage != null ? String(vehicle.initialMileage) : "",
     currentMileage: vehicle.currentMileage != null ? String(vehicle.currentMileage) : "",
+    mileageUnit: vehicle.mileageUnit ?? "",
     engineDisplacement: vehicle.engineDisplacement != null ? String(vehicle.engineDisplacement) : "",
     fuelType: vehicle.fuelType ?? "",
   };
@@ -52,6 +57,7 @@ export function vehicleFormValuesToInput(values: VehicleFormValues): VehicleInpu
   const initialMileage = parseOptionalVehicleNumber(values.initialMileage);
   const currentMileage = parseOptionalVehicleNumber(values.currentMileage);
   const engineDisplacement = parseOptionalVehicleNumber(values.engineDisplacement);
+  const mileageUnit: MileageUnit | null = values.mileageUnit === "" ? null : values.mileageUnit;
 
   if (values.year.trim() && (year == null || !Number.isInteger(year) || year < 1886 || year > 2200)) {
     throw new Error(i18n.t("vehicles.validation.yearRange"));
@@ -65,6 +71,9 @@ export function vehicleFormValuesToInput(values: VehicleFormValues): VehicleInpu
   if (values.engineDisplacement.trim() && (engineDisplacement == null || engineDisplacement <= 0)) {
     throw new Error(i18n.t("vehicles.validation.displacementPositive"));
   }
+  if (mileageUnit != null && !isMileageUnit(mileageUnit)) {
+    throw new Error(i18n.t("vehicles.validation.mileageUnitInvalid"));
+  }
   const vinCheck = optionalVinValidate(values.vin, i18n.t("vehicles.validation.vinInvalid"));
   if (vinCheck !== true) throw new Error(vinCheck);
 
@@ -76,6 +85,7 @@ export function vehicleFormValuesToInput(values: VehicleFormValues): VehicleInpu
     licensePlate: values.licensePlate,
     initialMileage,
     currentMileage,
+    mileageUnit,
     engineDisplacement,
     fuelType: values.fuelType,
   };

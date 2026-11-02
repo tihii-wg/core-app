@@ -5,6 +5,8 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { parseOptionalVehicleNumber } from "../../services/apiVehicles";
 import { optionalVinValidate } from "../../lib/vin";
+import { MILEAGE_UNITS } from "./vehicleMileage";
+import { useVehicleMileageUnitSupport } from "./useVehicleMileageUnitSupport";
 import { VEHICLE_FUEL_TYPES, type VehicleFormValues } from "./vehicleForm";
 
 type VehicleFieldsProps = {
@@ -19,7 +21,12 @@ type VehicleFieldsProps = {
 export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch, errors, disabled }: VehicleFieldsProps) {
   const { t } = useTranslation();
   const fuelType = watch("fuelType");
+  const mileageUnit = watch("mileageUnit");
   const fuelNone = "__none__";
+  const unitNone = "__none__";
+  const mileageUnitSupported = useVehicleMileageUnitSupport();
+  const unitAbbr =
+    mileageUnit === "km" ? "km" : mileageUnit === "mi" ? "mi" : t("vehicles.mileage.unitUnknownShort");
 
   return (
     <div className="space-y-4">
@@ -88,9 +95,44 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
         {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
       </div>
 
+      {mileageUnitSupported ? (
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefix}-mileage-unit`}>{t("vehicles.fields.mileageUnit")}</Label>
+          <Select
+            value={mileageUnit || unitNone}
+            onValueChange={(value) =>
+              setValue("mileageUnit", value === unitNone ? "" : (value as "km" | "mi"), {
+                shouldDirty: true,
+              })
+            }
+            disabled={disabled}
+          >
+            <SelectTrigger id={`${idPrefix}-mileage-unit`}>
+              <SelectValue placeholder={t("vehicles.placeholders.mileageUnit")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={unitNone}>{t("vehicles.placeholders.mileageUnitNone")}</SelectItem>
+              {MILEAGE_UNITS.map((unit) => (
+                <SelectItem key={unit} value={unit}>
+                  {unit === "km" ? t("vehicles.mileage.kilometers") : t("vehicles.mileage.miles")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{t("vehicles.mileage.unitHint")}</p>
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground" data-testid="mileage-unit-unavailable">
+          {t("vehicles.errors.mileageUnitUnsupported")}
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-initial-mileage`}>{t("vehicles.fields.initialMileage")}</Label>
+          <Label htmlFor={`${idPrefix}-initial-mileage`}>
+            {t("vehicles.fields.initialMileage")}
+            <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span>
+          </Label>
           <Input
             id={`${idPrefix}-initial-mileage`}
             inputMode="numeric"
@@ -107,7 +149,10 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
           {errors.initialMileage && <p className="text-xs text-destructive">{errors.initialMileage.message}</p>}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-current-mileage`}>{t("vehicles.fields.currentMileage")}</Label>
+          <Label htmlFor={`${idPrefix}-current-mileage`}>
+            {t("vehicles.fields.currentMileage")}
+            <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span>
+          </Label>
           <Input
             id={`${idPrefix}-current-mileage`}
             inputMode="numeric"

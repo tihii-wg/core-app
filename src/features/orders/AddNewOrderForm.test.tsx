@@ -27,6 +27,7 @@ const vehiclesState = vi.hoisted(() => ({
     licensePlate: string | null;
     initialMileage: number | null;
     currentMileage: number | null;
+    mileageUnit: 'km' | 'mi' | null;
     engineDisplacement: null;
     fuelType: null;
     createdAt: string;
@@ -128,6 +129,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: input.licensePlate?.trim() || "XYZ999",
         initialMileage: null,
         currentMileage: null,
+        mileageUnit: null,
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -220,6 +222,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: "ABC123",
         initialMileage: null,
         currentMileage: null,
+        mileageUnit: null,
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -269,6 +272,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: "ABC123",
         initialMileage: null,
         currentMileage: 45000,
+        mileageUnit: null,
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -283,7 +287,7 @@ describe("AddNewOrderForm client validation", () => {
     await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
 
-    const mileage = await screen.findByLabelText(/^Current mileage$/i);
+    const mileage = await screen.findByLabelText(/Current odometer reading/i);
     expect(mileage).toHaveValue("");
     await user.type(mileage, "46010");
     await user.click(saveDraftButton());
@@ -312,6 +316,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: "ABC123",
         initialMileage: null,
         currentMileage: 45000,
+        mileageUnit: null,
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -325,7 +330,7 @@ describe("AddNewOrderForm client validation", () => {
 
     await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
-    expect(await screen.findByLabelText(/^Current mileage$/i)).toHaveValue("");
+    expect(await screen.findByLabelText(/Current odometer reading/i)).toHaveValue("");
     await user.click(saveDraftButton());
 
     await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
@@ -347,6 +352,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: "ABC123",
         initialMileage: null,
         currentMileage: null,
+        mileageUnit: null,
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -361,7 +367,7 @@ describe("AddNewOrderForm client validation", () => {
 
     await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
-    await user.type(screen.getByLabelText(/^Current mileage$/i), "100");
+    await user.type(screen.getByLabelText(/Current odometer reading/i), "100");
     await user.click(saveDraftButton());
 
     await vi.waitFor(() => expect(persistMileageMock).toHaveBeenCalled());

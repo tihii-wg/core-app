@@ -13,6 +13,7 @@ import { orderAssetFieldsFromVehicle, vehicleDisplayLabel, vehicleSummaryDetails
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useCreateVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
+import { mileageUnitAbbreviation, mileageUnitLabel } from "../vehicles/vehicleMileage";
 import { VehicleFieldsGrid } from "./VehicleFieldsGrid";
 import { mileageFormValueFromVehicle, visitMileageValidate } from "./orderVehicleMileage";
 
@@ -170,6 +171,9 @@ export function OrderVehicleFields<T extends FieldValues>({
   if (!clientId) return null;
 
   const summary = selectedVehicle ? vehicleSummaryDetails(selectedVehicle) : null;
+  const mileageUnitAbbr = selectedVehicle
+    ? mileageUnitAbbreviation(selectedVehicle.mileageUnit) || t("vehicles.mileage.unitUnknownShort")
+    : "";
 
   return (
     <div className="space-y-2">
@@ -222,19 +226,32 @@ export function OrderVehicleFields<T extends FieldValues>({
           </div>
 
           <div className="space-y-1.5 border-t border-border pt-3">
-            <Label htmlFor="order-vehicle-current-mileage">{t("vehicles.fields.currentMileage")}</Label>
-            <Input
-              id="order-vehicle-current-mileage"
-              inputMode="numeric"
-              className="w-full min-w-0 max-w-full sm:max-w-[12rem]"
-              placeholder={t("vehicles.placeholders.currentMileage")}
-              disabled={disabled}
-              {...register("currentMileage" as Path<T>, {
-                validate: (value) =>
-                  visitMileageValidate(String(value ?? ""), t("vehicles.validation.mileageWholeNonNegative")),
-              })}
-            />
+            <Label htmlFor="order-vehicle-current-mileage">
+              {t("vehicles.fields.currentMileage")}
+              <span className="ml-1 font-normal text-muted-foreground">({mileageUnitAbbr})</span>
+            </Label>
+            <div className="relative w-full min-w-0 max-w-full sm:max-w-[12rem]">
+              <Input
+                id="order-vehicle-current-mileage"
+                inputMode="numeric"
+                className="w-full min-w-0 pr-10"
+                placeholder={t("vehicles.placeholders.currentMileage")}
+                disabled={disabled}
+                {...register("currentMileage" as Path<T>, {
+                  validate: (value) =>
+                    visitMileageValidate(String(value ?? ""), t("vehicles.validation.mileageWholeNonNegative")),
+                })}
+              />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+                {mileageUnitAbbr}
+              </span>
+            </div>
             {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
+            <p className="text-xs text-muted-foreground">
+              {t("vehicles.mileage.readingUnit", {
+                unit: mileageUnitLabel(selectedVehicle.mileageUnit, t),
+              })}
+            </p>
           </div>
         </div>
       ) : null}

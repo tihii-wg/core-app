@@ -63,6 +63,7 @@ describe("orderAssetFieldsFromVehicle", () => {
     licensePlate: "ABC123",
     initialMileage: null,
     currentMileage: null,
+    mileageUnit: null,
     engineDisplacement: null,
     fuelType: null,
     createdAt: "",

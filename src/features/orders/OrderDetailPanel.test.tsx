@@ -119,6 +119,7 @@ const linkedVehicleState = vi.hoisted(() => ({
     licensePlate: string | null;
     initialMileage: number | null;
     currentMileage: number | null;
+    mileageUnit: 'km' | 'mi' | null;
     engineDisplacement: number | null;
     fuelType: string | null;
     createdAt: string;
@@ -251,6 +252,7 @@ beforeEach(() => {
     licensePlate: "ABC123",
     initialMileage: 12000,
     currentMileage: 45000,
+    mileageUnit: null,
     engineDisplacement: 2,
     fuelType: "diesel",
     createdAt: "",

@@ -45,6 +45,9 @@ export interface Client {
   emailNotificationsConsent?: boolean;
 }
 
+/** Per-vehicle odometer unit. Null/unknown when not set or column not applied yet. */
+export type MileageUnit = "km" | "mi";
+
 /** Client-owned vehicle (public.vehicles). Soft-deleted via deleted_at. */
 export type Vehicle = {
   id: string;
@@ -57,6 +60,8 @@ export type Vehicle = {
   licensePlate: string | null;
   initialMileage: number | null;
   currentMileage: number | null;
+  /** Odometer unit for this vehicle. Null when unset or when DB column is absent. */
+  mileageUnit: MileageUnit | null;
   engineDisplacement: number | null;
   fuelType: string | null;
   createdAt: string;
@@ -72,6 +77,7 @@ export type VehicleInput = {
   licensePlate?: string | null;
   initialMileage?: number | null;
   currentMileage?: number | null;
+  mileageUnit?: MileageUnit | null;
   engineDisplacement?: number | null;
   fuelType?: string | null;
 };

@@ -13,6 +13,7 @@ import {
 } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
 import { vehicleDisplayLabel } from "../../services/apiVehicles";
+import { formatVehicleMileage } from "./vehicleMileage";
 import { useGetClientVehicles } from "./useGetClientVehicles";
 import { useArchiveVehicle, useCreateVehicle, useUpdateVehicle } from "./useVehicleMutations";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
@@ -117,7 +118,7 @@ export function ClientVehiclesSection({ clientId, onOpenOrder }: ClientVehiclesS
                     vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
                     vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
                     vehicle.currentMileage != null
-                      ? `${t("vehicles.fields.currentMileage")}: ${vehicle.currentMileage}`
+                      ? `${t("vehicles.fields.currentMileage")}: ${formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t)}`
                       : null,
                   ]
                     .filter(Boolean)

@@ -53,6 +53,7 @@ export function vehicleInputWithCurrentMileage(vehicle: Vehicle, currentMileage:
     licensePlate: vehicle.licensePlate,
     initialMileage: vehicle.initialMileage,
     currentMileage,
+    // Omit mileageUnit so updateVehicle leaves the configured unit untouched.
     engineDisplacement: vehicle.engineDisplacement,
     fuelType: vehicle.fuelType,
   };

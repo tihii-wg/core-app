@@ -648,6 +648,7 @@ export default {
         year: "Year",
         initial_mileage: "Initial mileage",
         current_mileage: "Current mileage",
+        mileage_unit: "Mileage unit",
         engine_displacement: "Engine displacement",
         fuel_type: "Fuel type",
         kind: "Kind",

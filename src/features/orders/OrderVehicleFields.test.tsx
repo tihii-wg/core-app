@@ -51,6 +51,7 @@ const sampleVehicle: Vehicle = {
   licensePlate: "ABC123",
   initialMileage: null,
   currentMileage: 45000,
+  mileageUnit: null,
   engineDisplacement: null,
   fuelType: null,
   createdAt: "",
@@ -314,7 +315,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         currentMileage: "",
       });
     });
-    expect(screen.getByLabelText(/^Current mileage$/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("");
   });
 
   it("keeps current mileage empty on new orders even when the vehicle has stored mileage", async () => {
@@ -325,14 +326,14 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
 
     await vi.waitFor(() => expect(readSnapshot().currentMileage).toBe(""));
-    expect(screen.getByLabelText(/^Current mileage$/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("");
   });
 
   it("prefills current mileage from the vehicle when editing an order", async () => {
     renderWithQuery(<Harness initialVehicleId="veh-1" mileageMode="vehicle" />);
 
     await vi.waitFor(() => {
-      expect(screen.getByLabelText(/^Current mileage$/i)).toHaveValue("45000");
+      expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("45000");
     });
     expect(readSnapshot().currentMileage).toBe("45000");
   });
@@ -341,7 +342,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness initialVehicleId="veh-1" />);
 
-    const mileage = await screen.findByLabelText(/^Current mileage$/i);
+    const mileage = await screen.findByLabelText(/Current odometer reading/i);
     await user.type(mileage, "-5");
     await user.click(screen.getByRole("button", { name: /Save harness/i }));
     expect(await screen.findByText(/whole number zero or greater|Mileage must be/i)).toBeInTheDocument();
@@ -403,7 +404,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
     await vi.waitFor(() => expect(readSnapshot().vehicleId).toBe("veh-1"));
 
-    const mileage = screen.getByLabelText(/^Current mileage$/i);
+    const mileage = screen.getByLabelText(/Current odometer reading/i);
     await user.type(mileage, "99999");
     expect(mileage).toHaveValue("99999");
 
@@ -419,7 +420,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         currentMileage: "",
       });
     });
-    expect(screen.getByLabelText(/^Current mileage$/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("");
   });
 
   it("preserves existing order snapshot fields until the vehicle association changes", async () => {

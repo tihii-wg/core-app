@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { Vehicle } from "../../lib/types";
+import { formatVehicleMileage, mileageUnitLabel } from "../vehicles/vehicleMileage";
 
 function displayValue(value: string | number | null | undefined, empty: string): string {
   if (value == null) return empty;
@@ -31,8 +32,21 @@ export function VehicleFieldsGrid({
     { key: "year", label: t("vehicles.fields.year"), value: displayValue(vehicle.year, empty) },
     { key: "vin", label: t("vehicles.fields.vin"), value: displayValue(vehicle.vin, empty), mono: true },
     { key: "licensePlate", label: t("vehicles.fields.licensePlate"), value: displayValue(vehicle.licensePlate, empty) },
-    { key: "initialMileage", label: t("vehicles.fields.initialMileage"), value: displayValue(vehicle.initialMileage, empty) },
-    { key: "currentMileage", label: t("vehicles.fields.currentMileage"), value: displayValue(vehicle.currentMileage, empty) },
+    {
+      key: "mileageUnit",
+      label: t("vehicles.fields.mileageUnit"),
+      value: vehicle.mileageUnit ? mileageUnitLabel(vehicle.mileageUnit, t) : empty,
+    },
+    {
+      key: "initialMileage",
+      label: t("vehicles.fields.initialMileage"),
+      value: formatVehicleMileage(vehicle.initialMileage, vehicle.mileageUnit, t, { empty }),
+    },
+    {
+      key: "currentMileage",
+      label: t("vehicles.fields.currentMileage"),
+      value: formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t, { empty }),
+    },
     {
       key: "engineDisplacement",
       label: t("vehicles.fields.engineDisplacement"),

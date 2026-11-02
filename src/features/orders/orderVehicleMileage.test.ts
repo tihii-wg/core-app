@@ -36,6 +36,7 @@ const vehicle: Vehicle = {
   licensePlate: "ABC123",
   initialMileage: 1000,
   currentMileage: 45000,
+  mileageUnit: null,
   engineDisplacement: null,
   fuelType: null,
   createdAt: "",
@@ -94,6 +95,7 @@ describe("orderVehicleMileage", () => {
       engineDisplacement: null,
       fuelType: null,
     });
+    expect(vehicleInputWithCurrentMileage(vehicle, 46000)).not.toHaveProperty("mileageUnit");
   });
 
   it("persists mileage through updateVehicle and skips empty values", async () => {
