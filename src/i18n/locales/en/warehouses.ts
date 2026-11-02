@@ -4,7 +4,7 @@ export default {
   loading: "Loading warehouses...",
   loadError: "Could not load warehouses.",
   emptyTitle: "No warehouses yet",
-  emptyDescription: "Create a warehouse to track stock by location, then receive goods into it.",
+  emptyDescription: "Create a warehouse below to track stock by location, then receive goods into it. No warehouses are created automatically.",
   selectorLabel: "Warehouse",
   allWarehouses: "All warehouses",
   currentWarehouse: "Current: {{name}}",

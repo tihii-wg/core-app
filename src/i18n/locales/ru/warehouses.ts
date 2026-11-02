@@ -7,7 +7,7 @@ const warehouses: Messages<typeof en> = {
   loading: "Загрузка складов...",
   loadError: "Не удалось загрузить склады.",
   emptyTitle: "Складов пока нет",
-  emptyDescription: "Создайте склад, чтобы вести остатки по местам хранения, затем оформите приход.",
+  emptyDescription: "Создайте склад ниже, чтобы вести остатки по местам хранения, затем оформите приход. Склады не создаются автоматически.",
   selectorLabel: "Склад",
   allWarehouses: "Все склады",
   currentWarehouse: "Сейчас: {{name}}",

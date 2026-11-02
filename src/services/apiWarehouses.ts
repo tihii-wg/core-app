@@ -78,7 +78,11 @@ async function clearOtherDefaults(workspaceId: string, exceptId?: string) {
   if (error) throw mapWarehouseWriteError(error);
 }
 
-/** Lists warehouses; returns [] when the `warehouses` table has not been applied yet. */
+/**
+ * Lists live warehouses for the workspace.
+ * Throws a clear "unavailable" error when the `warehouses` table is missing —
+ * never invents placeholder rows. An empty array means the table exists and there are no warehouses yet.
+ */
 export async function getWarehouses(workspaceId: string | undefined) {
   const resolved = requireWorkspaceId(workspaceId);
   const { data, error } = await supabase
@@ -89,10 +93,7 @@ export async function getWarehouses(workspaceId: string | undefined) {
     .order("is_default", { ascending: false })
     .order("name", { ascending: true });
 
-  if (error) {
-    if (isMissingTableError(error, "warehouses")) return [] as WarehouseRecord[];
-    throw new Error(error.message);
-  }
+  if (error) throw mapWarehouseWriteError(error);
   return ((data ?? []) as Record<string, unknown>[]).map(toWarehouse);
 }
 

@@ -236,7 +236,13 @@ export async function createInvoiceFromOrder(orderId: string, workspaceId: strin
 
   await ensureOrderNotInvoiced(targetWorkspaceId, orderId);
 
-  const { data: order, error: orderError } = await supabase.from("orders").select("*,clients(name)").eq("id", orderId).eq("workspace_id", targetWorkspaceId).maybeSingle();
+  // Disambiguate: orders has two FKs to clients (client_id + payer_client_id).
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("*,clients!orders_client_id_fkey(name)")
+    .eq("id", orderId)
+    .eq("workspace_id", targetWorkspaceId)
+    .maybeSingle();
 
   if (orderError) throw new Error(orderError.message);
   if (!order) throw new Error(i18n.t("invoices.errors.orderNotFound"));

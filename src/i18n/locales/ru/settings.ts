@@ -406,7 +406,7 @@ const settings: Messages<typeof en> = {
     },
     errors: {
       nameRequired: "Укажите название склада",
-      unavailable: "Склады пока недоступны. Сначала примените RO-схему (crm_ro_v1).",
+      unavailable: "Склады пока недоступны. Примените supabase/manual/20261101230000_warehouse_management_bootstrap.PRODUCTION.sql (затем VERIFY-скрипт).",
       noPermission: "Недостаточно прав для управления складами.",
       notFound: "Склад не найден.",
       cannotDeleteDefault: "Нельзя удалить склад по умолчанию. Сначала назначьте другой.",

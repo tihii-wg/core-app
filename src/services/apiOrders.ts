@@ -483,7 +483,8 @@ type OrderMaterialLine = {
 
 // Explicit tax_invoice_number so PostgREST always returns it even if a stale
 // schema-cache expansion of `*` ever omitted a newly added column.
-const orderColumns = "*,tax_invoice_number,clients(name,client_type,email,phone)";
+// Disambiguate: orders has two FKs to clients (client_id + payer_client_id).
+const orderColumns = "*,tax_invoice_number,clients!orders_client_id_fkey(name,client_type,email,phone)";
 const orderServiceBaseColumns = "id, order_id, service_id, service_name, price, quantity";
 
 // `order_services.kind` ('labor' | 'service') comes from crm_ro_v1 or 20261101050000_order_line_kind.PRODUCTION.sql.
@@ -1098,7 +1099,7 @@ async function assertTaxInvoiceAllowsPaid(orderId: string, workspaceId: string) 
 
   const { data: orderRow, error } = await supabase
     .from("orders")
-    .select("tax_invoice_number, clients(client_type)")
+    .select("tax_invoice_number, clients!orders_client_id_fkey(client_type)")
     .eq("id", orderId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();

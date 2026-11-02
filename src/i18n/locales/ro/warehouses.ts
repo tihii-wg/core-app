@@ -7,7 +7,7 @@ const warehouses: Messages<typeof en> = {
   loading: "Se încarcă depozitele...",
   loadError: "Depozitele nu au putut fi încărcate.",
   emptyTitle: "Nu există depozite încă",
-  emptyDescription: "Creați un depozit pentru a urmări stocul pe locații, apoi recepționați bunuri.",
+  emptyDescription: "Creați un depozit mai jos pentru a urmări stocul pe locații, apoi recepționați bunuri. Depozitele nu se creează automat.",
   selectorLabel: "Depozit",
   allWarehouses: "Toate depozitele",
   currentWarehouse: "Curent: {{name}}",

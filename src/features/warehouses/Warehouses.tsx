@@ -45,7 +45,7 @@ export function Warehouses() {
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { canWrite } = useWorkspaceSubscription();
   const { can } = useMyPermissions();
-  const { data: warehouses = [], isLoading, isError, refetch } = useGetWarehouses();
+  const { data: warehouses = [], isLoading, isError, error, refetch } = useGetWarehouses();
   const { data: stock = [], isLoading: stockLoading } = useGetWarehouseStock();
   const { items } = useGetInventoryItems("", "all", itemsSort);
 
@@ -155,7 +155,9 @@ export function Warehouses() {
       {isError ? (
         <Card>
           <CardContent className="space-y-3 py-6">
-            <p className="text-sm text-destructive">{t("warehouses.loadError")}</p>
+            <p className="text-sm text-destructive">
+              {error instanceof Error && error.message ? error.message : t("warehouses.loadError")}
+            </p>
             <Button type="button" variant="outline" onClick={() => refetch()}>
               {t("common.retry")}
             </Button>

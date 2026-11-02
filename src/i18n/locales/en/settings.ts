@@ -401,7 +401,7 @@ export default {
     },
     errors: {
       nameRequired: "Warehouse name is required",
-      unavailable: "Warehouses are not available yet. Apply the RO schema (crm_ro_v1) first.",
+      unavailable: "Warehouses are not available yet. Apply supabase/manual/20261101230000_warehouse_management_bootstrap.PRODUCTION.sql (then run the VERIFY script).",
       noPermission: "You do not have permission to manage warehouses.",
       notFound: "Warehouse was not found.",
       cannotDeleteDefault: "Cannot delete the default warehouse. Set another default first.",

@@ -405,7 +405,7 @@ const settings: Messages<typeof en> = {
     },
     errors: {
       nameRequired: "Denumirea depozitului este obligatorie",
-      unavailable: "Depozitele nu sunt disponibile încă. Aplicați mai întâi schema RO (crm_ro_v1).",
+      unavailable: "Depozitele nu sunt disponibile încă. Aplicați supabase/manual/20261101230000_warehouse_management_bootstrap.PRODUCTION.sql (apoi scriptul VERIFY).",
       noPermission: "Nu aveți permisiunea de a gestiona depozitele.",
       notFound: "Depozitul nu a fost găsit.",
       cannotDeleteDefault: "Nu puteți șterge depozitul implicit. Setați mai întâi altul.",
