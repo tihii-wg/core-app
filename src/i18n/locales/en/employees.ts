@@ -82,7 +82,6 @@ export default {
   detail: {
     contactInformation: "Contact Information",
     panelDescription: "Employee details and current open-order workload.",
-    noEmail: "No email on file",
     noPhone: "No phone on file",
     assignedTasks: "Assigned Tasks",
     completedTasks: "Completed Tasks",

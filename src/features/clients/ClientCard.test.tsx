@@ -30,7 +30,7 @@ describe("ClientCard", () => {
     renderCard();
     expect(screen.getByText("Alexandru Constantin Popescu-Mare")).toBeInTheDocument();
     expect(screen.getByText("+373 600 000 000")).toBeInTheDocument();
-    expect(screen.getByText("alexandru.constantin@example-long-domain.com")).toBeInTheDocument();
+    expect(screen.queryByText("alexandru.constantin@example-long-domain.com")).not.toBeInTheDocument();
     expect(screen.getByText("MDL 250.00")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
   });

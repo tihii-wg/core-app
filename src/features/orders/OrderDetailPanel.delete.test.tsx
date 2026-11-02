@@ -83,6 +83,8 @@ vi.mock("../finance/usePayments", () => ({
   }),
   useRecordPayment: () => ({ mutate: vi.fn(), isPending: false }),
   useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
+  useRecordPaymentVoid: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteFullyVoidedPayment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({

@@ -416,7 +416,6 @@ const reports: Messages<typeof en> = {
     contactPerson: "Persoană de contact",
     type: "Tip",
     phone: "Telefon",
-    email: "Email",
     added: "Adăugat",
   },
   values: {

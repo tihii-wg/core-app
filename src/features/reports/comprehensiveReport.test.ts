@@ -89,7 +89,7 @@ describe("comprehensiveReport", () => {
     expect(titles(model)).toEqual(["Orders by status", "Orders", "New clients", "Clients by order value"]);
     expect(table(model, "Orders").rows.map((row) => row.number)).toEqual(["ORD-2", "ORD-1"]);
     expect(table(model, "Orders").totals?.total).toBe(150);
-    expect(table(model, "New clients").rows).toEqual([{ name: "Bob", contact: "Bea", type: "Organization", phone: "+1 555", email: "bob@example.com", added: "2026-09-30" }]);
+    expect(table(model, "New clients").rows).toEqual([{ name: "Bob", contact: "Bea", type: "Organization", phone: "+1 555", added: "2026-09-30" }]);
     expect(table(model, "Clients by order value").rows.map((row) => row.client)).toEqual(["Ada", "Bob"]);
   });
 

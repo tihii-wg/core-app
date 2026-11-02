@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, Mail, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { Calendar, Pencil, Phone, Save, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -170,7 +170,6 @@ export default function OrderDetailPanel({
   const hasMaterialLines = materialLines.length > 0;
   const fallbackService = selectedOrder?.service?.trim() ?? "";
   const description = selectedOrder?.description?.trim() ?? "";
-  const clientEmail = selectedOrder?.clientEmail?.trim() ?? "";
   const clientPhone = selectedOrder?.clientPhone?.trim() ?? "";
   const deadline = selectedOrder?.deadline?.trim() ?? "";
   const assigneeEmptyHint =
@@ -233,26 +232,16 @@ export default function OrderDetailPanel({
                     </div>
                   </div>
                 ) : null}
-                {(clientPhone || clientEmail) && (
+                {clientPhone ? (
                   <div className="space-y-1.5 pt-1 text-sm">
-                    {clientPhone ? (
-                      <div className="flex items-center gap-2">
-                        <Phone className="size-3.5 shrink-0 text-subtle-foreground" />
-                        <a href={`tel:${clientPhone}`} className="tabular-nums text-foreground hover:underline">
-                          {clientPhone}
-                        </a>
-                      </div>
-                    ) : null}
-                    {clientEmail ? (
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Mail className="size-3.5 shrink-0 text-subtle-foreground" />
-                        <a href={`mailto:${clientEmail}`} className="truncate text-primary hover:underline">
-                          {clientEmail}
-                        </a>
-                      </div>
-                    ) : null}
+                    <div className="flex items-center gap-2">
+                      <Phone className="size-3.5 shrink-0 text-subtle-foreground" />
+                      <a href={`tel:${clientPhone}`} className="tabular-nums text-foreground hover:underline">
+                        {clientPhone}
+                      </a>
+                    </div>
                   </div>
-                )}
+                ) : null}
               </div>
               <div className="shrink-0 text-right">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>

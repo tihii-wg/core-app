@@ -93,11 +93,6 @@ export function Employees() {
               <p className={cn("truncate font-medium", inactive ? "text-muted-foreground" : "text-foreground")} title={emp.name}>
                 {emp.name}
               </p>
-              {emp.email ? (
-                <p className="truncate text-xs text-muted-foreground" title={emp.email}>
-                  {emp.email}
-                </p>
-              ) : null}
             </div>
           </div>
         );

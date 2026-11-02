@@ -87,7 +87,6 @@ const employees: Messages<typeof en> = {
   detail: {
     contactInformation: "Контактная информация",
     panelDescription: "Сведения о сотруднике и текущая нагрузка по открытым заказам.",
-    noEmail: "Email не указан",
     noPhone: "Телефон не указан",
     assignedTasks: "Назначенные задачи",
     completedTasks: "Выполненные задачи",

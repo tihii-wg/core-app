@@ -86,7 +86,6 @@ const employees: Messages<typeof en> = {
   detail: {
     contactInformation: "Date de contact",
     panelDescription: "Detalii despre angajat și volumul curent de comenzi deschise.",
-    noEmail: "Niciun email înregistrat",
     noPhone: "Niciun telefon înregistrat",
     assignedTasks: "Sarcini atribuite",
     completedTasks: "Sarcini finalizate",

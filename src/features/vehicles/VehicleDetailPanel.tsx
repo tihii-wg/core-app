@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardList, Mail, Pencil, Phone } from "lucide-react";
+import { ClipboardList, Pencil, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Order } from "../../lib/types";
 import { Button } from "../../ui/Button";
@@ -61,7 +61,6 @@ export function VehicleDetailPanel({
   }
 
   const owner = vehicle && client && client.id === vehicle.clientId ? client : null;
-  const ownerEmail = owner?.email?.trim() ?? "";
   const ownerPhone = owner?.phone?.trim() ?? "";
   const ownerName = owner
     ? owner.name
@@ -131,26 +130,16 @@ export function VehicleDetailPanel({
                         </div>
                       </div>
                     ) : null}
-                    {(ownerPhone || ownerEmail) && (
+                    {ownerPhone ? (
                       <div className="space-y-1.5 pt-1 text-sm">
-                        {ownerPhone ? (
-                          <div className="flex items-center gap-2">
-                            <Phone className="size-3.5 shrink-0 text-subtle-foreground" />
-                            <a href={`tel:${ownerPhone}`} className="tabular-nums text-foreground hover:underline">
-                              {ownerPhone}
-                            </a>
-                          </div>
-                        ) : null}
-                        {ownerEmail ? (
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Mail className="size-3.5 shrink-0 text-subtle-foreground" />
-                            <a href={`mailto:${ownerEmail}`} className="truncate text-primary hover:underline">
-                              {ownerEmail}
-                            </a>
-                          </div>
-                        ) : null}
+                        <div className="flex items-center gap-2">
+                          <Phone className="size-3.5 shrink-0 text-subtle-foreground" />
+                          <a href={`tel:${ownerPhone}`} className="tabular-nums text-foreground hover:underline">
+                            {ownerPhone}
+                          </a>
+                        </div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   {vehicle.licensePlate ? (
                     <div className="shrink-0 text-right">

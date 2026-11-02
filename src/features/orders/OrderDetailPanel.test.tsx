@@ -88,6 +88,8 @@ vi.mock("../finance/usePayments", () => ({
   useGetPayments: () => ({ payments: [], isLoading: false, error: null, isUnavailable: false, refetch: vi.fn() }),
   useRecordPayment: () => ({ mutate: vi.fn(), isPending: false }),
   useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
+  useRecordPaymentVoid: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteFullyVoidedPayment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
@@ -391,7 +393,7 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByText("2026-10-01")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toHaveTextContent("Ada Tech");
     expect(screen.getByRole("link", { name: "+37361111111" })).toHaveAttribute("href", "tel:+37361111111");
-    expect(screen.getByRole("link", { name: "ada@example.com" })).toHaveAttribute("href", "mailto:ada@example.com");
+    expect(screen.queryByRole("link", { name: "ada@example.com" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Services" })).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("Oil filter")).toBeInTheDocument();

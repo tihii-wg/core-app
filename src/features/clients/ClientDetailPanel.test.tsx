@@ -172,10 +172,10 @@ describe("ClientDetailPanel", () => {
       expect.objectContaining({
         clientId: "client-1",
         clientName: "Ada Byron",
-        email: "ada@example.com",
         phone: "+37361111111",
       }),
     );
+    expect(mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty("email");
     expect(onClientUpdated).toHaveBeenCalledWith(expect.objectContaining({ name: "Ada Byron" }));
     expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
   });
@@ -222,5 +222,12 @@ describe("ClientDetailPanel", () => {
     expect(await screen.findByRole("heading", { name: /Ada Lovelace/ })).toBeInTheDocument();
     expect(screen.queryByText("Contact Information")).not.toBeInTheDocument();
     expect(screen.queryByText("Notes")).not.toBeInTheDocument();
+  });
+
+  it("does not display client email even when present", async () => {
+    renderPanel();
+    expect(await screen.findByRole("heading", { name: /Ada Lovelace/ })).toBeInTheDocument();
+    expect(screen.queryByText("ada@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "ada@example.com" })).not.toBeInTheDocument();
   });
 });

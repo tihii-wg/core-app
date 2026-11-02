@@ -44,7 +44,7 @@ function ResultContent({ result }: { result: SearchResult }) {
     const { client } = result;
     title = <span className="font-medium text-foreground">{client.name}</span>;
     badge = <ClientTypeBadge clientType={client.client_type} />;
-    subtitle = details([client.phone, client.email, client.contact_person, client.tax_id]);
+    subtitle = details([client.phone, client.contact_person, client.tax_id]);
   } else {
     const { item } = result;
     title = <span className="font-medium text-foreground">{item.name}</span>;

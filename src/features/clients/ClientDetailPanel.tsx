@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Calculator, ClipboardList, Mail, MapPin, Pencil, Phone, Plus } from "lucide-react";
+import { Calculator, ClipboardList, MapPin, Pencil, Phone, Plus } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Button } from "../../ui/Button";
 import { OrderStatusBadge } from "../../ui/StatusBadge";
@@ -69,7 +69,6 @@ export default function ClientDetailPanel({
     }
   }
 
-  const email = selectedClient?.email?.trim() ?? "";
   const phone = selectedClient?.phone?.trim() ?? "";
   const address = selectedClient?.address?.trim() ?? "";
   const notes = selectedClient?.notes?.trim() ?? "";
@@ -77,7 +76,6 @@ export default function ClientDetailPanel({
   const taxId = selectedClient?.tax_id?.trim() ?? "";
   const isOrganization = selectedClient?.client_type === "organization";
   const hasContact =
-    Boolean(email) ||
     Boolean(phone) ||
     Boolean(address) ||
     (isOrganization && Boolean(contactPerson)) ||
@@ -130,14 +128,6 @@ export default function ClientDetailPanel({
               <div className="space-y-3">
                 <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.contactInformation")}</h3>
                 <div className="space-y-2 text-sm">
-                  {email ? (
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Mail className="size-4 shrink-0 text-subtle-foreground" />
-                      <a href={`mailto:${email}`} className="truncate text-primary hover:underline">
-                        {email}
-                      </a>
-                    </div>
-                  ) : null}
                   {phone ? (
                     <div className="flex items-center gap-2">
                       <Phone className="size-4 shrink-0 text-subtle-foreground" />

@@ -79,7 +79,6 @@ function newClientsSection(clients: Client[], period: ReportPeriod): ReportSecti
       contact: client.contact_person,
       type: client.client_type ? i18n.t(`reports.values.clientTypes.${client.client_type}`) : null,
       phone: client.phone,
-      email: client.email,
       added: calendarDateKey(clientCreatedAt(client)),
     }));
 
@@ -90,7 +89,7 @@ function newClientsSection(clients: Client[], period: ReportPeriod): ReportSecti
     columns: [
       { key: "name", header: i18n.t("reports.columns.client"), secondary: [{ key: "contact", header: i18n.t("reports.columns.contactPerson") }] },
       { key: "type", header: i18n.t("reports.columns.type") },
-      { key: "phone", header: i18n.t("reports.columns.phone"), secondary: [{ key: "email", header: i18n.t("reports.columns.email") }] },
+      { key: "phone", header: i18n.t("reports.columns.phone") },
       { key: "added", header: i18n.t("reports.columns.added"), format: "date" },
     ],
     rows,

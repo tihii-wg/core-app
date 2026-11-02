@@ -83,8 +83,9 @@ export interface Order {
   clientId: string;
   clientName: string;
   clientType?: ClientType | null;
-  /** Present when the orders query embeds clients.email / clients.phone. */
+  /** Optional legacy field; client email is not shown in the UI. */
   clientEmail?: string;
+  /** Present when the orders query embeds clients.phone. */
   clientPhone?: string;
   /** Empty string when number is NULL (unexpected; create still assigns a number). */
   orderNumber: string;

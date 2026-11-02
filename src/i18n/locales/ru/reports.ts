@@ -428,7 +428,6 @@ const reports: Messages<typeof en> = {
     contactPerson: "Контактное лицо",
     type: "Тип",
     phone: "Телефон",
-    email: "Email",
     added: "Добавлен",
   },
   values: {

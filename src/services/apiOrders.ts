@@ -461,7 +461,6 @@ function clientFromRow(clients: unknown) {
   return {
     name: typeof client?.name === "string" ? client.name : "",
     clientType: toClientType(client?.client_type),
-    email: typeof client?.email === "string" ? client.email.trim() : "",
     phone: typeof client?.phone === "string" ? client.phone.trim() : "",
   };
 }
@@ -494,7 +493,7 @@ type OrderMaterialLine = {
 // Explicit tax_invoice_number so PostgREST always returns it even if a stale
 // schema-cache expansion of `*` ever omitted a newly added column.
 // Disambiguate: orders has two FKs to clients (client_id + payer_client_id).
-const orderColumns = "*,tax_invoice_number,clients!orders_client_id_fkey(name,client_type,email,phone)";
+const orderColumns = "*,tax_invoice_number,clients!orders_client_id_fkey(name,client_type,phone)";
 const orderServiceBaseColumns = "id, order_id, service_id, service_name, price, quantity";
 
 // `order_services.kind` ('labor' | 'service') comes from crm_ro_v1 or 20261101050000_order_line_kind.PRODUCTION.sql.
@@ -837,7 +836,6 @@ function toOrder(
     clientId: typeof row.client_id === "string" ? row.client_id : "",
     clientName: client.name,
     clientType: client.clientType,
-    ...(client.email ? { clientEmail: client.email } : {}),
     ...(client.phone ? { clientPhone: client.phone } : {}),
     orderNumber: typeof row.number === "string" ? row.number : "",
     vehicleId: typeof row.vehicle_id === "string" ? row.vehicle_id : null,

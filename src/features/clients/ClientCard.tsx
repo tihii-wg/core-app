@@ -1,4 +1,4 @@
-import { EllipsisVertical, Eye, Mail, Pencil, Phone, Trash2 } from "lucide-react";
+import { EllipsisVertical, Eye, Pencil, Phone, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Client } from "../../lib/types";
 import { Button } from "../../ui/Button";
@@ -73,24 +73,14 @@ export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, o
         </DropdownMenu>
       </div>
 
-      {(client.phone || client.email) && (
-        <div className="mt-1.5 space-y-0.5 text-[13px]">
-          {client.phone ? (
-            <p className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-              <Phone aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
-              <span className="truncate tabular-nums">{client.phone}</span>
-            </p>
-          ) : null}
-          {client.email ? (
-            <p className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-              <Mail aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
-              <span className="truncate" title={client.email}>
-                {client.email}
-              </span>
-            </p>
-          ) : null}
+      {client.phone ? (
+        <div className="mt-1.5 text-[13px]">
+          <p className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+            <Phone aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
+            <span className="truncate tabular-nums">{client.phone}</span>
+          </p>
         </div>
-      )}
+      ) : null}
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-2.5 text-sm">
         <span className="text-muted-foreground">

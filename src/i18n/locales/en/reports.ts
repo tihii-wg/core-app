@@ -401,7 +401,6 @@ export default {
     contactPerson: "Contact person",
     type: "Type",
     phone: "Phone",
-    email: "Email",
     added: "Added",
   },
   values: {

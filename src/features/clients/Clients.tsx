@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus, Phone, Mail, Pencil, Trash2 } from "lucide-react";
+import { Plus, Phone, Pencil, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 
 import { PageHeader } from "../../pages/PageHeader";
@@ -105,19 +105,14 @@ export function Clients() {
       header: t("clients.table.contact"),
       cell: (client) => (
         <div className="max-w-[12rem] min-w-0 space-y-0.5 xl:max-w-[13rem] 2xl:max-w-[15rem]">
-          {client.email && (
-            <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-              <Mail aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
-              <span className="truncate text-foreground" title={client.email}>{client.email}</span>
-            </div>
-          )}
-          {client.phone && (
+          {client.phone ? (
             <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
               <Phone aria-hidden="true" className="size-3 shrink-0 text-subtle-foreground" />
               <span className="truncate text-muted-foreground tabular-nums">{client.phone}</span>
             </div>
+          ) : (
+            <span className="text-subtle-foreground">—</span>
           )}
-          {!client.email && !client.phone && <span className="text-subtle-foreground">—</span>}
         </div>
       ),
       className: "hidden xl:table-cell",

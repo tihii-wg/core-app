@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Pencil, Phone } from "lucide-react";
+import { Pencil, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Employee, EmployeeRole } from "../../lib/types";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
@@ -113,16 +113,6 @@ export default function EmployeeDetailPanel({
                 {t("employees.detail.contactInformation")}
               </h3>
               <div className="space-y-2 text-sm">
-                {selectedEmployee.email ? (
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Mail className="size-4 shrink-0 text-subtle-foreground" aria-hidden="true" />
-                    <a href={`mailto:${selectedEmployee.email}`} className="truncate text-primary hover:underline">
-                      {selectedEmployee.email}
-                    </a>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">{t("employees.detail.noEmail")}</p>
-                )}
                 {selectedEmployee.phone ? (
                   <div className="flex items-center gap-2">
                     <Phone className="size-4 shrink-0 text-subtle-foreground" aria-hidden="true" />
