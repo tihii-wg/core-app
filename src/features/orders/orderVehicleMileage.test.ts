@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Vehicle } from "../../lib/types";
 import {
+  buildOrderMileageSnapshot,
+  mileageFormValueFromOrder,
   parseVisitMileage,
   persistOrderVehicleMileage,
   resolveVehicleMileageUpdate,
@@ -141,5 +143,27 @@ describe("orderVehicleMileage", () => {
         queryClient,
       }),
     ).rejects.toThrow(/rlss blocked/);
+  });
+
+  it("builds an order miles snapshot from visit mileage and the vehicle unit", () => {
+    expect(buildOrderMileageSnapshot("85500", { mileageUnit: "mi" })).toEqual({
+      vehicleMileageSnapshot: 85500,
+      vehicleMileageUnitSnapshot: "mi",
+    });
+    expect(buildOrderMileageSnapshot("1200", { mileageUnit: "km" })).toEqual({
+      vehicleMileageSnapshot: 1200,
+      vehicleMileageUnitSnapshot: "km",
+    });
+    expect(buildOrderMileageSnapshot("100", { mileageUnit: null })).toEqual({
+      vehicleMileageSnapshot: 100,
+      vehicleMileageUnitSnapshot: null,
+    });
+    expect(buildOrderMileageSnapshot("", { mileageUnit: "mi" })).toBeNull();
+  });
+
+  it("prefills edit forms from the order snapshot, not the live vehicle reading", () => {
+    expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: 85500 })).toBe("85500");
+    expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: null })).toBe("");
+    expect(mileageFormValueFromOrder(undefined)).toBe("");
   });
 });

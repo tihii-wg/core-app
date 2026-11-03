@@ -32,7 +32,7 @@ import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import { OrderVehicleFields } from "./OrderVehicleFields";
-import { persistOrderVehicleMileage } from "./orderVehicleMileage";
+import { buildOrderMileageSnapshot, persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
@@ -173,6 +173,15 @@ export default function AddNewOrderForm({
         }
       }
 
+      const selectedVehicleForSnapshot =
+        showVehicles && selectedVehicleId
+          ? clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId) ??
+            (queryClient.getQueryData<Vehicle[]>(clientVehiclesQueryKey(workspaceId, selectedClientId)) ?? []).find(
+              (vehicle) => vehicle.id === selectedVehicleId,
+            )
+          : undefined;
+      const mileageSnapshot = buildOrderMileageSnapshot(data.currentMileage, selectedVehicleForSnapshot);
+
       await createOrder({
         clientId: data.clientId || undefined,
         clientName: clientName.trim(),
@@ -189,6 +198,7 @@ export default function AddNewOrderForm({
           : workflow.orderFields.carNumber.visible
             ? data.carNumber
             : "",
+        ...(mileageSnapshot ?? {}),
         description: data.description,
         services: data.services ?? [],
         materials: data.materials,

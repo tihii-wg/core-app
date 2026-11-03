@@ -40,7 +40,7 @@ export function VehicleMileageForm({ vehicle, canEdit }: VehicleMileageFormProps
   }, [vehicle, reset]);
 
   const busy = updateVehicle.isPending || isSubmitting;
-  const unitAbbr = mileageUnitAbbreviation(vehicle.mileageUnit) || t("vehicles.mileage.unitUnknownShort");
+  const unitAbbr = mileageUnitAbbreviation(vehicle.mileageUnit);
 
   async function onSubmit(values: MileageFormValues) {
     const next = parseVisitMileage(values.currentMileage);
@@ -67,23 +67,25 @@ export function VehicleMileageForm({ vehicle, canEdit }: VehicleMileageFormProps
     >
       <Label htmlFor="vehicle-detail-current-mileage">
         {t("vehicles.fields.currentMileage")}
-        <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span>
+        {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
       </Label>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start">
         <div className="relative w-full min-w-0 max-w-full sm:max-w-[12rem]">
           <Input
             id="vehicle-detail-current-mileage"
             inputMode="numeric"
-            className="w-full min-w-0 pr-10"
+            className={`w-full min-w-0 ${unitAbbr ? "pr-10" : ""}`}
             placeholder={t("vehicles.placeholders.currentMileage")}
             disabled={!canEdit || busy}
             {...register("currentMileage", {
               validate: (value) => visitMileageValidate(value, t("vehicles.validation.mileageWholeNonNegative")),
             })}
           />
-          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
-            {unitAbbr}
-          </span>
+          {unitAbbr ? (
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+              {unitAbbr}
+            </span>
+          ) : null}
         </div>
         <Button type="submit" size="sm" disabled={!canEdit || busy || !isDirty}>
           {busy ? t("common.saving") : t("common.save")}

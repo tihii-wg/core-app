@@ -81,14 +81,26 @@ describe("OrderLinkedVehicleDetails", () => {
 
   it("renders nothing when the order has no vehicle_id", () => {
     const { container } = renderWithQuery(
-      <OrderLinkedVehicleDetails vehicleId={null} onOpenRelatedOrder={onOpenRelatedOrder} />,
+      <OrderLinkedVehicleDetails
+        vehicleId={null}
+        vehicleMileageSnapshot={null}
+        vehicleMileageUnitSnapshot={null}
+        onOpenRelatedOrder={onOpenRelatedOrder}
+      />,
     );
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByTestId("order-linked-vehicle")).not.toBeInTheDocument();
   });
 
-  it("loads all vehicle fields from the associated vehicle record", () => {
-    renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
+  it("loads vehicle identity from the vehicle and visit mileage from the order snapshot", () => {
+    renderWithQuery(
+      <OrderLinkedVehicleDetails
+        vehicleId="veh-1"
+        vehicleMileageSnapshot={85500}
+        vehicleMileageUnitSnapshot="mi"
+        onOpenRelatedOrder={onOpenRelatedOrder}
+      />,
+    );
 
     expect(screen.getByTestId("order-linked-vehicle")).toBeInTheDocument();
     expect(screen.getByText("Make")).toBeInTheDocument();
@@ -98,12 +110,42 @@ describe("OrderLinkedVehicleDetails", () => {
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
     expect(screen.getByText("ABC123")).toBeInTheDocument();
     expect(screen.getByText(/10,?000/)).toBeInTheDocument();
-    expect(screen.getByText(/45,?200/)).toBeInTheDocument();
+    expect(screen.getByText(/85,?500 mi/)).toBeInTheDocument();
+    expect(screen.getByText("Miles (mi)")).toBeInTheDocument();
     expect(screen.getByText("1.8")).toBeInTheDocument();
     expect(screen.getByText("Petrol")).toBeInTheDocument();
-    expect(screen.getByText("Mileage unit")).toBeInTheDocument();
+    expect(screen.getByText("Visit mileage unit")).toBeInTheDocument();
     expect(screen.queryByText("null")).not.toBeInTheDocument();
     expect(screen.queryByText("undefined")).not.toBeInTheDocument();
+  });
+
+  it("keeps the order snapshot unit when the vehicle live unit differs", () => {
+    vehicleState.vehicle = { ...fullVehicle, mileageUnit: "km", currentMileage: 99999 };
+    renderWithQuery(
+      <OrderLinkedVehicleDetails
+        vehicleId="veh-1"
+        vehicleMileageSnapshot={85500}
+        vehicleMileageUnitSnapshot="mi"
+        onOpenRelatedOrder={onOpenRelatedOrder}
+      />,
+    );
+
+    expect(screen.getByText(/85,?500 mi/)).toBeInTheDocument();
+    expect(screen.queryByText(/99,?999/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/85,?500 km/)).not.toBeInTheDocument();
+  });
+
+  it("shows unknown unit for legacy orders without a historical unit", () => {
+    renderWithQuery(
+      <OrderLinkedVehicleDetails
+        vehicleId="veh-1"
+        vehicleMileageSnapshot={12000}
+        vehicleMileageUnitSnapshot={null}
+        onOpenRelatedOrder={onOpenRelatedOrder}
+      />,
+    );
+
+    expect(screen.getByText(/12,?000 \(unit\?\)/i)).toBeInTheDocument();
   });
 
   it("opens vehicle details in a side drawer instead of navigating", async () => {

@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import i18n from "../../i18n";
-import type { Vehicle, VehicleInput } from "../../lib/types";
+import type { MileageUnit, Order, Vehicle, VehicleInput } from "../../lib/types";
 import { parseOptionalVehicleNumber, updateVehicle } from "../../services/apiVehicles";
 import { clientVehiclesQueryKey } from "../vehicles/useGetClientVehicles";
 
@@ -28,6 +28,30 @@ export function visitMileageValidate(value: string, message: string): true | str
 
 export function mileageFormValueFromVehicle(vehicle: Vehicle | null | undefined): string {
   return vehicle?.currentMileage != null ? String(vehicle.currentMileage) : "";
+}
+
+/** Prefill edit forms from the order's historical snapshot (not the vehicle's live reading). */
+export function mileageFormValueFromOrder(
+  order: Pick<Order, "vehicleMileageSnapshot"> | null | undefined,
+): string {
+  return order?.vehicleMileageSnapshot != null ? String(order.vehicleMileageSnapshot) : "";
+}
+
+/**
+ * Build the order-level historical mileage snapshot for create / explicit edit.
+ * Empty form → null (caller should omit the write on edit).
+ * Unit comes from the vehicle's configured unit at save time — never converted.
+ */
+export function buildOrderMileageSnapshot(
+  formMileage: string | null | undefined,
+  vehicle: Pick<Vehicle, "mileageUnit"> | null | undefined,
+): { vehicleMileageSnapshot: number; vehicleMileageUnitSnapshot: MileageUnit | null } | null {
+  const reading = parseVisitMileage(formMileage);
+  if (reading == null) return null;
+  return {
+    vehicleMileageSnapshot: reading,
+    vehicleMileageUnitSnapshot: vehicle?.mileageUnit ?? null,
+  };
 }
 
 /**

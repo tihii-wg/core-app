@@ -97,6 +97,16 @@ export interface Order {
   orderNumber: string;
   /** Linked public.vehicles.id when set. */
   vehicleId?: string | null;
+  /**
+   * Visit odometer reading captured on this order (historical).
+   * Null when never recorded or when the DB snapshot column is absent.
+   */
+  vehicleMileageSnapshot?: number | null;
+  /**
+   * Mileage unit at the time the visit reading was saved (`km` | `mi`).
+   * Null = unknown legacy; never inferred from the vehicle's current unit.
+   */
+  vehicleMileageUnitSnapshot?: MileageUnit | null;
   device: string;
   vin: string;
   carNumber: string;
@@ -183,6 +193,10 @@ export type CreateOrderInput = {
   device?: string;
   vin?: string;
   carNumber?: string;
+  /** Historical visit mileage for this order; omit when the visit field was left empty. */
+  vehicleMileageSnapshot?: number | null;
+  /** Unit captured with the visit mileage; null = unknown. */
+  vehicleMileageUnitSnapshot?: MileageUnit | null;
   description?: string;
   /** Empty array is allowed for draft orders. */
   services: OrderService[];
@@ -204,7 +218,10 @@ export type EditOrderFormData = {
   device: string;
   carNumber: string;
   vin: string;
-  /** Visit mileage for the linked vehicle; persisted to vehicles.current_mileage, not orders. */
+  /**
+   * Visit mileage form field. Also updates vehicles.current_mileage when changed.
+   * Order historical snapshot is written only when this field is dirty on save.
+   */
   currentMileage?: string;
   description: string;
   assignedEmployeeId: string;
@@ -219,6 +236,12 @@ export type UpdateOrderDetails = Omit<EditOrderFormData, "services" | "materials
   services?: OrderService[];
   /** The order's complete final material list; omit to leave saved materials untouched. Empty array removes all materials and restores stock. */
   materials?: OrderMaterial[];
+  /**
+   * Omit to leave historical mileage snapshots unchanged.
+   * When set, both value and unit are written together.
+   */
+  vehicleMileageSnapshot?: number | null;
+  vehicleMileageUnitSnapshot?: MileageUnit | null;
 };
 export interface addNewServiceFormData {
   serviceId?: string;

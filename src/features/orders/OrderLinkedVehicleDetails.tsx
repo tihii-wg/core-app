@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Order } from "../../lib/types";
+import type { MileageUnit, Order } from "../../lib/types";
 import { Skeleton } from "../../ui/Skeleton";
 import { ClientDetailsHost } from "../clients/ClientDetailsHost";
 import { useOpenClientDetails } from "../clients/useOpenClientDetails";
@@ -12,12 +12,20 @@ export { VehicleFieldsGrid };
 
 type OrderLinkedVehicleDetailsProps = {
   vehicleId: string | null | undefined;
+  /** Historical visit mileage from the order — never the vehicle's live unit/reading. */
+  vehicleMileageSnapshot?: number | null;
+  vehicleMileageUnitSnapshot?: MileageUnit | null;
   /** Switch the host Order Details panel to a related order (avoids nesting another Order Details sheet). */
   onOpenRelatedOrder: (order: Order) => void;
 };
 
 /** Read-only vehicle fields from `vehicles` via `orders.vehicle_id`. Never mutates the vehicle. */
-export function OrderLinkedVehicleDetails({ vehicleId, onOpenRelatedOrder }: OrderLinkedVehicleDetailsProps) {
+export function OrderLinkedVehicleDetails({
+  vehicleId,
+  vehicleMileageSnapshot = null,
+  vehicleMileageUnitSnapshot = null,
+  onOpenRelatedOrder,
+}: OrderLinkedVehicleDetailsProps) {
   const { t } = useTranslation();
   const empty = t("common.noValue");
   const id = vehicleId?.trim() || "";
@@ -46,7 +54,14 @@ export function OrderLinkedVehicleDetails({ vehicleId, onOpenRelatedOrder }: Ord
         </p>
       ) : (
         <>
-          <VehicleFieldsGrid vehicle={vehicle} empty={empty} />
+          <VehicleFieldsGrid
+            vehicle={vehicle}
+            empty={empty}
+            orderMileageSnapshot={{
+              value: vehicleMileageSnapshot,
+              unit: vehicleMileageUnitSnapshot,
+            }}
+          />
           <button
             type="button"
             onClick={() => setDetailOpen(true)}

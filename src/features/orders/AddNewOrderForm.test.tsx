@@ -272,7 +272,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: "ABC123",
         initialMileage: null,
         currentMileage: 45000,
-        mileageUnit: null,
+        mileageUnit: "mi",
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -297,6 +297,12 @@ describe("AddNewOrderForm client validation", () => {
       expect.objectContaining({
         formMileage: "46010",
         vehicle: expect.objectContaining({ id: "veh-1", currentMileage: 45000 }),
+      }),
+    );
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vehicleMileageSnapshot: 46010,
+        vehicleMileageUnitSnapshot: "mi",
       }),
     );
     expect(persistMileageMock.mock.invocationCallOrder[0]).toBeLessThan(createOrderMock.mock.invocationCallOrder[0]);
@@ -335,6 +341,7 @@ describe("AddNewOrderForm client validation", () => {
 
     await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
     expect(persistMileageMock).toHaveBeenCalledWith(expect.objectContaining({ formMileage: "" }));
+    expect(createOrderMock.mock.calls[0]?.[0]).not.toHaveProperty("vehicleMileageSnapshot");
   });
 
   it("does not create the order when mileage persistence fails", async () => {

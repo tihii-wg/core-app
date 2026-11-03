@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import type { Vehicle, VehicleInput } from "../../lib/types";
+import { probeVehicleMileageUnitSupport } from "../../services/apiVehicles";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Spinner } from "../../ui/Spinner";
@@ -34,6 +35,13 @@ export function VehicleFormDialog({ open, onOpenChange, title, description, init
   useEffect(() => {
     if (open) reset(vehicleToFormValues(initial));
   }, [open, initial, reset]);
+
+  // Refresh mileage_unit column support when the dialog opens so a stale
+  // "missing column" cache cannot block select/save after SQL was applied.
+  useEffect(() => {
+    if (!open) return;
+    void probeVehicleMileageUnitSupport();
+  }, [open]);
 
   const busy = Boolean(submitting || isSubmitting);
 

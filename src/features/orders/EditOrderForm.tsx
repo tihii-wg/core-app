@@ -30,7 +30,11 @@ import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderAssetFields from "./OrderAssetFields";
 import { OrderVehicleFields } from "./OrderVehicleFields";
-import { persistOrderVehicleMileage } from "./orderVehicleMileage";
+import {
+  buildOrderMileageSnapshot,
+  mileageFormValueFromOrder,
+  persistOrderVehicleMileage,
+} from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
@@ -68,14 +72,14 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     getValues,
     clearErrors,
     trigger,
-    formState: { errors, isSubmitting, isSubmitted },
+    formState: { errors, isSubmitting, isSubmitted, dirtyFields },
   } = useForm<EditOrderFormData>({
     defaultValues: {
       vehicleId: order.vehicleId ?? "",
       device: order.device,
       carNumber: order.carNumber,
       vin: order.vin,
-      currentMileage: "",
+      currentMileage: mileageFormValueFromOrder(order),
       description: order.description,
       assignedEmployeeId: order.assignedEmployeeId,
       deadline: order.deadline,
@@ -124,9 +128,11 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const onSubmit = async (data: EditOrderFormData) => {
     try {
       const selectedVehicleId = data.vehicleId?.trim() || "";
+      let selectedVehicle = selectedVehicleId
+        ? clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+        : undefined;
       if (showVehicles && selectedVehicleId) {
         try {
-          const selectedVehicle = clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
           if (!selectedVehicle) throw new Error(t("vehicles.errors.invalidSelection"));
           guardWrite();
           // Mileage write first — failed vehicle update must not report the order as saved.
@@ -143,6 +149,12 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         }
       }
 
+      // Only rewrite the historical snapshot when the visit-mileage field was explicitly edited.
+      const mileageSnapshot =
+        dirtyFields.currentMileage && selectedVehicle
+          ? buildOrderMileageSnapshot(data.currentMileage, selectedVehicle)
+          : null;
+
       // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
       const updatedOrder = await updateOrder({
         orderId: order.id,
@@ -158,6 +170,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
             ? data.carNumber
             : order.carNumber,
         vin: showVehicles ? (data.vin ?? "") : workflow.orderFields.vin.visible ? data.vin : order.vin,
+        ...(mileageSnapshot ?? {}),
         description: data.description,
         assignedEmployeeId: data.assignedEmployeeId,
         deadline: data.deadline,
@@ -182,6 +195,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           clientId={order.clientId}
           disabled={isSubmitting}
           mileageMode="vehicle"
+          preserveInitialMileage
         />
       ) : null}
 

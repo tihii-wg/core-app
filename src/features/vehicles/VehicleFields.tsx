@@ -5,8 +5,7 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { parseOptionalVehicleNumber } from "../../services/apiVehicles";
 import { optionalVinValidate } from "../../lib/vin";
-import { MILEAGE_UNITS } from "./vehicleMileage";
-import { useVehicleMileageUnitSupport } from "./useVehicleMileageUnitSupport";
+import { MILEAGE_UNITS, mileageUnitAbbreviation } from "./vehicleMileage";
 import { VEHICLE_FUEL_TYPES, type VehicleFormValues } from "./vehicleForm";
 
 type VehicleFieldsProps = {
@@ -23,10 +22,11 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
   const fuelType = watch("fuelType");
   const mileageUnit = watch("mileageUnit");
   const fuelNone = "__none__";
-  const unitNone = "__none__";
-  const mileageUnitSupported = useVehicleMileageUnitSupport();
-  const unitAbbr =
-    mileageUnit === "km" ? "km" : mileageUnit === "mi" ? "mi" : t("vehicles.mileage.unitUnknownShort");
+  // Stable controlled value for Radix (empty string is invalid). Not offered as a selectable option.
+  const unitUnset = "__unset__";
+  // Only show a unit abbreviation next to mileage inputs when a real unit is selected.
+  // Never show "ед.?" / "unit?" as if it were a disabled control.
+  const unitAbbr = mileageUnitAbbreviation(mileageUnit || null);
 
   return (
     <div className="space-y-4">
@@ -95,43 +95,40 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
         {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
       </div>
 
-      {mileageUnitSupported ? (
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-mileage-unit`}>{t("vehicles.fields.mileageUnit")}</Label>
-          <Select
-            value={mileageUnit || unitNone}
-            onValueChange={(value) =>
-              setValue("mileageUnit", value === unitNone ? "" : (value as "km" | "mi"), {
-                shouldDirty: true,
-              })
-            }
-            disabled={disabled}
-          >
-            <SelectTrigger id={`${idPrefix}-mileage-unit`}>
-              <SelectValue placeholder={t("vehicles.placeholders.mileageUnit")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={unitNone}>{t("vehicles.placeholders.mileageUnitNone")}</SelectItem>
-              {MILEAGE_UNITS.map((unit) => (
-                <SelectItem key={unit} value={unit}>
-                  {unit === "km" ? t("vehicles.mileage.kilometers") : t("vehicles.mileage.miles")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">{t("vehicles.mileage.unitHint")}</p>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground" data-testid="mileage-unit-unavailable">
-          {t("vehicles.errors.mileageUnitUnsupported")}
-        </p>
-      )}
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-mileage-unit`}>{t("vehicles.fields.mileageUnit")}</Label>
+        <Select
+          // Keep controlled: unset uses a non-selectable sentinel so Radix shows the placeholder.
+          value={mileageUnit || unitUnset}
+          onValueChange={(value) => {
+            if (value !== "km" && value !== "mi") return;
+            setValue("mileageUnit", value, { shouldDirty: true, shouldValidate: true });
+          }}
+          disabled={disabled}
+        >
+          <SelectTrigger id={`${idPrefix}-mileage-unit`} className="w-full min-w-0">
+            <SelectValue placeholder={t("vehicles.placeholders.mileageUnit")} />
+          </SelectTrigger>
+          <SelectContent>
+            {/* Hidden: keeps value controlled when unset; not a user-facing third option. */}
+            <SelectItem value={unitUnset} disabled className="hidden">
+              {t("vehicles.placeholders.mileageUnit")}
+            </SelectItem>
+            {MILEAGE_UNITS.map((unit) => (
+              <SelectItem key={unit} value={unit}>
+                {unit === "km" ? t("vehicles.mileage.kilometers") : t("vehicles.mileage.miles")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t("vehicles.mileage.unitHint")}</p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-initial-mileage`}>
             {t("vehicles.fields.initialMileage")}
-            <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span>
+            {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
           </Label>
           <Input
             id={`${idPrefix}-initial-mileage`}
@@ -151,7 +148,7 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-current-mileage`}>
             {t("vehicles.fields.currentMileage")}
-            <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span>
+            {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
           </Label>
           <Input
             id={`${idPrefix}-current-mileage`}
@@ -191,7 +188,7 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-fuel`}>{t("vehicles.fields.fuelType")}</Label>
           <Select value={fuelType || fuelNone} onValueChange={(value) => setValue("fuelType", value === fuelNone ? "" : value)} disabled={disabled}>
-            <SelectTrigger id={`${idPrefix}-fuel`}>
+            <SelectTrigger id={`${idPrefix}-fuel`} className="w-full min-w-0">
               <SelectValue placeholder={t("vehicles.placeholders.fuelType")} />
             </SelectTrigger>
             <SelectContent>

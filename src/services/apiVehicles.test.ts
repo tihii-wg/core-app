@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Vehicle } from "../lib/types";
-import { assertVehicleAssignable, orderAssetFieldsFromVehicle, vehicleMakeModelLabel } from "./apiVehicles";
+import {
+  assertVehicleAssignable,
+  createVehicle,
+  orderAssetFieldsFromVehicle,
+  resetVehicleMileageUnitSupport,
+  toVehicle,
+  updateVehicle,
+  vehicleMakeModelLabel,
+} from "./apiVehicles";
 
 const from = vi.hoisted(() => vi.fn());
 
@@ -23,6 +31,30 @@ function maybeSingleQuery(result: { data: unknown; error: unknown }) {
   chain.is = () => chain;
   chain.maybeSingle = () => Promise.resolve(result);
   return chain;
+}
+
+function writeQuery(result: { data: unknown; error: unknown }, terminal: "single" | "maybeSingle" = "single") {
+  const chain: Record<string, unknown> = {};
+  const selectArgs: unknown[] = [];
+  const insertArgs: unknown[] = [];
+  const updateArgs: unknown[] = [];
+  chain.insert = (payload: unknown) => {
+    insertArgs.push(payload);
+    return chain;
+  };
+  chain.update = (payload: unknown) => {
+    updateArgs.push(payload);
+    return chain;
+  };
+  chain.select = (cols?: unknown) => {
+    selectArgs.push(cols);
+    return chain;
+  };
+  chain.eq = () => chain;
+  chain.is = () => chain;
+  chain.single = () => Promise.resolve(result);
+  chain.maybeSingle = () => Promise.resolve(result);
+  return { chain, selectArgs, insertArgs, updateArgs, terminal };
 }
 
 describe("assertVehicleAssignable", () => {
@@ -96,5 +128,140 @@ describe("orderAssetFieldsFromVehicle", () => {
   it("returns empty snapshots when no vehicle is selected", () => {
     expect(orderAssetFieldsFromVehicle(null)).toEqual({ device: "", carNumber: "", vin: "" });
     expect(orderAssetFieldsFromVehicle(undefined)).toEqual({ device: "", carNumber: "", vin: "" });
+  });
+});
+
+describe("vehicle mileage_unit mapping", () => {
+  beforeEach(() => {
+    from.mockReset();
+    resetVehicleMileageUnitSupport();
+  });
+
+  it("maps mileage_unit from DB rows without inventing a unit", () => {
+    expect(toVehicle({ id: "1", workspace_id: "ws", client_id: "c", mileage_unit: "km" }).mileageUnit).toBe("km");
+    expect(toVehicle({ id: "1", workspace_id: "ws", client_id: "c", mileage_unit: "mi" }).mileageUnit).toBe("mi");
+    expect(toVehicle({ id: "1", workspace_id: "ws", client_id: "c", mileage_unit: null }).mileageUnit).toBeNull();
+    expect(toVehicle({ id: "1", workspace_id: "ws", client_id: "c" }).mileageUnit).toBeNull();
+  });
+
+  it("persists selected mileage_unit on create and reloads it", async () => {
+    const clientCheck = maybeSingleQuery({ data: { id: "client-1" }, error: null });
+    const write = writeQuery({
+      data: {
+        id: "veh-1",
+        workspace_id: "ws-1",
+        client_id: "client-1",
+        make: "Toyota",
+        model: null,
+        year: null,
+        vin: null,
+        license_plate: null,
+        initial_mileage: null,
+        current_mileage: 12000,
+        mileage_unit: "mi",
+        engine_displacement: null,
+        fuel_type: null,
+        created_at: "",
+        updated_at: "",
+        deleted_at: null,
+      },
+      error: null,
+    });
+    from.mockImplementation((table: string) => (table === "clients" ? clientCheck : write.chain));
+
+    const created = await createVehicle("ws-1", "client-1", {
+      make: "Toyota",
+      currentMileage: 12000,
+      mileageUnit: "mi",
+    });
+
+    expect(write.insertArgs[0]).toEqual(
+      expect.objectContaining({
+        mileage_unit: "mi",
+        current_mileage: 12000,
+      }),
+    );
+    expect(String(write.selectArgs[0])).toContain("mileage_unit");
+    expect(created.mileageUnit).toBe("mi");
+    expect(created.currentMileage).toBe(12000);
+  });
+
+  it("updates mileage_unit later without converting current_mileage", async () => {
+    const write = writeQuery(
+      {
+        data: {
+          id: "veh-1",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          make: "Toyota",
+          model: null,
+          year: null,
+          vin: null,
+          license_plate: null,
+          initial_mileage: null,
+          current_mileage: 45200,
+          mileage_unit: "mi",
+          engine_displacement: null,
+          fuel_type: null,
+          created_at: "",
+          updated_at: "",
+          deleted_at: null,
+        },
+        error: null,
+      },
+      "maybeSingle",
+    );
+    from.mockReturnValue(write.chain);
+
+    const updated = await updateVehicle("ws-1", "veh-1", {
+      make: "Toyota",
+      currentMileage: 45200,
+      mileageUnit: "mi",
+    });
+
+    expect(write.updateArgs[0]).toEqual(
+      expect.objectContaining({
+        mileage_unit: "mi",
+        current_mileage: 45200,
+      }),
+    );
+    expect(updated.mileageUnit).toBe("mi");
+    expect(updated.currentMileage).toBe(45200);
+  });
+
+  it("omits mileage_unit from the payload when the caller does not provide it", async () => {
+    const write = writeQuery(
+      {
+        data: {
+          id: "veh-1",
+          workspace_id: "ws-1",
+          client_id: "client-1",
+          make: "Toyota",
+          model: null,
+          year: null,
+          vin: null,
+          license_plate: null,
+          initial_mileage: null,
+          current_mileage: 46000,
+          mileage_unit: "km",
+          engine_displacement: null,
+          fuel_type: null,
+          created_at: "",
+          updated_at: "",
+          deleted_at: null,
+        },
+        error: null,
+      },
+      "maybeSingle",
+    );
+    from.mockReturnValue(write.chain);
+
+    await updateVehicle("ws-1", "veh-1", {
+      make: "Toyota",
+      currentMileage: 46000,
+    });
+
+    expect(write.updateArgs[0]).not.toHaveProperty("mileage_unit");
+    expect(write.updateArgs[0]).toEqual(expect.objectContaining({ current_mileage: 46000 }));
   });
 });

@@ -14,6 +14,7 @@ import { VehicleFieldsGrid } from "../orders/VehicleFieldsGrid";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
+import { formatVehicleMileage } from "./vehicleMileage";
 import { useGetVehicle } from "./useGetVehicle";
 import { useGetVehicleOrders } from "./useGetVehicleOrders";
 import { useUpdateVehicle } from "./useVehicleMutations";
@@ -179,6 +180,14 @@ export function VehicleDetailPanel({
                     <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                       {orders.map((order) => {
                         const secondary = [order.service?.trim(), order.description?.trim()].filter(Boolean).join(" · ");
+                        const visitMileage =
+                          order.vehicleMileageSnapshot != null
+                            ? formatVehicleMileage(
+                                order.vehicleMileageSnapshot,
+                                order.vehicleMileageUnitSnapshot,
+                                t,
+                              )
+                            : null;
 
                         return (
                           <li key={order.id}>
@@ -195,6 +204,11 @@ export function VehicleDetailPanel({
                                 </span>
                                 {order.createdAt ? (
                                   <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">{order.createdAt}</span>
+                                ) : null}
+                                {visitMileage ? (
+                                  <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">
+                                    {t("vehicles.fields.visitMileage")}: {visitMileage}
+                                  </span>
                                 ) : null}
                                 {secondary ? (
                                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">{secondary}</span>

@@ -1,6 +1,17 @@
-import type { CreateOrderInput, Order, OrderMaterial, OrderService, OrderServiceKind, OrderStatus, PaymentStatus, UpdateOrderDetails } from "../lib/types";
+import type {
+  CreateOrderInput,
+  MileageUnit,
+  Order,
+  OrderMaterial,
+  OrderService,
+  OrderServiceKind,
+  OrderStatus,
+  PaymentStatus,
+  UpdateOrderDetails,
+} from "../lib/types";
 import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
 import { assertValidOptionalVin } from "../lib/vin";
+import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import { assertVehicleAssignable } from "./apiVehicles";
 import { consolidateOrderMaterials } from "../features/inventory/orderMaterialLine";
 import {
@@ -303,34 +314,47 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   const normalizedVin = assertValidOptionalVin(input.vin, "orders.validation.vinLength");
   const device = nullIfEmptyText(input.device);
   const carNumber = nullIfEmptyText(input.carNumber)?.toUpperCase() ?? null;
+  const mileageSnapshotPatch = orderMileageSnapshotFields({
+    vehicleMileageSnapshot: input.vehicleMileageSnapshot,
+    vehicleMileageUnitSnapshot: input.vehicleMileageUnitSnapshot,
+  });
 
-  const { data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+  const insertOrderRow = (includeMileageSnapshot: boolean) =>
     supabase
-    .from("orders")
-    .insert({
-      workspace_id: targetWorkspaceId,
-      client_id: clientId,
-      vehicle_id: vehicleId,
-      device,
-      car_number: carNumber,
-      description: nullIfEmptyText(input.description),
-      employee_id: employeeId,
-      // Do not write employee ids into assigned_to (auth.users FK). Clear default auth.uid().
-      assigned_to: null,
-      created_by: user.id,
-      ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : { deadline: null }),
-      total_price: expectedMoney.total,
-      ...orderDiscountFields(expectedMoney, uniformPercentOf([...stampedLines, ...stampedServices.materials])),
-      status: "new",
-      is_paid: false,
-      number: `ORD-PENDING-${crypto.randomUUID()}`,
-      vin: normalizedVin,
-      service_id: resolvedServices[0]?.id ?? null,
-      service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
-    })
-    .select()
-    .single(),
+      .from("orders")
+      .insert({
+        workspace_id: targetWorkspaceId,
+        client_id: clientId,
+        vehicle_id: vehicleId,
+        device,
+        car_number: carNumber,
+        description: nullIfEmptyText(input.description),
+        employee_id: employeeId,
+        // Do not write employee ids into assigned_to (auth.users FK). Clear default auth.uid().
+        assigned_to: null,
+        created_by: user.id,
+        ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : { deadline: null }),
+        total_price: expectedMoney.total,
+        ...orderDiscountFields(expectedMoney, uniformPercentOf([...stampedLines, ...stampedServices.materials])),
+        status: "new",
+        is_paid: false,
+        number: `ORD-PENDING-${crypto.randomUUID()}`,
+        vin: normalizedVin,
+        service_id: resolvedServices[0]?.id ?? null,
+        service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
+        ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
+      } as Record<string, unknown>)
+      .select()
+      .single();
+
+  let { data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+    insertOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length)),
   );
+
+  if (orderError && isMissingOrderMileageSnapshotColumn(orderError)) {
+    orderMileageSnapshotSupported = false;
+    ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() => insertOrderRow(false)));
+  }
 
   if (orderError) throw new Error(orderError.message);
 
@@ -495,6 +519,60 @@ type OrderMaterialLine = {
 // Disambiguate: orders has two FKs to clients (client_id + payer_client_id).
 const orderColumns = "*,tax_invoice_number,clients!orders_client_id_fkey(name,client_type,phone)";
 const orderServiceBaseColumns = "id, order_id, service_id, service_name, price, quantity";
+
+/**
+ * Optional until supabase/manual/20261102220000_vehicle_mileage_unit.PRODUCTION.sql is applied.
+ * When false, create/update omit snapshot columns and mapped orders keep null snapshots.
+ */
+let orderMileageSnapshotSupported = true;
+
+/** Test hook: reset cached order mileage snapshot column support. */
+export function resetOrderMileageSnapshotSupport() {
+  orderMileageSnapshotSupported = true;
+}
+
+export function isOrderMileageSnapshotSupported() {
+  return orderMileageSnapshotSupported;
+}
+
+function isMissingOrderMileageSnapshotColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/\bvehicle_mileage(_unit)?_snapshot\b/i.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function readOrderMileageSnapshot(row: Record<string, unknown>): {
+  vehicleMileageSnapshot: number | null;
+  vehicleMileageUnitSnapshot: MileageUnit | null;
+} {
+  return {
+    vehicleMileageSnapshot: numberOrNull(row.vehicle_mileage_snapshot),
+    vehicleMileageUnitSnapshot: parseMileageUnit(row.vehicle_mileage_unit_snapshot),
+  };
+}
+
+/** Payload fields for create/update when the snapshot columns exist. */
+export function orderMileageSnapshotFields(input: {
+  vehicleMileageSnapshot?: number | null;
+  vehicleMileageUnitSnapshot?: MileageUnit | null;
+}): Record<string, unknown> {
+  if (!orderMileageSnapshotSupported) return {};
+  if (input.vehicleMileageSnapshot === undefined) return {};
+  return {
+    vehicle_mileage_snapshot: input.vehicleMileageSnapshot,
+    vehicle_mileage_unit_snapshot: input.vehicleMileageUnitSnapshot ?? null,
+  };
+}
 
 // `order_services.kind` ('labor' | 'service') comes from crm_ro_v1 or 20261101050000_order_line_kind.PRODUCTION.sql.
 // Until the column exists every request is retried once without it and the answer is remembered for the page lifetime.
@@ -884,6 +962,7 @@ function toOrder(
     ...(client.phone ? { clientPhone: client.phone } : {}),
     orderNumber: typeof row.number === "string" ? row.number : "",
     vehicleId: typeof row.vehicle_id === "string" ? row.vehicle_id : null,
+    ...readOrderMileageSnapshot(row),
     device: typeof row.device === "string" ? row.device : "",
     vin: readVin(row),
     carNumber: typeof row.car_number === "string" ? row.car_number : "",
@@ -1359,7 +1438,20 @@ export function readVin(row: Record<string, unknown>) {
 }
 
 export async function updateOrder(
-  { orderId, vehicleId, device, carNumber, vin = "", description, assignedEmployeeId, deadline, services, materials }: UpdateOrderDetails,
+  {
+    orderId,
+    vehicleId,
+    device,
+    carNumber,
+    vin = "",
+    description,
+    assignedEmployeeId,
+    deadline,
+    services,
+    materials,
+    vehicleMileageSnapshot,
+    vehicleMileageUnitSnapshot,
+  }: UpdateOrderDetails,
   targetWorkspaceId: string | undefined,
 ) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
@@ -1385,21 +1477,38 @@ export async function updateOrder(
       ? {}
       : { vehicle_id: await assertVehicleAssignable(workspaceId, clientId, nullIfEmptyUuid(vehicleId)) };
 
-  const { data, error } = await supabase
-    .from("orders")
-    .update({
-      ...vehiclePatch,
-      device: nullIfEmptyText(device),
-      car_number: nullIfEmptyText(carNumber)?.toUpperCase() ?? null,
-      description: nullIfEmptyText(description),
-      employee_id: employeeId,
-      deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
-      vin: normalizedVin,
-    })
-    .eq("id", orderId)
-    .eq("workspace_id", workspaceId)
-    .select(orderColumns)
-    .maybeSingle();
+  const mileageSnapshotPatch = orderMileageSnapshotFields({
+    vehicleMileageSnapshot,
+    vehicleMileageUnitSnapshot,
+  });
+
+  const updateOrderRow = (includeMileageSnapshot: boolean) =>
+    supabase
+      .from("orders")
+      .update({
+        ...vehiclePatch,
+        device: nullIfEmptyText(device),
+        car_number: nullIfEmptyText(carNumber)?.toUpperCase() ?? null,
+        description: nullIfEmptyText(description),
+        employee_id: employeeId,
+        deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
+        vin: normalizedVin,
+        ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
+      } as Record<string, unknown>)
+      .eq("id", orderId)
+      .eq("workspace_id", workspaceId)
+      .select(orderColumns)
+      .maybeSingle();
+
+  let { data, error } = await updateOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length));
+
+  if (error && isMissingOrderMileageSnapshotColumn(error)) {
+    orderMileageSnapshotSupported = false;
+    if (vehicleMileageSnapshot !== undefined) {
+      // Snapshot was requested but columns are absent — continue without them rather than failing the whole save.
+      ({ data, error } = await updateOrderRow(false));
+    }
+  }
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error(orderPermissionMessage());

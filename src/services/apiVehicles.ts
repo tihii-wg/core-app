@@ -34,17 +34,32 @@ function vehicleColumns(): string {
   return vehicleMileageUnitSupported ? `${vehicleBaseColumns}, mileage_unit` : vehicleBaseColumns;
 }
 
+/** Prefer selecting mileage_unit whenever the payload writes it, even if a prior probe cached false. */
+function vehicleSelectColumns(payload?: Record<string, unknown>): string {
+  if (payload && "mileage_unit" in payload) return `${vehicleBaseColumns}, mileage_unit`;
+  return vehicleColumns();
+}
+
 async function withVehicleColumns<T extends { error: DbError }>(run: () => PromiseLike<T>): Promise<T> {
+  // Always try WITH mileage_unit first so a stale "unsupported" cache recovers after SQL apply.
+  const wasSupported = vehicleMileageUnitSupported;
+  vehicleMileageUnitSupported = true;
   let result = await run();
-  if (vehicleMileageUnitSupported && isMissingMileageUnitColumn(result.error)) {
+  if (isMissingMileageUnitColumn(result.error)) {
     vehicleMileageUnitSupported = false;
     result = await run();
+  } else if (!result.error) {
+    vehicleMileageUnitSupported = true;
+  } else {
+    // Unrelated error: restore prior cache so we do not flip support based on RLS/network.
+    vehicleMileageUnitSupported = wasSupported;
   }
   return result;
 }
 
 /**
- * Read-only probe for vehicles.mileage_unit. Never throws; caches for the page lifetime.
+ * Read-only probe for vehicles.mileage_unit. Never throws.
+ * Always re-checks the DB so a prior "missing column" cache can recover after SQL is applied.
  */
 export async function probeVehicleMileageUnitSupport(): Promise<boolean> {
   try {
@@ -57,6 +72,7 @@ export async function probeVehicleMileageUnitSupport(): Promise<boolean> {
       vehicleMileageUnitSupported = false;
       return false;
     }
+    // Unrelated errors (network/RLS): keep current cache, do not flip false.
     return vehicleMileageUnitSupported;
   } catch {
     return vehicleMileageUnitSupported;
@@ -133,14 +149,11 @@ function payloadFromInput(input: VehicleInput) {
     engine_displacement: input.engineDisplacement ?? null,
     fuel_type: nullIfEmptyText(input.fuelType ?? null),
   };
-  if (vehicleMileageUnitSupported) {
-    // Only write when explicitly provided. Omitted keeps the existing DB value (order mileage updates).
-    // Explicit null means unknown — never invent km/mi for historical rows.
-    if (input.mileageUnit !== undefined) {
-      payload.mileage_unit = input.mileageUnit;
-    }
-  } else if (input.mileageUnit != null) {
-    throw new Error(i18n.t("vehicles.errors.mileageUnitUnsupported"));
+  // Always attempt to persist when the form/API provides a value (including explicit null).
+  // Omitted keeps the existing DB value (e.g. visit-mileage updates that must not touch the unit).
+  // Never invent km/mi. If the column is absent, create/update strip it and surface a clear error.
+  if (input.mileageUnit !== undefined) {
+    payload.mileage_unit = input.mileageUnit;
   }
   return payload;
 }
@@ -217,7 +230,7 @@ export async function createVehicle(workspaceId: string | undefined, clientId: s
       client_id: targetClientId,
       ...payload,
     } as Record<string, unknown>)
-    .select(vehicleColumns() as typeof vehicleBaseColumns)
+    .select(vehicleSelectColumns(payload) as typeof vehicleBaseColumns)
     .single();
 
   if (error && isMissingMileageUnitColumn(error)) {
@@ -233,8 +246,10 @@ export async function createVehicle(workspaceId: string | undefined, clientId: s
         client_id: targetClientId,
         ...payload,
       } as Record<string, unknown>)
-      .select(vehicleColumns() as typeof vehicleBaseColumns)
+      .select(vehicleSelectColumns(payload) as typeof vehicleBaseColumns)
       .single());
+  } else if (!error && "mileage_unit" in payload) {
+    vehicleMileageUnitSupported = true;
   }
 
   if (error) throw new Error(error.message);
@@ -250,7 +265,7 @@ export async function updateVehicle(workspaceId: string | undefined, vehicleId: 
     .eq("id", vehicleId)
     .eq("workspace_id", targetWorkspaceId)
     .is("deleted_at", null)
-    .select(vehicleColumns() as typeof vehicleBaseColumns)
+    .select(vehicleSelectColumns(payload) as typeof vehicleBaseColumns)
     .maybeSingle();
 
   if (error && isMissingMileageUnitColumn(error)) {
@@ -265,8 +280,10 @@ export async function updateVehicle(workspaceId: string | undefined, vehicleId: 
       .eq("id", vehicleId)
       .eq("workspace_id", targetWorkspaceId)
       .is("deleted_at", null)
-      .select(vehicleColumns() as typeof vehicleBaseColumns)
+      .select(vehicleSelectColumns(payload) as typeof vehicleBaseColumns)
       .maybeSingle());
+  } else if (!error && "mileage_unit" in payload) {
+    vehicleMileageUnitSupported = true;
   }
 
   if (error) throw new Error(error.message);

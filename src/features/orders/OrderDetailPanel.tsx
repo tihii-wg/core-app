@@ -303,6 +303,8 @@ export default function OrderDetailPanel({
             {showClientVehicles ? (
               <OrderLinkedVehicleDetails
                 vehicleId={selectedOrder.vehicleId}
+                vehicleMileageSnapshot={selectedOrder.vehicleMileageSnapshot ?? null}
+                vehicleMileageUnitSnapshot={selectedOrder.vehicleMileageUnitSnapshot ?? null}
                 onOpenRelatedOrder={(order) => {
                   onOrderUpdated(order);
                 }}

@@ -29,9 +29,14 @@ type OrderVehicleFieldsProps<T extends FieldValues> = {
   /**
    * How to initialize Current mileage when the selected vehicle changes.
    * - `empty` (new orders): never carry over stored mileage; user enters visit mileage explicitly.
-   * - `vehicle` (edit orders): prefill from `vehicles.current_mileage`.
+   * - `vehicle` (edit orders): prefill from `vehicles.current_mileage` when the vehicle changes.
    */
   mileageMode?: "empty" | "vehicle";
+  /**
+   * When true, keep the form's seeded `currentMileage` (order historical snapshot) until the
+   * selected vehicle id changes. Prevents live vehicle mileage from overwriting history on open.
+   */
+  preserveInitialMileage?: boolean;
 };
 
 function applyOrderAssetSnapshot<T extends FieldValues>(setValue: UseFormSetValue<T>, vehicle: Vehicle | undefined) {
@@ -61,6 +66,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   clientId,
   disabled,
   mileageMode = "empty",
+  preserveInitialMileage = false,
 }: OrderVehicleFieldsProps<T>) {
   const { t } = useTranslation();
   const vehicleIdPath = "vehicleId" as Path<T>;
@@ -76,6 +82,8 @@ export function OrderVehicleFields<T extends FieldValues>({
   const syncedAssetVehicleId = useRef<string | null>(null);
   /** Last vehicle id we synced currentMileage for. */
   const syncedMileageVehicleId = useRef<string | null>(null);
+  /** Skip the first mileage sync so edit forms keep the order's historical snapshot seed. */
+  const skipInitialMileageSync = useRef(preserveInitialMileage);
   /** Protect a just-created selection from being cleared while the list refetches / Select resyncs. */
   const pendingCreatedVehicleId = useRef<string | null>(null);
 
@@ -154,13 +162,20 @@ export function OrderVehicleFields<T extends FieldValues>({
 
   // Sync visit mileage when the selected vehicle changes.
   // Create (`empty`): clear the field so stored mileage is never carried into a new visit.
-  // Edit (`vehicle`): prefill from vehicles.current_mileage.
+  // Edit (`vehicle`): prefill from vehicles.current_mileage after the user changes vehicle.
+  // With `preserveInitialMileage`, keep the order snapshot seed until the vehicle id changes.
   useEffect(() => {
     if (isLoading) return;
 
     const nextId = selectedVehicleId?.trim() || "";
     if (syncedMileageVehicleId.current === nextId) return;
     if (nextId && !selectedVehicle) return;
+
+    if (skipInitialMileageSync.current) {
+      skipInitialMileageSync.current = false;
+      syncedMileageVehicleId.current = nextId;
+      return;
+    }
 
     syncedMileageVehicleId.current = nextId;
     const nextMileage =
@@ -171,9 +186,9 @@ export function OrderVehicleFields<T extends FieldValues>({
   if (!clientId) return null;
 
   const summary = selectedVehicle ? vehicleSummaryDetails(selectedVehicle) : null;
-  const mileageUnitAbbr = selectedVehicle
-    ? mileageUnitAbbreviation(selectedVehicle.mileageUnit) || t("vehicles.mileage.unitUnknownShort")
-    : "";
+  // Only show km/mi next to the reading when the vehicle has an explicit unit.
+  // Never invent a unit or show "ед.?" as if it were a disabled selector.
+  const mileageUnitAbbr = selectedVehicle ? mileageUnitAbbreviation(selectedVehicle.mileageUnit) : "";
 
   return (
     <div className="space-y-2">
@@ -228,13 +243,15 @@ export function OrderVehicleFields<T extends FieldValues>({
           <div className="space-y-1.5 border-t border-border pt-3">
             <Label htmlFor="order-vehicle-current-mileage">
               {t("vehicles.fields.currentMileage")}
-              <span className="ml-1 font-normal text-muted-foreground">({mileageUnitAbbr})</span>
+              {mileageUnitAbbr ? (
+                <span className="ml-1 font-normal text-muted-foreground">({mileageUnitAbbr})</span>
+              ) : null}
             </Label>
             <div className="relative w-full min-w-0 max-w-full sm:max-w-[12rem]">
               <Input
                 id="order-vehicle-current-mileage"
                 inputMode="numeric"
-                className="w-full min-w-0 pr-10"
+                className={`w-full min-w-0 ${mileageUnitAbbr ? "pr-10" : ""}`}
                 placeholder={t("vehicles.placeholders.currentMileage")}
                 disabled={disabled}
                 {...register("currentMileage" as Path<T>, {
@@ -242,9 +259,11 @@ export function OrderVehicleFields<T extends FieldValues>({
                     visitMileageValidate(String(value ?? ""), t("vehicles.validation.mileageWholeNonNegative")),
                 })}
               />
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
-                {mileageUnitAbbr}
-              </span>
+              {mileageUnitAbbr ? (
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+                  {mileageUnitAbbr}
+                </span>
+              ) : null}
             </div>
             {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
             <p className="text-xs text-muted-foreground">
