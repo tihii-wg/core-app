@@ -201,6 +201,219 @@ describe("order materials (request-only)", () => {
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(stock);
   });
 
+  it("editing an order without changing materials does not call sync_order_materials", async () => {
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "No Mat Change", services: [oilChange], materials: [{ ...brakePads, quantity: 2 }] },
+      WS.A,
+    );
+    const beforeRpc = fake.requests.filter((request) => request.table === "sync_order_materials" && request.op === "rpc").length;
+    const existing = fake.all("order_materials").filter((line) => line.order_id === created.id);
+
+    await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "No Mat Change",
+        carNumber: "AAA111",
+        vin: "",
+        description: "desc only",
+        assignedEmployeeId: "employee-a1",
+        deadline: "",
+        materials: existing.map((line) => ({
+          id: String(line.id),
+          inventoryItemId: String(line.inventory_item_id),
+          itemName: String(line.item_name),
+          price: Number(line.price),
+          quantity: Number(line.quantity),
+        })),
+      },
+      WS.A,
+    );
+
+    const afterRpc = fake.requests.filter((request) => request.table === "sync_order_materials" && request.op === "rpc").length;
+    expect(afterRpc).toBe(beforeRpc);
+    expect(fake.all("order_materials").filter((line) => line.order_id === created.id)).toHaveLength(1);
+  });
+
+  it("adds a material while preserving existing materials and other orders", async () => {
+    fake.all("inventory_items").push({
+      id: "item-a2",
+      workspace_id: WS.A,
+      name: "Oil filter",
+      sku: "OF-1",
+      description: null,
+      category: "Parts",
+      quantity: 10,
+      min_quantity: 1,
+      unit: "pcs",
+      purchase_price: 5,
+      selling_price: 8,
+      supplier: null,
+      location: null,
+      is_active: true,
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
+    });
+
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "Add Mat", services: [oilChange], materials: [{ ...brakePads, quantity: 1 }] },
+      WS.A,
+    );
+    const other = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Other order",
+        services: [oilChange],
+        materials: [{ inventoryItemId: "item-a2", itemName: "Oil filter", price: 8, quantity: 1 }],
+      },
+      WS.A,
+    );
+    const foreignBefore = fake.all("order_materials").filter((line) => line.order_id === "order-c1").length;
+
+    const updated = await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Add Mat",
+        carNumber: "AAA111",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "employee-a1",
+        deadline: "",
+        materials: [
+          { ...brakePads, quantity: 1 },
+          { inventoryItemId: "item-a2", itemName: "Oil filter", price: 8, quantity: 2 },
+        ],
+      },
+      WS.A,
+    );
+
+    expect(updated.materials).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ inventoryItemId: "item-a1", quantity: 1 }),
+        expect.objectContaining({ inventoryItemId: "item-a2", quantity: 2 }),
+      ]),
+    );
+    expect(updated.materials).toHaveLength(2);
+    expect(fake.all("order_materials").filter((line) => line.order_id === other.id)).toEqual([
+      expect.objectContaining({ inventory_item_id: "item-a2", quantity: 1 }),
+    ]);
+    expect(fake.all("order_materials").filter((line) => line.order_id === "order-c1")).toHaveLength(foreignBefore);
+  });
+
+  it("updates one material quantity without dropping sibling lines", async () => {
+    fake.all("inventory_items").push({
+      id: "item-a2",
+      workspace_id: WS.A,
+      name: "Oil filter",
+      sku: "OF-1",
+      description: null,
+      category: "Parts",
+      quantity: 10,
+      min_quantity: 1,
+      unit: "pcs",
+      purchase_price: 5,
+      selling_price: 8,
+      supplier: null,
+      location: null,
+      is_active: true,
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
+    });
+
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Update Mat",
+        services: [oilChange],
+        materials: [
+          { ...brakePads, quantity: 1 },
+          { inventoryItemId: "item-a2", itemName: "Oil filter", price: 8, quantity: 2 },
+        ],
+      },
+      WS.A,
+    );
+
+    const updated = await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Update Mat",
+        carNumber: "AAA111",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "employee-a1",
+        deadline: "",
+        materials: [
+          { ...brakePads, quantity: 3 },
+          { inventoryItemId: "item-a2", itemName: "Oil filter", price: 8, quantity: 2 },
+        ],
+      },
+      WS.A,
+    );
+
+    expect(updated.materials).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ inventoryItemId: "item-a1", quantity: 3 }),
+        expect.objectContaining({ inventoryItemId: "item-a2", quantity: 2 }),
+      ]),
+    );
+    expect(updated.materials).toHaveLength(2);
+  });
+
+  it("removes one material while keeping the rest and never touching another workspace", async () => {
+    fake.all("inventory_items").push({
+      id: "item-a2",
+      workspace_id: WS.A,
+      name: "Oil filter",
+      sku: "OF-1",
+      description: null,
+      category: "Parts",
+      quantity: 10,
+      min_quantity: 1,
+      unit: "pcs",
+      purchase_price: 5,
+      selling_price: 8,
+      supplier: null,
+      location: null,
+      is_active: true,
+      created_at: "2026-03-01T00:00:00.000Z",
+      updated_at: "2026-03-01T00:00:00.000Z",
+    });
+
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Remove Mat",
+        services: [oilChange],
+        materials: [
+          { ...brakePads, quantity: 1 },
+          { inventoryItemId: "item-a2", itemName: "Oil filter", price: 8, quantity: 2 },
+        ],
+      },
+      WS.A,
+    );
+    const foreignMaterials = fake.all("order_materials").filter((line) => line.order_id === "order-c1");
+
+    const updated = await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Remove Mat",
+        carNumber: "AAA111",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "employee-a1",
+        deadline: "",
+        materials: [{ inventoryItemId: "item-a2", itemName: "Oil filter", price: 8, quantity: 2 }],
+      },
+      WS.A,
+    );
+
+    expect(updated.materials).toEqual([expect.objectContaining({ inventoryItemId: "item-a2", quantity: 2 })]);
+    expect(fake.all("order_materials").filter((line) => line.order_id === created.id)).toHaveLength(1);
+    expect(fake.all("order_materials").filter((line) => line.order_id === "order-c1")).toEqual(foreignMaterials);
+  });
+
   it("includes materials on invoices with null service_id and frozen snapshots", async () => {
     const created = await createOrder(
       { clientId: "client-a1", clientName: "", device: "Invoice Car", services: [oilChange], materials: [{ ...brakePads, quantity: 2 }] },
@@ -501,3 +714,381 @@ describe("warehouse issue and return", () => {
     await expect(issueOrderMaterials(order, [{ inventoryItemId: "not-a-uuid", quantity: 1 }], "bad-id")).rejects.toThrow();
   });
 });
+
+describe("sync_order_materials security and correctness (fake RPC mirror)", () => {
+  beforeEach(() => {
+    seedCoreApp();
+    fake.signInAs(USERS.member.id);
+  });
+
+  async function rpc(orderId: string, materials: unknown) {
+    return fake.client.rpc("sync_order_materials", { p_order_id: orderId, p_materials: materials });
+  }
+
+  it("rejects null order id, nonexistent order, and unauthorized workspace", async () => {
+    expect((await rpc("", [])).error?.message).toMatch(/order_id is required/i);
+    expect((await rpc("missing-order", [])).error?.message).toMatch(/not found|permission/i);
+
+    fake.signInAs(USERS.outsider.id);
+    expect((await rpc("order-a1", [{ inventory_item_id: "item-a1", quantity: 1 }])).error?.message).toMatch(
+      /not found|permission/i,
+    );
+  });
+
+  it("rejects null/non-array payload and invalid quantities/prices/sources", async () => {
+    const order = await createOrder({ clientId: "client-a1", clientName: "", device: "X", services: [oilChange] }, WS.A);
+    const id = String(order.id);
+
+    expect((await rpc(id, null)).error?.message).toMatch(/JSON array/i);
+    expect((await rpc(id, { inventory_item_id: "item-a1", quantity: 1 })).error?.message).toMatch(/JSON array/i);
+    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 0 }])).error?.message).toMatch(/greater than 0/i);
+    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 1.5 }])).error?.message).toMatch(/whole number/i);
+    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 2147483648 }])).error?.message).toMatch(/too large/i);
+    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 1, supply_source: "warehouse" }])).error?.message).toMatch(
+      /supply_source/i,
+    );
+    expect(
+      (await rpc(id, [{ item_name: "Seal", price: -1, quantity: 1, supply_source: "one_time" }])).error?.message,
+    ).toMatch(/negative/i);
+  });
+
+  it("rejects catalog items from another workspace and preserves cross-order isolation", async () => {
+    const order = await createOrder({ clientId: "client-a1", clientName: "", device: "X", services: [oilChange] }, WS.A);
+    expect((await rpc(String(order.id), [{ inventory_item_id: "item-b1", quantity: 1 }])).error?.message).toMatch(
+      /unavailable/i,
+    );
+
+    const foreignBefore = fake.all("order_materials").filter((line) => line.order_id === "order-c1");
+    await rpc(String(order.id), [{ inventory_item_id: "item-a1", quantity: 2 }]);
+    expect(fake.all("order_materials").filter((line) => line.order_id === "order-c1")).toEqual(foreignBefore);
+  });
+
+  it("adds catalog and freeform materials, updates freeform by line_id, and preserves ids on repeat", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Mix",
+        services: [oilChange],
+        materials: [
+          { ...brakePads, quantity: 1 },
+          { itemName: "Gasket", price: 3, quantity: 1, supplySource: "one_time" },
+        ],
+      },
+      WS.A,
+    );
+    const first = (await getOrders(WS.A)).find((o) => o.id === created.id)!;
+    const freeformId = first.materials?.find((m) => !m.inventoryItemId)?.id;
+    expect(freeformId).toBeTruthy();
+
+    const again = await rpc(String(created.id), [
+      { inventory_item_id: "item-a1", quantity: 1, supply_source: "catalog" },
+      {
+        line_id: freeformId,
+        inventory_item_id: null,
+        item_name: "Gasket HD",
+        price: 4,
+        quantity: 2,
+        supply_source: "one_time",
+      },
+    ]);
+    expect(again.error).toBeNull();
+    expect(again.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ inventory_item_id: "item-a1", quantity: 1 }),
+        expect.objectContaining({ id: freeformId, item_name: "Gasket HD", quantity: 2, price: 4 }),
+      ]),
+    );
+
+    const repeat = await rpc(String(created.id), [
+      { inventory_item_id: "item-a1", quantity: 1, supply_source: "catalog" },
+      {
+        line_id: freeformId,
+        inventory_item_id: null,
+        item_name: "Gasket HD",
+        price: 4,
+        quantity: 2,
+        supply_source: "one_time",
+      },
+    ]);
+    expect(repeat.error).toBeNull();
+    expect((repeat.data as { id: string }[]).map((row) => row.id).sort()).toEqual(
+      (again.data as { id: string }[]).map((row) => row.id).sort(),
+    );
+  });
+
+  it("rejects converting freeform lines to catalog via inventory_item_id", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Conv",
+        services: [oilChange],
+        materials: [{ itemName: "Gasket", price: 3, quantity: 1, supplySource: "one_time" }],
+      },
+      WS.A,
+    );
+    const freeformId = fake.all("order_materials").find((line) => line.order_id === created.id)?.id;
+    expect(
+      (
+        await rpc(String(created.id), [
+          {
+            line_id: freeformId,
+            inventory_item_id: "item-a1",
+            item_name: "Gasket",
+            price: 3,
+            quantity: 1,
+            supply_source: "one_time",
+          },
+        ])
+      ).error?.message,
+    ).toMatch(/must not include inventory_item_id|Invalid/i);
+  });
+
+  it("rejects converting catalog lines to freeform and foreign line ids", async () => {
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "Guard", services: [oilChange], materials: [{ ...brakePads, quantity: 1 }] },
+      WS.A,
+    );
+    const catalogLine = fake.all("order_materials").find((line) => line.order_id === created.id)!;
+
+    expect(
+      (
+        await rpc(String(created.id), [
+          {
+            line_id: String(catalogLine.id),
+            item_name: "Hacked",
+            price: 1,
+            quantity: 1,
+            supply_source: "one_time",
+          },
+        ])
+      ).error?.message,
+    ).toMatch(/catalog material|Invalid line_id/i);
+
+    expect(
+      (
+        await rpc(String(created.id), [
+          { line_id: "line-c1", item_name: "Foreign", price: 1, quantity: 1, supply_source: "one_time" },
+        ])
+      ).error?.message,
+    ).toMatch(/Invalid line_id/i);
+  });
+
+  it("removes unissued materials, blocks outstanding issued, preserves fully returned history in totals", async () => {
+    row("inventory_items", "item-a1")!.quantity = Math.max(Number(row("inventory_items", "item-a1")!.quantity), 20);
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "Hist", services: [oilChange], materials: [{ ...brakePads, quantity: 2 }] },
+      WS.A,
+    );
+    const orderId = String(created.id);
+    const beforeStock = Number(row("inventory_items", "item-a1")?.quantity);
+
+    fake.signInAs(USERS.manager.id);
+    await issueOrderMaterials(orderId, [{ inventoryItemId: "item-a1", quantity: 2 }], "iss");
+    fake.signInAs(USERS.member.id);
+    expect((await rpc(orderId, [])).error?.message).toMatch(/outstanding issued/i);
+
+    fake.signInAs(USERS.manager.id);
+    await returnOrderMaterials(orderId, [{ inventoryItemId: "item-a1", quantity: 2 }], undefined, "ret");
+    fake.signInAs(USERS.member.id);
+    const cleared = await rpc(orderId, []);
+    // Fully returned lines keep issue/return history → retained (issued>0 or returned>0).
+    expect(cleared.error).toBeNull();
+    const remaining = fake.all("order_materials").filter((line) => line.order_id === orderId);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject({ quantity_issued: 2, quantity_returned: 2, quantity: 2 });
+    expect(Number(row("orders", orderId)?.total_price)).toBe(40 + 12 * 2);
+    expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeStock);
+
+    const fresh = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "Clear", services: [oilChange], materials: [{ ...brakePads, quantity: 1 }] },
+      WS.A,
+    );
+    expect((await rpc(String(fresh.id), [])).error).toBeNull();
+    expect(fake.all("order_materials").filter((line) => line.order_id === fresh.id)).toHaveLength(0);
+  });
+
+  it("rejects duplicate catalog ids in payload and rolls back on mid-sync validation failure", async () => {
+    const created = await createOrder({ clientId: "client-a1", clientName: "", device: "Dup", services: [oilChange] }, WS.A);
+    const dup = await rpc(String(created.id), [
+      { inventory_item_id: "item-a1", quantity: 2 },
+      { inventory_item_id: "item-a1", quantity: 3 },
+    ]);
+    expect(dup.error?.message).toMatch(/Duplicate catalog inventory_item_id/i);
+    expect(fake.all("order_materials").filter((line) => line.order_id === created.id)).toHaveLength(0);
+
+    const ok = await rpc(String(created.id), [{ inventory_item_id: "item-a1", quantity: 2 }]);
+    expect(ok.error).toBeNull();
+
+    const before = cloneMaterials(String(created.id));
+    const failed = await rpc(String(created.id), [
+      { inventory_item_id: "item-a1", quantity: 1 },
+      { inventory_item_id: "item-b1", quantity: 1 },
+    ]);
+    expect(failed.error?.message).toMatch(/unavailable/i);
+    expect(cloneMaterials(String(created.id))).toEqual(before);
+  });
+
+  it("empty array clears only zero-history lines and recomputes totals from services alone", async () => {
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "Empty", services: [oilChange], materials: [{ ...brakePads, quantity: 2 }] },
+      WS.A,
+    );
+    const orderId = String(created.id);
+    expect(Number(row("orders", orderId)?.total_price)).toBe(64);
+    expect((await rpc(orderId, [])).error).toBeNull();
+    expect(fake.all("order_materials").filter((line) => line.order_id === orderId)).toHaveLength(0);
+    expect(Number(row("orders", orderId)?.total_price)).toBe(40);
+  });
+
+  it("rejects empty and malformed line_id / inventory_item_id (never coerces to NULL)", async () => {
+    const created = await createOrder({ clientId: "client-a1", clientName: "", device: "Ids", services: [oilChange] }, WS.A);
+    const id = String(created.id);
+
+    for (const bad of ["", "   ", 0, true, false, [], { a: 1 }, "not-a-valid-uuid-shape-!!!!", "550e8400-e29b-41d4-a716-44665544000g"]) {
+      expect(
+        (await rpc(id, [{ line_id: bad, item_name: "X", price: 1, quantity: 1, supply_source: "one_time" }])).error?.message,
+      ).toMatch(/Invalid line_id/i);
+      expect((await rpc(id, [{ inventory_item_id: bad, quantity: 1 }])).error?.message).toMatch(/Invalid inventory_item_id/i);
+    }
+
+    // JSON null / omitted remain allowed for new freeform lines.
+    expect(
+      (await rpc(id, [{ line_id: null, item_name: "Fresh", price: 2, quantity: 1, supply_source: "one_time" }])).error,
+    ).toBeNull();
+    expect(
+      (await rpc(id, [{ item_name: "Also fresh", price: 2, quantity: 1, supply_source: "customer" }])).error,
+    ).toBeNull();
+  });
+
+  it("freezes freeform name/price/source after issue/return history; allows valid qty only", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Freeze",
+        services: [oilChange],
+        materials: [{ itemName: "Seal", price: 5, quantity: 3, supplySource: "one_time" }],
+      },
+      WS.A,
+    );
+    const orderId = String(created.id);
+    const line = fake.all("order_materials").find((row) => row.order_id === orderId)!;
+    // Warehouse issue RPC is catalog-only; seed history directly to exercise sync guards.
+    line.quantity_issued = 2;
+    line.quantity_returned = 1;
+
+    expect(
+      (
+        await rpc(orderId, [
+          { line_id: line.id, item_name: "Seal Renamed", price: 5, quantity: 3, supply_source: "one_time" },
+        ])
+      ).error?.message,
+    ).toMatch(/Cannot change material name after issue or return activity/i);
+
+    expect(
+      (
+        await rpc(orderId, [
+          { line_id: line.id, item_name: "Seal", price: 9, quantity: 3, supply_source: "one_time" },
+        ])
+      ).error?.message,
+    ).toMatch(/Cannot change material price after issue or return activity/i);
+
+    expect(
+      (
+        await rpc(orderId, [
+          { line_id: line.id, item_name: "Seal", price: 5, quantity: 3, supply_source: "customer" },
+        ])
+      ).error?.message,
+    ).toMatch(/Cannot change material supply source after issue or return activity/i);
+
+    expect(
+      (
+        await rpc(orderId, [
+          { line_id: line.id, item_name: "Seal", price: 5, quantity: 1, supply_source: "one_time" },
+        ])
+      ).error?.message,
+    ).toMatch(/Requested quantity cannot be less than already issued quantity/i);
+
+    const ok = await rpc(orderId, [
+      { line_id: line.id, item_name: "Seal", price: 5, quantity: 4, supply_source: "one_time" },
+    ]);
+    expect(ok.error).toBeNull();
+    expect(row("order_materials", String(line.id))).toMatchObject({
+      item_name: "Seal",
+      price: 5,
+      quantity: 4,
+      supply_source: "one_time",
+      quantity_issued: 2,
+      quantity_returned: 1,
+    });
+  });
+
+  it("keeps catalog name/price frozen on sync and rejects duplicate catalog rows", async () => {
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "CatHist", services: [oilChange], materials: [{ ...brakePads, quantity: 2 }] },
+      WS.A,
+    );
+    const orderId = String(created.id);
+    const catalogLine = fake.all("order_materials").find((row) => row.order_id === orderId)!;
+    catalogLine.quantity_issued = 1;
+    catalogLine.item_name = "Alpha brake pads";
+    catalogLine.price = 12;
+    row("inventory_items", "item-a1")!.selling_price = 99;
+    row("inventory_items", "item-a1")!.name = "Renamed in catalog";
+
+    const synced = await rpc(orderId, [{ inventory_item_id: "item-a1", quantity: 3, supply_source: "catalog" }]);
+    expect(synced.error).toBeNull();
+    expect(row("order_materials", String(catalogLine.id))).toMatchObject({
+      item_name: "Alpha brake pads",
+      price: 12,
+      quantity: 3,
+      quantity_issued: 1,
+    });
+
+    // Simulate legacy duplicate catalog rows (unique index missing / violated offline).
+    fake.all("order_materials").push({
+      id: "dup-catalog-line",
+      order_id: orderId,
+      inventory_item_id: "item-a1",
+      item_name: "Dup",
+      price: 1,
+      quantity: 1,
+      quantity_issued: 0,
+      quantity_returned: 0,
+      supply_source: "catalog",
+      created_at: new Date().toISOString(),
+    });
+    expect((await rpc(orderId, [{ inventory_item_id: "item-a1", quantity: 3 }])).error?.message).toMatch(
+      /Duplicate catalog material rows/i,
+    );
+  });
+
+  it("documents established accounting: fully returned retained lines remain in order total", async () => {
+    // Established across sync_order_materials since warehouse issue/return: total_price sums
+    // ALL remaining order_materials.price*quantity, including fully returned historical rows.
+    row("inventory_items", "item-a1")!.quantity = Math.max(Number(row("inventory_items", "item-a1")!.quantity), 20);
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "", device: "Bill", services: [oilChange], materials: [{ ...brakePads, quantity: 2 }] },
+      WS.A,
+    );
+    const orderId = String(created.id);
+    fake.signInAs(USERS.manager.id);
+    await issueOrderMaterials(orderId, [{ inventoryItemId: "item-a1", quantity: 2 }], "bill-iss");
+    await returnOrderMaterials(orderId, [{ inventoryItemId: "item-a1", quantity: 2 }], undefined, "bill-ret");
+    fake.signInAs(USERS.member.id);
+
+    expect((await rpc(orderId, [])).error).toBeNull();
+    expect(fake.all("order_materials").filter((line) => line.order_id === orderId)).toHaveLength(1);
+    expect(Number(row("orders", orderId)?.total_price)).toBe(40 + 12 * 2);
+  });
+});
+
+function cloneMaterials(orderId: string) {
+  return fake
+    .all("order_materials")
+    .filter((line) => line.order_id === orderId)
+    .map((line) => ({ ...line }))
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}

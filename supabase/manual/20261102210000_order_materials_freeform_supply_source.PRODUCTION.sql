@@ -153,6 +153,12 @@ $source_consistency$;
 --    Requested lines only. Never mutates inventory_items, warehouse_stock,
 --    stock_batches, or inventory_movements.
 --    Quantities: positive whole numbers (matches app + INTEGER columns on MAIN).
+--
+--    SECURITY NOTE: Prefer the dedicated secure replacement script
+--    supabase/manual/20261103200000_sync_order_materials_secure.PRODUCTION.sql
+--    after this schema script (eliminates TEMP-table spoofing + pg-safeupdate).
+--    The body below is retained for one-shot freeform schema apply, with
+--    DELETE FROM pg_temp.sync_mat WHERE true for pg-safeupdate compatibility.
 -- ---------------------------------------------------------------------
 create or replace function public.sync_order_materials(p_order_id uuid, p_materials jsonb)
 returns setof public.order_materials
@@ -203,7 +209,8 @@ begin
     supply_source text not null
   ) on commit drop;
 
-  delete from pg_temp.sync_mat;
+  -- pg-safeupdate rejects DELETE without a WHERE clause (error: DELETE requires a WHERE clause).
+  delete from pg_temp.sync_mat where true;
 
   for v_elem in select value from jsonb_array_elements(p_materials)
   loop

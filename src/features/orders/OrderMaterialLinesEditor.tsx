@@ -100,8 +100,10 @@ export default function OrderMaterialLinesEditor({
 
   function adjustQuantity(index: number, delta: number) {
     const current = parseOrderMaterialQuantity(getValues(`materials.${index}.quantity`)) ?? 0;
+    const issuedFloor = Number(getValues(`materials.${index}.quantityIssued`) ?? 0);
+    const minAllowed = Math.max(1, Number.isFinite(issuedFloor) ? issuedFloor : 0);
     const next = current + delta;
-    if (next < 1) return;
+    if (next < minAllowed) return;
     setValue(`materials.${index}.quantity`, next, { shouldDirty: true, shouldValidate: true });
   }
 
@@ -281,6 +283,11 @@ export default function OrderMaterialLinesEditor({
             const parsedQty = parseOrderMaterialQuantity(line?.quantity ?? field.quantity);
             const catalog = isCatalogOrderMaterial(line ?? field);
             const source = resolveMaterialSupplySource(line ?? field);
+            const issuedQty = Number(line?.quantityIssued ?? field.quantityIssued ?? 0);
+            const returnedQty = Number(line?.quantityReturned ?? field.quantityReturned ?? 0);
+            const hasWarehouseHistory = issuedQty > 0 || returnedQty > 0;
+            const freeformIdentityLocked = !catalog && hasWarehouseHistory;
+            const minQuantity = Math.max(1, issuedQty);
             const stock = catalog ? inventoryItems.find((item) => item.id === (line?.inventoryItemId ?? field.inventoryItemId))?.quantity : undefined;
             const quantityError = errors?.[index]?.quantity;
             const quantityInputId = `order-material-qty-${field.id}`;
@@ -295,7 +302,7 @@ export default function OrderMaterialLinesEditor({
               <div key={field.id} className="space-y-2 rounded-md border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
-                    {catalog ? (
+                    {catalog || freeformIdentityLocked ? (
                       <p className="font-medium [overflow-wrap:anywhere]">{line?.itemName ?? field.itemName}</p>
                     ) : (
                       <Controller
@@ -315,7 +322,7 @@ export default function OrderMaterialLinesEditor({
                       />
                     )}
                     <p className="text-[12px] text-muted-foreground">{sourceLabel}</p>
-                    {catalog ? (
+                    {catalog || freeformIdentityLocked ? (
                       <p className="text-[13px] text-muted-foreground">
                         {t("orders.detail.price")}: <span className="tabular-nums">{formatMoney(unitPrice)}</span>
                       </p>
@@ -352,6 +359,9 @@ export default function OrderMaterialLinesEditor({
                         )}
                       />
                     )}
+                    {freeformIdentityLocked ? (
+                      <p className="text-[12px] text-muted-foreground">{t("orders.form.freeformHistoryLocked")}</p>
+                    ) : null}
                     {stock != null && (
                       <p className="text-[13px] text-muted-foreground">
                         {t("orders.form.availableStock")}: <span className="tabular-nums">{stock}</span>
@@ -379,7 +389,8 @@ export default function OrderMaterialLinesEditor({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={disabled}
+                    disabled={disabled || hasWarehouseHistory}
+                    title={hasWarehouseHistory ? (t("orders.form.freeformHistoryLockedRemove") as string) : undefined}
                     onClick={() => remove(index)}
                     aria-label={t("orders.form.removeMaterial", { name: line?.itemName ?? field.itemName })}
                   >
@@ -394,7 +405,7 @@ export default function OrderMaterialLinesEditor({
                       type="button"
                       variant="outline"
                       size="icon-sm"
-                      disabled={disabled || (parsedQty != null && parsedQty <= 1) || parsedQty == null}
+                      disabled={disabled || parsedQty == null || parsedQty <= minQuantity}
                       onClick={() => adjustQuantity(index, -1)}
                       aria-label={t("orders.form.decreaseQuantity", { name: line?.itemName ?? field.itemName })}
                     >
@@ -404,13 +415,19 @@ export default function OrderMaterialLinesEditor({
                       name={`materials.${index}.quantity`}
                       control={control}
                       rules={{
-                        validate: (value) => quantityValidationMessage(value, t),
+                        validate: (value) => {
+                          const base = quantityValidationMessage(value, t);
+                          if (base !== true) return base;
+                          const number = typeof value === "number" ? value : Number(value);
+                          if (number < minQuantity) return t("orders.errors.cannotReduceBelowIssued") as string;
+                          return true;
+                        },
                       }}
                       render={({ field: quantityField }) => (
                         <Input
                           id={quantityInputId}
                           type="number"
-                          min={1}
+                          min={minQuantity}
                           step={1}
                           inputMode="numeric"
                           disabled={disabled}

@@ -216,6 +216,9 @@ export default {
     freeformNamePlaceholder: "e.g. Special gasket",
     freeformNameRequired: "Enter a part name",
     freeformPriceInvalid: "Enter a valid non-negative price",
+    freeformHistoryLocked:
+      "Name, price, and source are locked after this line has been issued or returned. You can still change quantity (not below issued).",
+    freeformHistoryLockedRemove: "Lines with issue or return history cannot be removed from the order.",
     freeformInvalid: "Enter a name, positive whole quantity, and a valid price.",
     oneTimePartPrice: "Sale price",
     customerPartPrice: "Charge (optional, can be 0)",
@@ -387,6 +390,7 @@ export default {
     freeformMaterialsUnsupported:
       "One-time and customer-supplied parts require a database update (nullable order_materials.inventory_item_id and an updated sync_order_materials). Apply supabase/manual/20261102200000_warehouse_integrity_inventory_safety.PRODUCTION.sql. Catalog parts can still be saved.",
     freeformNameRequired: "A part name is required for materials that are not in the catalog.",
+    materialHistoryFrozen: "Name, price, or source cannot change after issue or return activity on this material.",
     cannotReduceBelowIssued: "Cannot reduce or remove a material below the quantity already issued.",
     issueExceedsRemaining: "Cannot issue more than the remaining requested quantity.",
     returnExceedsOutstanding: "Cannot return more than the outstanding issued quantity.",

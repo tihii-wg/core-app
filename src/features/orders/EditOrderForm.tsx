@@ -45,6 +45,16 @@ type EditOrderFormProps = {
   onUpdated: (order: Order) => void;
 };
 
+/** react-hook-form marks field-array dirtiness as nested objects/arrays — treat any nested true as dirty. */
+function isFieldArrayDirty(value: unknown): boolean {
+  if (value === true) return true;
+  if (Array.isArray(value)) return value.some((entry) => isFieldArrayDirty(entry));
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some((entry) => isFieldArrayDirty(entry));
+  }
+  return false;
+}
+
 export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderFormProps) {
   const { t } = useTranslation();
   const { mutateAsync: updateOrder } = useUpdateOrder();
@@ -155,6 +165,11 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           ? buildOrderMileageSnapshot(data.currentMileage, selectedVehicle)
           : null;
 
+      // Only sync service/material lines when the corresponding field arrays were edited.
+      // Omitting them leaves persisted lines untouched (no unnecessary DELETE/RPC work).
+      const servicesDirty = isFieldArrayDirty(dirtyFields.services);
+      const materialsDirty = isFieldArrayDirty(dirtyFields.materials);
+
       // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
       const updatedOrder = await updateOrder({
         orderId: order.id,
@@ -174,8 +189,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         description: data.description,
         assignedEmployeeId: data.assignedEmployeeId,
         deadline: data.deadline,
-        services: data.services ?? [],
-        materials: data.materials,
+        ...(servicesDirty ? { services: data.services ?? [] } : {}),
+        ...(materialsDirty ? { materials: data.materials } : {}),
       });
       onUpdated(updatedOrder);
     } catch {

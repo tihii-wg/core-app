@@ -459,7 +459,8 @@ begin
     quantity numeric(12,2),
     supply_source text not null
   ) on commit drop;
-  delete from pg_temp.sync_mat;
+  -- pg-safeupdate rejects DELETE without a WHERE clause (error: DELETE requires a WHERE clause).
+  delete from pg_temp.sync_mat where true;
 
   for v_elem in select value from jsonb_array_elements(p_materials)
   loop

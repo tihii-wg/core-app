@@ -132,43 +132,100 @@ type SyncMatDesired = {
   supplySource: "catalog" | "one_time" | "customer";
 };
 
-/** Mirrors sync_order_materials: requested lines only — never changes inventory quantity. Supports catalog + freeform. */
+/**
+ * Mirrors the secure sync_order_materials body (JSONB staging, no TEMP tables):
+ * request-only lines; never changes inventory quantity; freeform line_id must
+ * already belong to this order as a freeform row (never converts catalog→freeform).
+ */
+/** Strict optional id: omit/null → null; empty/whitespace/non-string/invalid UUID shape → reject. */
+function parseOptionalSyncId(
+  elem: Record<string, unknown>,
+  key: string,
+  label: string,
+): { ok: true; value: string | null } | { ok: false; error: PgError } {
+  if (!(key in elem) || elem[key] === null) return { ok: true, value: null };
+  const raw = elem[key];
+  if (typeof raw !== "string") return { ok: false, error: error(`Invalid ${label}`, "22P02") };
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: false, error: error(`Invalid ${label}`, "22P02") };
+  // Postgres APPLY uses ::uuid. Fake seed ids (item-a1) are accepted; UUID-shaped strings must be valid.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const parts = trimmed.split("-");
+  const looksLikeUuid =
+    parts.length === 5 &&
+    parts[0]?.length === 8 &&
+    parts[1]?.length === 4 &&
+    parts[2]?.length === 4 &&
+    parts[3]?.length === 4 &&
+    parts[4]?.length === 12;
+  if (looksLikeUuid && !UUID_RE.test(trimmed)) {
+    return { ok: false, error: error(`Invalid ${label}`, "22P02") };
+  }
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(trimmed)) {
+    return { ok: false, error: error(`Invalid ${label}`, "22P02") };
+  }
+  return { ok: true, value: trimmed };
+}
+
 function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): { data: Row[] | null; error: PgError | null } {
-  const orderId = String(args.p_order_id ?? "");
+  const orderId = args.p_order_id == null || args.p_order_id === "" ? "" : String(args.p_order_id);
   const payload = args.p_materials;
   if (!orderId) return { data: null, error: error("order_id is required", "22023") };
-  if (!Array.isArray(payload)) return { data: null, error: error("materials must be a JSON array", "22023") };
+  if (payload == null || !Array.isArray(payload)) {
+    return { data: null, error: error("materials must be a JSON array", "22023") };
+  }
 
   const order = ctx.fake.all("orders").find((row) => row.id === orderId);
   if (!order || !isMember(order.workspace_id, ctx)) {
-    return { data: null, error: error("Order was not found or you do not have permission to change it.") };
+    return { data: null, error: error("Order was not found or you do not have permission to change it.", "42501") };
   }
 
   const desired: SyncMatDesired[] = [];
   const catalogByItem = new Map<string, SyncMatDesired>();
+  const seenFreeformIds = new Set<string>();
 
   for (const raw of payload) {
-    const elem = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
-    const quantity = elem ? roundQty(Number(elem.quantity)) : NaN;
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return { data: null, error: error("Each material entry must be a JSON object", "22023") };
+    }
+    const elem = raw as Record<string, unknown>;
+    if (typeof elem.quantity !== "number" || !Number.isFinite(elem.quantity)) {
+      return { data: null, error: error("Invalid material quantity", "22P02") };
+    }
+    const quantity = parsePositiveIntQty(elem.quantity);
+    if (quantity == null) {
+      if (!Number.isInteger(elem.quantity)) {
+        return { data: null, error: error("Material quantity must be a whole number", "22023") };
+      }
+      if (elem.quantity > 2147483647) {
+        return { data: null, error: error("Material quantity is too large", "22023") };
+      }
       return { data: null, error: error("Material quantity must be greater than 0", "22023") };
     }
 
-    const rawSource = elem && typeof elem.supply_source === "string" ? elem.supply_source : "";
-    const itemIdRaw = elem?.inventory_item_id == null || elem.inventory_item_id === "" ? "" : String(elem.inventory_item_id);
+    if (elem.supply_source != null && typeof elem.supply_source !== "string") {
+      return { data: null, error: error("Invalid supply_source", "22023") };
+    }
+    const rawSource = typeof elem.supply_source === "string" ? elem.supply_source.trim() : "";
+    if (rawSource && rawSource !== "one_time" && rawSource !== "customer" && rawSource !== "catalog") {
+      return { data: null, error: error("Invalid supply_source", "22023") };
+    }
     const supplySource: SyncMatDesired["supplySource"] =
-      rawSource === "one_time" || rawSource === "customer" || rawSource === "catalog"
-        ? rawSource
-        : itemIdRaw
-          ? "catalog"
-          : "one_time";
+      rawSource === "one_time" || rawSource === "customer" || rawSource === "catalog" ? rawSource : "catalog";
+
+    const itemParsed = parseOptionalSyncId(elem, "inventory_item_id", "inventory_item_id");
+    if (!itemParsed.ok) return { data: null, error: itemParsed.error };
+    const itemIdRaw = itemParsed.value;
+
+    const lineParsed = parseOptionalSyncId(elem, "line_id", "line_id");
+    if (!lineParsed.ok) return { data: null, error: lineParsed.error };
+    const lineIdRaw = lineParsed.value;
 
     if (supplySource === "catalog") {
       if (!itemIdRaw) return { data: null, error: error("inventory_item_id is required", "22023") };
-      const existing = catalogByItem.get(itemIdRaw);
-      if (existing) {
-        existing.quantity = roundQty(existing.quantity + quantity);
-        continue;
+      if (lineIdRaw) return { data: null, error: error("Catalog materials must not include line_id", "22023") };
+      if (catalogByItem.has(itemIdRaw)) {
+        return { data: null, error: error("Duplicate catalog inventory_item_id in materials payload", "22023") };
       }
       const line: SyncMatDesired = {
         lineId: null,
@@ -183,17 +240,57 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
       continue;
     }
 
-    const itemName = String(elem?.item_name ?? "").trim();
-    if (!itemName) return { data: null, error: error("item_name is required for non-catalog materials", "22023") };
-    const price = Number(elem?.price ?? 0);
+    if (itemIdRaw) {
+      return { data: null, error: error("Non-catalog materials must not include inventory_item_id", "22023") };
+    }
+    if (typeof elem.item_name !== "string" || !elem.item_name.trim()) {
+      return { data: null, error: error("item_name is required for non-catalog materials", "22023") };
+    }
+    if (elem.price != null && typeof elem.price !== "number") {
+      return { data: null, error: error("Invalid material price", "22P02") };
+    }
+    const price = Number(elem.price ?? 0);
     if (!Number.isFinite(price) || price < 0) {
       return { data: null, error: error("Material price cannot be negative", "22023") };
     }
-    const lineIdRaw = elem?.line_id == null || elem.line_id === "" ? null : String(elem.line_id);
+
+    if (lineIdRaw) {
+      if (seenFreeformIds.has(lineIdRaw)) {
+        return { data: null, error: error("Duplicate freeform line_id in materials payload", "22023") };
+      }
+      seenFreeformIds.add(lineIdRaw);
+      const existingRow = ctx.fake.all("order_materials").find((row) => row.id === lineIdRaw && row.order_id === orderId);
+      if (!existingRow) {
+        return { data: null, error: error("Invalid line_id for this order", "P0001") };
+      }
+      if (existingRow.inventory_item_id != null && existingRow.inventory_item_id !== "") {
+        return { data: null, error: error("Cannot convert a catalog material into a freeform material", "P0001") };
+      }
+      if (String(existingRow.supply_source ?? "") === "catalog") {
+        return { data: null, error: error("Cannot convert a catalog material into a freeform material", "P0001") };
+      }
+      if (!["one_time", "customer"].includes(String(existingRow.supply_source ?? ""))) {
+        return { data: null, error: error("Invalid line_id for this order", "P0001") };
+      }
+      const issued = Number(existingRow.quantity_issued ?? 0);
+      const returned = Number(existingRow.quantity_returned ?? 0);
+      if (issued !== 0 || returned !== 0) {
+        if (elem.item_name.trim() !== String(existingRow.item_name ?? "")) {
+          return { data: null, error: error("Cannot change material name after issue or return activity", "P0001") };
+        }
+        if (Number(price) !== Number(existingRow.price ?? 0)) {
+          return { data: null, error: error("Cannot change material price after issue or return activity", "P0001") };
+        }
+        if (supplySource !== String(existingRow.supply_source)) {
+          return { data: null, error: error("Cannot change material supply source after issue or return activity", "P0001") };
+        }
+      }
+    }
+
     desired.push({
       lineId: lineIdRaw,
       inventoryItemId: null,
-      itemName,
+      itemName: elem.item_name.trim(),
       price,
       quantity,
       supplySource,
@@ -218,7 +315,9 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
     }
   }
 
-  const catalogDesiredQty = new Map(desired.filter((line) => line.supplySource === "catalog" && line.inventoryItemId).map((line) => [line.inventoryItemId!, line.quantity]));
+  const catalogDesiredQty = new Map(
+    desired.filter((line) => line.supplySource === "catalog" && line.inventoryItemId).map((line) => [line.inventoryItemId!, line.quantity]),
+  );
   const freeformKeepIds = new Set(desired.filter((line) => line.supplySource !== "catalog" && line.lineId).map((line) => line.lineId!));
 
   for (const row of ctx.fake.all("order_materials").filter((line) => line.order_id === orderId)) {
@@ -239,7 +338,7 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
     if (next && next.quantity < issued) return fail("Requested quantity cannot be less than already issued quantity");
   }
 
-  // Remove unused zero-issue lines (catalog no longer desired, or freeform without keep id).
+  // Historical policy: retain any row with issue/return history even if no longer requested.
   ctx.fake.tables.order_materials = ctx.fake.all("order_materials").filter((row) => {
     if (row.order_id !== orderId) return true;
     if (Number(row.quantity_issued ?? 0) > 0 || Number(row.quantity_returned ?? 0) > 0) return true;
@@ -251,13 +350,21 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
 
   for (const line of desired) {
     if (line.supplySource === "catalog" && line.inventoryItemId) {
-      const existing = ctx.fake.all("order_materials").find((row) => row.order_id === orderId && row.inventory_item_id === line.inventoryItemId);
+      const matches = ctx.fake
+        .all("order_materials")
+        .filter((row) => row.order_id === orderId && row.inventory_item_id === line.inventoryItemId);
+      if (matches.length > 1) {
+        return fail("Duplicate catalog material rows exist for this order and inventory item; resolve duplicates before syncing");
+      }
+      const existing = matches[0];
       if (existing) {
+        // Catalog name/price snapshots stay frozen; only requested qty + source tag update.
         existing.quantity = line.quantity;
         existing.supply_source = "catalog";
         continue;
       }
-      const catalog = ctx.fake.all("inventory_items").find((row) => row.id === line.inventoryItemId)!;
+      const catalog = ctx.fake.all("inventory_items").find((row) => row.id === line.inventoryItemId && row.workspace_id === order.workspace_id);
+      if (!catalog) return fail("Inventory item is unavailable in this workspace");
       ctx.fake.all("order_materials").push({
         id: crypto.randomUUID(),
         order_id: orderId,
@@ -274,15 +381,22 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
     }
 
     if (line.lineId) {
-      const existing = ctx.fake.all("order_materials").find((row) => row.id === line.lineId && row.order_id === orderId);
-      if (existing) {
-        existing.item_name = line.itemName;
-        existing.price = line.price;
-        existing.quantity = line.quantity;
-        existing.inventory_item_id = null;
-        existing.supply_source = line.supplySource;
-        continue;
-      }
+      const existing = ctx.fake
+        .all("order_materials")
+        .find(
+          (row) =>
+            row.id === line.lineId &&
+            row.order_id === orderId &&
+            (row.inventory_item_id == null || row.inventory_item_id === "") &&
+            ["one_time", "customer"].includes(String(row.supply_source ?? "")),
+        );
+      if (!existing) return fail("Invalid line_id for this order");
+      existing.item_name = line.itemName;
+      existing.price = line.price;
+      existing.quantity = line.quantity;
+      existing.inventory_item_id = null;
+      existing.supply_source = line.supplySource;
+      continue;
     }
 
     ctx.fake.all("order_materials").push({

@@ -225,6 +225,9 @@ const orders: Messages<typeof en> = {
     freeformNamePlaceholder: "например, Специальная прокладка",
     freeformNameRequired: "Укажите название",
     freeformPriceInvalid: "Укажите корректную неотрицательную цену",
+    freeformHistoryLocked:
+      "Название, цена и источник заблокированы после выдачи или возврата. Количество можно менять (не ниже выданного).",
+    freeformHistoryLockedRemove: "Строки с историей выдачи или возврата нельзя удалить из заказа.",
     freeformInvalid: "Укажите название, целое количество больше 0 и корректную цену.",
     oneTimePartPrice: "Цена продажи",
     customerPartPrice: "Сумма (можно 0)",
@@ -396,6 +399,7 @@ const orders: Messages<typeof en> = {
     freeformMaterialsUnsupported:
       "Разовые и клиентские запчасти требуют обновления базы (nullable order_materials.inventory_item_id и обновлённый sync_order_materials). Примените supabase/manual/20261102200000_warehouse_integrity_inventory_safety.PRODUCTION.sql. Позиции из каталога сохраняются как раньше.",
     freeformNameRequired: "Для материалов вне каталога нужно указать название.",
+    materialHistoryFrozen: "Название, цену или источник нельзя менять после выдачи или возврата.",
     cannotReduceBelowIssued: "Нельзя уменьшить или удалить материал ниже уже выданного количества.",
     issueExceedsRemaining: "Нельзя выдать больше оставшегося запрошенного количества.",
     returnExceedsOutstanding: "Нельзя вернуть больше, чем осталось выданным.",

@@ -13,7 +13,7 @@ import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import { assertVehicleAssignable } from "./apiVehicles";
-import { consolidateOrderMaterials } from "../features/inventory/orderMaterialLine";
+import { consolidateOrderMaterials, orderMaterialsMatch } from "../features/inventory/orderMaterialLine";
 import {
   addCalendarDays,
   OPEN_ORDER_STATUSES,
@@ -91,8 +91,15 @@ function materialsSyncError(error: { message?: string; code?: string } | null) {
   if (message.includes("outstanding issued") || message.includes("already issued")) {
     return i18n.t("orders.errors.cannotReduceBelowIssued");
   }
+  if (/Cannot change material (name|price|supply source) after issue or return activity/i.test(message)) {
+    return i18n.t("orders.errors.materialHistoryFrozen");
+  }
   if (message.includes("unavailable") || message.includes("Inventory item")) {
     return i18n.t("orders.errors.invalidMaterial");
+  }
+  // Surface pg-safeupdate failures from sync_order_materials (e.g. unscoped temp-table DELETE) clearly.
+  if (/DELETE requires a WHERE clause/i.test(message)) {
+    return i18n.t("orders.errors.materialsSyncFailed");
   }
   return message || i18n.t("orders.errors.materialsSyncFailed");
 }
@@ -1547,12 +1554,18 @@ export async function updateOrder(
   };
   if (materials !== undefined) {
     const desiredMaterials = consolidateOrderMaterials(materials);
-    if (desiredMaterials.length > 0) {
-      // Non-empty: must sync via RPC. Failure throws — do not treat the update as fully successful.
+    const existingRows = await readExistingMaterials();
+    const existingMapped = mapMaterialLines(existingRows);
+
+    if (orderMaterialsMatch(existingMapped, desiredMaterials)) {
+      // Unchanged materials: do not call sync_order_materials (avoids unnecessary DELETEs).
+      materialLines = existingMapped;
+    } else if (desiredMaterials.length > 0) {
+      // Non-empty change: must sync via RPC. Failure throws — do not treat the update as fully successful.
       const percent = clientDiscountPercent(clientDiscounts, "product_order");
       const productPercent = percent > 0 && orderLineDiscountSupported ? percent : null;
       // Lines already on the order keep their stored discount; the ones the RPC inserts are new.
-      const existingMaterialIds = productPercent !== null ? new Set((await readExistingMaterials()).map((line) => String(line.id))) : new Set<string>();
+      const existingMaterialIds = productPercent !== null ? new Set(existingRows.map((line) => String(line.id))) : new Set<string>();
       materialLines = await syncOrderMaterialsRpc(orderId, desiredMaterials);
       materialsRpcRan = true;
       if (productPercent !== null) {
@@ -1565,15 +1578,12 @@ export async function updateOrder(
           throw stampError;
         }
       }
+    } else if (existingMapped.length > 0) {
+      // Clearing saved lines still requires sync_order_materials; surface RPC errors (no silent success).
+      materialLines = await syncOrderMaterialsRpc(orderId, []);
+      materialsRpcRan = true;
     } else {
-      const existing = await readExistingMaterials();
-      if (existing.length > 0) {
-        // Clearing saved lines still requires sync_order_materials; surface RPC errors (no silent success).
-        materialLines = await syncOrderMaterialsRpc(orderId, []);
-        materialsRpcRan = true;
-      } else {
-        materialLines = [];
-      }
+      materialLines = [];
     }
   } else {
     materialLines = mapMaterialLines(await readExistingMaterials());
@@ -1716,9 +1726,22 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   }
 
   if (removedIds.length > 0) {
-    const { data: deletedLines, error: deleteError } = await supabase.from("order_services").delete().eq("order_id", orderId).in("id", removedIds).select("id");
+    // Always scope DELETE to this order and the explicit line ids (pg-safeupdate rejects filterless DELETE).
+    const scopedIds = [...new Set(removedIds.map((id) => id.trim()).filter(Boolean))];
+    if (scopedIds.length === 0) {
+      throw new Error(orderPermissionMessage());
+    }
+    if (!orderId.trim()) {
+      throw new Error(orderPermissionMessage());
+    }
+    const { data: deletedLines, error: deleteError } = await supabase
+      .from("order_services")
+      .delete()
+      .eq("order_id", orderId)
+      .in("id", scopedIds)
+      .select("id");
     if (deleteError) throw new Error(deleteError.message);
-    if (!deletedLines || deletedLines.length !== removedIds.length) throw new Error(orderPermissionMessage());
+    if (!deletedLines || deletedLines.length !== scopedIds.length) throw new Error(orderPermissionMessage());
   }
 
   // Kind edits on lines that already exist. A missing column silently skips the edit (metadata only).

@@ -4,6 +4,7 @@ import {
   consolidateOrderMaterials,
   freeformOrderMaterial,
   isCatalogOrderMaterial,
+  orderMaterialsMatch,
   resolveMaterialSupplySource,
 } from "./orderMaterialLine";
 
@@ -34,5 +35,13 @@ describe("order material freeform / catalog helpers", () => {
     expect(result).toHaveLength(3);
     expect(result.find((line) => line.inventoryItemId === "i1")?.quantity).toBe(3);
     expect(resolveMaterialSupplySource({ supplySource: "customer" })).toBe("customer");
+  });
+
+  it("detects equivalent material sets for sync-skip", () => {
+    const a = [{ inventoryItemId: "i1", itemName: "A", price: 1, quantity: 2, supplySource: "catalog" as const }];
+    const b = [{ inventoryItemId: "i1", itemName: "Renamed", price: 99, quantity: 2, supplySource: "catalog" as const }];
+    const c = [{ inventoryItemId: "i1", itemName: "A", price: 1, quantity: 3, supplySource: "catalog" as const }];
+    expect(orderMaterialsMatch(a, b)).toBe(true);
+    expect(orderMaterialsMatch(a, c)).toBe(false);
   });
 });

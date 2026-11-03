@@ -222,6 +222,9 @@ const orders: Messages<typeof en> = {
     freeformNamePlaceholder: "ex. Garnitură specială",
     freeformNameRequired: "Introduceți denumirea",
     freeformPriceInvalid: "Introduceți un preț valid (≥ 0)",
+    freeformHistoryLocked:
+      "Denumirea, prețul și sursa sunt blocate după eliberare sau returnare. Cantitatea poate fi modificată (nu sub cantitatea eliberată).",
+    freeformHistoryLockedRemove: "Liniile cu istoric de eliberare sau returnare nu pot fi eliminate din comandă.",
     freeformInvalid: "Introduceți denumire, cantitate întreagă pozitivă și un preț valid.",
     oneTimePartPrice: "Preț de vânzare",
     customerPartPrice: "Taxă (poate fi 0)",
@@ -393,6 +396,7 @@ const orders: Messages<typeof en> = {
     freeformMaterialsUnsupported:
       "Piesele unice și cele de la client necesită o actualizare a bazei de date (order_materials.inventory_item_id nullable și sync_order_materials actualizat). Aplicați supabase/manual/20261102200000_warehouse_integrity_inventory_safety.PRODUCTION.sql. Piesele din catalog se salvează ca înainte.",
     freeformNameRequired: "Denumirea este obligatorie pentru materialele care nu sunt în catalog.",
+    materialHistoryFrozen: "Denumirea, prețul sau sursa nu pot fi schimbate după eliberare sau returnare.",
     cannotReduceBelowIssued: "Nu puteți reduce sau elimina un material sub cantitatea deja eliberată.",
     issueExceedsRemaining: "Nu puteți elibera mai mult decât cantitatea solicitată rămasă.",
     returnExceedsOutstanding: "Nu puteți returna mai mult decât cantitatea eliberată restantă.",

@@ -431,6 +431,7 @@ describe("updateOrder", () => {
   it("deletes a removed saved line, keeps the global service and recalculates the order", async () => {
     await updateOrder({ ...details, services: [savedOilChange, brakeCheck] }, WS.A);
     const brakeLine = linesOf("order-a1").find((line) => line.service_id === "service-a2")!;
+    const beforeDeletes = fake.requests.length;
 
     const order = await updateOrder({ ...details, services: [{ ...brakeCheck, id: String(brakeLine.id) }] }, WS.A);
 
@@ -439,6 +440,12 @@ describe("updateOrder", () => {
     expect(row("orders", "order-a1")).toMatchObject({ total_price: 25, service: "Brake check", service_id: "service-a2" });
     expect(order).toMatchObject({ totalPrice: 25, service: "Brake check", services: [{ ...brakeCheck, id: brakeLine.id }] });
     expect((await getOrders(WS.A)).find((item) => item.id === "order-a1")?.services).toEqual([{ ...brakeCheck, id: brakeLine.id }]);
+
+    const deletes = fake.requests.slice(beforeDeletes).filter((item) => item.table === "order_services" && item.op === "delete");
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]?.filters.some((filter) => filter.startsWith("order_id="))).toBe(true);
+    expect(deletes[0]?.filters.some((filter) => filter.startsWith("id="))).toBe(true);
+    expect(fake.all("order_services").some((line) => line.order_id === "order-c1")).toBe(true);
   });
 
   it("replaces a removed saved line with a new one so the lines match the form exactly", async () => {

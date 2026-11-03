@@ -124,3 +124,26 @@ export function sumOrderMaterialLines(lines: Array<Pick<OrderMaterial, "price" |
     return total + orderLineAmount({ price: line.price, quantity });
   }, 0);
 }
+
+/**
+ * Stable identity for sync-skip comparisons (id / catalog item / freeform name+source+price+qty).
+ * Ignores discount metadata — sync_order_materials does not own discounts.
+ */
+export function orderMaterialsSyncKey(materials: readonly OrderMaterial[]): string {
+  return consolidateOrderMaterials([...materials])
+    .map((line) => {
+      const source = resolveMaterialSupplySource(line);
+      const itemId = line.inventoryItemId?.trim() ?? "";
+      if (source === "catalog" && itemId) {
+        return `catalog:${itemId}:${line.quantity}`;
+      }
+      return `${source}:${line.id ?? ""}:${line.itemName.trim().toLowerCase()}:${Number(line.price) || 0}:${line.quantity}`;
+    })
+    .sort()
+    .join("|");
+}
+
+/** True when desired materials already match the persisted set (no sync_order_materials call needed). */
+export function orderMaterialsMatch(existing: readonly OrderMaterial[], desired: readonly OrderMaterial[]): boolean {
+  return orderMaterialsSyncKey(existing) === orderMaterialsSyncKey(desired);
+}
