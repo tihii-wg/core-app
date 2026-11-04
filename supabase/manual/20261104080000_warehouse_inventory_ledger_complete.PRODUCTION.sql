@@ -537,8 +537,10 @@ revoke all on function public.crm_restore_or_create_batch(uuid, uuid, uuid, nume
 -- New return peel order: LIFO among remaining slices (last issued first),
 -- preserving unit_cost / expires_on / supplier_client_id from the issue slice.
 --
--- Legacy issues/returns without batch provenance contribute nothing here;
--- the caller falls back to a new zero-cost batch (no fabricated history).
+-- Legacy issues/returns without batch provenance contribute nothing here.
+-- Caller (return RPC) distinguishes:
+--   * no issue provenance at all → explicit zero-cost fallback allowed;
+--   * issue provenance exists but peel shortfall → raise (no silent cover-up).
 -- Unattributed prior returns (no batch_id / allocations) reduce remaining
 -- via the same LIFO order so they cannot be ignored.
 --
@@ -1540,6 +1542,18 @@ begin
       hashtext(v_workspace_id::text || chr(31) || v_key)
     );
 
+    -- Key owned by atomic catalog RPCs (warehouse_rpc_idempotency) cannot be
+    -- reused by standalone issue. Nested add_and_issue → issue inserts the
+    -- ledger row only AFTER this call returns, so nested same-txn use is OK.
+    if to_regclass('public.warehouse_rpc_idempotency') is not null
+       and exists (
+         select 1 from public.warehouse_rpc_idempotency r
+         where r.workspace_id = v_workspace_id and r.idempotency_key = v_key
+       ) then
+      raise exception 'Idempotency key was already used with a different warehouse operation'
+        using errcode = '22023';
+    end if;
+
     select count(*)::integer into v_existing_count
     from public.inventory_movements m
     where m.workspace_id = v_workspace_id
@@ -1934,6 +1948,15 @@ begin
       hashtext(v_workspace_id::text || chr(31) || v_key)
     );
 
+    if to_regclass('public.warehouse_rpc_idempotency') is not null
+       and exists (
+         select 1 from public.warehouse_rpc_idempotency r
+         where r.workspace_id = v_workspace_id and r.idempotency_key = v_key
+       ) then
+      raise exception 'Idempotency key was already used with a different warehouse operation'
+        using errcode = '22023';
+    end if;
+
     select count(*)::integer into v_existing_count
     from public.inventory_movements m
     where m.workspace_id = v_workspace_id
@@ -2113,71 +2136,104 @@ begin
       quantity = public.warehouse_stock.quantity + excluded.quantity,
       updated_at = now();
 
-    v_peel := public.crm_peel_return_batch_slices(
-      v_workspace_id, v_line.id, p_warehouse_id, v_qty::numeric
-    );
-    v_alloc := '[]'::jsonb;
-    v_first_batch := null;
-    v_got := 0;
+    -- Provenance policy:
+    --   * If any issue movement for this OM+warehouse has batch_id / batch_allocations,
+    --     peel must cover the full return qty. A shortfall is accounting corruption —
+    --     do NOT invent zero-cost stock to conceal it.
+    --   * If NO issue movement has provenance (legacy path), allow a new zero-cost
+    --     batch for the uncovered remainder.
+    declare
+      v_has_issue_provenance boolean;
+    begin
+      select exists (
+        select 1
+        from public.inventory_movements m
+        where m.workspace_id = v_workspace_id
+          and m.order_material_id = v_line.id
+          and m.movement_type = 'issue'
+          and m.warehouse_id is not distinct from p_warehouse_id
+          and (
+            m.batch_id is not null
+            or (
+              m.batch_allocations is not null
+              and jsonb_typeof(m.batch_allocations) = 'array'
+              and jsonb_array_length(m.batch_allocations) > 0
+            )
+          )
+      ) into v_has_issue_provenance;
 
-    if v_peel is not null and jsonb_typeof(v_peel) = 'array' then
-      for v_slice in select value from jsonb_array_elements(v_peel)
-      loop
-        v_restore_qty := coalesce((v_slice ->> 'quantity')::numeric, 0);
-        if v_restore_qty <= 0 then
-          continue;
+      v_peel := public.crm_peel_return_batch_slices(
+        v_workspace_id, v_line.id, p_warehouse_id, v_qty::numeric
+      );
+      v_alloc := '[]'::jsonb;
+      v_first_batch := null;
+      v_got := 0;
+
+      if v_peel is not null and jsonb_typeof(v_peel) = 'array' then
+        for v_slice in select value from jsonb_array_elements(v_peel)
+        loop
+          v_restore_qty := coalesce((v_slice ->> 'quantity')::numeric, 0);
+          if v_restore_qty <= 0 then
+            continue;
+          end if;
+          begin
+            v_batch_id := (v_slice ->> 'batch_id')::uuid;
+          exception
+            when others then
+              v_batch_id := null;
+          end;
+
+          v_new_batch := public.crm_restore_or_create_batch(
+            v_workspace_id, p_warehouse_id, v_item_id, v_restore_qty,
+            v_batch_id,
+            coalesce((v_slice ->> 'unit_cost')::numeric, 0),
+            nullif(v_slice ->> 'expires_on', '')::date,
+            nullif(v_slice ->> 'supplier_client_id', '')::uuid,
+            null
+          );
+          if v_first_batch is null then
+            v_first_batch := v_new_batch;
+          end if;
+          -- Record SOURCE issued batch_id for peel accounting (not only the
+          -- physical restored row). If restore created a replacement batch,
+          -- attributing the return to the source prevents double-restore of
+          -- the original issued slice on a later partial return.
+          v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
+            'batch_id', coalesce(v_batch_id, v_new_batch),
+            'quantity', v_restore_qty,
+            'unit_cost', coalesce((v_slice ->> 'unit_cost')::numeric, 0),
+            'expires_on', nullif(v_slice ->> 'expires_on', '')::date,
+            'supplier_client_id', nullif(v_slice ->> 'supplier_client_id', '')::uuid
+          ));
+          v_got := v_got + v_restore_qty;
+        end loop;
+      end if;
+
+      v_need := v_qty::numeric - v_got;
+      if v_need > 0 then
+        if v_has_issue_provenance then
+          raise exception
+            'return_batch_provenance_incomplete: issued movements have batch provenance but return could not allocate % unit(s); refusing silent zero-cost stock'
+            , v_need
+            using errcode = 'P0001';
         end if;
-        begin
-          v_batch_id := (v_slice ->> 'batch_id')::uuid;
-        exception
-          when others then
-            v_batch_id := null;
-        end;
-
+        -- Legacy issues without batch provenance: explicit zero-cost fallback.
         v_new_batch := public.crm_restore_or_create_batch(
-          v_workspace_id, p_warehouse_id, v_item_id, v_restore_qty,
-          v_batch_id,
-          coalesce((v_slice ->> 'unit_cost')::numeric, 0),
-          nullif(v_slice ->> 'expires_on', '')::date,
-          nullif(v_slice ->> 'supplier_client_id', '')::uuid,
-          null
+          v_workspace_id, p_warehouse_id, v_item_id, v_need,
+          null, 0, null, null, null
         );
         if v_first_batch is null then
           v_first_batch := v_new_batch;
         end if;
-        -- Record SOURCE issued batch_id for peel accounting (not only the
-        -- physical restored row). If restore created a replacement batch,
-        -- attributing the return to the source prevents double-restore of
-        -- the original issued slice on a later partial return.
         v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
-          'batch_id', coalesce(v_batch_id, v_new_batch),
-          'quantity', v_restore_qty,
-          'unit_cost', coalesce((v_slice ->> 'unit_cost')::numeric, 0),
-          'expires_on', nullif(v_slice ->> 'expires_on', '')::date,
-          'supplier_client_id', nullif(v_slice ->> 'supplier_client_id', '')::uuid
+          'batch_id', v_new_batch,
+          'quantity', v_need,
+          'unit_cost', 0,
+          'expires_on', null,
+          'supplier_client_id', null
         ));
-        v_got := v_got + v_restore_qty;
-      end loop;
-    end if;
-
-    v_need := v_qty::numeric - v_got;
-    if v_need > 0 then
-      -- Fallback: new zero-cost batch for remainder / legacy issues without provenance.
-      v_new_batch := public.crm_restore_or_create_batch(
-        v_workspace_id, p_warehouse_id, v_item_id, v_need,
-        null, 0, null, null, null
-      );
-      if v_first_batch is null then
-        v_first_batch := v_new_batch;
       end if;
-      v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
-        'batch_id', v_new_batch,
-        'quantity', v_need,
-        'unit_cost', 0,
-        'expires_on', null,
-        'supplier_client_id', null
-      ));
-    end if;
+    end;
 
     insert into public.inventory_movements (
       workspace_id, inventory_item_id, order_id, order_material_id,
@@ -2294,15 +2350,16 @@ begin
     raise exception 'Inventory item is unavailable in this workspace' using errcode = 'P0001';
   end if;
 
-  v_price := coalesce(p_price, v_item.selling_price, 0);
+  -- Normalize effective price before fingerprinting (defaults applied).
+  v_price := round(coalesce(p_price, v_item.selling_price, 0)::numeric, 2);
   v_key := nullif(btrim(coalesce(p_idempotency_key, '')), '');
-  -- Fingerprint includes logical request fields (qty included) so same key +
-  -- different quantity/order/item/warehouse conflicts explicitly.
+  -- Fingerprint: order, warehouse, item, quantity, and normalized effective price.
   v_fingerprint := 'add_and_issue'
     || '|order=' || p_order_id::text
     || '|wh=' || p_warehouse_id::text
     || '|item=' || p_inventory_item_id::text
-    || '|qty=' || p_quantity::text;
+    || '|qty=' || p_quantity::text
+    || '|price=' || v_price::text;
 
   if v_key is not null then
     perform pg_advisory_xact_lock(
@@ -2325,7 +2382,9 @@ begin
       return v_prior.result;
     end if;
 
-    -- Also reject keys already consumed by a non-atomic warehouse movement.
+    -- Reject keys already used by standalone issue/return movements, or by the
+    -- other atomic RPC. Nested issue called below inserts movements with this
+    -- same key only after this check passes (first execution).
     if exists (
       select 1 from public.inventory_movements m
       where m.workspace_id = v_workspace_id and m.idempotency_key = v_key
@@ -2347,6 +2406,13 @@ begin
     if coalesce(v_line.supply_source, 'catalog') is distinct from 'catalog' then
       raise exception 'Existing order material is not a catalog line' using errcode = 'P0001';
     end if;
+    -- Reject warehouse mismatch: never issue from WH-B while row is bound to WH-A.
+    if v_line.warehouse_id is not null
+       and v_line.warehouse_id is distinct from p_warehouse_id then
+      raise exception
+        'Order material is assigned to a different warehouse; refuse cross-warehouse issue'
+        using errcode = '22023';
+    end if;
     v_outstanding := coalesce(v_line.quantity_issued, 0) - coalesce(v_line.quantity_returned, 0);
     if v_outstanding < 0 then
       raise exception 'order material issued/returned counters are inconsistent' using errcode = 'P0001';
@@ -2357,7 +2423,7 @@ begin
 
     update public.order_materials
     set quantity = p_quantity,
-        price = coalesce(v_price, price),
+        price = v_price,
         warehouse_id = coalesce(warehouse_id, p_warehouse_id),
         item_name = coalesce(nullif(btrim(item_name), ''), v_item.name),
         supply_source = 'catalog'
@@ -2466,6 +2532,7 @@ begin
   end if;
 
   v_key := nullif(btrim(coalesce(p_idempotency_key, '')), '');
+  -- Fingerprint covers all request fields for this RPC (no price arg).
   v_fingerprint := 'set_qty_issue'
     || '|order=' || p_order_id::text
     || '|om=' || p_order_material_id::text
@@ -2518,6 +2585,12 @@ begin
   end if;
   if v_line.inventory_item_id is null then
     raise exception 'Catalog order material requires inventory_item_id' using errcode = '22023';
+  end if;
+  if v_line.warehouse_id is not null
+     and v_line.warehouse_id is distinct from p_warehouse_id then
+    raise exception
+      'Order material is assigned to a different warehouse; refuse cross-warehouse issue'
+      using errcode = '22023';
   end if;
 
   v_outstanding := coalesce(v_line.quantity_issued, 0) - coalesce(v_line.quantity_returned, 0);
@@ -2577,7 +2650,7 @@ grant execute on function public.set_order_catalog_material_quantity_with_issue(
   to authenticated, service_role;
 
 -- ---------------------------------------------------------------------
--- 10. Post-checks + PostgREST notify
+-- 10. Post-checks (FAIL aborts transaction) + PostgREST notify
 -- ---------------------------------------------------------------------
 do $postcheck$
 declare
@@ -2585,82 +2658,120 @@ declare
   v_hash_after text;
   v_oid oid;
   v_proc oid;
+  v_rls boolean;
+  v_pass int := 0;
 begin
+  -- A) sync_order_materials unchanged
   v_oid := to_regprocedure('public.sync_order_materials(uuid,jsonb)');
   if v_oid is null then
-    raise exception 'Post-check: sync_order_materials(uuid,jsonb) missing';
+    raise exception 'Post-check FAIL: sync_order_materials(uuid,jsonb) missing';
   end if;
   v_hash_after := md5(pg_get_functiondef(v_oid));
   if v_hash_before is distinct from v_hash_after then
-    raise exception 'Post-check FAILED: sync_order_materials definition changed (forbidden)';
+    raise exception 'Post-check FAIL: sync_order_materials definition changed (forbidden)';
   end if;
+  raise notice 'PASS: sync_order_materials unchanged (md5=%)', v_hash_after;
+  v_pass := v_pass + 1;
 
+  -- B) schema columns / tables
   if not exists (
     select 1 from information_schema.columns
     where table_schema='public' and table_name='inventory_movements' and column_name='batch_allocations'
   ) then
-    raise exception 'Post-check: inventory_movements.batch_allocations missing';
+    raise exception 'Post-check FAIL: inventory_movements.batch_allocations missing';
   end if;
-
   if to_regclass('public.warehouse_rpc_idempotency') is null then
-    raise exception 'Post-check: warehouse_rpc_idempotency table missing';
+    raise exception 'Post-check FAIL: warehouse_rpc_idempotency table missing';
   end if;
+  raise notice 'PASS: batch_allocations + warehouse_rpc_idempotency present';
+  v_pass := v_pass + 1;
 
+  -- C) constraints
   if not exists (
     select 1 from pg_constraint where conname = 'order_materials_outstanding_vs_requested_check'
   ) then
-    raise exception 'Post-check: order_materials_outstanding_vs_requested_check missing';
+    raise exception 'Post-check FAIL: order_materials_outstanding_vs_requested_check missing';
   end if;
   if exists (
     select 1 from pg_constraint where conname = 'order_materials_issued_vs_requested_check'
   ) then
-    raise exception 'Post-check: legacy order_materials_issued_vs_requested_check still present';
+    raise exception 'Post-check FAIL: legacy order_materials_issued_vs_requested_check still present';
   end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'warehouse_stock_quantity_nonnegative'
+  ) then
+    raise exception 'Post-check FAIL: warehouse_stock_quantity_nonnegative missing';
+  end if;
+  raise notice 'PASS: outstanding + non-negative constraints';
+  v_pass := v_pass + 1;
 
+  -- D) required RPCs + SECURITY DEFINER
   if to_regprocedure('public.crm_post_goods_receipt(uuid)') is null
      or to_regprocedure('public.crm_post_stock_transfer(uuid)') is null
      or to_regprocedure('public.crm_post_write_off(uuid)') is null
-     or (
-          to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)') is null
-          and to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)') is null
-        )
-     or (
-          to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)') is null
-          and to_regprocedure('public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)') is null
-        )
-     or (
-          to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)') is null
-          and to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)') is null
-        )
-     or (
-          to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)') is null
-          and to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid, uuid, uuid, integer, text)') is null
-        )
+     or coalesce(
+          to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)'),
+          to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)')
+        ) is null
+     or coalesce(
+          to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)'),
+          to_regprocedure('public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)')
+        ) is null
+     or coalesce(
+          to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)'),
+          to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)')
+        ) is null
+     or coalesce(
+          to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'),
+          to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid, uuid, uuid, integer, text)')
+        ) is null
+     or coalesce(
+          to_regprocedure('public.crm_consume_batches_fifo(uuid,uuid,uuid,numeric)'),
+          to_regprocedure('public.crm_consume_batches_fifo(uuid, uuid, uuid, numeric)')
+        ) is null
+     or coalesce(
+          to_regprocedure('public.crm_peel_return_batch_slices(uuid,uuid,uuid,numeric)'),
+          to_regprocedure('public.crm_peel_return_batch_slices(uuid, uuid, uuid, numeric)')
+        ) is null
+     or coalesce(
+          to_regprocedure('public.crm_restore_or_create_batch(uuid,uuid,uuid,numeric,uuid,numeric,date,uuid,uuid)'),
+          to_regprocedure('public.crm_restore_or_create_batch(uuid, uuid, uuid, numeric, uuid, numeric, date, uuid, uuid)')
+        ) is null
   then
-    raise exception 'Post-check: one or more required function signatures missing';
+    raise exception 'Post-check FAIL: one or more required function signatures missing';
   end if;
 
-  v_proc := to_regprocedure('public.crm_post_goods_receipt(uuid)');
-  if v_proc is null or not (select p.prosecdef from pg_proc p where p.oid = v_proc) then
-    raise exception 'Post-check: crm_post_goods_receipt must be SECURITY DEFINER';
-  end if;
+  foreach v_proc in array array[
+    to_regprocedure('public.crm_post_goods_receipt(uuid)'),
+    coalesce(
+      to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)'),
+      to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)')
+    ),
+    coalesce(
+      to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)'),
+      to_regprocedure('public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)')
+    ),
+    coalesce(
+      to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)'),
+      to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)')
+    ),
+    coalesce(
+      to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'),
+      to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid, uuid, uuid, integer, text)')
+    )
+  ]
+  loop
+    if v_proc is null or not (select p.prosecdef from pg_proc p where p.oid = v_proc) then
+      raise exception 'Post-check FAIL: required RPC missing SECURITY DEFINER (%)', v_proc;
+    end if;
+    if (select pg_get_function_identity_arguments(v_proc)) is null then
+      raise exception 'Post-check FAIL: cannot resolve identity args for %', v_proc;
+    end if;
+  end loop;
+  raise notice 'PASS: required warehouse RPCs present + SECURITY DEFINER';
+  v_pass := v_pass + 1;
 
-  v_proc := coalesce(
-    to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)'),
-    to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)')
-  );
-  if v_proc is null or not (select p.prosecdef from pg_proc p where p.oid = v_proc) then
-    raise exception 'Post-check: issue_order_materials_from_warehouse must be SECURITY DEFINER';
-  end if;
-
-  v_proc := coalesce(
-    to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)'),
-    to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)')
-  );
-  if v_proc is null or not (select p.prosecdef from pg_proc p where p.oid = v_proc) then
-    raise exception 'Post-check: add_and_issue_order_catalog_material must be SECURITY DEFINER';
-  end if;
-
+  -- E) triggers
   if not exists (
     select 1 from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
@@ -2668,9 +2779,8 @@ begin
     where n.nspname='public' and c.relname='warehouses'
       and t.tgname='crm_prevent_hard_delete_warehouse' and not t.tgisinternal
   ) then
-    raise exception 'Post-check: warehouse hard-delete trigger missing';
+    raise exception 'Post-check FAIL: warehouse hard-delete trigger missing';
   end if;
-
   if not exists (
     select 1 from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
@@ -2678,35 +2788,39 @@ begin
     where n.nspname='public' and c.relname='inventory_items'
       and t.tgname='crm_inventory_item_create_warehouse_gate' and not t.tgisinternal
   ) then
-    raise exception 'Post-check: inventory item create warehouse gate missing';
+    raise exception 'Post-check FAIL: inventory item create warehouse gate missing';
   end if;
+  raise notice 'PASS: warehouse lifecycle + material create triggers';
+  v_pass := v_pass + 1;
 
-  -- Legacy EXECUTE revoked from authenticated when functions exist
-  if to_regprocedure('public.issue_order_materials(uuid,jsonb,text)') is not null
-     or to_regprocedure('public.issue_order_materials(uuid, jsonb, text)') is not null then
-    if has_function_privilege(
-         'authenticated',
-         coalesce(
-           to_regprocedure('public.issue_order_materials(uuid,jsonb,text)'),
-           to_regprocedure('public.issue_order_materials(uuid, jsonb, text)')
-         ),
-         'execute'
-       ) then
-      raise exception 'Post-check: authenticated still has EXECUTE on legacy issue_order_materials';
-    end if;
+  -- F) grants / revokes
+  if coalesce(
+       to_regprocedure('public.issue_order_materials(uuid,jsonb,text)'),
+       to_regprocedure('public.issue_order_materials(uuid, jsonb, text)')
+     ) is not null
+     and has_function_privilege(
+           'authenticated',
+           coalesce(
+             to_regprocedure('public.issue_order_materials(uuid,jsonb,text)'),
+             to_regprocedure('public.issue_order_materials(uuid, jsonb, text)')
+           ),
+           'execute'
+         ) then
+    raise exception 'Post-check FAIL: authenticated still has EXECUTE on legacy issue_order_materials';
   end if;
-  if to_regprocedure('public.return_order_materials(uuid,jsonb,text,text)') is not null
-     or to_regprocedure('public.return_order_materials(uuid, jsonb, text, text)') is not null then
-    if has_function_privilege(
-         'authenticated',
-         coalesce(
-           to_regprocedure('public.return_order_materials(uuid,jsonb,text,text)'),
-           to_regprocedure('public.return_order_materials(uuid, jsonb, text, text)')
-         ),
-         'execute'
-       ) then
-      raise exception 'Post-check: authenticated still has EXECUTE on legacy return_order_materials';
-    end if;
+  if coalesce(
+       to_regprocedure('public.return_order_materials(uuid,jsonb,text,text)'),
+       to_regprocedure('public.return_order_materials(uuid, jsonb, text, text)')
+     ) is not null
+     and has_function_privilege(
+           'authenticated',
+           coalesce(
+             to_regprocedure('public.return_order_materials(uuid,jsonb,text,text)'),
+             to_regprocedure('public.return_order_materials(uuid, jsonb, text, text)')
+           ),
+           'execute'
+         ) then
+    raise exception 'Post-check FAIL: authenticated still has EXECUTE on legacy return_order_materials';
   end if;
 
   if not has_function_privilege(
@@ -2717,9 +2831,8 @@ begin
     ),
     'execute'
   ) then
-    raise exception 'Post-check: authenticated missing EXECUTE on add_and_issue_order_catalog_material';
+    raise exception 'Post-check FAIL: authenticated missing EXECUTE on add_and_issue_order_catalog_material';
   end if;
-
   if not has_function_privilege(
     'authenticated',
     coalesce(
@@ -2728,8 +2841,29 @@ begin
     ),
     'execute'
   ) then
-    raise exception 'Post-check: authenticated missing EXECUTE on set_order_catalog_material_quantity_with_issue';
+    raise exception 'Post-check FAIL: authenticated missing EXECUTE on set_order_catalog_material_quantity_with_issue';
   end if;
+  raise notice 'PASS: EXECUTE grants/revokes';
+  v_pass := v_pass + 1;
+
+  -- G) idempotency table protection
+  select c.relrowsecurity into v_rls
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'warehouse_rpc_idempotency';
+  if not coalesce(v_rls, false) then
+    raise exception 'Post-check FAIL: warehouse_rpc_idempotency RLS not enabled';
+  end if;
+  if has_table_privilege('authenticated', 'public.warehouse_rpc_idempotency', 'insert')
+     or has_table_privilege('authenticated', 'public.warehouse_rpc_idempotency', 'update')
+     or has_table_privilege('authenticated', 'public.warehouse_rpc_idempotency', 'delete')
+     or has_table_privilege('anon', 'public.warehouse_rpc_idempotency', 'select') then
+    raise exception 'Post-check FAIL: warehouse_rpc_idempotency exposed to clients';
+  end if;
+  raise notice 'PASS: warehouse_rpc_idempotency RLS + no client write/select';
+  v_pass := v_pass + 1;
+
+  raise notice 'POST-CHECK SUMMARY: % checks PASS', v_pass;
 end
 $postcheck$;
 
@@ -2738,9 +2872,55 @@ notify pgrst, 'reload schema';
 commit;
 
 -- =====================================================================
+-- READ-ONLY DIAGNOSTICS (run separately after APPLY; never mutates)
+-- Reports PASS/FAIL style counts. Safe for MAIN review.
+-- =====================================================================
+--
+-- -- A) Stock consistency: warehouse_stock sum vs inventory_items.quantity
+-- select
+--   case when count(*) = 0 then 'PASS' else 'FAIL' end as verdict,
+--   count(*) as mismatched_items
+-- from public.inventory_items i
+-- left join (
+--   select workspace_id, inventory_item_id, sum(quantity) as wh_qty
+--   from public.warehouse_stock
+--   group by 1, 2
+-- ) w on w.workspace_id = i.workspace_id and w.inventory_item_id = i.id
+-- where coalesce(w.wh_qty, 0) is distinct from coalesce(i.quantity, 0);
+--
+-- -- B) Batch quantity_left never negative; never above quantity_received
+-- select
+--   case when count(*) = 0 then 'PASS' else 'FAIL' end as verdict,
+--   count(*) as bad_batches
+-- from public.stock_batches
+-- where quantity_left < 0
+--    or quantity_left > quantity_received;
+--
+-- -- C) Order material outstanding never exceeds requested
+-- select
+--   case when count(*) = 0 then 'PASS' else 'FAIL' end as verdict,
+--   count(*) as bad_order_materials
+-- from public.order_materials
+-- where (coalesce(quantity_issued,0) - coalesce(quantity_returned,0)) > quantity
+--    or coalesce(quantity_returned,0) > coalesce(quantity_issued,0);
+--
+-- -- D) Movement qty always positive
+-- select
+--   case when count(*) = 0 then 'PASS' else 'FAIL' end as verdict,
+--   count(*) as bad_movements
+-- from public.inventory_movements
+-- where quantity is null or quantity <= 0;
+--
+-- -- E) sync_order_materials still present (definition not inspected here)
+-- select
+--   case when to_regprocedure('public.sync_order_materials(uuid,jsonb)') is not null
+--        then 'PASS' else 'FAIL' end as verdict;
+--
+-- =====================================================================
 -- Manual APPLY checklist (owner):
 --   1) Open Supabase SQL Editor on MAIN (pundggjzzaqzbvykbxvo)
---   2) Paste this entire file and run once
+--   2) Paste this entire APPLY transaction (through COMMIT) and run once
 --   3) Confirm COMMIT succeeded (no Preflight/Post-check exception)
---   4) Smoke: post receipt → transfer → write-off; issue/return; add_and_issue
+--   4) Optionally run the READ-ONLY DIAGNOSTICS queries above
+--   5) Smoke: post receipt → transfer → write-off; issue/return; add_and_issue
 -- =====================================================================
