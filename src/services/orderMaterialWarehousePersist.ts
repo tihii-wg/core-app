@@ -34,10 +34,6 @@ function catalogKey(line: OrderMaterial): string {
   return line.inventoryItemId?.trim() ?? "";
 }
 
-function outstandingIssued(line: OrderMaterial): number {
-  return Math.max(0, Number(line.quantityIssued ?? 0) - Number(line.quantityReturned ?? 0));
-}
-
 type IssuedForCompensation = {
   inventoryItemId: string;
   warehouseId: string;

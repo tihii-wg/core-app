@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createOrder, getOrders, updateOrder, updateOrderStatus } from "./apiOrders";
+import { cancelOrder, createOrder, getOrders, updateOrder, updateOrderStatus } from "./apiOrders";
 import { createInvoiceFromOrder } from "./apiInvoices";
 import { issueOrderMaterials, returnOrderMaterials } from "./apiWarehouse";
 import { fake } from "../tests/fakeSupabase";
@@ -194,7 +194,19 @@ describe("order materials (warehouse-first immediate issue)", () => {
     );
     const stock = Number(row("inventory_items", "item-a1")?.quantity);
 
-    await updateOrderStatus(String(created.id), "cancelled", WS.A);
+    // Ordinary status writes cannot cancel — use the protected cancel_order RPC (no inventory side effects).
+    fake.rpcs.cancel_order = (args) => {
+      const orderId = String(args.p_order_id ?? "");
+      const order = row("orders", orderId);
+      if (!order || order.workspace_id !== args.p_workspace_id) {
+        return { data: null, error: { message: "order_lifecycle:order_not_found", code: "P0002" } };
+      }
+      order.status = "cancelled";
+      return { data: { ok: true, idempotent: false, closed_at: null }, error: null };
+    };
+
+    await cancelOrder(String(created.id), WS.A);
+    expect(row("orders", String(created.id))?.status).toBe("cancelled");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(stock);
 
     await updateOrderStatus(String(created.id), "in-progress", WS.A);
@@ -523,7 +535,7 @@ describe("warehouse issue and return", () => {
     const order = await orderWithMaterials(5);
     const before = Number(row("inventory_items", "item-a1")?.quantity);
 
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3, warehouseId: WH}], "issue-1");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3 }], "issue-1");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before - 3);
     const line = fake.all("order_materials").find((row) => row.order_id === order)!;
     expect(Number(line.quantity_issued)).toBe(3);
@@ -534,11 +546,11 @@ describe("warehouse issue and return", () => {
     const order = await orderWithMaterials(5);
     const before = Number(row("inventory_items", "item-a1")?.quantity);
 
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3, warehouseId: WH}], "issue-a");
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "issue-b");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3 }], "issue-a");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "issue-b");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before - 5);
 
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "issue-c")).rejects.toThrow(/remaining requested/i);
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "issue-c")).rejects.toThrow(/remaining requested/i);
   });
 
   it("fails issuance when stock is insufficient with no partial database changes", async () => {
@@ -547,7 +559,7 @@ describe("warehouse issue and return", () => {
     const materialsBefore = structuredClone(fake.all("order_materials"));
     const movementsBefore = fake.all("inventory_movements").length;
 
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "issue-fail")).rejects.toThrow(/stock/i);
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "issue-fail")).rejects.toThrow(/stock/i);
 
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(1);
     expect(fake.all("order_materials")).toEqual(materialsBefore);
@@ -556,10 +568,10 @@ describe("warehouse issue and return", () => {
 
   it("successful return increases stock by exactly the accepted quantity", async () => {
     const order = await orderWithMaterials(5);
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 5, warehouseId: WH}], "issue-all");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 5 }], "issue-all");
     const afterIssue = Number(row("inventory_items", "item-a1")?.quantity);
 
-    await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "leftover", "return-1");
+    await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "leftover", "return-1");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(afterIssue + 1);
     const line = fake.all("order_materials").find((row) => row.order_id === order)!;
     expect(Number(line.quantity_returned)).toBe(1);
@@ -567,10 +579,10 @@ describe("warehouse issue and return", () => {
 
   it("returns cannot exceed issued quantities minus previous returns", async () => {
     const order = await orderWithMaterials(5);
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3, warehouseId: WH}], "issue-3");
-    await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], undefined, "return-1");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3 }], "issue-3");
+    await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], undefined, "return-1");
 
-    await expect(returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3, warehouseId: WH}], undefined, "return-over")).rejects.toThrow(
+    await expect(returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 3 }], undefined, "return-over")).rejects.toThrow(
       /outstanding issued/i,
     );
   });
@@ -579,8 +591,8 @@ describe("warehouse issue and return", () => {
     const order = await orderWithMaterials(5);
     const before = Number(row("inventory_items", "item-a1")?.quantity);
 
-    const first = await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "same-key");
-    const second = await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "same-key");
+    const first = await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "same-key");
+    const second = await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "same-key");
 
     expect(second.map((m) => m.id)).toEqual(first.map((m) => m.id));
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before - 2);
@@ -591,8 +603,8 @@ describe("warehouse issue and return", () => {
     const order = await orderWithMaterials(5);
     const before = Number(row("inventory_items", "item-a1")?.quantity);
 
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "reuse-key");
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "reuse-key")).rejects.toThrow(/idempotency key/i);
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "reuse-key");
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "reuse-key")).rejects.toThrow(/idempotency key/i);
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before - 2);
     expect(fake.all("inventory_movements").filter((row) => row.idempotency_key === "reuse-key")).toHaveLength(1);
   });
@@ -600,17 +612,17 @@ describe("warehouse issue and return", () => {
   it("rejects idempotency key reuse across orders in the same workspace", async () => {
     const orderA = await orderWithMaterials(2);
     const orderB = await orderWithMaterials(2);
-    await issueOrderMaterials(orderA, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "shared-key");
-    await expect(issueOrderMaterials(orderB, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "shared-key")).rejects.toThrow(/idempotency key/i);
+    await issueOrderMaterials(orderA, [{ inventoryItemId: "item-a1", quantity: 1 }], "shared-key");
+    await expect(issueOrderMaterials(orderB, [{ inventoryItemId: "item-a1", quantity: 1 }], "shared-key")).rejects.toThrow(/idempotency key/i);
   });
 
   it("exact return retries match reason; different reason is rejected", async () => {
     const order = await orderWithMaterials(3);
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "issue-ret");
-    const first = await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "leftover", "ret-key");
-    const second = await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "leftover", "ret-key");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "issue-ret");
+    const first = await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "leftover", "ret-key");
+    const second = await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "leftover", "ret-key");
     expect(second.map((m) => m.id)).toEqual(first.map((m) => m.id));
-    await expect(returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "other", "ret-key")).rejects.toThrow(/idempotency key/i);
+    await expect(returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "other", "ret-key")).rejects.toThrow(/idempotency key/i);
   });
 
   it("rejects duplicate inventory_item_id values in one payload", async () => {
@@ -620,8 +632,8 @@ describe("warehouse issue and return", () => {
       issueOrderMaterials(
         order,
         [
-          { inventoryItemId: "item-a1", quantity: 1, warehouseId: WH},
-          { inventoryItemId: "item-a1", quantity: 1, warehouseId: WH},
+          { inventoryItemId: "item-a1", quantity: 1 },
+          { inventoryItemId: "item-a1", quantity: 1 },
         ],
         "dup-lines",
       ),
@@ -637,7 +649,7 @@ describe("warehouse issue and return", () => {
     const beforeA = Number(row("inventory_items", "item-a1")?.quantity);
     const beforeB = Number(row("inventory_items", "item-b1")?.quantity);
 
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-b1", quantity: 1, warehouseId: WH}], "xws")).rejects.toThrow(/unavailable/i);
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-b1", quantity: 1 }], "xws")).rejects.toThrow(/unavailable/i);
 
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeA);
     expect(Number(row("inventory_items", "item-b1")?.quantity)).toBe(beforeB);
@@ -649,8 +661,8 @@ describe("warehouse issue and return", () => {
     row("inventory_items", "item-a1")!.quantity = 1;
 
     const results = await Promise.allSettled([
-      issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "c1"),
-      issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "c2"),
+      issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "c1"),
+      issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "c2"),
     ]);
 
     const fulfilled = results.filter((result) => result.status === "fulfilled");
@@ -662,11 +674,11 @@ describe("warehouse issue and return", () => {
 
   it("concurrent returns cannot over-return material", async () => {
     const order = await orderWithMaterials(2);
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "issue-once");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "issue-once");
 
     const results = await Promise.allSettled([
-      returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], undefined, "r1"),
-      returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], undefined, "r2"),
+      returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], undefined, "r1"),
+      returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], undefined, "r2"),
     ]);
 
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
@@ -679,27 +691,27 @@ describe("warehouse issue and return", () => {
     const order = await orderWithMaterials(2);
     fake.signInAs(USERS.member.id);
 
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "m1")).rejects.toThrow(/permission/i);
-    await expect(returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], undefined, "m2")).rejects.toThrow(/permission/i);
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "m1")).rejects.toThrow(/permission/i);
+    await expect(returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], undefined, "m2")).rejects.toThrow(/permission/i);
   });
 
   it("rejects cross-workspace issuance", async () => {
     const order = await orderWithMaterials(1);
     fake.signInAs(USERS.outsider.id);
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1, warehouseId: WH}], "x1")).rejects.toThrow(/permission/i);
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1 }], "x1")).rejects.toThrow(/permission/i);
   });
 
   it("order deletion does not restore issued stock and is blocked while outstanding", async () => {
     const order = await orderWithMaterials(2);
     const before = Number(row("inventory_items", "item-a1")?.quantity);
-    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], "issue-del");
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], "issue-del");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before - 2);
 
     const blocked = await fake.client.from("orders").delete().eq("id", order);
     expect(blocked.error?.message).toMatch(/outstanding issued/i);
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before - 2);
 
-    await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2, warehouseId: WH}], undefined, "return-all");
+    await returnOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 2 }], undefined, "return-all");
     const deleted = await fake.client.from("orders").delete().eq("id", order);
     expect(deleted.error).toBeNull();
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(before);
@@ -734,9 +746,9 @@ describe("warehouse issue and return", () => {
 
   it("rejects invalid payloads", async () => {
     const order = await orderWithMaterials(2);
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 0, warehouseId: WH}], "bad-0")).rejects.toThrow();
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1.5, warehouseId: WH}], "bad-frac")).rejects.toThrow();
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "not-a-uuid", quantity: 1, warehouseId: WH}], "bad-id")).rejects.toThrow();
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 0 }], "bad-0")).rejects.toThrow();
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1.5 }], "bad-frac")).rejects.toThrow();
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "not-a-uuid", quantity: 1 }], "bad-id")).rejects.toThrow();
   });
 });
 
