@@ -367,6 +367,7 @@ const settings: Messages<typeof en> = {
       lifecycleRpcRequired: "Сначала примените SQL жизненного цикла заказов на MAIN.",
       replaceTargetInvalid: "Выберите активный обычный статус для замены",
       replaceTargetProtected: "Нельзя заменить на статус Закрытия или Отмены",
+      replaceSourceProtected: "Сначала снимите назначение Закрытия/Отмены, затем заменяйте статус",
       duplicateSemantic: "Допускается только один активный статус Закрытия и один Отмены",
     },
   },

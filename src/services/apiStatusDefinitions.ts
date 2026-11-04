@@ -1,4 +1,5 @@
 import i18n from "../i18n";
+import { allocateStatusCode } from "../features/statuses/statusCodes";
 import { isMissingTableError } from "./missingTable";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
@@ -239,14 +240,28 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
   if (!name) throw new Error(i18n.t("settings.statuses.errors.nameRequired"));
   const systemStatus = input.systemStatus?.trim() || null;
   const color = input.color?.trim() || null;
+  const entity = input.entity ?? "order";
+
+  // Pre-allocate a unique code among siblings (system_status is NOT unique).
+  const siblings = await getStatusDefinitions(resolved, entity);
+  const taken = new Set(siblings.map((s) => s.code).filter((c): c is string => Boolean(c)));
+  const provisionalId = crypto.randomUUID();
+  const code = allocateStatusCode({
+    statusId: provisionalId,
+    systemStatus,
+    existingCode: null,
+    takenCodes: taken,
+  });
 
   const payload: Record<string, unknown> = {
+    id: provisionalId,
     workspace_id: resolved,
-    entity: input.entity ?? "order",
+    entity,
     name,
     color,
     status_group: input.statusGroup,
     system_status: systemStatus,
+    code,
     sort_order: Number.isFinite(input.sortOrder) ? Math.trunc(input.sortOrder as number) : 0,
     semantic_action: "normal",
   };
@@ -254,6 +269,8 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
   let { data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumns).single();
   if (error && isMissingLifecycleColumn(error)) {
     delete payload.semantic_action;
+    delete payload.code;
+    delete payload.id;
     ({ data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumnsLegacy).single());
   }
 
@@ -470,8 +487,9 @@ export function normalActiveOrderStatuses(definitions: readonly StatusDefinition
 function mapLifecycleDbError(message: string) {
   if (/forbidden/i.test(message)) return i18n.t("settings.statuses.errors.forbidden");
   if (/status_not_found/i.test(message)) return i18n.t("settings.statuses.errors.notFound");
-  if (/replace_target/i.test(message)) return i18n.t("settings.statuses.errors.replaceTargetInvalid");
   if (/replace_target_protected/i.test(message)) return i18n.t("settings.statuses.errors.replaceTargetProtected");
+  if (/replace_source_has_semantic/i.test(message)) return i18n.t("settings.statuses.errors.replaceSourceProtected");
+  if (/replace_target|replace_same/i.test(message)) return i18n.t("settings.statuses.errors.replaceTargetInvalid");
   if (/23505|duplicate/i.test(message)) return i18n.t("settings.statuses.errors.duplicateSemantic");
   return message;
 }

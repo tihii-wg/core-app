@@ -118,4 +118,22 @@ describe("orderLifecycle", () => {
       isNormalWorkflowStatus(definition({ id: "x", name: "Закрыт", semanticAction: "normal" })),
     ).toBe(true);
   });
+
+  it("zero-value orders have no remaining even without ledger rows", () => {
+    const balance = orderPaymentBalance({ id: "o0", totalPrice: 0, isPaid: false, status: "new" }, []);
+    expect(balance.remaining).toBe(0);
+    expect(balance.hasLedger).toBe(false);
+  });
+
+  it("fully paid orders settle within money tolerance", () => {
+    const rows = [payment({ id: "p1", amount: 100, kind: "payment", orderId: "o1" })];
+    const balance = orderPaymentBalance({ id: "o1", totalPrice: 100, isPaid: false, status: "in-progress" }, rows);
+    expect(balance.remaining).toBe(0);
+    expect(balance.hasLedger).toBe(true);
+  });
+
+  it("unpaid positive orders still have remaining", () => {
+    const balance = orderPaymentBalance({ id: "o1", totalPrice: 50, isPaid: false, status: "new" }, []);
+    expect(balance.remaining).toBe(50);
+  });
 });

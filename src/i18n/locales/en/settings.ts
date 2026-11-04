@@ -364,6 +364,7 @@ export default {
       lifecycleRpcRequired: "Apply the order lifecycle SQL on MAIN before managing Close/Cancel actions.",
       replaceTargetInvalid: "Choose an active normal status as the replacement",
       replaceTargetProtected: "Cannot replace into a Close or Cancel status",
+      replaceSourceProtected: "Clear the Close/Cancel assignment before replacing this status",
       duplicateSemantic: "Only one active Close and one active Cancel status are allowed",
     },
   },

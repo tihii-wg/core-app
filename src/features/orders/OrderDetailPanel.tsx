@@ -119,7 +119,9 @@ export default function OrderDetailPanel({
   const activeCustomStatuses = orderStatusDefinitions.filter(
     (status) => status.isActive && status.semanticAction === "normal",
   );
-  const workflowStatuses = orderStatuses.filter((status) => status !== "closed" && status !== "cancelled");
+  const workflowStatuses = orderStatuses.filter(
+    (status): status is Exclude<OrderStatus, "closed" | "cancelled"> => status !== "closed" && status !== "cancelled",
+  );
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
   // Owner role unlocks Paid status controls; admin/manager do not. API re-checks owner_id.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
@@ -452,7 +454,11 @@ export default function OrderDetailPanel({
                 {paidStatusLocked ? t("orders.actions.statusLocked") : t("orders.detail.updateStatus")}
               </Label>
               <Select
-                value={workflowStatuses.includes(selectedOrder.status) ? selectedOrder.status : workflowStatuses[0]}
+                value={
+                  (workflowStatuses as readonly OrderStatus[]).includes(selectedOrder.status)
+                    ? selectedOrder.status
+                    : workflowStatuses[0]
+                }
                 onValueChange={(value) => {
                   const next = value as OrderStatus;
                   // Must pass the same owner flag used for `paidStatusLocked` / disabled —

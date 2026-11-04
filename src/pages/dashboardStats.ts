@@ -120,9 +120,20 @@ export function todayRevenueStats(orders: MoneyOrder[], now: Date) {
   };
 }
 
-/** Outstanding uses the same rule as Reports: unpaid orders that are not cancelled. */
-export function outstandingPaymentStats(orders: MoneyOrder[]) {
-  const unpaid = orders.filter((order) => order.status !== "cancelled" && !order.isPaid);
+/**
+ * Outstanding / awaiting payment.
+ * When `hasOutstanding` is provided (ledger-aware), prefer it over legacy `isPaid`.
+ * Otherwise fall back to unpaid flags for historical callers/tests.
+ */
+export function outstandingPaymentStats(
+  orders: MoneyOrder[],
+  options?: { hasOutstanding?: (order: MoneyOrder) => boolean },
+) {
+  const unpaid = orders.filter((order) => {
+    if (order.status === "cancelled" || order.status === "closed") return false;
+    if (options?.hasOutstanding) return options.hasOutstanding(order);
+    return !order.isPaid;
+  });
   return { amount: unpaid.reduce((sum, order) => sum + order.totalPrice, 0), orders: unpaid.length };
 }
 

@@ -56,6 +56,19 @@ export async function moveOrderOnBoard(
     if (!definition || definition.entity !== "order") {
       throw new Error(i18n.t("orders.board.errors.unknownStatus"));
     }
+    if (definition.semanticAction === "close") {
+      throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
+    }
+    if (definition.semanticAction === "cancel") {
+      throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
+    }
+  }
+
+  if (status === "closed") {
+    throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
+  }
+  if (status === "cancelled") {
+    throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
   }
 
   const fromCustomStatusId = await getCurrentCustomStatusId(orderId, resolved);

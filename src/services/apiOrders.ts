@@ -50,6 +50,8 @@ import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
 import { getStatusDefinitions, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
 import { findDefaultOrderStatus, parseLifecycleRpcError } from "../features/orders/orderLifecycle";
+import { orderHasOutstandingBalance, orderPaymentBalance } from "../features/finance/paymentCalculations";
+import { getPayments } from "./apiPayments";
 import { recordActivity } from "./apiActivityLog";
 import { recordStatusChangeEvents } from "./apiOrderEvents";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
@@ -1279,25 +1281,57 @@ export type OrdersAwaitingPayment = {
 };
 
 /**
- * Workspace total for unpaid, non-cancelled orders (same rule as dashboard outstanding).
- * Loads only `total_price` rows — not full order hydration.
+ * Workspace total for orders with a positive ledger remaining balance.
+ * Prefer payment ledger over legacy `is_paid` so refunds/voids surface outstanding.
+ * Cancelled and formally closed orders are excluded from the “awaiting payment” list
+ * (closed outstanding is shown on the closed order itself).
  */
 export async function getOrdersAwaitingPayment(workspaceId: string | undefined): Promise<OrdersAwaitingPayment> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase
-    .from("orders")
-    .select("total_price")
-    .eq("workspace_id", resolvedWorkspaceId)
-    .eq("is_paid", false)
-    .neq("status", "cancelled");
+  const [{ data, error }, payments] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("id, total_price, is_paid, status, closed_at")
+      .eq("workspace_id", resolvedWorkspaceId)
+      .neq("status", "cancelled")
+      .is("closed_at", null),
+    getPayments(resolvedWorkspaceId, {}).catch(() => []),
+  ]);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // closed_at may be absent on very old DBs — fall back without that filter.
+    if (/closed_at/i.test(error.message)) {
+      const legacy = await supabase
+        .from("orders")
+        .select("id, total_price, is_paid, status")
+        .eq("workspace_id", resolvedWorkspaceId)
+        .neq("status", "cancelled");
+      if (legacy.error) throw new Error(legacy.error.message);
+      return sumAwaitingPayment((legacy.data ?? []) as Record<string, unknown>[], payments);
+    }
+    throw new Error(error.message);
+  }
 
-  const rows = data ?? [];
-  return {
-    amount: rows.reduce((sum, row) => sum + Number((row as { total_price?: unknown }).total_price ?? 0), 0),
-    count: rows.length,
-  };
+  return sumAwaitingPayment((data ?? []) as Record<string, unknown>[], payments);
+}
+
+function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<ReturnType<typeof getPayments>>) {
+  let amount = 0;
+  let count = 0;
+  for (const row of rows) {
+    const statusRaw = typeof row.status === "string" ? row.status : "new";
+    const status = orderStatuses.has(statusRaw as OrderStatus) ? (statusRaw as OrderStatus) : "new";
+    const order = {
+      id: String(row.id),
+      totalPrice: Number(row.total_price ?? 0),
+      isPaid: Boolean(row.is_paid),
+      status,
+    };
+    if (!orderHasOutstandingBalance(order, payments)) continue;
+    amount += orderPaymentBalance(order, payments).remaining;
+    count += 1;
+  }
+  return { amount, count };
 }
 
 export async function getOrder(orderId: string, workspaceId: string | undefined) {
@@ -1464,6 +1498,14 @@ export async function updateOrderStatus(
 
   if (status === "closed") {
     throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
+  }
+
+  if (status === "cancelled") {
+    // When a Cancel semantic status exists, ordinary status writes must not cancel.
+    const definitions = await getStatusDefinitions(targetWorkspaceId, "order").catch(() => []);
+    if (definitions.some((d) => d.isActive && d.semanticAction === "cancel")) {
+      throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
+    }
   }
 
   const { data: existing, error: loadError } = await supabase

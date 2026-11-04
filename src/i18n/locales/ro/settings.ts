@@ -367,6 +367,7 @@ const settings: Messages<typeof en> = {
       lifecycleRpcRequired: "Aplicați SQL-ul de ciclu de viață pe MAIN înainte de acțiunile Închidere/Anulare.",
       replaceTargetInvalid: "Alegeți un status normal activ ca înlocuitor",
       replaceTargetProtected: "Nu puteți înlocui cu un status de Închidere sau Anulare",
+      replaceSourceProtected: "Eliminați mai întâi acțiunea Închidere/Anulare înainte de a înlocui acest status",
       duplicateSemantic: "Este permis un singur status activ de Închidere și unul de Anulare",
     },
   },
