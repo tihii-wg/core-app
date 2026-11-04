@@ -48,7 +48,11 @@ import {
 import { getClientDiscounts } from "./apiClientDiscounts";
 import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
-import { getStatusDefinitions, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
+import {
+  getStatusDefinitions,
+  getStatusDefinitionsByIds,
+  resolveCustomStatusForSystemStatus,
+} from "./apiStatusDefinitions";
 import { findDefaultOrderStatus, parseLifecycleRpcError } from "../features/orders/orderLifecycle";
 import { orderHasOutstandingBalance, orderPaymentBalance } from "../features/finance/paymentCalculations";
 import { getPayments } from "./apiPayments";
@@ -1474,18 +1478,28 @@ function mapCancelOrderError(message: string) {
   return message;
 }
 
+export type UpdateOrderStatusResult = {
+  status: OrderStatus;
+  customStatusId: string | null;
+  customStatus: { name: string; color: string | null } | null;
+};
+
 /**
  * Sole application write path that can set `orders.status = paid` / `is_paid`.
  * Every UI entry point (order menu, detail panel, etc.) goes through
  * `useUpdateOrderStatus` → this function. Direct Supabase/SQL updates are
  * outside app enforcement (no DB trigger in this codebase).
  *
+ * Also keeps `orders.custom_status_id` aligned with the system status write:
+ * the UI badge prefers custom status names, so leaving a stale custom_status_id
+ * would show the old status after a successful system-status update + history event.
+ *
  * Paid is locked for non-owners: the persisted `status` is re-read, and only
  * `workspaces.owner_id === auth.uid()` may move a Paid order to another status.
  * Non-owner updates keep `.neq("status","paid")` so a concurrent Paid write cannot be overwritten.
  *
  * Does NOT perform formal close/cancel — use `closeOrder` / `cancelOrder`.
- * Rejects `closed` (and `cancelled` when a cancel semantic is configured) at the app layer.
+ * Rejects `closed` and `cancelled` at the app layer.
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -1493,7 +1507,7 @@ export async function updateOrderStatus(
   workspaceId: string | undefined,
   /** Callers that write their own combined audit entry (board moves) pass `recordActivity: false`. */
   options?: { recordActivity?: boolean },
-) {
+): Promise<UpdateOrderStatusResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
 
   if (status === "closed") {
@@ -1507,7 +1521,7 @@ export async function updateOrderStatus(
 
   const { data: existing, error: loadError } = await supabase
     .from("orders")
-    .select("id, status, closed_at")
+    .select("id, status, closed_at, custom_status_id")
     .eq("id", orderId)
     .eq("workspace_id", targetWorkspaceId)
     .maybeSingle();
@@ -1517,13 +1531,26 @@ export async function updateOrderStatus(
 
   const currentStatus =
     typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
+  const fromCustomStatusId =
+    typeof (existing as { custom_status_id?: unknown }).custom_status_id === "string"
+      ? ((existing as { custom_status_id: string }).custom_status_id.trim() || null)
+      : null;
   if ((existing as { closed_at?: unknown }).closed_at) {
     throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
   }
 
   let ownerMayChangePaid = false;
   if (currentStatus === "paid") {
-    if (status === "paid") return;
+    if (status === "paid") {
+      const keep = fromCustomStatusId
+        ? (await getStatusDefinitionsByIds(targetWorkspaceId, [fromCustomStatusId]).catch(() => new Map())).get(fromCustomStatusId)
+        : null;
+      return {
+        status: "paid",
+        customStatusId: fromCustomStatusId,
+        customStatus: keep ? { name: keep.name, color: keep.color } : null,
+      };
+    }
     ownerMayChangePaid = await isAuthenticatedWorkspaceOwner(targetWorkspaceId);
     if (!ownerMayChangePaid) {
       throw new Error(i18n.t("orders.errors.paidStatusLocked"));
@@ -1534,12 +1561,18 @@ export async function updateOrderStatus(
     await assertTaxInvoiceAllowsPaid(orderId, targetWorkspaceId);
   }
 
-  const payload =
+  // Align custom_status_id with the system status in the same UPDATE so list/detail
+  // badges (which prefer custom names) cannot keep showing a stale definition.
+  const matched = await resolveCustomStatusForSystemStatus(targetWorkspaceId, status).catch(() => null);
+  const nextCustomStatusId = matched?.id ?? null;
+  const nextCustomStatus = matched ? { name: matched.name, color: matched.color } : null;
+
+  const payload: Record<string, unknown> =
     status === "paid"
-      ? { status, is_paid: true }
+      ? { status, is_paid: true, custom_status_id: nextCustomStatusId }
       : currentStatus === "paid"
-        ? { status, is_paid: false }
-        : { status };
+        ? { status, is_paid: false, custom_status_id: nextCustomStatusId }
+        : { status, custom_status_id: nextCustomStatusId };
 
   let updateQuery = supabase
     .from("orders")
@@ -1552,9 +1585,32 @@ export async function updateOrderStatus(
     updateQuery = updateQuery.neq("status", "paid");
   }
 
-  const { data, error } = await updateQuery.select("id");
+  const { data, error } = await updateQuery.select("id, status, custom_status_id");
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Older DBs without custom_status_id: fall back to status-only write.
+    if (/custom_status_id/i.test(error.message ?? "") && (error.code === "42703" || error.code === "PGRST204")) {
+      const legacyPayload =
+        status === "paid" ? { status, is_paid: true } : currentStatus === "paid" ? { status, is_paid: false } : { status };
+      let legacyQuery = supabase.from("orders").update(legacyPayload).eq("id", orderId).eq("workspace_id", targetWorkspaceId);
+      if (!ownerMayChangePaid) legacyQuery = legacyQuery.neq("status", "paid");
+      const legacy = await legacyQuery.select("id");
+      if (legacy.error) throw new Error(legacy.error.message);
+      if (!legacy.data || legacy.data.length === 0) throw new Error(orderPermissionMessage());
+      if (options?.recordActivity !== false) {
+        await recordActivity({
+          workspaceId: targetWorkspaceId,
+          entityType: "order",
+          entityId: orderId,
+          event: "order.status_changed",
+          details: { from: currentStatus || null, to: status },
+        });
+        await recordStatusChangeEvents({ orderId, source: "app", from: currentStatus || null, to: status });
+      }
+      return { status, customStatusId: null, customStatus: null };
+    }
+    throw new Error(error.message);
+  }
   if (!data || data.length === 0) {
     const { data: again, error: againError } = await supabase
       .from("orders")
@@ -1570,15 +1626,39 @@ export async function updateOrderStatus(
   }
 
   if (options?.recordActivity !== false) {
+    const nameIds = [fromCustomStatusId, nextCustomStatusId].filter((id): id is string => Boolean(id));
+    const names = nameIds.length
+      ? await getStatusDefinitionsByIds(targetWorkspaceId, nameIds).catch(() => new Map())
+      : new Map();
     await recordActivity({
       workspaceId: targetWorkspaceId,
       entityType: "order",
       entityId: orderId,
       event: "order.status_changed",
-      details: { from: currentStatus || null, to: status },
+      details: {
+        from: currentStatus || null,
+        to: status,
+        fromCustomStatusId,
+        toCustomStatusId: nextCustomStatusId,
+      },
     });
-    await recordStatusChangeEvents({ orderId, source: "app", from: currentStatus || null, to: status });
+    await recordStatusChangeEvents({
+      orderId,
+      source: "app",
+      from: currentStatus || null,
+      to: status,
+      fromCustomStatusId,
+      toCustomStatusId: nextCustomStatusId,
+      fromCustomStatusName: fromCustomStatusId ? names.get(fromCustomStatusId)?.name ?? null : null,
+      toCustomStatusName: nextCustomStatusId ? names.get(nextCustomStatusId)?.name ?? null : null,
+    });
   }
+
+  return {
+    status,
+    customStatusId: nextCustomStatusId,
+    customStatus: nextCustomStatus,
+  };
 }
 
 /** Saves (or clears, when blank) the tax invoice number of one order. Trims whitespace. */

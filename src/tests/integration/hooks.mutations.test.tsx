@@ -203,7 +203,7 @@ describe("order mutations", () => {
     await settle(() => result.current.status.mutateAsync({ orderId: "order-a1", status: "paid" }));
     await waitFor(() => expect(result.current.orders.orders[0]).toMatchObject({ status: "paid", paymentStatus: "paid" }));
 
-    await settle(() => result.current.status.mutateAsync({ orderId: "order-c1", status: "cancelled" }));
+    await settle(() => result.current.status.mutateAsync({ orderId: "order-c1", status: "completed" }));
     expect(toast.error).toHaveBeenCalledWith("Order was not found or you do not have permission to change it.", { id: "update-order-status" });
   });
 

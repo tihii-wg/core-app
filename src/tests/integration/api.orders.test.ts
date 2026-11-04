@@ -357,10 +357,14 @@ describe("updateOrderStatus", () => {
     fake.signInAs(USERS.member.id);
     await expect(updateOrderStatus("order-a1", "in-progress", WS.A)).rejects.toThrow(/workspace owner|paid/i);
     fake.signInAs(USERS.admin.id);
-    await expect(updateOrderStatus("order-a1", "cancelled", WS.A)).rejects.toThrow(/workspace owner|paid/i);
+    await expect(updateOrderStatus("order-a1", "completed", WS.A)).rejects.toThrow(/workspace owner|paid/i);
     fake.signInAs(USERS.manager.id);
     await expect(updateOrderStatus("order-a1", "completed", WS.A)).rejects.toThrow(/workspace owner|paid/i);
     expect(row("orders", "order-a1")).toMatchObject({ status: "paid", is_paid: true });
+  });
+
+  it("rejects direct cancelled writes so cancel_order remains required", async () => {
+    await expect(updateOrderStatus("order-a1", "cancelled", WS.A)).rejects.toThrow(/cancel/i);
   });
 
   it("lets the workspace owner reverse Paid and change status again", async () => {
@@ -380,9 +384,52 @@ describe("updateOrderStatus", () => {
   });
 
   it("refuses an order from another workspace", async () => {
-    await expect(updateOrderStatus("order-c1", "cancelled", WS.A)).rejects.toThrow("Order was not found or you do not have permission to change it.");
-    await expect(updateOrderStatus("order-c1", "cancelled", WS.C)).rejects.toThrow("Order was not found or you do not have permission to change it.");
+    await expect(updateOrderStatus("order-c1", "completed", WS.A)).rejects.toThrow("Order was not found or you do not have permission to change it.");
+    await expect(updateOrderStatus("order-c1", "completed", WS.C)).rejects.toThrow("Order was not found or you do not have permission to change it.");
     expect(row("orders", "order-c1")?.status).toBe("new");
+  });
+
+  it("persists custom_status_id alongside status so reload shows the selected status", async () => {
+    fake.all("status_definitions").push({
+      id: "def-progress",
+      workspace_id: WS.A,
+      entity: "order",
+      name: "In workshop",
+      color: "#336699",
+      status_group: "in_progress",
+      system_status: "in-progress",
+      code: "in_workshop",
+      semantic_action: "normal",
+      sort_order: 1,
+      is_default: true,
+      is_active: true,
+      show_overdue_badge: false,
+      adds_to_backorders: false,
+      deleted_at: null,
+    });
+    Object.assign(row("orders", "order-a1")!, {
+      status: "new",
+      is_paid: false,
+      custom_status_id: "stale-def",
+    });
+
+    const result = await updateOrderStatus("order-a1", "in-progress", WS.A);
+
+    expect(result).toEqual({
+      status: "in-progress",
+      customStatusId: "def-progress",
+      customStatus: { name: "In workshop", color: "#336699" },
+    });
+    expect(row("orders", "order-a1")).toMatchObject({
+      status: "in-progress",
+      custom_status_id: "def-progress",
+    });
+
+    const listed = await getOrders(WS.A);
+    const refreshed = listed.find((order) => order.id === "order-a1");
+    expect(refreshed?.status).toBe("in-progress");
+    expect(refreshed?.customStatusId).toBe("def-progress");
+    expect(refreshed?.customStatus).toEqual({ name: "In workshop", color: "#336699" });
   });
 
   it("surfaces Supabase errors", async () => {

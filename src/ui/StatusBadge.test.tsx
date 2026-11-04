@@ -1,6 +1,14 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { StatusBadge } from "./StatusBadge";
+import { describe, expect, it, vi } from "vitest";
+import { OrderStatusBadge, StatusBadge } from "./StatusBadge";
+
+vi.mock("../features/industries/useIndustryWorkflow", () => ({
+  useIndustryWorkflow: () => ({ workflow: { orderStatuses: ["new", "in-progress", "completed", "paid", "cancelled"] } }),
+}));
+
+vi.mock("../features/industries/industryWorkflow", () => ({
+  industryOrderStatusLabel: (_workflow: unknown, status: string) => `system:${status}`,
+}));
 
 describe("StatusBadge", () => {
   it("allows long localized labels to wrap within a narrow container", () => {
@@ -18,5 +26,18 @@ describe("StatusBadge", () => {
     expect(badge.className).not.toMatch(/\bshrink-0\b/);
     expect(badge.className).toMatch(/min-h-5\.5/);
     expect(container.firstElementChild?.contains(badge)).toBe(true);
+  });
+});
+
+describe("OrderStatusBadge", () => {
+  it("prefers the persisted custom status name and color over the legacy system label", () => {
+    render(<OrderStatusBadge status="in-progress" customStatus={{ name: "In workshop", color: "#336699" }} />);
+    expect(screen.getByText("In workshop")).toBeTruthy();
+    expect(screen.queryByText("system:in-progress")).toBeNull();
+  });
+
+  it("falls back to the system status label when no custom status is persisted", () => {
+    render(<OrderStatusBadge status="completed" customStatus={null} />);
+    expect(screen.getByText("system:completed")).toBeTruthy();
   });
 });

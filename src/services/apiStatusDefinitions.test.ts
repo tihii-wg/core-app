@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { assertCustomStatusTransition, getStatusTransitions, isCustomStatusTransitionAllowed } from "./apiStatusDefinitions";
+import {
+  assertCustomStatusTransition,
+  getStatusTransitions,
+  isCustomStatusTransitionAllowed,
+  pickCustomStatusForSystemStatus,
+  type StatusDefinition,
+} from "./apiStatusDefinitions";
 
 const from = vi.hoisted(() => vi.fn());
 
@@ -88,5 +94,53 @@ describe("status transitions api", () => {
   it("assert skips the query when there is no source custom status", async () => {
     await expect(assertCustomStatusTransition("ws-1", null, "b")).resolves.toBeUndefined();
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe("pickCustomStatusForSystemStatus", () => {
+  function def(partial: Partial<StatusDefinition> & Pick<StatusDefinition, "id" | "systemStatus">): StatusDefinition {
+    return {
+      workspaceId: "ws-1",
+      entity: "order",
+      name: partial.name ?? partial.id,
+      color: partial.color ?? null,
+      statusGroup: "in_progress",
+      code: null,
+      semanticAction: "normal",
+      sortOrder: 0,
+      isDefault: false,
+      isActive: true,
+      showOverdueBadge: false,
+      addsToBackorders: false,
+      ...partial,
+    };
+  }
+
+  it("returns null when nothing matches", () => {
+    expect(pickCustomStatusForSystemStatus([def({ id: "a", systemStatus: "new" })], "completed")).toBeNull();
+  });
+
+  it("prefers the default active normal definition for the system status", () => {
+    const picked = pickCustomStatusForSystemStatus(
+      [
+        def({ id: "a", systemStatus: "in-progress", sortOrder: 0, name: "A" }),
+        def({ id: "b", systemStatus: "in-progress", sortOrder: 1, name: "B", isDefault: true, color: "#00ff00" }),
+        def({ id: "c", systemStatus: "in-progress", sortOrder: 2, name: "C", semanticAction: "close" }),
+      ],
+      "in-progress",
+    );
+    expect(picked?.id).toBe("b");
+    expect(picked?.color).toBe("#00ff00");
+  });
+
+  it("falls back to earliest sort order when no default is set", () => {
+    const picked = pickCustomStatusForSystemStatus(
+      [
+        def({ id: "z", systemStatus: "completed", sortOrder: 5, name: "Z" }),
+        def({ id: "a", systemStatus: "completed", sortOrder: 1, name: "A" }),
+      ],
+      "completed",
+    );
+    expect(picked?.id).toBe("a");
   });
 });

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Order, OrderStatus } from "../../lib/types";
+import type { UpdateOrderStatusResult } from "../../services/apiOrders";
 import { useUpdateOrderStatus, findCachedOrder } from "./useGetOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
@@ -67,15 +68,17 @@ export function useOrderDetails() {
     setDetailPanelOpen(false);
   };
 
-  const applyStatusLocally = (orderId: string, newStatus: OrderStatus) => {
+  const applyStatusLocally = (orderId: string, result: UpdateOrderStatusResult) => {
     setSelectedOrder((current) => {
       if (current?.id !== orderId) return current;
-      // Spread keeps taxInvoiceNumber and every other field; only status/payment change.
-      const leftPaid = current.status === "paid" && newStatus !== "paid";
+      // Spread keeps taxInvoiceNumber and every other field; sync system + custom status together.
+      const leftPaid = current.status === "paid" && result.status !== "paid";
       return {
         ...current,
-        status: newStatus,
-        ...(newStatus === "paid"
+        status: result.status,
+        customStatusId: result.customStatusId,
+        customStatus: result.customStatus,
+        ...(result.status === "paid"
           ? { isPaid: true, paymentStatus: "paid" as const }
           : leftPaid
             ? { isPaid: false, paymentStatus: "unpaid" as const }
@@ -107,7 +110,7 @@ export function useOrderDetails() {
     updateStatus(
       { orderId: order.id, status: newStatus },
       {
-        onSuccess: () => applyStatusLocally(order.id, newStatus),
+        onSuccess: (result) => applyStatusLocally(order.id, result),
       },
     );
   };

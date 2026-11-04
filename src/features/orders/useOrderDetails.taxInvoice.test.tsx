@@ -268,4 +268,45 @@ describe("useOrderDetails tax invoice persistence", () => {
       expect.any(Object),
     );
   });
+
+  it("applies persisted custom status from the mutation result onto the detail card", () => {
+    statusHooks.mutate.mockImplementation((_vars: unknown, opts?: { onSuccess?: (result: unknown) => void }) => {
+      opts?.onSuccess?.({
+        status: "completed",
+        customStatusId: "def-ready",
+        customStatus: { name: "Ready for pickup", color: "#12ab34" },
+      });
+    });
+
+    const { result } = renderHook(() => useOrderDetails(), { wrapper });
+
+    act(() => {
+      result.current.openOrder({
+        ...baseOrder,
+        status: "in-progress",
+        customStatusId: "old-def",
+        customStatus: { name: "Waiting parts", color: "#999999" },
+        taxInvoiceNumber: "FV-1",
+      });
+    });
+
+    act(() => {
+      result.current.changeStatus(
+        {
+          ...baseOrder,
+          status: "in-progress",
+          customStatusId: "old-def",
+          customStatus: { name: "Waiting parts", color: "#999999" },
+          taxInvoiceNumber: "FV-1",
+        },
+        "completed",
+      );
+    });
+
+    expect(result.current.panelProps.selectedOrder).toMatchObject({
+      status: "completed",
+      customStatusId: "def-ready",
+      customStatus: { name: "Ready for pickup", color: "#12ab34" },
+    });
+  });
 });

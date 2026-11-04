@@ -76,24 +76,31 @@ export async function moveOrderOnBoard(
     await assertCustomStatusTransition(resolved, fromCustomStatusId, customStatusId);
   }
 
+  // When the system status changes, updateOrderStatus also aligns custom_status_id to
+  // the matching definition (or null). Board moves then overwrite with the exact column
+  // target so a non-default custom column is not replaced by the default match.
+  let persistedCustomAfterSystem: string | null | undefined;
   if (status !== currentStatus) {
-    await updateOrderStatus(orderId, status, resolved, { recordActivity: false });
+    const systemWrite = await updateOrderStatus(orderId, status, resolved, { recordActivity: false });
+    persistedCustomAfterSystem = systemWrite.customStatusId;
   }
 
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ custom_status_id: customStatusId })
-    .eq("id", orderId)
-    .eq("workspace_id", resolved)
-    .select("id");
+  if (persistedCustomAfterSystem !== customStatusId) {
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ custom_status_id: customStatusId })
+      .eq("id", orderId)
+      .eq("workspace_id", resolved)
+      .select("id");
 
-  if (error) {
-    if (isMissingCustomStatusColumn(error)) {
-      throw new Error(i18n.t("orders.board.errors.customStatusUnavailable"));
+    if (error) {
+      if (isMissingCustomStatusColumn(error)) {
+        throw new Error(i18n.t("orders.board.errors.customStatusUnavailable"));
+      }
+      throw new Error(error.message);
     }
-    throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error(i18n.t("orders.board.errors.moveFailed"));
   }
-  if (!data || data.length === 0) throw new Error(i18n.t("orders.board.errors.moveFailed"));
 
   if (status !== currentStatus || fromCustomStatusId !== customStatusId) {
     await recordActivity({

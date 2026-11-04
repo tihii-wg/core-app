@@ -114,6 +114,36 @@ export async function getStatusDefinitions(workspaceId: string | undefined, enti
   return ((data ?? []) as Record<string, unknown>[]).map(toStatusDefinition);
 }
 
+/**
+ * Picks the workspace order status definition that should mirror a system status write.
+ * Prefer the default among active normal defs with matching system_status; else earliest by sort.
+ * Returns null when none match (caller should clear custom_status_id).
+ */
+export function pickCustomStatusForSystemStatus(
+  definitions: readonly StatusDefinition[],
+  systemStatus: string,
+): StatusDefinition | null {
+  const matches = definitions
+    .filter(
+      (d) =>
+        d.entity === "order" &&
+        d.isActive &&
+        d.semanticAction === "normal" &&
+        (d.systemStatus ?? "") === systemStatus,
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  if (matches.length === 0) return null;
+  return matches.find((d) => d.isDefault) ?? matches[0] ?? null;
+}
+
+export async function resolveCustomStatusForSystemStatus(
+  workspaceId: string | undefined,
+  systemStatus: string,
+): Promise<StatusDefinition | null> {
+  const definitions = await getStatusDefinitions(workspaceId, "order");
+  return pickCustomStatusForSystemStatus(definitions, systemStatus);
+}
+
 /** Map of fromStatusId -> allowed next status ids. Empty when `status_transitions` is not applied yet. */
 export async function getStatusTransitions(workspaceId: string | undefined) {
   const resolved = requireWorkspaceId(workspaceId);

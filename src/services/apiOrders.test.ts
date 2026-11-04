@@ -682,15 +682,52 @@ describe("updateOrderStatus", () => {
   beforeEach(() => {
     getUser.mockReset();
     from.mockReset();
+    rpc.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    rpc.mockResolvedValue({ data: null, error: null });
   });
 
-  function statusOrdersMock(currentStatus: string, updateResult: { data: unknown; error: unknown } = { data: [{ id: "order-1" }], error: null }) {
+  function emptyStatusDefinitions() {
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      eq: () => chain,
+      is: () => chain,
+      order: () => chain,
+      in: () => chain,
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: [], error: null }).then(resolve, reject),
+    };
+    return chain;
+  }
+
+  function statusDefinitionsWith(rows: Record<string, unknown>[]) {
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      eq: () => chain,
+      is: () => chain,
+      order: () => chain,
+      in: () => Promise.resolve({ data: rows, error: null }),
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: rows, error: null }).then(resolve, reject),
+    };
+    return chain;
+  }
+
+  function statusOrdersMock(
+    currentStatus: string,
+    updateResult: { data: unknown; error: unknown } = {
+      data: [{ id: "order-1", status: "in-progress", custom_status_id: null }],
+      error: null,
+    },
+    options?: { customStatusId?: string | null },
+  ) {
     const updates: unknown[] = [];
     let phase: "load" | "update" = "load";
+    const currentCustom = options?.customStatusId ?? null;
     const orders: Record<string, unknown> = {
       select: () => {
-        phase = "load";
+        // `.update(...).select(...)` must keep the update result; only bare loads reset phase.
+        if (phase !== "update") phase = "load";
         return orders;
       },
       eq: () => orders,
@@ -703,7 +740,7 @@ describe("updateOrderStatus", () => {
       maybeSingle: () =>
         Promise.resolve(
           phase === "load"
-            ? { data: { id: "order-1", status: currentStatus }, error: null }
+            ? { data: { id: "order-1", status: currentStatus, custom_status_id: currentCustom }, error: null }
             : updateResult,
         ),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
@@ -722,28 +759,110 @@ describe("updateOrderStatus", () => {
     return workspaces;
   }
 
-  it("marks the order paid when the status changes to paid", async () => {
-    const { orders, updates } = statusOrdersMock("completed");
+  function mockStatusTables(orders: unknown, extras?: Record<string, unknown>) {
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
+      if (table === "status_definitions") return emptyStatusDefinitions();
+      if (table === "activity_log") {
+        const log: Record<string, unknown> = { insert: () => Promise.resolve({ data: null, error: null }) };
+        return log;
+      }
+      if (extras?.[table]) return extras[table];
       throw new Error(`Unexpected table ${table}`);
     });
+  }
+
+  it("marks the order paid when the status changes to paid", async () => {
+    const { orders, updates } = statusOrdersMock("completed", {
+      data: [{ id: "order-1", status: "paid", custom_status_id: null }],
+      error: null,
+    });
+    mockStatusTables(orders);
 
     await updateOrderStatus("order-1", "paid", "ws-1");
 
-    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true, custom_status_id: null });
+  });
+
+  it("persists status and clears stale custom_status_id when no matching definition exists", async () => {
+    const { orders, updates } = statusOrdersMock(
+      "new",
+      { data: [{ id: "order-1", status: "in-progress", custom_status_id: null }], error: null },
+      { customStatusId: "stale-custom" },
+    );
+    mockStatusTables(orders);
+
+    const result = await updateOrderStatus("order-1", "in-progress", "ws-1");
+
+    expect(updates[0]).toEqual({ status: "in-progress", custom_status_id: null });
+    expect(result).toEqual({ status: "in-progress", customStatusId: null, customStatus: null });
+  });
+
+  it("persists matching custom_status_id with the system status in one update", async () => {
+    const def = {
+      id: "def-ready",
+      workspace_id: "ws-1",
+      entity: "order",
+      name: "Ready for pickup",
+      color: "#12ab34",
+      status_group: "completed",
+      system_status: "completed",
+      code: "ready",
+      semantic_action: "normal",
+      sort_order: 1,
+      is_default: true,
+      is_active: true,
+      show_overdue_badge: false,
+      adds_to_backorders: false,
+      deleted_at: null,
+    };
+    const { orders, updates } = statusOrdersMock(
+      "in-progress",
+      { data: [{ id: "order-1", status: "completed", custom_status_id: "def-ready" }], error: null },
+      { customStatusId: "old-def" },
+    );
+    from.mockImplementation((table: string) => {
+      if (table === "orders") return orders;
+      if (table === "status_definitions") return statusDefinitionsWith([def]);
+      if (table === "activity_log") return { insert: () => Promise.resolve({ data: null, error: null }) };
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    const result = await updateOrderStatus("order-1", "completed", "ws-1");
+
+    expect(updates[0]).toEqual({ status: "completed", custom_status_id: "def-ready" });
+    expect(result).toEqual({
+      status: "completed",
+      customStatusId: "def-ready",
+      customStatus: { name: "Ready for pickup", color: "#12ab34" },
+    });
+  });
+
+  it("does not write history when the order update fails", async () => {
+    const { orders, updates } = statusOrdersMock("new", {
+      data: null,
+      error: { message: "write failed", code: "42501" },
+    });
+    mockStatusTables(orders);
+
+    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow("write failed");
+    expect(updates).toHaveLength(1);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("rejects closed and cancelled direct writes so protected RPCs remain required", async () => {
+    await expect(updateOrderStatus("order-1", "closed", "ws-1")).rejects.toThrow(/close/i);
+    await expect(updateOrderStatus("order-1", "cancelled", "ws-1")).rejects.toThrow(/cancel/i);
+    expect(from).not.toHaveBeenCalled();
   });
 
   it("leaves payment unchanged for other statuses", async () => {
     const { orders, updates } = statusOrdersMock("new");
-    from.mockImplementation((table: string) => {
-      if (table === "orders") return orders;
-      throw new Error(`Unexpected table ${table}`);
-    });
+    mockStatusTables(orders);
 
     await updateOrderStatus("order-1", "in-progress", "ws-1");
 
-    expect(updates[0]).toEqual({ status: "in-progress" });
+    expect(updates[0]).toEqual({ status: "in-progress", custom_status_id: null });
   });
 
   it("rejects changing a persisted Paid order when the caller is not the workspace owner", async () => {
@@ -752,44 +871,46 @@ describe("updateOrderStatus", () => {
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "workspaces") return workspaces;
+      if (table === "status_definitions") return emptyStatusDefinitions();
       throw new Error(`Unexpected table ${table}`);
     });
 
     await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(/workspace owner|paid/i);
-    await expect(updateOrderStatus("order-1", "cancelled", "ws-1")).rejects.toThrow(/workspace owner|paid/i);
     expect(updates).toHaveLength(0);
   });
 
   it("allows the workspace owner to change a Paid order and clear is_paid", async () => {
-    const { orders, updates } = statusOrdersMock("paid");
+    const { orders, updates } = statusOrdersMock("paid", {
+      data: [{ id: "order-1", status: "in-progress", custom_status_id: null }],
+      error: null,
+    });
     const workspaces = workspacesOwnerMock(true);
     from.mockImplementation((table: string) => {
       if (table === "orders") return orders;
       if (table === "workspaces") return workspaces;
+      if (table === "status_definitions") return emptyStatusDefinitions();
+      if (table === "activity_log") return { insert: () => Promise.resolve({ data: null, error: null }) };
       throw new Error(`Unexpected table ${table}`);
     });
 
     await updateOrderStatus("order-1", "in-progress", "ws-1");
-    expect(updates[0]).toEqual({ status: "in-progress", is_paid: false });
+    expect(updates[0]).toEqual({ status: "in-progress", is_paid: false, custom_status_id: null });
   });
 
   it("allows the workspace owner to change status again after reversing Paid", async () => {
-    const { orders, updates } = statusOrdersMock("in-progress");
-    from.mockImplementation((table: string) => {
-      if (table === "orders") return orders;
-      throw new Error(`Unexpected table ${table}`);
+    const { orders, updates } = statusOrdersMock("in-progress", {
+      data: [{ id: "order-1", status: "completed", custom_status_id: null }],
+      error: null,
     });
+    mockStatusTables(orders);
 
     await updateOrderStatus("order-1", "completed", "ws-1");
-    expect(updates[0]).toEqual({ status: "completed" });
+    expect(updates[0]).toEqual({ status: "completed", custom_status_id: null });
   });
 
   it("allows a no-op when the order is already paid and the target is paid", async () => {
     const { orders, updates } = statusOrdersMock("paid");
-    from.mockImplementation((table: string) => {
-      if (table === "orders") return orders;
-      throw new Error(`Unexpected table ${table}`);
-    });
+    mockStatusTables(orders);
 
     await updateOrderStatus("order-1", "paid", "ws-1");
     expect(updates).toHaveLength(0);
@@ -812,30 +933,23 @@ describe("updateOrderStatus", () => {
       maybeSingle: () =>
         Promise.resolve(
           selectPhase === 1
-            ? { data: { id: "order-1", status: "completed" }, error: null }
+            ? { data: { id: "order-1", status: "completed", custom_status_id: null }, error: null }
             : { data: { status: "paid" }, error: null },
         ),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
         Promise.resolve({ data: [], error: null }).then(resolve, reject),
     };
-    from.mockImplementation((table: string) => {
-      if (table === "orders") return orders;
-      throw new Error(`Unexpected table ${table}`);
-    });
+    mockStatusTables(orders);
 
     await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(
       /workspace owner|paid/i,
     );
-    expect(updates).toEqual([{ status: "in-progress" }]);
+    expect(updates).toEqual([{ status: "in-progress", custom_status_id: null }]);
   });
 
   it("reports a permission error when RLS lets no row through", async () => {
     const orders = query({ data: null, error: null });
-
-    from.mockImplementation((table: string) => {
-      if (table === "orders") return orders;
-      throw new Error(`Unexpected table ${table}`);
-    });
+    mockStatusTables(orders);
 
     await expect(updateOrderStatus("order-1", "completed", "ws-1")).rejects.toThrow("permission");
   });
@@ -845,8 +959,22 @@ describe("tax invoice requirement", () => {
   beforeEach(() => {
     getUser.mockReset();
     from.mockReset();
+    rpc.mockReset();
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
+    rpc.mockResolvedValue({ data: null, error: null });
   });
+
+  function emptyStatusDefinitions() {
+    const chain: Record<string, unknown> = {
+      select: () => chain,
+      eq: () => chain,
+      is: () => chain,
+      order: () => chain,
+      then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve({ data: [], error: null }).then(resolve, reject),
+    };
+    return chain;
+  }
 
   function statusSetup({
     required,
@@ -877,11 +1005,14 @@ describe("tax invoice requirement", () => {
           data:
             selectKind === "tax"
               ? { tax_invoice_number: taxNumber, clients: { client_type: clientType } }
-              : { id: "order-1", status: currentStatus },
+              : { id: "order-1", status: currentStatus, custom_status_id: null },
           error: null,
         }),
       then: (resolve: (value: { data: unknown; error: unknown }) => unknown, reject?: (reason: unknown) => unknown) =>
-        Promise.resolve({ data: [{ id: "order-1" }], error: null }).then(resolve, reject),
+        Promise.resolve({
+          data: [{ id: "order-1", status: currentStatus === "paid" ? "paid" : "completed", custom_status_id: null }],
+          error: null,
+        }).then(resolve, reject),
     };
     const workspaceChain: Record<string, unknown> = {
       select: () => workspaceChain,
@@ -891,6 +1022,8 @@ describe("tax invoice requirement", () => {
     from.mockImplementation((table: string) => {
       if (table === "orders") return ordersChain;
       if (table === "workspaces") return workspaceChain;
+      if (table === "status_definitions") return emptyStatusDefinitions();
+      if (table === "activity_log") return { insert: () => Promise.resolve({ data: null, error: null }) };
       throw new Error(`Unexpected table ${table}`);
     });
     return { updates };
@@ -911,32 +1044,32 @@ describe("tax invoice requirement", () => {
   it("allows marking paid for a legal entity after a valid tax invoice number is saved", async () => {
     const { updates } = statusSetup({ required: true, taxNumber: "FV-2026-77", clientType: "organization" });
     await updateOrderStatus("order-1", "paid", "ws-1");
-    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true, custom_status_id: null });
   });
 
   it("allows marking an individual order paid without a tax invoice number when the setting is enabled", async () => {
     const { updates } = statusSetup({ required: true, taxNumber: null, clientType: "individual" });
     await updateOrderStatus("order-1", "paid", "ws-1");
-    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true, custom_status_id: null });
   });
 
   it("preserves existing behavior when the requirement is disabled", async () => {
     const { updates } = statusSetup({ required: false, taxNumber: null, clientType: "organization" });
     await updateOrderStatus("order-1", "paid", "ws-1");
-    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true, custom_status_id: null });
   });
 
   it("does not gate non-paid statuses even when the requirement is enabled", async () => {
     const { updates } = statusSetup({ required: true, taxNumber: null, clientType: "organization" });
     await updateOrderStatus("order-1", "completed", "ws-1");
-    expect(updates[0]).toEqual({ status: "completed" });
+    expect(updates[0]).toEqual({ status: "completed", custom_status_id: null });
   });
 
   it("status updates to paid never clear tax_invoice_number in the write payload", async () => {
     const { updates } = statusSetup({ required: true, taxNumber: "FV-KEEP", clientType: "organization" });
     await updateOrderStatus("order-1", "paid", "ws-1");
     expect(updates).toHaveLength(1);
-    expect(updates[0]).toEqual({ status: "paid", is_paid: true });
+    expect(updates[0]).toEqual({ status: "paid", is_paid: true, custom_status_id: null });
     expect(updates[0]).not.toHaveProperty("tax_invoice_number");
   });
 

@@ -218,6 +218,8 @@ vi.mock("../finance/usePayments", () => ({
   }),
   useRecordPayment: () => ({ mutate: vi.fn(), isPending: false }),
   useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
+  useRecordPaymentVoid: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteFullyVoidedPayment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 beforeEach(() => {
@@ -643,7 +645,8 @@ describe("Orders page", () => {
 
     expect(screen.getByText(/Status locked/i)).toBeInTheDocument();
     expect(screen.getByText(/Only the workspace owner can change/i)).toBeInTheDocument();
-    for (const label of ["New", "In Progress", "Waiting Parts", "Completed", "Cancelled"]) {
+    // Cancelled/closed are protected lifecycle actions, not direct status menu options.
+    for (const label of ["New", "In Progress", "Waiting Parts", "Completed"]) {
       expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute("aria-disabled", "true");
     }
     expect(statusHooks.mutate).not.toHaveBeenCalled();
