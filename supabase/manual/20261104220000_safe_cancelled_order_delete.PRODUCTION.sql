@@ -1,6 +1,10 @@
 -- =============================================================================
 -- SAFE CANCELLED ORDER DELETION (MAIN) — delete_order_with_payments @v3
 -- =============================================================================
+-- SUPERSEDED by 20261104240000_safe_cancelled_order_delete.PRODUCTION.sql (@v4).
+-- Do not apply this file on MAIN: @v3 references nonexistent invoices.invoice_number
+-- (real column is invoices.number). Keep for history only.
+--
 -- Project: MAIN only (pundggjzzaqzbvykbxvo). Do NOT run against TEST.
 -- Apply manually in Supabase SQL editor after review. Do not auto-apply.
 --

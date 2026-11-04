@@ -2138,7 +2138,7 @@ function isMissingRelationError(error: { code?: string } | null | undefined) {
 }
 
 /** Manual SQL enabling cancelled-only delete + Storage cleanup queue. */
-export const SAFE_CANCELLED_ORDER_DELETE_SQL = "20261104220000_safe_cancelled_order_delete.PRODUCTION.sql";
+export const SAFE_CANCELLED_ORDER_DELETE_SQL = "20261104240000_safe_cancelled_order_delete.PRODUCTION.sql";
 
 /** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
 export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {
@@ -2217,9 +2217,10 @@ export type DeleteOrderResult = {
 };
 
 async function listOrderInvoiceLabels(workspaceId: string, orderId: string): Promise<string[]> {
+  // Schema: public.invoices.number (see 20261004010000_invoices.sql). Not invoice_number.
   const { data, error } = await supabase
     .from("invoices")
-    .select("id, invoice_number")
+    .select("id, number")
     .eq("workspace_id", workspaceId)
     .eq("order_id", orderId);
   if (error) {
@@ -2227,7 +2228,7 @@ async function listOrderInvoiceLabels(workspaceId: string, orderId: string): Pro
     throw new Error(error.message);
   }
   return (data ?? []).map((row) => {
-    const number = typeof row.invoice_number === "string" ? row.invoice_number.trim() : "";
+    const number = typeof row.number === "string" ? row.number.trim() : "";
     return number || String(row.id);
   });
 }
