@@ -9,7 +9,7 @@ function invalidateOrderCaches(queryClient: ReturnType<typeof useQueryClient>, w
   void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["orders-page", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["order", orderId] });
-  void queryClient.invalidateQueries({ queryKey: ["order-events", orderId] });
+  void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["payments", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
 }

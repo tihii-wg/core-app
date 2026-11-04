@@ -123,6 +123,50 @@ function canWarehouse(workspaceId: unknown, ctx: PolicyCtx) {
   return ["owner", "admin", "manager"].includes(roleIn(workspaceId, ctx) ?? "");
 }
 
+/** Mirrors crm_order_event_resolve_actor + crm_order_event_insert for fake integration tests. */
+function resolveActorName(workspaceId: unknown, ctx: PolicyCtx) {
+  if (!ctx.uid) return null;
+  const employee = ctx.fake
+    .all("employees")
+    .find((row) => row.workspace_id === workspaceId && row.profile_id === ctx.uid && (row.status == null || row.status === "active"));
+  if (typeof employee?.name === "string" && employee.name.trim()) return employee.name.trim();
+  const user = ctx.fake.users.find((item) => item.id === ctx.uid);
+  const meta = user?.user_metadata ?? {};
+  const fromMeta =
+    (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+    (typeof meta.name === "string" && meta.name.trim()) ||
+    "";
+  if (fromMeta) return fromMeta;
+  return user?.email?.trim() || null;
+}
+
+function pushOrderEvent(
+  ctx: PolicyCtx,
+  input: {
+    workspaceId: unknown;
+    orderId: unknown;
+    eventType: string;
+    fieldName?: string | null;
+    oldValue?: string | null;
+    newValue?: string | null;
+    payload?: Record<string, unknown>;
+  },
+) {
+  ctx.fake.all("order_events").push({
+    id: crypto.randomUUID(),
+    workspace_id: input.workspaceId,
+    order_id: input.orderId,
+    event_type: input.eventType,
+    field_name: input.fieldName ?? null,
+    old_value: input.oldValue ?? null,
+    new_value: input.newValue ?? null,
+    payload: { source: "trigger", ...(input.payload ?? {}) },
+    actor_user_id: ctx.uid,
+    actor_name: resolveActorName(input.workspaceId, ctx),
+    created_at: new Date().toISOString(),
+  });
+}
+
 type SyncMatDesired = {
   lineId: string | null;
   inventoryItemId: string | null;
@@ -298,9 +342,11 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
   }
 
   const materialsSnapshot = cloneRows(ctx.fake.all("order_materials"));
+  const eventsSnapshot = cloneRows(ctx.fake.all("order_events"));
   const orderSnapshot = { ...order };
   const rollback = () => {
     ctx.fake.tables.order_materials = materialsSnapshot;
+    ctx.fake.tables.order_events = eventsSnapshot;
     Object.assign(order, orderSnapshot);
   };
   const fail = (message: string, code = "P0001") => {
@@ -339,6 +385,7 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
   }
 
   // Historical policy: retain any row with issue/return history even if no longer requested.
+  const beforeSync = cloneRows(ctx.fake.all("order_materials").filter((row) => row.order_id === orderId));
   ctx.fake.tables.order_materials = ctx.fake.all("order_materials").filter((row) => {
     if (row.order_id !== orderId) return true;
     if (Number(row.quantity_issued ?? 0) > 0 || Number(row.quantity_returned ?? 0) > 0) return true;
@@ -347,6 +394,22 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
     }
     return freeformKeepIds.has(String(row.id));
   });
+  for (const removed of beforeSync) {
+    if (ctx.fake.all("order_materials").some((row) => row.id === removed.id)) continue;
+    pushOrderEvent(ctx, {
+      workspaceId: order.workspace_id,
+      orderId,
+      eventType: "material_removed",
+      fieldName: "order_materials",
+      oldValue: String(removed.item_name ?? ""),
+      payload: {
+        line_id: removed.id,
+        item_name: removed.item_name,
+        quantity: removed.quantity,
+        price: removed.price,
+      },
+    });
+  }
 
   for (const line of desired) {
     if (line.supplySource === "catalog" && line.inventoryItemId) {
@@ -358,14 +421,32 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
       }
       const existing = matches[0];
       if (existing) {
+        const prevQty = Number(existing.quantity);
         // Catalog name/price snapshots stay frozen; only requested qty + source tag update.
         existing.quantity = line.quantity;
         existing.supply_source = "catalog";
+        if (prevQty !== line.quantity) {
+          pushOrderEvent(ctx, {
+            workspaceId: order.workspace_id,
+            orderId,
+            eventType: "material_updated",
+            fieldName: "order_materials",
+            oldValue: String(existing.item_name ?? ""),
+            newValue: String(existing.item_name ?? ""),
+            payload: {
+              line_id: existing.id,
+              item_name: existing.item_name,
+              quantity: line.quantity,
+              price: existing.price,
+              changes: { quantity: { from: prevQty, to: line.quantity } },
+            },
+          });
+        }
         continue;
       }
       const catalog = ctx.fake.all("inventory_items").find((row) => row.id === line.inventoryItemId && row.workspace_id === order.workspace_id);
       if (!catalog) return fail("Inventory item is unavailable in this workspace");
-      ctx.fake.all("order_materials").push({
+      const created = {
         id: crypto.randomUUID(),
         order_id: orderId,
         inventory_item_id: line.inventoryItemId,
@@ -376,6 +457,21 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
         quantity_returned: 0,
         supply_source: "catalog",
         created_at: new Date().toISOString(),
+      };
+      ctx.fake.all("order_materials").push(created);
+      pushOrderEvent(ctx, {
+        workspaceId: order.workspace_id,
+        orderId,
+        eventType: "material_added",
+        fieldName: "order_materials",
+        newValue: String(created.item_name),
+        payload: {
+          line_id: created.id,
+          item_name: created.item_name,
+          quantity: created.quantity,
+          price: created.price,
+          inventory_item_id: created.inventory_item_id,
+        },
       });
       continue;
     }
@@ -391,15 +487,40 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
             ["one_time", "customer"].includes(String(row.supply_source ?? "")),
         );
       if (!existing) return fail("Invalid line_id for this order");
+      const changes: Record<string, { from: unknown; to: unknown }> = {};
+      if (String(existing.item_name ?? "") !== String(line.itemName ?? "")) {
+        changes.name = { from: existing.item_name, to: line.itemName };
+      }
+      if (Number(existing.price) !== Number(line.price)) changes.price = { from: existing.price, to: line.price };
+      if (Number(existing.quantity) !== Number(line.quantity)) {
+        changes.quantity = { from: existing.quantity, to: line.quantity };
+      }
       existing.item_name = line.itemName;
       existing.price = line.price;
       existing.quantity = line.quantity;
       existing.inventory_item_id = null;
       existing.supply_source = line.supplySource;
+      if (Object.keys(changes).length > 0) {
+        pushOrderEvent(ctx, {
+          workspaceId: order.workspace_id,
+          orderId,
+          eventType: "material_updated",
+          fieldName: "order_materials",
+          oldValue: String(changes.name?.from ?? existing.item_name ?? ""),
+          newValue: String(line.itemName ?? ""),
+          payload: {
+            line_id: existing.id,
+            item_name: line.itemName,
+            quantity: line.quantity,
+            price: line.price,
+            changes,
+          },
+        });
+      }
       continue;
     }
 
-    ctx.fake.all("order_materials").push({
+    const freeform = {
       id: crypto.randomUUID(),
       order_id: orderId,
       inventory_item_id: null,
@@ -410,6 +531,20 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
       quantity_returned: 0,
       supply_source: line.supplySource,
       created_at: new Date().toISOString(),
+    };
+    ctx.fake.all("order_materials").push(freeform);
+    pushOrderEvent(ctx, {
+      workspaceId: order.workspace_id,
+      orderId,
+      eventType: "material_added",
+      fieldName: "order_materials",
+      newValue: String(freeform.item_name),
+      payload: {
+        line_id: freeform.id,
+        item_name: freeform.item_name,
+        quantity: freeform.quantity,
+        price: freeform.price,
+      },
     });
   }
 
@@ -527,10 +662,12 @@ function issueOrReturnRpc(
   const inventorySnapshot = cloneRows(ctx.fake.all("inventory_items"));
   const materialsSnapshot = cloneRows(ctx.fake.all("order_materials"));
   const movementsSnapshot = cloneRows(ctx.fake.all("inventory_movements"));
+  const eventsSnapshot = cloneRows(ctx.fake.all("order_events"));
   const rollback = () => {
     ctx.fake.tables.inventory_items = inventorySnapshot;
     ctx.fake.tables.order_materials = materialsSnapshot;
     ctx.fake.tables.inventory_movements = movementsSnapshot;
+    ctx.fake.tables.order_events = eventsSnapshot;
   };
   const fail = (message: string, code = "P0001") => {
     rollback();
@@ -579,6 +716,43 @@ function issueOrReturnRpc(
 
     ctx.fake.all("inventory_movements").push(movement);
     created.push(movement);
+
+    // Record only after the stock + ledger write succeeded (mirrors AFTER UPDATE trigger).
+    if (kind === "issue") {
+      pushOrderEvent(ctx, {
+        workspaceId: order.workspace_id,
+        orderId,
+        eventType: "material_issued",
+        fieldName: "quantity_issued",
+        oldValue: String(issued),
+        newValue: String(issued + quantity),
+        payload: {
+          line_id: line.id,
+          item_name: line.item_name,
+          quantity,
+          price: line.price,
+          quantity_issued: issued + quantity,
+          quantity_returned: returned,
+        },
+      });
+    } else {
+      pushOrderEvent(ctx, {
+        workspaceId: order.workspace_id,
+        orderId,
+        eventType: "material_returned",
+        fieldName: "quantity_returned",
+        oldValue: String(returned),
+        newValue: String(returned + quantity),
+        payload: {
+          line_id: line.id,
+          item_name: line.item_name,
+          quantity,
+          price: line.price,
+          quantity_issued: issued,
+          quantity_returned: returned + quantity,
+        },
+      });
+    }
   }
 
   return { data: created, error: null };
@@ -673,6 +847,9 @@ export function installSecurityModel() {
     order_materials: {
       select: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
     },
+    order_events: {
+      select: (row, ctx) => isMember(row.workspace_id, ctx),
+    },
     inventory_movements: {
       select: (row, ctx) => isMember(row.workspace_id, ctx),
     },
@@ -733,7 +910,7 @@ export function installSecurityModel() {
       ctx.fake.tables.warehouse_stock = ctx.fake.all("warehouse_stock").filter((row) => !sameItem(row));
       return null;
     },
-    orders: (op, oldRow, _newRow, ctx) => {
+    orders: (op, oldRow, newRow, ctx) => {
       if (op === "DELETE" && oldRow) {
         const outstanding = ctx.fake
           .all("order_materials")
@@ -741,6 +918,82 @@ export function installSecurityModel() {
         if (outstanding) return error("Cannot delete an order with outstanding issued materials. Return issued stock first.", "P0001");
         ctx.fake.tables.order_materials = ctx.fake.all("order_materials").filter((row) => row.order_id !== oldRow.id);
         ctx.fake.tables.order_services = ctx.fake.all("order_services").filter((row) => row.order_id !== oldRow.id);
+      }
+      if (op === "UPDATE" && oldRow && newRow && oldRow.status !== newRow.status) {
+        const lifecycle =
+          newRow.status === "closed" ? "close" : newRow.status === "cancelled" ? "cancel" : oldRow.status === "closed" || oldRow.status === "cancelled" ? "reopen" : null;
+        pushOrderEvent(ctx, {
+          workspaceId: newRow.workspace_id,
+          orderId: newRow.id,
+          eventType: "status_changed",
+          fieldName: "status",
+          oldValue: String(oldRow.status ?? ""),
+          newValue: String(newRow.status ?? ""),
+          payload: lifecycle ? { lifecycle } : {},
+        });
+      }
+      return null;
+    },
+    order_services: (op, oldRow, newRow, ctx) => {
+      const orderId = String((newRow ?? oldRow)?.order_id ?? "");
+      const order = ctx.fake.all("orders").find((row) => row.id === orderId);
+      if (!order) return null;
+      if (op === "INSERT" && newRow) {
+        pushOrderEvent(ctx, {
+          workspaceId: order.workspace_id,
+          orderId,
+          eventType: "service_added",
+          fieldName: "order_services",
+          newValue: String(newRow.service_name ?? ""),
+          payload: {
+            line_id: newRow.id,
+            item_name: newRow.service_name,
+            quantity: newRow.quantity,
+            price: newRow.price,
+            ...(newRow.kind ? { kind: newRow.kind } : {}),
+          },
+        });
+      }
+      if (op === "DELETE" && oldRow) {
+        pushOrderEvent(ctx, {
+          workspaceId: order.workspace_id,
+          orderId,
+          eventType: "service_removed",
+          fieldName: "order_services",
+          oldValue: String(oldRow.service_name ?? ""),
+          payload: {
+            line_id: oldRow.id,
+            item_name: oldRow.service_name,
+            quantity: oldRow.quantity,
+            price: oldRow.price,
+            ...(oldRow.kind ? { kind: oldRow.kind } : {}),
+          },
+        });
+      }
+      if (op === "UPDATE" && oldRow && newRow) {
+        const changes: Record<string, { from: unknown; to: unknown }> = {};
+        if (oldRow.service_name !== newRow.service_name) changes.name = { from: oldRow.service_name, to: newRow.service_name };
+        if (Number(oldRow.quantity) !== Number(newRow.quantity)) changes.quantity = { from: oldRow.quantity, to: newRow.quantity };
+        if (Number(oldRow.price) !== Number(newRow.price)) changes.price = { from: oldRow.price, to: newRow.price };
+        if (oldRow.kind !== newRow.kind) changes.kind = { from: oldRow.kind, to: newRow.kind };
+        if (Object.keys(changes).length > 0) {
+          pushOrderEvent(ctx, {
+            workspaceId: order.workspace_id,
+            orderId,
+            eventType: "service_updated",
+            fieldName: "order_services",
+            oldValue: String(oldRow.service_name ?? ""),
+            newValue: String(newRow.service_name ?? ""),
+            payload: {
+              line_id: newRow.id,
+              item_name: newRow.service_name,
+              quantity: newRow.quantity,
+              price: newRow.price,
+              changes,
+              ...(newRow.kind ? { kind: newRow.kind } : {}),
+            },
+          });
+        }
       }
       return null;
     },

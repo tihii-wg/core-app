@@ -21,15 +21,10 @@ type OrderFeedSectionProps = {
 };
 
 function eventText(t: TFunction, description: OrderEventDescription) {
-  const { from, to, type, field } = description.params;
-  switch (description.key) {
-    case "statusChanged":
-      return t("orders.feed.events.statusChanged", { from, to });
-    case "customStatusChanged":
-      return t("orders.feed.events.customStatusChanged", { from, to });
-    default:
-      return t("orders.feed.events.generic", { type, field, from, to }).replace(/\s{2,}/g, " ");
-  }
+  // Dynamic event keys stay stringly-typed so new activity events do not require regenerating i18n types.
+  const key = `orders.feed.events.${description.key}`;
+  const text = String(t(key as never, description.params as never));
+  return description.key === "generic" ? text.replace(/\s{2,}/g, " ") : text;
 }
 
 function formatStamp(value: string, locale: string) {
@@ -38,7 +33,7 @@ function formatStamp(value: string, locale: string) {
   return parsed.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** Order detail: comments (add/delete) and the status event timeline. Degrades to notices when tables/RPC are missing. */
+/** Order detail: comments (add/delete) and the activity event timeline. Degrades to notices when tables/RPC are missing. */
 export default function OrderFeedSection({ orderId, enabled, canComment }: OrderFeedSectionProps) {
   const { t, i18n } = useTranslation();
   const { workflow } = useIndustryWorkflow();
@@ -143,10 +138,10 @@ export default function OrderFeedSection({ orderId, enabled, canComment }: Order
             {events.events.map((event) => {
               const description = describeOrderEvent(event, statusLabel);
               return (
-                <li key={event.id} className="relative">
+                <li key={event.id} className="relative min-w-0">
                   <span aria-hidden="true" className="absolute top-1.5 -left-[1.3125rem] size-2 rounded-full bg-primary/70" />
                   <p className="text-sm [overflow-wrap:anywhere] text-foreground">{eventText(t, description)}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {event.actorName ?? t("orders.feed.unknownAuthor")}
                     {" · "}
                     <time dateTime={event.createdAt} className="tabular-nums">

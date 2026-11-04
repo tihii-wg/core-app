@@ -135,6 +135,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       await queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] });
       await queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
       toast.success(mode === "issue" ? t("orders.toast.issued") : t("orders.toast.returned"), { id: toastId });
       setMode(null);
     } catch (error) {
