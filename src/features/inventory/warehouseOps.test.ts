@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignCreatedItemToOpLines,
   hasValidQtyPrecision,
   lineAmount,
   parseDecimalInput,
@@ -9,6 +10,7 @@ import {
   sumLineAmounts,
   totalsByItem,
   validateOpLines,
+  type OpDraftLine,
   type OpLineInput,
 } from "./warehouseOps";
 
@@ -108,5 +110,34 @@ describe("previewStockAfter", () => {
 
   it("write-off reduces source and total", () => {
     expect(previewStockAfter("writeOff", current, 3)).toEqual({ from: 7, to: 4, total: 11 });
+  });
+});
+
+describe("assignCreatedItemToOpLines", () => {
+  let nextKey = 100;
+  const makeLine = (): OpDraftLine => ({ key: ++nextKey, itemId: "", quantity: "", unitCost: "" });
+
+  it("fills the first empty line without adding a duplicate row", () => {
+    const lines: OpDraftLine[] = [
+      { key: 1, itemId: "", quantity: "", unitCost: "" },
+      { key: 2, itemId: "existing", quantity: "2", unitCost: "5" },
+    ];
+    expect(assignCreatedItemToOpLines(lines, "new", "12", makeLine)).toEqual([
+      { key: 1, itemId: "new", quantity: "", unitCost: "12" },
+      { key: 2, itemId: "existing", quantity: "2", unitCost: "5" },
+    ]);
+  });
+
+  it("appends a line when every line already has an item", () => {
+    const lines: OpDraftLine[] = [{ key: 1, itemId: "a", quantity: "1", unitCost: "3" }];
+    const result = assignCreatedItemToOpLines(lines, "b", "9", makeLine);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual(lines[0]);
+    expect(result[1]).toMatchObject({ itemId: "b", unitCost: "9", quantity: "" });
+  });
+
+  it("does not add a second line for an item already selected", () => {
+    const lines: OpDraftLine[] = [{ key: 1, itemId: "a", quantity: "1", unitCost: "3" }];
+    expect(assignCreatedItemToOpLines(lines, "a", "99", makeLine)).toBe(lines);
   });
 });

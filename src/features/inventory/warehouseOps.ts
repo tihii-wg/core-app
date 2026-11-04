@@ -119,3 +119,27 @@ export function previewStockAfter(
       return { from: roundQty(current.from - quantity), to: current.to, total: roundQty(current.total - quantity) };
   }
 }
+
+/** Draft line shape used by WarehouseOpDialog while the create-material dialog is open. */
+export type OpDraftLine = { key: number; itemId: string; quantity: string; unitCost: string };
+
+/**
+ * Places a newly created catalog item onto the open operation draft without duplicating an
+ * existing selection of the same item. Prefers the first empty line; otherwise appends a line.
+ */
+export function assignCreatedItemToOpLines(
+  lines: OpDraftLine[],
+  itemId: string,
+  unitCost: string,
+  makeLine: () => OpDraftLine,
+): OpDraftLine[] {
+  if (!itemId) return lines;
+  if (lines.some((line) => line.itemId === itemId)) return lines;
+
+  const emptyIndex = lines.findIndex((line) => !line.itemId);
+  if (emptyIndex >= 0) {
+    return lines.map((line, index) => (index === emptyIndex ? { ...line, itemId, unitCost } : line));
+  }
+
+  return [...lines, { ...makeLine(), itemId, unitCost }];
+}
