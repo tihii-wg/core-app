@@ -35,11 +35,14 @@ import { OrderVehicleFields } from "./OrderVehicleFields";
 import { buildOrderMileageSnapshot, persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
+import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
 import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
 import OrderTotalsSummary from "./OrderTotalsSummary";
 import { previewOrderMoney } from "./orderMoneyPreview";
 import { useDebounce } from "../../hooks/useDebounce";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { defaultsForKind } from "./warranty";
 
 export default function AddNewOrderForm({
   setCreateModalOpen,
@@ -62,6 +65,13 @@ export default function AddNewOrderForm({
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const { formatMoney } = useWorkspaceMoney();
+  const { data: workspace } = useGetWorkspace();
+  const warrantyDefaults = {
+    serviceDurationMonths: workspace?.warrantyServiceMonths ?? null,
+    serviceMileageLimit: workspace?.warrantyServiceKm ?? null,
+    partsDurationMonths: workspace?.warrantyPartsMonths ?? null,
+    partsMileageLimit: workspace?.warrantyPartsKm ?? null,
+  };
   const { workflow, copy } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
   const showVehicles = industrySupportsClientVehicles(workflow);
@@ -377,7 +387,12 @@ export default function AddNewOrderForm({
 
               if (alreadyExists) return;
 
-              serviceAppend(catalogServiceToOrderLine(service));
+              const warranty = defaultsForKind(warrantyDefaults, "service");
+              serviceAppend({
+                ...catalogServiceToOrderLine(service),
+                warrantyMonths: warranty.durationMonths,
+                warrantyKm: warranty.mileageLimit,
+              });
               clearErrors("services");
             }}
             onCreate={(serviceName, price) => {
@@ -385,11 +400,14 @@ export default function AddNewOrderForm({
 
               if (alreadyExists) return;
 
+              const warranty = defaultsForKind(warrantyDefaults, "service");
               serviceAppend({
                 serviceId: crypto.randomUUID(),
                 serviceName,
                 price,
                 quantity: 1,
+                warrantyMonths: warranty.durationMonths,
+                warrantyKm: warranty.mileageLimit,
               });
               clearErrors("services");
             }}
@@ -402,27 +420,41 @@ export default function AddNewOrderForm({
                 const unitPrice = watchedServices?.[index]?.price ?? field.price ?? 0;
 
                 return (
-                  <div key={field.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
-                      <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(unitPrice)}</p>
+                  <div key={field.id} className="space-y-2 rounded-md border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
+                        <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(unitPrice)}</p>
+                      </div>
+                      <OrderServiceKindSelect
+                        value={watchedServices?.[index]?.kind}
+                        lineName={field.serviceName}
+                        disabled={isSubmitting}
+                        onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isSubmitting}
+                        onClick={() => serviceRemove(index)}
+                        aria-label={t("orders.form.removeService", { name: field.serviceName })}
+                      >
+                        {t("orders.form.remove")}
+                      </Button>
                     </div>
-                    <OrderServiceKindSelect
-                      value={watchedServices?.[index]?.kind}
-                      lineName={field.serviceName}
+                    <OrderLineWarrantyFields
+                      idPrefix={`create-service-${index}`}
+                      months={watchedServices?.[index]?.warrantyMonths}
+                      days={watchedServices?.[index]?.warrantyDays}
+                      km={watchedServices?.[index]?.warrantyKm}
                       disabled={isSubmitting}
-                      onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
+                      onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
+                        setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
+                        setValue(`services.${index}.warrantyDays`, warrantyDays, { shouldDirty: true });
+                        setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true });
+                      }}
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isSubmitting}
-                      onClick={() => serviceRemove(index)}
-                      aria-label={t("orders.form.removeService", { name: field.serviceName })}
-                    >
-                      {t("orders.form.remove")}
-                    </Button>
                   </div>
                 );
               })}
@@ -440,6 +472,7 @@ export default function AddNewOrderForm({
           trigger={trigger as never}
           inventoryItems={activeInventory}
           disabled={isSubmitting}
+          warrantyDefaults={warrantyDefaults}
           isSubmitted={isSubmitted}
           errors={errors.materials}
         />

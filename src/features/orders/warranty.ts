@@ -8,6 +8,11 @@ export type WarrantyItemKind = "service" | "material";
 export type WarrantyLimits = {
   /** Calendar months of coverage. Null/0 = no duration limit. */
   durationMonths: number | null;
+  /**
+   * Exact calendar days of coverage when the source used days (not months).
+   * Null/0 = no day-based limit. Never derived by dividing days by 30.
+   */
+  durationDays?: number | null;
   /** Mileage allowance from start mileage. Null/0 = no mileage limit. */
   mileageLimit: number | null;
 };
@@ -55,8 +60,19 @@ export function normalizeWarrantyKm(value: unknown): number | null {
   return Math.floor(n);
 }
 
+export function normalizeWarrantyDays(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
 export function hasWarrantyCoverage(limits: WarrantyLimits): boolean {
-  return Boolean(normalizeWarrantyMonths(limits.durationMonths) || normalizeWarrantyKm(limits.mileageLimit));
+  return Boolean(
+    normalizeWarrantyMonths(limits.durationMonths) ||
+      normalizeWarrantyDays(limits.durationDays) ||
+      normalizeWarrantyKm(limits.mileageLimit),
+  );
 }
 
 /** Add calendar months in a timezone-aware way using UTC date parts of the start instant. */
@@ -83,19 +99,55 @@ export function toDateOnlyUtc(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Add exact calendar days using UTC date parts of the start instant. */
+export function addCalendarDaysIso(startIso: string, days: number): string {
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime()) || days <= 0) return startIso;
+  const end = new Date(start.getTime());
+  end.setUTCDate(end.getUTCDate() + days);
+  return end.toISOString();
+}
+
 export function buildWarrantyExpiration(params: {
   startsAt: string;
   durationMonths: number | null;
+  durationDays?: number | null;
   startMileage: number | null;
   mileageLimit: number | null;
 }): { endsOn: string | null; expiresAtMileage: number | null } {
   const months = normalizeWarrantyMonths(params.durationMonths);
+  const days = months ? null : normalizeWarrantyDays(params.durationDays);
   const limit = normalizeWarrantyKm(params.mileageLimit);
-  const endsOn = months ? toDateOnlyUtc(addCalendarMonthsIso(params.startsAt, months)) : null;
+  const endsOn = months
+    ? toDateOnlyUtc(addCalendarMonthsIso(params.startsAt, months))
+    : days
+      ? toDateOnlyUtc(addCalendarDaysIso(params.startsAt, days))
+      : null;
   const startMileage =
     params.startMileage != null && Number.isFinite(Number(params.startMileage)) ? Math.max(0, Math.floor(Number(params.startMileage))) : null;
+  // Mileage expiration requires an immutable start mileage; never invent one.
   const expiresAtMileage = limit != null && startMileage != null ? startMileage + limit : null;
   return { endsOn, expiresAtMileage };
+}
+
+/**
+ * Compact label for a line's configured (or activated) warranty limits.
+ * Returns null when there is no coverage — callers should render nothing.
+ */
+export function formatWarrantyLimitsLabel(
+  limits: WarrantyLimits,
+  t: (key: string, options?: { count?: number; value?: string }) => string,
+  formatKm: (n: number) => string,
+): string | null {
+  const months = normalizeWarrantyMonths(limits.durationMonths);
+  const days = months ? null : normalizeWarrantyDays(limits.durationDays);
+  const km = normalizeWarrantyKm(limits.mileageLimit);
+  if (!months && !days && !km) return null;
+  const parts: string[] = [];
+  if (months) parts.push(t("orders.warranty.line.months", { count: months }));
+  if (days) parts.push(t("orders.warranty.line.days", { count: days }));
+  if (km) parts.push(t("orders.warranty.line.km", { value: formatKm(km) }));
+  return t("orders.warranty.line.withCoverage", { value: parts.join(" / ") });
 }
 
 /**
@@ -184,4 +236,144 @@ export function defaultsForKind(defaults: WorkspaceWarrantyDefaults, kind: Warra
     return { durationMonths: defaults.serviceDurationMonths, mileageLimit: defaults.serviceMileageLimit };
   }
   return { durationMonths: defaults.partsDurationMonths, mileageLimit: defaults.partsMileageLimit };
+}
+
+/** Near-expiry thresholds for compact list/board indicators (display only). */
+export const WARRANTY_NEAR_EXPIRY_DAYS = 30;
+export const WARRANTY_NEAR_EXPIRY_KM = 1000;
+
+export type RemainingDuration = {
+  /** Whole calendar months remaining until endsOn (0 when under one month). */
+  months: number;
+  /** Extra whole days after those months (or total days when months === 0). */
+  days: number;
+  /** Total whole days remaining (never negative). */
+  totalDays: number;
+};
+
+/**
+ * Calendar remaining duration until endsOn (date-only, UTC day boundary).
+ * Returns null when endsOn is missing/invalid or already past.
+ */
+export function remainingDurationUntil(endsOn: string | null | undefined, nowIso?: string): RemainingDuration | null {
+  if (!endsOn?.trim()) return null;
+  const now = nowIso ? new Date(nowIso) : new Date();
+  if (Number.isNaN(now.getTime())) return null;
+  const end = new Date(`${endsOn.trim()}T23:59:59.999Z`);
+  if (Number.isNaN(end.getTime()) || end.getTime() < now.getTime()) return null;
+
+  const startDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  const totalDays = Math.max(0, Math.round((endDay - startDay) / 86_400_000));
+  if (totalDays <= 0) return null;
+
+  let months =
+    (end.getUTCFullYear() - now.getUTCFullYear()) * 12 + (end.getUTCMonth() - now.getUTCMonth());
+  const anchor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, now.getUTCDate()));
+  if (anchor.getTime() > endDay) months -= 1;
+  months = Math.max(0, months);
+  const afterMonths = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, now.getUTCDate()));
+  const days = Math.max(0, Math.round((endDay - afterMonths.getTime()) / 86_400_000));
+  return { months, days, totalDays };
+}
+
+export type OrderWarrantyIndicatorModel = {
+  /** Nothing to render. */
+  visible: boolean;
+  isWarrantyOrder: boolean;
+  coveredItemCount: number;
+  status: WarrantyStatusCode;
+  evaluation: WarrantyEvaluation | null;
+  remaining: RemainingDuration | null;
+  nearExpiry: boolean;
+  /** Snapshot chosen as the primary (earliest) indicator. */
+  primary: WarrantySnapshot | null;
+};
+
+function urgencyKey(
+  evaluation: WarrantyEvaluation,
+  nowMs: number,
+): { dateMs: number; mileage: number } {
+  const dateMs = evaluation.expiresOn
+    ? new Date(`${evaluation.expiresOn}T23:59:59.999Z`).getTime()
+    : Number.POSITIVE_INFINITY;
+  const mileage =
+    evaluation.remainingMileage != null && Number.isFinite(evaluation.remainingMileage)
+      ? evaluation.remainingMileage
+      : Number.POSITIVE_INFINITY;
+  void nowMs;
+  return { dateMs: Number.isFinite(dateMs) ? dateMs : Number.POSITIVE_INFINITY, mileage };
+}
+
+/**
+ * Pick the covered item whose limit is reached first (earliest date, else lowest remaining km).
+ * Expired items win over active ones so the card shows the expired state when any linked claim is expired.
+ */
+export function selectPrimaryWarrantyItem(
+  items: readonly { snapshot: WarrantySnapshot; evaluation: WarrantyEvaluation }[],
+  nowIso?: string,
+): { snapshot: WarrantySnapshot; evaluation: WarrantyEvaluation } | null {
+  if (items.length === 0) return null;
+  const nowMs = (nowIso ? new Date(nowIso) : new Date()).getTime();
+  const ranked = [...items].sort((a, b) => {
+    const aExpired = isWarrantyExpired(a.evaluation.status);
+    const bExpired = isWarrantyExpired(b.evaluation.status);
+    if (aExpired !== bExpired) return aExpired ? -1 : 1;
+    const aKey = urgencyKey(a.evaluation, nowMs);
+    const bKey = urgencyKey(b.evaluation, nowMs);
+    if (aKey.dateMs !== bKey.dateMs) return aKey.dateMs - bKey.dateMs;
+    return aKey.mileage - bKey.mileage;
+  });
+  return ranked[0] ?? null;
+}
+
+/**
+ * Build the compact list/board indicator model from covered snapshots.
+ * `isWarrantyOrder` only affects the Warranty label; coverage comes from snapshots.
+ */
+export function buildOrderWarrantyIndicator(params: {
+  snapshots: readonly WarrantySnapshot[];
+  currentMileage?: number | null;
+  isWarrantyOrder: boolean;
+  nowIso?: string;
+}): OrderWarrantyIndicatorModel {
+  const covered = params.snapshots.filter((snapshot) => hasWarrantyCoverage(snapshot));
+  if (covered.length === 0 && !params.isWarrantyOrder) {
+    return {
+      visible: false,
+      isWarrantyOrder: false,
+      coveredItemCount: 0,
+      status: "none",
+      evaluation: null,
+      remaining: null,
+      nearExpiry: false,
+      primary: null,
+    };
+  }
+
+  const evaluated = covered.map((snapshot) => ({
+    snapshot,
+    evaluation: evaluateWarranty({ snapshot, currentMileage: params.currentMileage, nowIso: params.nowIso }),
+  }));
+  const primary = selectPrimaryWarrantyItem(evaluated, params.nowIso);
+  const evaluation = primary?.evaluation ?? null;
+  const status = evaluation?.status ?? (params.isWarrantyOrder ? "unavailable" : "none");
+  const remaining =
+    evaluation && !isWarrantyExpired(status) ? remainingDurationUntil(evaluation.expiresOn, params.nowIso) : null;
+  const nearExpiry =
+    status === "active" &&
+    ((remaining != null && remaining.totalDays <= WARRANTY_NEAR_EXPIRY_DAYS) ||
+      (evaluation?.remainingMileage != null && evaluation.remainingMileage <= WARRANTY_NEAR_EXPIRY_KM));
+
+  const visible = params.isWarrantyOrder || covered.length > 0;
+  return {
+    visible,
+    isWarrantyOrder: params.isWarrantyOrder,
+    coveredItemCount: covered.length,
+    status,
+    evaluation,
+    remaining,
+    nearExpiry,
+    primary: primary?.snapshot ?? null,
+  };
 }

@@ -290,10 +290,12 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                 <OrderLineWarrantyFields
                   idPrefix={`edit-service-${index}`}
                   months={watchedServices?.[index]?.warrantyMonths}
+                  days={watchedServices?.[index]?.warrantyDays}
                   km={watchedServices?.[index]?.warrantyKm}
                   disabled={isSubmitting || Boolean(order.closedAt)}
-                  onChange={({ warrantyMonths, warrantyKm }) => {
+                  onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                     setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
+                    setValue(`services.${index}.warrantyDays`, warrantyDays, { shouldDirty: true });
                     setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true });
                   }}
                 />
@@ -313,6 +315,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         trigger={trigger as never}
         inventoryItems={activeInventory}
         disabled={isSubmitting}
+        warrantyDisabled={isSubmitting || Boolean(order.closedAt)}
+        warrantyDefaults={warrantyDefaults}
         isSubmitted={isSubmitted}
         errors={errors.materials}
       />

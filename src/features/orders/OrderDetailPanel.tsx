@@ -19,6 +19,10 @@ import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/Stat
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import WarrantyOrderSection from "./WarrantyOrderSection";
+import { OrderWarrantyCoverageSection } from "./OrderWarrantyCoverageSection";
+import { OrderLineWarrantyBadge } from "./OrderLineWarrantyBadge";
+import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
@@ -206,11 +210,16 @@ export default function OrderDetailPanel({
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
       <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
         <SheetHeader className="pr-24">
-          <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
-            {selectedOrder?.orderNumber}
-            {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />}
-            {selectedOrder?.warrantySourceOrderId && !isEditing ? (
-              <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge>
+          <SheetTitle className="min-w-0">
+            <span className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
+              {selectedOrder?.orderNumber}
+              {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />}
+              {selectedOrder?.warrantySourceOrderId && !isEditing ? (
+                <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge>
+              ) : null}
+            </span>
+            {selectedOrder && !isEditing ? (
+              <OrderDetailWarrantyUnderNumber order={selectedOrder} />
             ) : null}
           </SheetTitle>
           {selectedOrder && !isEditing && canEditOrder && (
@@ -244,6 +253,13 @@ export default function OrderDetailPanel({
 
         {selectedOrder && !isEditing && (
           <div className="space-y-5 px-5 py-5">
+            {selectedOrder.warrantySourceOrderId ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-warranty-claim-banner>
+                <p className="text-sm font-semibold text-foreground">{t("orders.warranty.claimTitle")}</p>
+                <p className="text-xs text-muted-foreground">{t("orders.warranty.claimHint")}</p>
+              </div>
+            ) : null}
+
             <WarrantyOrderSection
               order={selectedOrder}
               currentMileage={selectedOrder.vehicleMileageSnapshot ?? null}
@@ -251,6 +267,11 @@ export default function OrderDetailPanel({
               onChanged={() => {
                 void onOrderUpdated(selectedOrder);
               }}
+            />
+
+            <OrderWarrantyCoverageSection
+              order={selectedOrder}
+              currentMileage={selectedOrder.vehicleMileageSnapshot ?? null}
             />
 
             <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
@@ -374,12 +395,24 @@ export default function OrderDetailPanel({
                     {serviceLines.map((line, index) => (
                       <tr key={line.id ?? `${line.serviceId}-${index}`}>
                         <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
-                          {line.serviceName}
-                          {line.kind ? (
-                            <StatusBadge variant="muted" className="ml-2 align-middle">
-                              {t(`orders.form.lineKind.${line.kind}`)}
-                            </StatusBadge>
-                          ) : null}
+                          <div className="min-w-0 space-y-0.5">
+                            <p>
+                              {line.serviceName}
+                              {line.kind ? (
+                                <StatusBadge variant="muted" className="ml-2 align-middle">
+                                  {t(`orders.form.lineKind.${line.kind}`)}
+                                </StatusBadge>
+                              ) : null}
+                            </p>
+                            <OrderLineWarrantyBadge
+                              activated={Boolean(selectedOrder.closedAt)}
+                              limits={{
+                                durationMonths: line.warrantyMonths ?? null,
+                                durationDays: line.warrantyDays ?? null,
+                                mileageLimit: line.warrantyKm ?? null,
+                              }}
+                            />
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
@@ -421,6 +454,14 @@ export default function OrderDetailPanel({
                             <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
                               <div className="space-y-1">
                                 <p>{line.itemName}</p>
+                                <OrderLineWarrantyBadge
+                                  activated={Boolean(selectedOrder.closedAt)}
+                                  limits={{
+                                    durationMonths: line.warrantyMonths ?? null,
+                                    durationDays: line.warrantyDays ?? null,
+                                    mileageLimit: line.warrantyKm ?? null,
+                                  }}
+                                />
                                 <p className="text-[11px] text-muted-foreground">{sourceLabel}</p>
                                 {status ? (
                                   <>
@@ -788,6 +829,11 @@ function TaxInvoiceNumberField({
       {missingRequired ? <p className="text-xs text-destructive">{t("orders.taxInvoice.requiredHint")}</p> : null}
     </div>
   );
+}
+
+function OrderDetailWarrantyUnderNumber({ order }: { order: Order }) {
+  const { byOrderId } = useOrdersWarrantyIndicators([order]);
+  return <OrderWarrantyIndicator model={byOrderId.get(order.id)} className="mt-1 font-normal" />;
 }
 
 function DetailItem({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {

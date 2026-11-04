@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
-import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
+import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
+import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import type { OrderWarrantyIndicatorModel } from "./warranty";
 
 type OrderCardProps = {
   order: Order;
@@ -15,6 +17,8 @@ type OrderCardProps = {
   requireTaxInvoiceNumber?: boolean;
   /** Ledger-derived payment status when available; falls back to order.paymentStatus. */
   paymentStatus?: PaymentStatus;
+  /** Batched warranty indicator for this card (from useOrdersWarrantyIndicators). */
+  warrantyIndicator?: OrderWarrantyIndicatorModel | null;
   formatMoney: (value: number) => string;
   onView: (order: Order) => void;
   onOpenClient?: (clientId: string) => void;
@@ -38,6 +42,7 @@ export function OrderCard({
   isStatusUpdating = false,
   requireTaxInvoiceNumber = false,
   paymentStatus,
+  warrantyIndicator,
   formatMoney,
   onView,
   onOpenClient,
@@ -58,6 +63,7 @@ export function OrderCard({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="break-all font-semibold text-primary tabular-nums">{order.orderNumber}</p>
+          <OrderWarrantyIndicator model={warrantyIndicator} className="mt-0.5" />
           <p className="mt-0.5 truncate font-medium text-foreground">
             {onOpenClient ? (
               <OrderClientName clientId={order.clientId} clientName={order.clientName} onOpenClient={onOpenClient} />
@@ -101,7 +107,6 @@ export function OrderCard({
       <div className="mt-2.5 flex min-w-0 items-end gap-3 overflow-hidden border-t border-border pt-2.5">
         <div className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
           <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
-          {order.warrantySourceOrderId ? <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge> : null}
           <PaymentStatusBadge status={resolvedPaymentStatus} />
         </div>
         <span className={cn("shrink-0 text-right")}>

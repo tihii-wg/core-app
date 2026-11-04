@@ -4,10 +4,11 @@ import { Label } from "../../ui/Label";
 
 type Props = {
   months: number | null | undefined;
+  days?: number | null | undefined;
   km: number | null | undefined;
   disabled?: boolean;
   idPrefix: string;
-  onChange: (next: { warrantyMonths: number | null; warrantyKm: number | null }) => void;
+  onChange: (next: { warrantyMonths: number | null; warrantyDays: number | null; warrantyKm: number | null }) => void;
 };
 
 function parseOptional(value: string): number | null {
@@ -18,11 +19,14 @@ function parseOptional(value: string): number | null {
   return Math.floor(n);
 }
 
-/** Compact per-line warranty duration (months) + mileage limit editors. */
-export default function OrderLineWarrantyFields({ months, km, disabled, idPrefix, onChange }: Props) {
+/**
+ * Per-line warranty editors: months OR exact days (months take precedence when both set),
+ * plus optional mileage. Workspace defaults typically fill months + km.
+ */
+export default function OrderLineWarrantyFields({ months, days, km, disabled, idPrefix, onChange }: Props) {
   const { t } = useTranslation();
   return (
-    <div className="mt-2 grid grid-cols-2 gap-2">
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
       <div className="space-y-1">
         <Label htmlFor={`${idPrefix}-warranty-months`} className="text-xs text-muted-foreground">
           {t("orders.warranty.monthsLabel")}
@@ -36,10 +40,38 @@ export default function OrderLineWarrantyFields({ months, km, disabled, idPrefix
           disabled={disabled}
           value={months ?? ""}
           placeholder={t("orders.warranty.noLimit")}
-          onChange={(event) => onChange({ warrantyMonths: parseOptional(event.target.value), warrantyKm: km ?? null })}
+          onChange={(event) =>
+            onChange({
+              warrantyMonths: parseOptional(event.target.value),
+              warrantyDays: days ?? null,
+              warrantyKm: km ?? null,
+            })
+          }
         />
       </div>
       <div className="space-y-1">
+        <Label htmlFor={`${idPrefix}-warranty-days`} className="text-xs text-muted-foreground">
+          {t("orders.warranty.daysLabel")}
+        </Label>
+        <Input
+          id={`${idPrefix}-warranty-days`}
+          type="number"
+          min={1}
+          step={1}
+          inputMode="numeric"
+          disabled={disabled}
+          value={days ?? ""}
+          placeholder={t("orders.warranty.noLimit")}
+          onChange={(event) =>
+            onChange({
+              warrantyMonths: months ?? null,
+              warrantyDays: parseOptional(event.target.value),
+              warrantyKm: km ?? null,
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1 col-span-2 sm:col-span-1">
         <Label htmlFor={`${idPrefix}-warranty-km`} className="text-xs text-muted-foreground">
           {t("orders.warranty.kmLabel")}
         </Label>
@@ -52,7 +84,13 @@ export default function OrderLineWarrantyFields({ months, km, disabled, idPrefix
           disabled={disabled}
           value={km ?? ""}
           placeholder={t("orders.warranty.noLimit")}
-          onChange={(event) => onChange({ warrantyMonths: months ?? null, warrantyKm: parseOptional(event.target.value) })}
+          onChange={(event) =>
+            onChange({
+              warrantyMonths: months ?? null,
+              warrantyDays: days ?? null,
+              warrantyKm: parseOptional(event.target.value),
+            })
+          }
         />
       </div>
     </div>

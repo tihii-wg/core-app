@@ -452,13 +452,13 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
         issuedForCompensation = applied.issuedForCompensation;
         if (freeform.length > 0) {
           // Include catalog lines so sync does not delete just-issued rows.
-          const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform));
+          const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
           writtenMaterialLines = await stampMaterialLineDiscounts(orderId, synced, productPercent ?? 0, new Set());
         } else {
           writtenMaterialLines = await stampMaterialLineDiscounts(orderId, applied.catalog, productPercent ?? 0, new Set());
         }
       } else {
-        const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform);
+        const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
         writtenMaterialLines = await stampMaterialLineDiscounts(orderId, syncedMaterials, productPercent ?? 0, new Set());
       }
     } catch (error) {
@@ -809,7 +809,7 @@ let orderLineWarrantySupported: boolean | null = null;
 
 function orderServiceColumns() {
   const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
-  const warranty = orderLineWarrantySupported === false ? "" : ", warranty_months, warranty_km";
+  const warranty = orderLineWarrantySupported === false ? "" : ", warranty_months, warranty_days, warranty_km";
   return `${orderServiceKindSupported ? `${orderServiceBaseColumns}, kind` : orderServiceBaseColumns}${discount}${warranty}`;
 }
 
@@ -825,7 +825,7 @@ async function withOrderServiceKind<T extends { error: { code?: string; message?
   run: (columns: string, withKind: boolean) => PromiseLike<T>,
 ): Promise<T> {
   const first = await run(orderServiceColumns(), orderServiceKindSupported);
-  if (first.error && /warranty_months|warranty_km/i.test(first.error.message ?? "") && (first.error.code === "42703" || first.error.code === "PGRST204")) {
+  if (first.error && /warranty_months|warranty_days|warranty_km/i.test(first.error.message ?? "") && (first.error.code === "42703" || first.error.code === "PGRST204")) {
     orderLineWarrantySupported = false;
     const retry = await run(orderServiceColumns(), orderServiceKindSupported);
     if (orderServiceKindSupported && isMissingOrderServiceKindColumn(retry.error)) {
@@ -957,6 +957,9 @@ function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
     ...(mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) !== undefined
       ? { warrantyMonths: mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) }
       : {}),
+    ...(mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) !== undefined
+      ? { warrantyDays: mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) }
+      : {}),
     ...(mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) !== undefined
       ? { warrantyKm: mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) }
       : {}),
@@ -988,6 +991,9 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
       ...(mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) !== undefined
         ? { warrantyMonths: mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) }
         : {}),
+      ...(mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) !== undefined
+        ? { warrantyDays: mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) }
+        : {}),
       ...(mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) !== undefined
         ? { warrantyKm: mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) }
         : {}),
@@ -995,7 +1001,7 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
   });
 }
 
-async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]) {
+async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[], workspaceId?: string) {
   const consolidated = consolidateOrderMaterials(materials);
   const hasFreeform = consolidated.some((line) => !line.inventoryItemId?.trim());
   if (hasFreeform) {
@@ -1026,7 +1032,54 @@ async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]
   });
 
   if (error) throw new Error(materialsSyncError(error));
-  return mapMaterialLines((data ?? []) as OrderMaterialLine[]);
+  const mapped = mapMaterialLines((data ?? []) as OrderMaterialLine[]);
+
+  // Persist warranty fields via dedicated RPC (sync_order_materials does not write them).
+  if (workspaceId && orderLineWarrantySupported !== false) {
+    const warrantyPayload = consolidated.map((line) => {
+      const itemId = line.inventoryItemId?.trim();
+      const matched = itemId
+        ? mapped.find((row) => row.inventoryItemId === itemId)
+        : line.id
+          ? mapped.find((row) => row.id === line.id)
+          : mapped.find((row) => row.itemName === line.itemName && !row.inventoryItemId);
+      return {
+        ...(matched?.id ? { line_id: matched.id } : {}),
+        ...(itemId ? { inventory_item_id: itemId } : {}),
+        warranty_months: mapWarrantyMonths(line.warrantyMonths) ?? null,
+        warranty_days: mapWarrantyMonths(line.warrantyDays) ?? null,
+        warranty_km: mapWarrantyMonths(line.warrantyKm) ?? null,
+      };
+    });
+    const { error: warrantyError } = await supabase.rpc("apply_order_material_warranties", {
+      p_order_id: orderId,
+      p_workspace_id: workspaceId,
+      p_lines: warrantyPayload,
+    });
+    if (warrantyError) {
+      if (/apply_order_material_warranties|Could not find the function/i.test(warrantyError.message ?? "")) {
+        // SQL not applied yet — leave quantities synced; warranty columns stay as-is.
+      } else if (/warranty_months|warranty_days|warranty_km/i.test(warrantyError.message ?? "") && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
+        orderLineWarrantySupported = false;
+      } else {
+        throw new Error(warrantyError.message);
+      }
+    } else {
+      for (const line of mapped) {
+        const source = consolidated.find((row) =>
+          (line.id && row.id === line.id) ||
+          (line.inventoryItemId && row.inventoryItemId === line.inventoryItemId) ||
+          (!line.inventoryItemId && !row.inventoryItemId && row.itemName === line.itemName),
+        );
+        if (!source) continue;
+        line.warrantyMonths = mapWarrantyMonths(source.warrantyMonths) ?? null;
+        line.warrantyDays = mapWarrantyMonths(source.warrantyDays) ?? null;
+        line.warrantyKm = mapWarrantyMonths(source.warrantyKm) ?? null;
+      }
+    }
+  }
+
+  return mapped;
 }
 
 function toOrder(
@@ -1948,9 +2001,9 @@ export async function updateOrder(
           desired: desiredMaterials,
           existing: existingMapped,
         });
-        materialLines = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform));
+        materialLines = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), workspaceId);
       } else {
-        materialLines = await syncOrderMaterialsRpc(orderId, freeform);
+        materialLines = await syncOrderMaterialsRpc(orderId, freeform, workspaceId);
       }
       materialsRpcRan = true;
       if (productPercent !== null) {
@@ -1963,7 +2016,7 @@ export async function updateOrder(
       }
     } else if (existingMapped.length > 0) {
       // Clearing saved lines still requires sync_order_materials; surface RPC errors (no silent success).
-      materialLines = await syncOrderMaterialsRpc(orderId, []);
+      materialLines = await syncOrderMaterialsRpc(orderId, [], workspaceId);
       materialsRpcRan = true;
     } else {
       materialLines = [];
@@ -2086,6 +2139,9 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       ...(orderLineWarrantySupported !== false && service.warrantyMonths != null
         ? { warranty_months: mapWarrantyMonths(service.warrantyMonths) }
         : {}),
+      ...(orderLineWarrantySupported !== false && service.warrantyDays != null
+        ? { warranty_days: mapWarrantyMonths(service.warrantyDays) }
+        : {}),
       ...(orderLineWarrantySupported !== false && service.warrantyKm != null ? { warranty_km: mapWarrantyMonths(service.warrantyKm) } : {}),
     });
   }
@@ -2154,12 +2210,13 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
         .from("order_services")
         .update({
           warranty_months: mapWarrantyMonths(service.warrantyMonths) ?? null,
+          warranty_days: mapWarrantyMonths(service.warrantyDays) ?? null,
           warranty_km: mapWarrantyMonths(service.warrantyKm) ?? null,
         })
         .eq("id", service.id)
         .eq("order_id", orderId);
       if (warrantyError) {
-        if (/warranty_months|warranty_km/i.test(warrantyError.message) && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
+        if (/warranty_months|warranty_days|warranty_km/i.test(warrantyError.message) && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
           orderLineWarrantySupported = false;
           break;
         }
@@ -2168,6 +2225,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       const line = kept.find((item) => item.id === service.id) ?? inserted.find((item) => item.id === service.id);
       if (line) {
         (line as { warranty_months?: number | null }).warranty_months = mapWarrantyMonths(service.warrantyMonths) ?? null;
+        (line as { warranty_days?: number | null }).warranty_days = mapWarrantyMonths(service.warrantyDays) ?? null;
         (line as { warranty_km?: number | null }).warranty_km = mapWarrantyMonths(service.warrantyKm) ?? null;
       }
     }

@@ -1,15 +1,21 @@
 import i18n from "../i18n";
 import type { Order } from "../lib/types";
 import {
+  buildOrderWarrantyIndicator,
   evaluateWarranty,
+  normalizeWarrantyDays,
   normalizeWarrantyKm,
   normalizeWarrantyMonths,
+  type OrderWarrantyIndicatorModel,
   type WarrantyEvaluation,
   type WarrantyItemKind,
   type WarrantySnapshot,
   type WarrantyStatusCode,
 } from "../features/orders/warranty";
 import supabase from "./supabase";
+
+const WARRANTY_RECORD_COLUMNS =
+  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, duration_days, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
 
 function requireWorkspaceId(workspaceId: string | undefined) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
@@ -34,6 +40,7 @@ function mapSnapshot(row: Record<string, unknown>): WarrantySnapshot {
     orderServiceId: typeof row.order_service_id === "string" ? row.order_service_id : null,
     orderMaterialId: typeof row.order_material_id === "string" ? row.order_material_id : null,
     durationMonths: normalizeWarrantyMonths(row.duration_months),
+    durationDays: normalizeWarrantyDays(row.duration_days),
     mileageLimit: normalizeWarrantyKm(row.mileage_limit),
     startsAt: typeof row.starts_at === "string" ? row.starts_at : typeof row.starts_on === "string" ? `${row.starts_on}T00:00:00.000Z` : "",
     endsOn: typeof row.ends_on === "string" ? row.ends_on : null,
@@ -42,25 +49,40 @@ function mapSnapshot(row: Record<string, unknown>): WarrantySnapshot {
   };
 }
 
+const WARRANTY_RECORD_COLUMNS_LEGACY =
+  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
+
 export async function getWarrantyRecordsForOrder(workspaceId: string | undefined, orderId: string): Promise<WarrantySnapshot[]> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const id = orderId.trim();
   if (!id) return [];
 
-  const { data, error } = await supabase
+  const primary = await supabase
     .from("warranty_records")
-    .select(
-      "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage",
-    )
+    .select(WARRANTY_RECORD_COLUMNS)
     .eq("workspace_id", targetWorkspaceId)
     .eq("order_id", id)
     .order("created_at", { ascending: true });
+
+  let rows = (primary.data ?? null) as Record<string, unknown>[] | null;
+  let error = primary.error;
+
+  if (error && isMissingColumnError(error) && /duration_days/i.test(error.message ?? "")) {
+    const legacy = await supabase
+      .from("warranty_records")
+      .select(WARRANTY_RECORD_COLUMNS_LEGACY)
+      .eq("workspace_id", targetWorkspaceId)
+      .eq("order_id", id)
+      .order("created_at", { ascending: true });
+    rows = (legacy.data ?? null) as Record<string, unknown>[] | null;
+    error = legacy.error;
+  }
 
   if (error) {
     if (isMissingRelationError(error) || isMissingColumnError(error)) return [];
     throw new Error(error.message);
   }
-  return ((data ?? []) as Record<string, unknown>[]).map(mapSnapshot);
+  return (rows ?? []).map(mapSnapshot);
 }
 
 export type WarrantyClaimInput = {
@@ -101,9 +123,7 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
   const recordIds = rows.map((row) => String(row.warranty_record_id));
   const { data: records, error: recordsError } = await supabase
     .from("warranty_records")
-    .select(
-      "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage",
-    )
+    .select(WARRANTY_RECORD_COLUMNS)
     .eq("workspace_id", targetWorkspaceId)
     .in("id", recordIds);
 
@@ -121,6 +141,124 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
     currentMileageAtClaim: row.current_mileage_at_claim == null ? null : Number(row.current_mileage_at_claim),
     record: byId.get(String(row.warranty_record_id)),
   }));
+}
+
+/**
+ * Batched warranty indicator payloads for a page of orders (no N+1).
+ * - Warranty claim orders: snapshots from warranty_order_claims → warranty_records
+ * - Original orders: snapshots from warranty_records for that order_id
+ * - Vehicle mileage: one vehicles query for distinct vehicle ids on the page
+ */
+export async function getOrdersWarrantyIndicatorMap(
+  workspaceId: string | undefined,
+  orders: readonly Pick<Order, "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "closedAt">[],
+  nowIso?: string,
+): Promise<Record<string, OrderWarrantyIndicatorModel>> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const result: Record<string, OrderWarrantyIndicatorModel> = {};
+  if (orders.length === 0) return result;
+
+  const claimOrderIds = [...new Set(orders.filter((order) => order.warrantySourceOrderId).map((order) => order.id))];
+  const originalOrderIds = [...new Set(orders.filter((order) => !order.warrantySourceOrderId).map((order) => order.id))];
+
+  const snapshotsByOrderId = new Map<string, WarrantySnapshot[]>();
+  const claimRecordIdsByOrderId = new Map<string, string[]>();
+
+  if (claimOrderIds.length > 0) {
+    const { data: claims, error: claimsError } = await supabase
+      .from("warranty_order_claims")
+      .select("warranty_order_id, warranty_record_id")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("warranty_order_id", claimOrderIds);
+    if (claimsError) {
+      if (!(isMissingRelationError(claimsError) || isMissingColumnError(claimsError))) throw new Error(claimsError.message);
+    } else {
+      const recordIds = new Set<string>();
+      for (const row of (claims ?? []) as Record<string, unknown>[]) {
+        const orderId = String(row.warranty_order_id ?? "");
+        const recordId = String(row.warranty_record_id ?? "");
+        if (!orderId || !recordId) continue;
+        recordIds.add(recordId);
+        const list = claimRecordIdsByOrderId.get(orderId) ?? [];
+        list.push(recordId);
+        claimRecordIdsByOrderId.set(orderId, list);
+      }
+      if (recordIds.size > 0) {
+        const { data: records, error: recordsError } = await supabase
+          .from("warranty_records")
+          .select(WARRANTY_RECORD_COLUMNS)
+          .eq("workspace_id", targetWorkspaceId)
+          .in("id", [...recordIds]);
+        if (recordsError) {
+          if (!(isMissingRelationError(recordsError) || isMissingColumnError(recordsError))) throw new Error(recordsError.message);
+        } else {
+          const byId = new Map(((records ?? []) as Record<string, unknown>[]).map((row) => [String(row.id), mapSnapshot(row)]));
+          for (const [orderId, ids] of claimRecordIdsByOrderId) {
+            snapshotsByOrderId.set(
+              orderId,
+              ids.map((id) => byId.get(id)).filter((row): row is WarrantySnapshot => Boolean(row)),
+            );
+          }
+        }
+      }
+    }
+  }
+
+  if (originalOrderIds.length > 0) {
+    const { data: records, error: recordsError } = await supabase
+      .from("warranty_records")
+      .select(WARRANTY_RECORD_COLUMNS)
+      .eq("workspace_id", targetWorkspaceId)
+      .in("order_id", originalOrderIds);
+    if (recordsError) {
+      if (!(isMissingRelationError(recordsError) || isMissingColumnError(recordsError))) throw new Error(recordsError.message);
+    } else {
+      for (const row of (records ?? []) as Record<string, unknown>[]) {
+        const snapshot = mapSnapshot(row);
+        const list = snapshotsByOrderId.get(snapshot.orderId) ?? [];
+        list.push(snapshot);
+        snapshotsByOrderId.set(snapshot.orderId, list);
+      }
+    }
+  }
+
+  const vehicleIds = [
+    ...new Set(orders.map((order) => order.vehicleId?.trim()).filter((id): id is string => Boolean(id))),
+  ];
+  const mileageByVehicleId = new Map<string, number>();
+  if (vehicleIds.length > 0) {
+    const { data: vehicles, error: vehiclesError } = await supabase
+      .from("vehicles")
+      .select("id, current_mileage")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("id", vehicleIds);
+    if (vehiclesError) {
+      if (!(isMissingRelationError(vehiclesError) || isMissingColumnError(vehiclesError))) throw new Error(vehiclesError.message);
+    } else {
+      for (const row of (vehicles ?? []) as Record<string, unknown>[]) {
+        const id = String(row.id ?? "");
+        const mileage = row.current_mileage == null ? null : Number(row.current_mileage);
+        if (id && mileage != null && Number.isFinite(mileage)) mileageByVehicleId.set(id, Math.floor(mileage));
+      }
+    }
+  }
+
+  for (const order of orders) {
+    const vehicleId = order.vehicleId?.trim() || "";
+    const currentMileage =
+      (vehicleId ? mileageByVehicleId.get(vehicleId) : undefined) ??
+      (order.vehicleMileageSnapshot != null && Number.isFinite(order.vehicleMileageSnapshot)
+        ? Math.floor(order.vehicleMileageSnapshot)
+        : null);
+    result[order.id] = buildOrderWarrantyIndicator({
+      snapshots: snapshotsByOrderId.get(order.id) ?? [],
+      currentMileage,
+      isWarrantyOrder: Boolean(order.warrantySourceOrderId),
+      nowIso,
+    });
+  }
+
+  return result;
 }
 
 /**

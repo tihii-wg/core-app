@@ -36,9 +36,11 @@ import { useIsMobile } from "../../hooks/use-mobile";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderCard } from "./OrderCard";
 import { OrderColumnsMenu } from "./OrderColumnsMenu";
+import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { OrdersBoard } from "./OrdersBoard";
 import { OrdersCalendar } from "./OrdersCalendar";
 import { OrderViewToggle } from "./OrderViewToggle";
+import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import { isOrderStatus, readOrderViewMode, writeOrderViewMode, type OrderViewMode } from "./orderBoard";
 import {
   readOrderVisibleColumns,
@@ -177,6 +179,8 @@ export function Orders() {
     return map;
   }, [payments]);
 
+  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(orders);
+
   const displayedOrders = useMemo(() => {
     if (!awaitingPaymentFilter) return orders;
     return orders.filter((order) => orderHasOutstandingBalance(order, payments));
@@ -210,7 +214,12 @@ export function Orders() {
     {
       key: "orderNumber",
       header: t("orders.table.orderNumber"),
-      cell: (order) => <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>,
+      cell: (order) => (
+        <div className="min-w-0">
+          <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>
+          <OrderWarrantyIndicator model={warrantyByOrderId.get(order.id)} className="mt-0.5" />
+        </div>
+      ),
       className: "whitespace-nowrap",
     },
     {
@@ -574,6 +583,7 @@ export function Orders() {
                 isStatusUpdating={orderDetails.isStatusUpdating}
                 requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
                 paymentStatus={paymentStatusByOrder.get(order.id)}
+                warrantyIndicator={warrantyByOrderId.get(order.id)}
                 formatMoney={formatMoney}
                 onView={orderDetails.openOrder}
                 onOpenClient={openClientFromOrder}

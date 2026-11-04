@@ -25,6 +25,8 @@ import { orderLineAmount } from "../services/orderServiceLine";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { defaultIssueWarehouseId, issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
+import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
+import { defaultsForKind, type WorkspaceWarrantyDefaults } from "./warranty";
 
 type MaterialsFormSlice = { materials: OrderMaterial[] };
 
@@ -43,6 +45,9 @@ type OrderMaterialLinesEditorProps = {
   trigger?: (name?: string | string[]) => Promise<boolean>;
   inventoryItems: InventoryItem[];
   disabled?: boolean;
+  /** When true, warranty inputs are read-only (e.g. order already closed). */
+  warrantyDisabled?: boolean;
+  warrantyDefaults?: WorkspaceWarrantyDefaults;
   isSubmitted?: boolean;
   errors?: {
     root?: { message?: string };
@@ -79,6 +84,8 @@ export default function OrderMaterialLinesEditor({
   trigger,
   inventoryItems,
   disabled = false,
+  warrantyDisabled = false,
+  warrantyDefaults,
   isSubmitted = false,
   errors,
 }: OrderMaterialLinesEditorProps) {
@@ -130,7 +137,13 @@ export default function OrderMaterialLinesEditor({
       adjustQuantity(existingIndex, 1);
       return;
     }
-    append(catalogItemToOrderMaterial(item, 1, issueWarehouseId));
+    const warranty = warrantyDefaults ? defaultsForKind(warrantyDefaults, "material") : null;
+    append({
+      ...catalogItemToOrderMaterial(item, 1, issueWarehouseId),
+      ...(warranty
+        ? { warrantyMonths: warranty.durationMonths, warrantyKm: warranty.mileageLimit, warrantyDays: null }
+        : {}),
+    });
   }
 
   function handleCreated(item: InventoryItem) {
@@ -164,14 +177,18 @@ export default function OrderMaterialLinesEditor({
   function addFreeformLine(supplySource: Exclude<OrderMaterialSupplySource, "catalog">) {
     setFreeError("");
     try {
-      append(
-        freeformOrderMaterial({
+      const warranty = warrantyDefaults ? defaultsForKind(warrantyDefaults, "material") : null;
+      append({
+        ...freeformOrderMaterial({
           itemName: freeName,
           price: Number(freePrice),
           quantity: Number(freeQty),
           supplySource,
         }),
-      );
+        ...(warranty
+          ? { warrantyMonths: warranty.durationMonths, warrantyKm: warranty.mileageLimit, warrantyDays: null }
+          : {}),
+      });
       setFreeName("");
       setFreePrice("0");
       setFreeQty("1");
@@ -568,6 +585,18 @@ export default function OrderMaterialLinesEditor({
                 {catalog && outstanding > 0 && parsedQty != null && parsedQty < outstanding ? (
                   <p className="text-xs text-destructive">{t("orders.errors.returnBeforeReduce")}</p>
                 ) : null}
+                <OrderLineWarrantyFields
+                  idPrefix={`edit-material-${index}`}
+                  months={line?.warrantyMonths}
+                  days={line?.warrantyDays}
+                  km={line?.warrantyKm}
+                  disabled={disabled || warrantyDisabled}
+                  onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
+                    setValue(`materials.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
+                    setValue(`materials.${index}.warrantyDays`, warrantyDays, { shouldDirty: true });
+                    setValue(`materials.${index}.warrantyKm`, warrantyKm, { shouldDirty: true });
+                  }}
+                />
               </div>
             );
           })}

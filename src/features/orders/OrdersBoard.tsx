@@ -13,6 +13,9 @@ import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { buildOrderBoardColumns, resolveBoardMove, type OrderBoardColumn } from "./orderBoard";
 import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
 import { isPaidStatusChangeForbidden, isTaxInvoiceBlocked } from "./taxInvoice";
+import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
+import type { OrderWarrantyIndicatorModel } from "./warranty";
 
 type OrdersBoardProps = {
   /** Debounced search text (same box as the table). */
@@ -58,6 +61,7 @@ export function OrdersBoard({
     [orders, employeeFilter, deadlineFilter, today],
   );
 
+  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(visibleOrders);
   const columns = useMemo(() => buildOrderBoardColumns(visibleOrders, definitions), [visibleOrders, definitions]);
   const draggedOrder = draggedId ? visibleOrders.find((order) => order.id === draggedId) ?? null : null;
   const movingId = move.isPending ? move.variables?.orderId : undefined;
@@ -174,6 +178,7 @@ export function OrdersBoard({
                       draggable={canWrite && !move.isPending}
                       isDragging={draggedId === order.id}
                       isMoving={movingId === order.id}
+                      warrantyIndicator={warrantyByOrderId.get(order.id)}
                       formatMoney={formatMoney}
                       onOpen={onOpenOrder}
                       onDragStart={(event) => {
@@ -203,13 +208,25 @@ type BoardCardProps = {
   draggable: boolean;
   isDragging: boolean;
   isMoving: boolean;
+  warrantyIndicator?: OrderWarrantyIndicatorModel | null;
   formatMoney: (amount: number) => string;
   onOpen: (order: Order) => void;
   onDragStart: (event: DragEvent) => void;
   onDragEnd: () => void;
 };
 
-function BoardCard({ order, overdue, draggable, isDragging, isMoving, formatMoney, onOpen, onDragStart, onDragEnd }: BoardCardProps) {
+function BoardCard({
+  order,
+  overdue,
+  draggable,
+  isDragging,
+  isMoving,
+  warrantyIndicator,
+  formatMoney,
+  onOpen,
+  onDragStart,
+  onDragEnd,
+}: BoardCardProps) {
   const { t } = useTranslation();
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -238,7 +255,10 @@ function BoardCard({ order, overdue, draggable, isDragging, isMoving, formatMone
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-semibold text-primary tabular-nums">{order.orderNumber || "—"}</span>
+        <div className="min-w-0">
+          <span className="text-sm font-semibold text-primary tabular-nums">{order.orderNumber || "—"}</span>
+          <OrderWarrantyIndicator model={warrantyIndicator} className="mt-0.5" />
+        </div>
         <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
       </div>
       <p className="mt-1 truncate text-sm font-medium text-foreground" title={order.clientName}>

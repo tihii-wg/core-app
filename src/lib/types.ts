@@ -497,6 +497,8 @@ export type OrderService = {
   discountValue?: number | null;
   /** Calendar months of warranty coverage. Null/absent = no duration limit (or column missing). */
   warrantyMonths?: number | null;
+  /** Exact calendar days when the line uses day-based warranty (not months). */
+  warrantyDays?: number | null;
   /** Mileage allowance from warranty start. Null/absent = no mileage limit (or column missing). */
   warrantyKm?: number | null;
 };
@@ -532,6 +534,8 @@ export type OrderMaterial = {
   discountValue?: number | null;
   /** Calendar months of warranty coverage. Null/absent = no duration limit (or column missing). */
   warrantyMonths?: number | null;
+  /** Exact calendar days when the line uses day-based warranty (not months). */
+  warrantyDays?: number | null;
   /** Mileage allowance from warranty start. Null/absent = no mileage limit (or column missing). */
   warrantyKm?: number | null;
 };
