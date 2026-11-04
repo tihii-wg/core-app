@@ -530,20 +530,20 @@ revoke all on function public.crm_restore_or_create_batch(uuid, uuid, uuid, nume
 -- Accounting model (per original issued batch_id):
 --   remaining[batch] = sum(issue allocations) - sum(prior return allocations)
 -- Prior returns are attributed by batch_id from their batch_allocations (or
--- single batch_id). This is NOT "subtract total returned qty from the front
--- of the issue list" — that mixes FIFO prior-return burn with LIFO new-return
--- peel and can restore the same batch twice across partial returns.
+-- single batch_id on older return rows). This is NOT "subtract total returned
+-- qty from the front of the issue list" — that mixes FIFO prior-return burn
+-- with LIFO new-return peel and can restore the same batch twice across
+-- partial returns.
 --
 -- New return peel order: LIFO among remaining slices (last issued first),
 -- preserving unit_cost / expires_on / supplier_client_id from the issue slice.
 --
--- Issues/returns without batch_id / batch_allocations contribute nothing here.
--- Caller (return RPC) is fail-closed on shortfall: schema provides no positive
--- proof that empty provenance is "legacy" rather than a malformed/new issue
--- (no invented cutoff date/flag). Proven legacy path is peelable batch_id
--- and/or batch_allocations on the source issue movements.
--- Unattributed prior returns (no batch_id / allocations) reduce remaining
--- via the same LIFO order so they cannot be ignored.
+-- Issue provenance (fail-closed):
+--   * ONLY non-empty, validated batch_allocations on issue movements are peelable.
+--   * A non-NULL batch_id alone is NOT proof of legacy eligibility and MUST NOT
+--     synthesize zero-cost allocations (no invented cutoff/flag/metadata).
+--   * Missing/malformed/incomplete issue allocations raise immediately.
+-- Prior returns without allocations still reduce remaining (qty accounting only).
 --
 -- Concurrency: caller must hold FOR UPDATE on the order_materials row (and
 -- related stock locks) before invoking this helper.
@@ -572,14 +572,21 @@ declare
   v_remaining numeric;
   v_elem jsonb;
   v_mov record;
+  v_alloc_sum numeric;
+  v_slice_batch uuid;
+  v_slice_qty numeric;
+  v_slice_cost numeric;
+  v_batch_ok boolean;
 begin
   if p_return_qty is null or p_return_qty <= 0 then
     raise exception 'crm_peel_return_batch_slices: quantity must be > 0' using errcode = '22023';
   end if;
 
   -- 1) Flatten issue allocations in chronological order (multiple issues OK).
+  --    Require explicit batch_allocations; never invent slices from batch_id alone.
   for v_mov in
-    select m.id, m.created_at, m.quantity, m.batch_id, m.batch_allocations
+    select m.id, m.created_at, m.quantity, m.batch_id, m.batch_allocations,
+           m.inventory_item_id, m.warehouse_id
     from public.inventory_movements m
     where m.workspace_id = p_workspace_id
       and m.order_material_id = p_order_material_id
@@ -587,24 +594,98 @@ begin
       and m.warehouse_id is not distinct from p_warehouse_id
     order by m.created_at asc, m.id asc
   loop
-    if v_mov.batch_allocations is not null
-       and jsonb_typeof(v_mov.batch_allocations) = 'array'
-       and jsonb_array_length(v_mov.batch_allocations) > 0 then
-      for v_elem in select value from jsonb_array_elements(v_mov.batch_allocations)
-      loop
-        v_flat := v_flat || jsonb_build_array(v_elem);
-      end loop;
-    elsif v_mov.batch_id is not null then
-      -- Legacy issue: only batch_id recorded (no fabricated multi-slice history).
-      v_flat := v_flat || jsonb_build_array(jsonb_build_object(
-        'batch_id', v_mov.batch_id,
-        'quantity', v_mov.quantity,
-        'unit_cost', 0,
-        'expires_on', null,
-        'supplier_client_id', null
-      ));
+    if v_mov.batch_allocations is null
+       or jsonb_typeof(v_mov.batch_allocations) <> 'array'
+       or jsonb_array_length(v_mov.batch_allocations) = 0 then
+      raise exception
+        'crm_peel_return_batch_slices: issue movement % lacks valid batch_allocations (batch_id-only or empty provenance is not proven legacy); refusing synthetic zero-cost return'
+        , v_mov.id
+        using errcode = 'P0001';
     end if;
-    -- else: issue with no batch_id / batch_allocations — skip; caller fail-closes on shortfall
+
+    v_alloc_sum := 0;
+    for v_elem in select value from jsonb_array_elements(v_mov.batch_allocations)
+    loop
+      begin
+        v_slice_batch := nullif(btrim(coalesce(v_elem ->> 'batch_id', '')), '')::uuid;
+      exception
+        when others then
+          raise exception
+            'crm_peel_return_batch_slices: issue movement % has non-UUID batch_id in batch_allocations'
+            , v_mov.id
+            using errcode = 'P0001';
+      end;
+
+      begin
+        v_slice_qty := (v_elem ->> 'quantity')::numeric;
+      exception
+        when others then
+          raise exception
+            'crm_peel_return_batch_slices: issue movement % has non-numeric quantity in batch_allocations'
+            , v_mov.id
+            using errcode = 'P0001';
+      end;
+
+      if not (v_elem ? 'unit_cost') then
+        raise exception
+          'crm_peel_return_batch_slices: issue movement % allocation missing unit_cost'
+          , v_mov.id
+          using errcode = 'P0001';
+      end if;
+      begin
+        v_slice_cost := (v_elem ->> 'unit_cost')::numeric;
+      exception
+        when others then
+          raise exception
+            'crm_peel_return_batch_slices: issue movement % has non-numeric unit_cost in batch_allocations'
+            , v_mov.id
+            using errcode = 'P0001';
+      end;
+
+      if v_slice_batch is null or v_slice_qty is null or v_slice_qty <= 0 then
+        raise exception
+          'crm_peel_return_batch_slices: issue movement % allocation requires batch_id and quantity > 0'
+          , v_mov.id
+          using errcode = 'P0001';
+      end if;
+      if v_slice_cost is null or v_slice_cost < 0 then
+        raise exception
+          'crm_peel_return_batch_slices: issue movement % allocation unit_cost must be >= 0'
+          , v_mov.id
+          using errcode = 'P0001';
+      end if;
+
+      select exists (
+        select 1
+        from public.stock_batches b
+        where b.id = v_slice_batch
+          and b.workspace_id = p_workspace_id
+          and b.warehouse_id is not distinct from p_warehouse_id
+          and b.inventory_item_id = v_mov.inventory_item_id
+      ) into v_batch_ok;
+      if not coalesce(v_batch_ok, false) then
+        raise exception
+          'crm_peel_return_batch_slices: issue movement % references batch % not found for this workspace/warehouse/item'
+          , v_mov.id, v_slice_batch
+          using errcode = 'P0001';
+      end if;
+
+      v_alloc_sum := v_alloc_sum + v_slice_qty;
+      v_flat := v_flat || jsonb_build_array(jsonb_build_object(
+        'batch_id', v_slice_batch,
+        'quantity', v_slice_qty,
+        'unit_cost', v_slice_cost,
+        'expires_on', nullif(v_elem ->> 'expires_on', '')::date,
+        'supplier_client_id', nullif(v_elem ->> 'supplier_client_id', '')::uuid
+      ));
+    end loop;
+
+    if round(coalesce(v_alloc_sum, 0), 3) is distinct from round(coalesce(v_mov.quantity, 0), 3) then
+      raise exception
+        'crm_peel_return_batch_slices: issue movement % batch_allocations total (%) does not equal movement quantity (%)'
+        , v_mov.id, coalesce(v_alloc_sum, 0), coalesce(v_mov.quantity, 0)
+        using errcode = 'P0001';
+    end if;
   end loop;
 
   -- 2) Sum prior returns per original batch_id (from return movement provenance).
@@ -1140,7 +1221,9 @@ begin
     loop
       if v_slice.batch_id is null
          or v_slice.quantity is null
-         or v_slice.quantity <= 0 then
+         or v_slice.quantity <= 0
+         or v_slice.unit_cost is null
+         or v_slice.unit_cost < 0 then
         raise exception
           'crm_post_stock_transfer: invalid FIFO allocation slice for "%"'
           , v_line.item_name
@@ -1367,7 +1450,9 @@ begin
     loop
       if v_slice.batch_id is null
          or v_slice.quantity is null
-         or v_slice.quantity <= 0 then
+         or v_slice.quantity <= 0
+         or v_slice.unit_cost is null
+         or v_slice.unit_cost < 0 then
         raise exception
           'crm_post_write_off: invalid FIFO allocation slice for "%"'
           , v_line.item_name
@@ -1377,7 +1462,7 @@ begin
         v_first_batch := v_slice.batch_id;
       end if;
       v_fifo_qty := v_fifo_qty + v_slice.quantity;
-      v_cost_sum := v_cost_sum + coalesce(v_slice.unit_cost, 0) * v_slice.quantity;
+      v_cost_sum := v_cost_sum + v_slice.unit_cost * v_slice.quantity;
       v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
         'batch_id', v_slice.batch_id,
         'quantity', v_slice.quantity,
@@ -1782,7 +1867,9 @@ begin
     loop
       if v_slice.batch_id is null
          or v_slice.quantity is null
-         or v_slice.quantity <= 0 then
+         or v_slice.quantity <= 0
+         or v_slice.unit_cost is null
+         or v_slice.unit_cost < 0 then
         raise exception
           'issue_order_materials_from_warehouse: invalid FIFO allocation slice for inventory_item_id=%'
           , v_item_id
@@ -1928,6 +2015,7 @@ declare
   v_need numeric;
   v_got numeric;
   v_restore_qty numeric;
+  v_slice_unit_cost numeric;
   v_batch_id uuid;
   v_first_batch uuid;
   v_new_batch uuid;
@@ -2190,14 +2278,10 @@ begin
     end if;
 
     -- Provenance policy (fail-closed):
-    --   * Schema-provable issue provenance is batch_id and/or non-empty
-    --     batch_allocations on source issue movements (peelable by
-    --     crm_peel_return_batch_slices). That path is preserved.
-    --   * Missing/empty provenance on new or corrupted issue rows is NOT
-    --     treated as legacy. There is no schema field/cutoff that positively
-    --     proves "legacy era" without inventing one — so zero-cost invent
-    --     fallback is refused. Shortfall / overshoot / invalid peel → raise.
-    -- Resolve and validate provenance BEFORE any OM / stock / movement writes.
+    --   * Only validated non-empty batch_allocations on source ISSUE movements
+    --     are peelable (crm_peel_return_batch_slices raises on batch_id-only /
+    --     empty / malformed issue provenance — no synthetic zero-cost).
+    --   * Pass 1 validates peel coverage with no mutations; Pass 2 restores.
     v_peel := public.crm_peel_return_batch_slices(
       v_workspace_id, v_line.id, p_warehouse_id, v_qty::numeric
     );
@@ -2242,11 +2326,33 @@ begin
           using errcode = 'P0001';
       end if;
 
+      if not (v_slice ? 'unit_cost') then
+        raise exception
+          'return_batch_provenance_invalid: peel slice missing unit_cost for order_material_id=%'
+          , v_line.id
+          using errcode = 'P0001';
+      end if;
+      begin
+        v_slice_unit_cost := (v_slice ->> 'unit_cost')::numeric;
+      exception
+        when others then
+          raise exception
+            'return_batch_provenance_invalid: peel slice non-numeric unit_cost for order_material_id=%'
+            , v_line.id
+            using errcode = 'P0001';
+      end;
+      if v_slice_unit_cost is null or v_slice_unit_cost < 0 then
+        raise exception
+          'return_batch_provenance_invalid: peel slice unit_cost must be >= 0 for order_material_id=%'
+          , v_line.id
+          using errcode = 'P0001';
+      end if;
+
       v_got := v_got + v_restore_qty;
       v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
         'batch_id', v_batch_id,
         'quantity', v_restore_qty,
-        'unit_cost', coalesce((v_slice ->> 'unit_cost')::numeric, 0),
+        'unit_cost', v_slice_unit_cost,
         'expires_on', nullif(v_slice ->> 'expires_on', '')::date,
         'supplier_client_id', nullif(v_slice ->> 'supplier_client_id', '')::uuid
       ));
@@ -2259,7 +2365,7 @@ begin
        or jsonb_typeof(v_alloc) <> 'array'
        or jsonb_array_length(v_alloc) = 0 then
       raise exception
-        'return_batch_provenance_incomplete: allocated (%) does not equal return qty (%); empty/missing issue batch_id+batch_allocations cannot be proven as safe legacy — refusing zero-cost invent (order_material_id=%)'
+        'return_batch_provenance_incomplete: allocated (%) does not equal return qty (%); refusing return without complete explicit issue batch_allocations (order_material_id=%)'
         , coalesce(v_got, 0), v_qty, v_line.id
         using errcode = 'P0001';
     end if;
@@ -2273,7 +2379,7 @@ begin
       v_new_batch := public.crm_restore_or_create_batch(
         v_workspace_id, p_warehouse_id, v_item_id, v_restore_qty,
         v_batch_id,
-        coalesce((v_slice ->> 'unit_cost')::numeric, 0),
+        (v_slice ->> 'unit_cost')::numeric,
         nullif(v_slice ->> 'expires_on', '')::date,
         nullif(v_slice ->> 'supplier_client_id', '')::uuid,
         null
@@ -2883,7 +2989,43 @@ begin
   ) then
     raise exception 'Post-check FAIL: inventory item create warehouse gate missing';
   end if;
-  raise notice 'PASS: warehouse lifecycle + material create triggers';
+  if not exists (
+    select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname='public' and c.relname='goods_receipt_lines'
+      and t.tgname='crm_guard_posted_lines' and not t.tgisinternal
+  ) then
+    raise exception 'Post-check FAIL: goods_receipt_lines posted-guard trigger missing';
+  end if;
+  if not exists (
+    select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname='public' and c.relname='goods_receipts'
+      and t.tgname='crm_guard_receipt_header_immutable' and not t.tgisinternal
+  ) then
+    raise exception 'Post-check FAIL: goods_receipts header immutability trigger missing';
+  end if;
+  if not exists (
+    select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname='public' and c.relname='stock_transfer_lines'
+      and t.tgname='crm_guard_posted_transfer_lines' and not t.tgisinternal
+  ) then
+    raise exception 'Post-check FAIL: stock_transfer_lines posted-guard trigger missing';
+  end if;
+  if not exists (
+    select 1 from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname='public' and c.relname='write_off_lines'
+      and t.tgname='crm_guard_posted_write_off_lines' and not t.tgisinternal
+  ) then
+    raise exception 'Post-check FAIL: write_off_lines posted-guard trigger missing';
+  end if;
+  raise notice 'PASS: warehouse lifecycle + material create + posted-document triggers';
   v_pass := v_pass + 1;
 
   -- F) grants / revokes (client RPCs granted; helpers + legacy globals revoked)
