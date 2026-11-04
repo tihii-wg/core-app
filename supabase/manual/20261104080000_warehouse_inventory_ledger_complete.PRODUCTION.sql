@@ -1044,6 +1044,7 @@ declare
   v_first_dst uuid;
   v_avg_cost numeric;
   v_rowcount integer;
+  v_fifo_qty numeric;
 begin
   if (select auth.uid()) is null then
     raise exception 'crm_post_stock_transfer: not authenticated' using errcode = '42501';
@@ -1128,6 +1129,8 @@ begin
     v_dst_alloc := '[]'::jsonb;
     v_first_src := null;
     v_first_dst := null;
+    -- Reset per inventory-item aggregation (never carry over from previous item).
+    v_fifo_qty := 0;
 
     for v_slice in
       select * from public.crm_consume_batches_fifo(
@@ -1137,6 +1140,7 @@ begin
       if v_first_src is null then
         v_first_src := v_slice.batch_id;
       end if;
+      v_fifo_qty := v_fifo_qty + v_slice.quantity;
       v_src_alloc := v_src_alloc || jsonb_build_array(jsonb_build_object(
         'batch_id', v_slice.batch_id,
         'quantity', v_slice.quantity,
@@ -1167,6 +1171,16 @@ begin
         'supplier_client_id', v_slice.supplier_client_id
       ));
     end loop;
+
+    -- Fail closed: transfers require complete FIFO batch provenance for the
+    -- requested qty. Empty/partial FIFO (e.g. legacy stock with no batches)
+    -- must not produce movements or stock updates.
+    if round(coalesce(v_fifo_qty, 0), 3) is distinct from round(v_line.quantity, 3) then
+      raise exception
+        'crm_post_stock_transfer: FIFO batch coverage (%) does not equal requested quantity (%) for "%"'
+        , coalesce(v_fifo_qty, 0), v_line.quantity, v_line.item_name
+        using errcode = 'P0001';
+    end if;
 
     update public.warehouse_stock
        set quantity = quantity - v_line.quantity, updated_at = now()
@@ -2350,10 +2364,11 @@ begin
     raise exception 'Inventory item is unavailable in this workspace' using errcode = 'P0001';
   end if;
 
-  -- Normalize effective price before fingerprinting (defaults applied).
-  v_price := round(coalesce(p_price, v_item.selling_price, 0)::numeric, 2);
+  -- Effective price: NULL / omitted p_price both resolve via selling_price then 0.
+  -- Assigned into numeric(10,2) so fingerprint formatting is deterministic.
+  v_price := coalesce(p_price, v_item.selling_price, 0);
   v_key := nullif(btrim(coalesce(p_idempotency_key, '')), '');
-  -- Fingerprint: order, warehouse, item, quantity, and normalized effective price.
+  -- Fingerprint includes effective normalized price (same key + different price = conflict).
   v_fingerprint := 'add_and_issue'
     || '|order=' || p_order_id::text
     || '|wh=' || p_warehouse_id::text
@@ -2406,11 +2421,12 @@ begin
     if coalesce(v_line.supply_source, 'catalog') is distinct from 'catalog' then
       raise exception 'Existing order material is not a catalog line' using errcode = 'P0001';
     end if;
-    -- Reject warehouse mismatch: never issue from WH-B while row is bound to WH-A.
+    -- Fail closed on warehouse mismatch (NULL warehouse may still be assigned).
     if v_line.warehouse_id is not null
        and v_line.warehouse_id is distinct from p_warehouse_id then
       raise exception
-        'Order material is assigned to a different warehouse; refuse cross-warehouse issue'
+        'Existing order material belongs to another warehouse (material_warehouse=%, requested=%)'
+        , v_line.warehouse_id, p_warehouse_id
         using errcode = '22023';
     end if;
     v_outstanding := coalesce(v_line.quantity_issued, 0) - coalesce(v_line.quantity_returned, 0);
@@ -2421,6 +2437,7 @@ begin
       raise exception 'quantity cannot be less than outstanding issued quantity' using errcode = '22023';
     end if;
 
+    -- After mismatch check: only fill NULL warehouse_id; never overwrite a different one.
     update public.order_materials
     set quantity = p_quantity,
         price = v_price,
@@ -2586,10 +2603,12 @@ begin
   if v_line.inventory_item_id is null then
     raise exception 'Catalog order material requires inventory_item_id' using errcode = '22023';
   end if;
+  -- Fail closed on warehouse mismatch (NULL warehouse may still be assigned).
   if v_line.warehouse_id is not null
      and v_line.warehouse_id is distinct from p_warehouse_id then
     raise exception
-      'Order material is assigned to a different warehouse; refuse cross-warehouse issue'
+      'Existing order material belongs to another warehouse (material_warehouse=%, requested=%)'
+      , v_line.warehouse_id, p_warehouse_id
       using errcode = '22023';
   end if;
 
@@ -2601,6 +2620,7 @@ begin
     raise exception 'quantity cannot be less than outstanding issued quantity' using errcode = '22023';
   end if;
 
+  -- After mismatch check: only fill NULL warehouse_id; never overwrite a different one.
   update public.order_materials
   set quantity = p_quantity,
       warehouse_id = coalesce(warehouse_id, p_warehouse_id)
