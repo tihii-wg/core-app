@@ -16,6 +16,7 @@ export function useCreateStatusDefinition() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["status_definitions", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       toast.success(i18n.t("settings.statuses.toast.created"));
     },
     onError: (error: Error) => toast.error(error.message || i18n.t("common.somethingWentWrong")),

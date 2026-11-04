@@ -92,8 +92,8 @@ export default {
     unknownAuthor: "Unknown user",
     deleteComment: "Delete comment",
     events: {
-      statusChanged: "Changed order status: {{from}} → {{to}}",
-      customStatusChanged: "Changed custom status: {{from}} → {{to}}",
+      statusChanged: "Status changed: {{from}} → {{to}}",
+      customStatusChanged: "Status changed: {{from}} → {{to}}",
       orderClosed: "Closed order (from {{from}})",
       orderCancelled: "Cancelled order (from {{from}})",
       orderReopened: "Reopened order: {{from}} → {{to}}",

@@ -161,6 +161,14 @@ vi.mock("../employees/useGetEmployees", () => ({
   }),
 }));
 
+vi.mock("../statuses/useGetStatusDefinitions", () => ({
+  useGetStatusDefinitions: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock("./useMoveOrderOnBoard", () => ({
+  useMoveOrderOnBoard: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("../industries/useIndustryWorkflow", async () => {
   const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
   return {

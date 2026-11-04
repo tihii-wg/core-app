@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "../../ui/DropdownMenu";
 import type { Order, OrderStatus } from "../../lib/types";
-import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
+import { industryOrderStatusLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
@@ -37,6 +37,13 @@ import { CloseOrderDialog } from "./CloseOrderDialog";
 import { useCancelOrder } from "./useCloseOrder";
 import { useGetPayments } from "../finance/usePayments";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
+import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
+import {
+  resolveCurrentUnifiedStatus,
+  resolveUnifiedStatusSelection,
+  unifiedStatusOptions,
+} from "./unifiedOrderStatus";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -97,7 +104,13 @@ export function OrderActionsMenu({
   const { payments } = useGetPayments();
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
-  const workflowStatuses = ORDER_STATUSES.filter((status) => status !== "closed" && status !== "cancelled");
+  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
+  const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
+  const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
+    industryOrderStatusLabel(workflow, status),
+  );
+  const currentUnifiedStatus = resolveCurrentUnifiedStatus(order, statusOptions);
+  const statusBusy = isStatusUpdating || isUnifiedStatusUpdating;
   const hasInvoice = Boolean(invoiceNumber);
   const paymentCount = Math.max(0, linkedPaymentCount);
 
@@ -144,18 +157,18 @@ export function OrderActionsMenu({
           <DropdownMenuLabel>
             {paidLocked
               ? t("orders.actions.statusLocked")
-              : isStatusUpdating
+              : statusBusy
                 ? t("orders.actions.updatingStatus")
                 : t("orders.actions.changeStatus")}
           </DropdownMenuLabel>
-          {workflowStatuses.map((status) => {
-            const current = status === order.status;
-            const blockedPaid = status === "paid" && paidBlocked && !current;
+          {statusOptions.map((option) => {
+            const current = currentUnifiedStatus?.id === option.id;
+            const blockedPaid = option.systemStatus === "paid" && paidBlocked && !current;
             const locked = paidLocked || blockedPaid || formallyClosed;
             return (
               <DropdownMenuItem
-                key={status}
-                disabled={current || isStatusUpdating || locked}
+                key={option.id}
+                disabled={current || statusBusy || locked}
                 title={
                   paidLocked
                     ? t("orders.errors.paidStatusLocked")
@@ -165,11 +178,29 @@ export function OrderActionsMenu({
                 }
                 onSelect={() => {
                   if (locked) return;
-                  onStatusChange(order, status);
+                  const move = resolveUnifiedStatusSelection(order, option);
+                  if (!move) return;
+                  if (option.kind === "definition" || move.customStatusId !== null || order.customStatusId) {
+                    moveOnBoard({
+                      orderId: order.id,
+                      status: move.status,
+                      customStatusId: move.customStatusId,
+                      currentStatus: order.status,
+                    });
+                    return;
+                  }
+                  onStatusChange(order, move.status);
                 }}
               >
                 {current ? <Check /> : <span className="size-4" aria-hidden />}
-                {industryOrderStatusLabel(workflow, status)}
+                {option.color ? (
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
+                    style={{ backgroundColor: option.color }}
+                  />
+                ) : null}
+                {option.name}
               </DropdownMenuItem>
             );
           })}

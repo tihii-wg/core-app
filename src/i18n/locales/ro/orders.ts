@@ -98,8 +98,8 @@ const orders: Messages<typeof en> = {
     unknownAuthor: "Utilizator necunoscut",
     deleteComment: "Șterge comentariul",
     events: {
-      statusChanged: "Status comandă schimbat: {{from}} → {{to}}",
-      customStatusChanged: "Status personalizat schimbat: {{from}} → {{to}}",
+      statusChanged: "Status schimbat: {{from}} → {{to}}",
+      customStatusChanged: "Status schimbat: {{from}} → {{to}}",
       orderClosed: "Comandă închisă (din {{from}})",
       orderCancelled: "Comandă anulată (din {{from}})",
       orderReopened: "Comandă redeschisă: {{from}} → {{to}}",

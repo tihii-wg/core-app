@@ -13,14 +13,14 @@ import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
 import { Skeleton } from "../../ui/Skeleton";
 import { useOrdersAwaitingPayment, useOrdersPage } from "./useGetOrders";
 import { statIconVariants } from "../../ui/statCardStyles";
-import type { Order, OrderStatus } from "../../lib/types";
+import type { Order } from "../../lib/types";
 import { useDebounce } from "../../hooks/useDebounce";
 import {
   DEFAULT_ORDERS_PAGE_SIZE,
   ORDERS_PAGE_SIZES,
   type OrdersPageSize,
 } from "../../services/apiOrders";
-import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
+import { industryOrderStatusLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useOrderDetails } from "./useOrderDetails";
 import { CreateOrderDialog } from "./CreateOrderDialog";
@@ -39,7 +39,7 @@ import { OrderColumnsMenu } from "./OrderColumnsMenu";
 import { OrdersBoard } from "./OrdersBoard";
 import { OrdersCalendar } from "./OrdersCalendar";
 import { OrderViewToggle } from "./OrderViewToggle";
-import { readOrderViewMode, writeOrderViewMode, type OrderViewMode } from "./orderBoard";
+import { isOrderStatus, readOrderViewMode, writeOrderViewMode, type OrderViewMode } from "./orderBoard";
 import {
   readOrderVisibleColumns,
   writeOrderVisibleColumns,
@@ -56,8 +56,8 @@ import { OrderClientName } from "./OrderClientName";
 import { ClientDetailsHost } from "../clients/ClientDetailsHost";
 import { useOpenClientDetails } from "../clients/useOpenClientDetails";
 import type { Client } from "../../lib/types";
-
-const orderStatuses: OrderStatus[] = ORDER_STATUSES;
+import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
+import { hasConfigurableOrderStatuses, unifiedStatusFilterOptions } from "./unifiedOrderStatus";
 
 export function Orders() {
   const { t } = useTranslation();
@@ -76,7 +76,8 @@ export function Orders() {
 
   // Filters / pagination (server-side via getOrdersPage)
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
+  /** "all" | status_definitions.id | system OrderStatus (fallback when no definitions). */
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [deadlineFilter, setDeadlineFilter] = useState<DeadlineFilter>("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
   /** Toggle: when true, list only orders with ledger remaining > 0. */
@@ -106,6 +107,13 @@ export function Orders() {
 
   const { employees } = useGetEmployees();
   const assigneeOptions = assignableTechnicians(employees);
+  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
+  const unifiedFilterOptions = useMemo(
+    () => unifiedStatusFilterOptions(orderStatusDefinitions, (status) => industryOrderStatusLabel(workflow, status)),
+    [orderStatusDefinitions, workflow],
+  );
+  const usesDefinitionFilter = hasConfigurableOrderStatuses(orderStatusDefinitions);
+  const selectedFilterOption = statusFilter === "all" ? null : unifiedFilterOptions.find((option) => option.id === statusFilter) ?? null;
 
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
   const { payments } = useGetPayments();
@@ -138,7 +146,13 @@ export function Orders() {
     refetch: refetchOrders,
   } = useOrdersPage({
     search: debouncedSearch,
-    status: statusFilter,
+    status: (() => {
+      if (usesDefinitionFilter || statusFilter === "all") return "all";
+      const raw = statusFilter.startsWith("system:") ? statusFilter.slice("system:".length) : statusFilter;
+      return isOrderStatus(raw) ? raw : "all";
+    })(),
+    customStatusId: usesDefinitionFilter && statusFilter !== "all" ? statusFilter : "all",
+    customStatusFallbackSystem: usesDefinitionFilter ? selectedFilterOption?.systemStatus ?? null : null,
     deadline: deadlineFilter,
     employeeId: employeeFilter,
     today,
@@ -323,7 +337,7 @@ export function Orders() {
 
   const statusOptions = [
     { value: "all", label: t("orders.filters.allStatuses") },
-    ...orderStatuses.map((status) => ({ value: status, label: industryOrderStatusLabel(workflow, status) })),
+    ...unifiedFilterOptions.map((option) => ({ value: option.id, label: option.name })),
   ];
 
   const deadlineOptions = [
@@ -359,9 +373,18 @@ export function Orders() {
     if (deadlineFilter === "upcoming" && !debouncedSearch && statusFilter === "all" && employeeFilter === "all") {
       return <EmptyState title={t("orders.empty.noUpcomingTitle")} description={t("orders.empty.noUpcomingDescription")} />;
     }
-    if (statusFilter === "waiting-parts" && !debouncedSearch && deadlineFilter === "all" && employeeFilter === "all") {
-      const statusLabel = industryOrderStatusLabel(workflow, "waiting-parts");
-      return <EmptyState title={t("orders.empty.noWaitingTitle", { status: statusLabel })} description={t("orders.empty.noWaitingDescription")} />;
+    if (
+      selectedFilterOption?.systemStatus === "waiting-parts" &&
+      !debouncedSearch &&
+      deadlineFilter === "all" &&
+      employeeFilter === "all"
+    ) {
+      return (
+        <EmptyState
+          title={t("orders.empty.noWaitingTitle", { status: selectedFilterOption.name })}
+          description={t("orders.empty.noWaitingDescription")}
+        />
+      );
     }
     return <EmptyState title={t("orders.empty.noMatchesTitle")} description={t("orders.empty.noMatchesDescription")} />;
   }
@@ -458,7 +481,7 @@ export function Orders() {
                     value: statusFilter,
                     onChange: (value: string) => {
                       deactivateAwaitingPaymentFilter();
-                      setStatusFilter(value as OrderStatus | "all");
+                      setStatusFilter(value);
                     },
                   },
                 ]),

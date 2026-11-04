@@ -20,7 +20,7 @@ import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
-import { industryOrderStatusLabel, ORDER_STATUSES, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
+import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -64,12 +64,11 @@ import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { CloseOrderDialog } from "./CloseOrderDialog";
 import { isOrderFormallyClosed } from "./orderLifecycle";
 import { useCancelOrder } from "./useCloseOrder";
-
-function systemStatusToOrderStatus(value: string | null | undefined): OrderStatus | null {
-  if (!value) return null;
-  const normalized = value.trim().replace(/_/g, "-");
-  return (ORDER_STATUSES as readonly string[]).includes(normalized) ? (normalized as OrderStatus) : null;
-}
+import {
+  resolveCurrentUnifiedStatus,
+  resolveUnifiedStatusSelection,
+  unifiedStatusOptions,
+} from "./unifiedOrderStatus";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -83,8 +82,6 @@ type OrderDetailPanelProps = {
   /** Called after a successful delete so the parent can clear selection and return to the list. */
   onDeleted?: (orderId: string) => void;
 };
-
-const orderStatuses: OrderStatus[] = ORDER_STATUSES;
 
 export default function OrderDetailPanel({
   selectedOrder,
@@ -112,16 +109,16 @@ export default function OrderDetailPanel({
   const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
-  const { mutate: moveOnBoard, isPending: isCustomStatusUpdating } = useMoveOrderOnBoard();
+  const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const activeCustomStatuses = orderStatusDefinitions.filter(
-    (status) => status.isActive && status.semanticAction === "normal",
+  const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
+    industryOrderStatusLabel(workflow, status),
   );
-  const workflowStatuses = orderStatuses.filter(
-    (status): status is Exclude<OrderStatus, "closed" | "cancelled"> => status !== "closed" && status !== "cancelled",
-  );
+  const currentUnifiedStatus = selectedOrder
+    ? resolveCurrentUnifiedStatus(selectedOrder, statusOptions)
+    : null;
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
   // Owner role unlocks Paid status controls; admin/manager do not. API re-checks owner_id.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
@@ -454,41 +451,80 @@ export default function OrderDetailPanel({
                 {paidStatusLocked ? t("orders.actions.statusLocked") : t("orders.detail.updateStatus")}
               </Label>
               <Select
-                value={
-                  (workflowStatuses as readonly OrderStatus[]).includes(selectedOrder.status)
-                    ? selectedOrder.status
-                    : workflowStatuses[0]
-                }
+                value={currentUnifiedStatus?.id ?? statusOptions[0]?.id ?? ""}
                 onValueChange={(value) => {
-                  const next = value as OrderStatus;
-                  // Must pass the same owner flag used for `paidStatusLocked` / disabled —
-                  // omitting it defaults to non-owner and silently drops owner Paid→* changes.
                   if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
-                  if (next === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
-                  onStatusChange(next);
+                  const option = statusOptions.find((item) => item.id === value);
+                  if (!option) return;
+                  const move = resolveUnifiedStatusSelection(selectedOrder, option);
+                  if (!move) return;
+                  if (move.status === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
+
+                  if (option.kind === "definition" || move.customStatusId !== null || selectedOrder.customStatusId) {
+                    moveOnBoard(
+                      {
+                        orderId: selectedOrder.id,
+                        status: move.status,
+                        customStatusId: move.customStatusId,
+                        currentStatus: selectedOrder.status,
+                      },
+                      {
+                        onSuccess: () => {
+                          onOrderUpdated({
+                            ...selectedOrder,
+                            status: move.status,
+                            customStatusId: move.customStatusId,
+                            customStatus: option.kind === "definition"
+                              ? { name: option.name, color: option.color }
+                              : null,
+                            ...(move.status === "paid"
+                              ? { isPaid: true, paymentStatus: "paid" as const }
+                              : selectedOrder.status === "paid"
+                                ? { isPaid: false, paymentStatus: "unpaid" as const }
+                                : {}),
+                          });
+                        },
+                      },
+                    );
+                    return;
+                  }
+
+                  onStatusChange(move.status);
                 }}
-                disabled={!canEditOrder || isStatusUpdating || isCustomStatusUpdating || isAssigneeUpdating || paidStatusLocked}
+                disabled={!canEditOrder || isStatusUpdating || isUnifiedStatusUpdating || isAssigneeUpdating || paidStatusLocked}
               >
                 <SelectTrigger id="order-status" className="w-full min-w-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {workflowStatuses.map((status) => (
-                    <SelectItem
-                      key={status}
-                      value={status}
-                      disabled={paidStatusLocked || (status === "paid" && paidStatusBlocked)}
-                      title={
-                        paidStatusLocked
-                          ? t("orders.errors.paidStatusLocked")
-                          : status === "paid" && paidStatusBlocked
-                            ? t("orders.taxInvoice.requiredHint")
-                            : undefined
-                      }
-                    >
-                      {industryOrderStatusLabel(workflow, status)}
-                    </SelectItem>
-                  ))}
+                  {statusOptions.map((option) => {
+                    const blocksPaid = option.systemStatus === "paid" && paidStatusBlocked;
+                    return (
+                      <SelectItem
+                        key={option.id}
+                        value={option.id}
+                        disabled={paidStatusLocked || blocksPaid}
+                        title={
+                          paidStatusLocked
+                            ? t("orders.errors.paidStatusLocked")
+                            : blocksPaid
+                              ? t("orders.taxInvoice.requiredHint")
+                              : undefined
+                        }
+                      >
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          {option.color ? (
+                            <span
+                              aria-hidden
+                              className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
+                              style={{ backgroundColor: option.color }}
+                            />
+                          ) : null}
+                          <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               {selectedOrder.closedAt ? (
@@ -504,74 +540,14 @@ export default function OrderDetailPanel({
               ) : null}
               {canEditOrder && !isOrderFormallyClosed(selectedOrder) && selectedOrder.status !== "cancelled" ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCloseOpen(true)} disabled={isStatusUpdating}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCloseOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
                     <Lock className="size-3.5" />
                     {t("orders.lifecycle.closeAction")}
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || cancelOrder.isPending}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating || cancelOrder.isPending}>
                     <CircleX className="size-3.5" />
                     {t("orders.lifecycle.cancelAction")}
                   </Button>
-                </div>
-              ) : null}
-              {activeCustomStatuses.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  <Label htmlFor="order-custom-status" className="block">
-                    {t("orders.detail.customStatus")}
-                  </Label>
-                  <Select
-                    value={selectedOrder.customStatusId ?? "__none__"}
-                    onValueChange={(value) => {
-                      if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
-                      const nextCustomId = value === "__none__" ? null : value;
-                      if ((selectedOrder.customStatusId ?? null) === nextCustomId) return;
-                      const definition = nextCustomId
-                        ? activeCustomStatuses.find((item) => item.id === nextCustomId)
-                        : null;
-                      const nextSystem =
-                        systemStatusToOrderStatus(definition?.systemStatus) ?? selectedOrder.status;
-                      if (nextSystem === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
-                      moveOnBoard(
-                        {
-                          orderId: selectedOrder.id,
-                          status: nextSystem,
-                          customStatusId: nextCustomId,
-                          currentStatus: selectedOrder.status,
-                        },
-                        {
-                          onSuccess: () => {
-                            onOrderUpdated({
-                              ...selectedOrder,
-                              status: nextSystem,
-                              customStatusId: nextCustomId,
-                              customStatus: definition
-                                ? { name: definition.name, color: definition.color }
-                                : null,
-                              ...(nextSystem === "paid"
-                                ? { isPaid: true, paymentStatus: "paid" as const }
-                                : (selectedOrder.status as string) === "paid"
-                                  ? { isPaid: false, paymentStatus: "unpaid" as const }
-                                  : {}),
-                            });
-                          },
-                        },
-                      );
-                    }}
-                    disabled={!canEditOrder || isStatusUpdating || isCustomStatusUpdating || isAssigneeUpdating || paidStatusLocked}
-                  >
-                    <SelectTrigger id="order-custom-status" className="w-full min-w-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t("orders.detail.customStatusNone")}</SelectItem>
-                      {activeCustomStatuses.map((status) => (
-                        <SelectItem key={status.id} value={status.id}>
-                          {status.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.detail.customStatusHint")}</p>
                 </div>
               ) : null}
               {paidStatusLocked ? (

@@ -70,6 +70,13 @@ export const DEFAULT_ORDERS_PAGE_SIZE: OrdersPageSize = 25;
 export type OrdersListQuery = {
   search?: string;
   status?: OrderStatus | "all";
+  /**
+   * Workspace status_definitions.id filter. When set, matches that custom status
+   * and also orders whose custom_status_id is null but system status matches
+   * `customStatusFallbackSystem` (board column fallback).
+   */
+  customStatusId?: string | "all";
+  customStatusFallbackSystem?: OrderStatus | null;
   deadline?: DeadlineFilter;
   /** employees.id; omit / "all" = no assignee filter */
   employeeId?: string | "all";
@@ -1150,6 +1157,8 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
 type OrdersFilterInput = {
   search?: string;
   status?: OrderStatus | "all";
+  customStatusId?: string | "all";
+  customStatusFallbackSystem?: OrderStatus | null;
   deadline?: DeadlineFilter;
   employeeId?: string | "all";
   today: string;
@@ -1175,11 +1184,37 @@ async function applyOrdersListFilters(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
   workspaceId: string,
-  { search = "", status = "all", deadline = "all", employeeId = "all", today }: OrdersFilterInput,
+  {
+    search = "",
+    status = "all",
+    customStatusId = "all",
+    customStatusFallbackSystem = null,
+    deadline = "all",
+    employeeId = "all",
+    today,
+  }: OrdersFilterInput,
 ): Promise<{ query: typeof query } | null> {
-  const statuses = statusesForOrdersFilter(status, deadline);
-  if (statuses && statuses.length === 0) return null;
-  if (statuses) query = query.in("status", statuses);
+  const definitionId = customStatusId === "all" ? "" : customStatusId.trim();
+  if (definitionId) {
+    // Match the workspace status column, including legacy rows that only have system status.
+    if (customStatusFallbackSystem) {
+      query = query.or(
+        `custom_status_id.eq.${definitionId},and(custom_status_id.is.null,status.eq.${customStatusFallbackSystem})`,
+      );
+    } else {
+      query = query.eq("custom_status_id", definitionId);
+    }
+    // Deadline filters still only apply to open lifecycle buckets.
+    if (deadline !== "all") {
+      const open = statusesForOrdersFilter("all", deadline);
+      if (open && open.length === 0) return null;
+      if (open) query = query.in("status", open);
+    }
+  } else {
+    const statuses = statusesForOrdersFilter(status, deadline);
+    if (statuses && statuses.length === 0) return null;
+    if (statuses) query = query.in("status", statuses);
+  }
 
   // NULL deadlines never satisfy inequality filters in Postgres, matching client-side checks.
   if (deadline === "overdue") {

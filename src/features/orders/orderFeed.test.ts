@@ -26,10 +26,10 @@ describe("describeOrderEvent", () => {
     expect(describeOrderEvent(event({ newValue: "paid" }), label).params.from).toBe("—");
   });
 
-  it("uses names frozen in the payload for custom statuses", () => {
+  it("renders legacy custom_status_id events as the same Status changed copy", () => {
     expect(
       describeOrderEvent(event({ fieldName: "custom_status_id", oldValue: "id1", newValue: "id2", payload: { old_name: "QA", new_name: " Ready " } }), label),
-    ).toEqual({ key: "customStatusChanged", params: { from: "QA", to: "Ready" } });
+    ).toEqual({ key: "statusChanged", params: { from: "QA", to: "Ready" } });
     expect(describeOrderEvent(event({ fieldName: "custom_status_id", oldValue: "id1" }), label).params).toEqual({ from: "—", to: "—" });
   });
 

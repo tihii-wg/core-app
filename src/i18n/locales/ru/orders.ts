@@ -101,8 +101,8 @@ const orders: Messages<typeof en> = {
     unknownAuthor: "Неизвестный пользователь",
     deleteComment: "Удалить комментарий",
     events: {
-      statusChanged: "Статус заказа изменён: {{from}} → {{to}}",
-      customStatusChanged: "Пользовательский статус изменён: {{from}} → {{to}}",
+      statusChanged: "Статус изменён: {{from}} → {{to}}",
+      customStatusChanged: "Статус изменён: {{from}} → {{to}}",
       orderClosed: "Заказ закрыт (было: {{from}})",
       orderCancelled: "Заказ отменён (было: {{from}})",
       orderReopened: "Заказ снова открыт: {{from}} → {{to}}",

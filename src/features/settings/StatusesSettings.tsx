@@ -171,9 +171,9 @@ export function StatusesSettings() {
                             ) : null}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {t("settings.statuses.group")}: {status.statusGroup}
-                            {status.code ? ` · ${status.code}` : ""}
-                            {status.systemStatus ? ` · ${status.systemStatus}` : ""}
+                            {t(`settings.statuses.groups.${status.statusGroup}`, {
+                              defaultValue: status.statusGroup,
+                            })}
                             {status.color ? ` · ${status.color}` : ""}
                           </p>
                           {transitions && transitions.get(status.id)?.size ? (
@@ -332,12 +332,13 @@ export function StatusesSettings() {
                 onChange={(event) => setForm({ ...form, systemStatus: event.target.value })}
               >
                 <option value="">{t("settings.statuses.form.systemStatusNone")}</option>
-                {ORDER_STATUSES.filter((status) => status !== "closed").map((status) => (
+                {ORDER_STATUSES.filter((status) => status !== "closed" && status !== "cancelled").map((status) => (
                   <option key={status} value={status}>
                     {status}
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground">{t("settings.statuses.form.systemStatusHint")}</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="status-sort">{t("settings.statuses.form.sortOrder")}</Label>

@@ -91,41 +91,39 @@ function updatedLineParams(event: OrderEvent) {
  * Turns a raw `order_events` row into an i18n key + params. Pure.
  * Snapshots in the payload (item_name, quantity, price, changes) win over live catalog data.
  */
-export function describeOrderEvent(event: OrderEvent, statusLabel: (value: string) => string): OrderEventDescription {
-  if (event.eventType === "status_changed" && event.fieldName === "custom_status_id") {
+function statusChangedNames(event: OrderEvent, statusLabel: (value: string) => string) {
+  // Prefer frozen custom-status names; never surface raw definition UUIDs.
+  const fromCustom = payloadText(event, "old_name");
+  const toCustom = payloadText(event, "new_name");
+  if (event.fieldName === "custom_status_id" || fromCustom || toCustom) {
     return {
-      key: "customStatusChanged",
-      params: {
-        from: payloadText(event, "old_name") ?? EMPTY,
-        to: payloadText(event, "new_name") ?? EMPTY,
-      },
+      from: fromCustom ?? EMPTY,
+      to: toCustom ?? EMPTY,
     };
   }
+  return {
+    from: event.oldValue ? statusLabel(event.oldValue) : EMPTY,
+    to: event.newValue ? statusLabel(event.newValue) : EMPTY,
+  };
+}
 
+export function describeOrderEvent(event: OrderEvent, statusLabel: (value: string) => string): OrderEventDescription {
   if (event.eventType === "status_changed") {
     const lifecycle = payloadText(event, "lifecycle");
+    const names = statusChangedNames(event, statusLabel);
+
+    // Legacy custom_status_id rows and system status rows both render as one "Status changed" event.
+    // Close/cancel/reopen keep dedicated titles so lifecycle remains visible.
     if (lifecycle === "close" || event.newValue === "closed") {
-      return { key: "orderClosed", params: { from: event.oldValue ? statusLabel(event.oldValue) : EMPTY } };
+      return { key: "orderClosed", params: { from: names.from } };
     }
     if (lifecycle === "cancel" || event.newValue === "cancelled") {
-      return { key: "orderCancelled", params: { from: event.oldValue ? statusLabel(event.oldValue) : EMPTY } };
+      return { key: "orderCancelled", params: { from: names.from } };
     }
     if (lifecycle === "reopen") {
-      return {
-        key: "orderReopened",
-        params: {
-          from: event.oldValue ? statusLabel(event.oldValue) : EMPTY,
-          to: event.newValue ? statusLabel(event.newValue) : EMPTY,
-        },
-      };
+      return { key: "orderReopened", params: names };
     }
-    return {
-      key: "statusChanged",
-      params: {
-        from: event.oldValue ? statusLabel(event.oldValue) : EMPTY,
-        to: event.newValue ? statusLabel(event.newValue) : EMPTY,
-      },
-    };
+    return { key: "statusChanged", params: names };
   }
 
   if (event.eventType === "service_added") {

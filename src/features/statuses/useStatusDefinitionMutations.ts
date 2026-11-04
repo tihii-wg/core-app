@@ -16,6 +16,8 @@ import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscriptio
 
 function invalidateStatuses(queryClient: ReturnType<typeof useQueryClient>, workspaceId: string | undefined) {
   void queryClient.invalidateQueries({ queryKey: ["status_definitions", workspaceId] });
+  // Selectors, board columns, and filters all read definitions; keep order views in sync.
+  void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
 }
 
 export function useUpdateStatusDefinition() {
@@ -114,7 +116,6 @@ export function useReplaceOrderStatus() {
     },
     onSuccess: () => {
       invalidateStatuses(queryClient, workspaceId);
-      void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       toast.success(i18n.t("settings.statuses.toast.replaced"));
     },
     onError: (error: Error) => toast.error(error.message || i18n.t("common.somethingWentWrong")),

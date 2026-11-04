@@ -28,6 +28,35 @@ vi.mock("../industries/useIndustryWorkflow", () => ({
   }),
 }));
 
+vi.mock("../statuses/useGetStatusDefinitions", () => ({
+  useGetStatusDefinitions: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock("./useMoveOrderOnBoard", () => ({
+  useMoveOrderOnBoard: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("./useCloseOrder", () => ({
+  useCloseOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../finance/usePayments", () => ({
+  useGetPayments: () => ({ payments: [], isLoading: false, error: null }),
+}));
+
+vi.mock("../workspaces/useWorkspaceMoney", () => ({
+  useWorkspaceMoney: () => ({ formatMoney: (n: number) => String(n) }),
+}));
+
+vi.mock("../documents/useGetDocumentTemplates", () => ({
+  useGetDocumentTemplates: () => ({ data: [], isLoading: false }),
+}));
+
+vi.mock("../documents/usePrintOrderDocument", () => ({
+  usePrintOrderDocument: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 const baseOrder = {
   id: "order-1",
   orderNumber: "ORD-1",
