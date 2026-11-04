@@ -10,12 +10,7 @@ import { Textarea } from "../../ui/Textarea";
 import { isCatalogOrderMaterial, parseOrderMaterialQuantity } from "../inventory/orderMaterialLine";
 import { remainingToIssue, remainingToReturn } from "../inventory/warehouseMaterialStatus";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import {
-  issueOrderMaterials,
-  issueOrderMaterialsFromWarehouse,
-  returnOrderMaterials,
-  returnOrderMaterialsToWarehouse,
-} from "../../services/apiWarehouse";
+import { issueOrderMaterialsFromWarehouse, returnOrderMaterialsToWarehouse } from "../../services/apiWarehouse";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { defaultIssueWarehouseId, issuableWarehouses, linesExceedingWarehouseStock, warehouseStockOf } from "./issueWarehouse";
@@ -109,13 +104,13 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       return;
     }
 
-    // When active warehouses exist, issue/return must pick one so stock accounting stays warehouse-aware.
-    if (warehouses.length > 0 && !warehouseId) {
+    // Warehouse-first: issue/return always require an explicitly selected active warehouse.
+    if (!warehouseId) {
       toast.error(t("orders.warehouse.warehouseRequired"));
       return;
     }
 
-    if (mode === "issue" && warehouseId && warehouseStockLoaded && linesExceedingWarehouseStock(lines, warehouseStock, warehouseId).length > 0) {
+    if (mode === "issue" && warehouseStockLoaded && linesExceedingWarehouseStock(lines, warehouseStock, warehouseId).length > 0) {
       toast.error(t("orders.errors.insufficientWarehouseStock"));
       return;
     }
@@ -128,18 +123,11 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     try {
       guardWrite();
       const idempotencyKey = crypto.randomUUID();
-      // When a warehouse is selected, only the warehouse-aware RPCs run — never fall back to
-      // global issue/return (that would desync inventory_items.quantity vs warehouse_stock).
+      // Never call legacy global issue/return — warehouse stock would desync.
       if (mode === "issue") {
-        if (warehouseId) {
-          await issueOrderMaterialsFromWarehouse(order.id, lines, warehouseId, idempotencyKey);
-        } else {
-          await issueOrderMaterials(order.id, lines, idempotencyKey);
-        }
-      } else if (warehouseId) {
-        await returnOrderMaterialsToWarehouse(order.id, lines, warehouseId, reason, idempotencyKey);
+        await issueOrderMaterialsFromWarehouse(order.id, lines, warehouseId, idempotencyKey);
       } else {
-        await returnOrderMaterials(order.id, lines, reason, idempotencyKey);
+        await returnOrderMaterialsToWarehouse(order.id, lines, warehouseId, reason, idempotencyKey);
       }
       const refreshed = await getOrder(order.id, workspaceId);
       onOrderUpdated(refreshed);
@@ -161,15 +149,34 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   // Freeform (one-time / customer) lines never participate in warehouse issue/return.
   if (!canManage || stockMaterials.length === 0) return null;
 
+  const warehouseOpsDisabled = warehouses.length === 0;
+
   return (
     <>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" disabled={issueable.length === 0} onClick={() => openDialog("issue")}>
-          {t("orders.warehouse.issueAction")}
-        </Button>
-        <Button type="button" variant="outline" size="sm" disabled={returnable.length === 0} onClick={() => openDialog("return")}>
-          {t("orders.warehouse.returnAction")}
-        </Button>
+      <div className="space-y-2">
+        {warehouseOpsDisabled ? (
+          <p className="text-xs text-muted-foreground">{t("orders.warehouse.noActiveWarehouse")}</p>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={warehouseOpsDisabled || issueable.length === 0}
+            onClick={() => openDialog("issue")}
+          >
+            {t("orders.warehouse.issueAction")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={warehouseOpsDisabled || returnable.length === 0}
+            onClick={() => openDialog("return")}
+          >
+            {t("orders.warehouse.returnAction")}
+          </Button>
+        </div>
       </div>
 
       <Dialog open={mode != null} onOpenChange={(open) => !open && closeDialog()}>
@@ -182,31 +189,29 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
           </DialogHeader>
 
           <div className="space-y-3">
-            {warehouses.length > 0 ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="order-warehouse">
-                  {mode === "issue" ? t("orders.warehouse.warehouseLabel") : t("orders.warehouse.returnWarehouseLabel")}
-                </Label>
-                <Select value={warehouseId} onValueChange={setWarehouseId} disabled={busy}>
-                  <SelectTrigger
-                    id="order-warehouse"
-                    aria-label={mode === "issue" ? t("orders.warehouse.warehouseLabel") : t("orders.warehouse.returnWarehouseLabel")}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {warehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {mode === "issue" ? t("orders.warehouse.warehouseHint") : t("orders.warehouse.returnWarehouseHint")}
-                </p>
-              </div>
-            ) : null}
+            <div className="space-y-1.5">
+              <Label htmlFor="order-warehouse">
+                {mode === "issue" ? t("orders.warehouse.warehouseLabel") : t("orders.warehouse.returnWarehouseLabel")}
+              </Label>
+              <Select value={warehouseId} onValueChange={setWarehouseId} disabled={busy || warehouseOpsDisabled}>
+                <SelectTrigger
+                  id="order-warehouse"
+                  aria-label={mode === "issue" ? t("orders.warehouse.warehouseLabel") : t("orders.warehouse.returnWarehouseLabel")}
+                >
+                  <SelectValue placeholder={t("orders.warehouse.warehousePlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((warehouse) => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {mode === "issue" ? t("orders.warehouse.warehouseHint") : t("orders.warehouse.returnWarehouseHint")}
+              </p>
+            </div>
             {(mode === "issue" ? issueable : returnable).map((line) => {
               const itemId = line.inventoryItemId?.trim();
               if (!itemId) return null;

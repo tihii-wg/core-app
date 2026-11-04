@@ -88,7 +88,7 @@ function resolveMinQuantity(value: number | null | undefined) {
   return DEFAULT_INVENTORY_MIN_QUANTITY;
 }
 
-function itemPayload(input: InventoryItemFormData) {
+function itemPayload(input: InventoryItemFormData, options?: { includeQuantity?: boolean }) {
   const sku = input.sku.trim();
 
   return {
@@ -96,7 +96,8 @@ function itemPayload(input: InventoryItemFormData) {
     sku: sku || null,
     description: input.description.trim() || null,
     category: input.category.trim() || null,
-    quantity: input.quantity,
+    // Quantity is warehouse-owned. Create always forces 0; updates never send quantity.
+    ...(options?.includeQuantity ? { quantity: input.quantity } : {}),
     min_quantity: resolveMinQuantity(input.minQuantity),
     unit: input.unit.trim(),
     purchase_price: input.purchasePrice,
@@ -180,7 +181,8 @@ export async function createInventoryItem(input: InventoryItemFormData, workspac
     .from("inventory_items")
     .insert({
       workspace_id: resolvedWorkspaceId,
-      ...itemPayload({ ...input, quantity: 0 }),
+      ...itemPayload({ ...input, quantity: 0 }, { includeQuantity: true }),
+      quantity: 0,
     })
     .select("id")
     .maybeSingle();
@@ -197,10 +199,11 @@ export async function createInventoryItem(input: InventoryItemFormData, workspac
 export async function updateInventoryItem({ id, ...input }: InventoryItemFormData & { id: string }, workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
+  // Never write quantity from the catalog form — warehouse documents own stock.
   const { data, error } = await supabase
     .from("inventory_items")
     .update({
-      ...itemPayload(input),
+      ...itemPayload(input, { includeQuantity: false }),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

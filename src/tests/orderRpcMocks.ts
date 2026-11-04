@@ -2,8 +2,14 @@
 //   crm_set_order_line_discounts          (20261101070000_order_line_discounts_rpc.PRODUCTION.sql)
 //   issue_order_materials_from_warehouse  (20261101080000_issue_order_materials_warehouse.PRODUCTION.sql)
 //   return_order_materials_to_warehouse   (20261101100000_return_order_materials_warehouse.PRODUCTION.sql)
+//   add_and_issue_order_catalog_material  (20261103220000_add_and_issue_order_catalog_material.PRODUCTION.sql)
+//   set_order_catalog_material_quantity_with_issue (same file)
 // Call the install function from a test AFTER seedCoreApp(); without it the fake answers PGRST202 ("function missing").
 import { computeOrderMoney, isLineDiscountType, uniformPercentOf } from "../features/orders/orderTotals";
+import {
+  ADD_AND_ISSUE_ORDER_CATALOG_MATERIAL_RPC,
+  SET_ORDER_CATALOG_MATERIAL_QUANTITY_WITH_ISSUE_RPC,
+} from "../services/apiOrderMaterialStock";
 import { fake, type PgError, type PolicyCtx, type Row } from "./fakeSupabase";
 import { roleIn } from "./coreAppDb";
 
@@ -268,5 +274,118 @@ export function installReturnToWarehouseRpc() {
       created.push(movement);
     }
     return { data: created, error: null };
+  };
+}
+
+/** Installs atomic create/update+issue RPCs used by warehouse-first order material saves. */
+export function installAddAndIssueOrderCatalogMaterialRpcs() {
+  installIssueFromWarehouseRpc();
+  installReturnToWarehouseRpc();
+
+  fake.rpcs[ADD_AND_ISSUE_ORDER_CATALOG_MATERIAL_RPC] = (args, ctx) => {
+    const order = orderFor(args, ctx);
+    if (!order) return fail("Order was not found or you do not have permission to change it.", "42501");
+    if (!["owner", "admin", "manager"].includes(roleIn(order.workspace_id, ctx) ?? "")) {
+      return fail("You do not have permission to issue warehouse materials.", "42501");
+    }
+    const warehouse = ctx.fake.all("warehouses").find((row) => row.id === args.p_warehouse_id);
+    if (!warehouse || warehouse.workspace_id !== order.workspace_id || warehouse.deleted_at || warehouse.is_active === false) {
+      return fail("Warehouse not found, inactive or in another workspace", "22023");
+    }
+    const itemId = String(args.p_inventory_item_id ?? "");
+    const quantity = Number(args.p_quantity);
+    if (!itemId || !Number.isInteger(quantity) || quantity <= 0) {
+      return fail("Each issue line requires inventory_item_id and quantity > 0", "22023");
+    }
+    const key = typeof args.p_idempotency_key === "string" ? args.p_idempotency_key.trim() : "";
+    if (key) {
+      const existingMovements = ctx.fake
+        .all("inventory_movements")
+        .filter((row) => row.workspace_id === order.workspace_id && row.idempotency_key === key);
+      if (existingMovements.length > 0) {
+        const line = ctx.fake.all("order_materials").find((row) => row.id === existingMovements[0]?.order_material_id);
+        if (line) return { data: { material: line, movements: existingMovements }, error: null };
+      }
+    }
+
+    const item = ctx.fake.all("inventory_items").find((row) => row.id === itemId && row.workspace_id === order.workspace_id);
+    if (!item) return fail("Inventory item is unavailable in this workspace");
+    let line = ctx.fake.all("order_materials").find((row) => row.order_id === order.id && row.inventory_item_id === itemId);
+    if (!line) {
+      const price =
+        args.p_price == null || args.p_price === "" ? Number(item.selling_price ?? 0) : Number(args.p_price);
+      line = {
+        id: crypto.randomUUID(),
+        order_id: order.id,
+        inventory_item_id: itemId,
+        item_name: String(item.name ?? ""),
+        price: Number.isFinite(price) ? price : 0,
+        quantity,
+        quantity_issued: 0,
+        quantity_returned: 0,
+        supply_source: "catalog",
+        warehouse_id: warehouse.id,
+      };
+      ctx.fake.all("order_materials").push(line);
+    } else {
+      line.quantity = Math.max(Number(line.quantity ?? 0), quantity);
+      line.warehouse_id = warehouse.id;
+    }
+
+    const need = quantity - Number(line.quantity_issued ?? 0);
+    if (need <= 0) return { data: { material: line, movements: [] }, error: null };
+
+    const issue = fake.rpcs.issue_order_materials_from_warehouse?.(
+      {
+        p_order_id: order.id,
+        p_warehouse_id: warehouse.id,
+        p_lines: [{ inventory_item_id: itemId, quantity: need }],
+        p_idempotency_key: key || null,
+      },
+      ctx,
+    );
+    if (!issue || issue.error) return issue ?? fail("Could not issue materials.");
+    return { data: { material: line, movements: issue.data }, error: null };
+  };
+
+  fake.rpcs[SET_ORDER_CATALOG_MATERIAL_QUANTITY_WITH_ISSUE_RPC] = (args, ctx) => {
+    const order = orderFor(args, ctx);
+    if (!order) return fail("Order was not found or you do not have permission to change it.", "42501");
+    if (!["owner", "admin", "manager"].includes(roleIn(order.workspace_id, ctx) ?? "")) {
+      return fail("You do not have permission to issue warehouse materials.", "42501");
+    }
+    const warehouse = ctx.fake.all("warehouses").find((row) => row.id === args.p_warehouse_id);
+    if (!warehouse || warehouse.workspace_id !== order.workspace_id || warehouse.deleted_at || warehouse.is_active === false) {
+      return fail("Warehouse not found, inactive or in another workspace", "22023");
+    }
+    const lineId = String(args.p_order_material_id ?? "");
+    const quantity = Number(args.p_quantity);
+    if (!lineId || !Number.isInteger(quantity) || quantity <= 0) {
+      return fail("Invalid material quantity", "22023");
+    }
+    const line = ctx.fake.all("order_materials").find((row) => row.id === lineId && row.order_id === order.id);
+    if (!line || !line.inventory_item_id) return fail("Material is not on this order");
+    const issued = Number(line.quantity_issued ?? 0);
+    const returned = Number(line.quantity_returned ?? 0);
+    const outstanding = issued - returned;
+    if (quantity < outstanding) return fail("Requested quantity cannot be less than already issued quantity");
+
+    line.quantity = quantity;
+    line.warehouse_id = warehouse.id;
+    const need = quantity - issued;
+    if (need <= 0) return { data: { material: line }, error: null };
+
+    const key = typeof args.p_idempotency_key === "string" ? args.p_idempotency_key.trim() : "";
+    const issue = fake.rpcs.issue_order_materials_from_warehouse?.(
+      {
+        p_order_id: order.id,
+        p_warehouse_id: warehouse.id,
+        p_lines: [{ inventory_item_id: line.inventory_item_id, quantity: need }],
+        p_idempotency_key: key || null,
+      },
+      ctx,
+    );
+    if (!issue || issue.error) return issue ?? fail("Could not issue materials.");
+    return { data: { material: line }, error: null };
   };
 }

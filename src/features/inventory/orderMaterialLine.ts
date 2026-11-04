@@ -35,18 +35,25 @@ export function isCatalogOrderMaterial(line: Pick<OrderMaterial, "inventoryItemI
 /**
  * Snapshots the inventory item's current name and selling price onto a new order material line.
  * Later catalog edits must not rewrite this line — order_materials stores its own price/name.
+ * `warehouseId` is required for warehouse-first immediate issue when the line is saved.
  */
-export function catalogItemToOrderMaterial(item: Pick<InventoryItem, "id" | "name" | "sellingPrice">, quantity = 1): OrderMaterial {
+export function catalogItemToOrderMaterial(
+  item: Pick<InventoryItem, "id" | "name" | "sellingPrice">,
+  quantity = 1,
+  warehouseId?: string,
+): OrderMaterial {
   const qty = parseOrderMaterialQuantity(quantity);
   if (qty == null) {
     throw new Error("Material quantity must be a positive whole number");
   }
+  const warehouse = warehouseId?.trim();
   return {
     inventoryItemId: item.id,
     itemName: item.name,
     price: item.sellingPrice ?? 0,
     quantity: qty,
     supplySource: "catalog",
+    ...(warehouse ? { warehouseId: warehouse } : {}),
   };
 }
 
@@ -91,6 +98,7 @@ export function consolidateOrderMaterials(materials: OrderMaterial[]): OrderMate
         existing.quantity = existing.quantity + quantity;
         continue;
       }
+      const warehouse = line.warehouseId?.trim();
       catalogByItem.set(itemId, {
         ...(line.id ? { id: line.id } : {}),
         inventoryItemId: itemId,
@@ -98,6 +106,7 @@ export function consolidateOrderMaterials(materials: OrderMaterial[]): OrderMate
         price: Number(line.price) || 0,
         quantity,
         supplySource: "catalog",
+        ...(warehouse ? { warehouseId: warehouse } : {}),
         ...(line.quantityIssued != null ? { quantityIssued: line.quantityIssued } : {}),
         ...(line.quantityReturned != null ? { quantityReturned: line.quantityReturned } : {}),
       });
@@ -135,7 +144,7 @@ export function orderMaterialsSyncKey(materials: readonly OrderMaterial[]): stri
       const source = resolveMaterialSupplySource(line);
       const itemId = line.inventoryItemId?.trim() ?? "";
       if (source === "catalog" && itemId) {
-        return `catalog:${itemId}:${line.quantity}`;
+        return `catalog:${itemId}:${line.quantity}:${line.warehouseId?.trim() ?? ""}`;
       }
       return `${source}:${line.id ?? ""}:${line.itemName.trim().toLowerCase()}:${Number(line.price) || 0}:${line.quantity}`;
     })

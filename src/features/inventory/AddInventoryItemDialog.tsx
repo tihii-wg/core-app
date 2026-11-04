@@ -1,8 +1,13 @@
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { EmptyState } from "../../ui/EmptyState";
 import type { InventoryItem } from "../../lib/types";
+import { languageFromPath } from "../../i18n/languages";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import InventoryItemForm from "./InventoryItemForm";
 import { DEFAULT_INVENTORY_MIN_QUANTITY } from "./inventoryDefaults";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
@@ -34,11 +39,16 @@ type AddInventoryItemDialogProps = {
 
 export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", onCreated }: AddInventoryItemDialogProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { workspaceId } = useActiveWorkspaceId();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
   const { markupPercent, markupLoading, commitMarkup } = useInventoryMarkupEditor();
   const { mutate: createItem, isPending: isCreating } = useCreateInventoryItem();
-  // Create always starts at zero stock — warehouses optional; receipt is a separate step.
+  const { data: warehouses = [], isLoading: warehousesLoading, isSuccess: warehousesLoaded } = useGetWarehouses();
+  const hasActiveWarehouse = warehouses.some((warehouse) => warehouse.isActive);
+  // Create always starts at zero stock; receipt is a separate warehouse document.
   const formKey = open ? `create-${initialName}` : "closed";
 
   return (
@@ -48,8 +58,21 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
           <DialogTitle>{inventoryCopy.addDialogTitle}</DialogTitle>
           <DialogDescription className="sr-only">{inventoryCopy.addDialogDescription}</DialogDescription>
         </DialogHeader>
-        {markupLoading ? (
+        {warehousesLoading || markupLoading ? (
           <p className="text-sm text-muted-foreground">{t("inventory.dialogs.loadingItem")}</p>
+        ) : warehousesLoaded && !hasActiveWarehouse ? (
+          <EmptyState
+            title={t("inventory.warehouseRequired.title")}
+            description={t("inventory.warehouseRequired.description")}
+            action={{
+              label: t("inventory.warehouseRequired.openWarehouses"),
+              onClick: () => {
+                onOpenChange(false);
+                const locale = languageFromPath(location.pathname);
+                navigate(`/${locale}/${workspaceId}/warehouses`);
+              },
+            }}
+          />
         ) : (
           <InventoryItemForm
             key={formKey}
@@ -67,6 +90,7 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
             onCancel={() => onOpenChange(false)}
             onMarkupCommit={commitMarkup}
             onSubmit={(data) => {
+              if (!hasActiveWarehouse) return;
               createItem({ ...data, quantity: 0 }, {
                 onSuccess: (item) => {
                   onCreated?.(item);

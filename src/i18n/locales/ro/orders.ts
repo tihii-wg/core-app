@@ -212,6 +212,12 @@ const orders: Messages<typeof en> = {
     decreaseQuantity: "Scade cantitatea pentru {{name}}",
     increaseQuantity: "Crește cantitatea pentru {{name}}",
     materialsRequestHint: "Cantitățile solicitate se salvează pe comandă. Stocul se modifică doar la eliberare sau returnare din depozit.",
+    materialsImmediateHint: "Piesele din catalog se scad din depozitul selectat imediat ce comanda este salvată.",
+    issueWarehouseLabel: "Eliberare din depozit",
+    immediateIssueHint: "Salvarea comenzii scade cantitatea din depozitul selectat imediat.",
+    willDeductOnSave: "Această cantitate va fi scăzută din depozit la salvare.",
+    issuedSummary: "Eliberat {{issued}} · Returnat {{returned}} · Restant {{outstanding}}",
+    returnBeforeRemove: "Returnați cantitatea eliberată restantă înainte de a elimina linia.",
     materialSourceAria: "Sursa materialului",
     materialSourceCatalog: "Din catalog",
     materialSourceOneTime: "Piesă unică",
@@ -327,6 +333,8 @@ const orders: Messages<typeof en> = {
     returnWarehouseHint: "Cantitatea returnată se adaugă în acest depozit și în totalul articolului.",
     warehouseStock: "În acest depozit: {{count}}",
     warehouseRequired: "Selectați un depozit înainte de confirmare.",
+    warehousePlaceholder: "Selectați depozitul",
+    noActiveWarehouse: "Creați un depozit activ înainte de eliberare sau returnare.",
     globalOnlyWarning: "Materialele au fost eliberate, dar stocul pe depozit nu a scăzut: SQL-ul de eliberare din depozit nu este aplicat (stocul este ținut doar global).",
     globalOnlyReturnWarning:
       "Materialele au fost returnate în totalul companiei, dar stocul pe depozit nu a fost actualizat: SQL-ul de returnare în depozit nu este aplicat.",
@@ -404,6 +412,11 @@ const orders: Messages<typeof en> = {
     issueFailed: "Materialele nu au putut fi eliberate.",
     returnFailed: "Materialele nu au putut fi returnate.",
     insufficientWarehouseStock: "Stoc insuficient în depozitul selectat pentru unul sau mai multe materiale.",
+    insufficientWarehouseStockDetail:
+      "{{material}}: solicitat {{requested}}, disponibil {{available}} în {{warehouse}}.",
+    returnBeforeReduce: "Returnați cantitatea eliberată în plus într-un depozit înainte de a reduce cantitatea solicitată.",
+    atomicIssueRpcMissing:
+      "Eliberarea imediată din depozit necesită funcția de bază de date {{rpc}}. Aplicați supabase/manual/20261103220000_add_and_issue_order_catalog_material.PRODUCTION.sql.",
     warehouseStockMissing: "Stocul pe depozite nu este disponibil în această bază de date (lipsește tabelul warehouse_stock).",
     warehouseInvalid: "Depozitul selectat nu a fost găsit, este inactiv sau aparține altui spațiu de lucru.",
     issueFromWarehouseRpcMissing:

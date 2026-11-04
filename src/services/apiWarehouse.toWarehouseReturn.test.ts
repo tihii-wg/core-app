@@ -8,15 +8,30 @@ import { seedCoreApp, USERS, WS, row } from "../tests/coreAppDb";
 
 vi.mock("./supabase", async () => ({ default: (await import("../tests/fakeSupabase")).fakeClient }));
 
-const brakePads = { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 5 };
 const qty = (quantity: number) => [{ inventoryItemId: "item-a1", quantity }];
 
+async function orderWithRequestOnly(requested = 5) {
+  const order = await createOrder({
+    clientId: "client-a1",
+    clientName: "",
+    device: "Car",
+    services: [{ serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }],
+    materials: [],
+  }, WS.A);
+  const { error } = await fake.client.rpc("sync_order_materials", {
+    p_order_id: order.id,
+    p_materials: [{ inventory_item_id: "item-a1", quantity: requested }],
+  });
+  if (error) throw new Error(error.message);
+  return String(order.id);
+}
+
 async function orderWithIssued(quantity: number) {
-  const order = await createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [{ serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }], materials: [brakePads] }, WS.A);
+  const orderId = await orderWithRequestOnly(5);
   fake.signInAs(USERS.manager.id);
   installIssueFromWarehouseRpc();
-  await issueOrderMaterialsFromWarehouse(String(order.id), qty(quantity), "wh-main", `issue-${quantity}`);
-  return String(order.id);
+  await issueOrderMaterialsFromWarehouse(orderId, qty(quantity), "wh-main", `issue-${quantity}`);
+  return orderId;
 }
 
 function stockOf(warehouseId: string) {
@@ -34,11 +49,11 @@ describe("returnOrderMaterialsToWarehouse", () => {
 
   it("throws MissingRpcError when the SQL is not applied (no silent global fallback)", async () => {
     installIssueFromWarehouseRpc();
-    const order = await createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [{ serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }], materials: [brakePads] }, WS.A);
+    const orderId = await orderWithRequestOnly(5);
     fake.signInAs(USERS.manager.id);
-    await issueOrderMaterialsFromWarehouse(String(order.id), qty(2), "wh-main", "pre");
-    await expect(returnOrderMaterialsToWarehouse(String(order.id), qty(1), "wh-main", undefined, "r0")).rejects.toBeInstanceOf(MissingRpcError);
-    await returnOrderMaterials(String(order.id), qty(1), undefined, "r0-legacy");
+    await issueOrderMaterialsFromWarehouse(orderId, qty(2), "wh-main", "pre");
+    await expect(returnOrderMaterialsToWarehouse(orderId, qty(1), "wh-main", undefined, "r0")).rejects.toBeInstanceOf(MissingRpcError);
+    await returnOrderMaterials(orderId, qty(1), undefined, "r0-legacy");
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(19);
     expect(stockOf("wh-main")).toBe(8);
   });

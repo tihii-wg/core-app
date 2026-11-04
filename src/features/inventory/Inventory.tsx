@@ -72,8 +72,10 @@ export function Inventory() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
   const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
-  const { data: warehouses = [] } = useGetWarehouses();
-  const canReceiveStock = warehouses.some((warehouse) => warehouse.isActive);
+  const { data: warehouses = [], isLoading: warehousesLoading } = useGetWarehouses();
+  const hasActiveWarehouse = warehouses.some((warehouse) => warehouse.isActive);
+  const canReceiveStock = hasActiveWarehouse;
+  const canCreateMaterial = canMutateInventory && hasActiveWarehouse && !warehousesLoading;
 
   useEffect(() => {
     const itemId = searchParams.get("item")?.trim();
@@ -225,13 +227,36 @@ export function Inventory() {
         }
         actions={
           canMutateInventory ? (
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={() => setCreateOpen(true)} disabled={!canCreateMaterial}>
               <Plus />
               {inventoryCopy.addItem}
             </Button>
           ) : undefined
         }
       />
+
+      {!warehousesLoading && canMutateInventory && !hasActiveWarehouse ? (
+        <Card>
+          <CardHeader className="gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-base">{t("inventory.warehouseRequired.title")}</CardTitle>
+              <CardDescription>{t("inventory.warehouseRequired.description")}</CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                const locale = languageFromPath(location.pathname);
+                navigate(`/${locale}/${workspaceId}/warehouses`);
+              }}
+            >
+              {t("inventory.warehouseRequired.openWarehouses")}
+            </Button>
+          </CardHeader>
+        </Card>
+      ) : null}
 
       <SubscriptionReadOnlyNotice />
 
@@ -335,7 +360,16 @@ export function Inventory() {
           </div>
         ) : items.length === 0 ? (
           <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
-            {hasSearchOrFilter ? <NoSearchResults query={searchQuery || (supplierFilter !== "all" ? supplierFilter : stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter)} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
+            {hasSearchOrFilter ? (
+              <NoSearchResults
+                query={
+                  searchQuery ||
+                  (supplierFilter !== "all" ? supplierFilter : stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter)
+                }
+              />
+            ) : (
+              <NoInventory onAddItem={canCreateMaterial ? () => setCreateOpen(true) : undefined} />
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -362,13 +396,26 @@ export function Inventory() {
             const status = effectiveStockStatus(item);
             return status === "out_of_stock" ? "bg-destructive/[0.035]" : status === "low_stock" ? "bg-warning/[0.045]" : undefined;
           }}
-          emptyState={hasSearchOrFilter ? <NoSearchResults query={searchQuery || (supplierFilter !== "all" ? supplierFilter : stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter)} /> : <NoInventory onAddItem={() => setCreateOpen(true)} />}
+          emptyState={
+            hasSearchOrFilter ? (
+              <NoSearchResults
+                query={
+                  searchQuery ||
+                  (supplierFilter !== "all" ? supplierFilter : stockFilters.find((option) => option.value === stockFilter)?.label || stockFilter)
+                }
+              />
+            ) : (
+              <NoInventory onAddItem={canCreateMaterial ? () => setCreateOpen(true) : undefined} />
+            )
+          }
         />
       )}
 
       <AddInventoryItemDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={createOpen && canCreateMaterial}
+        onOpenChange={(next) => {
+          if (!next || canCreateMaterial) setCreateOpen(next);
+        }}
         onCreated={(item) => {
           if (canReceiveStock) setReceiveItem(item);
         }}

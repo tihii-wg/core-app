@@ -215,6 +215,12 @@ const orders: Messages<typeof en> = {
     decreaseQuantity: "Уменьшить количество для {{name}}",
     increaseQuantity: "Увеличить количество для {{name}}",
     materialsRequestHint: "Запрошенные количества сохраняются в заказе. Остаток склада меняется только при выдаче или возврате со склада.",
+    materialsImmediateHint: "Материалы из каталога списываются с выбранного склада сразу при сохранении заказа.",
+    issueWarehouseLabel: "Склад выдачи",
+    immediateIssueHint: "При сохранении заказа количество будет сразу списано с выбранного склада.",
+    willDeductOnSave: "Это количество будет списано со склада при сохранении.",
+    issuedSummary: "Выдано {{issued}} · Возвращено {{returned}} · В работе {{outstanding}}",
+    returnBeforeRemove: "Сначала верните невозвращённый остаток на склад, затем удалите строку.",
     materialSourceAria: "Источник материала",
     materialSourceCatalog: "Из каталога",
     materialSourceOneTime: "Разовая позиция",
@@ -330,6 +336,8 @@ const orders: Messages<typeof en> = {
     returnWarehouseHint: "Возвращённое количество добавляется на этот склад и в общее количество позиции.",
     warehouseStock: "На этом складе: {{count}}",
     warehouseRequired: "Выберите склад перед подтверждением.",
+    warehousePlaceholder: "Выберите склад",
+    noActiveWarehouse: "Создайте активный склад, прежде чем выдавать или возвращать материалы.",
     globalOnlyWarning: "Материалы выданы, но остаток по складу не уменьшен: SQL выдачи со склада не применён (остаток ведётся только общий).",
     globalOnlyReturnWarning:
       "Материалы возвращены в общий остаток, но остаток по складу не обновлён: SQL возврата на склад не применён.",
@@ -407,6 +415,11 @@ const orders: Messages<typeof en> = {
     issueFailed: "Не удалось выдать материалы.",
     returnFailed: "Не удалось вернуть материалы.",
     insufficientWarehouseStock: "Недостаточно остатка на выбранном складе для одного или нескольких материалов.",
+    insufficientWarehouseStockDetail:
+      "{{material}}: запрошено {{requested}}, доступно {{available}} на складе {{warehouse}}.",
+    returnBeforeReduce: "Верните лишнее выданное количество на склад, прежде чем уменьшать запрошенное.",
+    atomicIssueRpcMissing:
+      "Немедленное списание со склада требует функцию БД {{rpc}}. Примените supabase/manual/20261103220000_add_and_issue_order_catalog_material.PRODUCTION.sql.",
     warehouseStockMissing: "Остатки по складам недоступны в этой базе данных (нет таблицы warehouse_stock).",
     warehouseInvalid: "Выбранный склад не найден, неактивен или принадлежит другому рабочему пространству.",
     issueFromWarehouseRpcMissing:

@@ -19,6 +19,11 @@ export default {
     moreCount_one: "{{count}} more item needs attention — use the stock filter to see all.",
     moreCount_other: "{{count}} more items need attention — use the stock filter to see all.",
   },
+  warehouseRequired: {
+    title: "Create a warehouse first",
+    description: "An active warehouse is required before you can add materials to the catalog. Stock is stored per warehouse — not on the material card.",
+    openWarehouses: "Open warehouses",
+  },
   categories: {
     title: "Product categories",
     description: "Read-only list from the catalog.",

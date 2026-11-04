@@ -88,9 +88,16 @@ export function NoServices({ onAddService }: { onAddService?: () => void }) {
   return <EmptyState icon={Package} title={t("common.empty.noServicesTitle")} description={t("common.empty.noServicesDescription")} action={onAddService ? { label: t("common.empty.noServicesAction"), onClick: onAddService } : undefined} />;
 }
 
-export function NoInventory({ onAddItem }: { onAddItem: () => void }) {
+export function NoInventory({ onAddItem }: { onAddItem?: () => void }) {
   const { shell } = useIndustryWorkflow();
-  return <EmptyState icon={Package} title={shell.noInventoryTitle} description={shell.noInventoryDescription} action={{ label: shell.noInventoryAction, onClick: onAddItem }} />;
+  return (
+    <EmptyState
+      icon={Package}
+      title={shell.noInventoryTitle}
+      description={shell.noInventoryDescription}
+      action={onAddItem ? { label: shell.noInventoryAction, onClick: onAddItem } : undefined}
+    />
+  );
 }
 
 export function NoEmployees({ onAddClient }: { onAddClient: () => void }) {

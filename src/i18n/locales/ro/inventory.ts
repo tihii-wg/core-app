@@ -26,6 +26,11 @@ const inventory: Messages<typeof en> = {
     moreCount_few: "Încă {{count}} articole necesită atenție — folosește filtrul de stoc pentru a le vedea pe toate.",
     moreCount_other: "Încă {{count}} de articole necesită atenție — folosește filtrul de stoc pentru a le vedea pe toate.",
   },
+  warehouseRequired: {
+    title: "Creează mai întâi un depozit",
+    description: "Este necesar un depozit activ înainte de a adăuga materiale în catalog. Stocul este pe depozite, nu pe fișa materialului.",
+    openWarehouses: "Deschide depozitele",
+  },
   categories: {
     title: "Categorii de produse",
     description: "Listă din catalog, doar vizualizare.",

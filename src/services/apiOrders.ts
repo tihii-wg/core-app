@@ -13,7 +13,18 @@ import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import { assertVehicleAssignable } from "./apiVehicles";
-import { consolidateOrderMaterials, orderMaterialsMatch } from "../features/inventory/orderMaterialLine";
+import {
+  consolidateOrderMaterials,
+  isCatalogOrderMaterial,
+  orderMaterialsMatch,
+} from "../features/inventory/orderMaterialLine";
+import {
+  applyCatalogImmediateIssue,
+  assertCatalogWarehousesSelected,
+  compensateIssuedCatalogMaterials,
+  freeformMaterialsOnly,
+  mergeCatalogAndFreeform,
+} from "./orderMaterialWarehousePersist";
 import {
   addCalendarDays,
   OPEN_ORDER_STATUSES,
@@ -404,12 +415,30 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
 
   let writtenMaterialLines: OrderMaterial[] = [];
   if (materials.length > 0) {
+    const orderId = String(order.id);
+    let issuedForCompensation: Awaited<ReturnType<typeof applyCatalogImmediateIssue>>["issuedForCompensation"] = [];
     try {
-      // The RPC takes the item's selling price and rewrites orders.total_price as the GROSS sum; the
-      // persisted lines (not the form) are therefore the source of truth for the final total below.
-      const syncedMaterials = await syncOrderMaterialsRpc(String(order.id), materials);
-      writtenMaterialLines = await stampMaterialLineDiscounts(String(order.id), syncedMaterials, productPercent ?? 0, new Set());
+      assertCatalogWarehousesSelected(materials);
+      const freeform = freeformMaterialsOnly(materials);
+      const hasCatalog = materials.some(isCatalogOrderMaterial);
+
+      // Catalog: atomic add+issue per line (RPC contract). Freeform: sync_order_materials only.
+      if (hasCatalog) {
+        const applied = await applyCatalogImmediateIssue({ orderId, desired: materials, existing: [] });
+        issuedForCompensation = applied.issuedForCompensation;
+        if (freeform.length > 0) {
+          // Include catalog lines so sync does not delete just-issued rows.
+          const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform));
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, synced, productPercent ?? 0, new Set());
+        } else {
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, applied.catalog, productPercent ?? 0, new Set());
+        }
+      } else {
+        const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform);
+        writtenMaterialLines = await stampMaterialLineDiscounts(orderId, syncedMaterials, productPercent ?? 0, new Set());
+      }
     } catch (error) {
+      await compensateIssuedCatalogMaterials(orderId, issuedForCompensation);
       const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
       const syncMessage = error instanceof Error ? error.message : String(error);
       if (rollbackError) {
@@ -517,6 +546,7 @@ type OrderMaterialLine = {
   quantity_issued?: number;
   quantity_returned?: number;
   supply_source?: string | null;
+  warehouse_id?: string | null;
   discount_type?: string | null;
   discount_value?: number | string | null;
 };
@@ -826,14 +856,22 @@ export function toOrderServiceKind(value: unknown): OrderServiceKind | null {
 }
 const orderMaterialBaseColumns = "id, order_id, inventory_item_id, item_name, price, quantity, quantity_issued, quantity_returned";
 
+/** Optional until warehouse bootstrap / immediate-issue SQL sets order_materials.warehouse_id. */
+let orderMaterialWarehouseIdSupported = true;
+
 function isMissingSupplySourceColumn(error: DbError) {
   return isMissingColumnNamed(error, /\bsupply_source\b/i);
 }
 
+function isMissingWarehouseIdColumn(error: DbError) {
+  return isMissingColumnNamed(error, /\bwarehouse_id\b/i);
+}
+
 function orderMaterialColumns() {
   const supply = orderMaterialSupplySourceSupported ? ", supply_source" : "";
+  const warehouse = orderMaterialWarehouseIdSupported ? ", warehouse_id" : "";
   const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
-  return `${orderMaterialBaseColumns}${supply}${discount}`;
+  return `${orderMaterialBaseColumns}${supply}${warehouse}${discount}`;
 }
 
 /** Runs an order_materials select; retries without missing optional columns (supply_source / discounts). */
@@ -841,6 +879,10 @@ async function withOrderMaterialColumns<T extends { error: DbError }>(run: () =>
   let result = await run();
   if (orderMaterialSupplySourceSupported && isMissingSupplySourceColumn(result.error)) {
     orderMaterialSupplySourceSupported = false;
+    result = await run();
+  }
+  if (orderMaterialWarehouseIdSupported && isMissingWarehouseIdColumn(result.error)) {
+    orderMaterialWarehouseIdSupported = false;
     result = await run();
   }
   if (orderLineDiscountSupported && isMissingLineDiscountColumn(result.error)) {
@@ -880,6 +922,7 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
         : inventoryItemId
           ? ("catalog" as const)
           : ("one_time" as const);
+    const warehouseId = typeof line.warehouse_id === "string" && line.warehouse_id.trim() ? line.warehouse_id : undefined;
     return {
       ...(line.id ? { id: String(line.id) } : {}),
       ...(inventoryItemId ? { inventoryItemId } : {}),
@@ -889,6 +932,7 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
       quantityIssued: Number(line.quantity_issued ?? 0),
       quantityReturned: Number(line.quantity_returned ?? 0),
       supplySource,
+      ...(warehouseId ? { warehouseId } : {}),
       ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
     };
   });
@@ -1561,19 +1605,29 @@ export async function updateOrder(
       // Unchanged materials: do not call sync_order_materials (avoids unnecessary DELETEs).
       materialLines = existingMapped;
     } else if (desiredMaterials.length > 0) {
-      // Non-empty change: must sync via RPC. Failure throws — do not treat the update as fully successful.
+      assertCatalogWarehousesSelected(desiredMaterials);
       const percent = clientDiscountPercent(clientDiscounts, "product_order");
       const productPercent = percent > 0 && orderLineDiscountSupported ? percent : null;
-      // Lines already on the order keep their stored discount; the ones the RPC inserts are new.
       const existingMaterialIds = productPercent !== null ? new Set(existingRows.map((line) => String(line.id))) : new Set<string>();
-      materialLines = await syncOrderMaterialsRpc(orderId, desiredMaterials);
+      const hasCatalog = desiredMaterials.some(isCatalogOrderMaterial);
+      const freeform = freeformMaterialsOnly(desiredMaterials);
+
+      if (hasCatalog) {
+        // Issue new / increased catalog qty first (atomic per line). Then sync full set for freeform + qty decreases.
+        const applied = await applyCatalogImmediateIssue({
+          orderId,
+          desired: desiredMaterials,
+          existing: existingMapped,
+        });
+        materialLines = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform));
+      } else {
+        materialLines = await syncOrderMaterialsRpc(orderId, freeform);
+      }
       materialsRpcRan = true;
       if (productPercent !== null) {
         try {
           materialLines = await stampMaterialLineDiscounts(orderId, materialLines, productPercent, existingMaterialIds);
         } catch (stampError) {
-          // sync_order_materials already reset total_price to the gross sum: restore the net total of the lines as
-          // persisted (new material lines undiscounted) so the order is never left with a stale total, then report.
           await persistOrderTotals(workspaceId, orderId, lines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine)).catch(() => undefined);
           throw stampError;
         }

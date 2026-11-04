@@ -8,9 +8,9 @@ import { seedCoreApp, USERS, WS, row } from "../tests/coreAppDb";
 
 vi.mock("./supabase", async () => ({ default: (await import("../tests/fakeSupabase")).fakeClient }));
 
-const brakePads = { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 5 };
 const issue = (quantity: number) => [{ inventoryItemId: "item-a1", quantity }];
 
+/** Request-only catalog line (issued=0) so from-warehouse issue can be tested in isolation. */
 async function orderWithMaterials() {
   const order = await createOrder(
     {
@@ -18,10 +18,15 @@ async function orderWithMaterials() {
       clientName: "",
       device: "Car",
       services: [{ serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }],
-      materials: [brakePads],
+      materials: [],
     },
     WS.A,
   );
+  const { error } = await fake.client.rpc("sync_order_materials", {
+    p_order_id: order.id,
+    p_materials: [{ inventory_item_id: "item-a1", quantity: 5 }],
+  });
+  if (error) throw new Error(error.message);
   fake.signInAs(USERS.manager.id);
   return String(order.id);
 }

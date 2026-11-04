@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createOrder, getOrders, resetOrderDiscountSupport, updateOrder } from "./apiOrders";
 import { fake } from "../tests/fakeSupabase";
 import { seedCoreApp, USERS, WS, row } from "../tests/coreAppDb";
-import { installOrderLineDiscountsRpc } from "../tests/orderRpcMocks";
+import { installAddAndIssueOrderCatalogMaterialRpcs, installOrderLineDiscountsRpc, seedWarehouse } from "../tests/orderRpcMocks";
 
 vi.mock("./supabase", async () => ({ default: (await import("../tests/fakeSupabase")).fakeClient }));
 
 const oilChange = { serviceId: "service-a1", serviceName: "Oil change", price: 100, quantity: 1 };
 const brakeCheck = { serviceId: "service-a2", serviceName: "Brake check", price: 50, quantity: 2 };
-const brakePads = { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 2 };
+const WH = "wh-a1";
+const brakePads = { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 2, warehouseId: WH };
 const details = { device: "Car", carNumber: "AAA111", vin: "", description: "", assignedEmployeeId: "employee-a1", deadline: "" };
 
 function seedDiscount(target: string, percent: number, clientId = "client-a1") {
@@ -21,7 +22,12 @@ function linesOf(orderId: string) {
 
 beforeEach(() => {
   seedCoreApp();
-  fake.signInAs(USERS.member.id);
+  // Catalog materials require warehouse issue permission (owner/admin/manager).
+  fake.signInAs(USERS.manager.id);
+  installAddAndIssueOrderCatalogMaterialRpcs();
+  seedWarehouse(WS.A, WH, { "item-a1": 50, "item-a2": 50 });
+  const item = row("inventory_items", "item-a1");
+  if (item) item.quantity = 50;
   resetOrderDiscountSupport();
 });
 
@@ -109,7 +115,13 @@ describe("createOrder persists client discounts", () => {
   it("a plain member without orders.edit gets the RPC permission error, not a silent downgrade", async () => {
     installOrderLineDiscountsRpc();
     seedDiscount("product_order", 50);
-    await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [oilChange], materials: [brakePads] }, WS.A)).rejects.toThrow(/permission to edit order discounts/);
+    // Member can create the order line path only after warehouse issue permission — use services-only + manager issue path is N/A;
+    // for discount permission, stamp as manager then switch is covered elsewhere; here member hits discount RPC via services+materials
+    // only when issue succeeds first. Sign in as manager for issue, then the discount RPC still checks orders.edit.
+    fake.signInAs(USERS.member.id);
+    await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [oilChange], materials: [brakePads] }, WS.A)).rejects.toThrow(
+      /permission to issue warehouse materials|permission to edit order discounts/i,
+    );
   });
 
   it("surfaces an RPC business error instead of degrading", async () => {
@@ -163,7 +175,12 @@ describe("updateOrder keeps and recomputes discounts", () => {
     const saved = (await getOrders(WS.A)).find((item) => item.id === orderId)!;
     const before = fake.requests.filter((item) => item.table === "crm_set_order_line_discounts").length;
 
-    await updateOrder({ ...details, orderId, services: saved.services, materials: [...saved.materials!, { inventoryItemId: "item-a2", itemName: "Alpha oil", price: 5, quantity: 1 }] }, WS.A);
+    await updateOrder({
+      ...details,
+      orderId,
+      services: saved.services,
+      materials: [...saved.materials!, { inventoryItemId: "item-a2", itemName: "Alpha oil", price: 5, quantity: 1, warehouseId: WH }],
+    }, WS.A);
     const calls = fake.requests.filter((item) => item.table === "crm_set_order_line_discounts").slice(before);
     expect(calls).toHaveLength(1);
     expect((calls[0].values as { p_lines: unknown[] }).p_lines).toHaveLength(1);

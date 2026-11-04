@@ -506,6 +506,11 @@ export type OrderMaterial = {
   quantityIssued?: number;
   /** Cumulative quantity returned to the warehouse. */
   quantityReturned?: number;
+  /**
+   * Warehouse used for immediate catalog issue / return (client + optional order_materials.warehouse_id).
+   * Required when adding or increasing a catalog line under warehouse-first rules.
+   */
+  warehouseId?: string;
   /** catalog (default) | one_time | customer. Absent when column not applied yet. */
   supplySource?: OrderMaterialSupplySource;
   /** `order_materials.discount_type` / `discount_value` (crm_ro_v1). Absent when the columns do not exist. */

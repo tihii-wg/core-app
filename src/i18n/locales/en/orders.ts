@@ -206,6 +206,12 @@ export default {
     decreaseQuantity: "Decrease quantity for {{name}}",
     increaseQuantity: "Increase quantity for {{name}}",
     materialsRequestHint: "Requested quantities are saved on the order. Warehouse stock changes only when materials are issued or returned.",
+    materialsImmediateHint: "Catalog parts are deducted from the selected warehouse as soon as the order is saved.",
+    issueWarehouseLabel: "Issue from warehouse",
+    immediateIssueHint: "Saving this order will deduct the quantity from the selected warehouse immediately.",
+    willDeductOnSave: "This quantity will be deducted from the warehouse when you save.",
+    issuedSummary: "Issued {{issued}} · Returned {{returned}} · Outstanding {{outstanding}}",
+    returnBeforeRemove: "Return outstanding issued quantity before removing this line.",
     materialSourceAria: "Material source",
     materialSourceCatalog: "Catalog part",
     materialSourceOneTime: "One-time part",
@@ -321,6 +327,8 @@ export default {
     returnWarehouseHint: "Returned quantity is added to this warehouse and to the item total.",
     warehouseStock: "In this warehouse: {{count}}",
     warehouseRequired: "Select a warehouse before confirming.",
+    warehousePlaceholder: "Select warehouse",
+    noActiveWarehouse: "Create an active warehouse before issuing or returning materials.",
     globalOnlyWarning: "Materials were issued, but per-warehouse stock was not reduced: the warehouse issue SQL is not applied (stock is tracked globally only).",
     globalOnlyReturnWarning:
       "Materials were returned to the company total, but per-warehouse stock was not updated: the warehouse return SQL is not applied.",
@@ -398,8 +406,13 @@ export default {
     issueFailed: "Could not issue materials.",
     returnFailed: "Could not return materials.",
     insufficientWarehouseStock: "Not enough stock in the selected warehouse for one or more materials.",
+    insufficientWarehouseStockDetail:
+      "{{material}}: requested {{requested}}, available {{available}} in {{warehouse}}.",
+    returnBeforeReduce: "Return the excess issued quantity to a warehouse before reducing the requested quantity.",
     warehouseStockMissing: "Per-warehouse stock is not available on this database (warehouse_stock table is missing).",
     warehouseInvalid: "The selected warehouse was not found, is inactive, or belongs to another workspace.",
+    atomicIssueRpcMissing:
+      "Immediate warehouse issue requires the database function {{rpc}}. Apply supabase/manual/20261103220000_add_and_issue_order_catalog_material.PRODUCTION.sql.",
     issueFromWarehouseRpcMissing:
       "Issuing from a selected warehouse requires the database function issue_order_materials_from_warehouse. Apply supabase/manual/20261101080000_issue_order_materials_warehouse.PRODUCTION.sql.",
     returnToWarehouseRpcMissing:
