@@ -537,10 +537,11 @@ revoke all on function public.crm_restore_or_create_batch(uuid, uuid, uuid, nume
 -- New return peel order: LIFO among remaining slices (last issued first),
 -- preserving unit_cost / expires_on / supplier_client_id from the issue slice.
 --
--- Legacy issues/returns without batch provenance contribute nothing here.
--- Caller (return RPC) distinguishes:
---   * no issue provenance at all → explicit zero-cost fallback allowed;
---   * issue provenance exists but peel shortfall → raise (no silent cover-up).
+-- Issues/returns without batch_id / batch_allocations contribute nothing here.
+-- Caller (return RPC) is fail-closed on shortfall: schema provides no positive
+-- proof that empty provenance is "legacy" rather than a malformed/new issue
+-- (no invented cutoff date/flag). Proven legacy path is peelable batch_id
+-- and/or batch_allocations on the source issue movements.
 -- Unattributed prior returns (no batch_id / allocations) reduce remaining
 -- via the same LIFO order so they cannot be ignored.
 --
@@ -603,7 +604,7 @@ begin
         'supplier_client_id', null
       ));
     end if;
-    -- else: legacy issue with no batch provenance — skip (caller may zero-cost fallback)
+    -- else: issue with no batch_id / batch_allocations — skip; caller fail-closes on shortfall
   end loop;
 
   -- 2) Sum prior returns per original batch_id (from return movement provenance).
@@ -721,8 +722,8 @@ begin
     v_remaining := v_remaining - v_take;
   end loop;
 
-  -- If v_remaining > 0 here, caller supplies zero-cost fallback for the gap
-  -- (legacy / insufficient annotated provenance). Do not invent issue history.
+  -- If v_remaining > 0 here, caller must reject (cannot invent issue history
+  -- or prove a zero-cost legacy gap from schema alone).
   return v_out;
 end;
 $fn$;
@@ -1137,6 +1138,14 @@ begin
         v_transfer.workspace_id, v_transfer.from_warehouse_id, v_line.inventory_item_id, v_line.quantity
       )
     loop
+      if v_slice.batch_id is null
+         or v_slice.quantity is null
+         or v_slice.quantity <= 0 then
+        raise exception
+          'crm_post_stock_transfer: invalid FIFO allocation slice for "%"'
+          , v_line.item_name
+          using errcode = 'P0001';
+      end if;
       if v_first_src is null then
         v_first_src := v_slice.batch_id;
       end if;
@@ -1255,6 +1264,7 @@ declare
   v_avg_cost numeric;
   v_cost_sum numeric;
   v_rowcount integer;
+  v_fifo_qty numeric;
 begin
   if (select auth.uid()) is null then
     raise exception 'crm_post_write_off: not authenticated' using errcode = '42501';
@@ -1344,18 +1354,29 @@ begin
         v_line.item_name, v_item_qty, v_line.quantity using errcode = '23514';
     end if;
 
+    -- Reset FIFO accumulators per inventory item (never carry over).
     v_alloc := '[]'::jsonb;
     v_first_batch := null;
     v_cost_sum := 0;
+    v_fifo_qty := 0;
 
     for v_slice in
       select * from public.crm_consume_batches_fifo(
         v_write_off.workspace_id, v_write_off.warehouse_id, v_line.inventory_item_id, v_line.quantity
       )
     loop
+      if v_slice.batch_id is null
+         or v_slice.quantity is null
+         or v_slice.quantity <= 0 then
+        raise exception
+          'crm_post_write_off: invalid FIFO allocation slice for "%"'
+          , v_line.item_name
+          using errcode = 'P0001';
+      end if;
       if v_first_batch is null then
         v_first_batch := v_slice.batch_id;
       end if;
+      v_fifo_qty := v_fifo_qty + v_slice.quantity;
       v_cost_sum := v_cost_sum + coalesce(v_slice.unit_cost, 0) * v_slice.quantity;
       v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
         'batch_id', v_slice.batch_id,
@@ -1365,6 +1386,24 @@ begin
         'supplier_client_id', v_slice.supplier_client_id
       ));
     end loop;
+
+    -- Fail closed: write-offs require complete FIFO batch provenance before any
+    -- stock balance update or movement insert. Empty/partial/excessive FIFO must not
+    -- reduce warehouse/global qty or post a movement with NULL provenance.
+    if round(coalesce(v_fifo_qty, 0), 3) is distinct from round(v_line.quantity, 3) then
+      raise exception
+        'crm_post_write_off: FIFO batch coverage (%) does not equal requested quantity (%) for "%"'
+        , coalesce(v_fifo_qty, 0), v_line.quantity, v_line.item_name
+        using errcode = 'P0001';
+    end if;
+    if v_alloc is null
+       or jsonb_typeof(v_alloc) <> 'array'
+       or jsonb_array_length(v_alloc) = 0 then
+      raise exception
+        'crm_post_write_off: FIFO returned no allocation slices for "%"'
+        , v_line.item_name
+        using errcode = 'P0001';
+    end if;
 
     update public.warehouse_stock
        set quantity = quantity - v_line.quantity, updated_at = now()
@@ -1388,11 +1427,8 @@ begin
         v_line.item_name using errcode = '23514';
     end if;
 
-    v_avg_cost := case
-      when jsonb_array_length(v_alloc) > 0 and v_line.quantity > 0
-        then round(v_cost_sum / v_line.quantity, 4)
-      else case when v_line.quantity > 0 then round(v_line.amount / v_line.quantity, 4) else 0 end
-    end;
+    -- Cost from verified FIFO slices only (coverage already proven above).
+    v_avg_cost := round(v_cost_sum / v_line.quantity, 4);
 
     insert into public.inventory_movements (
       workspace_id, inventory_item_id, movement_type, quantity, reason, created_by,
@@ -1402,7 +1438,7 @@ begin
       v_write_off.workspace_id, v_line.inventory_item_id, 'adjustment', v_line.quantity,
       coalesce(nullif(btrim(v_write_off.reason), ''), 'write_off'), (select auth.uid()),
       v_write_off.warehouse_id, v_first_batch, 'write_off', v_write_off.id, v_avg_cost,
-      nullif(v_alloc, '[]'::jsonb),
+      v_alloc,
       'write_off:' || v_write_off.id::text || ':' || v_line.inventory_item_id::text
     );
 
@@ -1460,6 +1496,7 @@ declare
   v_alloc jsonb;
   v_first_batch uuid;
   v_unit_cost numeric;
+  v_fifo_qty numeric;
 begin
   if p_order_id is null then
     raise exception 'order_id is required' using errcode = '22023';
@@ -1732,19 +1769,30 @@ begin
       raise exception 'insufficient_warehouse_stock' using errcode = 'P0001';
     end if;
 
+    -- Reset FIFO accumulators per order material (never carry over).
     v_alloc := '[]'::jsonb;
     v_first_batch := null;
     v_unit_cost := null;
+    v_fifo_qty := 0;
 
     for v_slice in
       select * from public.crm_consume_batches_fifo(
         v_workspace_id, p_warehouse_id, v_item_id, v_qty::numeric
       )
     loop
+      if v_slice.batch_id is null
+         or v_slice.quantity is null
+         or v_slice.quantity <= 0 then
+        raise exception
+          'issue_order_materials_from_warehouse: invalid FIFO allocation slice for inventory_item_id=%'
+          , v_item_id
+          using errcode = 'P0001';
+      end if;
       if v_first_batch is null then
         v_first_batch := v_slice.batch_id;
         v_unit_cost := v_slice.unit_cost;
       end if;
+      v_fifo_qty := v_fifo_qty + v_slice.quantity;
       v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
         'batch_id', v_slice.batch_id,
         'quantity', v_slice.quantity,
@@ -1753,6 +1801,25 @@ begin
         'supplier_client_id', v_slice.supplier_client_id
       ));
     end loop;
+
+    -- Fail closed BEFORE any balance / OM / movement mutation: allocated FIFO qty
+    -- must equal the requested issue qty. Never post an issue with NULL/partial
+    -- batch_allocations while reducing stock.
+    if round(coalesce(v_fifo_qty, 0), 3) is distinct from round(v_qty::numeric, 3) then
+      raise exception
+        'issue_order_materials_from_warehouse: FIFO batch coverage (%) does not equal requested quantity (%) for inventory_item_id=%'
+        , coalesce(v_fifo_qty, 0), v_qty, v_item_id
+        using errcode = 'P0001';
+    end if;
+    if v_alloc is null
+       or jsonb_typeof(v_alloc) <> 'array'
+       or jsonb_array_length(v_alloc) = 0
+       or v_first_batch is null then
+      raise exception
+        'issue_order_materials_from_warehouse: FIFO returned no allocation slices for inventory_item_id=%'
+        , v_item_id
+        using errcode = 'P0001';
+    end if;
 
     update public.inventory_items
     set quantity = quantity - v_qty::numeric,
@@ -1804,7 +1871,7 @@ begin
     ) values (
       v_workspace_id, v_item_id, p_order_id, v_line.id,
       'issue', v_qty, null, v_key, (select auth.uid()),
-      p_warehouse_id, v_first_batch, v_unit_cost, nullif(v_alloc, '[]'::jsonb)
+      p_warehouse_id, v_first_batch, v_unit_cost, v_alloc
     )
     returning id into v_movement_id;
 
@@ -2115,6 +2182,114 @@ begin
       raise exception 'Inventory item is unavailable in this workspace' using errcode = 'P0001';
     end if;
 
+    -- Outstanding check against the locked OM row before mutating batches/stock.
+    if v_line.quantity_returned + v_qty > v_line.quantity_issued
+       or v_line.quantity_issued < v_line.quantity_returned
+       or v_line.quantity_returned < 0 then
+      raise exception 'Cannot return more than the outstanding issued quantity' using errcode = 'P0001';
+    end if;
+
+    -- Provenance policy (fail-closed):
+    --   * Schema-provable issue provenance is batch_id and/or non-empty
+    --     batch_allocations on source issue movements (peelable by
+    --     crm_peel_return_batch_slices). That path is preserved.
+    --   * Missing/empty provenance on new or corrupted issue rows is NOT
+    --     treated as legacy. There is no schema field/cutoff that positively
+    --     proves "legacy era" without inventing one — so zero-cost invent
+    --     fallback is refused. Shortfall / overshoot / invalid peel → raise.
+    -- Resolve and validate provenance BEFORE any OM / stock / movement writes.
+    v_peel := public.crm_peel_return_batch_slices(
+      v_workspace_id, v_line.id, p_warehouse_id, v_qty::numeric
+    );
+    v_alloc := '[]'::jsonb;
+    v_first_batch := null;
+    v_got := 0;
+
+    if v_peel is null or jsonb_typeof(v_peel) <> 'array' then
+      raise exception
+        'return_batch_provenance_unproven: peel did not return a JSON array for order_material_id=%; refusing zero-cost invent'
+        , v_line.id
+        using errcode = 'P0001';
+    end if;
+
+    -- Pass 1: validate peel JSON structure and exact qty coverage with NO mutations.
+    for v_slice in select value from jsonb_array_elements(v_peel)
+    loop
+      begin
+        v_batch_id := nullif(btrim(coalesce(v_slice ->> 'batch_id', '')), '')::uuid;
+      exception
+        when others then
+          raise exception
+            'return_batch_provenance_invalid: peel slice has non-UUID batch_id for order_material_id=%'
+            , v_line.id
+            using errcode = 'P0001';
+      end;
+
+      begin
+        v_restore_qty := (v_slice ->> 'quantity')::numeric;
+      exception
+        when others then
+          raise exception
+            'return_batch_provenance_invalid: peel slice has non-numeric quantity for order_material_id=%'
+            , v_line.id
+            using errcode = 'P0001';
+      end;
+
+      if v_batch_id is null or v_restore_qty is null or v_restore_qty <= 0 then
+        raise exception
+          'return_batch_provenance_invalid: peel slice requires batch_id and quantity > 0 for order_material_id=%'
+          , v_line.id
+          using errcode = 'P0001';
+      end if;
+
+      v_got := v_got + v_restore_qty;
+      v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
+        'batch_id', v_batch_id,
+        'quantity', v_restore_qty,
+        'unit_cost', coalesce((v_slice ->> 'unit_cost')::numeric, 0),
+        'expires_on', nullif(v_slice ->> 'expires_on', '')::date,
+        'supplier_client_id', nullif(v_slice ->> 'supplier_client_id', '')::uuid
+      ));
+    end loop;
+
+    v_need := v_qty::numeric - coalesce(v_got, 0);
+    -- Exact equality (return qty is integer); do not round away a shortfall/overshoot.
+    if coalesce(v_got, 0) is distinct from v_qty::numeric
+       or v_alloc is null
+       or jsonb_typeof(v_alloc) <> 'array'
+       or jsonb_array_length(v_alloc) = 0 then
+      raise exception
+        'return_batch_provenance_incomplete: allocated (%) does not equal return qty (%); empty/missing issue batch_id+batch_allocations cannot be proven as safe legacy — refusing zero-cost invent (order_material_id=%)'
+        , coalesce(v_got, 0), v_qty, v_line.id
+        using errcode = 'P0001';
+    end if;
+
+    -- Pass 2: only after full coverage is proven, restore/create batches and record movement alloc.
+    v_first_batch := null;
+    for v_slice in select value from jsonb_array_elements(v_alloc)
+    loop
+      v_batch_id := (v_slice ->> 'batch_id')::uuid;
+      v_restore_qty := (v_slice ->> 'quantity')::numeric;
+      v_new_batch := public.crm_restore_or_create_batch(
+        v_workspace_id, p_warehouse_id, v_item_id, v_restore_qty,
+        v_batch_id,
+        coalesce((v_slice ->> 'unit_cost')::numeric, 0),
+        nullif(v_slice ->> 'expires_on', '')::date,
+        nullif(v_slice ->> 'supplier_client_id', '')::uuid,
+        null
+      );
+      if v_first_batch is null then
+        v_first_batch := v_new_batch;
+      end if;
+    end loop;
+
+    if v_first_batch is null then
+      raise exception
+        'return_batch_provenance_incomplete: batch restore produced no batch_id for order_material_id=%'
+        , v_line.id
+        using errcode = 'P0001';
+    end if;
+
     -- Outstanding = quantity_issued - quantity_returned (same model as issue RPC).
     -- Return never decreases quantity_issued; it only increases quantity_returned.
     update public.order_materials
@@ -2150,105 +2325,6 @@ begin
       quantity = public.warehouse_stock.quantity + excluded.quantity,
       updated_at = now();
 
-    -- Provenance policy:
-    --   * If any issue movement for this OM+warehouse has batch_id / batch_allocations,
-    --     peel must cover the full return qty. A shortfall is accounting corruption —
-    --     do NOT invent zero-cost stock to conceal it.
-    --   * If NO issue movement has provenance (legacy path), allow a new zero-cost
-    --     batch for the uncovered remainder.
-    declare
-      v_has_issue_provenance boolean;
-    begin
-      select exists (
-        select 1
-        from public.inventory_movements m
-        where m.workspace_id = v_workspace_id
-          and m.order_material_id = v_line.id
-          and m.movement_type = 'issue'
-          and m.warehouse_id is not distinct from p_warehouse_id
-          and (
-            m.batch_id is not null
-            or (
-              m.batch_allocations is not null
-              and jsonb_typeof(m.batch_allocations) = 'array'
-              and jsonb_array_length(m.batch_allocations) > 0
-            )
-          )
-      ) into v_has_issue_provenance;
-
-      v_peel := public.crm_peel_return_batch_slices(
-        v_workspace_id, v_line.id, p_warehouse_id, v_qty::numeric
-      );
-      v_alloc := '[]'::jsonb;
-      v_first_batch := null;
-      v_got := 0;
-
-      if v_peel is not null and jsonb_typeof(v_peel) = 'array' then
-        for v_slice in select value from jsonb_array_elements(v_peel)
-        loop
-          v_restore_qty := coalesce((v_slice ->> 'quantity')::numeric, 0);
-          if v_restore_qty <= 0 then
-            continue;
-          end if;
-          begin
-            v_batch_id := (v_slice ->> 'batch_id')::uuid;
-          exception
-            when others then
-              v_batch_id := null;
-          end;
-
-          v_new_batch := public.crm_restore_or_create_batch(
-            v_workspace_id, p_warehouse_id, v_item_id, v_restore_qty,
-            v_batch_id,
-            coalesce((v_slice ->> 'unit_cost')::numeric, 0),
-            nullif(v_slice ->> 'expires_on', '')::date,
-            nullif(v_slice ->> 'supplier_client_id', '')::uuid,
-            null
-          );
-          if v_first_batch is null then
-            v_first_batch := v_new_batch;
-          end if;
-          -- Record SOURCE issued batch_id for peel accounting (not only the
-          -- physical restored row). If restore created a replacement batch,
-          -- attributing the return to the source prevents double-restore of
-          -- the original issued slice on a later partial return.
-          v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
-            'batch_id', coalesce(v_batch_id, v_new_batch),
-            'quantity', v_restore_qty,
-            'unit_cost', coalesce((v_slice ->> 'unit_cost')::numeric, 0),
-            'expires_on', nullif(v_slice ->> 'expires_on', '')::date,
-            'supplier_client_id', nullif(v_slice ->> 'supplier_client_id', '')::uuid
-          ));
-          v_got := v_got + v_restore_qty;
-        end loop;
-      end if;
-
-      v_need := v_qty::numeric - v_got;
-      if v_need > 0 then
-        if v_has_issue_provenance then
-          raise exception
-            'return_batch_provenance_incomplete: issued movements have batch provenance but return could not allocate % unit(s); refusing silent zero-cost stock'
-            , v_need
-            using errcode = 'P0001';
-        end if;
-        -- Legacy issues without batch provenance: explicit zero-cost fallback.
-        v_new_batch := public.crm_restore_or_create_batch(
-          v_workspace_id, p_warehouse_id, v_item_id, v_need,
-          null, 0, null, null, null
-        );
-        if v_first_batch is null then
-          v_first_batch := v_new_batch;
-        end if;
-        v_alloc := v_alloc || jsonb_build_array(jsonb_build_object(
-          'batch_id', v_new_batch,
-          'quantity', v_need,
-          'unit_cost', 0,
-          'expires_on', null,
-          'supplier_client_id', null
-        ));
-      end if;
-    end;
-
     insert into public.inventory_movements (
       workspace_id, inventory_item_id, order_id, order_material_id,
       movement_type, quantity, reason, idempotency_key, created_by,
@@ -2256,7 +2332,7 @@ begin
     ) values (
       v_workspace_id, v_item_id, p_order_id, v_line.id,
       'return', v_qty, v_reason, v_key, (select auth.uid()),
-      p_warehouse_id, v_first_batch, nullif(v_alloc, '[]'::jsonb)
+      p_warehouse_id, v_first_batch, v_alloc
     )
     returning id into v_movement_id;
 
@@ -2725,70 +2801,67 @@ begin
   raise notice 'PASS: outstanding + non-negative constraints';
   v_pass := v_pass + 1;
 
-  -- D) required RPCs + SECURITY DEFINER
-  if to_regprocedure('public.crm_post_goods_receipt(uuid)') is null
-     or to_regprocedure('public.crm_post_stock_transfer(uuid)') is null
-     or to_regprocedure('public.crm_post_write_off(uuid)') is null
-     or coalesce(
-          to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)'),
-          to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)')
-        ) is null
-     or coalesce(
-          to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)'),
-          to_regprocedure('public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)')
-        ) is null
-     or coalesce(
-          to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)'),
-          to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)')
-        ) is null
-     or coalesce(
-          to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'),
-          to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid, uuid, uuid, integer, text)')
-        ) is null
-     or coalesce(
-          to_regprocedure('public.crm_consume_batches_fifo(uuid,uuid,uuid,numeric)'),
-          to_regprocedure('public.crm_consume_batches_fifo(uuid, uuid, uuid, numeric)')
-        ) is null
-     or coalesce(
-          to_regprocedure('public.crm_peel_return_batch_slices(uuid,uuid,uuid,numeric)'),
-          to_regprocedure('public.crm_peel_return_batch_slices(uuid, uuid, uuid, numeric)')
-        ) is null
-     or coalesce(
-          to_regprocedure('public.crm_restore_or_create_batch(uuid,uuid,uuid,numeric,uuid,numeric,date,uuid,uuid)'),
-          to_regprocedure('public.crm_restore_or_create_batch(uuid, uuid, uuid, numeric, uuid, numeric, date, uuid, uuid)')
-        ) is null
-  then
-    raise exception 'Post-check FAIL: one or more required function signatures missing';
-  end if;
+  -- D) ALL 14 CREATE OR REPLACE FUNCTION targets: signature + SECURITY DEFINER + empty search_path
+  declare
+    v_fn text;
+    v_oid oid;
+    v_defs text[] := array[
+      'public.crm_consume_batches_fifo(uuid,uuid,uuid,numeric)',
+      'public.crm_restore_or_create_batch(uuid,uuid,uuid,numeric,uuid,numeric,date,uuid,uuid)',
+      'public.crm_peel_return_batch_slices(uuid,uuid,uuid,numeric)',
+      'public.crm_prevent_hard_delete_warehouse()',
+      'public.crm_inventory_item_create_warehouse_gate()',
+      'public.crm_guard_posted_document_lines()',
+      'public.crm_guard_receipt_header_immutable()',
+      'public.crm_post_goods_receipt(uuid)',
+      'public.crm_post_stock_transfer(uuid)',
+      'public.crm_post_write_off(uuid)',
+      'public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)',
+      'public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)',
+      'public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)',
+      'public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'
+    ];
+    v_empty_path boolean;
+    v_secdef boolean;
+  begin
+    foreach v_fn in array v_defs
+    loop
+      v_oid := to_regprocedure(v_fn);
+      if v_oid is null then
+        -- Tolerate alternate spacing in identity args for a few overloads.
+        v_oid := to_regprocedure(replace(v_fn, ',', ', '));
+      end if;
+      if v_oid is null then
+        raise exception 'Post-check FAIL: required function missing: %', v_fn;
+      end if;
 
-  foreach v_proc in array array[
-    to_regprocedure('public.crm_post_goods_receipt(uuid)'),
-    coalesce(
-      to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)'),
-      to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)')
-    ),
-    coalesce(
-      to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)'),
-      to_regprocedure('public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)')
-    ),
-    coalesce(
-      to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)'),
-      to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)')
-    ),
-    coalesce(
-      to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'),
-      to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid, uuid, uuid, integer, text)')
-    )
-  ]
-  loop
-    if v_proc is null or not (select p.prosecdef from pg_proc p where p.oid = v_proc) then
-      raise exception 'Post-check FAIL: required RPC missing SECURITY DEFINER (%)', v_proc;
-    end if;
-    if (select pg_get_function_identity_arguments(v_proc)) is null then
-      raise exception 'Post-check FAIL: cannot resolve identity args for %', v_proc;
-    end if;
-  end loop;
-  raise notice 'PASS: required warehouse RPCs present + SECURITY DEFINER';
+      select p.prosecdef into v_secdef from pg_proc p where p.oid = v_oid;
+      if not coalesce(v_secdef, false) then
+        raise exception 'Post-check FAIL: % is not SECURITY DEFINER', v_fn;
+      end if;
+
+      select coalesce((
+        select bool_or(
+          cfg in ('search_path=""', 'search_path=', 'search_path=''''')
+          or cfg ~ '^search_path=\s*$'
+          or cfg ~ '^search_path=\s*""\s*$'
+        )
+        from unnest(coalesce((select p.proconfig from pg_proc p where p.oid = v_oid), array[]::text[])) as cfg
+      ), false) into v_empty_path;
+
+      if not v_empty_path then
+        raise exception 'Post-check FAIL: % missing SET search_path = ''''', v_fn;
+      end if;
+
+      if has_function_privilege('public', v_oid, 'execute') then
+        raise exception 'Post-check FAIL: PUBLIC still has EXECUTE on %', v_fn;
+      end if;
+      if has_function_privilege('anon', v_oid, 'execute') then
+        raise exception 'Post-check FAIL: anon still has EXECUTE on %', v_fn;
+      end if;
+    end loop;
+  end;
+  raise notice 'PASS: all 14 APPLY functions present + SECURITY DEFINER + empty search_path + no PUBLIC/anon EXECUTE';
   v_pass := v_pass + 1;
 
   -- E) triggers
@@ -2813,7 +2886,7 @@ begin
   raise notice 'PASS: warehouse lifecycle + material create triggers';
   v_pass := v_pass + 1;
 
-  -- F) grants / revokes
+  -- F) grants / revokes (client RPCs granted; helpers + legacy globals revoked)
   if coalesce(
        to_regprocedure('public.issue_order_materials(uuid,jsonb,text)'),
        to_regprocedure('public.issue_order_materials(uuid, jsonb, text)')
@@ -2843,27 +2916,61 @@ begin
     raise exception 'Post-check FAIL: authenticated still has EXECUTE on legacy return_order_materials';
   end if;
 
-  if not has_function_privilege(
-    'authenticated',
+  foreach v_proc in array array[
+    to_regprocedure('public.crm_post_goods_receipt(uuid)'),
+    to_regprocedure('public.crm_post_stock_transfer(uuid)'),
+    to_regprocedure('public.crm_post_write_off(uuid)'),
+    coalesce(
+      to_regprocedure('public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)'),
+      to_regprocedure('public.issue_order_materials_from_warehouse(uuid, jsonb, uuid, text)')
+    ),
+    coalesce(
+      to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)'),
+      to_regprocedure('public.return_order_materials_to_warehouse(uuid, jsonb, uuid, text, text)')
+    ),
     coalesce(
       to_regprocedure('public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)'),
       to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, integer, numeric, text)')
     ),
-    'execute'
-  ) then
-    raise exception 'Post-check FAIL: authenticated missing EXECUTE on add_and_issue_order_catalog_material';
-  end if;
-  if not has_function_privilege(
-    'authenticated',
     coalesce(
       to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'),
       to_regprocedure('public.set_order_catalog_material_quantity_with_issue(uuid, uuid, uuid, integer, text)')
+    )
+  ]
+  loop
+    if v_proc is null or not has_function_privilege('authenticated', v_proc, 'execute') then
+      raise exception 'Post-check FAIL: authenticated missing EXECUTE on client warehouse RPC (%)', v_proc;
+    end if;
+  end loop;
+
+  foreach v_proc in array array[
+    coalesce(
+      to_regprocedure('public.crm_consume_batches_fifo(uuid,uuid,uuid,numeric)'),
+      to_regprocedure('public.crm_consume_batches_fifo(uuid, uuid, uuid, numeric)')
     ),
-    'execute'
-  ) then
-    raise exception 'Post-check FAIL: authenticated missing EXECUTE on set_order_catalog_material_quantity_with_issue';
-  end if;
-  raise notice 'PASS: EXECUTE grants/revokes';
+    coalesce(
+      to_regprocedure('public.crm_restore_or_create_batch(uuid,uuid,uuid,numeric,uuid,numeric,date,uuid,uuid)'),
+      to_regprocedure('public.crm_restore_or_create_batch(uuid, uuid, uuid, numeric, uuid, numeric, date, uuid, uuid)')
+    ),
+    coalesce(
+      to_regprocedure('public.crm_peel_return_batch_slices(uuid,uuid,uuid,numeric)'),
+      to_regprocedure('public.crm_peel_return_batch_slices(uuid, uuid, uuid, numeric)')
+    ),
+    to_regprocedure('public.crm_prevent_hard_delete_warehouse()'),
+    to_regprocedure('public.crm_inventory_item_create_warehouse_gate()'),
+    to_regprocedure('public.crm_guard_posted_document_lines()'),
+    to_regprocedure('public.crm_guard_receipt_header_immutable()')
+  ]
+  loop
+    if v_proc is null then
+      raise exception 'Post-check FAIL: helper/trigger function missing during grant audit';
+    end if;
+    if has_function_privilege('authenticated', v_proc, 'execute') then
+      raise exception 'Post-check FAIL: authenticated must not EXECUTE helper/trigger function (%)', v_proc;
+    end if;
+  end loop;
+
+  raise notice 'PASS: EXECUTE grants/revokes (client RPCs + helpers + legacy)';
   v_pass := v_pass + 1;
 
   -- G) idempotency table protection
