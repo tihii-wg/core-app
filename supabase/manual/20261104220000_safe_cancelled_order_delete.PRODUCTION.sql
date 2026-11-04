@@ -545,14 +545,14 @@ begin
     v_problems := v_problems || 'delete_order_with_payments missing; ';
   end if;
 
-  select pg_catalog.obj_description(p.oid, 'pg_proc') into v_comment
-  from pg_catalog.pg_proc p
-  join pg_catalog.pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'public'
-    and p.proname = 'delete_order_with_payments'
-    and pg_catalog.pg_get_function_identity_arguments(p.oid) = 'uuid, uuid';
+  select pg_catalog.obj_description(
+    to_regprocedure('public.delete_order_with_payments(uuid,uuid)')::oid,
+    'pg_proc'
+  )
+  into v_comment;
 
-  if v_comment is null or position('delete_order_with_payments@v3' in v_comment) = 0 then
+  if v_comment is null
+     or position('delete_order_with_payments@v3' in v_comment) = 0 then
     v_problems := v_problems || 'delete_order_with_payments comment not @v3; ';
   end if;
 
