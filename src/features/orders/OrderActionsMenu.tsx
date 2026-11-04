@@ -375,7 +375,12 @@ export function OrderActionsMenu({
               variant="destructive"
               disabled={cancelOrderMutation.isPending}
               onClick={() => {
-                cancelOrderMutation.mutate(order.id, { onSuccess: () => setCancelOpen(false) });
+                cancelOrderMutation.mutate(order.id, {
+                  onSuccess: () => {
+                    setCancelOpen(false);
+                    // List/board caches are patched inside useCancelOrder; reopen details to refresh.
+                  },
+                });
               }}
             >
               {cancelOrderMutation.isPending ? t("common.saving") : t("orders.lifecycle.confirmCancel")}

@@ -202,11 +202,14 @@ describe("order materials (warehouse-first immediate issue)", () => {
         return { data: null, error: { message: "order_lifecycle:order_not_found", code: "P0002" } };
       }
       order.status = "cancelled";
-      return { data: { ok: true, idempotent: false, closed_at: null }, error: null };
+      order.custom_status_id = null;
+      return { data: { ok: true, idempotent: false, closed_at: null, custom_status_id: null }, error: null };
     };
 
-    await cancelOrder(String(created.id), WS.A);
+    const cancelled = await cancelOrder(String(created.id), WS.A);
+    expect(cancelled.status).toBe("cancelled");
     expect(row("orders", String(created.id))?.status).toBe("cancelled");
+    expect(row("orders", String(created.id))?.custom_status_id ?? null).toBeNull();
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(stock);
 
     await updateOrderStatus(String(created.id), "in-progress", WS.A);

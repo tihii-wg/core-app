@@ -1475,8 +1475,20 @@ export async function closeOrder(orderId: string, workspaceId: string | undefine
   return data as { ok?: boolean; idempotent?: boolean; closed_at?: string; remaining?: number };
 }
 
+export type CancelOrderResult = {
+  ok?: boolean;
+  idempotent?: boolean;
+  order_id?: string;
+  custom_status_id?: string | null;
+  closed_at?: null;
+  /** Always the system lifecycle value after a successful cancel RPC. */
+  status: "cancelled";
+  customStatusId: string | null;
+  customStatus: { name: string; color: string | null } | null;
+};
+
 /** Formal cancel via RPC. Does not set closed_at, create refunds, or touch inventory. */
-export async function cancelOrder(orderId: string, workspaceId: string | undefined) {
+export async function cancelOrder(orderId: string, workspaceId: string | undefined): Promise<CancelOrderResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const { data, error } = await supabase.rpc("cancel_order", {
     p_order_id: orderId,
@@ -1488,7 +1500,54 @@ export async function cancelOrder(orderId: string, workspaceId: string | undefin
     }
     throw new Error(mapCancelOrderError(error.message));
   }
-  return data as { ok?: boolean; idempotent?: boolean; closed_at?: null };
+
+  const payload = (data ?? {}) as {
+    ok?: boolean;
+    idempotent?: boolean;
+    order_id?: string;
+    custom_status_id?: string | null;
+    closed_at?: null;
+  };
+
+  // Prefer the RPC-reported custom_status_id; fall back to a fresh read so UI/cache
+  // never keep a pre-cancel custom badge after status becomes cancelled.
+  let customStatusId =
+    typeof payload.custom_status_id === "string" && payload.custom_status_id.trim()
+      ? payload.custom_status_id.trim()
+      : payload.custom_status_id === null
+        ? null
+        : undefined;
+
+  if (customStatusId === undefined) {
+    const { data: row, error: readError } = await supabase
+      .from("orders")
+      .select("status, custom_status_id")
+      .eq("id", orderId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (!row || String((row as { status?: unknown }).status ?? "") !== "cancelled") {
+      throw new Error(i18n.t("orders.lifecycle.errors.cancelNotPersisted"));
+    }
+    customStatusId =
+      typeof (row as { custom_status_id?: unknown }).custom_status_id === "string"
+        ? String((row as { custom_status_id: string }).custom_status_id).trim() || null
+        : null;
+  }
+
+  let customStatus: { name: string; color: string | null } | null = null;
+  if (customStatusId) {
+    const names = await getStatusDefinitionsByIds(targetWorkspaceId, [customStatusId]).catch(() => new Map());
+    const found = names.get(customStatusId);
+    if (found) customStatus = { name: found.name, color: found.color };
+  }
+
+  return {
+    ...payload,
+    status: "cancelled",
+    customStatusId: customStatusId ?? null,
+    customStatus,
+  };
 }
 
 function mapCloseOrderError(message: string) {

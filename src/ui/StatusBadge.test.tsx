@@ -40,4 +40,15 @@ describe("OrderStatusBadge", () => {
     render(<OrderStatusBadge status="completed" customStatus={null} />);
     expect(screen.getByText("system:completed")).toBeTruthy();
   });
+
+  it("shows system Cancelled even when a custom status named Cancelled is attached", () => {
+    render(<OrderStatusBadge status="cancelled" customStatus={{ name: "Cancelled", color: "#111" }} />);
+    expect(screen.getByText("system:cancelled")).toBeTruthy();
+  });
+
+  it("ignores a stale ordinary custom status after system cancellation", () => {
+    render(<OrderStatusBadge status="cancelled" customStatus={{ name: "In Progress", color: "#0f0" }} />);
+    expect(screen.getByText("system:cancelled")).toBeTruthy();
+    expect(screen.queryByText("In Progress")).toBeNull();
+  });
 });

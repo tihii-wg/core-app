@@ -694,7 +694,17 @@ export default function OrderDetailPanel({
                 variant="destructive"
                 disabled={cancelOrder.isPending}
                 onClick={() => {
-                  cancelOrder.mutate(selectedOrder.id, { onSuccess: () => setCancelOpen(false) });
+                  cancelOrder.mutate(selectedOrder.id, {
+                    onSuccess: (result) => {
+                      setCancelOpen(false);
+                      onOrderUpdated({
+                        ...selectedOrder,
+                        status: "cancelled",
+                        customStatusId: result.customStatusId,
+                        customStatus: result.customStatus,
+                      });
+                    },
+                  });
                 }}
               >
                 {cancelOrder.isPending ? t("common.saving") : t("orders.lifecycle.confirmCancel")}

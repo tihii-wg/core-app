@@ -605,6 +605,7 @@ const orders: Messages<typeof en> = {
       useCloseAction: "Folosiți «Închide comanda». Schimbarea statusului nu închide comanda.",
       useCancelAction: "Folosiți «Anulează comanda». Schimbarea obișnuită de status nu este permisă.",
       orderAlreadyClosed: "Comanda este închisă formal. Statusul nu poate fi schimbat aici.",
+      cancelNotPersisted: "Anularea nu a fost salvată. Comanda nu a fost marcată ca anulată. Interfața nu s-a schimbat.",
     },
   },
 };

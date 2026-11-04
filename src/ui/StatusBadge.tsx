@@ -111,6 +111,15 @@ export function OrderStatusBadge({
   customStatus?: { name: string; color?: string | null } | null;
 }) {
   const { workflow } = useIndustryWorkflow();
+  // Formal lifecycle states are authoritative: a stale or renamed custom status
+  // must never hide system cancelled/closed (including a custom named "Cancelled").
+  if (status === "cancelled" || status === "closed") {
+    return (
+      <StatusBadge variant={orderVariants[status]} dot>
+        {industryOrderStatusLabel(workflow, status)}
+      </StatusBadge>
+    );
+  }
   if (customStatus?.name) {
     return <EntityStatusBadge name={customStatus.name} color={customStatus.color} />;
   }

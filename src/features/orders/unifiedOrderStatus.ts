@@ -103,6 +103,10 @@ export function resolveCurrentUnifiedStatus(
   options: readonly UnifiedStatusOption[],
 ): UnifiedStatusOption | null {
   if (options.length === 0) return null;
+  // Ordinary selectors exclude close/cancel semantics; cancelled/closed are not "current" picks here.
+  if (order.status === "cancelled" || order.status === "closed") {
+    return options.find((option) => option.systemStatus === order.status) ?? null;
+  }
   if (options[0]?.kind === "definition") {
     if (order.customStatusId) {
       const explicit = options.find((option) => option.id === order.customStatusId);

@@ -81,6 +81,26 @@ describe("buildOrderBoardColumns", () => {
     expect(columns[1].orders.map((o) => o.id)).toEqual(["1"]);
     expect(columns[2].orders.map((o) => o.id)).toEqual(["2"]);
   });
+
+  it("places cancelled orders on the cancel column even with a stale ordinary custom_status_id", () => {
+    const definitions = [
+      definition({ id: "progress", name: "In Progress", statusGroup: "in_progress", systemStatus: "in-progress", sortOrder: 1 }),
+      definition({
+        id: "cancel",
+        name: "Cancelled",
+        statusGroup: "dropped_off",
+        systemStatus: "cancelled",
+        semanticAction: "cancel",
+        sortOrder: 2,
+      }),
+    ];
+    const columns = buildOrderBoardColumns(
+      [order({ id: "1", status: "cancelled", customStatusId: "progress" })],
+      definitions,
+    );
+    expect(columns.find((column) => column.key === "cancel")?.orders.map((o) => o.id)).toEqual(["1"]);
+    expect(columns.find((column) => column.key === "progress")?.orders).toEqual([]);
+  });
 });
 
 describe("resolveBoardMove", () => {

@@ -129,6 +129,14 @@ export function buildOrderBoardColumns(orders: readonly Order[], definitions: re
   };
 
   for (const order of orders) {
+    // Formal cancelled/closed always follow system status so a stale custom_status_id
+    // cannot leave the card in an ordinary workflow column after cancel/close.
+    if (order.status === "cancelled" || order.status === "closed") {
+      const lifecycle = fallbackBySystemStatus.get(order.status);
+      const target = (lifecycle ? columns.get(lifecycle.id) : undefined) ?? unassigned;
+      target.orders.push(order);
+      continue;
+    }
     const explicit = order.customStatusId ? columns.get(order.customStatusId) : undefined;
     const fallback = fallbackBySystemStatus.get(order.status);
     const target = explicit ?? (fallback ? columns.get(fallback.id) : undefined) ?? unassigned;
