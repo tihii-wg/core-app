@@ -7,6 +7,7 @@
 --   3) activate_order_warranties never falls back to live vehicles.current_mileage
 --   4) duration_days on warranty_records; ends_on from months OR exact days
 --   5) RLS: replace FOR ALL editor policies (orders.edit must not imply DELETE)
+--   5b) warranty_order_claims.is_active + DELETE requires orders.delete (no edit DELETE)
 --   6) Snapshot immutability trigger on warranty_records
 --   7) orders.warranty_source_order_id FK forced to ON DELETE RESTRICT
 --   8) BEFORE DELETE guard calling order_delete_blocked_by_warranty
@@ -163,6 +164,14 @@ create policy warranty_records_delete_editor
   on public.warranty_records for delete to authenticated
   using (coalesce(public.crm_has_permission(workspace_id, 'orders.delete'), false));
 
+-- Soft-deactivate flag: editors UPDATE is_active instead of DELETE+INSERT when
+-- linking/unlinking covered items. Inactive rows still protect original orders.
+alter table public.warranty_order_claims
+  add column if not exists is_active boolean not null default true;
+
+comment on column public.warranty_order_claims.is_active is
+  'False when the warranty order no longer treats this snapshot as a current claim. Row is retained so originals stay protected from deletion.';
+
 drop policy if exists warranty_order_claims_write_editor on public.warranty_order_claims;
 drop policy if exists warranty_order_claims_insert_editor on public.warranty_order_claims;
 drop policy if exists warranty_order_claims_update_editor on public.warranty_order_claims;
@@ -182,10 +191,12 @@ create policy warranty_order_claims_update_editor
   using (coalesce(public.crm_has_permission(workspace_id, 'orders.edit'), false))
   with check (coalesce(public.crm_has_permission(workspace_id, 'orders.edit'), false));
 
--- Claim rows are replaced when saving a warranty link (delete + insert); editors need DELETE.
+-- SECURITY: orders.edit must NOT delete claims (that would drop history that blocks
+-- original-order deletion). Hard DELETE requires orders.delete. App link edits use
+-- INSERT/UPDATE + is_active only.
 create policy warranty_order_claims_delete_editor
   on public.warranty_order_claims for delete to authenticated
-  using (coalesce(public.crm_has_permission(workspace_id, 'orders.edit'), false));
+  using (coalesce(public.crm_has_permission(workspace_id, 'orders.delete'), false));
 
 -- ---------------------------------------------------------------------------
 -- 4) Immutability trigger for activated warranty snapshots
@@ -741,6 +752,10 @@ grant execute on function public.apply_order_material_warranties(uuid, uuid, jso
 comment on function public.apply_order_material_warranties(uuid, uuid, jsonb) is
   'managed-object: core-app/apply_order_material_warranties@v1 — sets warranty_months/days/km on order_materials after sync; blocked after close.';
 
+-- Inactive claims still block original-order deletion (history retention).
+comment on function public.order_delete_blocked_by_warranty(uuid, uuid) is
+  'managed-object: core-app/order_delete_blocked_by_warranty@v1 — blocks delete when child warranty orders or any warranty_order_claims (including is_active=false) reference this original.';
+
 -- ---------------------------------------------------------------------------
 -- 9) Post-apply verification
 -- ---------------------------------------------------------------------------
@@ -795,6 +810,40 @@ begin
 
   if v_pol is null or v_pol !~* 'warranty_records_delete_editor' then
     v_problems := v_problems || 'warranty_records_delete_editor missing; ';
+  end if;
+
+  -- Claims DELETE must require orders.delete (not orders.edit).
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'warranty_order_claims'
+      and policyname = 'warranty_order_claims_delete_editor'
+      and cmd = 'DELETE'
+      and qual ilike '%orders.delete%'
+  ) then
+    v_problems := v_problems || 'warranty_order_claims DELETE policy missing orders.delete; ';
+  end if;
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'warranty_order_claims'
+      and policyname = 'warranty_order_claims_delete_editor'
+      and qual ilike '%orders.edit%'
+      and qual not ilike '%orders.delete%'
+  ) then
+    v_problems := v_problems || 'warranty_order_claims DELETE still keyed to orders.edit; ';
+  end if;
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'warranty_order_claims'
+      and policyname = 'warranty_order_claims_write_editor'
+  ) then
+    v_problems := v_problems || 'warranty_order_claims_write_editor still present; ';
+  end if;
+  if not exists (
+    select 1 from pg_catalog.pg_attribute a
+    where a.attrelid = 'public.warranty_order_claims'::regclass
+      and a.attname = 'is_active' and a.attnum > 0 and not a.attisdropped
+  ) then
+    v_problems := v_problems || 'warranty_order_claims.is_active missing; ';
   end if;
 
   if to_regprocedure('public.apply_order_material_warranties(uuid,uuid,jsonb)') is null then

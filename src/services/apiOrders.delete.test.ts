@@ -77,6 +77,9 @@ describe("mapOrderDeleteDbError", () => {
   it("maps authorization failures", () => {
     expect(mapOrderDeleteDbError({ message: "order_delete:forbidden", code: "42501" }).message).toMatch(/permission/i);
     expect(mapOrderDeleteDbError({ message: "order_delete:not_authenticated" }).message).toMatch(/permission/i);
+    expect(mapOrderDeleteDbError({ message: "order_delete:forbidden_closed", code: "42501" }).message).toMatch(
+      /closed|permission/i,
+    );
   });
 
   it("maps stock return failures", () => {

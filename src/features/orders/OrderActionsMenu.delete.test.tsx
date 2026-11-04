@@ -41,6 +41,18 @@ vi.mock("./useCloseOrder", () => ({
   useCancelOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+vi.mock("./useClosedOrderPermissions", () => ({
+  useClosedOrderActionPermissions: () => ({
+    role: "owner",
+    grants: { cancelClosed: [], deleteClosed: [] },
+    isLoading: false,
+    isError: false,
+    canCancelClosed: true,
+    canDeleteClosed: true,
+  }),
+  useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
+}));
+
 vi.mock("../finance/usePayments", () => ({
   useGetPayments: () => ({ payments: [], isLoading: false, error: null }),
 }));

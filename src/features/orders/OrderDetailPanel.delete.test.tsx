@@ -23,6 +23,7 @@ vi.mock("./useUpdateOrder", () => ({
 }));
 
 vi.mock("./useGetOrders", () => ({
+  useGetOrders: () => ({ orders: [], isLoading: false, error: null }),
   useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -80,6 +81,18 @@ vi.mock("./useMoveOrderOnBoard", () => ({
 vi.mock("./useCloseOrder", () => ({
   useCloseOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCancelOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("./useClosedOrderPermissions", () => ({
+  useClosedOrderActionPermissions: () => ({
+    role: "owner",
+    grants: { cancelClosed: [], deleteClosed: [] },
+    isLoading: false,
+    isError: false,
+    canCancelClosed: true,
+    canDeleteClosed: true,
+  }),
+  useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
 }));
 
 vi.mock("./OrderAttachmentsSection", () => ({

@@ -32,6 +32,7 @@ import {
 } from "../../lib/workspaceGeneralSettings";
 import { useCreateLegalEntity, useDeleteLegalEntity, useLegalEntities, useUpdateLegalEntity } from "./useLegalEntities";
 import type { LegalEntity, LegalEntityInput } from "../../services/apiLegalEntities";
+import { ClosedOrderPermissionsSettings } from "./ClosedOrderPermissionsSettings";
 
 function SettingRow({ label, description, control }: { label: string; description?: string; control: React.ReactNode }) {
   return (
@@ -660,6 +661,7 @@ export function GeneralSettingsExtra() {
   return (
     <>
       <OrdersSettingsCard workspace={workspace} />
+      <ClosedOrderPermissionsSettings workspace={workspace} />
       <ContactsSettingsCard workspace={workspace} />
       <InvoicesSettingsCard workspace={workspace} />
       <LegalEntitiesCard workspace={workspace} />

@@ -75,6 +75,11 @@ import {
   unifiedStatusOptions,
 } from "./unifiedOrderStatus";
 import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
+import {
+  canOfferCancelOrderAction,
+  canOfferDeleteClosedOrderAction,
+} from "./closedOrderPermissions";
+import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -111,6 +116,7 @@ export default function OrderDetailPanel({
   const showClientVehicles = industrySupportsClientVehicles(workflow);
   const workspaceRole = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
+  const closedOrderPerms = useClosedOrderActionPermissions();
   const canWarehouse = withSubscriptionWriteAccess(canManageWarehouse(workspaceRole), subscriptionAllowsWrite);
   const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
@@ -142,13 +148,32 @@ export default function OrderDetailPanel({
   const activePaymentsBlockingDelete = selectedOrder
     ? activePaymentsBlockingOrderDelete(payments, selectedOrder.id)
     : [];
-  const deleteBlockedReason = hasInvoice
-    ? t("orders.errors.cannotDeleteWithInvoice")
-    : !isCancelledForDelete
-      ? t("orders.delete.requireCancelled")
-      : activePaymentsBlockingDelete.length > 0
-        ? t("orders.errors.cannotDeleteWithActivePayments")
-        : null;
+  const deleteBlockedReason = !selectedOrder
+    ? null
+    : hasInvoice
+      ? t("orders.errors.cannotDeleteWithInvoice")
+      : !isCancelledForDelete
+        ? t("orders.delete.requireCancelled")
+        : activePaymentsBlockingDelete.length > 0
+          ? t("orders.errors.cannotDeleteWithActivePayments")
+          : !canOfferDeleteClosedOrderAction({
+                order: selectedOrder,
+                workspaceRole,
+                grants: closedOrderPerms.grants,
+              })
+            ? t("orders.errors.deleteClosedForbidden")
+            : null;
+  const showOpenLifecycleActions =
+    canEditOrder && selectedOrder != null && !isOrderFormallyClosed(selectedOrder) && selectedOrder.status !== "cancelled";
+  const showCancelClosedAction =
+    selectedOrder != null &&
+    canOfferCancelOrderAction({
+      order: selectedOrder,
+      canWrite: canEditOrder,
+      workspaceRole,
+      grants: closedOrderPerms.grants,
+    }) &&
+    isOrderFormallyClosed(selectedOrder);
   const linkedPaymentCount = selectedOrder
     ? payments.filter((payment) => payment.orderId === selectedOrder.id).length
     : 0;
@@ -606,12 +631,20 @@ export default function OrderDetailPanel({
                   ) : null}
                 </div>
               ) : null}
-              {canEditOrder && !isOrderFormallyClosed(selectedOrder) && selectedOrder.status !== "cancelled" ? (
+              {showOpenLifecycleActions ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => setCloseOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
                     <Lock className="size-3.5" />
                     {t("orders.lifecycle.closeAction")}
                   </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating || cancelOrder.isPending}>
+                    <CircleX className="size-3.5" />
+                    {t("orders.lifecycle.cancelAction")}
+                  </Button>
+                </div>
+              ) : null}
+              {showCancelClosedAction ? (
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating || cancelOrder.isPending}>
                     <CircleX className="size-3.5" />
                     {t("orders.lifecycle.cancelAction")}

@@ -45,6 +45,11 @@ import {
   unifiedStatusOptions,
 } from "./unifiedOrderStatus";
 import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
+import {
+  canOfferCancelOrderAction,
+  canOfferDeleteClosedOrderAction,
+} from "./closedOrderPermissions";
+import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -105,6 +110,7 @@ export function OrderActionsMenu({
   const { payments } = useGetPayments();
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
+  const closedOrderPerms = useClosedOrderActionPermissions();
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
   const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
@@ -122,7 +128,20 @@ export function OrderActionsMenu({
       ? t("orders.delete.requireCancelled")
       : activePaymentsBlockingDelete.length > 0
         ? t("orders.errors.cannotDeleteWithActivePayments")
-        : null;
+        : !canOfferDeleteClosedOrderAction({
+              order,
+              workspaceRole: closedOrderPerms.role,
+              grants: closedOrderPerms.grants,
+            })
+          ? t("orders.errors.deleteClosedForbidden")
+          : null;
+  const showOpenLifecycleActions = canWrite && !formallyClosed && order.status !== "cancelled";
+  const showCancelClosedAction = canOfferCancelOrderAction({
+    order,
+    canWrite,
+    workspaceRole: closedOrderPerms.role,
+    grants: closedOrderPerms.grants,
+  }) && formallyClosed;
 
   async function copyPublicStatusLink() {
     if (copyingPublicLink) return;
@@ -224,13 +243,22 @@ export function OrderActionsMenu({
             </p>
           ) : null}
 
-          {canWrite && !formallyClosed && order.status !== "cancelled" ? (
+          {showOpenLifecycleActions ? (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setCloseOpen(true)}>
                 <Lock />
                 {t("orders.lifecycle.closeAction")}
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setCancelOpen(true)}>
+                <CircleX />
+                {t("orders.lifecycle.cancelAction")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {showCancelClosedAction ? (
+            <>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setCancelOpen(true)}>
                 <CircleX />
                 {t("orders.lifecycle.cancelAction")}

@@ -93,4 +93,12 @@ describe("cancelOrder", () => {
     });
     await expect(cancelOrder("order-1", "ws-1")).rejects.toThrow(/closed/i);
   });
+
+  it("rejects unauthorized closed-order cancel RPC errors", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: "order_lifecycle:forbidden_cancel_closed", code: "42501" },
+    });
+    await expect(cancelOrder("order-1", "ws-1")).rejects.toThrow(/permission|closed/i);
+  });
 });

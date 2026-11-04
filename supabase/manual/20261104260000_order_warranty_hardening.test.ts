@@ -31,6 +31,15 @@ describe("order warranty hardening SQL", () => {
     expect(sql).toMatch(/drop policy if exists warranty_order_claims_write_editor/i);
   });
 
+  it("requires orders.delete for warranty_order_claims hard DELETE and soft-deactivates via is_active", () => {
+    expect(sql).toMatch(/add column if not exists is_active boolean not null default true/i);
+    const deletePolicy = sql.match(
+      /create policy warranty_order_claims_delete_editor[\s\S]*?using \(([^;]+)\);/i,
+    );
+    expect(deletePolicy?.[1] ?? "").toMatch(/orders\.delete/);
+    expect(deletePolicy?.[1] ?? "").not.toMatch(/orders\.edit/);
+  });
+
   it("uses public.is_workspace_member(uuid) in preflight and SELECT policies", () => {
     expect(sql).toMatch(/to_regprocedure\('public\.is_workspace_member\(uuid\)'\)/);
     expect(sql).toMatch(/using \(public\.is_workspace_member\(workspace_id\)\)/);

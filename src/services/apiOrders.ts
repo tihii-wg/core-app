@@ -1656,6 +1656,7 @@ function mapCloseOrderError(message: string) {
 
 function mapCancelOrderError(message: string) {
   const parsed = parseLifecycleRpcError(message);
+  if (parsed.code === "forbidden_cancel_closed") return i18n.t("orders.lifecycle.errors.forbiddenCancelClosed");
   if (parsed.code === "cannot_cancel_closed") return i18n.t("orders.lifecycle.errors.cannotCancelClosed");
   if (parsed.code === "forbidden" || parsed.code === "workspace_mismatch") return i18n.t("orders.lifecycle.errors.forbidden");
   if (parsed.code === "order_not_found") return orderPermissionMessage();
@@ -2311,6 +2312,9 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
   }
   if (/order_delete:not_cancelled/i.test(blob)) {
     return new Error(i18n.t("orders.errors.deleteRequiresCancelled"));
+  }
+  if (/order_delete:forbidden_closed/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteClosedForbidden"));
   }
   if (/order_delete:forbidden|order_delete:not_member|order_delete:not_authenticated/i.test(blob) || error.code === "42501") {
     return new Error(i18n.t("orders.errors.deleteForbidden"));

@@ -177,6 +177,25 @@ const settings: Messages<typeof en> = {
       deletionNote: "Ștergere: entitățile juridice sunt șterse logic de aplicație, iar clienții șterși logic sunt ascunși din liste și din verificările de duplicate. Permisiunile de ștergere definitivă din baza de date rămân neschimbate, în așteptarea unei revizuiri separate.",
     },
   },
+  closedOrderPermissions: {
+    title: "Permisiuni pentru comenzi închise",
+    description: "Decideți ce roluri pot anula sau șterge comenzile după închiderea formală. Aceste două permisiuni sunt independente.",
+    ownerAlways: "Proprietarul păstrează întotdeauna ambele permisiuni și nu le poate pierde. Modificările se aplică imediat pentru Admin, Manager și Membru.",
+    cancelTitle: "Anulare comenzi închise",
+    cancelDescription: "Permite rolurilor selectate să anuleze o comandă deja închisă. Anularea păstrează comanda și istoricul; nu șterge garanțiile sau înregistrările financiare.",
+    deleteTitle: "Ștergere comenzi închise",
+    deleteDescription: "Permite rolurilor selectate să șteargă definitiv o comandă închisă. Protecțiile existente pentru garanții, facturi, plăți și inventar blochează în continuare ștergerile nesigure.",
+    save: "Salvați permisiunile pentru comenzi închise",
+    loadFailed: "Permisiunile pentru comenzi închise nu au putut fi încărcate",
+    toast: {
+      saving: "Se salvează permisiunile pentru comenzi închise...",
+      saved: "Permisiunile pentru comenzi închise au fost salvate",
+      failed: "Nu s-au putut salva permisiunile pentru comenzi închise",
+    },
+    errors: {
+      schemaRequired: "Permisiunile pentru comenzi închise necesită scriptul SQL revizuit. Aplicați supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql pe MAIN după revizuire.",
+    },
+  },
   notifications: {
     email: {
       title: "Notificări prin e-mail",

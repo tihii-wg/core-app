@@ -174,6 +174,25 @@ export default {
       deletionNote: "Deletion behaviour: legal entities are soft-deleted by the app, and soft-deleted clients are hidden from lists and duplicate checks. Database hard-delete permissions are unchanged pending a separate review.",
     },
   },
+  closedOrderPermissions: {
+    title: "Closed Order Permissions",
+    description: "Decide which workspace roles may cancel or delete orders after they are formally closed. These two permissions are independent.",
+    ownerAlways: "The workspace owner always retains both permissions and cannot lose them. Changes apply immediately to Admin, Manager, and Member.",
+    cancelTitle: "Cancel closed orders",
+    cancelDescription: "Allow selected roles to cancel an order that is already closed. Cancellation keeps the order and its history; it does not delete warranty or financial records.",
+    deleteTitle: "Delete closed orders",
+    deleteDescription: "Allow selected roles to permanently delete a closed order. Existing warranty, invoice, payment, and inventory safeguards still block unsafe deletes.",
+    save: "Save closed order permissions",
+    loadFailed: "Closed order permissions could not be loaded",
+    toast: {
+      saving: "Saving closed order permissions...",
+      saved: "Closed order permissions saved",
+      failed: "Could not save closed order permissions",
+    },
+    errors: {
+      schemaRequired: "Closed order permissions require the reviewed database script. Apply supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql on MAIN after review.",
+    },
+  },
   notifications: {
     email: {
       title: "Email Notifications",

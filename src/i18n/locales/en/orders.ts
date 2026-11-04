@@ -461,6 +461,7 @@ export default {
     deleteRequiresCancelled:
       "Only cancelled orders can be permanently deleted. Cancel the order first. Nothing was deleted.",
     deleteForbidden: "You do not have permission to delete this order.",
+    deleteClosedForbidden: "You do not have permission to delete closed orders. Ask the workspace owner to grant Delete closed orders for your role.",
     deleteWithPaymentsRpcMissing:
       "Deleting a cancelled order requires the reviewed database function delete_order_with_payments. Apply supabase/manual/{{file}} on MAIN after review. Nothing was deleted.",
     deleteIssuedRequiresCancelled:
@@ -595,7 +596,8 @@ export default {
       rpcRequired: "Apply the order lifecycle SQL on MAIN before closing or cancelling orders.",
       notSettled: "Cannot close: outstanding balance is {{remaining}}.",
       cannotCloseCancelled: "A cancelled order cannot be closed.",
-      cannotCancelClosed: "A closed order cannot be cancelled. Reopen is a separate action.",
+      cannotCancelClosed: "A closed order cannot be cancelled without the Cancel closed orders permission.",
+      forbiddenCancelClosed: "You do not have permission to cancel closed orders. Ask the workspace owner to grant Cancel closed orders for your role.",
       forbidden: "You do not have permission to change this order.",
       useCloseAction: "Use Close order. Status changes cannot close an order.",
       useCancelAction: "Use Cancel order. Status changes cannot cancel an order.",

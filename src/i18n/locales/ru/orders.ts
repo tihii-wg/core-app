@@ -469,6 +469,7 @@ const orders: Messages<typeof en> = {
     deleteRequiresCancelled:
       "Навсегда можно удалить только отменённые заказы. Сначала отмените заказ. Ничего не удалено.",
     deleteForbidden: "У вас нет права удалить этот заказ.",
+    deleteClosedForbidden: "У вас нет права удалять закрытые заказы. Попросите владельца выдать «Удаление закрытых заказов» для вашей роли.",
     deleteWithPaymentsRpcMissing:
       "Удаление отменённого заказа требует delete_order_with_payments. Примените supabase/manual/{{file}} на MAIN. Ничего не удалено.",
     deleteIssuedRequiresCancelled:
@@ -603,7 +604,8 @@ const orders: Messages<typeof en> = {
       rpcRequired: "Сначала примените SQL жизненного цикла заказов на MAIN.",
       notSettled: "Нельзя закрыть: остаток {{remaining}}.",
       cannotCloseCancelled: "Отменённый заказ нельзя закрыть.",
-      cannotCancelClosed: "Закрытый заказ нельзя отменить. Повторное открытие — отдельное действие.",
+      cannotCancelClosed: "Закрытый заказ нельзя отменить без права «Отмена закрытых заказов».",
+      forbiddenCancelClosed: "У вас нет права отменять закрытые заказы. Попросите владельца выдать «Отмена закрытых заказов» для вашей роли.",
       forbidden: "Недостаточно прав для изменения этого заказа.",
       useCloseAction: "Используйте «Закрыть заказ». Смена статуса не закрывает заказ.",
       useCancelAction: "Используйте «Отменить заказ». Обычная смена статуса недоступна.",

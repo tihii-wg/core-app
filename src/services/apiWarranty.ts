@@ -106,11 +106,20 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
   const id = warrantyOrderId.trim();
   if (!id) return [];
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("warranty_order_claims")
-    .select("id, warranty_order_id, warranty_record_id, validity_status, accepted_outside_period, current_mileage_at_claim")
+    .select("id, warranty_order_id, warranty_record_id, validity_status, accepted_outside_period, current_mileage_at_claim, is_active")
     .eq("workspace_id", targetWorkspaceId)
-    .eq("warranty_order_id", id);
+    .eq("warranty_order_id", id)
+    .eq("is_active", true);
+
+  if (error && isMissingColumnError(error) && /is_active/i.test(error.message ?? "")) {
+    ({ data, error } = await supabase
+      .from("warranty_order_claims")
+      .select("id, warranty_order_id, warranty_record_id, validity_status, accepted_outside_period, current_mileage_at_claim")
+      .eq("workspace_id", targetWorkspaceId)
+      .eq("warranty_order_id", id));
+  }
 
   if (error) {
     if (isMissingRelationError(error) || isMissingColumnError(error)) return [];
@@ -165,11 +174,19 @@ export async function getOrdersWarrantyIndicatorMap(
   const claimRecordIdsByOrderId = new Map<string, string[]>();
 
   if (claimOrderIds.length > 0) {
-    const { data: claims, error: claimsError } = await supabase
+    let { data: claims, error: claimsError } = await supabase
       .from("warranty_order_claims")
-      .select("warranty_order_id, warranty_record_id")
+      .select("warranty_order_id, warranty_record_id, is_active")
       .eq("workspace_id", targetWorkspaceId)
-      .in("warranty_order_id", claimOrderIds);
+      .in("warranty_order_id", claimOrderIds)
+      .eq("is_active", true);
+    if (claimsError && isMissingColumnError(claimsError) && /is_active/i.test(claimsError.message ?? "")) {
+      ({ data: claims, error: claimsError } = await supabase
+        .from("warranty_order_claims")
+        .select("warranty_order_id, warranty_record_id")
+        .eq("workspace_id", targetWorkspaceId)
+        .in("warranty_order_id", claimOrderIds));
+    }
     if (claimsError) {
       if (!(isMissingRelationError(claimsError) || isMissingColumnError(claimsError))) throw new Error(claimsError.message);
     } else {
@@ -344,34 +361,57 @@ export async function saveWarrantyOrderLink(params: {
     throw new Error(orderError.message);
   }
 
-  const { error: clearError } = await supabase
+  // Prefer immutable claim history: upsert active claims and soft-deactivate others.
+  // Hard DELETE requires orders.delete and is not used for ordinary link edits.
+  const selectedIds = params.claims.map((claim) => claim.warrantyRecordId);
+
+  if (selectedIds.length > 0) {
+    const payload = params.claims.map((claim) => {
+      const snapshot = byId.get(claim.warrantyRecordId)!;
+      const evaluation = evaluateSnapshotAgainstVehicle(snapshot, claim.currentMileageAtClaim ?? params.currentMileage);
+      return {
+        workspace_id: workspaceId,
+        warranty_order_id: warrantyOrderId,
+        warranty_record_id: claim.warrantyRecordId,
+        validity_status: evaluation.status,
+        accepted_outside_period: Boolean(claim.acceptedOutsidePeriod),
+        current_mileage_at_claim: claim.currentMileageAtClaim ?? params.currentMileage,
+        is_active: true,
+      };
+    });
+
+    const { error: upsertError } = await supabase.from("warranty_order_claims").upsert(payload, {
+      onConflict: "warranty_order_id,warranty_record_id",
+    });
+    if (upsertError) {
+      if (isMissingRelationError(upsertError) || isMissingColumnError(upsertError)) {
+        // Pre-hardening schema: fall back to insert-only when unique upsert / is_active unavailable.
+        const legacyPayload = payload.map(({ is_active: _active, ...rest }) => rest);
+        const { error: insertError } = await supabase.from("warranty_order_claims").insert(legacyPayload);
+        if (insertError) {
+          if (isMissingRelationError(insertError) || isMissingColumnError(insertError)) {
+            throw new Error(i18n.t("orders.warranty.errors.schemaRequired"));
+          }
+          throw new Error(insertError.message);
+        }
+      } else {
+        throw new Error(upsertError.message);
+      }
+    }
+  }
+
+  // Soft-deactivate claims no longer selected (or all when saving empty selection).
+  let deactivateQuery = supabase
     .from("warranty_order_claims")
-    .delete()
+    .update({ is_active: false })
     .eq("workspace_id", workspaceId)
     .eq("warranty_order_id", warrantyOrderId);
-  if (clearError && !isMissingRelationError(clearError)) throw new Error(clearError.message);
-
-  if (params.claims.length === 0) return;
-
-  const payload = params.claims.map((claim) => {
-    const snapshot = byId.get(claim.warrantyRecordId)!;
-    const evaluation = evaluateSnapshotAgainstVehicle(snapshot, claim.currentMileageAtClaim ?? params.currentMileage);
-    return {
-      workspace_id: workspaceId,
-      warranty_order_id: warrantyOrderId,
-      warranty_record_id: claim.warrantyRecordId,
-      validity_status: evaluation.status,
-      accepted_outside_period: Boolean(claim.acceptedOutsidePeriod),
-      current_mileage_at_claim: claim.currentMileageAtClaim ?? params.currentMileage,
-    };
-  });
-
-  const { error: insertError } = await supabase.from("warranty_order_claims").insert(payload);
-  if (insertError) {
-    if (isMissingRelationError(insertError) || isMissingColumnError(insertError)) {
-      throw new Error(i18n.t("orders.warranty.errors.schemaRequired"));
-    }
-    throw new Error(insertError.message);
+  if (selectedIds.length > 0) {
+    deactivateQuery = deactivateQuery.not("warranty_record_id", "in", `(${selectedIds.join(",")})`);
+  }
+  const { error: deactivateError } = await deactivateQuery;
+  if (deactivateError && !(isMissingRelationError(deactivateError) || (isMissingColumnError(deactivateError) && /is_active/i.test(deactivateError.message ?? "")))) {
+    throw new Error(deactivateError.message);
   }
 }
 
@@ -380,7 +420,19 @@ export async function clearWarrantyOrderLink(workspaceId: string | undefined, wa
   const id = warrantyOrderId.trim();
   if (!id) return;
 
-  await supabase.from("warranty_order_claims").delete().eq("workspace_id", targetWorkspaceId).eq("warranty_order_id", id);
+  // Soft-deactivate claim history; do not DELETE (editors lack claim DELETE under hardened RLS).
+  const { error: deactivateError } = await supabase
+    .from("warranty_order_claims")
+    .update({ is_active: false })
+    .eq("workspace_id", targetWorkspaceId)
+    .eq("warranty_order_id", id);
+  if (
+    deactivateError &&
+    !(isMissingRelationError(deactivateError) || (isMissingColumnError(deactivateError) && /is_active/i.test(deactivateError.message ?? "")))
+  ) {
+    throw new Error(deactivateError.message);
+  }
+
   const { error } = await supabase.from("orders").update({ warranty_source_order_id: null }).eq("id", id).eq("workspace_id", targetWorkspaceId);
   if (error && !isMissingColumnError(error)) throw new Error(error.message);
 }

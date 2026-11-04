@@ -466,6 +466,7 @@ const orders: Messages<typeof en> = {
     deleteRequiresCancelled:
       "Doar comenzile anulate pot fi șterse definitiv. Anulați comanda mai întâi. Nu s-a șters nimic.",
     deleteForbidden: "Nu aveți permisiunea de a șterge această comandă.",
+    deleteClosedForbidden: "Nu aveți permisiunea de a șterge comenzile închise. Cereți proprietarului să acorde «Ștergere comenzi închise» pentru rolul dvs.",
     deleteWithPaymentsRpcMissing:
       "Ștergerea unei comenzi anulate necesită delete_order_with_payments. Aplicați supabase/manual/{{file}} pe MAIN. Nu s-a șters nimic.",
     deleteIssuedRequiresCancelled:
@@ -600,7 +601,8 @@ const orders: Messages<typeof en> = {
       rpcRequired: "Aplicați SQL-ul de ciclu de viață pe MAIN înainte de închidere/anulare.",
       notSettled: "Nu se poate închide: restul este {{remaining}}.",
       cannotCloseCancelled: "O comandă anulată nu poate fi închisă.",
-      cannotCancelClosed: "O comandă închisă nu poate fi anulată. Redeschiderea este o acțiune separată.",
+      cannotCancelClosed: "O comandă închisă nu poate fi anulată fără permisiunea «Anulare comenzi închise».",
+      forbiddenCancelClosed: "Nu aveți permisiunea de a anula comenzile închise. Cereți proprietarului să acorde «Anulare comenzi închise» pentru rolul dvs.",
       forbidden: "Nu aveți permisiunea de a modifica această comandă.",
       useCloseAction: "Folosiți «Închide comanda». Schimbarea statusului nu închide comanda.",
       useCancelAction: "Folosiți «Anulează comanda». Schimbarea obișnuită de status nu este permisă.",
