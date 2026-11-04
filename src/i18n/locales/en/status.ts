@@ -6,6 +6,7 @@ export default {
     completed: "Completed",
     paid: "Paid",
     cancelled: "Cancelled",
+    closed: "Closed",
     byIndustry: {
       auto_repair: {
         "waiting-parts": "Waiting Parts",

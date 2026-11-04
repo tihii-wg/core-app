@@ -9,6 +9,7 @@ const status: Messages<typeof en> = {
     completed: "Выполнен",
     paid: "Оплачен",
     cancelled: "Отменён",
+    closed: "Закрыт",
     byIndustry: {
       auto_repair: {
         "waiting-parts": "Ожидает запчасти",

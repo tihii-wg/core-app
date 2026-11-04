@@ -154,12 +154,16 @@ export function resolveBoardMove(order: Order, column: OrderBoardColumn): BoardM
   if (column.kind === "unassigned") return null;
   if (column.kind === "system") {
     if (!column.systemStatus) return null;
+    if (column.systemStatus === "closed" || column.systemStatus === "cancelled") return null;
     if (order.status === column.systemStatus && !order.customStatusId) return null;
     return { status: column.systemStatus, customStatusId: null };
   }
   const definition = column.definition;
   if (!definition) return null;
+  // Close/cancel columns are not ordinary drag targets — use explicit lifecycle actions.
+  if (definition.semanticAction === "close" || definition.semanticAction === "cancel") return null;
   const status = column.systemStatus ?? order.status;
+  if (status === "closed" || status === "cancelled") return null;
   if (order.customStatusId === definition.id && order.status === status) return null;
   return { status, customStatusId: definition.id };
 }

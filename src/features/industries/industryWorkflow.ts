@@ -3,7 +3,7 @@ import type { OrderStatus, serviceCategory } from "../../lib/types";
 import { isValidOptionalVin, normalizeVin } from "../../lib/vin";
 
 /** Stored order.status values (application constants; DB column is unconstrained text). */
-export const ORDER_STATUSES: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"];
+export const ORDER_STATUSES: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled", "closed"];
 
 /** Stored services.category values used by the app (includes historical spelling "assesment"). */
 export const SERVICE_CATEGORIES = ["repair", "software", "update", "data", "assesment"] as const;

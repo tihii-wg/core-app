@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Link2, Pencil, Printer, Trash2 } from "lucide-react";
+import { Check, CircleX, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Link2, Lock, Pencil, Printer, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
@@ -32,6 +32,11 @@ import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
 import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useDeleteOrder } from "./useDeleteOrder";
+import { isOrderFormallyClosed } from "./orderLifecycle";
+import { CloseOrderDialog } from "./CloseOrderDialog";
+import { useCancelOrder } from "./useCloseOrder";
+import { useGetPayments } from "../finance/usePayments";
+import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -85,7 +90,14 @@ export function OrderActionsMenu({
   const { data: templates = [] } = useGetDocumentTemplates();
   const printTemplates = templates.filter((template) => template.isActive && template.bodyHtml.trim());
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [copyingPublicLink, setCopyingPublicLink] = useState(false);
+  const cancelOrderMutation = useCancelOrder();
+  const { payments } = useGetPayments();
+  const { formatMoney } = useWorkspaceMoney();
+  const formallyClosed = isOrderFormallyClosed(order);
+  const workflowStatuses = ORDER_STATUSES.filter((status) => status !== "closed" && status !== "cancelled");
   const hasInvoice = Boolean(invoiceNumber);
   const paymentCount = Math.max(0, linkedPaymentCount);
 
@@ -136,10 +148,10 @@ export function OrderActionsMenu({
                 ? t("orders.actions.updatingStatus")
                 : t("orders.actions.changeStatus")}
           </DropdownMenuLabel>
-          {ORDER_STATUSES.map((status) => {
+          {workflowStatuses.map((status) => {
             const current = status === order.status;
             const blockedPaid = status === "paid" && paidBlocked && !current;
-            const locked = paidLocked || blockedPaid;
+            const locked = paidLocked || blockedPaid || formallyClosed;
             return (
               <DropdownMenuItem
                 key={status}
@@ -169,6 +181,20 @@ export function OrderActionsMenu({
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {t("orders.taxInvoice.paidRequiresNumber")}
             </p>
+          ) : null}
+
+          {canWrite && !formallyClosed && order.status !== "cancelled" ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setCloseOpen(true)}>
+                <Lock />
+                {t("orders.lifecycle.closeAction")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setCancelOpen(true)}>
+                <CircleX />
+                {t("orders.lifecycle.cancelAction")}
+              </DropdownMenuItem>
+            </>
           ) : null}
 
           <DropdownMenuSeparator />
@@ -278,6 +304,38 @@ export function OrderActionsMenu({
                 : paymentCount > 0
                   ? t("orders.delete.confirmWithPayments", { count: paymentCount })
                   : t("orders.actions.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <CloseOrderDialog
+        order={order}
+        open={closeOpen}
+        onOpenChange={setCloseOpen}
+        payments={payments}
+        formatMoney={formatMoney}
+      />
+
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent onClick={stop}>
+          <DialogHeader>
+            <DialogTitle>{t("orders.lifecycle.cancelTitle")}</DialogTitle>
+            <DialogDescription>{t("orders.lifecycle.cancelDescription", { number: order.orderNumber })}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelOrderMutation.isPending}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={cancelOrderMutation.isPending}
+              onClick={() => {
+                cancelOrderMutation.mutate(order.id, { onSuccess: () => setCancelOpen(false) });
+              }}
+            >
+              {cancelOrderMutation.isPending ? t("common.saving") : t("orders.lifecycle.confirmCancel")}
             </Button>
           </DialogFooter>
         </DialogContent>

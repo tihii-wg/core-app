@@ -34,6 +34,8 @@ function definition(partial: Partial<StatusDefinition> & { id: string; name: str
     color: null,
     statusGroup: "new",
     systemStatus: null,
+    code: null,
+    semanticAction: "normal",
     sortOrder: 0,
     isDefault: false,
     isActive: true,
@@ -44,7 +46,7 @@ function definition(partial: Partial<StatusDefinition> & { id: string; name: str
 }
 
 describe("buildOrderBoardColumns", () => {
-  it("falls back to the six system status columns without definitions", () => {
+  it("falls back to the system status columns without definitions", () => {
     const columns = buildOrderBoardColumns([order({ id: "a", status: "paid" }), order({ id: "b" })], []);
     expect(columns.map((column) => column.key)).toEqual([
       "system:new",
@@ -53,6 +55,7 @@ describe("buildOrderBoardColumns", () => {
       "system:completed",
       "system:paid",
       "system:cancelled",
+      "system:closed",
     ]);
     expect(columns.find((column) => column.key === "system:paid")?.orders.map((o) => o.id)).toEqual(["a"]);
   });
@@ -101,5 +104,20 @@ describe("resolveBoardMove", () => {
     const o = order({ id: "1", status: "waiting-parts" });
     expect(resolveBoardMove(o, ready)).toEqual({ status: "completed", customStatusId: "ready" });
     expect(resolveBoardMove(o, unassigned)).toBeNull();
+  });
+
+  it("refuses drag onto close/cancel semantic columns even if named Closed", () => {
+    const columns = buildOrderBoardColumns(
+      [order({ id: "1", status: "new" })],
+      [
+        definition({ id: "close", name: "Закрыт", statusGroup: "closed", semanticAction: "close", systemStatus: "closed" }),
+        definition({ id: "fake", name: "Закрыт", statusGroup: "done", semanticAction: "normal", systemStatus: "completed" }),
+      ],
+    );
+    const closeCol = columns.find((column) => column.key === "close")!;
+    const fakeCol = columns.find((column) => column.key === "fake")!;
+    const o = order({ id: "1", status: "new" });
+    expect(resolveBoardMove(o, closeCol)).toBeNull();
+    expect(resolveBoardMove(o, fakeCol)).toEqual({ status: "completed", customStatusId: "fake" });
   });
 });

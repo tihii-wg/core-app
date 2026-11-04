@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Shield, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
@@ -8,19 +8,48 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { controlClassName } from "../../ui/controlStyles";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../ui/Dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useCreateStatusDefinition } from "../statuses/useCreateStatusDefinition";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useGetStatusTransitions } from "../statuses/useGetStatusTransitions";
+import {
+  useDeleteStatusDefinition,
+  useReorderStatusDefinitions,
+  useReplaceOrderStatus,
+  useSetDefaultStatusDefinition,
+  useSetOrderLifecycleSemantic,
+  useUpdateStatusDefinition,
+} from "../statuses/useStatusDefinitionMutations";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { PERMISSION_KEYS } from "../roles/permissions";
 import { useMyPermissions } from "../roles/useMyPermissions";
-import { STATUS_GROUPS, type StatusEntity, type StatusGroup } from "../../services/apiStatusDefinitions";
+import {
+  STATUS_GROUPS,
+  type StatusDefinition,
+  type StatusEntity,
+  type StatusGroup,
+  type StatusSemanticAction,
+} from "../../services/apiStatusDefinitions";
 
 const entities: StatusEntity[] = ["order", "estimate", "lead", "invoice", "transfer", "task"];
+
+function semanticLabelKey(action: StatusSemanticAction) {
+  if (action === "close") return "settings.statuses.semantic.close";
+  if (action === "cancel") return "settings.statuses.semantic.cancel";
+  return "settings.statuses.semantic.normal";
+}
 
 export function StatusesSettings() {
   const { t } = useTranslation();
@@ -30,17 +59,44 @@ export function StatusesSettings() {
   const workspaceRole = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
   const { can } = useMyPermissions();
-  // Legacy (permissions unavailable): owner-only, as before. With permissions loaded: settings.statuses (owners hold '*').
-  const canEdit = withSubscriptionWriteAccess(can(PERMISSION_KEYS.settingsStatuses, canManageWorkspace(workspaceRole)), subscriptionAllowsWrite);
+  const canEdit = withSubscriptionWriteAccess(
+    can(PERMISSION_KEYS.settingsStatuses, canManageWorkspace(workspaceRole)),
+    subscriptionAllowsWrite,
+  );
   const createStatus = useCreateStatusDefinition();
-  const [form, setForm] = useState<{
-    name: string;
-    color: string;
-    statusGroup: StatusGroup;
-    systemStatus: string;
-    sortOrder: string;
-  }>({ name: "", color: "#2563eb", statusGroup: "new", systemStatus: "", sortOrder: "0" });
+  const updateStatus = useUpdateStatusDefinition();
+  const setDefault = useSetDefaultStatusDefinition();
+  const reorder = useReorderStatusDefinitions();
+  const deleteStatus = useDeleteStatusDefinition();
+  const setSemantic = useSetOrderLifecycleSemantic();
+  const replaceStatus = useReplaceOrderStatus();
+
+  const [form, setForm] = useState({
+    name: "",
+    color: "#2563eb",
+    statusGroup: "new" as StatusGroup,
+    systemStatus: "",
+    sortOrder: "0",
+  });
+  const [editing, setEditing] = useState<StatusDefinition | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("#2563eb");
+  const [replaceFrom, setReplaceFrom] = useState<StatusDefinition | null>(null);
+  const [replaceToId, setReplaceToId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<StatusDefinition | null>(null);
+
   const statusNames = useMemo(() => new Map(data.map((status) => [status.id, status.name])), [data]);
+  const byEntity = useMemo(() => {
+    const map = new Map<StatusEntity, StatusDefinition[]>();
+    for (const status of data) {
+      const list = map.get(status.entity) ?? [];
+      list.push(status);
+      map.set(status.entity, list);
+    }
+    return map;
+  }, [data]);
+
+  const orderStatuses = byEntity.get("order") ?? [];
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -58,15 +114,14 @@ export function StatusesSettings() {
     );
   };
 
-  const byEntity = useMemo(() => {
-    const map = new Map<StatusEntity, typeof data>();
-    for (const status of data) {
-      const list = map.get(status.entity) ?? [];
-      list.push(status);
-      map.set(status.entity, list);
-    }
-    return map;
-  }, [data]);
+  function moveStatus(list: StatusDefinition[], index: number, direction: -1 | 1) {
+    const next = index + direction;
+    if (next < 0 || next >= list.length) return;
+    const ordered = [...list];
+    const [item] = ordered.splice(index, 1);
+    ordered.splice(next, 0, item);
+    reorder.mutate(ordered.map((status) => status.id));
+  }
 
   return (
     <Card>
@@ -97,17 +152,27 @@ export function StatusesSettings() {
                   <p className="text-sm text-muted-foreground">{t("settings.statuses.emptyEntity")}</p>
                 ) : (
                   <ul className="divide-y divide-border rounded-lg border border-border">
-                    {(byEntity.get(item) ?? []).map((status) => (
-                      <li key={status.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                    {(byEntity.get(item) ?? []).map((status, index, list) => (
+                      <li key={status.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <EntityStatusBadge name={status.name} color={status.color} />
                             {status.isDefault ? (
                               <span className="text-xs text-muted-foreground">{t("settings.statuses.default")}</span>
                             ) : null}
+                            {!status.isActive ? (
+                              <span className="text-xs text-muted-foreground">{t("settings.statuses.inactive")}</span>
+                            ) : null}
+                            {status.semanticAction !== "normal" ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">
+                                <Shield className="size-3" />
+                                {t(semanticLabelKey(status.semanticAction))}
+                              </span>
+                            ) : null}
                           </div>
                           <p className="text-xs text-muted-foreground">
                             {t("settings.statuses.group")}: {status.statusGroup}
+                            {status.code ? ` · ${status.code}` : ""}
                             {status.systemStatus ? ` · ${status.systemStatus}` : ""}
                             {status.color ? ` · ${status.color}` : ""}
                           </p>
@@ -121,20 +186,96 @@ export function StatusesSettings() {
                             </p>
                           ) : null}
                         </div>
-                        <div className="flex gap-4">
-                          <div className="rounded-md border border-border bg-background p-2">
-                            <p className="mb-1 text-[11px] text-muted-foreground">{t("settings.statuses.previewLight")}</p>
-                            <div className="rounded-md bg-[#f6f7f9] p-2">
-                              <EntityStatusBadge name={status.name} color={status.color} />
-                            </div>
+                        {canEdit && item === "order" ? (
+                          <div className="flex flex-wrap gap-1">
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              disabled={index === 0 || reorder.isPending}
+                              onClick={() => moveStatus(list, index, -1)}
+                              aria-label={t("settings.statuses.moveUp")}
+                            >
+                              <ArrowUp className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              disabled={index === list.length - 1 || reorder.isPending}
+                              onClick={() => moveStatus(list, index, 1)}
+                              aria-label={t("settings.statuses.moveDown")}
+                            >
+                              <ArrowDown className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditing(status);
+                                setEditName(status.name);
+                                setEditColor(status.color || "#2563eb");
+                              }}
+                            >
+                              {t("common.edit")}
+                            </Button>
+                            {!status.isDefault && status.semanticAction === "normal" && status.isActive ? (
+                              <Button type="button" size="sm" variant="outline" onClick={() => setDefault.mutate(status.id)}>
+                                {t("settings.statuses.setDefault")}
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateStatus.mutate({ id: status.id, isActive: !status.isActive })}
+                            >
+                              {status.isActive ? t("settings.statuses.deactivate") : t("settings.statuses.activate")}
+                            </Button>
+                            {status.semanticAction === "normal" ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSemantic.mutate({ statusId: status.id, action: "close" })}
+                                >
+                                  {t("settings.statuses.assignClose")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSemantic.mutate({ statusId: status.id, action: "cancel" })}
+                                >
+                                  {t("settings.statuses.assignCancel")}
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSemantic.mutate({ statusId: status.id, action: "normal" })}
+                              >
+                                {t("settings.statuses.clearSemantic")}
+                              </Button>
+                            )}
+                            <Button type="button" size="sm" variant="outline" onClick={() => setReplaceFrom(status)}>
+                              {t("settings.statuses.replace")}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              onClick={() => setDeleteTarget(status)}
+                              aria-label={t("settings.statuses.delete")}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
                           </div>
-                          <div className="rounded-md border border-border bg-background p-2">
-                            <p className="mb-1 text-[11px] text-muted-foreground">{t("settings.statuses.previewDark")}</p>
-                            <div className="dark rounded-md bg-[#0e1014] p-2">
-                              <EntityStatusBadge name={status.name} color={status.color} />
-                            </div>
-                          </div>
-                        </div>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -147,6 +288,7 @@ export function StatusesSettings() {
         {canEdit ? (
           <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-2">
             <p className="text-sm font-medium text-foreground sm:col-span-2">{t("settings.statuses.form.title")}</p>
+            <p className="text-xs text-muted-foreground sm:col-span-2">{t("settings.statuses.form.normalOnlyHint")}</p>
             <div className="space-y-1.5">
               <Label htmlFor="status-name">{t("settings.statuses.form.name")}</Label>
               <Input
@@ -190,7 +332,7 @@ export function StatusesSettings() {
                 onChange={(event) => setForm({ ...form, systemStatus: event.target.value })}
               >
                 <option value="">{t("settings.statuses.form.systemStatusNone")}</option>
-                {ORDER_STATUSES.map((status) => (
+                {ORDER_STATUSES.filter((status) => status !== "closed").map((status) => (
                   <option key={status} value={status}>
                     {status}
                   </option>
@@ -214,6 +356,124 @@ export function StatusesSettings() {
             </div>
           </form>
         ) : null}
+
+        <Dialog open={editing != null} onOpenChange={(open) => !open && setEditing(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("settings.statuses.editTitle")}</DialogTitle>
+              <DialogDescription>{t("settings.statuses.editDescription")}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-status-name">{t("settings.statuses.form.name")}</Label>
+                <Input id="edit-status-name" value={editName} onChange={(event) => setEditName(event.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-status-color">{t("settings.statuses.form.color")}</Label>
+                <Input
+                  id="edit-status-color"
+                  type="color"
+                  className="w-20 p-1"
+                  value={editColor}
+                  onChange={(event) => setEditColor(event.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                disabled={!editName.trim() || updateStatus.isPending}
+                onClick={() => {
+                  if (!editing) return;
+                  updateStatus.mutate(
+                    { id: editing.id, name: editName, color: editColor },
+                    { onSuccess: () => setEditing(null) },
+                  );
+                }}
+              >
+                {t("common.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={replaceFrom != null} onOpenChange={(open) => !open && setReplaceFrom(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("settings.statuses.replaceTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("settings.statuses.replaceDescription", { name: replaceFrom?.name ?? "" })}
+              </DialogDescription>
+            </DialogHeader>
+            <Select value={replaceToId} onValueChange={setReplaceToId}>
+              <SelectTrigger>
+                <SelectValue placeholder={t("settings.statuses.replacePick")} />
+              </SelectTrigger>
+              <SelectContent>
+                {orderStatuses
+                  .filter((status) => status.id !== replaceFrom?.id && status.isActive && status.semanticAction === "normal")
+                  .map((status) => (
+                    <SelectItem key={status.id} value={status.id}>
+                      {status.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setReplaceFrom(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                disabled={!replaceFrom || !replaceToId || replaceStatus.isPending}
+                onClick={() => {
+                  if (!replaceFrom || !replaceToId) return;
+                  replaceStatus.mutate(
+                    { fromStatusId: replaceFrom.id, toStatusId: replaceToId },
+                    {
+                      onSuccess: () => {
+                        setReplaceFrom(null);
+                        setReplaceToId("");
+                      },
+                    },
+                  );
+                }}
+              >
+                {t("settings.statuses.replaceConfirm")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deleteTarget != null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("settings.statuses.deleteTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("settings.statuses.deleteDescription", { name: deleteTarget?.name ?? "" })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!deleteTarget || deleteStatus.isPending}
+                onClick={() => {
+                  if (!deleteTarget) return;
+                  deleteStatus.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
+                }}
+              >
+                {t("settings.statuses.delete")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

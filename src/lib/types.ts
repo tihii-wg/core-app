@@ -1,6 +1,6 @@
 // Core App Types
 
-export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled";
+export type OrderStatus = "new" | "in-progress" | "waiting-parts" | "completed" | "paid" | "cancelled" | "closed";
 
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 
@@ -120,6 +120,11 @@ export interface Order {
   customStatusId?: string | null;
   /** Resolved status_definitions row for badge display. */
   customStatus?: { name: string; color: string | null } | null;
+  /**
+   * Formal closure timestamp (`orders.closed_at`). Set only by close RPC.
+   * Null when never formally closed. Refunds after close do not clear this.
+   */
+  closedAt?: string | null;
   /** employees.id from orders.employee_id (legacy assigned_to only when employee_id is empty). */
   assignedEmployeeId: string;
   assignedEmployeeName: string;

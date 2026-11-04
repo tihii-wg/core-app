@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { Calendar, CircleX, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -61,6 +61,9 @@ import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
+import { CloseOrderDialog } from "./CloseOrderDialog";
+import { isOrderFormallyClosed } from "./orderLifecycle";
+import { useCancelOrder } from "./useCloseOrder";
 
 function systemStatusToOrderStatus(value: string | null | undefined): OrderStatus | null {
   if (!value) return null;
@@ -96,7 +99,10 @@ export default function OrderDetailPanel({
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
+  const cancelOrder = useCancelOrder();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const showClientVehicles = industrySupportsClientVehicles(workflow);
@@ -110,7 +116,10 @@ export default function OrderDetailPanel({
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const activeCustomStatuses = orderStatusDefinitions.filter((status) => status.isActive);
+  const activeCustomStatuses = orderStatusDefinitions.filter(
+    (status) => status.isActive && status.semanticAction === "normal",
+  );
+  const workflowStatuses = orderStatuses.filter((status) => status !== "closed" && status !== "cancelled");
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
   // Owner role unlocks Paid status controls; admin/manager do not. API re-checks owner_id.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
@@ -443,7 +452,7 @@ export default function OrderDetailPanel({
                 {paidStatusLocked ? t("orders.actions.statusLocked") : t("orders.detail.updateStatus")}
               </Label>
               <Select
-                value={selectedOrder.status}
+                value={workflowStatuses.includes(selectedOrder.status) ? selectedOrder.status : workflowStatuses[0]}
                 onValueChange={(value) => {
                   const next = value as OrderStatus;
                   // Must pass the same owner flag used for `paidStatusLocked` / disabled —
@@ -458,7 +467,7 @@ export default function OrderDetailPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {orderStatuses.map((status) => (
+                  {workflowStatuses.map((status) => (
                     <SelectItem
                       key={status}
                       value={status}
@@ -476,6 +485,29 @@ export default function OrderDetailPanel({
                   ))}
                 </SelectContent>
               </Select>
+              {selectedOrder.closedAt ? (
+                <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+                  <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>
+                  <p className="text-xs text-muted-foreground">{t("orders.lifecycle.closedAt", { date: selectedOrder.closedAt })}</p>
+                  {paymentBalance && paymentBalance.remaining > 0.005 ? (
+                    <p className="text-sm text-destructive">
+                      {t("orders.lifecycle.postCloseOutstanding", { amount: formatMoney(paymentBalance.remaining) })}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {canEditOrder && !isOrderFormallyClosed(selectedOrder) && selectedOrder.status !== "cancelled" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCloseOpen(true)} disabled={isStatusUpdating}>
+                    <Lock className="size-3.5" />
+                    {t("orders.lifecycle.closeAction")}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || cancelOrder.isPending}>
+                    <CircleX className="size-3.5" />
+                    {t("orders.lifecycle.cancelAction")}
+                  </Button>
+                </div>
+              ) : null}
               {activeCustomStatuses.length > 0 ? (
                 <div className="mt-3 space-y-2">
                   <Label htmlFor="order-custom-status" className="block">
@@ -630,6 +662,48 @@ export default function OrderDetailPanel({
                   : linkedPaymentCount > 0
                     ? t("orders.delete.confirmWithPayments", { count: linkedPaymentCount })
                     : t("orders.actions.delete")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      <CloseOrderDialog
+        order={selectedOrder}
+        open={closeOpen}
+        onOpenChange={setCloseOpen}
+        payments={payments}
+        formatMoney={formatMoney}
+      />
+
+      {selectedOrder ? (
+        <Dialog
+          open={cancelOpen}
+          onOpenChange={(open) => {
+            if (cancelOrder.isPending) return;
+            setCancelOpen(open);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("orders.lifecycle.cancelTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("orders.lifecycle.cancelDescription", { number: selectedOrder.orderNumber })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelOrder.isPending}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={cancelOrder.isPending}
+                onClick={() => {
+                  cancelOrder.mutate(selectedOrder.id, { onSuccess: () => setCancelOpen(false) });
+                }}
+              >
+                {cancelOrder.isPending ? t("common.saving") : t("orders.lifecycle.confirmCancel")}
               </Button>
             </DialogFooter>
           </DialogContent>

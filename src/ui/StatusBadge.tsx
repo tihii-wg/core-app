@@ -58,6 +58,7 @@ const orderVariants: Record<OrderStatus, BadgeVariant> = {
   completed: 'success',
   paid: 'success',
   cancelled: 'muted',
+  closed: 'muted',
 };
 
 /** Custom status chip: tinted plate + readable foreground (docs §5.17). */

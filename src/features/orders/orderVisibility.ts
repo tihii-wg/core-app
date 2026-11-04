@@ -2,7 +2,7 @@ import type { Order, OrderStatus } from "../../lib/types";
 import { localDateKey } from "../../pages/dashboardStats";
 
 /** Statuses that are no longer open work — excluded from overdue/upcoming. */
-const CLOSED_STATUSES = new Set<OrderStatus>(["completed", "paid", "cancelled"]);
+const CLOSED_STATUSES = new Set<OrderStatus>(["completed", "paid", "cancelled", "closed"]);
 
 /** Open work statuses used by deadline filters (client + server). */
 export const OPEN_ORDER_STATUSES: OrderStatus[] = ["new", "in-progress", "waiting-parts"];

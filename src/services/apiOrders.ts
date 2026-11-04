@@ -48,10 +48,11 @@ import {
 import { getClientDiscounts } from "./apiClientDiscounts";
 import { createClient, getClients, toClientType } from "./apiClients";
 import { createService } from "./apiServices";
-import { getStatusDefinitionsByIds } from "./apiStatusDefinitions";
+import { getStatusDefinitions, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
+import { findDefaultOrderStatus, parseLifecycleRpcError } from "../features/orders/orderLifecycle";
 import { recordActivity } from "./apiActivityLog";
 import { recordStatusChangeEvents } from "./apiOrderEvents";
-import { isMissingRpcError } from "./missingRpc";
+import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
 import i18n from "../i18n";
@@ -338,6 +339,13 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     vehicleMileageUnitSnapshot: input.vehicleMileageUnitSnapshot,
   });
 
+  const definitions = await getStatusDefinitions(targetWorkspaceId, "order").catch(() => []);
+  const defaultStatus = findDefaultOrderStatus(definitions);
+  const initialSystemStatus: OrderStatus =
+    defaultStatus && orderStatuses.has(defaultStatus.systemStatus as OrderStatus)
+      ? (defaultStatus.systemStatus as OrderStatus)
+      : "new";
+
   const insertOrderRow = (includeMileageSnapshot: boolean) =>
     supabase
       .from("orders")
@@ -355,7 +363,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
         ...(input.deadline ? { deadline: new Date(input.deadline).toISOString() } : { deadline: null }),
         total_price: expectedMoney.total,
         ...orderDiscountFields(expectedMoney, uniformPercentOf([...stampedLines, ...stampedServices.materials])),
-        status: "new",
+        status: initialSystemStatus,
+        ...(defaultStatus ? { custom_status_id: defaultStatus.id } : {}),
         is_paid: false,
         number: `ORD-PENDING-${crypto.randomUUID()}`,
         vin: normalizedVin,
@@ -510,7 +519,7 @@ async function loadClientDiscounts(workspaceId: string, clientId: string | null)
   }
 }
 
-const orderStatuses = new Set<OrderStatus>(["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled"]);
+const orderStatuses = new Set<OrderStatus>(["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled", "closed"]);
 
 function formatOrderDate(value: unknown) {
   if (typeof value !== "string" || value.length < 10) return "";
@@ -1025,6 +1034,7 @@ function toOrder(
     status,
     customStatusId,
     customStatus,
+    closedAt: typeof row.closed_at === "string" && row.closed_at.trim() ? row.closed_at : null,
     // Canonical: employees.id via orders.employee_id; legacy assigned_to only when employee_id is empty.
     assignedEmployeeId: employee?.id ?? fallbackAssigneeId,
     assignedEmployeeName: employee?.name || memberNames.get(legacyAssignedTo) || "",
@@ -1374,6 +1384,63 @@ async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
 }
 
 /**
+ * Formal close via SECURITY DEFINER RPC. Never auto-invoked from payment recording.
+ * Validates ledger remaining server-side; sets closed_at once; idempotent.
+ */
+export async function closeOrder(orderId: string, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc("close_order_if_settled", {
+    p_order_id: orderId,
+    p_workspace_id: targetWorkspaceId,
+  });
+  if (error) {
+    if (isMissingRpcError(error, "close_order_if_settled")) {
+      throw new MissingRpcError("close_order_if_settled", i18n.t("orders.lifecycle.errors.rpcRequired"));
+    }
+    throw new Error(mapCloseOrderError(error.message));
+  }
+  return data as { ok?: boolean; idempotent?: boolean; closed_at?: string; remaining?: number };
+}
+
+/** Formal cancel via RPC. Does not set closed_at, create refunds, or touch inventory. */
+export async function cancelOrder(orderId: string, workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc("cancel_order", {
+    p_order_id: orderId,
+    p_workspace_id: targetWorkspaceId,
+  });
+  if (error) {
+    if (isMissingRpcError(error, "cancel_order")) {
+      throw new MissingRpcError("cancel_order", i18n.t("orders.lifecycle.errors.rpcRequired"));
+    }
+    throw new Error(mapCancelOrderError(error.message));
+  }
+  return data as { ok?: boolean; idempotent?: boolean; closed_at?: null };
+}
+
+function mapCloseOrderError(message: string) {
+  const parsed = parseLifecycleRpcError(message);
+  if (parsed.code === "not_settled" || parsed.code === "ledger_required") {
+    const remaining = parsed.remaining != null ? parsed.remaining.toFixed(2) : "?";
+    const currency = parsed.currency ? ` ${parsed.currency}` : "";
+    return i18n.t("orders.lifecycle.errors.notSettled", { remaining: `${remaining}${currency}`.trim() });
+  }
+  if (parsed.code === "cannot_close_cancelled") return i18n.t("orders.lifecycle.errors.cannotCloseCancelled");
+  if (parsed.code === "forbidden" || parsed.code === "workspace_mismatch") return i18n.t("orders.lifecycle.errors.forbidden");
+  if (parsed.code === "order_not_found") return orderPermissionMessage();
+  return message;
+}
+
+function mapCancelOrderError(message: string) {
+  const parsed = parseLifecycleRpcError(message);
+  if (parsed.code === "cannot_cancel_closed") return i18n.t("orders.lifecycle.errors.cannotCancelClosed");
+  if (parsed.code === "forbidden" || parsed.code === "workspace_mismatch") return i18n.t("orders.lifecycle.errors.forbidden");
+  if (parsed.code === "order_not_found") return orderPermissionMessage();
+  if (parsed.code === "cancel_status_via_rpc_only") return i18n.t("orders.lifecycle.errors.useCancelAction");
+  return message;
+}
+
+/**
  * Sole application write path that can set `orders.status = paid` / `is_paid`.
  * Every UI entry point (order menu, detail panel, etc.) goes through
  * `useUpdateOrderStatus` → this function. Direct Supabase/SQL updates are
@@ -1382,6 +1449,9 @@ async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
  * Paid is locked for non-owners: the persisted `status` is re-read, and only
  * `workspaces.owner_id === auth.uid()` may move a Paid order to another status.
  * Non-owner updates keep `.neq("status","paid")` so a concurrent Paid write cannot be overwritten.
+ *
+ * Does NOT perform formal close/cancel — use `closeOrder` / `cancelOrder`.
+ * Rejects `closed` (and `cancelled` when a cancel semantic is configured) at the app layer.
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -1392,9 +1462,13 @@ export async function updateOrderStatus(
 ) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
 
+  if (status === "closed") {
+    throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
+  }
+
   const { data: existing, error: loadError } = await supabase
     .from("orders")
-    .select("id, status")
+    .select("id, status, closed_at")
     .eq("id", orderId)
     .eq("workspace_id", targetWorkspaceId)
     .maybeSingle();
@@ -1404,6 +1478,9 @@ export async function updateOrderStatus(
 
   const currentStatus =
     typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
+  if ((existing as { closed_at?: unknown }).closed_at) {
+    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
 
   let ownerMayChangePaid = false;
   if (currentStatus === "paid") {

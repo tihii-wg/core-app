@@ -9,6 +9,7 @@ const status: Messages<typeof en> = {
     completed: "Finalizată",
     paid: "Achitată",
     cancelled: "Anulată",
+    closed: "Închisă",
     byIndustry: {
       auto_repair: {
         "waiting-parts": "Așteaptă piese",

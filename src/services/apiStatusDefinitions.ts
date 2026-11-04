@@ -1,8 +1,11 @@
 import i18n from "../i18n";
 import { isMissingTableError } from "./missingTable";
+import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 
 export type StatusEntity = "order" | "estimate" | "lead" | "invoice" | "transfer" | "task";
+
+export type StatusSemanticAction = "normal" | "close" | "cancel";
 
 export type StatusDefinition = {
   id: string;
@@ -12,6 +15,8 @@ export type StatusDefinition = {
   color: string | null;
   statusGroup: string;
   systemStatus: string | null;
+  code: string | null;
+  semanticAction: StatusSemanticAction;
   sortOrder: number;
   isDefault: boolean;
   isActive: boolean;
@@ -20,6 +25,10 @@ export type StatusDefinition = {
 };
 
 const statusColumns =
+  "id, workspace_id, entity, name, color, status_group, system_status, code, semantic_action, sort_order, is_default, is_active, show_overdue_badge, adds_to_backorders, deleted_at";
+
+/** Fallback select when code/semantic_action columns are not applied yet. */
+const statusColumnsLegacy =
   "id, workspace_id, entity, name, color, status_group, system_status, sort_order, is_default, is_active, show_overdue_badge, adds_to_backorders, deleted_at";
 
 function requireWorkspaceId(workspaceId: string | undefined) {
@@ -33,6 +42,18 @@ function isMissingStatusTable(error: { code?: string; message?: string } | null)
   return error.code === "PGRST205" || error.code === "42P01" || /status_definitions/i.test(error.message ?? "");
 }
 
+function isMissingLifecycleColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  if (error.code === "PGRST204" || error.code === "42703") {
+    return /semantic_action|code/i.test(error.message ?? "");
+  }
+  return /semantic_action|code/i.test(error.message ?? "") && /schema cache|does not exist/i.test(error.message ?? "");
+}
+
+function toSemanticAction(value: unknown): StatusSemanticAction {
+  return value === "close" || value === "cancel" ? value : "normal";
+}
+
 export function toStatusDefinition(row: Record<string, unknown>): StatusDefinition {
   return {
     id: String(row.id),
@@ -42,6 +63,8 @@ export function toStatusDefinition(row: Record<string, unknown>): StatusDefiniti
     color: typeof row.color === "string" ? row.color : null,
     statusGroup: typeof row.status_group === "string" ? row.status_group : "new",
     systemStatus: typeof row.system_status === "string" ? row.system_status : null,
+    code: typeof row.code === "string" ? row.code : null,
+    semanticAction: toSemanticAction(row.semantic_action),
     sortOrder: typeof row.sort_order === "number" ? row.sort_order : 0,
     isDefault: Boolean(row.is_default),
     isActive: row.is_active !== false,
@@ -50,19 +73,34 @@ export function toStatusDefinition(row: Record<string, unknown>): StatusDefiniti
   };
 }
 
-export async function getStatusDefinitions(workspaceId: string | undefined, entity?: StatusEntity) {
-  const resolved = requireWorkspaceId(workspaceId);
+async function selectDefinitions(workspaceId: string, entity?: StatusEntity) {
   let query = supabase
     .from("status_definitions")
     .select(statusColumns)
-    .eq("workspace_id", resolved)
+    .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
-
   if (entity) query = query.eq("entity", entity);
+  const first = await query;
+  if (!first.error) return first;
+  if (isMissingLifecycleColumn(first.error)) {
+    let legacy = supabase
+      .from("status_definitions")
+      .select(statusColumnsLegacy)
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    if (entity) legacy = legacy.eq("entity", entity);
+    return legacy;
+  }
+  return first;
+}
 
-  const { data, error } = await query;
+export async function getStatusDefinitions(workspaceId: string | undefined, entity?: StatusEntity) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const { data, error } = await selectDefinitions(resolved, entity);
   if (error) {
     if (isMissingStatusTable(error)) return [] as StatusDefinition[];
     throw new Error(error.message);
@@ -137,13 +175,26 @@ export async function getStatusDefinitionsByIds(workspaceId: string | undefined,
     .in("id", unique)
     .is("deleted_at", null);
 
-  if (error) {
-    if (isMissingStatusTable(error)) return new Map<string, StatusDefinition>();
-    throw new Error(error.message);
+  let rows: Record<string, unknown>[] | null = (data as Record<string, unknown>[] | null) ?? null;
+  let err = error;
+  if (err && isMissingLifecycleColumn(err)) {
+    const legacy = await supabase
+      .from("status_definitions")
+      .select(statusColumnsLegacy)
+      .eq("workspace_id", resolved)
+      .in("id", unique)
+      .is("deleted_at", null);
+    rows = (legacy.data as Record<string, unknown>[] | null) ?? null;
+    err = legacy.error;
+  }
+
+  if (err) {
+    if (isMissingStatusTable(err)) return new Map<string, StatusDefinition>();
+    throw new Error(err.message);
   }
 
   const map = new Map<string, StatusDefinition>();
-  for (const row of (data ?? []) as Record<string, unknown>[]) {
+  for (const row of rows ?? []) {
     const status = toStatusDefinition(row);
     map.set(status.id, status);
   }
@@ -172,7 +223,16 @@ export type CreateStatusDefinitionInput = {
   sortOrder?: number;
 };
 
-/** Creates a status definition (defaults to the `order` entity). */
+export type UpdateStatusDefinitionInput = {
+  id: string;
+  name?: string;
+  color?: string | null;
+  statusGroup?: StatusGroup;
+  sortOrder?: number;
+  isActive?: boolean;
+};
+
+/** Creates a status definition (defaults to the `order` entity). Always semantic normal. */
 export async function createStatusDefinition(input: CreateStatusDefinitionInput, workspaceId: string | undefined) {
   const resolved = requireWorkspaceId(workspaceId);
   const name = input.name.trim();
@@ -180,19 +240,22 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
   const systemStatus = input.systemStatus?.trim() || null;
   const color = input.color?.trim() || null;
 
-  const { data, error } = await supabase
-    .from("status_definitions")
-    .insert({
-      workspace_id: resolved,
-      entity: input.entity ?? "order",
-      name,
-      color,
-      status_group: input.statusGroup,
-      system_status: systemStatus,
-      sort_order: Number.isFinite(input.sortOrder) ? Math.trunc(input.sortOrder as number) : 0,
-    })
-    .select(statusColumns)
-    .single();
+  const payload: Record<string, unknown> = {
+    workspace_id: resolved,
+    entity: input.entity ?? "order",
+    name,
+    color,
+    status_group: input.statusGroup,
+    system_status: systemStatus,
+    sort_order: Number.isFinite(input.sortOrder) ? Math.trunc(input.sortOrder as number) : 0,
+    semantic_action: "normal",
+  };
+
+  let { data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumns).single();
+  if (error && isMissingLifecycleColumn(error)) {
+    delete payload.semantic_action;
+    ({ data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumnsLegacy).single());
+  }
 
   if (error) {
     if (isMissingStatusTable(error)) throw new Error(i18n.t("settings.statuses.errors.unavailable"));
@@ -200,4 +263,215 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
     throw new Error(error.message);
   }
   return toStatusDefinition(data as Record<string, unknown>);
+}
+
+export async function updateStatusDefinition(input: UpdateStatusDefinitionInput, workspaceId: string | undefined) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error(i18n.t("settings.statuses.errors.nameRequired"));
+    patch.name = name;
+  }
+  if (input.color !== undefined) patch.color = input.color?.trim() || null;
+  if (input.statusGroup !== undefined) patch.status_group = input.statusGroup;
+  if (input.sortOrder !== undefined) patch.sort_order = Math.trunc(input.sortOrder);
+  if (input.isActive !== undefined) {
+    patch.is_active = input.isActive;
+    if (!input.isActive) patch.is_default = false;
+  }
+
+  const { data, error } = await supabase
+    .from("status_definitions")
+    .update(patch)
+    .eq("id", input.id)
+    .eq("workspace_id", resolved)
+    .is("deleted_at", null)
+    .select(statusColumns)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingLifecycleColumn(error)) {
+      const legacy = await supabase
+        .from("status_definitions")
+        .update(patch)
+        .eq("id", input.id)
+        .eq("workspace_id", resolved)
+        .is("deleted_at", null)
+        .select(statusColumnsLegacy)
+        .maybeSingle();
+      if (legacy.error) {
+        if (legacy.error.code === "23505") throw new Error(i18n.t("settings.statuses.errors.duplicate"));
+        throw new Error(legacy.error.message);
+      }
+      if (!legacy.data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+      return toStatusDefinition(legacy.data as Record<string, unknown>);
+    }
+    if (error.code === "23505") throw new Error(i18n.t("settings.statuses.errors.duplicate"));
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+  return toStatusDefinition(data as Record<string, unknown>);
+}
+
+/** Sets exactly one default order status for the workspace. */
+export async function setDefaultStatusDefinition(statusId: string, workspaceId: string | undefined) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const { data: target, error: loadError } = await supabase
+    .from("status_definitions")
+    .select("id, entity, is_active, semantic_action")
+    .eq("id", statusId)
+    .eq("workspace_id", resolved)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!target) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+  if ((target as { entity?: string }).entity !== "order") {
+    throw new Error(i18n.t("settings.statuses.errors.orderOnly"));
+  }
+  if ((target as { is_active?: boolean }).is_active === false) {
+    throw new Error(i18n.t("settings.statuses.errors.inactiveDefault"));
+  }
+  if ((target as { semantic_action?: string }).semantic_action === "close" || (target as { semantic_action?: string }).semantic_action === "cancel") {
+    throw new Error(i18n.t("settings.statuses.errors.protectedDefault"));
+  }
+
+  const { error: clearError } = await supabase
+    .from("status_definitions")
+    .update({ is_default: false, updated_at: new Date().toISOString() })
+    .eq("workspace_id", resolved)
+    .eq("entity", "order")
+    .is("deleted_at", null)
+    .eq("is_default", true);
+  if (clearError) throw new Error(clearError.message);
+
+  const { data, error } = await supabase
+    .from("status_definitions")
+    .update({ is_default: true, updated_at: new Date().toISOString() })
+    .eq("id", statusId)
+    .eq("workspace_id", resolved)
+    .select(statusColumns)
+    .maybeSingle();
+  if (error) {
+    if (isMissingLifecycleColumn(error)) {
+      const legacy = await supabase
+        .from("status_definitions")
+        .update({ is_default: true, updated_at: new Date().toISOString() })
+        .eq("id", statusId)
+        .eq("workspace_id", resolved)
+        .select(statusColumnsLegacy)
+        .maybeSingle();
+      if (legacy.error) throw new Error(legacy.error.message);
+      if (!legacy.data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+      return toStatusDefinition(legacy.data as Record<string, unknown>);
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+  return toStatusDefinition(data as Record<string, unknown>);
+}
+
+/** Reorders statuses by writing sequential sort_order values. */
+export async function reorderStatusDefinitions(orderedIds: string[], workspaceId: string | undefined) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const ids = orderedIds.map((id) => id.trim()).filter(Boolean);
+  for (let index = 0; index < ids.length; index += 1) {
+    const { error } = await supabase
+      .from("status_definitions")
+      .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
+      .eq("id", ids[index])
+      .eq("workspace_id", resolved)
+      .is("deleted_at", null);
+    if (error) throw new Error(error.message);
+  }
+}
+
+/** Soft-deletes an unused status. Fails if orders still reference it. */
+export async function deleteStatusDefinition(statusId: string, workspaceId: string | undefined) {
+  const resolved = requireWorkspaceId(workspaceId);
+
+  const { count, error: countError } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", resolved)
+    .eq("custom_status_id", statusId);
+  if (countError) throw new Error(countError.message);
+  if ((count ?? 0) > 0) throw new Error(i18n.t("settings.statuses.errors.inUse"));
+
+  const { data: row, error: loadError } = await supabase
+    .from("status_definitions")
+    .select("id, is_default, semantic_action")
+    .eq("id", statusId)
+    .eq("workspace_id", resolved)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!row) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+  if ((row as { is_default?: boolean }).is_default) {
+    throw new Error(i18n.t("settings.statuses.errors.cannotDeleteDefault"));
+  }
+  const action = (row as { semantic_action?: string }).semantic_action;
+  if (action === "close" || action === "cancel") {
+    throw new Error(i18n.t("settings.statuses.errors.cannotDeleteProtected"));
+  }
+
+  const { error } = await supabase
+    .from("status_definitions")
+    .update({ deleted_at: new Date().toISOString(), is_active: false, is_default: false, updated_at: new Date().toISOString() })
+    .eq("id", statusId)
+    .eq("workspace_id", resolved);
+  if (error) throw new Error(error.message);
+}
+
+export async function setOrderLifecycleSemantic(
+  statusId: string,
+  action: StatusSemanticAction,
+  workspaceId: string | undefined,
+) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc("set_order_lifecycle_semantic", {
+    p_workspace_id: resolved,
+    p_status_id: statusId,
+    p_action: action,
+  });
+  if (error) {
+    if (isMissingRpcError(error, "set_order_lifecycle_semantic")) {
+      throw new MissingRpcError("set_order_lifecycle_semantic", i18n.t("settings.statuses.errors.lifecycleRpcRequired"));
+    }
+    throw new Error(mapLifecycleDbError(error.message));
+  }
+  return data;
+}
+
+export async function replaceOrderStatus(fromStatusId: string, toStatusId: string, workspaceId: string | undefined) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc("replace_order_status", {
+    p_workspace_id: resolved,
+    p_from_status_id: fromStatusId,
+    p_to_status_id: toStatusId,
+  });
+  if (error) {
+    if (isMissingRpcError(error, "replace_order_status")) {
+      throw new MissingRpcError("replace_order_status", i18n.t("settings.statuses.errors.lifecycleRpcRequired"));
+    }
+    throw new Error(mapLifecycleDbError(error.message));
+  }
+  return data;
+}
+
+export function isProtectedSemantic(action: StatusSemanticAction | string | null | undefined) {
+  return action === "close" || action === "cancel";
+}
+
+export function normalActiveOrderStatuses(definitions: readonly StatusDefinition[]) {
+  return definitions.filter((d) => d.entity === "order" && d.isActive && d.semanticAction === "normal");
+}
+
+function mapLifecycleDbError(message: string) {
+  if (/forbidden/i.test(message)) return i18n.t("settings.statuses.errors.forbidden");
+  if (/status_not_found/i.test(message)) return i18n.t("settings.statuses.errors.notFound");
+  if (/replace_target/i.test(message)) return i18n.t("settings.statuses.errors.replaceTargetInvalid");
+  if (/replace_target_protected/i.test(message)) return i18n.t("settings.statuses.errors.replaceTargetProtected");
+  if (/23505|duplicate/i.test(message)) return i18n.t("settings.statuses.errors.duplicateSemantic");
+  return message;
 }
