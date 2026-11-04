@@ -2862,6 +2862,26 @@ declare
   v_proc oid;
   v_rls boolean;
   v_pass int := 0;
+  -- Section D: audit all 14 APPLY functions (declared once at block scope).
+  v_fn text;
+  v_empty_path boolean;
+  v_secdef boolean;
+  v_defs text[] := array[
+    'public.crm_consume_batches_fifo(uuid,uuid,uuid,numeric)',
+    'public.crm_restore_or_create_batch(uuid,uuid,uuid,numeric,uuid,numeric,date,uuid,uuid)',
+    'public.crm_peel_return_batch_slices(uuid,uuid,uuid,numeric)',
+    'public.crm_prevent_hard_delete_warehouse()',
+    'public.crm_inventory_item_create_warehouse_gate()',
+    'public.crm_guard_posted_document_lines()',
+    'public.crm_guard_receipt_header_immutable()',
+    'public.crm_post_goods_receipt(uuid)',
+    'public.crm_post_stock_transfer(uuid)',
+    'public.crm_post_write_off(uuid)',
+    'public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)',
+    'public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)',
+    'public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)',
+    'public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'
+  ];
 begin
   -- A) sync_order_materials unchanged
   v_oid := to_regprocedure('public.sync_order_materials(uuid,jsonb)');
@@ -2908,65 +2928,42 @@ begin
   v_pass := v_pass + 1;
 
   -- D) ALL 14 CREATE OR REPLACE FUNCTION targets: signature + SECURITY DEFINER + empty search_path
-  declare
-    v_fn text;
-    v_oid oid;
-    v_defs text[] := array[
-      'public.crm_consume_batches_fifo(uuid,uuid,uuid,numeric)',
-      'public.crm_restore_or_create_batch(uuid,uuid,uuid,numeric,uuid,numeric,date,uuid,uuid)',
-      'public.crm_peel_return_batch_slices(uuid,uuid,uuid,numeric)',
-      'public.crm_prevent_hard_delete_warehouse()',
-      'public.crm_inventory_item_create_warehouse_gate()',
-      'public.crm_guard_posted_document_lines()',
-      'public.crm_guard_receipt_header_immutable()',
-      'public.crm_post_goods_receipt(uuid)',
-      'public.crm_post_stock_transfer(uuid)',
-      'public.crm_post_write_off(uuid)',
-      'public.issue_order_materials_from_warehouse(uuid,jsonb,uuid,text)',
-      'public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)',
-      'public.add_and_issue_order_catalog_material(uuid,uuid,uuid,integer,numeric,text)',
-      'public.set_order_catalog_material_quantity_with_issue(uuid,uuid,uuid,integer,text)'
-    ];
-    v_empty_path boolean;
-    v_secdef boolean;
-  begin
-    foreach v_fn in array v_defs
-    loop
-      v_oid := to_regprocedure(v_fn);
-      if v_oid is null then
-        -- Tolerate alternate spacing in identity args for a few overloads.
-        v_oid := to_regprocedure(replace(v_fn, ',', ', '));
-      end if;
-      if v_oid is null then
-        raise exception 'Post-check FAIL: required function missing: %', v_fn;
-      end if;
+  foreach v_fn in array v_defs
+  loop
+    v_oid := to_regprocedure(v_fn);
+    if v_oid is null then
+      -- Tolerate alternate spacing in identity args for a few overloads.
+      v_oid := to_regprocedure(replace(v_fn, ',', ', '));
+    end if;
+    if v_oid is null then
+      raise exception 'Post-check FAIL: required function missing: %', v_fn;
+    end if;
 
-      select p.prosecdef into v_secdef from pg_proc p where p.oid = v_oid;
-      if not coalesce(v_secdef, false) then
-        raise exception 'Post-check FAIL: % is not SECURITY DEFINER', v_fn;
-      end if;
+    select p.prosecdef into v_secdef from pg_proc p where p.oid = v_oid;
+    if not coalesce(v_secdef, false) then
+      raise exception 'Post-check FAIL: % is not SECURITY DEFINER', v_fn;
+    end if;
 
-      select coalesce((
-        select bool_or(
-          cfg in ('search_path=""', 'search_path=', 'search_path=''''')
-          or cfg ~ '^search_path=\s*$'
-          or cfg ~ '^search_path=\s*""\s*$'
-        )
-        from unnest(coalesce((select p.proconfig from pg_proc p where p.oid = v_oid), array[]::text[])) as cfg
-      ), false) into v_empty_path;
+    select coalesce((
+      select bool_or(
+        cfg in ('search_path=""', 'search_path=', 'search_path=''''')
+        or cfg ~ '^search_path=\s*$'
+        or cfg ~ '^search_path=\s*""\s*$'
+      )
+      from unnest(coalesce((select p.proconfig from pg_proc p where p.oid = v_oid), array[]::text[])) as cfg
+    ), false) into v_empty_path;
 
-      if not v_empty_path then
-        raise exception 'Post-check FAIL: % missing SET search_path = ''''', v_fn;
-      end if;
+    if not v_empty_path then
+      raise exception 'Post-check FAIL: % missing SET search_path = ''''', v_fn;
+    end if;
 
-      if has_function_privilege('public', v_oid, 'execute') then
-        raise exception 'Post-check FAIL: PUBLIC still has EXECUTE on %', v_fn;
-      end if;
-      if has_function_privilege('anon', v_oid, 'execute') then
-        raise exception 'Post-check FAIL: anon still has EXECUTE on %', v_fn;
-      end if;
-    end loop;
-  end;
+    if has_function_privilege('public', v_oid, 'execute') then
+      raise exception 'Post-check FAIL: PUBLIC still has EXECUTE on %', v_fn;
+    end if;
+    if has_function_privilege('anon', v_oid, 'execute') then
+      raise exception 'Post-check FAIL: anon still has EXECUTE on %', v_fn;
+    end if;
+  end loop;
   raise notice 'PASS: all 14 APPLY functions present + SECURITY DEFINER + empty search_path + no PUBLIC/anon EXECUTE';
   v_pass := v_pass + 1;
 
