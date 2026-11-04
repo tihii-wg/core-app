@@ -31,6 +31,13 @@ describe("order warranty hardening SQL", () => {
     expect(sql).toMatch(/drop policy if exists warranty_order_claims_write_editor/i);
   });
 
+  it("uses public.is_workspace_member(uuid) in preflight and SELECT policies", () => {
+    expect(sql).toMatch(/to_regprocedure\('public\.is_workspace_member\(uuid\)'\)/);
+    expect(sql).toMatch(/using \(public\.is_workspace_member\(workspace_id\)\)/);
+    expect(sql).not.toMatch(/to_regprocedure\('public\.crm_is_workspace_member/);
+    expect(sql).not.toMatch(/public\.crm_is_workspace_member\(/);
+  });
+
   it("guards original-order delete and freezes activated snapshots", () => {
     expect(sql).toMatch(/trg_orders_block_delete_with_warranty/);
     expect(sql).toMatch(/order_delete_blocked_by_warranty/);

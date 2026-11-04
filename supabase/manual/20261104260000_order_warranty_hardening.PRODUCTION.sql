@@ -32,6 +32,9 @@ begin
   if to_regclass('public.warranty_records') is null then
     v_problems := v_problems || 'warranty_records missing (apply 20261104250000 first); ';
   end if;
+  if to_regclass('public.warranty_order_claims') is null then
+    v_problems := v_problems || 'warranty_order_claims missing (apply 20261104250000 first); ';
+  end if;
   if to_regprocedure('public.activate_order_warranties(uuid,uuid,timestamptz)') is null then
     v_problems := v_problems || 'activate_order_warranties missing; ';
   end if;
@@ -41,11 +44,22 @@ begin
   if to_regprocedure('public.order_delete_blocked_by_warranty(uuid,uuid)') is null then
     v_problems := v_problems || 'order_delete_blocked_by_warranty missing; ';
   end if;
-  if to_regprocedure('public.crm_has_permission(uuid,text)') is null then
-    v_problems := v_problems || 'crm_has_permission missing; ';
+  -- crm_has_permission(uuid, text) — accept either to_regprocedure spacing form.
+  if to_regprocedure('public.crm_has_permission(uuid,text)') is null
+     and to_regprocedure('public.crm_has_permission(uuid, text)') is null then
+    v_problems := v_problems || 'crm_has_permission(uuid,text) missing; ';
   end if;
-  if to_regprocedure('public.crm_is_workspace_member(uuid)') is null then
-    v_problems := v_problems || 'crm_is_workspace_member missing; ';
+  -- Membership helper on MAIN / existing RLS: public.is_workspace_member(uuid).
+  if to_regprocedure('public.is_workspace_member(uuid)') is null then
+    v_problems := v_problems || 'is_workspace_member(uuid) missing; ';
+  end if;
+  if to_regclass('public.warranty_records') is not null
+     and not exists (
+       select 1 from pg_catalog.pg_attribute a
+       where a.attrelid = 'public.warranty_records'::regclass
+         and a.attname = 'activated_on_close' and a.attnum > 0 and not a.attisdropped
+     ) then
+    v_problems := v_problems || 'warranty_records.activated_on_close missing; ';
   end if;
   if v_problems <> '' then
     raise exception 'order_warranty_hardening preflight failed: %', v_problems;
@@ -134,7 +148,7 @@ drop policy if exists warranty_records_select_member on public.warranty_records;
 
 create policy warranty_records_select_member
   on public.warranty_records for select to authenticated
-  using (coalesce(public.crm_is_workspace_member(workspace_id), false));
+  using (public.is_workspace_member(workspace_id));
 
 create policy warranty_records_insert_editor
   on public.warranty_records for insert to authenticated
@@ -157,7 +171,7 @@ drop policy if exists warranty_order_claims_select_member on public.warranty_ord
 
 create policy warranty_order_claims_select_member
   on public.warranty_order_claims for select to authenticated
-  using (coalesce(public.crm_is_workspace_member(workspace_id), false));
+  using (public.is_workspace_member(workspace_id));
 
 create policy warranty_order_claims_insert_editor
   on public.warranty_order_claims for insert to authenticated
