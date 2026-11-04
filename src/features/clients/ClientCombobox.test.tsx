@@ -25,7 +25,7 @@ const pavelB: Client = {
 };
 
 describe("ClientCombobox duplicate names", () => {
-  it("lists every matching client by id and keeps Create new available for an existing name", async () => {
+  it("keeps the list closed until focus and lists every matching client by id", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
     const onCreateRequest = vi.fn();
@@ -41,6 +41,8 @@ describe("ClientCombobox duplicate names", () => {
       />,
     );
 
+    expect(screen.queryByText("+37369111111")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("combobox", { name: /^Client$/i }));
 
     expect(screen.getByText("+37369111111")).toBeInTheDocument();
@@ -49,6 +51,7 @@ describe("ClientCombobox duplicate names", () => {
 
     await user.click(screen.getByText("+37368222222"));
     expect(onSelect).toHaveBeenCalledWith(pavelB);
+    expect(screen.queryByText("+37369111111")).not.toBeInTheDocument();
 
     onCreateRequest.mockClear();
     rerender(

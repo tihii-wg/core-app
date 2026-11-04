@@ -16,7 +16,11 @@ export function CreateOrderDialog({ open, onOpenChange, searchQuery = "", initia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg w-full owerflow-hidden ">
+      <DialogContent
+        className="max-w-lg w-full owerflow-hidden "
+        // Do not autofocus the client field — that would open the clients dropdown on mount.
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{t("orders.createDialog.title")}</DialogTitle>
           <DialogDescription>{t("orders.createDialog.description")}</DialogDescription>

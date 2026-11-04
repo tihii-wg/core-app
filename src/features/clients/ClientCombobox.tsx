@@ -38,6 +38,7 @@ export default function ClientCombobox({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const copy = industryClientCopy(workflow);
+  // Closed until the user focuses/clicks/types — never open on mount.
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +51,7 @@ export default function ClientCombobox({
       }
     }
 
+    // pointerdown (not blur) so a click on an option is processed before close.
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
@@ -67,6 +69,16 @@ export default function ClientCombobox({
   const canCreate = Boolean(onCreateRequest) && value.trim().length > 0;
   const emptyPhone = t("clients.combobox.noPhone");
 
+  function selectClient(client: Client) {
+    onSelect(client);
+    setOpen(false);
+  }
+
+  function requestCreate() {
+    onCreateRequest?.(value.trim());
+    setOpen(false);
+  }
+
   return (
     <div ref={containerRef} className="relative">
       <Input
@@ -83,13 +95,14 @@ export default function ClientCombobox({
         role="combobox"
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);
         }}
       />
 
-      {open && (
+      {open ? (
         <div
           id="client-combobox-list"
           role="listbox"
@@ -104,10 +117,9 @@ export default function ClientCombobox({
                 type="button"
                 role="option"
                 className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
-                onClick={() => {
-                  onSelect(client);
-                  setOpen(false);
-                }}
+                // Keep focus on the input so the list is not torn down before click.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectClient(client)}
               >
                 <span className="min-w-0">
                   <span className="block truncate font-medium text-foreground">{client.name}</span>
@@ -122,10 +134,8 @@ export default function ClientCombobox({
             <button
               type="button"
               className="flex w-full items-center gap-2 border-t px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-              onClick={() => {
-                onCreateRequest?.(value.trim());
-                setOpen(false);
-              }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={requestCreate}
             >
               <Plus className="size-4 shrink-0" aria-hidden />
               <span>
@@ -134,7 +144,7 @@ export default function ClientCombobox({
             </button>
           ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
