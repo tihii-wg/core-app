@@ -81,6 +81,11 @@ const clients: Messages<typeof en> = {
   combobox: {
     placeholder: "Клиент",
     newClient: "Новый клиент: <strong>{{name}}</strong>",
+    createNew: "Создать нового клиента «<strong>{{name}}</strong>»",
+    noMatches: "Нет подходящих клиентов",
+    noPhone: "Без телефона",
+    selectedHint: "Выбран: {{name}} · {{phone}}",
+    selectOrCreate: "Выберите существующего клиента или нажмите «Создать нового клиента».",
   },
   detail: {
     editTitle: "Редактировать клиента",

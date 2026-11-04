@@ -120,7 +120,12 @@ function requireWorkspaceId(workspaceId: string | undefined) {
   return workspaceId;
 }
 
-/** Resolve client for create. Empty clientId + empty name → NULL (draft without client). */
+/**
+ * Resolve client for create.
+ * - clientId set → use that exact clients.id (never match by name).
+ * - clientId empty + empty name → NULL (draft without client).
+ * - clientId empty + name → always create a new client row (duplicate names allowed).
+ */
 async function resolveClientId(workspaceId: string, { clientId, clientName, clientType, clientTaxId, clientContactPerson, clientPhone = "" }: CreateOrderInput) {
   const existingId = nullIfEmptyUuid(clientId);
   if (existingId) return existingId;
@@ -128,11 +133,7 @@ async function resolveClientId(workspaceId: string, { clientId, clientName, clie
   const name = clientName?.trim() ?? "";
   if (!name) return null;
 
-  const { data: existingClients, error: existingClientError } = await supabase.from("clients").select("id").eq("workspace_id", workspaceId).ilike("name", name).limit(1);
-
-  if (existingClientError) throw new Error(existingClientError.message);
-  if (existingClients?.[0]?.id) return existingClients[0].id as string;
-
+  // Do not look up by name — multiple clients may share the same name.
   const createdClients = await createClient({
     workspace_id: workspaceId,
     clientName: name,

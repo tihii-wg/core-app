@@ -73,31 +73,32 @@ describe("createOrder", () => {
     ]);
   });
 
-  it("reuses an existing client by name and creates a missing one in the same workspace", async () => {
-    const existing = await createOrder({ clientName: "ada alpha", device: "Car", services: [oilChange] }, WS.A);
+  it("uses an explicit clientId and creates a new client when only a name is provided", async () => {
+    const existing = await createOrder({ clientId: "client-a1", clientName: "ada alpha", device: "Car", services: [oilChange] }, WS.A);
     expect(existing.client_id).toBe("client-a1");
 
-    const created = await createOrder({ clientName: "Walk In", device: "Car", services: [oilChange] }, WS.A);
+    const created = await createOrder({ clientName: "Walk In", clientPhone: "+37369000010", device: "Car", services: [oilChange] }, WS.A);
     expect(row("clients", String(created.client_id))).toMatchObject({ name: "Walk In", workspace_id: WS.A });
+    expect(created.client_id).not.toBe("client-a1");
   });
 
-  it("creates a missing client with the entered phone and ignores contact fields for an existing client", async () => {
-    const created = await createOrder(
-      { clientName: " Nina New ", clientType: "organization", clientTaxId: " 1002600000001 ", clientContactPerson: " Ion ", clientPhone: " +37369000001 ", device: "Car", services: [oilChange] },
+  it("allows multiple clients with the same name and never reuses a client by name alone", async () => {
+    const first = await createOrder(
+      { clientName: " Pavel ", clientType: "organization", clientTaxId: " 1002600000001 ", clientContactPerson: " Ion ", clientPhone: " +37369111111 ", device: "Car", services: [oilChange] },
       WS.A,
     );
-    expect(row("clients", String(created.client_id))).toMatchObject({ name: "Nina New", client_type: "organization", tax_id: "1002600000001", contact_person: "Ion", phone: "+37369000001", workspace_id: WS.A });
-    expect(row("clients", String(created.client_id))?.email == null || row("clients", String(created.client_id))?.email === "").toBe(true);
+    expect(row("clients", String(first.client_id))).toMatchObject({ name: "Pavel", client_type: "organization", tax_id: "1002600000001", contact_person: "Ion", phone: "+37369111111", workspace_id: WS.A });
 
     const walkIn = await createOrder({ clientName: "Walk In Two", clientTaxId: "999", clientContactPerson: "Nobody", clientPhone: "+37369000003", device: "Car", services: [oilChange] }, WS.A);
     expect(row("clients", String(walkIn.client_id))).toMatchObject({ client_type: "individual", tax_id: null, contact_person: null });
 
     const clientsBefore = fake.all("clients").length;
-    Object.assign(row("clients", String(created.client_id))!, { email: "legacy@example.com" });
-    const existing = await createOrder({ clientName: "nina new", clientPhone: "+37369000002", device: "Car", services: [oilChange] }, WS.A);
-    expect(existing.client_id).toBe(created.client_id);
-    expect(fake.all("clients")).toHaveLength(clientsBefore);
-    expect(row("clients", String(created.client_id))).toMatchObject({ phone: "+37369000001", email: "legacy@example.com" });
+    Object.assign(row("clients", String(first.client_id))!, { email: "legacy@example.com" });
+    const second = await createOrder({ clientName: "pavel", clientPhone: "+37368222222", device: "Car", services: [oilChange] }, WS.A);
+    expect(second.client_id).not.toBe(first.client_id);
+    expect(fake.all("clients")).toHaveLength(clientsBefore + 1);
+    expect(row("clients", String(first.client_id))).toMatchObject({ phone: "+37369111111", email: "legacy@example.com" });
+    expect(row("clients", String(second.client_id))).toMatchObject({ name: "pavel", phone: "+37368222222" });
   });
 
   it("resolves a service by name inside the workspace and ignores a service id from another workspace", async () => {

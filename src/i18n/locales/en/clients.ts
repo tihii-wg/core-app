@@ -76,6 +76,11 @@ export default {
   combobox: {
     placeholder: "Client",
     newClient: "New client: <strong>{{name}}</strong>",
+    createNew: "Create new client \"<strong>{{name}}</strong>\"",
+    noMatches: "No matching clients",
+    noPhone: "No phone",
+    selectedHint: "Selected: {{name}} · {{phone}}",
+    selectOrCreate: "Select an existing client or choose “Create new client”.",
   },
   detail: {
     editTitle: "Edit client",

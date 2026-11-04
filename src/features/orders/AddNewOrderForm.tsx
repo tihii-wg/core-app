@@ -12,7 +12,7 @@ import useGetServices from "../services/useGetServices";
 import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,6 +39,7 @@ import OrderServiceKindSelect from "./OrderServiceKindSelect";
 import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
 import OrderTotalsSummary from "./OrderTotalsSummary";
 import { previewOrderMoney } from "./orderMoneyPreview";
+import { useDebounce } from "../../hooks/useDebounce";
 
 export default function AddNewOrderForm({
   setCreateModalOpen,
@@ -48,7 +49,12 @@ export default function AddNewOrderForm({
 }: CreateMadalProps & { searchQuery: string; initialClientId?: string; initialClientName?: string }) {
   const { t } = useTranslation();
   const { services } = useGetServices();
-  const { clients } = useGetClients(searchQuery);
+  const [clientName, setClientName] = useState(initialClientName);
+  // Explicit create mode — typing a name that already exists must not auto-reuse that client.
+  const [createNewClient, setCreateNewClient] = useState(false);
+  const debouncedClientSearch = useDebounce(clientName.trim(), 250);
+  const clientListSearch = debouncedClientSearch || searchQuery;
+  const { clients } = useGetClients(clientListSearch);
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: createOrder } = useCreateOrder();
@@ -60,7 +66,6 @@ export default function AddNewOrderForm({
   const clientCopy = industryClientCopy(workflow);
   const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
-  const [clientName, setClientName] = useState(initialClientName);
   const submitLockRef = useRef(false);
 
   const activeServices = services?.filter((service) => service.status === "active");
@@ -101,9 +106,13 @@ export default function AddNewOrderForm({
   /** Client-vehicle industries: order-level make/plate/VIN are obsolete — use the vehicle selector only. */
   const hideDuplicateVehicleAssetFields = showVehicles;
   const typedClientName = clientName.trim();
-  const isNewClient = typedClientName !== "" && !selectedClientId && !clients?.some((client) => client.name?.toLowerCase() === typedClientName.toLowerCase());
+  const isNewClient = createNewClient && typedClientName !== "" && !selectedClientId;
   const newClientType = useWatch({ control, name: "newClientType" });
   const isNewOrganization = isNewClient && newClientType === "organization";
+  const selectedClient = useMemo(
+    () => (selectedClientId ? (clients ?? []).find((client) => client.id === selectedClientId) : undefined),
+    [clients, selectedClientId],
+  );
 
   useEffect(() => {
     if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
@@ -142,6 +151,13 @@ export default function AddNewOrderForm({
     submitLockRef.current = true;
 
     try {
+      // Typed name without an explicit select or create must not silently reuse/create by name.
+      if (typedClientName && !data.clientId && !createNewClient) {
+        toast.error(t("clients.combobox.selectOrCreate"));
+        submitLockRef.current = false;
+        return;
+      }
+
       const selectedVehicleId = data.vehicleId?.trim() || "";
       if (showVehicles && selectedVehicleId) {
         try {
@@ -184,11 +200,12 @@ export default function AddNewOrderForm({
 
       await createOrder({
         clientId: data.clientId || undefined,
-        clientName: clientName.trim(),
-        clientType: data.newClientType,
-        clientTaxId: data.newClientTaxId,
-        clientContactPerson: data.newClientContactPerson,
-        clientPhone: data.newClientPhone,
+        // Only send a create-name when the user explicitly chose “Create new client”.
+        clientName: data.clientId ? clientName.trim() : createNewClient ? clientName.trim() : "",
+        clientType: createNewClient ? data.newClientType : undefined,
+        clientTaxId: createNewClient ? data.newClientTaxId : undefined,
+        clientContactPerson: createNewClient ? data.newClientContactPerson : undefined,
+        clientPhone: createNewClient ? data.newClientPhone : undefined,
         vehicleId: data.vehicleId || null,
         // Vehicle industries: OrderVehicleFields snapshots device/plate/VIN from the selected vehicle.
         device: data.device?.trim() ?? "",
@@ -230,6 +247,7 @@ export default function AddNewOrderForm({
                 value={clientName}
                 onChange={(value) => {
                   setClientName(value);
+                  setCreateNewClient(false);
                   field.onChange("");
                   setValue("vehicleId", "");
                   if (isSubmitted) {
@@ -237,8 +255,15 @@ export default function AddNewOrderForm({
                   }
                 }}
                 onSelect={(client) => {
+                  setCreateNewClient(false);
                   setClientName(client.name);
                   field.onChange(client.id);
+                  setValue("vehicleId", "");
+                }}
+                onCreateRequest={(name) => {
+                  setCreateNewClient(true);
+                  setClientName(name);
+                  field.onChange("");
                   setValue("vehicleId", "");
                 }}
               />
@@ -246,6 +271,14 @@ export default function AddNewOrderForm({
           />
 
           {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>}
+          {selectedClientId && !isNewClient ? (
+            <p className="text-xs text-muted-foreground">
+              {t("clients.combobox.selectedHint", {
+                name: selectedClient?.name || clientName,
+                phone: selectedClient?.phone?.trim() || t("clients.combobox.noPhone"),
+              })}
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">{t("orders.form.draftHint")}</p>
 
           {isNewClient && (

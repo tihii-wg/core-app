@@ -80,6 +80,11 @@ const clients: Messages<typeof en> = {
   combobox: {
     placeholder: "Client",
     newClient: "Client nou: <strong>{{name}}</strong>",
+    createNew: "Creează client nou \"<strong>{{name}}</strong>\"",
+    noMatches: "Niciun client potrivit",
+    noPhone: "Fără telefon",
+    selectedHint: "Selectat: {{name}} · {{phone}}",
+    selectOrCreate: "Selectează un client existent sau alege „Creează client nou”.",
   },
   detail: {
     editTitle: "Editează clientul",

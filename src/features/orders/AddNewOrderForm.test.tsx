@@ -382,13 +382,20 @@ describe("AddNewOrderForm client validation", () => {
     expect(setCreateModalOpen).not.toHaveBeenCalledWith(false);
   });
 
+  async function startCreateNewClient(user: ReturnType<typeof userEvent.setup>, name: string) {
+    const clientInput = screen.getByLabelText(/^(Client|Customer|Organization name)$/);
+    await user.clear(clientInput);
+    await user.type(clientInput, name);
+    await user.click(await screen.findByRole("button", { name: /Create new client/i }));
+  }
+
   it("asks for the phone of a new client with the client form's validation", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText(/^Client$/), "Nina New");
+    await startCreateNewClient(user, "Nina New");
     expect(screen.getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
     expect(screen.queryByLabelText(/Email/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Phone *"), "069123456");
@@ -404,7 +411,7 @@ describe("AddNewOrderForm client validation", () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.type(screen.getByLabelText(/^Client$/), "Fleet SRL");
+    await startCreateNewClient(user, "Fleet SRL");
     expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox", { name: "Client type *" }));
@@ -507,7 +514,7 @@ describe("AddNewOrderForm client validation", () => {
     const setCreateModalOpen = vi.fn();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" />);
 
-    await user.type(screen.getByLabelText(/Client|Customer/i), "Ada");
+    await startCreateNewClient(user, "Ada");
     await user.type(screen.getByLabelText("Phone *"), "+37369123456");
     await user.type(screen.getByLabelText(/Job \/ location/i), "Kitchen");
     await addCustomService(user, "Install sink", "100");
