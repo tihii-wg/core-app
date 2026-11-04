@@ -56,7 +56,17 @@ describe("mapOrderDeleteDbError", () => {
 
   it("maps authorization failures", () => {
     expect(mapOrderDeleteDbError({ message: "order_delete:not_member", code: "42501" }).message).toMatch(/permission/i);
+    expect(mapOrderDeleteDbError({ message: "order_delete:forbidden", code: "42501" }).message).toMatch(/permission/i);
     expect(mapOrderDeleteDbError({ message: "order_delete:not_authenticated" }).message).toMatch(/permission/i);
+  });
+
+  it("maps cancelled-order stock return failures", () => {
+    expect(mapOrderDeleteDbError({ message: "order_delete:issued_materials_require_cancelled_order" }).message).toMatch(
+      /cancel/i,
+    );
+    expect(mapOrderDeleteDbError({ message: "order_delete:materials_ledger_mismatch item=x" }).message).toMatch(
+      /material|warehouse|return/i,
+    );
   });
 
   it("maps missing RPC / payment FK to the manual SQL guidance message", () => {
@@ -101,13 +111,39 @@ describe("deleteOrder", () => {
       error: null,
     });
 
-    await expect(deleteOrder("order-1", "ws-1")).resolves.toEqual({ id: "order-1", paymentsDeleted: 2 });
+    await expect(deleteOrder("order-1", "ws-1")).resolves.toEqual({
+      id: "order-1",
+      paymentsDeleted: 2,
+      materialsReturned: [],
+    });
     expect(rpc).toHaveBeenCalledWith("delete_order_with_payments", {
       p_workspace_id: "ws-1",
       p_order_id: "order-1",
     });
     // Must not issue a separate client-side payments delete (append-only).
     expect(from.mock.calls.filter((call) => call[0] === "orders")).toHaveLength(0);
+  });
+
+  it("returns materials_returned from the RPC payload", async () => {
+    from.mockImplementation((table: string) => {
+      if (table === "invoices") return limitQuery({ data: [], error: null });
+      if (table === "payments") return countQuery({ data: null, error: null, count: 0 });
+      throw new Error(`unexpected table ${table}`);
+    });
+    rpc.mockResolvedValue({
+      data: {
+        order_id: "order-1",
+        payments_deleted: 0,
+        materials_returned: [{ warehouse_id: "wh-1", idempotency_key: "order_delete:order-1:wh-1" }],
+      },
+      error: null,
+    });
+
+    await expect(deleteOrder("order-1", "ws-1")).resolves.toEqual({
+      id: "order-1",
+      paymentsDeleted: 0,
+      materialsReturned: [{ warehouse_id: "wh-1", idempotency_key: "order_delete:order-1:wh-1" }],
+    });
   });
 
   it("maps authorization failures from the RPC without falling back to partial deletes", async () => {
@@ -155,10 +191,16 @@ describe("deleteOrder", () => {
     expect(from).not.toHaveBeenCalledWith("orders");
   });
 
-  it("falls back to a plain order delete when the RPC is missing and there are no payments", async () => {
+  it("falls back to a plain order delete when the RPC is missing and there are no payments or issued stock", async () => {
     from.mockImplementation((table: string) => {
       if (table === "invoices") return limitQuery({ data: [], error: null });
       if (table === "payments") return countQuery({ data: null, error: null, count: 0 });
+      if (table === "order_materials") {
+        const chain: Record<string, unknown> = {};
+        chain.select = () => chain;
+        chain.eq = () => Promise.resolve({ data: [], error: null });
+        return chain;
+      }
       if (table === "orders") return deleteQuery({ data: { id: "order-1" }, error: null });
       throw new Error(`unexpected table ${table}`);
     });
@@ -167,7 +209,36 @@ describe("deleteOrder", () => {
       error: { code: "PGRST202", message: "function not found" },
     });
 
-    await expect(deleteOrder("order-1", "ws-1")).resolves.toEqual({ id: "order-1", paymentsDeleted: 0 });
+    await expect(deleteOrder("order-1", "ws-1")).resolves.toEqual({
+      id: "order-1",
+      paymentsDeleted: 0,
+      materialsReturned: [],
+    });
     expect(from).toHaveBeenCalledWith("orders");
+  });
+
+  it("refuses plain delete fallback when outstanding issued materials exist and RPC is missing", async () => {
+    from.mockImplementation((table: string) => {
+      if (table === "invoices") return limitQuery({ data: [], error: null });
+      if (table === "payments") return countQuery({ data: null, error: null, count: 0 });
+      if (table === "order_materials") {
+        const chain: Record<string, unknown> = {};
+        chain.select = () => chain;
+        chain.eq = () =>
+          Promise.resolve({
+            data: [{ quantity_issued: 2, quantity_returned: 0 }],
+            error: null,
+          });
+        return chain;
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "function not found" },
+    });
+
+    await expect(deleteOrder("order-1", "ws-1")).rejects.toThrow(/delete_order_with_payments|atomic|return/i);
+    expect(from).not.toHaveBeenCalledWith("orders");
   });
 });

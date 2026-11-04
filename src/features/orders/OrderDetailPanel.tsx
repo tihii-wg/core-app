@@ -632,9 +632,13 @@ export default function OrderDetailPanel({
                       number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
                       count: linkedPaymentCount,
                     })
-                  : t("orders.delete.description", {
-                      number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
-                    })}
+                  : selectedOrder.status === "cancelled"
+                    ? t("orders.delete.descriptionCancelledWithStock", {
+                        number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
+                      })
+                    : t("orders.delete.description", {
+                        number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
+                      })}
               </DialogDescription>
             </DialogHeader>
             {hasInvoice ? (

@@ -162,6 +162,8 @@ const orders: Messages<typeof en> = {
   delete: {
     title: "Ștergeți comanda?",
     description: "Ștergeți comanda {{number}}. Această acțiune nu poate fi anulată. Comenzile asociate unei facturi nu pot fi șterse.",
+    descriptionCancelledWithStock:
+      "Ștergeți comanda anulată {{number}}. Materialele eliberate restante vor fi returnate automat în depozitele originale. Acțiunea nu poate fi anulată.",
     descriptionWithPayments:
       "Ștergeți comanda {{number}} și {{count}} înregistrare/înregistrări de plată asociată/asociate. Doar pentru date de test greșite; acțiunea nu poate fi anulată. Facturile blochează în continuare ștergerea.",
     confirmWithPayments: "Șterge comanda + {{count}} plată/plăți",
@@ -384,6 +386,7 @@ const orders: Messages<typeof en> = {
     deleting: "Se șterge comanda...",
     deleted: "Comanda a fost ștearsă",
     deletedWithPayments: "Comanda a fost ștearsă ({{count}} înregistrare/înregistrări de plată eliminate)",
+    deletedWithMaterialsReturned: "Comanda a fost ștearsă; materialele eliberate au fost returnate la {{warehouses}} depozit(e)",
     statusUpdateFailed: "Statusul comenzii nu a putut fi actualizat",
     issuing: "Se eliberează materialele...",
     issued: "Materialele au fost eliberate",
@@ -431,7 +434,13 @@ const orders: Messages<typeof en> = {
       "Această comandă are înregistrări în registrul de plăți. Confirmați în dialog ștergerea comenzii împreună cu plățile asociate (necesită RPC-ul revizuit delete_order_with_payments).",
     deleteForbidden: "Nu aveți permisiunea de a șterge această comandă.",
     deleteWithPaymentsRpcMissing:
-      "Ștergerea unei comenzi cu plăți necesită funcția de bază de date revizuită delete_order_with_payments. Aplicați supabase/manual-sql/propose_delete_order_with_payments.sql după review. Nu s-a șters nimic.",
+      "Ștergerea unei comenzi cu plăți necesită delete_order_with_payments. Aplicați SQL-ul de ciclu de viață pe MAIN. Nu s-a șters nimic.",
+    deleteIssuedRequiresCancelled:
+      "Comenzile cu materiale eliberate din depozit pot fi șterse doar după anulare. Anulați comanda, apoi ștergeți pentru a returna stocul.",
+    deleteReturnRpcMissing:
+      "Ștergerea unei comenzi anulate cu materiale eliberate necesită delete_order_with_payments (SQL ciclu de viață) pentru returnarea atomică a stocului. Nu s-a șters nimic.",
+    deleteMaterialsReturnFailed:
+      "Nu s-au putut returna materialele eliberate în depozit. Nu s-a șters nimic. Verificați proveniența mișcărilor și reîncercați.",
   },
   byIndustry: {
     default: {

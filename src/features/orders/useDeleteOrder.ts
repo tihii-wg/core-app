@@ -19,12 +19,23 @@ export function useDeleteOrder() {
     onMutate: () => toast.loading(i18n.t("orders.toast.deleting"), { id: "delete-order" }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["orders-page", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
       invalidatePaymentViews(queryClient, workspaceId);
+      const returned = result.materialsReturned?.length ?? 0;
       toast.success(
-        result.paymentsDeleted > 0
-          ? i18n.t("orders.toast.deletedWithPayments", { count: result.paymentsDeleted })
-          : i18n.t("orders.toast.deleted"),
+        returned > 0
+          ? i18n.t("orders.toast.deletedWithMaterialsReturned", {
+              count: result.paymentsDeleted,
+              warehouses: returned,
+            })
+          : result.paymentsDeleted > 0
+            ? i18n.t("orders.toast.deletedWithPayments", { count: result.paymentsDeleted })
+            : i18n.t("orders.toast.deleted"),
         { id: "delete-order" },
       );
     },

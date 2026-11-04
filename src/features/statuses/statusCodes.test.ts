@@ -3,6 +3,8 @@ import {
   allocateStatusCode,
   backfillStatusCodes,
   fallbackCodeFromStatusId,
+  isStatusCodeUniqueViolation,
+  nextAvailableCode,
   preferredCodeFromSystemStatus,
 } from "./statusCodes";
 
@@ -26,6 +28,13 @@ describe("statusCodes", () => {
     );
   });
 
+  it("nextAvailableCode uses base then _2,_3 when collisions exist", () => {
+    const base = fallbackCodeFromStatusId(WS_A.inWork);
+    expect(nextAvailableCode(base, new Set())).toBe(base);
+    expect(nextAvailableCode(base, new Set([base]))).toBe(`${base}_2`);
+    expect(nextAvailableCode(base, new Set([base, `${base}_2`]))).toBe(`${base}_3`);
+  });
+
   it("keeps an existing code even when preferred is free", () => {
     expect(
       allocateStatusCode({
@@ -37,7 +46,7 @@ describe("statusCodes", () => {
     ).toBe("custom_keep");
   });
 
-  it("assigns preferred only when free; otherwise UUID fallback", () => {
+  it("assigns preferred only when free; otherwise collision-safe UUID fallback", () => {
     expect(
       allocateStatusCode({
         statusId: WS_A.inWork,
@@ -47,14 +56,15 @@ describe("statusCodes", () => {
       }),
     ).toBe("in_progress");
 
+    const taken = new Set(["in_progress", fallbackCodeFromStatusId(WS_A.approval)]);
     expect(
       allocateStatusCode({
         statusId: WS_A.approval,
         systemStatus: "in-progress",
         existingCode: null,
-        takenCodes: new Set(["in_progress"]),
+        takenCodes: taken,
       }),
-    ).toBe(fallbackCodeFromStatusId(WS_A.approval));
+    ).toBe(`${fallbackCodeFromStatusId(WS_A.approval)}_2`);
   });
 
   it("backfills duplicate system_status rows with unique stable codes", () => {
@@ -70,9 +80,20 @@ describe("statusCodes", () => {
     expect(codes.get(WS_A.inWork)).toBe("in_progress");
     expect(codes.get(WS_A.approval)).toBe(fallbackCodeFromStatusId(WS_A.approval));
     expect(codes.get(WS_A.waitingPay)).toBe(fallbackCodeFromStatusId(WS_A.waitingPay));
+    expect(new Set(codes.values()).size).toBe(codes.size);
+  });
 
-    const unique = new Set(codes.values());
-    expect(unique.size).toBe(codes.size);
+  it("repairs duplicate existing codes by keeping the earliest and reallocating losers", () => {
+    const rows = [
+      { id: WS_A.inWork, systemStatus: "in-progress", code: "in_progress", sortOrder: 1, createdAt: "2024-01-01" },
+      { id: WS_A.approval, systemStatus: "in-progress", code: "in_progress", sortOrder: 2, createdAt: "2024-01-02" },
+      { id: WS_A.waitingPay, systemStatus: "in-progress", code: "in_progress", sortOrder: 3, createdAt: "2024-01-03" },
+    ];
+    const codes = backfillStatusCodes(rows);
+    expect(codes.get(WS_A.inWork)).toBe("in_progress");
+    expect(codes.get(WS_A.approval)).toBe(fallbackCodeFromStatusId(WS_A.approval));
+    expect(codes.get(WS_A.waitingPay)).toBe(fallbackCodeFromStatusId(WS_A.waitingPay));
+    expect(new Set(codes.values()).size).toBe(3);
   });
 
   it("is idempotent when existing codes are already unique", () => {
@@ -82,19 +103,16 @@ describe("statusCodes", () => {
       { id: WS_A.waitingPay, systemStatus: "in-progress", code: fallbackCodeFromStatusId(WS_A.waitingPay), sortOrder: 3 },
     ];
     const first = backfillStatusCodes(rows);
-    const second = backfillStatusCodes(
-      rows.map((row) => ({ ...row, code: first.get(row.id) ?? null })),
-    );
+    const second = backfillStatusCodes(rows.map((row) => ({ ...row, code: first.get(row.id) ?? null })));
     expect(Object.fromEntries(second)).toEqual(Object.fromEntries(first));
   });
 
-  it("does not overwrite established codes when re-running against same system_status peers", () => {
+  it("does not overwrite established codes when peers share system_status", () => {
     const rows = [
       { id: WS_A.approval, systemStatus: "in-progress", code: "in_progress", sortOrder: 2 },
       { id: WS_A.inWork, systemStatus: "in-progress", code: null, sortOrder: 1 },
     ];
     const codes = backfillStatusCodes(rows);
-    // Existing holder of in_progress keeps it; earlier NULL row gets UUID fallback.
     expect(codes.get(WS_A.approval)).toBe("in_progress");
     expect(codes.get(WS_A.inWork)).toBe(fallbackCodeFromStatusId(WS_A.inWork));
   });
@@ -106,5 +124,21 @@ describe("statusCodes", () => {
     ];
     const codes = backfillStatusCodes(rows);
     expect([...codes.values()].join(",")).not.toMatch(/согласован|работе|оплат/i);
+  });
+
+  it("detects only status-code unique violations for concurrent create retry", () => {
+    expect(
+      isStatusCodeUniqueViolation({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "status_definitions_code_uidx"',
+      }),
+    ).toBe(true);
+    expect(
+      isStatusCodeUniqueViolation({
+        code: "23505",
+        message: 'duplicate key value violates unique constraint "status_definitions_name_idx"',
+      }),
+    ).toBe(false);
+    expect(isStatusCodeUniqueViolation({ code: "23503", message: "fk" })).toBe(false);
   });
 });

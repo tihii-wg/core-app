@@ -1501,11 +1501,8 @@ export async function updateOrderStatus(
   }
 
   if (status === "cancelled") {
-    // When a Cancel semantic status exists, ordinary status writes must not cancel.
-    const definitions = await getStatusDefinitions(targetWorkspaceId, "order").catch(() => []);
-    if (definitions.some((d) => d.isActive && d.semanticAction === "cancel")) {
-      throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
-    }
+    // Direct cancellation is always blocked — use cancel_order RPC.
+    throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
   }
 
   const { data: existing, error: loadError } = await supabase
@@ -1971,11 +1968,23 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
   if (/order_delete:has_invoice/i.test(blob)) {
     return new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
   }
-  if (/order_delete:not_member|order_delete:not_authenticated/i.test(blob) || error.code === "42501") {
+  if (/order_delete:forbidden|order_delete:not_member|order_delete:not_authenticated/i.test(blob) || error.code === "42501") {
     return new Error(i18n.t("orders.errors.deleteForbidden"));
   }
   if (/order_delete:not_found/i.test(blob)) {
     return new Error(orderPermissionMessage());
+  }
+  if (/order_delete:issued_materials_require_cancelled_order/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteIssuedRequiresCancelled"));
+  }
+  if (/order_delete:return_rpc_missing|order_delete:inventory_ledger_missing/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteReturnRpcMissing"));
+  }
+  if (/order_delete:materials_ledger_mismatch|order_delete:materials_warehouse_unresolved|order_delete:materials_outstanding_after_return/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteMaterialsReturnFailed"));
+  }
+  if (/Cannot delete an order with outstanding issued materials/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteIssuedRequiresCancelled"));
   }
   if (error.code === "PGRST202" || error.code === "42883" || /could not find the function|function .* does not exist/i.test(blob)) {
     return new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
@@ -1994,6 +2003,7 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
 export type DeleteOrderResult = {
   id: string;
   paymentsDeleted: number;
+  materialsReturned: Array<{ warehouse_id?: string; lines?: unknown; idempotency_key?: string }>;
 };
 
 async function countOrderPayments(workspaceId: string, orderId: string): Promise<number> {
@@ -2046,10 +2056,15 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
   });
 
   if (!rpcError) {
-    const payload = rpcData as { order_id?: string; payments_deleted?: number } | null;
+    const payload = rpcData as {
+      order_id?: string;
+      payments_deleted?: number;
+      materials_returned?: DeleteOrderResult["materialsReturned"];
+    } | null;
     return {
       id: payload?.order_id ?? id,
       paymentsDeleted: typeof payload?.payments_deleted === "number" ? payload.payments_deleted : paymentCount,
+      materialsReturned: Array.isArray(payload?.materials_returned) ? payload.materials_returned : [],
     };
   }
 
@@ -2062,9 +2077,28 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
     throw mapOrderDeleteDbError(rpcError);
   }
 
-  // RPC not installed yet: only allow plain order delete when no payment rows exist.
+  // RPC not installed yet: only allow plain order delete when no payment rows exist
+  // and there is no outstanding issued stock (trigger would otherwise block).
   if (paymentCount > 0) {
     throw new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+  }
+
+  {
+    const { data: materialRows, error: materialsError } = await supabase
+      .from("order_materials")
+      .select("quantity_issued, quantity_returned")
+      .eq("order_id", id);
+    if (!materialsError) {
+      const hasOutstanding = (materialRows ?? []).some((row) => {
+        const issued = Number((row as { quantity_issued?: unknown }).quantity_issued ?? 0);
+        const returned = Number((row as { quantity_returned?: unknown }).quantity_returned ?? 0);
+        return issued - returned > 0;
+      });
+      if (hasOutstanding) {
+        // Without the delete RPC, outstanding stock cannot be returned atomically.
+        throw new Error(i18n.t("orders.errors.deleteReturnRpcMissing"));
+      }
+    }
   }
 
   const { data, error } = await supabase
@@ -2077,5 +2111,5 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
 
   if (error) throw mapOrderDeleteDbError(error);
   if (!data) throw new Error(orderPermissionMessage());
-  return { id, paymentsDeleted: 0 };
+  return { id, paymentsDeleted: 0, materialsReturned: [] };
 }

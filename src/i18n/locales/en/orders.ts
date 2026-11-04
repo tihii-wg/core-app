@@ -156,6 +156,8 @@ export default {
   delete: {
     title: "Delete order?",
     description: "Delete order {{number}}. This cannot be undone. Orders linked to an invoice cannot be deleted.",
+    descriptionCancelledWithStock:
+      "Delete cancelled order {{number}}. Outstanding issued warehouse materials will be returned to their original warehouses automatically. This cannot be undone.",
     descriptionWithPayments:
       "Delete order {{number}} and {{count}} linked payment record(s). This is for mistaken test data only and cannot be undone. Invoices still block deletion.",
     confirmWithPayments: "Delete order + {{count}} payment(s)",
@@ -378,6 +380,8 @@ export default {
     deleting: "Deleting order...",
     deleted: "Order deleted",
     deletedWithPayments: "Order deleted ({{count}} payment record(s) removed)",
+    deletedWithMaterialsReturned:
+      "Order deleted; issued materials returned to {{warehouses}} warehouse(s)",
     statusUpdateFailed: "Could not update the order status",
     issuing: "Issuing materials...",
     issued: "Materials issued",
@@ -425,7 +429,13 @@ export default {
       "This order has payment ledger records. Confirm deletion in the dialog to remove the order and its linked payments together (requires the reviewed delete_order_with_payments RPC).",
     deleteForbidden: "You do not have permission to delete this order.",
     deleteWithPaymentsRpcMissing:
-      "Deleting an order with payments requires the reviewed database function delete_order_with_payments. Apply supabase/manual-sql/propose_delete_order_with_payments.sql after review. Nothing was deleted.",
+      "Deleting an order with payments requires the reviewed database function delete_order_with_payments. Apply the order lifecycle SQL on MAIN after review. Nothing was deleted.",
+    deleteIssuedRequiresCancelled:
+      "Orders with outstanding issued warehouse materials can only be deleted after they are cancelled. Cancel the order first, then delete to return stock.",
+    deleteReturnRpcMissing:
+      "Deleting a cancelled order with issued materials requires delete_order_with_payments (order lifecycle SQL) so stock can be returned atomically. Nothing was deleted.",
+    deleteMaterialsReturnFailed:
+      "Could not return issued warehouse materials for this order. Nothing was deleted. Check warehouse stock provenance and try again.",
   },
   byIndustry: {
     default: {
@@ -553,7 +563,7 @@ export default {
       cannotCancelClosed: "A closed order cannot be cancelled. Reopen is a separate action.",
       forbidden: "You do not have permission to change this order.",
       useCloseAction: "Use Close order. Status changes cannot close an order.",
-      useCancelAction: "Use Cancel order. Status changes cannot cancel when a Cancel status is configured.",
+      useCancelAction: "Use Cancel order. Status changes cannot cancel an order.",
       orderAlreadyClosed: "This order is formally closed. Status cannot be changed here.",
     },
   },

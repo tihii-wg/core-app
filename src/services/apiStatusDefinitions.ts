@@ -1,5 +1,10 @@
 import i18n from "../i18n";
-import { allocateStatusCode } from "../features/statuses/statusCodes";
+import {
+  allocateStatusCode,
+  fallbackCodeFromStatusId,
+  isStatusCodeUniqueViolation,
+  nextAvailableCode,
+} from "../features/statuses/statusCodes";
 import { isMissingTableError } from "./missingTable";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
@@ -246,7 +251,7 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
   const siblings = await getStatusDefinitions(resolved, entity);
   const taken = new Set(siblings.map((s) => s.code).filter((c): c is string => Boolean(c)));
   const provisionalId = crypto.randomUUID();
-  const code = allocateStatusCode({
+  let code = allocateStatusCode({
     statusId: provisionalId,
     systemStatus,
     existingCode: null,
@@ -267,6 +272,16 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
   };
 
   let { data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumns).single();
+
+  // Concurrent create may race on a preferred canonical code — retry once with UUID fallback.
+  // Preserve the same status UUID. Do not mask name-uniqueness violations.
+  if (error && isStatusCodeUniqueViolation(error)) {
+    taken.add(String(payload.code));
+    code = nextAvailableCode(fallbackCodeFromStatusId(provisionalId), taken);
+    payload.code = code;
+    ({ data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumns).single());
+  }
+
   if (error && isMissingLifecycleColumn(error)) {
     delete payload.semantic_action;
     delete payload.code;

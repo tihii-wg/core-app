@@ -275,7 +275,11 @@ export function OrderActionsMenu({
                     number: order.orderNumber || t("orders.emptyOrderLabel"),
                     count: paymentCount,
                   })
-                : t("orders.delete.description", { number: order.orderNumber || t("orders.emptyOrderLabel") })}
+                : order.status === "cancelled"
+                  ? t("orders.delete.descriptionCancelledWithStock", {
+                      number: order.orderNumber || t("orders.emptyOrderLabel"),
+                    })
+                  : t("orders.delete.description", { number: order.orderNumber || t("orders.emptyOrderLabel") })}
             </DialogDescription>
           </DialogHeader>
           {hasInvoice ? (
