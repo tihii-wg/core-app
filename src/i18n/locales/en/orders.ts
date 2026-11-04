@@ -168,13 +168,15 @@ export default {
     delete: "Delete order",
   },
   delete: {
-    title: "Delete order?",
-    description: "Delete order {{number}}. This cannot be undone. Orders linked to an invoice cannot be deleted.",
+    title: "Delete order permanently?",
+    description:
+      "Permanently delete cancelled order {{number}} and its related history. This cannot be undone. Active invoices and payments must be annulled first.",
     descriptionCancelledWithStock:
-      "Delete cancelled order {{number}}. Outstanding issued warehouse materials will be returned to their original warehouses automatically. This cannot be undone.",
+      "Permanently delete cancelled order {{number}} and its history. Outstanding issued warehouse materials will be returned to their original warehouses once. This cannot be undone.",
     descriptionWithPayments:
-      "Delete order {{number}} and {{count}} linked payment record(s). This is for mistaken test data only and cannot be undone. Invoices still block deletion.",
-    confirmWithPayments: "Delete order + {{count}} payment(s)",
+      "Permanently delete cancelled order {{number}}. {{count}} fully voided payment record(s) will be removed with it. Active payments, refunds, and invoices still block deletion.",
+    confirmWithPayments: "Delete order + {{count}} voided payment(s)",
+    requireCancelled: "Cancel the order first. Only cancelled orders can be permanently deleted.",
   },
   emptyOrderLabel: "Draft",
   createDialog: {
@@ -438,18 +440,37 @@ export default {
     materialDiscountRpcMissing:
       "The client's product discount could not be saved on the material lines: the database function crm_set_order_line_discounts is missing. Apply supabase/manual/20261101070000_order_line_discounts_rpc.PRODUCTION.sql. The totals shown in the form were not saved.",
     materialDiscountFailed: "Could not save the material discounts.",
-    cannotDeleteWithInvoice: "This order has an invoice and cannot be deleted. Nothing was deleted.",
+    cannotDeleteWithInvoice:
+      "This order still has an invoice. Mark the invoice as sent in error and delete it first. Nothing was deleted.",
+    cannotDeleteWithInvoiceDocs:
+      "This order still has invoice(s) {{docs}}. Annul/delete those invoices first. Nothing was deleted.",
     cannotDeleteWithPayment:
-      "This order has payment ledger records. Confirm deletion in the dialog to remove the order and its linked payments together (requires the reviewed delete_order_with_payments RPC).",
+      "This order still has active payment ledger records. Void them in Finance first (and remove fully voided rows if needed). Nothing was deleted.",
+    cannotDeleteWithActivePayments:
+      "This order still has active payments. Void them in Finance first. Nothing was deleted.",
+    cannotDeleteWithActivePaymentsDocs:
+      "This order still has active payment(s): {{docs}}. Void them in Finance first. Nothing was deleted.",
+    cannotDeleteWithRefunds:
+      "This order has refund records that must remain for accounting. It cannot be permanently deleted.",
+    cannotDeleteWithOrphanedVoids:
+      "This order has incomplete void ledger rows. Resolve them in Finance first. Nothing was deleted.",
+    cannotDeleteWithFinanceTransactions:
+      "This order still has finance transactions. Resolve them first. Nothing was deleted.",
+    cannotDeleteWithCreditNotes:
+      "This order still has credit notes. Resolve them first. Nothing was deleted.",
+    deleteRequiresCancelled:
+      "Only cancelled orders can be permanently deleted. Cancel the order first. Nothing was deleted.",
     deleteForbidden: "You do not have permission to delete this order.",
     deleteWithPaymentsRpcMissing:
-      "Deleting an order with payments requires the reviewed database function delete_order_with_payments. Apply the order lifecycle SQL on MAIN after review. Nothing was deleted.",
+      "Deleting a cancelled order requires the reviewed database function delete_order_with_payments. Apply supabase/manual/{{file}} on MAIN after review. Nothing was deleted.",
     deleteIssuedRequiresCancelled:
       "Orders with outstanding issued warehouse materials can only be deleted after they are cancelled. Cancel the order first, then delete to return stock.",
     deleteReturnRpcMissing:
-      "Deleting a cancelled order with issued materials requires delete_order_with_payments (order lifecycle SQL) so stock can be returned atomically. Nothing was deleted.",
+      "Deleting a cancelled order with issued materials requires delete_order_with_payments so stock can be returned atomically. Apply the safe cancelled-order delete SQL. Nothing was deleted.",
     deleteMaterialsReturnFailed:
       "Could not return issued warehouse materials for this order. Nothing was deleted. Check warehouse stock provenance and try again.",
+    deleteStorageCleanupPending:
+      "The order was removed from the database, but {{count}} attachment file(s) could not be deleted from Storage yet. Retry cleanup; queued paths remain in order_attachment_cleanup (see {{file}}).",
   },
   byIndustry: {
     default: {

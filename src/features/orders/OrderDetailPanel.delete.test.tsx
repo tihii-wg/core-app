@@ -69,8 +69,25 @@ vi.mock("../industries/useIndustryWorkflow", async () => {
   };
 });
 
+vi.mock("../statuses/useGetStatusDefinitions", () => ({
+  useGetStatusDefinitions: () => ({ data: [], isLoading: false, error: null }),
+}));
+
+vi.mock("./useMoveOrderOnBoard", () => ({
+  useMoveOrderOnBoard: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("./useCloseOrder", () => ({
+  useCloseOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 vi.mock("./OrderAttachmentsSection", () => ({
   default: () => <div data-testid="order-attachments-stub" />,
+}));
+
+vi.mock("./OrderFeedSection", () => ({
+  default: () => <div data-testid="order-feed-stub" />,
 }));
 
 vi.mock("../finance/usePayments", () => ({
@@ -125,7 +142,7 @@ const order = {
   services: [{ id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 }],
   materials: [],
   description: "",
-  status: "new",
+  status: "cancelled",
   assignedEmployeeId: "",
   assignedEmployeeName: "",
   deadline: "2026-10-01",
@@ -137,13 +154,14 @@ const order = {
 } as Order;
 
 function renderPanel(props: {
+  selectedOrder?: Order;
   invoiceNumber?: string;
   onDeleted?: (orderId: string) => void;
   setDetailPanelOpen?: (open: boolean) => void;
 } = {}) {
   return renderWithQuery(
     <OrderDetailPanel
-      selectedOrder={order}
+      selectedOrder={props.selectedOrder ?? order}
       detailPanelOpen
       setDetailPanelOpen={props.setDetailPanelOpen ?? vi.fn()}
       onOrderUpdated={vi.fn()}
@@ -157,7 +175,13 @@ function renderPanel(props: {
 describe("OrderDetailPanel delete action", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
-    mutateAsync.mockResolvedValue({ id: "order-1", paymentsDeleted: 0 });
+    mutateAsync.mockResolvedValue({
+      id: "order-1",
+      paymentsDeleted: 0,
+      materialsReturned: [],
+      attachmentStoragePaths: [],
+      storageCleanupComplete: true,
+    });
     deletePending.value = false;
     paymentsState.payments = [];
     subscriptionState.canWrite = true;
@@ -169,18 +193,18 @@ describe("OrderDetailPanel delete action", () => {
     renderPanel({ onDeleted });
 
     await user.click(screen.getByRole("button", { name: /Delete order/i }));
-    expect(screen.getByRole("heading", { name: /Delete order\?/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Delete order permanently/i })).toBeInTheDocument();
     expect(screen.getByText(/This cannot be undone/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Cancel/i }));
     await waitFor(() => {
-      expect(screen.queryByRole("heading", { name: /Delete order\?/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Delete order permanently/i })).not.toBeInTheDocument();
     });
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
-  it("deletes the order and notifies the parent on confirm", async () => {
+  it("deletes the cancelled order and notifies the parent on confirm", async () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();
     renderPanel({ onDeleted });
@@ -195,19 +219,35 @@ describe("OrderDetailPanel delete action", () => {
     expect(onDeleted).toHaveBeenCalledWith("order-1");
   });
 
-  it("mentions linked payments in the confirmation", async () => {
-    const user = userEvent.setup();
-    paymentsState.payments = [
-      { id: "p1", orderId: "order-1", amount: 10, kind: "payment" } as LedgerPayment,
-      { id: "p2", orderId: "order-1", amount: 5, kind: "refund" } as LedgerPayment,
-      { id: "p3", orderId: "other", amount: 1, kind: "payment" } as LedgerPayment,
-    ];
-    mutateAsync.mockResolvedValue({ id: "order-1", paymentsDeleted: 2 });
-    renderPanel();
+  it("refuses delete when the order is not cancelled", async () => {
+    renderPanel({ selectedOrder: { ...order, status: "new" } });
+    const deleteButton = screen.getByRole("button", { name: /Delete order/i });
+    expect(deleteButton).toBeDisabled();
+    expect(screen.getByText(/Cancel the order first/i)).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: /Delete order/i }));
-    expect(screen.getByText(/Delete order ORD-2026-003 and 2 linked payment/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Delete order \+ 2 payment/i })).toBeInTheDocument();
+  it("blocks delete when active payments remain", async () => {
+    paymentsState.payments = [
+      {
+        id: "p1",
+        workspaceId: "ws-1",
+        orderId: "order-1",
+        invoiceId: null,
+        relatedPaymentId: null,
+        amount: 10,
+        kind: "payment",
+        currencyCode: "MDL",
+        paymentMethod: "cash",
+        paidAt: "2026-11-01",
+        note: "",
+        createdBy: null,
+        createdAt: "2026-11-01",
+      },
+    ];
+    renderPanel();
+    const deleteButton = screen.getByRole("button", { name: /Delete order/i });
+    expect(deleteButton).toBeDisabled();
+    expect(screen.getByText(/active payments/i)).toBeInTheDocument();
   });
 
   it("keeps invoice-linked orders intact and does not call delete", async () => {
@@ -217,12 +257,12 @@ describe("OrderDetailPanel delete action", () => {
 
     const deleteButton = screen.getByRole("button", { name: /Delete order/i });
     expect(deleteButton).toBeDisabled();
-    expect(screen.getByText(/has an invoice and cannot be deleted/i)).toBeInTheDocument();
+    expect(screen.getByText(/invoice/i)).toBeInTheDocument();
 
     await user.click(deleteButton);
     expect(mutateAsync).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
-    expect(screen.queryByRole("heading", { name: /Delete order\?/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Delete order permanently/i })).not.toBeInTheDocument();
   });
 
   it("hides the delete action when subscription write is disabled", () => {

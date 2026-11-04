@@ -44,6 +44,7 @@ import {
   resolveUnifiedStatusSelection,
   unifiedStatusOptions,
 } from "./unifiedOrderStatus";
+import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -113,6 +114,15 @@ export function OrderActionsMenu({
   const statusBusy = isStatusUpdating || isUnifiedStatusUpdating;
   const hasInvoice = Boolean(invoiceNumber);
   const paymentCount = Math.max(0, linkedPaymentCount);
+  const isCancelledForDelete = orderHasCancelSemantic(order, orderStatusDefinitions);
+  const activePaymentsBlockingDelete = activePaymentsBlockingOrderDelete(payments, order.id);
+  const deleteBlockedReason = hasInvoice
+    ? t("orders.errors.cannotDeleteWithInvoice")
+    : !isCancelledForDelete
+      ? t("orders.delete.requireCancelled")
+      : activePaymentsBlockingDelete.length > 0
+        ? t("orders.errors.cannotDeleteWithActivePayments")
+        : null;
 
   async function copyPublicStatusLink() {
     if (copyingPublicLink) return;
@@ -281,10 +291,10 @@ export function OrderActionsMenu({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
-                disabled={hasInvoice || deleteOrder.isPending}
-                title={hasInvoice ? t("orders.errors.cannotDeleteWithInvoice") : undefined}
+                disabled={Boolean(deleteBlockedReason) || deleteOrder.isPending}
+                title={deleteBlockedReason ?? undefined}
                 onSelect={() => {
-                  if (hasInvoice) return;
+                  if (deleteBlockedReason) return;
                   setConfirmDeleteOpen(true);
                 }}
               >
@@ -306,16 +316,14 @@ export function OrderActionsMenu({
                     number: order.orderNumber || t("orders.emptyOrderLabel"),
                     count: paymentCount,
                   })
-                : order.status === "cancelled"
-                  ? t("orders.delete.descriptionCancelledWithStock", {
-                      number: order.orderNumber || t("orders.emptyOrderLabel"),
-                    })
-                  : t("orders.delete.description", { number: order.orderNumber || t("orders.emptyOrderLabel") })}
+                : t("orders.delete.descriptionCancelledWithStock", {
+                    number: order.orderNumber || t("orders.emptyOrderLabel"),
+                  })}
             </DialogDescription>
           </DialogHeader>
-          {hasInvoice ? (
+          {deleteBlockedReason ? (
             <p className="text-sm text-destructive" role="alert">
-              {t("orders.errors.cannotDeleteWithInvoice")}
+              {deleteBlockedReason}
             </p>
           ) : null}
           <DialogFooter>
@@ -325,9 +333,9 @@ export function OrderActionsMenu({
             <Button
               type="button"
               variant="destructive"
-              disabled={deleteOrder.isPending || hasInvoice}
+              disabled={deleteOrder.isPending || Boolean(deleteBlockedReason)}
               onClick={() => {
-                if (hasInvoice) return;
+                if (deleteBlockedReason) return;
                 void deleteOrder.mutateAsync(order.id).then(() => {
                   setConfirmDeleteOpen(false);
                   onDeleted?.(order.id);

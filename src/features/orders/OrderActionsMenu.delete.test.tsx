@@ -62,7 +62,7 @@ const baseOrder = {
   orderNumber: "ORD-1",
   clientId: "c1",
   clientName: "Ada",
-  status: "new",
+  status: "cancelled",
   totalPrice: 100,
   isPaid: false,
   paymentStatus: "unpaid",
@@ -87,7 +87,7 @@ describe("OrderActionsMenu delete confirmation", () => {
     mutateAsync.mockResolvedValue({ id: "order-1", paymentsDeleted: 2 });
   });
 
-  it("states how many linked payments will be deleted", async () => {
+  it("states how many voided payments will be removed with a cancelled order", async () => {
     const user = userEvent.setup();
     renderWithQuery(
       <OrderActionsMenu
@@ -102,8 +102,27 @@ describe("OrderActionsMenu delete confirmation", () => {
 
     await user.click(screen.getByRole("button", { name: /Actions for order/i }));
     await user.click(screen.getByRole("menuitem", { name: /Delete order/i }));
-    expect(screen.getByText(/Delete order ORD-1 and 2 linked payment/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Delete order \+ 2 payment/i })).toBeInTheDocument();
+    expect(screen.getByText(/Permanently delete cancelled order ORD-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 fully voided payment/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Delete order \+ 2 voided payment/i })).toBeInTheDocument();
+  });
+
+  it("refuses delete for a non-cancelled order", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <OrderActionsMenu
+        order={{ ...baseOrder, status: "new" }}
+        onView={noop}
+        onEdit={noop}
+        onStatusChange={noop}
+        onCreateInvoice={noop}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Actions for order/i }));
+    const deleteItem = screen.getByRole("menuitem", { name: /Delete order/i });
+    expect(deleteItem).toHaveAttribute("aria-disabled", "true");
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it("keeps invoice restriction and does not call delete", async () => {

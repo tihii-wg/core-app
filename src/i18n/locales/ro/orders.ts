@@ -174,13 +174,15 @@ const orders: Messages<typeof en> = {
     delete: "Șterge comanda",
   },
   delete: {
-    title: "Ștergeți comanda?",
-    description: "Ștergeți comanda {{number}}. Această acțiune nu poate fi anulată. Comenzile asociate unei facturi nu pot fi șterse.",
+    title: "Ștergeți definitiv comanda?",
+    description:
+      "Ștergeți definitiv comanda anulată {{number}} și istoricul asociat. Acțiunea nu poate fi anulată. Facturile și plățile active trebuie anulate mai întâi.",
     descriptionCancelledWithStock:
-      "Ștergeți comanda anulată {{number}}. Materialele eliberate restante vor fi returnate automat în depozitele originale. Acțiunea nu poate fi anulată.",
+      "Ștergeți definitiv comanda anulată {{number}} și istoricul. Materialele eliberate restante vor fi returnate o singură dată în depozitele originale. Acțiunea nu poate fi anulată.",
     descriptionWithPayments:
-      "Ștergeți comanda {{number}} și {{count}} înregistrare/înregistrări de plată asociată/asociate. Doar pentru date de test greșite; acțiunea nu poate fi anulată. Facturile blochează în continuare ștergerea.",
-    confirmWithPayments: "Șterge comanda + {{count}} plată/plăți",
+      "Ștergeți definitiv comanda anulată {{number}}. {{count}} înregistrare/înregistrări de plată complet anulate vor fi eliminate. Plățile, rambursările și facturile active blochează ștergerea.",
+    confirmWithPayments: "Șterge comanda + {{count}} plată/plăți anulate",
+    requireCancelled: "Anulați mai întâi comanda. Doar comenzile anulate pot fi șterse definitiv.",
   },
   emptyOrderLabel: "Ciornă",
   createDialog: {
@@ -443,18 +445,37 @@ const orders: Messages<typeof en> = {
     materialDiscountRpcMissing:
       "Reducerea clientului la produse nu a putut fi salvată pe liniile de materiale: lipsește funcția crm_set_order_line_discounts. Aplicați supabase/manual/20261101070000_order_line_discounts_rpc.PRODUCTION.sql. Totalurile din formular nu au fost salvate.",
     materialDiscountFailed: "Reducerile pe materiale nu au putut fi salvate.",
-    cannotDeleteWithInvoice: "Această comandă are o factură și nu poate fi ștearsă. Nu s-a șters nimic.",
+    cannotDeleteWithInvoice:
+      "Această comandă are încă o factură. Marcați-o ca trimisă din greșeală și ștergeți-o mai întâi. Nu s-a șters nimic.",
+    cannotDeleteWithInvoiceDocs:
+      "Această comandă are încă factura/facturile {{docs}}. Anulați/ștergeți-le mai întâi. Nu s-a șters nimic.",
     cannotDeleteWithPayment:
-      "Această comandă are înregistrări în registrul de plăți. Confirmați în dialog ștergerea comenzii împreună cu plățile asociate (necesită RPC-ul revizuit delete_order_with_payments).",
+      "Această comandă are încă plăți active. Anulați-le în Finanțe mai întâi. Nu s-a șters nimic.",
+    cannotDeleteWithActivePayments:
+      "Această comandă are încă plăți active. Anulați-le în Finanțe mai întâi. Nu s-a șters nimic.",
+    cannotDeleteWithActivePaymentsDocs:
+      "Această comandă are încă plata/plățile: {{docs}}. Anulați-le în Finanțe mai întâi. Nu s-a șters nimic.",
+    cannotDeleteWithRefunds:
+      "Această comandă are rambursări care trebuie păstrate în contabilitate. Nu poate fi ștearsă definitiv.",
+    cannotDeleteWithOrphanedVoids:
+      "Această comandă are înregistrări de anulare incomplete. Rezolvați-le în Finanțe. Nu s-a șters nimic.",
+    cannotDeleteWithFinanceTransactions:
+      "Această comandă are încă tranzacții financiare. Rezolvați-le mai întâi. Nu s-a șters nimic.",
+    cannotDeleteWithCreditNotes:
+      "Această comandă are încă note de credit. Rezolvați-le mai întâi. Nu s-a șters nimic.",
+    deleteRequiresCancelled:
+      "Doar comenzile anulate pot fi șterse definitiv. Anulați comanda mai întâi. Nu s-a șters nimic.",
     deleteForbidden: "Nu aveți permisiunea de a șterge această comandă.",
     deleteWithPaymentsRpcMissing:
-      "Ștergerea unei comenzi cu plăți necesită delete_order_with_payments. Aplicați SQL-ul de ciclu de viață pe MAIN. Nu s-a șters nimic.",
+      "Ștergerea unei comenzi anulate necesită delete_order_with_payments. Aplicați supabase/manual/{{file}} pe MAIN. Nu s-a șters nimic.",
     deleteIssuedRequiresCancelled:
       "Comenzile cu materiale eliberate din depozit pot fi șterse doar după anulare. Anulați comanda, apoi ștergeți pentru a returna stocul.",
     deleteReturnRpcMissing:
-      "Ștergerea unei comenzi anulate cu materiale eliberate necesită delete_order_with_payments (SQL ciclu de viață) pentru returnarea atomică a stocului. Nu s-a șters nimic.",
+      "Ștergerea unei comenzi anulate cu materiale eliberate necesită delete_order_with_payments pentru returnarea atomică a stocului. Nu s-a șters nimic.",
     deleteMaterialsReturnFailed:
       "Nu s-au putut returna materialele eliberate în depozit. Nu s-a șters nimic. Verificați proveniența mișcărilor și reîncercați.",
+    deleteStorageCleanupPending:
+      "Comanda a fost ștearsă din baza de date, dar {{count}} fișier(e) atașat(e) nu au putut fi eliminate din Storage. Reîncercați curățarea ({{file}}).",
   },
   byIndustry: {
     default: {

@@ -18,8 +18,15 @@ export function useDeleteOrder() {
     },
     onMutate: () => toast.loading(i18n.t("orders.toast.deleting"), { id: "delete-order" }),
     onSuccess: (result) => {
+      if (!result.storageCleanupComplete) {
+        toast.error(i18n.t("orders.errors.deleteStorageCleanupPending", { count: result.attachmentStoragePaths.length, file: "order_attachment_cleanup" }), {
+          id: "delete-order",
+        });
+        return;
+      }
       void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["orders-page", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] });

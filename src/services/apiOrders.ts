@@ -2077,11 +2077,44 @@ function isMissingRelationError(error: { code?: string } | null | undefined) {
   return error?.code === "PGRST205" || error?.code === "42P01";
 }
 
+/** Manual SQL enabling cancelled-only delete + Storage cleanup queue. */
+export const SAFE_CANCELLED_ORDER_DELETE_SQL = "20261104220000_safe_cancelled_order_delete.PRODUCTION.sql";
+
 /** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
 export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {
   const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
-  if (/order_delete:has_invoice/i.test(blob)) {
-    return new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
+  const invoiceMatch = blob.match(/order_delete:has_invoice(?::orders)?:([^\n]+)/i);
+  if (invoiceMatch || /order_delete:has_invoice/i.test(blob)) {
+    const docs = invoiceMatch?.[1]?.trim();
+    return new Error(
+      docs
+        ? i18n.t("orders.errors.cannotDeleteWithInvoiceDocs", { docs })
+        : i18n.t("orders.errors.cannotDeleteWithInvoice"),
+    );
+  }
+  if (/order_delete:has_finance_transactions/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.cannotDeleteWithFinanceTransactions"));
+  }
+  if (/order_delete:has_credit_notes/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.cannotDeleteWithCreditNotes"));
+  }
+  const paymentMatch = blob.match(/order_delete:has_active_payment:([^\n]+)/i);
+  if (paymentMatch || /order_delete:has_active_payment/i.test(blob)) {
+    const docs = paymentMatch?.[1]?.trim();
+    return new Error(
+      docs
+        ? i18n.t("orders.errors.cannotDeleteWithActivePaymentsDocs", { docs })
+        : i18n.t("orders.errors.cannotDeleteWithActivePayments"),
+    );
+  }
+  if (/order_delete:has_refund/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.cannotDeleteWithRefunds"));
+  }
+  if (/order_delete:has_orphaned_void/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.cannotDeleteWithOrphanedVoids"));
+  }
+  if (/order_delete:not_cancelled/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteRequiresCancelled"));
   }
   if (/order_delete:forbidden|order_delete:not_member|order_delete:not_authenticated/i.test(blob) || error.code === "42501") {
     return new Error(i18n.t("orders.errors.deleteForbidden"));
@@ -2089,7 +2122,10 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
   if (/order_delete:not_found/i.test(blob)) {
     return new Error(orderPermissionMessage());
   }
-  if (/order_delete:issued_materials_require_cancelled_order/i.test(blob)) {
+  if (
+    /order_delete:issued_materials_require_cancelled_order|order_delete:issued_materials_on_closed_order/i.test(blob) ||
+    /Cannot delete an order with outstanding issued materials/i.test(blob)
+  ) {
     return new Error(i18n.t("orders.errors.deleteIssuedRequiresCancelled"));
   }
   if (/order_delete:return_rpc_missing|order_delete:inventory_ledger_missing/i.test(blob)) {
@@ -2098,15 +2134,12 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
   if (/order_delete:materials_ledger_mismatch|order_delete:materials_warehouse_unresolved|order_delete:materials_outstanding_after_return/i.test(blob)) {
     return new Error(i18n.t("orders.errors.deleteMaterialsReturnFailed"));
   }
-  if (/Cannot delete an order with outstanding issued materials/i.test(blob)) {
-    return new Error(i18n.t("orders.errors.deleteIssuedRequiresCancelled"));
-  }
   if (error.code === "PGRST202" || error.code === "42883" || /could not find the function|function .* does not exist/i.test(blob)) {
-    return new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+    return new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing", { file: SAFE_CANCELLED_ORDER_DELETE_SQL }));
   }
   if (error.code === "23503" || /foreign key|violates foreign key/i.test(blob)) {
     if (/payments_order_id_fkey|table ["']?payments["']?/i.test(blob)) {
-      return new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+      return new Error(i18n.t("orders.errors.cannotDeleteWithActivePayments"));
     }
     if (/invoices_.*order_id|table ["']?invoices["']?/i.test(blob)) {
       return new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
@@ -2119,112 +2152,121 @@ export type DeleteOrderResult = {
   id: string;
   paymentsDeleted: number;
   materialsReturned: Array<{ warehouse_id?: string; lines?: unknown; idempotency_key?: string }>;
+  attachmentStoragePaths: string[];
+  storageCleanupComplete: boolean;
 };
 
-async function countOrderPayments(workspaceId: string, orderId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from("payments")
-    .select("id", { count: "exact", head: true })
+async function listOrderInvoiceLabels(workspaceId: string, orderId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("id, invoice_number")
     .eq("workspace_id", workspaceId)
     .eq("order_id", orderId);
   if (error) {
-    if (isMissingRelationError(error)) return 0;
+    if (isMissingRelationError(error)) return [];
     throw new Error(error.message);
   }
-  return count ?? 0;
+  return (data ?? []).map((row) => {
+    const number = typeof row.invoice_number === "string" ? row.invoice_number.trim() : "";
+    return number || String(row.id);
+  });
+}
+
+async function listOrderAttachmentStoragePaths(workspaceId: string, orderId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("order_attachments")
+    .select("storage_path")
+    .eq("workspace_id", workspaceId)
+    .eq("order_id", orderId);
+  if (error) {
+    if (isMissingRelationError(error)) return [];
+    throw new Error(error.message);
+  }
+  return (data ?? [])
+    .map((row) => (typeof row.storage_path === "string" ? row.storage_path.trim() : ""))
+    .filter(Boolean);
+}
+
+async function removeOrderAttachmentStoragePaths(workspaceId: string, paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return [];
+  // Same bucket as apiOrderAttachments / orderAttachments.ts (avoid feature↔service cycles).
+  const bucket = "order-attachments";
+  const failed: string[] = [];
+  // Remove in small batches; retries stay idempotent (missing objects are OK).
+  for (let i = 0; i < paths.length; i += 20) {
+    const batch = paths.slice(i, i + 20);
+    const { error } = await supabase.storage.from(bucket).remove(batch);
+    if (error) {
+      // Retry once per path so a single bad object does not strand the batch.
+      for (const path of batch) {
+        const { error: oneError } = await supabase.storage.from(bucket).remove([path]);
+        if (oneError) failed.push(path);
+      }
+      continue;
+    }
+    // Drop successful paths from the cleanup queue when that table exists.
+    await supabase.from("order_attachment_cleanup").delete().eq("workspace_id", workspaceId).in("storage_path", batch);
+  }
+  return failed;
 }
 
 /**
- * Hard-delete an order in the active workspace.
- * Invoices always block (nothing is deleted).
- * Linked payments require the reviewed RPC `delete_order_with_payments` (append-only ledger:
- * clients must not DELETE payments directly). Without that RPC, orders with payments cannot be removed.
- * Order service/material lines follow DB CASCADE when present.
+ * Permanently delete a cancelled order via protected RPC.
+ * Preconditions (also enforced server-side): cancelled semantic, no invoices,
+ * no refunds / active payments (fully voided trees may be cleaned), stock returned atomically.
+ * Storage objects are removed after the DB transaction; success requires cleanup completion.
  */
 export async function deleteOrder(orderId: string, workspaceId: string | undefined): Promise<DeleteOrderResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const id = orderId.trim();
   if (!id) throw new Error(orderPermissionMessage());
 
-  const { data: invoices, error: invoiceError } = await supabase
-    .from("invoices")
-    .select("id")
-    .eq("workspace_id", targetWorkspaceId)
-    .eq("order_id", id)
-    .limit(1);
-  if (invoiceError) {
-    // Missing invoices table/relation should not block unrelated workspaces; only surface real errors.
-    if (!isMissingRelationError(invoiceError)) {
-      throw new Error(invoiceError.message);
-    }
-  } else if ((invoices ?? []).length > 0) {
-    throw new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
+  const invoiceLabels = await listOrderInvoiceLabels(targetWorkspaceId, id);
+  if (invoiceLabels.length > 0) {
+    throw new Error(i18n.t("orders.errors.cannotDeleteWithInvoiceDocs", { docs: invoiceLabels.join(", ") }));
   }
 
-  const paymentCount = await countOrderPayments(targetWorkspaceId, id);
+  // Snapshot Storage paths before the RPC removes metadata rows.
+  const prelistedPaths = await listOrderAttachmentStoragePaths(targetWorkspaceId, id);
 
-  // Atomic path: SECURITY DEFINER RPC deletes order-linked payments then the order.
-  // Always preferred so payment+order never split across client round-trips.
   const { data: rpcData, error: rpcError } = await supabase.rpc("delete_order_with_payments", {
     p_workspace_id: targetWorkspaceId,
     p_order_id: id,
   });
 
-  if (!rpcError) {
-    const payload = rpcData as {
-      order_id?: string;
-      payments_deleted?: number;
-      materials_returned?: DeleteOrderResult["materialsReturned"];
-    } | null;
-    return {
-      id: payload?.order_id ?? id,
-      paymentsDeleted: typeof payload?.payments_deleted === "number" ? payload.payments_deleted : paymentCount,
-      materialsReturned: Array.isArray(payload?.materials_returned) ? payload.materials_returned : [],
-    };
-  }
-
-  const rpcMissing =
-    rpcError.code === "PGRST202" ||
-    rpcError.code === "42883" ||
-    /could not find the function|function .* does not exist/i.test(rpcError.message ?? "");
-
-  if (!rpcMissing) {
+  if (rpcError) {
+    // No client-side fallback delete: cancelled + financial + stock rules live only in the RPC.
     throw mapOrderDeleteDbError(rpcError);
   }
 
-  // RPC not installed yet: only allow plain order delete when no payment rows exist
-  // and there is no outstanding issued stock (trigger would otherwise block).
-  if (paymentCount > 0) {
-    throw new Error(i18n.t("orders.errors.deleteWithPaymentsRpcMissing"));
+  const payload = rpcData as {
+    order_id?: string;
+    payments_deleted?: number;
+    materials_returned?: DeleteOrderResult["materialsReturned"];
+    attachment_storage_paths?: unknown;
+    storage_cleanup_pending?: boolean;
+  } | null;
+
+  const rpcPaths = Array.isArray(payload?.attachment_storage_paths)
+    ? payload.attachment_storage_paths.filter((path): path is string => typeof path === "string" && path.trim() !== "")
+    : [];
+  const paths = [...new Set([...prelistedPaths, ...rpcPaths])];
+
+  const failedPaths = await removeOrderAttachmentStoragePaths(targetWorkspaceId, paths);
+  if (failedPaths.length > 0) {
+    throw new Error(
+      i18n.t("orders.errors.deleteStorageCleanupPending", {
+        count: failedPaths.length,
+        file: SAFE_CANCELLED_ORDER_DELETE_SQL,
+      }),
+    );
   }
 
-  {
-    const { data: materialRows, error: materialsError } = await supabase
-      .from("order_materials")
-      .select("quantity_issued, quantity_returned")
-      .eq("order_id", id);
-    if (!materialsError) {
-      const hasOutstanding = (materialRows ?? []).some((row) => {
-        const issued = Number((row as { quantity_issued?: unknown }).quantity_issued ?? 0);
-        const returned = Number((row as { quantity_returned?: unknown }).quantity_returned ?? 0);
-        return issued - returned > 0;
-      });
-      if (hasOutstanding) {
-        // Without the delete RPC, outstanding stock cannot be returned atomically.
-        throw new Error(i18n.t("orders.errors.deleteReturnRpcMissing"));
-      }
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("orders")
-    .delete()
-    .eq("id", id)
-    .eq("workspace_id", targetWorkspaceId)
-    .select("id")
-    .maybeSingle();
-
-  if (error) throw mapOrderDeleteDbError(error);
-  if (!data) throw new Error(orderPermissionMessage());
-  return { id, paymentsDeleted: 0, materialsReturned: [] };
+  return {
+    id: payload?.order_id ?? id,
+    paymentsDeleted: typeof payload?.payments_deleted === "number" ? payload.payments_deleted : 0,
+    materialsReturned: Array.isArray(payload?.materials_returned) ? payload.materials_returned : [],
+    attachmentStoragePaths: paths,
+    storageCleanupComplete: true,
+  };
 }

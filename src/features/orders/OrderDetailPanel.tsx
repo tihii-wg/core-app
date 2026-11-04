@@ -69,6 +69,7 @@ import {
   resolveUnifiedStatusSelection,
   unifiedStatusOptions,
 } from "./unifiedOrderStatus";
+import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -130,6 +131,19 @@ export default function OrderDetailPanel({
   const paymentBalance = selectedOrder ? orderPaymentBalance(selectedOrder, payments) : null;
   const deleteOrder = useDeleteOrder();
   const hasInvoice = Boolean(invoiceNumber);
+  const isCancelledForDelete = selectedOrder
+    ? orderHasCancelSemantic(selectedOrder, orderStatusDefinitions)
+    : false;
+  const activePaymentsBlockingDelete = selectedOrder
+    ? activePaymentsBlockingOrderDelete(payments, selectedOrder.id)
+    : [];
+  const deleteBlockedReason = hasInvoice
+    ? t("orders.errors.cannotDeleteWithInvoice")
+    : !isCancelledForDelete
+      ? t("orders.delete.requireCancelled")
+      : activePaymentsBlockingDelete.length > 0
+        ? t("orders.errors.cannotDeleteWithActivePayments")
+        : null;
   const linkedPaymentCount = selectedOrder
     ? payments.filter((payment) => payment.orderId === selectedOrder.id).length
     : 0;
@@ -570,20 +584,18 @@ export default function OrderDetailPanel({
                   type="button"
                   variant="destructive"
                   className="w-full min-w-0 sm:w-auto"
-                  disabled={hasInvoice || deleteOrder.isPending}
-                  title={hasInvoice ? t("orders.errors.cannotDeleteWithInvoice") : undefined}
+                  disabled={Boolean(deleteBlockedReason) || deleteOrder.isPending}
+                  title={deleteBlockedReason ?? undefined}
                   onClick={() => {
-                    if (hasInvoice) return;
+                    if (deleteBlockedReason) return;
                     setConfirmDeleteOpen(true);
                   }}
                 >
                   <Trash2 className="size-4 shrink-0" />
                   <span className="truncate">{t("orders.actions.delete")}</span>
                 </Button>
-                {hasInvoice ? (
-                  <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                    {t("orders.errors.cannotDeleteWithInvoice")}
-                  </p>
+                {deleteBlockedReason ? (
+                  <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{deleteBlockedReason}</p>
                 ) : null}
               </div>
             ) : null}
@@ -608,18 +620,14 @@ export default function OrderDetailPanel({
                       number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
                       count: linkedPaymentCount,
                     })
-                  : selectedOrder.status === "cancelled"
-                    ? t("orders.delete.descriptionCancelledWithStock", {
-                        number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
-                      })
-                    : t("orders.delete.description", {
-                        number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
-                      })}
+                  : t("orders.delete.descriptionCancelledWithStock", {
+                      number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
+                    })}
               </DialogDescription>
             </DialogHeader>
-            {hasInvoice ? (
+            {deleteBlockedReason ? (
               <p className="text-sm text-destructive" role="alert">
-                {t("orders.errors.cannotDeleteWithInvoice")}
+                {deleteBlockedReason}
               </p>
             ) : null}
             <DialogFooter>
@@ -634,9 +642,9 @@ export default function OrderDetailPanel({
               <Button
                 type="button"
                 variant="destructive"
-                disabled={deleteOrder.isPending || hasInvoice}
+                disabled={deleteOrder.isPending || Boolean(deleteBlockedReason)}
                 onClick={() => {
-                  if (hasInvoice || deleteOrder.isPending) return;
+                  if (deleteBlockedReason || deleteOrder.isPending) return;
                   void deleteOrder.mutateAsync(selectedOrder.id).then(() => {
                     setConfirmDeleteOpen(false);
                     onDeleted?.(selectedOrder.id);
