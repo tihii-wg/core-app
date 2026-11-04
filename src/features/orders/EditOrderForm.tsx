@@ -16,7 +16,9 @@ import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { defaultsForKind } from "./warranty";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -38,6 +40,7 @@ import {
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
+import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 
 type EditOrderFormProps = {
   order: Order;
@@ -65,6 +68,13 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
+  const { data: workspace } = useGetWorkspace();
+  const warrantyDefaults = {
+    serviceDurationMonths: workspace?.warrantyServiceMonths ?? null,
+    serviceMileageLimit: workspace?.warrantyServiceKm ?? null,
+    partsDurationMonths: workspace?.warrantyPartsMonths ?? null,
+    partsMileageLimit: workspace?.warrantyPartsKm ?? null,
+  };
   const { workflow, copy } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
@@ -233,18 +243,24 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           errors={!!errors.services?.root}
           onSelect={(service) => {
             if (hasService(service.id, service.service_name)) return;
-
-            serviceAppend(catalogServiceToOrderLine(service));
+            const warranty = defaultsForKind(warrantyDefaults, "service");
+            serviceAppend({
+              ...catalogServiceToOrderLine(service),
+              warrantyMonths: warranty.durationMonths,
+              warrantyKm: warranty.mileageLimit,
+            });
             clearErrors("services");
           }}
           onCreate={(serviceName, price) => {
             if (hasService(null, serviceName)) return;
-
+            const warranty = defaultsForKind(warrantyDefaults, "service");
             serviceAppend({
               serviceId: crypto.randomUUID(),
               serviceName,
               price,
               quantity: 1,
+              warrantyMonths: warranty.durationMonths,
+              warrantyKm: warranty.mileageLimit,
             });
             clearErrors("services");
           }}
@@ -253,22 +269,34 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         {serviceFields.length > 0 && (
           <div className="space-y-2">
             {serviceFields.map((field, index) => (
-              <div key={field.fieldKey} className="flex items-center justify-between rounded-md border p-3">
-                <div>
-                  <p className="font-medium">{field.serviceName}</p>
-                  <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
+              <div key={field.fieldKey} className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{field.serviceName}</p>
+                    <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <OrderServiceKindSelect
+                      value={watchedServices?.[index]?.kind}
+                      lineName={field.serviceName}
+                      disabled={isSubmitting}
+                      onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
+                    />
+                    <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={t("orders.form.removeService", { name: field.serviceName })}>
+                      {t("orders.form.remove")}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <OrderServiceKindSelect
-                    value={watchedServices?.[index]?.kind}
-                    lineName={field.serviceName}
-                    disabled={isSubmitting}
-                    onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
-                  />
-                  <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={t("orders.form.removeService", { name: field.serviceName })}>
-                    {t("orders.form.remove")}
-                  </Button>
-                </div>
+                <OrderLineWarrantyFields
+                  idPrefix={`edit-service-${index}`}
+                  months={watchedServices?.[index]?.warrantyMonths}
+                  km={watchedServices?.[index]?.warrantyKm}
+                  disabled={isSubmitting || Boolean(order.closedAt)}
+                  onChange={({ warrantyMonths, warrantyKm }) => {
+                    setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
+                    setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true });
+                  }}
+                />
               </div>
             ))}
           </div>

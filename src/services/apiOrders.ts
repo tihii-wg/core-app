@@ -805,9 +805,12 @@ async function stampMaterialLineDiscounts(orderId: string, lines: OrderMaterial[
   return applyTo(updated);
 }
 
+let orderLineWarrantySupported: boolean | null = null;
+
 function orderServiceColumns() {
   const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
-  return `${orderServiceKindSupported ? `${orderServiceBaseColumns}, kind` : orderServiceBaseColumns}${discount}`;
+  const warranty = orderLineWarrantySupported === false ? "" : ", warranty_months, warranty_km";
+  return `${orderServiceKindSupported ? `${orderServiceBaseColumns}, kind` : orderServiceBaseColumns}${discount}${warranty}`;
 }
 
 function isMissingOrderServiceKindColumn(error: { code?: string; message?: string } | null | undefined) {
@@ -822,10 +825,20 @@ async function withOrderServiceKind<T extends { error: { code?: string; message?
   run: (columns: string, withKind: boolean) => PromiseLike<T>,
 ): Promise<T> {
   const first = await run(orderServiceColumns(), orderServiceKindSupported);
+  if (first.error && /warranty_months|warranty_km/i.test(first.error.message ?? "") && (first.error.code === "42703" || first.error.code === "PGRST204")) {
+    orderLineWarrantySupported = false;
+    const retry = await run(orderServiceColumns(), orderServiceKindSupported);
+    if (orderServiceKindSupported && isMissingOrderServiceKindColumn(retry.error)) {
+      orderServiceKindSupported = false;
+      return run(orderServiceColumns(), false);
+    }
+    return retry;
+  }
   if (orderServiceKindSupported && isMissingOrderServiceKindColumn(first.error)) {
     orderServiceKindSupported = false;
     return run(orderServiceColumns(), false);
   }
+  if (first.error == null && orderLineWarrantySupported == null) orderLineWarrantySupported = true;
   return first;
 }
 
@@ -924,6 +937,14 @@ export function readTaxInvoiceNumber(row: Record<string, unknown>) {
   return String(raw);
 }
 
+function mapWarrantyMonths(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
 function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
   return serviceLines.map((line) => ({
     ...(line.id ? { id: String(line.id) } : {}),
@@ -933,6 +954,12 @@ function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
     quantity: Number(line.quantity ?? 1),
     ...(toOrderServiceKind(line.kind) ? { kind: toOrderServiceKind(line.kind) } : {}),
     ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
+    ...(mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) !== undefined
+      ? { warrantyMonths: mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) }
+      : {}),
+    ...(mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) !== undefined
+      ? { warrantyKm: mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) }
+      : {}),
   }));
 }
 
@@ -958,6 +985,12 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
       supplySource,
       ...(warehouseId ? { warehouseId } : {}),
       ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
+      ...(mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) !== undefined
+        ? { warrantyMonths: mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) }
+        : {}),
+      ...(mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) !== undefined
+        ? { warrantyKm: mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) }
+        : {}),
     };
   });
 }
@@ -1049,6 +1082,10 @@ function toOrder(
     customStatusId,
     customStatus,
     closedAt: typeof row.closed_at === "string" && row.closed_at.trim() ? row.closed_at : null,
+    warrantySourceOrderId:
+      typeof row.warranty_source_order_id === "string" && row.warranty_source_order_id.trim()
+        ? row.warranty_source_order_id
+        : null,
     // Canonical: employees.id via orders.employee_id; legacy assigned_to only when employee_id is empty.
     assignedEmployeeId: employee?.id ?? fallbackAssigneeId,
     assignedEmployeeName: employee?.name || memberNames.get(legacyAssignedTo) || "",
@@ -2046,6 +2083,10 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       quantity: service.quantity,
       ...(service.kind ? { kind: service.kind } : {}),
       ...(stamped && lineHasDiscount(stamped) ? { discount_type: stamped.discountType as LineDiscountType, discount_value: Number(stamped.discountValue) } : {}),
+      ...(orderLineWarrantySupported !== false && service.warrantyMonths != null
+        ? { warranty_months: mapWarrantyMonths(service.warrantyMonths) }
+        : {}),
+      ...(orderLineWarrantySupported !== false && service.warrantyKm != null ? { warranty_km: mapWarrantyMonths(service.warrantyKm) } : {}),
     });
   }
 
@@ -2105,8 +2146,35 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     if (line) line.kind = change.kind;
   }
 
+  // Per-line warranty conditions on kept + newly inserted lines (feature-detected columns).
+  if (orderLineWarrantySupported !== false) {
+    for (const service of services) {
+      if (!service.id) continue;
+      const { error: warrantyError } = await supabase
+        .from("order_services")
+        .update({
+          warranty_months: mapWarrantyMonths(service.warrantyMonths) ?? null,
+          warranty_km: mapWarrantyMonths(service.warrantyKm) ?? null,
+        })
+        .eq("id", service.id)
+        .eq("order_id", orderId);
+      if (warrantyError) {
+        if (/warranty_months|warranty_km/i.test(warrantyError.message) && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
+          orderLineWarrantySupported = false;
+          break;
+        }
+        throw new Error(warrantyError.message);
+      }
+      const line = kept.find((item) => item.id === service.id) ?? inserted.find((item) => item.id === service.id);
+      if (line) {
+        (line as { warranty_months?: number | null }).warranty_months = mapWarrantyMonths(service.warrantyMonths) ?? null;
+        (line as { warranty_km?: number | null }).warranty_km = mapWarrantyMonths(service.warrantyKm) ?? null;
+      }
+    }
+  }
+
   const lines = [...kept, ...inserted];
-  if (newLines.length === 0 && removedIds.length === 0) return { lines, summary: null };
+  if (newLines.length === 0 && removedIds.length === 0 && kindChanges.length === 0) return { lines, summary: null };
 
   const { data: materialRows, error: materialRowsError } = await withLineDiscountColumns(() =>
     supabase.from("order_materials").select(orderLineDiscountSupported ? "price, quantity, discount_type, discount_value" : "price, quantity").eq("order_id", orderId),
@@ -2169,6 +2237,16 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
   }
   if (/order_delete:has_refund/i.test(blob)) {
     return new Error(i18n.t("orders.errors.cannotDeleteWithRefunds"));
+  }
+  const warrantyOrdersMatch = blob.match(/order_delete:has_warranty_orders:([^\n]+)/i);
+  if (warrantyOrdersMatch || /order_delete:has_warranty_orders/i.test(blob)) {
+    const docs = warrantyOrdersMatch?.[1]?.trim();
+    return new Error(
+      docs ? i18n.t("orders.warranty.errors.deleteBlockedByClaims", { docs }) : i18n.t("orders.warranty.errors.deleteBlocked"),
+    );
+  }
+  if (/order_delete:has_warranty_claims/i.test(blob)) {
+    return new Error(i18n.t("orders.warranty.errors.deleteBlocked"));
   }
   if (/order_delete:has_orphaned_void/i.test(blob)) {
     return new Error(i18n.t("orders.errors.cannotDeleteWithOrphanedVoids"));
@@ -2285,6 +2363,12 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
   const invoiceLabels = await listOrderInvoiceLabels(targetWorkspaceId, id);
   if (invoiceLabels.length > 0) {
     throw new Error(i18n.t("orders.errors.cannotDeleteWithInvoiceDocs", { docs: invoiceLabels.join(", ") }));
+  }
+
+  const { getWarrantyDeleteBlocker } = await import("./apiWarranty");
+  const warrantyBlock = await getWarrantyDeleteBlocker(targetWorkspaceId, id);
+  if (warrantyBlock) {
+    throw mapOrderDeleteDbError({ message: warrantyBlock, code: "23514" });
   }
 
   // Snapshot Storage paths before the RPC removes metadata rows.

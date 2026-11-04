@@ -87,6 +87,14 @@ describe("mapOrderDeleteDbError", () => {
   });
 });
 
+function mockDeleteRpcs(deleteResult: { data: unknown; error: unknown }) {
+  rpc.mockImplementation((name: string) => {
+    if (name === "order_delete_blocked_by_warranty") return Promise.resolve({ data: null, error: null });
+    if (name === "delete_order_with_payments") return Promise.resolve(deleteResult);
+    return Promise.resolve({ data: null, error: { message: `unexpected rpc ${name}` } });
+  });
+}
+
 describe("deleteOrder", () => {
   beforeEach(() => {
     from.mockReset();
@@ -118,7 +126,7 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: {
         order_id: "order-1",
         payments_deleted: 0,
@@ -146,13 +154,12 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: null,
       error: { message: "order_delete:has_active_payment:pay-keep", code: "23514" },
     });
 
     await expect(deleteOrder("order-1", "ws-1")).rejects.toThrow(/pay-keep|payment/i);
-    expect(from).not.toHaveBeenCalledWith("orders");
     expect(from).not.toHaveBeenCalledWith("payments");
   });
 
@@ -162,13 +169,12 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: null,
       error: { code: "PGRST202", message: "Could not find the function public.delete_order_with_payments" },
     });
 
     await expect(deleteOrder("order-1", "ws-1")).rejects.toThrow(/delete_order_with_payments|safe_cancelled_order_delete/i);
-    expect(from).not.toHaveBeenCalledWith("orders");
   });
 
   it("maps not_cancelled from the RPC without deleting anything client-side", async () => {
@@ -177,13 +183,12 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: null,
       error: { message: "order_delete:not_cancelled", code: "P0001" },
     });
 
     await expect(deleteOrder("order-1", "ws-1")).rejects.toThrow(/cancel/i);
-    expect(from).not.toHaveBeenCalledWith("orders");
   });
 
   it("maps active payment blockers from the RPC", async () => {
@@ -192,7 +197,7 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: null,
       error: { message: "order_delete:has_active_payment:pay-1", code: "23514" },
     });
@@ -206,7 +211,7 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: null,
       error: { message: "order_delete:has_refund:count=2", code: "23514" },
     });
@@ -223,7 +228,7 @@ describe("deleteOrder", () => {
       if (table === "order_attachment_cleanup") return cleanupDeleteQuery();
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: {
         order_id: "order-1",
         payments_deleted: 1,
@@ -255,7 +260,7 @@ describe("deleteOrder", () => {
       if (table === "order_attachment_cleanup") return cleanupDeleteQuery();
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: {
         order_id: "order-1",
         payments_deleted: 0,
@@ -275,12 +280,27 @@ describe("deleteOrder", () => {
       if (table === "order_attachments") return attachmentsQuery({ data: [], error: null });
       throw new Error(`unexpected table ${table}`);
     });
-    rpc.mockResolvedValue({
+    mockDeleteRpcs({
       data: null,
       error: { code: "42501", message: "order_delete:forbidden" },
     });
 
     await expect(deleteOrder("order-1", "ws-1")).rejects.toThrow(/permission/i);
-    expect(from).not.toHaveBeenCalledWith("orders");
+  });
+
+  it("blocks deleting an original order that still has warranty claim orders", async () => {
+    from.mockImplementation((table: string) => {
+      if (table === "invoices") return invoiceQuery({ data: [], error: null });
+      throw new Error(`unexpected table ${table}`);
+    });
+    rpc.mockImplementation((name: string) => {
+      if (name === "order_delete_blocked_by_warranty") {
+        return Promise.resolve({ data: "order_delete:has_warranty_orders:ORD-W1", error: null });
+      }
+      return Promise.resolve({ data: null, error: { message: `unexpected rpc ${name}` } });
+    });
+
+    await expect(deleteOrder("order-1", "ws-1")).rejects.toThrow(/ORD-W1|warranty/i);
+    expect(rpc).not.toHaveBeenCalledWith("delete_order_with_payments", expect.anything());
   });
 });

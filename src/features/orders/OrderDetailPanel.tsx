@@ -18,6 +18,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
+import WarrantyOrderSection from "./WarrantyOrderSection";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
@@ -208,6 +209,9 @@ export default function OrderDetailPanel({
           <SheetTitle className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
             {selectedOrder?.orderNumber}
             {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />}
+            {selectedOrder?.warrantySourceOrderId && !isEditing ? (
+              <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge>
+            ) : null}
           </SheetTitle>
           {selectedOrder && !isEditing && canEditOrder && (
             <button
@@ -240,6 +244,15 @@ export default function OrderDetailPanel({
 
         {selectedOrder && !isEditing && (
           <div className="space-y-5 px-5 py-5">
+            <WarrantyOrderSection
+              order={selectedOrder}
+              currentMileage={selectedOrder.vehicleMileageSnapshot ?? null}
+              disabled={!canEditOrder || Boolean(selectedOrder.closedAt)}
+              onChanged={() => {
+                void onOrderUpdated(selectedOrder);
+              }}
+            />
+
             <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
               <div className="min-w-0 space-y-2">
                 <div>

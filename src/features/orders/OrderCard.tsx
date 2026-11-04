@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
-import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
+import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
@@ -101,6 +101,7 @@ export function OrderCard({
       <div className="mt-2.5 flex min-w-0 items-end gap-3 overflow-hidden border-t border-border pt-2.5">
         <div className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
           <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
+          {order.warrantySourceOrderId ? <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge> : null}
           <PaymentStatusBadge status={resolvedPaymentStatus} />
         </div>
         <span className={cn("shrink-0 text-right")}>

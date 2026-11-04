@@ -50,9 +50,21 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
   const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const { mutateAsync: save, isPending } = useUpdateWorkspaceOrderSettings();
   const [warrantyStart, setWarrantyStart] = useState<WarrantyStart>(normalizeWarrantyStart(workspace.warrantyStart));
+  const [serviceMonths, setServiceMonths] = useState(workspace.warrantyServiceMonths?.toString() ?? "");
+  const [serviceKm, setServiceKm] = useState(workspace.warrantyServiceKm?.toString() ?? "");
+  const [partsMonths, setPartsMonths] = useState(workspace.warrantyPartsMonths?.toString() ?? "");
+  const [partsKm, setPartsKm] = useState(workspace.warrantyPartsKm?.toString() ?? "");
   const [comments, setComments] = useState<VisibilityDefault>(normalizeVisibility(workspace.defaultCommentsVisibility));
   const [files, setFiles] = useState<VisibilityDefault>(normalizeVisibility(workspace.defaultFilesVisibility));
   const [preventDevice, setPreventDevice] = useState(workspace.preventDuplicateDeviceOrders);
+
+  function parseOptional(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return Math.floor(n);
+  }
 
   async function onSave() {
     toast.loading(t("settings.general.orders.toast.saving"), { id: "orders-settings" });
@@ -60,6 +72,10 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
       await save({
         workspaceId: workspace.id,
         warrantyStart,
+        warrantyServiceMonths: parseOptional(serviceMonths),
+        warrantyServiceKm: parseOptional(serviceKm),
+        warrantyPartsMonths: parseOptional(partsMonths),
+        warrantyPartsKm: parseOptional(partsKm),
         defaultCommentsVisibility: comments,
         defaultFilesVisibility: files,
         preventDuplicateDeviceOrders: preventDevice,
@@ -92,6 +108,63 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">{t("settings.general.orders.warrantyHint")}</p>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium">{t("settings.general.orders.warrantyDefaultsTitle")}</p>
+            <p className="text-xs text-muted-foreground">{t("settings.general.orders.warrantyDefaultsHint")}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="warranty-service-months">{t("settings.general.orders.warrantyServiceMonths")}</Label>
+              <Input
+                id="warranty-service-months"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={serviceMonths}
+                disabled={!canEdit || isPending}
+                onChange={(event) => setServiceMonths(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="warranty-service-km">{t("settings.general.orders.warrantyServiceKm")}</Label>
+              <Input
+                id="warranty-service-km"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={serviceKm}
+                disabled={!canEdit || isPending}
+                onChange={(event) => setServiceKm(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="warranty-parts-months">{t("settings.general.orders.warrantyPartsMonths")}</Label>
+              <Input
+                id="warranty-parts-months"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={partsMonths}
+                disabled={!canEdit || isPending}
+                onChange={(event) => setPartsMonths(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="warranty-parts-km">{t("settings.general.orders.warrantyPartsKm")}</Label>
+              <Input
+                id="warranty-parts-km"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={partsKm}
+                disabled={!canEdit || isPending}
+                onChange={(event) => setPartsKm(event.target.value)}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

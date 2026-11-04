@@ -125,6 +125,11 @@ export interface Order {
    * Null when never formally closed. Refunds after close do not clear this.
    */
   closedAt?: string | null;
+  /**
+   * When set, this order is a warranty claim linked to the original closed order
+   * (`orders.warranty_source_order_id`). Null/absent = ordinary order.
+   */
+  warrantySourceOrderId?: string | null;
   /** employees.id from orders.employee_id (legacy assigned_to only when employee_id is empty). */
   assignedEmployeeId: string;
   assignedEmployeeName: string;
@@ -490,6 +495,10 @@ export type OrderService = {
   /** `order_services.discount_type` / `discount_value` (crm_ro_v1). Absent when the columns do not exist. */
   discountType?: "percent" | "amount" | null;
   discountValue?: number | null;
+  /** Calendar months of warranty coverage. Null/absent = no duration limit (or column missing). */
+  warrantyMonths?: number | null;
+  /** Mileage allowance from warranty start. Null/absent = no mileage limit (or column missing). */
+  warrantyKm?: number | null;
 };
 
 /** How an order material line is sourced. Catalog lines link to inventory_items; others are order-only snapshots. */
@@ -521,6 +530,10 @@ export type OrderMaterial = {
   /** `order_materials.discount_type` / `discount_value` (crm_ro_v1). Absent when the columns do not exist. */
   discountType?: "percent" | "amount" | null;
   discountValue?: number | null;
+  /** Calendar months of warranty coverage. Null/absent = no duration limit (or column missing). */
+  warrantyMonths?: number | null;
+  /** Mileage allowance from warranty start. Null/absent = no mileage limit (or column missing). */
+  warrantyKm?: number | null;
 };
 
 export type InventoryMovementType = "issue" | "return" | "adjustment";

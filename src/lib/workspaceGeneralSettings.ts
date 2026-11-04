@@ -24,6 +24,14 @@ export type WorkspaceRegionalExtra = {
 
 export type WorkspaceOrderSettings = {
   warrantyStart: WarrantyStart;
+  /** Default warranty months for new service/labor lines; null = disabled. */
+  warrantyServiceMonths: number | null;
+  /** Default warranty mileage for new service/labor lines; null = disabled. */
+  warrantyServiceKm: number | null;
+  /** Default warranty months for new parts/materials; null = disabled. */
+  warrantyPartsMonths: number | null;
+  /** Default warranty mileage for new parts/materials; null = disabled. */
+  warrantyPartsKm: number | null;
   defaultCommentsVisibility: VisibilityDefault;
   defaultFilesVisibility: VisibilityDefault;
   preventDuplicateDeviceOrders: boolean;
@@ -59,10 +67,22 @@ export const companyFieldDefaults: WorkspaceCompanyFields = {
 
 export const orderSettingsDefaults: WorkspaceOrderSettings = {
   warrantyStart: "created_at",
+  warrantyServiceMonths: null,
+  warrantyServiceKm: null,
+  warrantyPartsMonths: null,
+  warrantyPartsKm: null,
   defaultCommentsVisibility: "private",
   defaultFilesVisibility: "private",
   preventDuplicateDeviceOrders: false,
 };
+
+/** Positive integer or null (disabled). */
+export function normalizeOptionalPositiveInt(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
 
 export const contactSettingsDefaults: WorkspaceContactSettings = {
   showClientMiddleName: false,

@@ -18,6 +18,7 @@ import {
   normalizeInvoiceOrderDetailsMode,
   normalizeVisibility,
   normalizeWarrantyStart,
+  normalizeOptionalPositiveInt,
   orderSettingsDefaults,
   type WorkspaceCompanyFields,
   type WorkspaceContactSettings,
@@ -78,6 +79,10 @@ const generalSettingsColumns = [
   "country_code",
   "document_language",
   "warranty_start",
+  "warranty_service_months",
+  "warranty_service_km",
+  "warranty_parts_months",
+  "warranty_parts_km",
   "default_comments_visibility",
   "default_files_visibility",
   "prevent_duplicate_device_orders",
@@ -237,6 +242,10 @@ export type WorkspaceDetails = {
   countryCode: string;
   documentLanguage: string;
   warrantyStart: string;
+  warrantyServiceMonths: number | null;
+  warrantyServiceKm: number | null;
+  warrantyPartsMonths: number | null;
+  warrantyPartsKm: number | null;
   defaultCommentsVisibility: string;
   defaultFilesVisibility: string;
   preventDuplicateDeviceOrders: boolean;
@@ -317,6 +326,10 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     countryCode: readString(record.country_code, "MD") || "MD",
     documentLanguage: normalizeDocumentLanguage(readString(record.document_language, readString(record.language, "en"))),
     warrantyStart: normalizeWarrantyStart(readString(record.warranty_start)),
+    warrantyServiceMonths: normalizeOptionalPositiveInt(record.warranty_service_months),
+    warrantyServiceKm: normalizeOptionalPositiveInt(record.warranty_service_km),
+    warrantyPartsMonths: normalizeOptionalPositiveInt(record.warranty_parts_months),
+    warrantyPartsKm: normalizeOptionalPositiveInt(record.warranty_parts_km),
     defaultCommentsVisibility: normalizeVisibility(readString(record.default_comments_visibility)),
     defaultFilesVisibility: normalizeVisibility(readString(record.default_files_visibility)),
     preventDuplicateDeviceOrders: readBool(record.prevent_duplicate_device_orders, orderSettingsDefaults.preventDuplicateDeviceOrders),
@@ -698,6 +711,10 @@ export async function updateWorkspaceTaxInvoiceSettings(workspaceId: string, req
 export async function updateWorkspaceOrderSettings(workspaceId: string, input: WorkspaceOrderSettings) {
   return updateWorkspaceColumns(workspaceId, {
     warranty_start: normalizeWarrantyStart(input.warrantyStart),
+    warranty_service_months: normalizeOptionalPositiveInt(input.warrantyServiceMonths),
+    warranty_service_km: normalizeOptionalPositiveInt(input.warrantyServiceKm),
+    warranty_parts_months: normalizeOptionalPositiveInt(input.warrantyPartsMonths),
+    warranty_parts_km: normalizeOptionalPositiveInt(input.warrantyPartsKm),
     default_comments_visibility: normalizeVisibility(input.defaultCommentsVisibility),
     default_files_visibility: normalizeVisibility(input.defaultFilesVisibility),
     prevent_duplicate_device_orders: Boolean(input.preventDuplicateDeviceOrders),
