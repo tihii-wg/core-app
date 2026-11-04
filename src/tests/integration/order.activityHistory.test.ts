@@ -69,8 +69,42 @@ describe("order activity history", () => {
       WS.A,
     );
 
-    const removed = eventsFor(String(created.id)).find((event) => event.event_type === "service_removed");
-    expect(removed?.payload).toMatchObject({ item_name: "Brake check", price: 25, quantity: 1 });
+    const removed = eventsFor(String(created.id)).filter((event) => event.event_type === "service_removed");
+    expect(removed).toHaveLength(1);
+    expect(removed[0]?.payload).toMatchObject({ item_name: "Brake check", price: 25, quantity: 1 });
+  });
+
+  it("records exactly one service_removed event per cleared line when all services are removed", async () => {
+    const created = await createOrder(
+      { clientId: "client-a1", clientName: "Ada Alpha", device: "Golf", services: [oilChange, labor] },
+      WS.A,
+    );
+    const orderId = String(created.id);
+
+    await updateOrder(
+      {
+        orderId,
+        device: "Golf",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        services: [],
+      },
+      WS.A,
+    );
+
+    const removed = eventsFor(orderId).filter((event) => event.event_type === "service_removed");
+    expect(removed).toHaveLength(2);
+    const names = removed.map((event) => String((event.payload as { item_name?: string }).item_name ?? "")).sort();
+    expect(names).toEqual(["Brake check", "Oil change"]);
+    expect(removed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ payload: expect.objectContaining({ item_name: "Brake check", price: 25, quantity: 1 }) }),
+        expect.objectContaining({ payload: expect.objectContaining({ item_name: "Oil change", price: 40, quantity: 1 }) }),
+      ]),
+    );
   });
 
   it("records material add, quantity change, and removal for freeform lines", async () => {

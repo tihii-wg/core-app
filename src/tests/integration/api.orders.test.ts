@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOrder, getOrders, updateOrder, updateOrderStatus } from "../../services/apiOrders";
 import { fake } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
+import { installAddAndIssueOrderCatalogMaterialRpcs, seedWarehouse } from "../orderRpcMocks";
 
 vi.mock("../../services/supabase", async () => ({ default: (await import("../fakeSupabase")).fakeClient }));
 
@@ -120,9 +121,29 @@ describe("createOrder", () => {
     expect(fake.all("services").some((item) => item.service_name === "Brand new" && item.workspace_id === WS.A)).toBe(true);
   });
 
+  it("creates an order with zero services", async () => {
+    const order = await createOrder({ clientId: "client-a1", clientName: "Ada Alpha", device: "Golf", services: [] }, WS.A);
+    expect(linesOf(String(order.id))).toHaveLength(0);
+    expect(order).toMatchObject({ total_price: 0, service: null, service_id: null });
+    expect(row("orders", String(order.id))).toMatchObject({ service: null, service_id: null, total_price: 0 });
+  });
+
+  it("skips blank service draft rows when creating", async () => {
+    const order = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [{ serviceId: "", serviceName: "   ", price: 10, quantity: 1 }],
+      },
+      WS.A,
+    );
+    expect(linesOf(String(order.id))).toHaveLength(0);
+    expect(order).toMatchObject({ total_price: 0, service: null, service_id: null });
+  });
+
   it("validates input and the workspace", async () => {
     await expect(createOrder({ clientName: "", device: "Car", services: [] }, WS.A)).rejects.toThrow("Client is required");
-    await expect(createOrder({ clientId: "client-a1", clientName: "", device: "Car", services: [] }, WS.A)).rejects.toThrow("Service is required");
     await expect(createOrder({ clientName: "", device: "Car", services: [oilChange] }, WS.A)).rejects.toThrow("Client is required");
     await expect(createOrder({ clientName: "X", device: "Car", services: [oilChange] }, undefined)).rejects.toThrow("No active workspace selected");
   });
@@ -509,10 +530,70 @@ describe("updateOrder", () => {
     expect(linesOf("order-a1").map((line) => line.service_name)).toEqual(["Oil change", "Brake check"]);
   });
 
-  it("refuses to save an order without services", async () => {
-    await expect(updateOrder({ ...details, services: [] }, WS.A)).rejects.toThrow("Service is required");
+  it("allows saving an order with zero services and clears order_services", async () => {
+    const order = await updateOrder({ ...details, services: [] }, WS.A);
+    expect(linesOf("order-a1")).toHaveLength(0);
+    expect(order.services).toEqual([]);
+    expect(row("orders", "order-a1")).toMatchObject({ service: "", service_id: null, total_price: 0 });
+  });
+
+  it("clears every service when multiple lines are removed", async () => {
+    await updateOrder({ ...details, services: [savedOilChange, brakeCheck] }, WS.A);
+    expect(linesOf("order-a1")).toHaveLength(2);
+
+    const order = await updateOrder({ ...details, services: [] }, WS.A);
+    expect(linesOf("order-a1")).toHaveLength(0);
+    expect(order.services).toEqual([]);
+    expect(row("orders", "order-a1")).toMatchObject({ service: "", service_id: null, total_price: 0 });
+  });
+
+  it("keeps existing materials when all services are cleared", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [oilChange],
+        materials: [{ itemName: "Ad-hoc gasket", price: 5, quantity: 2, supplySource: "one_time" }],
+      },
+      WS.A,
+    );
+    const orderId = String(created.id);
+    const materialBefore = fake.all("order_materials").filter((line) => line.order_id === orderId);
+    expect(materialBefore).toHaveLength(1);
+
+    const order = await updateOrder(
+      {
+        orderId,
+        device: "Golf",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        services: [],
+      },
+      WS.A,
+    );
+
+    expect(linesOf(orderId)).toHaveLength(0);
+    expect(order.services).toEqual([]);
+    expect(fake.all("order_materials").filter((line) => line.order_id === orderId)).toEqual([
+      expect.objectContaining({ item_name: "Ad-hoc gasket", quantity: 2, price: 5 }),
+    ]);
+    expect(row("orders", orderId)).toMatchObject({ total_price: 10, service: "", service_id: null });
+  });
+
+  it("reloads an order with zero services and can add a service later", async () => {
+    await updateOrder({ ...details, services: [] }, WS.A);
+    const listed = (await getOrders(WS.A)).find((item) => item.id === "order-a1");
+    expect(listed?.services).toEqual([]);
+    expect(listed?.service).toBe("");
+
+    const restored = await updateOrder({ ...details, services: [brakeCheck] }, WS.A);
     expect(linesOf("order-a1")).toHaveLength(1);
-    expect(fake.requests.filter((item) => item.op !== "select")).toHaveLength(0);
+    expect(restored.services).toEqual([expect.objectContaining(brakeCheck)]);
+    expect(row("orders", "order-a1")).toMatchObject({ total_price: 25, service: "Brake check", service_id: "service-a2" });
   });
 
   it("ignores a line id from another order instead of touching it", async () => {
@@ -550,13 +631,19 @@ describe("updateOrder", () => {
   });
 
   it("saves catalog and freeform materials together without inventing catalog ids for freeform lines", async () => {
+    fake.signInAs(USERS.owner.id);
+    installAddAndIssueOrderCatalogMaterialRpcs();
+    seedWarehouse(WS.A, "wh-a1", { "item-a1": 50 });
+    const item = row("inventory_items", "item-a1");
+    if (item) item.quantity = 50;
     const beforeQty = Number(row("inventory_items", "item-a1")?.quantity ?? 0);
+
     const order = await updateOrder(
       {
         ...details,
         services: [savedOilChange],
         materials: [
-          { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 2, supplySource: "catalog" },
+          { inventoryItemId: "item-a1", itemName: "Alpha brake pads", price: 12, quantity: 2, supplySource: "catalog", warehouseId: "wh-a1" },
           { itemName: " Special gasket ", price: 7.5, quantity: 1, supplySource: "one_time" },
           { itemName: "Customer rotor", price: 0, quantity: 1, supplySource: "customer" },
         ],
@@ -570,6 +657,7 @@ describe("updateOrder", () => {
       quantity: 2,
       supply_source: "catalog",
       price: 12,
+      quantity_issued: 2,
     });
     expect(lines.find((line) => line.supply_source === "one_time")).toMatchObject({
       inventory_item_id: null,
@@ -583,11 +671,11 @@ describe("updateOrder", () => {
       item_name: "Customer rotor",
       price: 0,
     });
-    expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeQty);
+    expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(beforeQty - 2);
     const materials = order.materials ?? [];
     expect(materials).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ inventoryItemId: "item-a1", supplySource: "catalog", quantity: 2 }),
+        expect.objectContaining({ inventoryItemId: "item-a1", supplySource: "catalog", quantity: 2, quantityIssued: 2 }),
         expect.objectContaining({ itemName: "Special gasket", supplySource: "one_time", price: 7.5 }),
         expect.objectContaining({ itemName: "Customer rotor", supplySource: "customer", price: 0 }),
       ]),

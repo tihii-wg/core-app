@@ -252,7 +252,7 @@ describe("orders page", () => {
     expect(fake.requests.filter((request) => request.table === "order_services" && (request.op === "insert" || request.op === "delete"))).toHaveLength(0);
   });
 
-  it("requires at least one service when editing", async () => {
+  it("allows saving after removing the last service", async () => {
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
@@ -260,10 +260,13 @@ describe("orders page", () => {
     await user.click(within(panel).getByRole("button", { name: "Remove Oil change" }));
     await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
 
-    expect((await screen.findAllByText("Service is required")).length).toBeGreaterThan(0);
-    expect(within(panel).getByRole("button", { name: "Save Changes" })).toBeInTheDocument();
-    expect(fake.requests.filter((request) => ["orders", "order_services"].includes(request.table) && request.op !== "select")).toHaveLength(0);
-    expect(fake.all("order_services").filter((line) => line.order_id === "order-a1")).toHaveLength(1);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(fake.all("order_services").filter((line) => line.order_id === "order-a1")).toHaveLength(0);
+    expect(row("orders", "order-a1")).toMatchObject({ service: "", service_id: null });
+
+    const reopened = await openOrderPanel(user);
+    expect(within(reopened).queryByText("Services")).not.toBeInTheDocument();
+    expect(within(reopened).queryByRole("button", { name: "Remove Oil change" })).not.toBeInTheDocument();
   });
 
   it("edits an order from the row actions menu in a dialog and stays on the orders page", async () => {

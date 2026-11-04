@@ -301,10 +301,11 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   if (!nullIfEmptyUuid(input.clientId) && !(input.clientName?.trim())) {
     throw new Error(i18n.t("orders.validation.clientRequired"));
   }
-  if (!(input.services?.length)) throw new Error(i18n.t("orders.validation.serviceRequired"));
-
+  // Orders may be saved with zero services (empty draft / cleared lines).
+  // Blank draft rows are skipped; named entries still go through resolveService.
   const resolvedServices: ResolvedServiceLine[] = [];
   for (const service of input.services ?? []) {
+    if (!service.serviceId && !service.serviceName?.trim()) continue;
     const resolved = await resolveService(targetWorkspaceId, service);
     resolvedServices.push({
       ...resolved,
@@ -1797,8 +1798,8 @@ export async function updateOrder(
   targetWorkspaceId: string | undefined,
 ) {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
-  // Reject empty service lists before any DB write so validation stays a pure client-side failure.
-  if (services && services.length === 0) throw new Error(i18n.t("orders.validation.serviceRequired"));
+  // Empty `services: []` is allowed: syncOrderServices deletes every line for this order.
+  // Omitting `services` (undefined) leaves existing lines untouched.
 
   const employeeId = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = assertValidOptionalVin(vin, "orders.validation.vinLength");
