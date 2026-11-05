@@ -178,6 +178,15 @@ export default {
     title: "Closed Order Permissions",
     description: "Decide which workspace roles may cancel or delete orders after they are formally closed. These two permissions are independent.",
     ownerAlways: "The workspace owner always retains both permissions and cannot lose them. Changes apply immediately to Admin, Manager, and Member.",
+    manageTitle: "Owner closed-order management",
+    manageLabel: "Allow owner to manage closed orders",
+    manageDescription:
+      "When enabled, the workspace owner can edit, change the status of, and delete closed orders. Admins, managers, and members never receive this override.",
+    manageToast: {
+      saving: "Saving owner closed-order setting...",
+      saved: "Owner closed-order setting saved",
+      failed: "Could not save owner closed-order setting",
+    },
     cancelTitle: "Cancel closed orders",
     cancelDescription: "Allow selected roles to cancel an order that is already closed. Cancellation keeps the order and its history; it does not delete warranty or financial records.",
     deleteTitle: "Delete closed orders",
@@ -191,6 +200,8 @@ export default {
     },
     errors: {
       schemaRequired: "Closed order permissions require the reviewed database script. Apply supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql on MAIN after review.",
+      manageSchemaRequired:
+        "Owner closed-order management requires the reviewed database script. Apply supabase/manual/20261105170000_owner_manage_closed_orders.PRODUCTION.sql on MAIN after review.",
     },
   },
   notifications: {

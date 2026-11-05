@@ -98,6 +98,7 @@ const generalSettingsColumns = [
   "default_legal_entity_id",
   "online_payments_enabled",
   "require_tax_invoice_number",
+  "owner_can_manage_closed_orders",
 ] as const;
 
 function mentionsPreferenceColumn(message?: string) {
@@ -261,6 +262,8 @@ export type WorkspaceDetails = {
   defaultLegalEntityId: string | null;
   onlinePaymentsEnabled: boolean;
   requireTaxInvoiceNumber: boolean;
+  /** Owner-only: when true, workspaces.owner_id may edit/manage closed orders. Default false. */
+  ownerCanManageClosedOrders: boolean;
   subscriptionStatus: WorkspaceSubscriptionStatus | null;
   subscriptionStartedAt: string | null;
   subscriptionExpiresAt: string | null;
@@ -345,6 +348,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     defaultLegalEntityId: typeof record.default_legal_entity_id === "string" ? record.default_legal_entity_id : null,
     onlinePaymentsEnabled: readBool(record.online_payments_enabled, false),
     requireTaxInvoiceNumber: readBool(record.require_tax_invoice_number, false),
+    ownerCanManageClosedOrders: readBool(record.owner_can_manage_closed_orders, false),
     subscriptionStatus: normalizeSubscriptionStatus(record.subscription_status),
     subscriptionStartedAt: readTimestamp(record.subscription_started_at),
     subscriptionExpiresAt: readTimestamp(record.subscription_expires_at),
@@ -706,6 +710,36 @@ export async function updateWorkspaceTaxInvoiceSettings(workspaceId: string, req
   return updateWorkspaceColumns(workspaceId, {
     require_tax_invoice_number: Boolean(requireTaxInvoiceNumber),
   });
+}
+
+/**
+ * Persist owner-only closed-order management setting.
+ * Requires `workspaces.owner_id === auth user` (not membership role alone).
+ */
+export async function updateOwnerCanManageClosedOrders(workspaceId: string, enabled: boolean) {
+  const user = await currentUser();
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) throw new Error(ownerOnlyWorkspaceMessage());
+  if (workspace.ownerId !== user.id) throw new Error(ownerOnlyWorkspaceMessage());
+
+  const { data, error } = await supabase
+    .from("workspaces")
+    .update({ owner_can_manage_closed_orders: Boolean(enabled) })
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (/owner_can_manage_closed_orders/i.test(error.message) && (error.code === "42703" || error.code === "PGRST204")) {
+      throw new Error(i18n.t("settings.closedOrderPermissions.errors.manageSchemaRequired"));
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error(ownerOnlyWorkspaceMessage());
+
+  return getWorkspace(workspaceId);
 }
 
 export async function updateWorkspaceOrderSettings(workspaceId: string, input: WorkspaceOrderSettings) {

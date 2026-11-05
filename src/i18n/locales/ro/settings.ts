@@ -181,6 +181,15 @@ const settings: Messages<typeof en> = {
     title: "Permisiuni pentru comenzi închise",
     description: "Decideți ce roluri pot anula sau șterge comenzile după închiderea formală. Aceste două permisiuni sunt independente.",
     ownerAlways: "Proprietarul păstrează întotdeauna ambele permisiuni și nu le poate pierde. Modificările se aplică imediat pentru Admin, Manager și Membru.",
+    manageTitle: "Gestionarea comenzilor închise de către proprietar",
+    manageLabel: "Permite proprietarului să gestioneze comenzile închise",
+    manageDescription:
+      "Când este activat, proprietarul spațiului de lucru poate edita, schimba statusul și șterge comenzile închise. Adminii, managerii și membrii nu primesc niciodată această excepție.",
+    manageToast: {
+      saving: "Se salvează setarea proprietarului...",
+      saved: "Setarea proprietarului a fost salvată",
+      failed: "Nu s-a putut salva setarea proprietarului",
+    },
     cancelTitle: "Anulare comenzi închise",
     cancelDescription: "Permite rolurilor selectate să anuleze o comandă deja închisă. Anularea păstrează comanda și istoricul; nu șterge garanțiile sau înregistrările financiare.",
     deleteTitle: "Ștergere comenzi închise",
@@ -194,6 +203,8 @@ const settings: Messages<typeof en> = {
     },
     errors: {
       schemaRequired: "Permisiunile pentru comenzi închise necesită scriptul SQL revizuit. Aplicați supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql pe MAIN după revizuire.",
+      manageSchemaRequired:
+        "Gestionarea comenzilor închise de către proprietar necesită scriptul SQL revizuit. Aplicați supabase/manual/20261105170000_owner_manage_closed_orders.PRODUCTION.sql pe MAIN după revizuire.",
     },
   },
   notifications: {

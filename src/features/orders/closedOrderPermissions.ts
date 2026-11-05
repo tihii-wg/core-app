@@ -6,6 +6,28 @@ import {
 import { isOrderFormallyClosed } from "./orderLifecycle";
 import type { Order } from "../../lib/types";
 
+/**
+ * Owner-only override for managing formally closed orders.
+ * Requires authoritative `workspaces.owner_id` match AND the workspace setting.
+ * Never true for admin/manager/member.
+ */
+export function ownerMayManageClosedOrders(opts: {
+  isOwnerByOwnerId: boolean;
+  ownerCanManageClosedOrders: boolean;
+}): boolean {
+  return Boolean(opts.isOwnerByOwnerId && opts.ownerCanManageClosedOrders);
+}
+
+/** True when the order is open, or the caller may manage this closed order. */
+export function canMutateOrderContent(opts: {
+  order: Pick<Order, "closedAt" | "status">;
+  isOwnerByOwnerId: boolean;
+  ownerCanManageClosedOrders: boolean;
+}): boolean {
+  if (!isOrderFormallyClosed(opts.order)) return true;
+  return ownerMayManageClosedOrders(opts);
+}
+
 export function canCancelClosedOrder(
   workspaceRole: string | null | undefined,
   grants: ClosedOrderPermissionGrants | null | undefined,

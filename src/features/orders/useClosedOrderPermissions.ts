@@ -5,10 +5,16 @@ import {
   saveClosedOrderPermissionGrants,
   type ClosedOrderPermissionGrants,
 } from "../../services/apiClosedOrderPermissions";
+import { updateOwnerCanManageClosedOrders } from "../../services/apiWorkspaces";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
-import { canCancelClosedOrder, canDeleteClosedOrder } from "./closedOrderPermissions";
+import {
+  canCancelClosedOrder,
+  canDeleteClosedOrder,
+  ownerMayManageClosedOrders,
+} from "./closedOrderPermissions";
 
 export function closedOrderPermissionsQueryKey(workspaceId: string | undefined) {
   return ["closed-order-permissions", workspaceId] as const;
@@ -29,13 +35,22 @@ export function useClosedOrderPermissionGrants(workspaceId?: string | null) {
 export function useClosedOrderActionPermissions() {
   const role = useActiveWorkspaceRole();
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
+  const { workspaceId } = useActiveWorkspaceId();
+  const { data: workspace } = useGetWorkspace(workspaceId);
   const { data: grants, isLoading, isError } = useClosedOrderPermissionGrants();
   const safeGrants = grants ?? emptyClosedOrderGrants();
+  const canManageClosedContent = ownerMayManageClosedOrders({
+    isOwnerByOwnerId,
+    ownerCanManageClosedOrders: workspace?.ownerCanManageClosedOrders === true,
+  });
   return {
     role,
     grants: safeGrants,
     isLoading,
     isError,
+    isOwnerByOwnerId,
+    ownerCanManageClosedOrders: workspace?.ownerCanManageClosedOrders === true,
+    canManageClosedContent,
     canCancelClosed: isOwnerByOwnerId || canCancelClosedOrder(role, safeGrants),
     canDeleteClosed: isOwnerByOwnerId || canDeleteClosedOrder(role, safeGrants),
   };
@@ -50,6 +65,22 @@ export function useSaveClosedOrderPermissionGrants() {
       if (workspaceId) {
         queryClient.setQueryData(closedOrderPermissionsQueryKey(workspaceId), saved);
       }
+    },
+  });
+}
+
+export function useSaveOwnerCanManageClosedOrders() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  return useMutation({
+    mutationFn: (enabled: boolean) => updateOwnerCanManageClosedOrders(workspaceId!, enabled),
+    onSuccess: (workspace) => {
+      if (!workspaceId || !workspace) return;
+      // Workspace details power permission gates — refresh immediately.
+      queryClient.setQueryData(["workspace", workspaceId], workspace);
+      queryClient.invalidateQueries({ queryKey: ["workspace", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: closedOrderPermissionsQueryKey(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
 }

@@ -66,6 +66,7 @@ const workspace: WorkspaceDetails = {
   defaultLegalEntityId: null,
   onlinePaymentsEnabled: false,
   requireTaxInvoiceNumber: false,
+  ownerCanManageClosedOrders: false,
   subscriptionStatus: "active",
   subscriptionStartedAt: null,
   subscriptionExpiresAt: null,

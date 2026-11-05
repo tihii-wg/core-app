@@ -190,6 +190,35 @@ describe("unifiedOrderStatus", () => {
     ).toBeNull();
   });
 
+  it("allows closed-order status selection when owner manage-closed override is on", () => {
+    const options = unifiedStatusOptions(defaults, label);
+    const waiting = options.find((option) => option.id === "d-waiting")!;
+    expect(
+      resolveUnifiedStatusSelection(
+        order({ status: "closed", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-new" }),
+        waiting,
+        { allowManageClosed: true },
+      ),
+    ).toEqual({ status: "waiting-parts", customStatusId: "d-waiting" });
+    expect(
+      resolveUnifiedStatusSelection(
+        order({ status: "cancelled", closedAt: null, customStatusId: null }),
+        waiting,
+        { allowManageClosed: true },
+      ),
+    ).toBeNull();
+  });
+
+  it("shows the live status when closed_at remains after an owner status change", () => {
+    const options = unifiedStatusOptions(defaults, label);
+    expect(
+      resolveCurrentUnifiedStatus(
+        order({ status: "in-progress", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-progress" }),
+        options,
+      )?.id,
+    ).toBe("d-progress");
+  });
+
   it("never lets a stale customStatusId override closed/cancelled in selectors", () => {
     const options = unifiedStatusOptions(defaults, label);
     // Selectors exclude lifecycle defs — current resolution must not fall back to a regular custom.

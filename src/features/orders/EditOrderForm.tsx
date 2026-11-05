@@ -18,6 +18,8 @@ import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
+import { canMutateOrderContent } from "./closedOrderPermissions";
 import { defaultsForKind } from "./warranty";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
@@ -78,6 +80,12 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { workflow, copy } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
+  const closedOrderPerms = useClosedOrderActionPermissions();
+  const allowClosedMutation = canMutateOrderContent({
+    order,
+    isOwnerByOwnerId: closedOrderPerms.isOwnerByOwnerId,
+    ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+  });
   const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? order.clientId || null : null);
   const activeServices = services?.filter((service) => service.status === "active");
   const activeInventory = inventoryItems.filter((item) => item.isActive);
@@ -107,6 +115,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       materials: order.materials ?? [],
     },
   });
+  const warrantyDisabled = isSubmitting || (Boolean(order.closedAt) && !allowClosedMutation);
 
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
@@ -288,7 +297,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                   months={watchedServices?.[index]?.warrantyMonths}
                   days={watchedServices?.[index]?.warrantyDays}
                   km={watchedServices?.[index]?.warrantyKm}
-                  disabled={isSubmitting || Boolean(order.closedAt)}
+                  disabled={warrantyDisabled}
                   onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                     setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
                     setValue(`services.${index}.warrantyDays`, warrantyDays, { shouldDirty: true });
@@ -311,7 +320,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         trigger={trigger as never}
         inventoryItems={activeInventory}
         disabled={isSubmitting}
-        warrantyDisabled={isSubmitting || Boolean(order.closedAt)}
+        warrantyDisabled={warrantyDisabled}
         warrantyDefaults={warrantyDefaults}
         isSubmitted={isSubmitted}
         errors={errors.materials}

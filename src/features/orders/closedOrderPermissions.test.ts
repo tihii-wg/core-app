@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   canCancelClosedOrder,
   canDeleteClosedOrder,
+  canMutateOrderContent,
   canOfferCancelOrderAction,
   canOfferDeleteClosedOrderAction,
+  ownerMayManageClosedOrders,
 } from "./closedOrderPermissions";
 
 describe("closed order UI permission helpers", () => {
@@ -136,4 +138,41 @@ describe("closed order UI permission helpers", () => {
       }),
     ).toBe(false);
   });
+
+  it("owner manage-closed setting unlocks content only for owner_id + enabled", () => {
+    const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: false })).toBe(false);
+    expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: true })).toBe(true);
+    expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: false, ownerCanManageClosedOrders: true })).toBe(false);
+
+    expect(
+      canMutateOrderContent({
+        order: closed,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(false);
+    expect(
+      canMutateOrderContent({
+        order: closed,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: true,
+      }),
+    ).toBe(true);
+    expect(
+      canMutateOrderContent({
+        order: closed,
+        isOwnerByOwnerId: false,
+        ownerCanManageClosedOrders: true,
+      }),
+    ).toBe(false);
+    expect(
+      canMutateOrderContent({
+        order: { status: "in-progress", closedAt: null },
+        isOwnerByOwnerId: false,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(true);
+  });
 });
+

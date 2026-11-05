@@ -13,11 +13,13 @@ import {
   type ClosedOrderGrantableRole,
   type ClosedOrderPermissionGrants,
 } from "../../services/apiClosedOrderPermissions";
-import { canManageWorkspace, workspaceRoleLabel } from "../workspaces/workspaceRoles";
+import { workspaceRoleLabel } from "../workspaces/workspaceRoles";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import {
   useClosedOrderPermissionGrants,
   useSaveClosedOrderPermissionGrants,
+  useSaveOwnerCanManageClosedOrders,
 } from "../orders/useClosedOrderPermissions";
 
 function toggleRole(
@@ -67,6 +69,53 @@ function RoleGrantGroup({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function OwnerManageClosedOrdersToggle({ workspace }: { workspace: WorkspaceDetails }) {
+  const { t } = useTranslation();
+  const save = useSaveOwnerCanManageClosedOrders();
+  const [enabled, setEnabled] = useState(workspace.ownerCanManageClosedOrders === true);
+
+  useEffect(() => {
+    setEnabled(workspace.ownerCanManageClosedOrders === true);
+  }, [workspace.ownerCanManageClosedOrders, workspace.id]);
+
+  async function onToggle(next: boolean) {
+    const previous = enabled;
+    setEnabled(next);
+    toast.loading(t("settings.closedOrderPermissions.manageToast.saving"), { id: "owner-manage-closed" });
+    try {
+      await save.mutateAsync(next);
+      toast.success(t("settings.closedOrderPermissions.manageToast.saved"), { id: "owner-manage-closed" });
+    } catch (err) {
+      setEnabled(previous);
+      toast.error(
+        err instanceof Error ? err.message : t("settings.closedOrderPermissions.manageToast.failed"),
+        { id: "owner-manage-closed" },
+      );
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-4" data-owner-manage-closed-orders>
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">{t("settings.closedOrderPermissions.manageTitle")}</p>
+        <p className="text-[13px] text-muted-foreground">{t("settings.closedOrderPermissions.manageDescription")}</p>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="owner-manage-closed-orders" className="font-normal">
+          {t("settings.closedOrderPermissions.manageLabel")}
+        </Label>
+        <Switch
+          id="owner-manage-closed-orders"
+          checked={enabled}
+          disabled={save.isPending}
+          onCheckedChange={(value) => void onToggle(value)}
+          aria-label={t("settings.closedOrderPermissions.manageLabel")}
+        />
       </div>
     </div>
   );
@@ -149,6 +198,8 @@ function ClosedOrderPermissionsForm({ workspace }: { workspace: WorkspaceDetails
         <CardDescription>{t("settings.closedOrderPermissions.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <OwnerManageClosedOrdersToggle workspace={workspace} />
+
         <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
           <Lock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>{t("settings.closedOrderPermissions.ownerAlways")}</p>
@@ -185,8 +236,9 @@ function ClosedOrderPermissionsForm({ workspace }: { workspace: WorkspaceDetails
   );
 }
 
-/** Owner-only section. Non-owners must not see or edit these grants. */
+/** Owner Menu section. Visible only to workspaces.owner_id — not admins/managers/members. */
 export function ClosedOrderPermissionsSettings({ workspace }: { workspace: WorkspaceDetails }) {
-  if (!canManageWorkspace(workspace.role)) return null;
+  const isOwnerByOwnerId = useIsWorkspaceOwnerId();
+  if (!isOwnerByOwnerId) return null;
   return <ClosedOrderPermissionsForm workspace={workspace} />;
 }

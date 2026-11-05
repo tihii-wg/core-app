@@ -136,9 +136,15 @@ export default function OrderDetailPanel({
   // Paid unlock uses membership owner role. Lifecycle status is never editable via the ordinary selector.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
+  const canManageClosedContent = closedOrderPerms.canManageClosedContent;
   const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
+  // Closed/cancelled statuses stay locked unless the owner manage-closed setting is on.
   const lifecycleStatusLocked =
-    selectedOrder != null && (isOrderFormallyClosed(selectedOrder) || selectedOrder.status === "cancelled");
+    selectedOrder != null &&
+    ((isOrderFormallyClosed(selectedOrder) && !canManageClosedContent) ||
+      (selectedOrder.status === "cancelled" && !isOrderFormallyClosed(selectedOrder)));
+  const closedContentLocked =
+    selectedOrder != null && isOrderFormallyClosed(selectedOrder) && !canManageClosedContent;
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
@@ -199,6 +205,7 @@ export default function OrderDetailPanel({
 
   async function handleAssigneeChange(assignedEmployeeId: string) {
     if (!selectedOrder || isAssigneeUpdating) return;
+    if (closedContentLocked) return;
     if ((selectedOrder.assignedEmployeeId || "") === assignedEmployeeId) return;
 
     try {
@@ -253,7 +260,7 @@ export default function OrderDetailPanel({
               <OrderDetailWarrantyUnderNumber order={selectedOrder} />
             ) : null}
           </SheetTitle>
-          {selectedOrder && !isEditing && canEditOrder && (
+          {selectedOrder && !isEditing && canEditOrder && !closedContentLocked && (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
@@ -294,7 +301,7 @@ export default function OrderDetailPanel({
             <WarrantyOrderSection
               order={selectedOrder}
               currentMileage={selectedOrder.vehicleMileageSnapshot ?? null}
-              disabled={!canEditOrder || Boolean(selectedOrder.closedAt)}
+              disabled={!canEditOrder || closedContentLocked}
               onChanged={() => {
                 void onOrderUpdated(selectedOrder);
               }}
@@ -404,7 +411,7 @@ export default function OrderDetailPanel({
                 label={copy.assignedEmployeeLabel}
                 value={selectedOrder.assignedEmployeeId}
                 options={technicianOptions}
-                disabled={!canEditOrder || isAssigneeUpdating || isStatusUpdating}
+                disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
                 errorMessage={assigneeErrorMessage}
                 emptyHint={assigneeEmptyHint}
                 onChange={handleAssigneeChange}
@@ -567,7 +574,9 @@ export default function OrderDetailPanel({
                   if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
                   const option = statusOptions.find((item) => item.id === value);
                   if (!option) return;
-                  const move = resolveUnifiedStatusSelection(selectedOrder, option);
+                  const move = resolveUnifiedStatusSelection(selectedOrder, option, {
+                    allowManageClosed: canManageClosedContent,
+                  });
                   if (!move) return;
                   if (move.status === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
 

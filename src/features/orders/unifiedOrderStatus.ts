@@ -111,10 +111,10 @@ export function resolveCurrentUnifiedStatus(
   options: readonly UnifiedStatusOption[],
 ): UnifiedStatusOption | null {
   if (options.length === 0) return null;
-  // Lifecycle status is authoritative — never let a stale regular custom_status_id win.
-  if (order.status === "cancelled" || order.status === "closed" || Boolean(order.closedAt?.trim())) {
-    const lifecycleStatus: OrderStatus =
-      order.status === "cancelled" ? "cancelled" : order.status === "closed" ? "closed" : "closed";
+  // Closed/cancelled system status is authoritative — never let a stale regular custom_status_id win.
+  // When closed_at remains set but status was changed (owner manage-closed), prefer the live status.
+  if (order.status === "cancelled" || order.status === "closed") {
+    const lifecycleStatus: OrderStatus = order.status === "cancelled" ? "cancelled" : "closed";
     return options.find((option) => option.systemStatus === lifecycleStatus) ?? null;
   }
   if (options[0]?.kind === "definition") {
@@ -138,12 +138,17 @@ export function resolveCurrentUnifiedStatus(
 export function resolveUnifiedStatusSelection(
   order: Pick<Order, "status" | "customStatusId" | "closedAt">,
   option: UnifiedStatusOption,
+  opts?: { allowManageClosed?: boolean },
 ): BoardMove | null {
   if (option.semanticAction === "close" || option.semanticAction === "cancel") return null;
   if (option.systemStatus === "closed" || option.systemStatus === "cancelled") return null;
 
-  // Closed/cancelled are lifecycle-only: ordinary selectors must not change them.
-  if (isLifecycleOrderStatus(order)) return null;
+  // Closed/cancelled are lifecycle-only unless the owner manage-closed override is active.
+  // Cancelled-without-close stays locked (no reopen via ordinary selector).
+  if (isLifecycleOrderStatus(order)) {
+    if (!opts?.allowManageClosed) return null;
+    if (order.status === "cancelled" && !order.closedAt?.trim()) return null;
+  }
 
   if (option.kind === "definition") {
     const status = option.systemStatus ?? (isOrderStatus(order.status) ? order.status : null);

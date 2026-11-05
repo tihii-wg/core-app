@@ -116,6 +116,9 @@ export function OrderActionsMenu({
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
   const closedOrderPerms = useClosedOrderActionPermissions();
+  const canManageClosedContent = closedOrderPerms.canManageClosedContent;
+  const statusLockedForMenu =
+    (formallyClosed && !canManageClosedContent) || (order.status === "cancelled" && !formallyClosed);
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
   const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
@@ -191,13 +194,13 @@ export function OrderActionsMenu({
 
           <DropdownMenuSeparator />
           <DropdownMenuLabel>
-            {formallyClosed || order.status === "cancelled" || paidLocked
+            {statusLockedForMenu || paidLocked
               ? t("orders.actions.statusLocked")
               : statusBusy
                 ? t("orders.actions.updatingStatus")
                 : t("orders.actions.changeStatus")}
           </DropdownMenuLabel>
-          {formallyClosed || order.status === "cancelled" ? (
+          {statusLockedForMenu ? (
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {order.status === "cancelled"
                 ? t("orders.lifecycle.errors.orderAlreadyCancelled")
@@ -221,7 +224,9 @@ export function OrderActionsMenu({
                   }
                   onSelect={() => {
                     if (locked) return;
-                    const move = resolveUnifiedStatusSelection(order, option);
+                    const move = resolveUnifiedStatusSelection(order, option, {
+                      allowManageClosed: canManageClosedContent,
+                    });
                     if (!move) return;
                     if (option.kind === "definition" || move.customStatusId !== null || order.customStatusId) {
                       moveOnBoard({
@@ -248,11 +253,11 @@ export function OrderActionsMenu({
               );
             })
           )}
-          {paidLocked && !(formallyClosed || order.status === "cancelled") ? (
+          {paidLocked && !statusLockedForMenu ? (
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {t("orders.actions.paidStatusImmutable")}
             </p>
-          ) : paidBlocked && !(formallyClosed || order.status === "cancelled") ? (
+          ) : paidBlocked && !statusLockedForMenu ? (
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {t("orders.taxInvoice.paidRequiresNumber")}
             </p>

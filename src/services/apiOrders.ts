@@ -1558,6 +1558,36 @@ export async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
   return data != null;
 }
 
+/**
+ * True only when auth.uid() is workspaces.owner_id AND owner_can_manage_closed_orders.
+ * Never trusts membership role or client-supplied flags.
+ */
+export async function ownerMayManageClosedOrdersOnServer(workspaceId: string) {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError) throw new Error(authError.message);
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("owner_can_manage_closed_orders")
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    // Column not applied yet → treat as disabled (safe default).
+    if (/owner_can_manage_closed_orders/i.test(error.message ?? "") && (error.code === "42703" || error.code === "PGRST204")) {
+      return false;
+    }
+    throw new Error(error.message);
+  }
+  return data != null && (data as { owner_can_manage_closed_orders?: unknown }).owner_can_manage_closed_orders === true;
+}
+
 export type SetLifecycleRegularCustomStatusResult = {
   status: OrderStatus;
   customStatusId: string;
@@ -1868,10 +1898,16 @@ export async function updateOrderStatus(
     typeof (existing as { custom_status_id?: unknown }).custom_status_id === "string"
       ? ((existing as { custom_status_id: string }).custom_status_id.trim() || null)
       : null;
-  if ((existing as { closed_at?: unknown }).closed_at || currentStatus === "closed") {
-    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
-  }
-  if (currentStatus === "cancelled") {
+  const isClosedRow =
+    Boolean((existing as { closed_at?: unknown }).closed_at) || currentStatus === "closed";
+  if (isClosedRow) {
+    // Owner + owner_can_manage_closed_orders may change status on closed rows.
+    // Non-owners and owners with the setting off stay blocked.
+    const mayManage = await ownerMayManageClosedOrdersOnServer(targetWorkspaceId);
+    if (!mayManage) {
+      throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+    }
+  } else if (currentStatus === "cancelled") {
     throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
   }
 
@@ -2068,12 +2104,28 @@ export async function updateOrder(
 
   const { data: existingOrder, error: existingError } = await supabase
     .from("orders")
-    .select("client_id")
+    .select("client_id, status, closed_at")
     .eq("id", orderId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (!existingOrder) throw new Error(orderPermissionMessage());
+
+  const existingStatus =
+    typeof (existingOrder as { status?: unknown }).status === "string"
+      ? (existingOrder as { status: string }).status
+      : "";
+  const existingClosedAt =
+    typeof (existingOrder as { closed_at?: unknown }).closed_at === "string"
+      ? (existingOrder as { closed_at: string }).closed_at
+      : null;
+  const isClosedRow = Boolean(existingClosedAt) || existingStatus === "closed";
+  if (isClosedRow) {
+    const mayManage = await ownerMayManageClosedOrdersOnServer(workspaceId);
+    if (!mayManage) {
+      throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+    }
+  }
 
   const clientId = typeof existingOrder.client_id === "string" ? existingOrder.client_id : null;
   // Omit vehicleId from the payload to leave orders.vehicle_id unchanged (assignee-only updates).

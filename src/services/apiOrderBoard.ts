@@ -86,10 +86,11 @@ export async function moveOrderOnBoard(
   if (!existing) throw new Error(i18n.t("orders.board.errors.moveFailed"));
   const existingStatus =
     typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
-  if ((existing as { closed_at?: unknown }).closed_at || existingStatus === "closed") {
-    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
-  }
-  if (existingStatus === "cancelled") {
+  // Closed-order mutation gate is enforced inside updateOrderStatus (owner manage setting).
+  // Keep a specific cancelled message for non-closed cancelled rows.
+  const isClosedRow =
+    Boolean((existing as { closed_at?: unknown }).closed_at) || existingStatus === "closed";
+  if (!isClosedRow && existingStatus === "cancelled") {
     throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
   }
 
