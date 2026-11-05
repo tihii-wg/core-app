@@ -72,10 +72,14 @@ export async function applyCatalogImmediateIssue(params: {
       throw new Error(i18n.t("orders.errors.cannotReduceBelowIssued"));
     }
 
-    // Keep desired warranty limits so syncOrderMaterialsRpc → apply_order_material_warranties
-    // still receives them after catalog issue RPCs (which do not round-trip warranty columns).
+    // Keep desired identity + warranty so apply_order_material_warranties can match the
+    // persisted row. Issue RPCs do not round-trip warranty_* (or always inventory_item_id).
     const withWarranty = (material: OrderMaterial): OrderMaterial => ({
       ...material,
+      inventoryItemId: material.inventoryItemId?.trim() || line.inventoryItemId,
+      itemName: material.itemName || line.itemName,
+      warehouseId: material.warehouseId?.trim() || warehouseId,
+      supplySource: "catalog",
       warrantyMonths: line.warrantyMonths,
       warrantyDays: line.warrantyDays,
       warrantyKm: line.warrantyKm,

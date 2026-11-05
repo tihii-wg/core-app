@@ -85,6 +85,8 @@ export async function getOrderComments(workspaceId: string | undefined, orderId:
 export async function createOrderComment(workspaceId: string | undefined, orderId: string, body: string): Promise<OrderComment> {
   const resolved = requireWorkspaceId(workspaceId);
   if (!orderId.trim()) throw new Error(i18n.t("orders.feed.errors.noOrder"));
+  const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+  await assertClosedOrderMutableOnServer(orderId, resolved);
   const text = normalizeCommentBody(body);
 
   let authorName: string | null = null;
@@ -108,6 +110,8 @@ export async function createOrderComment(workspaceId: string | undefined, orderI
 
 export async function deleteOrderComment(workspaceId: string | undefined, orderId: string, commentId: string): Promise<void> {
   const resolved = requireWorkspaceId(workspaceId);
+  const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+  await assertClosedOrderMutableOnServer(orderId, resolved);
   const { data, error } = await supabase
     .from("order_comments")
     .update({ deleted_at: new Date().toISOString() })

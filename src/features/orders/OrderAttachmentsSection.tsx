@@ -26,6 +26,8 @@ type OrderAttachmentsSectionProps = {
   orderId: string;
   /** When false, the panel is closed — skip fetching. */
   enabled?: boolean;
+  /** When false, forces read-only (e.g. closed order without owner-manage). `undefined` keeps role default. */
+  canMutateOverride?: boolean;
 };
 
 function formatUploadedAt(value: string) {
@@ -125,9 +127,14 @@ function AttachmentPreviewDialog({
   );
 }
 
-export default function OrderAttachmentsSection({ orderId, enabled = true }: OrderAttachmentsSectionProps) {
+export default function OrderAttachmentsSection({
+  orderId,
+  enabled = true,
+  canMutateOverride,
+}: OrderAttachmentsSectionProps) {
   const { t } = useTranslation();
-  const canMutate = useCanMutateOrderAttachments();
+  const canMutateRole = useCanMutateOrderAttachments();
+  const canMutate = canMutateOverride === false ? false : canMutateRole;
   const { attachments, isLoading, error, refetch } = useOrderAttachments(orderId, { enabled });
   const upload = useUploadOrderAttachment(orderId);
   const remove = useDeleteOrderAttachment(orderId);

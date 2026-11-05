@@ -51,7 +51,7 @@ describe("ClosedOrderPermissionsSettings", () => {
     expect(screen.getByText("Allow owner to manage closed orders")).toBeInTheDocument();
     expect(screen.getByText("Cancel closed orders")).toBeInTheDocument();
     expect(screen.getByText("Delete closed orders")).toBeInTheDocument();
-    expect(screen.getByText(/owner always retains both permissions/i)).toBeInTheDocument();
+    expect(screen.getByText(/cancel\/delete grants are independent/i)).toBeInTheDocument();
     // 1 owner-manage toggle + 3 cancel roles + 3 delete roles
     expect(screen.getAllByRole("switch")).toHaveLength(7);
   });

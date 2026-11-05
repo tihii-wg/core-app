@@ -177,11 +177,12 @@ export default {
   closedOrderPermissions: {
     title: "Closed Order Permissions",
     description: "Decide which workspace roles may cancel or delete orders after they are formally closed. These two permissions are independent.",
-    ownerAlways: "The workspace owner always retains both permissions and cannot lose them. Changes apply immediately to Admin, Manager, and Member.",
+    ownerAlways:
+      "Admin, Manager, and Member cancel/delete grants are independent of the owner manage-closed setting. The owner needs that setting enabled to cancel or delete closed orders.",
     manageTitle: "Owner closed-order management",
     manageLabel: "Allow owner to manage closed orders",
     manageDescription:
-      "When enabled, the workspace owner can edit, change the status of, and delete closed orders. Admins, managers, and members never receive this override.",
+      "When enabled, the workspace owner can edit, change the status of, cancel, and delete closed orders. Admins, managers, and members never receive this override.",
     manageToast: {
       saving: "Saving owner closed-order setting...",
       saved: "Owner closed-order setting saved",

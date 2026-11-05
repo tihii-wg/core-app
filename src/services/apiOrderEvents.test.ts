@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildStatusEventInputs,
   getOrderEvents,
+  getRecentActiveOrderIds,
   isMissingOrderEventRpc,
   recordOrderEvent,
   recordStatusChangeEvents,
@@ -21,8 +22,10 @@ function query(result: Result) {
   const chain = {
     select: () => chain,
     eq: () => chain,
+    in: () => chain,
     order: () => chain,
     limit: () => chain,
+    range: () => chain,
     then: (onFulfilled: (value: Result) => unknown, onRejected?: (reason: unknown) => unknown) => Promise.resolve(result).then(onFulfilled, onRejected),
   };
   return chain;
@@ -133,5 +136,44 @@ describe("apiOrderEvents", () => {
     rpc.mockRejectedValueOnce(new Error("network"));
     expect(await recordOrderEvent({ orderId: "o", eventType: "x" })).toEqual({ recorded: false, reason: "error" });
     expect(await recordOrderEvent({ orderId: " ", eventType: "x" })).toEqual({ recorded: false, reason: "error" });
+  });
+
+  it("prefers crm_recent_active_order_ids and returns unique order ids newest-first", async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        { order_id: "o-paid", last_activity_at: "2026-11-05T12:00:00Z" },
+        { order_id: "o-paid", last_activity_at: "2026-11-05T11:00:00Z" },
+        { order_id: "o-old", last_activity_at: "2026-11-04T09:00:00Z" },
+      ],
+      error: null,
+    });
+    expect(await getRecentActiveOrderIds("ws", 5)).toEqual({
+      orderIds: ["o-paid", "o-old"],
+      isUnavailable: false,
+    });
+    expect(rpc).toHaveBeenCalledWith("crm_recent_active_order_ids", { p_workspace_id: "ws", p_limit: 5 });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("scans order_events when the recent-ids RPC is missing and reports a missing table", async () => {
+    rpc.mockResolvedValueOnce({ error: { code: "PGRST202", message: "Could not find the function" } });
+    from.mockReturnValueOnce(
+      query({
+        data: [
+          { order_id: "o1", event_type: "payment_recorded", created_at: "2026-11-05T12:00:00Z" },
+          { order_id: "o1", event_type: "status_changed", created_at: "2026-11-05T11:00:00Z" },
+          { order_id: "o2", event_type: "service_added", created_at: "2026-11-05T10:00:00Z" },
+        ],
+        error: null,
+      }),
+    );
+    expect(await getRecentActiveOrderIds("ws", 5)).toEqual({
+      orderIds: ["o1", "o2"],
+      isUnavailable: false,
+    });
+
+    rpc.mockResolvedValueOnce({ error: { code: "PGRST202", message: "missing" } });
+    from.mockReturnValueOnce(query({ data: null, error: { code: "PGRST205", message: "Could not find the table 'public.order_events'" } }));
+    expect(await getRecentActiveOrderIds("ws", 5)).toEqual({ orderIds: [], isUnavailable: true });
   });
 });

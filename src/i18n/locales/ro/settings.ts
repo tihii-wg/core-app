@@ -180,11 +180,12 @@ const settings: Messages<typeof en> = {
   closedOrderPermissions: {
     title: "Permisiuni pentru comenzi închise",
     description: "Decideți ce roluri pot anula sau șterge comenzile după închiderea formală. Aceste două permisiuni sunt independente.",
-    ownerAlways: "Proprietarul păstrează întotdeauna ambele permisiuni și nu le poate pierde. Modificările se aplică imediat pentru Admin, Manager și Membru.",
+    ownerAlways:
+      "Permisiunile de anulare/ștergere pentru Admin, Manager și Membru sunt independente de setarea proprietarului pentru gestionarea comenzilor închise. Proprietarul are nevoie ca acea setare să fie activă pentru a anula sau șterge comenzile închise.",
     manageTitle: "Gestionarea comenzilor închise de către proprietar",
     manageLabel: "Permite proprietarului să gestioneze comenzile închise",
     manageDescription:
-      "Când este activat, proprietarul spațiului de lucru poate edita, schimba statusul și șterge comenzile închise. Adminii, managerii și membrii nu primesc niciodată această excepție.",
+      "Când este activat, proprietarul spațiului de lucru poate edita, schimba statusul, anula și șterge comenzile închise. Adminii, managerii și membrii nu primesc niciodată această excepție.",
     manageToast: {
       saving: "Se salvează setarea proprietarului...",
       saved: "Setarea proprietarului a fost salvată",

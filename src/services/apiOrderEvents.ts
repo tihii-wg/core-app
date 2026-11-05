@@ -1,3 +1,9 @@
+import {
+  isMeaningfulOrderEventType,
+  MEANINGFUL_ORDER_EVENT_TYPES,
+  RECENT_ORDERS_LIMIT,
+  uniqueOrderIdsByLatestActivity,
+} from "../features/dashboard/recentOrdersByActivity";
 import supabase from "./supabase";
 import { isMissingTableError, requireWorkspaceId } from "./missingTable";
 
@@ -70,6 +76,102 @@ export async function getOrderEvents(workspaceId: string | undefined, orderId: s
     throw new Error(error.message);
   }
   return { events: sortOrderEvents(((data ?? []) as Record<string, unknown>[]).map(toOrderEvent)), isUnavailable: false };
+}
+
+export type RecentActiveOrderIdsResult = {
+  orderIds: string[];
+  /** True when `order_events` (or the optional recent-ids RPC) is not available — callers should fall back. */
+  isUnavailable: boolean;
+};
+
+const RECENT_ACTIVITY_SCAN_PAGE = 100;
+const RECENT_ACTIVITY_SCAN_MAX_PAGES = 5;
+
+/**
+ * Workspace-scoped order ids ordered by latest meaningful `order_events` activity (newest first).
+ * Prefers `crm_recent_active_order_ids` when applied; otherwise scans newest events until `limit`
+ * unique orders are collected (does not load the full event history).
+ */
+export async function getRecentActiveOrderIds(
+  workspaceId: string | undefined,
+  limit = RECENT_ORDERS_LIMIT,
+): Promise<RecentActiveOrderIdsResult> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const capped = Math.max(0, Math.min(50, Math.floor(limit) || RECENT_ORDERS_LIMIT));
+  if (capped === 0) return { orderIds: [], isUnavailable: false };
+
+  const fromRpc = await tryRecentActiveOrderIdsRpc(resolved, capped);
+  if (fromRpc) return fromRpc;
+
+  return scanRecentActiveOrderIds(resolved, capped);
+}
+
+async function tryRecentActiveOrderIdsRpc(
+  workspaceId: string,
+  limit: number,
+): Promise<RecentActiveOrderIdsResult | null> {
+  try {
+    const { data, error } = await supabase.rpc("crm_recent_active_order_ids", {
+      p_workspace_id: workspaceId,
+      p_limit: limit,
+    });
+    if (error) {
+      if (isMissingOrderEventRpc(error) || isMissingTableError(error, "order_events")) return null;
+      // Permission / unexpected RPC errors: fall through to the table scan.
+      return null;
+    }
+    const orderIds: string[] = [];
+    const seen = new Set<string>();
+    for (const row of (data ?? []) as { order_id?: unknown }[]) {
+      const id = typeof row.order_id === "string" ? row.order_id.trim() : "";
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      orderIds.push(id);
+      if (orderIds.length >= limit) break;
+    }
+    return { orderIds, isUnavailable: false };
+  } catch {
+    return null;
+  }
+}
+
+async function scanRecentActiveOrderIds(workspaceId: string, limit: number): Promise<RecentActiveOrderIdsResult> {
+  const collected: { orderId: string; eventType: string; createdAt: string }[] = [];
+  let offset = 0;
+
+  for (let page = 0; page < RECENT_ACTIVITY_SCAN_MAX_PAGES; page += 1) {
+    const { data, error } = await supabase
+      .from("order_events")
+      .select("order_id, event_type, created_at")
+      .eq("workspace_id", workspaceId)
+      .in("event_type", [...MEANINGFUL_ORDER_EVENT_TYPES])
+      .order("created_at", { ascending: false })
+      .range(offset, offset + RECENT_ACTIVITY_SCAN_PAGE - 1);
+
+    if (error) {
+      if (isMissingTableError(error, "order_events")) return { orderIds: [], isUnavailable: true };
+      throw new Error(error.message);
+    }
+
+    const rows = (data ?? []) as Record<string, unknown>[];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const orderId = text(row.order_id) ?? "";
+      const eventType = text(row.event_type) ?? "";
+      const createdAt = text(row.created_at) ?? "";
+      if (!orderId || !isMeaningfulOrderEventType(eventType)) continue;
+      collected.push({ orderId, eventType, createdAt });
+    }
+
+    const uniqueSoFar = uniqueOrderIdsByLatestActivity(collected, limit);
+    if (uniqueSoFar.length >= limit || rows.length < RECENT_ACTIVITY_SCAN_PAGE) {
+      return { orderIds: uniqueSoFar, isUnavailable: false };
+    }
+    offset += RECENT_ACTIVITY_SCAN_PAGE;
+  }
+
+  return { orderIds: uniqueOrderIdsByLatestActivity(collected, limit), isUnavailable: false };
 }
 
 export type RecordOrderEventInput = {

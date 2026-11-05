@@ -29,14 +29,15 @@ function isMissingRelationError(error: { code?: string } | null | undefined) {
 }
 
 /**
- * Owner always has both permissions. Others only when their workspace role is granted.
+ * Role grants for admin/manager/member only.
+ * Workspace owner cancel/delete of closed orders uses owner_can_manage_closed_orders
+ * (see ownerMayManageClosedOrders / crm_owner_may_manage_closed_orders) — not membership role.
  */
 export function roleHasClosedOrderPermission(
   workspaceRole: string | null | undefined,
   permission: ClosedOrderPermission,
   grants: ClosedOrderPermissionGrants | null | undefined,
 ): boolean {
-  if (workspaceRole === "owner") return true;
   if (!grants) return false;
   if (workspaceRole !== "admin" && workspaceRole !== "manager" && workspaceRole !== "member") return false;
   const list = permission === CLOSED_ORDER_PERMISSIONS.cancelClosed ? grants.cancelClosed : grants.deleteClosed;

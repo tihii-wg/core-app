@@ -4,7 +4,11 @@ import { createInvoiceFromOrder } from "./apiInvoices";
 import { issueOrderMaterials, returnOrderMaterials } from "./apiWarehouse";
 import { fake } from "../tests/fakeSupabase";
 import { seedCoreApp, USERS, WS, row } from "../tests/coreAppDb";
-import { installAddAndIssueOrderCatalogMaterialRpcs, seedWarehouse } from "../tests/orderRpcMocks";
+import {
+  installAddAndIssueOrderCatalogMaterialRpcs,
+  installApplyOrderMaterialWarrantiesRpc,
+  seedWarehouse,
+} from "../tests/orderRpcMocks";
 
 vi.mock("./supabase", async () => ({ default: (await import("../tests/fakeSupabase")).fakeClient }));
 
@@ -212,7 +216,8 @@ describe("order materials (warehouse-first immediate issue)", () => {
     expect(row("orders", String(created.id))?.custom_status_id ?? null).toBeNull();
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(stock);
 
-    await updateOrderStatus(String(created.id), "in-progress", WS.A);
+    // Cancelled orders cannot be reopened via ordinary status writes; stock still unchanged.
+    await expect(updateOrderStatus(String(created.id), "in-progress", WS.A)).rejects.toThrow(/cancelled/i);
     expect(Number(row("inventory_items", "item-a1")?.quantity)).toBe(stock);
   });
 
@@ -1123,3 +1128,254 @@ function cloneMaterials(orderId: string) {
     .map((line) => ({ ...line }))
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
+
+describe("order material warranty persistence", () => {
+  beforeEach(() => {
+    seedCoreApp();
+    fake.signInAs(USERS.manager.id);
+    installAddAndIssueOrderCatalogMaterialRpcs();
+    installApplyOrderMaterialWarrantiesRpc();
+    seedWarehouse(WS.A, WH, { "item-a1": 50, "item-a2": 50 });
+    const item = row("inventory_items", "item-a1");
+    if (item) item.quantity = 50;
+    ensureItemA2(50);
+  });
+
+  it("persists catalog duration warranty on create and restores it after reload", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 12, warrantyKm: null }],
+      },
+      WS.A,
+    );
+
+    const dbLine = fake.all("order_materials").find((line) => line.order_id === created.id);
+    expect(dbLine).toMatchObject({ warranty_months: 12, warranty_km: null });
+    expect(fake.requests.some((item) => item.table === "apply_order_material_warranties" && item.op === "rpc")).toBe(true);
+
+    const reloaded = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    expect(reloaded?.materials?.[0]).toMatchObject({ warrantyMonths: 12, warrantyKm: null });
+  });
+
+  it("persists catalog mileage warranty on create and restores it after reload", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: null, warrantyKm: 20000 }],
+      },
+      WS.A,
+    );
+
+    const reloaded = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    expect(reloaded?.materials?.[0]).toMatchObject({ warrantyMonths: null, warrantyKm: 20000 });
+  });
+
+  it("preserves a manual warranty override across save and reopen", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 6, warrantyKm: null }],
+      },
+      WS.A,
+    );
+    const lineId = String(fake.all("order_materials").find((line) => line.order_id === created.id)?.id ?? "");
+
+    await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Car",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        services: [oilChange],
+        materials: [
+          {
+            id: lineId,
+            ...brakePads,
+            warrantyMonths: 36,
+            warrantyKm: 50000,
+          },
+        ],
+      },
+      WS.A,
+    );
+
+    const reloaded = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    expect(reloaded?.materials?.[0]).toMatchObject({ warrantyMonths: 36, warrantyKm: 50000 });
+  });
+
+  it("does not overwrite a saved line warranty when only quantity identity matches catalog defaults", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 18, warrantyKm: 10000 }],
+      },
+      WS.A,
+    );
+    const lineId = String(fake.all("order_materials").find((line) => line.order_id === created.id)?.id ?? "");
+
+    // Re-save the same saved warranty (simulates reopen + save without touching warranty).
+    await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Car",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        services: [oilChange],
+        materials: [{ id: lineId, ...brakePads, warrantyMonths: 18, warrantyKm: 10000 }],
+      },
+      WS.A,
+    );
+
+    const reloaded = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    expect(reloaded?.materials?.[0]).toMatchObject({ warrantyMonths: 18, warrantyKm: 10000 });
+  });
+
+  it("adds a new material with warranty after reopening without clearing the first line", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 12, warrantyKm: null }],
+      },
+      WS.A,
+    );
+    const firstId = String(fake.all("order_materials").find((line) => line.order_id === created.id)?.id ?? "");
+
+    await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Car",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        services: [oilChange],
+        materials: [
+          { id: firstId, ...brakePads, warrantyMonths: 12, warrantyKm: null },
+          {
+            inventoryItemId: "item-a2",
+            itemName: "Oil filter",
+            price: 8,
+            quantity: 1,
+            warehouseId: WH,
+            supplySource: "catalog",
+            warrantyMonths: null,
+            warrantyKm: 15000,
+          },
+        ],
+      },
+      WS.A,
+    );
+
+    const reloaded = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    expect(reloaded?.materials).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ inventoryItemId: "item-a1", warrantyMonths: 12, warrantyKm: null }),
+        expect.objectContaining({ inventoryItemId: "item-a2", warrantyMonths: null, warrantyKm: 15000 }),
+      ]),
+    );
+  });
+
+  it("restores persisted line warranty into edit form values after save and reopen", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 24, warrantyKm: 30000 }],
+      },
+      WS.A,
+    );
+
+    const reopened = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    // EditOrderForm defaultValues: materials: order.materials — must carry DB snapshot, not catalog card.
+    expect(reopened?.materials?.[0]).toMatchObject({
+      warrantyMonths: 24,
+      warrantyKm: 30000,
+    });
+  });
+
+  it("saving an unchanged reopened order keeps warranty configuration", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 12, warrantyKm: 10000 }],
+      },
+      WS.A,
+    );
+    const lineId = String(fake.all("order_materials").find((line) => line.order_id === created.id)?.id ?? "");
+    const before = cloneMaterials(String(created.id));
+
+    await updateOrder(
+      {
+        orderId: String(created.id),
+        device: "Car",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        services: [oilChange],
+        materials: [{ id: lineId, ...brakePads, warrantyMonths: 12, warrantyKm: 10000 }],
+      },
+      WS.A,
+    );
+
+    expect(cloneMaterials(String(created.id))).toEqual(
+      before.map((line) => expect.objectContaining({
+        id: line.id,
+        warranty_months: 12,
+        warranty_km: 10000,
+      })),
+    );
+  });
+
+  it("preserves saved order-line warranty when catalog card defaults change later", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, warrantyMonths: 12, warrantyKm: null }],
+      },
+      WS.A,
+    );
+    const item = row("inventory_items", "item-a1");
+    if (item) {
+      item.warranty_type = "mileage";
+      item.warranty_months = null;
+      item.warranty_km = 99999;
+    }
+
+    const reloaded = (await getOrders(WS.A)).find((order) => order.id === created.id);
+    expect(reloaded?.materials?.[0]).toMatchObject({ warrantyMonths: 12, warrantyKm: null });
+    expect(item).toMatchObject({ warranty_type: "mileage", warranty_km: 99999 });
+  });
+});

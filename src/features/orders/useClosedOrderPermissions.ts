@@ -31,7 +31,7 @@ export function useClosedOrderPermissionGrants(workspaceId?: string | null) {
   });
 }
 
-/** Resolved cancel/delete-closed flags (workspaces.owner_id always; else role grants). */
+/** Resolved cancel/delete-closed flags (owner+setting; else role grants). */
 export function useClosedOrderActionPermissions() {
   const role = useActiveWorkspaceRole();
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
@@ -39,9 +39,10 @@ export function useClosedOrderActionPermissions() {
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { data: grants, isLoading, isError } = useClosedOrderPermissionGrants();
   const safeGrants = grants ?? emptyClosedOrderGrants();
+  const ownerCanManageClosedOrders = workspace?.ownerCanManageClosedOrders === true;
   const canManageClosedContent = ownerMayManageClosedOrders({
     isOwnerByOwnerId,
-    ownerCanManageClosedOrders: workspace?.ownerCanManageClosedOrders === true,
+    ownerCanManageClosedOrders,
   });
   return {
     role,
@@ -49,10 +50,10 @@ export function useClosedOrderActionPermissions() {
     isLoading,
     isError,
     isOwnerByOwnerId,
-    ownerCanManageClosedOrders: workspace?.ownerCanManageClosedOrders === true,
+    ownerCanManageClosedOrders,
     canManageClosedContent,
-    canCancelClosed: isOwnerByOwnerId || canCancelClosedOrder(role, safeGrants),
-    canDeleteClosed: isOwnerByOwnerId || canDeleteClosedOrder(role, safeGrants),
+    canCancelClosed: canManageClosedContent || canCancelClosedOrder(role, safeGrants),
+    canDeleteClosed: canManageClosedContent || canDeleteClosedOrder(role, safeGrants),
   };
 }
 

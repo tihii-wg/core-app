@@ -177,15 +177,20 @@ export function sumOrderMaterialLines(lines: Array<Pick<OrderMaterial, "price" |
  * Stable identity for sync-skip comparisons (id / catalog item / freeform name+source+price+qty).
  * Ignores discount metadata — sync_order_materials does not own discounts.
  */
+function warrantySyncToken(line: Pick<OrderMaterial, "warrantyMonths" | "warrantyDays" | "warrantyKm">): string {
+  return `w:${line.warrantyMonths ?? ""}:${line.warrantyDays ?? ""}:${line.warrantyKm ?? ""}`;
+}
+
 export function orderMaterialsSyncKey(materials: readonly OrderMaterial[]): string {
   return consolidateOrderMaterials([...materials])
     .map((line) => {
       const source = resolveMaterialSupplySource(line);
       const itemId = line.inventoryItemId?.trim() ?? "";
+      const warranty = warrantySyncToken(line);
       if (source === "catalog" && itemId) {
-        return `catalog:${itemId}:${line.quantity}:${line.warehouseId?.trim() ?? ""}`;
+        return `catalog:${itemId}:${line.quantity}:${line.warehouseId?.trim() ?? ""}:${warranty}`;
       }
-      return `${source}:${line.id ?? ""}:${line.itemName.trim().toLowerCase()}:${Number(line.price) || 0}:${line.quantity}`;
+      return `${source}:${line.id ?? ""}:${line.itemName.trim().toLowerCase()}:${Number(line.price) || 0}:${line.quantity}:${warranty}`;
     })
     .sort()
     .join("|");

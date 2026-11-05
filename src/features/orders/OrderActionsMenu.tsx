@@ -141,6 +141,7 @@ export function OrderActionsMenu({
               workspaceRole: closedOrderPerms.role,
               grants: closedOrderPerms.grants,
               isOwnerByOwnerId,
+              ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
             })
           ? t("orders.errors.deleteClosedForbidden")
           : null;
@@ -151,6 +152,7 @@ export function OrderActionsMenu({
     workspaceRole: closedOrderPerms.role,
     grants: closedOrderPerms.grants,
     isOwnerByOwnerId,
+    ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
   }) && formallyClosed;
 
   async function copyPublicStatusLink() {

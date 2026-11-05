@@ -1,5 +1,5 @@
 import { ClipboardList, Package, Pencil, UserPlus, ArrowLeft, ArrowRight, FileText, RefreshCw, Activity } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -14,6 +14,7 @@ import { Skeleton } from "../ui/Skeleton";
 import { PageHeader } from "./PageHeader";
 import { getOrders } from "../services/apiOrders";
 import { getClients } from "../services/apiClients";
+import { getRecentActiveOrderIds } from "../services/apiOrderEvents";
 import {
   clientCreatedAt,
   isAtOrBelowMinimum,
@@ -33,12 +34,22 @@ import { AddInventoryItemDialog } from "../features/inventory/AddInventoryItemDi
 import ClientTypeBadge from "../features/clients/ClientTypeBadge";
 import OrderDetailPanel from "../features/orders/OrderDetailPanel";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
+import { OrderWarrantyIndicator } from "../features/orders/OrderWarrantyIndicator";
+import { useOrdersWarrantyIndicators } from "../features/orders/useOrdersWarrantyIndicators";
+import { isOpenOrder } from "../features/orders/orderVisibility";
 import { EditInventoryItemDialog } from "../features/inventory/EditInventoryItemDialog";
 import { quantityClass } from "../features/inventory/inventoryDisplay";
 import { effectiveStockStatus } from "../features/inventory/stockStatus";
+import { orderPaymentBalance } from "../features/finance/paymentCalculations";
+import { useGetPayments } from "../features/finance/usePayments";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
 import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
 import { DashboardQuickActions } from "../features/dashboard/DashboardQuickActions";
+import {
+  RECENT_ORDERS_LIMIT,
+  selectOrdersByActivityIds,
+  selectRecentOrdersFallback,
+} from "../features/dashboard/recentOrdersByActivity";
 import { industryOrderStatusLabel } from "../features/industries/industryWorkflow";
 import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 import { SubscriptionReadOnlyNotice } from "../features/workspaces/SubscriptionReadOnlyNotice";
@@ -120,6 +131,14 @@ export default function Dashboard() {
     queryFn: () => getClients("", workspaceId),
     enabled: Boolean(workspaceId),
   });
+  // Same prefix as order-detail feed invalidation — refreshes after status/payment/line mutations.
+  const { data: recentActivityIds } = useQuery({
+    queryKey: ["order_events", workspaceId, "recent-activity", RECENT_ORDERS_LIMIT],
+    queryFn: () => getRecentActiveOrderIds(workspaceId, RECENT_ORDERS_LIMIT),
+    enabled: Boolean(workspaceId) && !showActiveOrders,
+    staleTime: 15_000,
+  });
+  const { payments } = useGetPayments();
 
   const now = new Date();
   const today = localDateKey(now);
@@ -137,8 +156,8 @@ export default function Dashboard() {
     { key: "completedToday", label: t("dashboard.tasks.completedToday"), count: taskOverview.completedToday, color: "bg-success" },
   ];
 
-  const closedStatuses = ["completed", "paid", "cancelled"];
-  const activeOrders = workspaceOrders.filter((order) => !closedStatuses.includes(order.status));
+  // Match Orders page open-work definition (`closed` included — not only completed/paid/cancelled).
+  const activeOrders = workspaceOrders.filter((order) => isOpenOrder(order));
   const orderCardCount = showActiveOrders ? workspaceOrders.length : activeOrders.length;
 
   const activity = recentActivity(workspaceOrders, workspaceClients, 6);
@@ -151,7 +170,26 @@ export default function Dashboard() {
   const lowStockItems = inventoryItems.filter(isAtOrBelowMinimum);
   const lowStockCount = lowStockItems.length;
 
-  const listedOrders = showActiveOrders ? activeOrders : workspaceOrders.slice(0, 5);
+  const recentOrders = useMemo(() => {
+    // No feed yet / SQL not applied / cold workspace with zero events → created_at fallback.
+    // Once meaningful events exist, only those orders appear (no padding with inactive rows).
+    const orderIds = Array.isArray(recentActivityIds?.orderIds) ? recentActivityIds.orderIds : null;
+    if (!recentActivityIds || recentActivityIds.isUnavailable || !orderIds || orderIds.length === 0) {
+      return selectRecentOrdersFallback(workspaceOrders, RECENT_ORDERS_LIMIT);
+    }
+    return selectOrdersByActivityIds(workspaceOrders, orderIds, RECENT_ORDERS_LIMIT);
+  }, [recentActivityIds, workspaceOrders]);
+
+  const listedOrders = showActiveOrders ? activeOrders : recentOrders;
+  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(listedOrders);
+
+  const paymentStatusByOrder = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof orderPaymentBalance>["status"]>();
+    for (const order of listedOrders) {
+      map.set(order.id, orderPaymentBalance(order, payments).status);
+    }
+    return map;
+  }, [listedOrders, payments]);
 
   const openActivity = (event: ActivityItem) => {
     if (event.kind === "client-created") return;
@@ -163,7 +201,12 @@ export default function Dashboard() {
     {
       key: "orderNumber",
       header: t("dashboard.columns.order"),
-      cell: (order) => <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>,
+      cell: (order) => (
+        <div className="min-w-0">
+          <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>
+          <OrderWarrantyIndicator model={warrantyByOrderId.get(order.id)} className="mt-0.5" />
+        </div>
+      ),
       className: "whitespace-nowrap",
     },
     {
@@ -186,12 +229,20 @@ export default function Dashboard() {
     {
       key: "status",
       header: t("common.status"),
-      cell: (order) => <OrderStatusBadge status={order.status} customStatus={order.customStatus} />,
+      cell: (order) => (
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
+          {/* Payment column is sm+; mirror ledger status under lifecycle on narrow screens (Orders parity). */}
+          <span className="sm:hidden">
+            <PaymentStatusBadge status={paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
+          </span>
+        </div>
+      ),
     },
     {
       key: "payment",
       header: t("dashboard.columns.payment"),
-      cell: (order) => <PaymentStatusBadge status={order.paymentStatus} />,
+      cell: (order) => <PaymentStatusBadge status={paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />,
       className: "hidden sm:table-cell",
     },
     {

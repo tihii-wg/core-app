@@ -146,6 +146,77 @@ describe("createOrder", () => {
     expect(order).toMatchObject({ total_price: 0, service: null, service_id: null });
   });
 
+  it("persists service duration warranty on create and restores it after reload", async () => {
+    const order = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [{ ...oilChange, warrantyMonths: 12, warrantyDays: null, warrantyKm: null }],
+      },
+      WS.A,
+    );
+
+    expect(linesOf(String(order.id))[0]).toMatchObject({
+      warranty_months: 12,
+      warranty_days: null,
+      warranty_km: null,
+    });
+    const reloaded = (await getOrders(WS.A)).find((item) => item.id === order.id);
+    expect(reloaded?.services[0]).toMatchObject({ warrantyMonths: 12, warrantyKm: null });
+  });
+
+  it("persists service mileage warranty on create and restores it after reload", async () => {
+    const order = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [{ ...oilChange, warrantyMonths: null, warrantyDays: null, warrantyKm: 20000 }],
+      },
+      WS.A,
+    );
+
+    expect(linesOf(String(order.id))[0]).toMatchObject({ warranty_months: null, warranty_km: 20000 });
+    const reloaded = (await getOrders(WS.A)).find((item) => item.id === order.id);
+    expect(reloaded?.services[0]).toMatchObject({ warrantyMonths: null, warrantyKm: 20000 });
+  });
+
+  it("persists combined service warranty on create and keeps it after a no-op reopen save", async () => {
+    const order = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "Ada Alpha",
+        device: "Golf",
+        services: [{ ...oilChange, warrantyMonths: 6, warrantyDays: null, warrantyKm: 10000 }],
+      },
+      WS.A,
+    );
+    const lineId = String(linesOf(String(order.id))[0]?.id ?? "");
+
+    await updateOrder(
+      {
+        orderId: String(order.id),
+        device: "Golf",
+        carNumber: "",
+        vin: "",
+        description: "",
+        assignedEmployeeId: "",
+        deadline: "",
+        // Partial line payload without warranty keys must not erase the snapshot.
+        services: [{ id: lineId, ...oilChange }],
+      },
+      WS.A,
+    );
+
+    expect(linesOf(String(order.id))[0]).toMatchObject({
+      warranty_months: 6,
+      warranty_km: 10000,
+    });
+    const reloaded = (await getOrders(WS.A)).find((item) => item.id === order.id);
+    expect(reloaded?.services[0]).toMatchObject({ warrantyMonths: 6, warrantyKm: 10000 });
+  });
+
   it("validates input and the workspace", async () => {
     await expect(createOrder({ clientName: "", device: "Car", services: [] }, WS.A)).rejects.toThrow("Client is required");
     await expect(createOrder({ clientName: "", device: "Car", services: [oilChange] }, WS.A)).rejects.toThrow("Client is required");
@@ -537,6 +608,29 @@ describe("updateOrder", () => {
     const brake = linesOf("order-a1").find((line) => line.service_id === "service-a2");
     expect(brake).toMatchObject({ warranty_months: 6, warranty_km: 5000 });
     expect(created.services.some((line) => line.serviceId === "service-a2" && line.warrantyMonths === 6)).toBe(true);
+  });
+
+  it("does not erase saved service warranty when update payload omits warranty keys", async () => {
+    await updateOrder(
+      {
+        ...details,
+        services: [{ ...savedOilChange, warrantyMonths: 18, warrantyDays: null, warrantyKm: 8000 }],
+      },
+      WS.A,
+    );
+    expect(linesOf("order-a1")[0]).toMatchObject({ warranty_months: 18, warranty_km: 8000 });
+
+    await updateOrder(
+      {
+        ...details,
+        services: [{ ...savedOilChange }],
+      },
+      WS.A,
+    );
+
+    expect(linesOf("order-a1")[0]).toMatchObject({ warranty_months: 18, warranty_km: 8000 });
+    const reloaded = (await getOrders(WS.A)).find((item) => item.id === "order-a1");
+    expect(reloaded?.services[0]).toMatchObject({ warrantyMonths: 18, warrantyKm: 8000 });
   });
 
   it("preserves delete of removed service lines while updating warranty on kept lines", async () => {

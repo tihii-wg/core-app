@@ -314,6 +314,10 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       ...(isLineDiscountType(service.discountType) && Number(service.discountValue) > 0
         ? { discountType: service.discountType, discountValue: Number(service.discountValue) }
         : {}),
+      // Snapshot form/catalog warranty onto the line — create insert must persist these.
+      warrantyMonths: mapWarrantyMonths(service.warrantyMonths) ?? null,
+      warrantyDays: mapWarrantyMonths(service.warrantyDays) ?? null,
+      warrantyKm: mapWarrantyMonths(service.warrantyKm) ?? null,
     });
   }
 
@@ -421,6 +425,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
             quantity: service.quantity,
             ...(withKind && service.kind ? { kind: service.kind } : {}),
             ...(orderLineDiscountSupported && lineHasDiscount(service) ? { discount_type: service.discountType, discount_value: service.discountValue } : {}),
+            ...orderServiceWarrantyInsertFields(service),
           })),
         ),
       ),
@@ -428,11 +433,44 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     if (!orderLineDiscountSupported) writtenServiceLines = stampedLines.map(stripServiceDiscount);
 
     if (orderServicesError) {
-      const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-      if (rollbackError) {
-        throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
+      // Retry without warranty columns when the schema has not been upgraded yet.
+      if (
+        orderLineWarrantySupported !== false &&
+        /warranty_months|warranty_days|warranty_km/i.test(orderServicesError.message ?? "") &&
+        (orderServicesError.code === "42703" || orderServicesError.code === "PGRST204")
+      ) {
+        orderLineWarrantySupported = false;
+        const { error: retryError } = await withLineDiscountColumns(() =>
+          withOrderServiceKind((_columns, withKind) =>
+            supabase.from("order_services").insert(
+              stampedLines.map((service) => ({
+                order_id: order.id,
+                service_id: service.id,
+                service_name: service.name,
+                price: service.price,
+                quantity: service.quantity,
+                ...(withKind && service.kind ? { kind: service.kind } : {}),
+                ...(orderLineDiscountSupported && lineHasDiscount(service)
+                  ? { discount_type: service.discountType, discount_value: service.discountValue }
+                  : {}),
+              })),
+            ),
+          ),
+        );
+        if (retryError) {
+          const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+          if (rollbackError) {
+            throw new Error(`${retryError.message}; order rollback failed: ${rollbackError.message}`);
+          }
+          throw new Error(retryError.message);
+        }
+      } else {
+        const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+        if (rollbackError) {
+          throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
+        }
+        throw new Error(orderServicesError.message);
       }
-      throw new Error(orderServicesError.message);
     }
   }
 
@@ -446,15 +484,24 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       const hasCatalog = materials.some(isCatalogOrderMaterial);
 
       // Catalog: atomic add+issue per line (RPC contract). Freeform: sync_order_materials only.
+      // Warranty columns are never written by add/issue — always persist via apply_order_material_warranties.
       if (hasCatalog) {
         const applied = await applyCatalogImmediateIssue({ orderId, desired: materials, existing: [] });
         issuedForCompensation = applied.issuedForCompensation;
         if (freeform.length > 0) {
           // Include catalog lines so sync does not delete just-issued rows.
+          // Re-apply warranties from the original form `materials` — merge/RPC round-trips can drop them.
           const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, synced, productPercent ?? 0, new Set());
+          const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, synced);
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withWarranty, productPercent ?? 0, new Set());
         } else {
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, applied.catalog, productPercent ?? 0, new Set());
+          const withWarranty = await persistOrderMaterialWarranties(
+            orderId,
+            targetWorkspaceId,
+            materials,
+            applied.catalog,
+          );
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withWarranty, productPercent ?? 0, new Set());
         }
       } else {
         const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
@@ -490,7 +537,26 @@ type ResolvedServiceLine = {
   kind?: OrderServiceKind;
   discountType?: LineDiscountType | null;
   discountValue?: number | null;
+  warrantyMonths?: number | null;
+  warrantyDays?: number | null;
+  warrantyKm?: number | null;
 };
+
+function orderServiceWarrantyInsertFields(service: Pick<ResolvedServiceLine, "warrantyMonths" | "warrantyDays" | "warrantyKm">) {
+  if (orderLineWarrantySupported === false) return {};
+  return {
+    warranty_months: mapWarrantyMonths(service.warrantyMonths) ?? null,
+    warranty_days: mapWarrantyMonths(service.warrantyDays) ?? null,
+    warranty_km: mapWarrantyMonths(service.warrantyKm) ?? null,
+  };
+}
+
+/** True when the payload explicitly carries warranty keys (including null clears). All-undefined = leave DB alone. */
+function serviceLineHasWarrantyIntent(
+  service: Pick<OrderService, "warrantyMonths" | "warrantyDays" | "warrantyKm">,
+) {
+  return service.warrantyMonths !== undefined || service.warrantyDays !== undefined || service.warrantyKm !== undefined;
+}
 
 function stripServiceDiscount(line: ResolvedServiceLine): ResolvedServiceLine {
   const { discountType: _type, discountValue: _value, ...rest } = line;
@@ -1012,6 +1078,108 @@ function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
   });
 }
 
+function matchPersistedMaterialLine(
+  line: OrderMaterial,
+  persisted: readonly OrderMaterial[],
+): OrderMaterial | undefined {
+  const itemId = line.inventoryItemId?.trim();
+  if (itemId) {
+    return persisted.find((row) => row.inventoryItemId === itemId);
+  }
+  if (line.id) {
+    const byId = persisted.find((row) => row.id === line.id);
+    if (byId) return byId;
+  }
+  // Form field-array ids are not order_materials.id — fall back to freeform identity.
+  return persisted.find((row) => row.itemName === line.itemName && !row.inventoryItemId);
+}
+
+function materialLineHasWarrantyIntent(line: Pick<OrderMaterial, "warrantyMonths" | "warrantyDays" | "warrantyKm">) {
+  return line.warrantyMonths !== undefined || line.warrantyDays !== undefined || line.warrantyKm !== undefined;
+}
+
+/**
+ * Writes order_materials warranty_* via apply_order_material_warranties.
+ * sync_order_materials / add_and_issue never persist these columns — callers must run this
+ * after every material write path (including catalog-only create).
+ *
+ * Lines whose warranty fields are all `undefined` are skipped so a partial form payload cannot
+ * silently null out saved order-line warranty snapshots.
+ */
+async function persistOrderMaterialWarranties(
+  orderId: string,
+  workspaceId: string,
+  desired: readonly OrderMaterial[],
+  persisted: OrderMaterial[],
+): Promise<OrderMaterial[]> {
+  if (orderLineWarrantySupported === false || desired.length === 0 || persisted.length === 0) {
+    return persisted;
+  }
+
+  const consolidated = consolidateOrderMaterials([...desired]);
+  const mapped = persisted.map((line) => ({ ...line }));
+  const warrantyPayload = consolidated
+    .filter(materialLineHasWarrantyIntent)
+    .map((line) => {
+      const itemId = line.inventoryItemId?.trim();
+      const matched = matchPersistedMaterialLine(line, mapped);
+      return {
+        ...(matched?.id ? { line_id: matched.id } : {}),
+        ...(itemId ? { inventory_item_id: itemId } : {}),
+        warranty_months: mapWarrantyMonths(line.warrantyMonths) ?? null,
+        warranty_days: mapWarrantyMonths(line.warrantyDays) ?? null,
+        warranty_km: mapWarrantyMonths(line.warrantyKm) ?? null,
+      };
+    })
+    .filter((row) => Boolean(row.line_id || row.inventory_item_id));
+
+  if (warrantyPayload.length === 0) {
+    return mapped;
+  }
+
+  const { error: warrantyError } = await supabase.rpc("apply_order_material_warranties", {
+    p_order_id: orderId,
+    p_workspace_id: workspaceId,
+    p_lines: warrantyPayload,
+  });
+
+  if (warrantyError) {
+    if (/apply_order_material_warranties|Could not find the function/i.test(warrantyError.message ?? "")) {
+      // SQL not applied yet — leave quantities synced; warranty columns stay as-is.
+      return mapped;
+    }
+    if (/warranty_months|warranty_days|warranty_km/i.test(warrantyError.message ?? "") && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
+      orderLineWarrantySupported = false;
+      return mapped;
+    }
+    throw new Error(warrantyError.message);
+  }
+
+  // Re-read so callers never see in-memory warranty that failed to land in order_materials
+  // (e.g. unmatched line_id / inventory_item_id). Prefer DB truth over the desired snapshot.
+  const { data: refreshedRows, error: refreshError } = await withOrderMaterialColumns(() =>
+    supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId).order("created_at", { ascending: true }),
+  );
+  if (refreshError) throw new Error(refreshError.message);
+  if (refreshedRows && refreshedRows.length > 0) {
+    return mapMaterialLines(refreshedRows as unknown as OrderMaterialLine[]);
+  }
+
+  for (const line of mapped) {
+    const source = consolidated.find(
+      (row) =>
+        (line.id && row.id === line.id) ||
+        (line.inventoryItemId && row.inventoryItemId === line.inventoryItemId) ||
+        (!line.inventoryItemId && !row.inventoryItemId && row.itemName === line.itemName),
+    );
+    if (!source || !materialLineHasWarrantyIntent(source)) continue;
+    line.warrantyMonths = mapWarrantyMonths(source.warrantyMonths) ?? null;
+    line.warrantyDays = mapWarrantyMonths(source.warrantyDays) ?? null;
+    line.warrantyKm = mapWarrantyMonths(source.warrantyKm) ?? null;
+  }
+  return mapped;
+}
+
 async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[], workspaceId?: string) {
   const consolidated = consolidateOrderMaterials(materials);
   const hasFreeform = consolidated.some((line) => !line.inventoryItemId?.trim());
@@ -1045,52 +1213,8 @@ async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]
   if (error) throw new Error(materialsSyncError(error));
   const mapped = mapMaterialLines((data ?? []) as OrderMaterialLine[]);
 
-  // Persist warranty fields via dedicated RPC (sync_order_materials does not write them).
-  if (workspaceId && orderLineWarrantySupported !== false) {
-    const warrantyPayload = consolidated.map((line) => {
-      const itemId = line.inventoryItemId?.trim();
-      const matched = itemId
-        ? mapped.find((row) => row.inventoryItemId === itemId)
-        : line.id
-          ? mapped.find((row) => row.id === line.id)
-          : mapped.find((row) => row.itemName === line.itemName && !row.inventoryItemId);
-      return {
-        ...(matched?.id ? { line_id: matched.id } : {}),
-        ...(itemId ? { inventory_item_id: itemId } : {}),
-        warranty_months: mapWarrantyMonths(line.warrantyMonths) ?? null,
-        warranty_days: mapWarrantyMonths(line.warrantyDays) ?? null,
-        warranty_km: mapWarrantyMonths(line.warrantyKm) ?? null,
-      };
-    });
-    const { error: warrantyError } = await supabase.rpc("apply_order_material_warranties", {
-      p_order_id: orderId,
-      p_workspace_id: workspaceId,
-      p_lines: warrantyPayload,
-    });
-    if (warrantyError) {
-      if (/apply_order_material_warranties|Could not find the function/i.test(warrantyError.message ?? "")) {
-        // SQL not applied yet — leave quantities synced; warranty columns stay as-is.
-      } else if (/warranty_months|warranty_days|warranty_km/i.test(warrantyError.message ?? "") && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
-        orderLineWarrantySupported = false;
-      } else {
-        throw new Error(warrantyError.message);
-      }
-    } else {
-      for (const line of mapped) {
-        const source = consolidated.find((row) =>
-          (line.id && row.id === line.id) ||
-          (line.inventoryItemId && row.inventoryItemId === line.inventoryItemId) ||
-          (!line.inventoryItemId && !row.inventoryItemId && row.itemName === line.itemName),
-        );
-        if (!source) continue;
-        line.warrantyMonths = mapWarrantyMonths(source.warrantyMonths) ?? null;
-        line.warrantyDays = mapWarrantyMonths(source.warrantyDays) ?? null;
-        line.warrantyKm = mapWarrantyMonths(source.warrantyKm) ?? null;
-      }
-    }
-  }
-
-  return mapped;
+  if (!workspaceId) return mapped;
+  return persistOrderMaterialWarranties(orderId, workspaceId, consolidated, mapped);
 }
 
 function toOrder(
@@ -1586,6 +1710,31 @@ export async function ownerMayManageClosedOrdersOnServer(workspaceId: string) {
     throw new Error(error.message);
   }
   return data != null && (data as { owner_can_manage_closed_orders?: unknown }).owner_can_manage_closed_orders === true;
+}
+
+/**
+ * Defense-in-depth for order-linked mutations. Open orders pass through.
+ * Formally closed orders require owner_id + owner_can_manage_closed_orders.
+ */
+export async function assertClosedOrderMutableOnServer(orderId: string, workspaceId: string) {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("status, closed_at")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(orderPermissionMessage());
+
+  const status = typeof (data as { status?: unknown }).status === "string" ? (data as { status: string }).status : "";
+  const closedAt =
+    typeof (data as { closed_at?: unknown }).closed_at === "string" ? (data as { closed_at: string }).closed_at : null;
+  if (!(Boolean(closedAt) || status === "closed")) return;
+
+  const mayManage = await ownerMayManageClosedOrdersOnServer(workspaceId);
+  if (!mayManage) {
+    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
 }
 
 export type SetLifecycleRegularCustomStatusResult = {
@@ -2208,8 +2357,9 @@ export async function updateOrder(
     const existingMapped = mapMaterialLines(existingRows);
 
     if (orderMaterialsMatch(existingMapped, desiredMaterials)) {
-      // Unchanged materials: do not call sync_order_materials (avoids unnecessary DELETEs).
-      materialLines = existingMapped;
+      // Qty/identity unchanged — still re-apply warranty snapshots (match includes warranty tokens,
+      // so this path is warranty-equal; persist is idempotent and keeps DB/UI aligned).
+      materialLines = await persistOrderMaterialWarranties(orderId, workspaceId, desiredMaterials, existingMapped);
     } else if (desiredMaterials.length > 0) {
       assertCatalogWarehousesSelected(desiredMaterials);
       const percent = clientDiscountPercent(clientDiscounts, "product_order");
@@ -2225,7 +2375,9 @@ export async function updateOrder(
           desired: desiredMaterials,
           existing: existingMapped,
         });
-        materialLines = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), workspaceId);
+        const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), workspaceId);
+        // Always re-apply from desiredMaterials so form warranty snapshots win over RPC round-trips.
+        materialLines = await persistOrderMaterialWarranties(orderId, workspaceId, desiredMaterials, synced);
       } else {
         materialLines = await syncOrderMaterialsRpc(orderId, freeform, workspaceId);
       }
@@ -2338,6 +2490,9 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     kind?: OrderServiceKind;
     discount_type?: LineDiscountType;
     discount_value?: number;
+    warranty_months?: number | null;
+    warranty_days?: number | null;
+    warranty_km?: number | null;
   }[] = [];
 
   for (const service of unsaved) {
@@ -2363,13 +2518,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       quantity: service.quantity,
       ...(service.kind ? { kind: service.kind } : {}),
       ...(stamped && lineHasDiscount(stamped) ? { discount_type: stamped.discountType as LineDiscountType, discount_value: Number(stamped.discountValue) } : {}),
-      ...(orderLineWarrantySupported !== false && service.warrantyMonths != null
-        ? { warranty_months: mapWarrantyMonths(service.warrantyMonths) }
-        : {}),
-      ...(orderLineWarrantySupported !== false && service.warrantyDays != null
-        ? { warranty_days: mapWarrantyMonths(service.warrantyDays) }
-        : {}),
-      ...(orderLineWarrantySupported !== false && service.warrantyKm != null ? { warranty_km: mapWarrantyMonths(service.warrantyKm) } : {}),
+      ...orderServiceWarrantyInsertFields(service),
     });
   }
 
@@ -2429,10 +2578,16 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     if (line) line.kind = change.kind;
   }
 
-  // Per-line warranty conditions on kept + newly inserted lines (feature-detected columns).
+  // Per-line warranty on kept + newly inserted lines. Skip when the form omitted warranty keys
+  // entirely (all undefined) so a partial dirty payload cannot null out a saved snapshot.
   if (orderLineWarrantySupported !== false) {
     for (const service of services) {
-      if (!service.id) continue;
+      if (!serviceLineHasWarrantyIntent(service)) continue;
+      const lineId =
+        service.id?.trim() ||
+        inserted.find((item) => String(item.service_id) === String(service.serviceId))?.id ||
+        kept.find((item) => isSameService(item, service))?.id;
+      if (!lineId) continue;
       const { error: warrantyError } = await supabase
         .from("order_services")
         .update({
@@ -2440,7 +2595,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
           warranty_days: mapWarrantyMonths(service.warrantyDays) ?? null,
           warranty_km: mapWarrantyMonths(service.warrantyKm) ?? null,
         })
-        .eq("id", service.id)
+        .eq("id", lineId)
         .eq("order_id", orderId);
       if (warrantyError) {
         if (/warranty_months|warranty_days|warranty_km/i.test(warrantyError.message) && (warrantyError.code === "42703" || warrantyError.code === "PGRST204")) {
@@ -2449,7 +2604,8 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
         }
         throw new Error(warrantyError.message);
       }
-      const line = kept.find((item) => item.id === service.id) ?? inserted.find((item) => item.id === service.id);
+      const line =
+        kept.find((item) => item.id === lineId) ?? inserted.find((item) => item.id === lineId);
       if (line) {
         (line as { warranty_months?: number | null }).warranty_months = mapWarrantyMonths(service.warrantyMonths) ?? null;
         (line as { warranty_days?: number | null }).warranty_days = mapWarrantyMonths(service.warrantyDays) ?? null;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   findDefaultOrderStatus,
   isNormalWorkflowStatus,
+  isOrderCurrentlyClosed,
   isOrderFormallyClosed,
   parseLifecycleRpcError,
   resolveWarrantyStartAt,
@@ -80,6 +81,17 @@ describe("orderLifecycle", () => {
         "closed_at",
       ),
     ).toBe("2026-01-05T12:00:00.000Z");
+  });
+
+  it("current closure banner requires live status=closed, not a historical closed_at alone", () => {
+    const closedAt = "2026-11-05T14:59:54.258807+00:00";
+    expect(isOrderCurrentlyClosed({ status: "closed", closedAt })).toBe(true);
+    expect(isOrderCurrentlyClosed({ status: "cancelled", closedAt })).toBe(false);
+    expect(isOrderCurrentlyClosed({ status: "in-progress", closedAt })).toBe(false);
+    expect(isOrderCurrentlyClosed({ status: "closed", closedAt: null })).toBe(false);
+    // Auth/history still sees formal closure after cancel/reopen.
+    expect(isOrderFormallyClosed({ status: "cancelled", closedAt })).toBe(true);
+    expect(isOrderFormallyClosed({ status: "in-progress", closedAt })).toBe(true);
   });
 
   it("does not double-count order+invoice linked payments", () => {

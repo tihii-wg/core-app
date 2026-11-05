@@ -25,6 +25,39 @@ describe("order material freeform / catalog helpers", () => {
     expect(isCatalogOrderMaterial({ supplySource: "customer" })).toBe(false);
   });
 
+  it("copies catalog duration and mileage warranty defaults onto new order lines", () => {
+    expect(
+      catalogItemToOrderMaterial({
+        id: "i1",
+        name: "Pad",
+        sellingPrice: 12,
+        warrantyType: "duration",
+        warrantyMonths: 12,
+        warrantyKm: null,
+      }),
+    ).toMatchObject({ warrantyMonths: 12, warrantyKm: null });
+    expect(
+      catalogItemToOrderMaterial({
+        id: "i2",
+        name: "Belt",
+        sellingPrice: 40,
+        warrantyType: "mileage",
+        warrantyMonths: null,
+        warrantyKm: 20000,
+      }),
+    ).toMatchObject({ warrantyMonths: null, warrantyKm: 20000 });
+    expect(
+      catalogItemToOrderMaterial({
+        id: "i3",
+        name: "Kit",
+        sellingPrice: 80,
+        warrantyType: "both",
+        warrantyMonths: 24,
+        warrantyKm: 30000,
+      }),
+    ).toMatchObject({ warrantyMonths: 24, warrantyKm: 30000 });
+  });
+
   it("consolidates catalog ids but keeps freeform lines separate", () => {
     const result = consolidateOrderMaterials([
       { inventoryItemId: "i1", itemName: "A", price: 1, quantity: 1, supplySource: "catalog" },
@@ -63,5 +96,20 @@ describe("order material freeform / catalog helpers", () => {
     const c = [{ inventoryItemId: "i1", itemName: "A", price: 1, quantity: 3, supplySource: "catalog" as const }];
     expect(orderMaterialsMatch(a, b)).toBe(true);
     expect(orderMaterialsMatch(a, c)).toBe(false);
+  });
+
+  it("treats warranty changes as material-set differences so they are persisted", () => {
+    const base = {
+      inventoryItemId: "i1",
+      itemName: "A",
+      price: 1,
+      quantity: 2,
+      supplySource: "catalog" as const,
+      warrantyMonths: 12,
+      warrantyKm: null as number | null,
+    };
+    expect(orderMaterialsMatch([base], [{ ...base, warrantyMonths: 24 }])).toBe(false);
+    expect(orderMaterialsMatch([base], [{ ...base, warrantyKm: 10000 }])).toBe(false);
+    expect(orderMaterialsMatch([base], [{ ...base }])).toBe(true);
   });
 });

@@ -347,6 +347,11 @@ export async function recordPayment(input: RecordPaymentInput, workspaceId: stri
     input.invoiceId?.trim() || null,
   );
 
+  if (links.orderId) {
+    const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+    await assertClosedOrderMutableOnServer(links.orderId, targetWorkspaceId);
+  }
+
   await requireWorkspaceCurrency(targetWorkspaceId, currencyCode);
 
   const existing = await getPayments(targetWorkspaceId, {});
@@ -427,6 +432,10 @@ export async function recordRefund(input: RecordRefundInput, workspaceId: string
   if (!isValidLedgerPayment(original)) {
     throw new Error(i18n.t("finance.payments.errors.originalInvalid"));
   }
+  if (original.orderId) {
+    const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+    await assertClosedOrderMutableOnServer(original.orderId, targetWorkspaceId);
+  }
 
   await requireWorkspaceCurrency(targetWorkspaceId, currencyCode);
 
@@ -483,6 +492,10 @@ export async function recordPaymentVoid(input: RecordVoidInput, workspaceId: str
   }
   if (!isValidLedgerPayment(original)) {
     throw new Error(i18n.t("finance.payments.errors.originalInvalid"));
+  }
+  if (original.orderId) {
+    const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+    await assertClosedOrderMutableOnServer(original.orderId, targetWorkspaceId);
   }
 
   const currencyCode = normalizeCurrencyCode(original.currencyCode);

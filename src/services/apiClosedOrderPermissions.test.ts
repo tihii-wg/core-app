@@ -34,9 +34,9 @@ function insertQuery(result: { data: unknown; error: unknown }) {
 }
 
 describe("roleHasClosedOrderPermission", () => {
-  it("always allows the owner for both permissions", () => {
-    expect(roleHasClosedOrderPermission("owner", CLOSED_ORDER_PERMISSIONS.cancelClosed, { cancelClosed: [], deleteClosed: [] })).toBe(true);
-    expect(roleHasClosedOrderPermission("owner", CLOSED_ORDER_PERMISSIONS.deleteClosed, { cancelClosed: [], deleteClosed: [] })).toBe(true);
+  it("does not treat membership role owner as an automatic closed-order grant", () => {
+    expect(roleHasClosedOrderPermission("owner", CLOSED_ORDER_PERMISSIONS.cancelClosed, { cancelClosed: [], deleteClosed: [] })).toBe(false);
+    expect(roleHasClosedOrderPermission("owner", CLOSED_ORDER_PERMISSIONS.deleteClosed, { cancelClosed: [], deleteClosed: [] })).toBe(false);
   });
 
   it("denies admin/manager/member by default", () => {

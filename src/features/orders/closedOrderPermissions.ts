@@ -8,8 +8,13 @@ import type { Order } from "../../lib/types";
 
 /**
  * Owner-only override for managing formally closed orders.
- * Requires authoritative `workspaces.owner_id` match AND the workspace setting.
- * Never true for admin/manager/member.
+ *
+ * BOTH required:
+ * 1. `workspaces.owner_id === auth.uid()` (isOwnerByOwnerId — never membership role alone)
+ * 2. `workspaces.owner_can_manage_closed_orders === true`
+ *
+ * Never true for admin/manager/member, or a membership role of "owner" without owner_id.
+ * View access to closed orders (including saved warranty) is independent of this flag.
  */
 export function ownerMayManageClosedOrders(opts: {
   isOwnerByOwnerId: boolean;
@@ -50,25 +55,38 @@ export function canOfferCancelOrderAction(opts: {
   grants: ClosedOrderPermissionGrants | null | undefined;
   /** Authoritative `workspaces.owner_id === auth user` (preferred over membership role). */
   isOwnerByOwnerId?: boolean;
+  /** Owner + workspaces.owner_can_manage_closed_orders (required for owner cancel of closed). */
+  ownerCanManageClosedOrders?: boolean;
 }): boolean {
   if (!opts.canWrite) return false;
   if (opts.order.status === "cancelled") return false;
   if (isOrderFormallyClosed(opts.order)) {
-    return Boolean(opts.isOwnerByOwnerId) || canCancelClosedOrder(opts.workspaceRole, opts.grants);
+    return (
+      ownerMayManageClosedOrders({
+        isOwnerByOwnerId: Boolean(opts.isOwnerByOwnerId),
+        ownerCanManageClosedOrders: Boolean(opts.ownerCanManageClosedOrders),
+      }) || canCancelClosedOrder(opts.workspaceRole, opts.grants)
+    );
   }
   return true;
 }
 
 /**
  * Closed orders still require cancel-before-delete.
- * After cancel, deletion of a closed order needs orders.delete_closed (owner always).
+ * After cancel, deletion of a closed order needs owner-manage setting or orders.delete_closed.
  */
 export function canOfferDeleteClosedOrderAction(opts: {
   order: Pick<Order, "closedAt" | "status">;
   workspaceRole: string | null | undefined;
   grants: ClosedOrderPermissionGrants | null | undefined;
   isOwnerByOwnerId?: boolean;
+  ownerCanManageClosedOrders?: boolean;
 }): boolean {
   if (!isOrderFormallyClosed(opts.order)) return true;
-  return Boolean(opts.isOwnerByOwnerId) || canDeleteClosedOrder(opts.workspaceRole, opts.grants);
+  return (
+    ownerMayManageClosedOrders({
+      isOwnerByOwnerId: Boolean(opts.isOwnerByOwnerId),
+      ownerCanManageClosedOrders: Boolean(opts.ownerCanManageClosedOrders),
+    }) || canDeleteClosedOrder(opts.workspaceRole, opts.grants)
+  );
 }

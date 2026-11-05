@@ -79,7 +79,24 @@ function linePayload(lines: WarehouseMaterialLineInput[]) {
   }));
 }
 
+async function assertWarehouseClosedOrderMutable(orderId: string) {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("workspace_id, status, closed_at")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(i18n.t("orders.errors.warehousePermission"));
+  const workspaceId = typeof (data as { workspace_id?: unknown }).workspace_id === "string"
+    ? (data as { workspace_id: string }).workspace_id
+    : "";
+  if (!workspaceId) throw new Error(i18n.t("orders.errors.warehousePermission"));
+  const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+  await assertClosedOrderMutableOnServer(orderId, workspaceId);
+}
+
 export async function issueOrderMaterials(orderId: string, lines: WarehouseMaterialLineInput[], idempotencyKey?: string) {
+  await assertWarehouseClosedOrderMutable(orderId);
   const { data, error } = await supabase.rpc("issue_order_materials", {
     p_order_id: orderId,
     p_lines: linePayload(lines),
@@ -102,6 +119,7 @@ export async function issueOrderMaterialsFromWarehouse(
   warehouseId: string,
   idempotencyKey?: string,
 ) {
+  await assertWarehouseClosedOrderMutable(orderId);
   const { data, error } = await supabase.rpc(ISSUE_FROM_WAREHOUSE_RPC, {
     p_order_id: orderId,
     p_lines: linePayload(lines),
@@ -118,6 +136,7 @@ export async function issueOrderMaterialsFromWarehouse(
 }
 
 export async function returnOrderMaterials(orderId: string, lines: WarehouseMaterialLineInput[], reason?: string, idempotencyKey?: string) {
+  await assertWarehouseClosedOrderMutable(orderId);
   const { data, error } = await supabase.rpc("return_order_materials", {
     p_order_id: orderId,
     p_lines: linePayload(lines),
@@ -142,6 +161,7 @@ export async function returnOrderMaterialsToWarehouse(
   reason?: string,
   idempotencyKey?: string,
 ) {
+  await assertWarehouseClosedOrderMutable(orderId);
   const { data, error } = await supabase.rpc(RETURN_TO_WAREHOUSE_RPC, {
     p_order_id: orderId,
     p_lines: linePayload(lines),

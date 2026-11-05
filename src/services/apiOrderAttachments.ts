@@ -107,6 +107,8 @@ export async function uploadOrderAttachment(
 ) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const targetOrderId = requireOrderId(orderId);
+  const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+  await assertClosedOrderMutableOnServer(targetOrderId, targetWorkspaceId);
 
   const validation = validateOrderAttachmentFile(file);
   if (validation === "empty") throw new Error(attachmentErrors.empty());
@@ -179,6 +181,8 @@ export async function deleteOrderAttachment(
 ) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const targetOrderId = requireOrderId(orderId);
+  const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
+  await assertClosedOrderMutableOnServer(targetOrderId, targetWorkspaceId);
   const id = attachmentId.trim();
   if (!id) throw new Error(attachmentErrors.notFound());
 

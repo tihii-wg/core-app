@@ -68,7 +68,7 @@ import { useGetPayments } from "../finance/usePayments";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { CloseOrderDialog } from "./CloseOrderDialog";
-import { isOrderFormallyClosed } from "./orderLifecycle";
+import { isOrderCurrentlyClosed, isOrderFormallyClosed } from "./orderLifecycle";
 import { useCancelOrder } from "./useCloseOrder";
 import {
   resolveCurrentUnifiedStatus,
@@ -171,6 +171,7 @@ export default function OrderDetailPanel({
                 workspaceRole,
                 grants: closedOrderPerms.grants,
                 isOwnerByOwnerId,
+                ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
               })
             ? t("orders.errors.deleteClosedForbidden")
             : null;
@@ -184,6 +185,7 @@ export default function OrderDetailPanel({
       workspaceRole,
       grants: closedOrderPerms.grants,
       isOwnerByOwnerId,
+      ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
     }) &&
     isOrderFormallyClosed(selectedOrder);
   const linkedPaymentCount = selectedOrder
@@ -529,7 +531,11 @@ export default function OrderDetailPanel({
                     </tbody>
                   </table>
                 </div>
-                <OrderWarehouseActions order={selectedOrder} canManage={canWarehouse} onOrderUpdated={onOrderUpdated} />
+                <OrderWarehouseActions
+                  order={selectedOrder}
+                  canManage={canWarehouse && !closedContentLocked}
+                  onOrderUpdated={onOrderUpdated}
+                />
               </div>
             ) : null}
 
@@ -545,12 +551,20 @@ export default function OrderDetailPanel({
               order={selectedOrder}
               payments={payments}
               isLoading={paymentsLoading}
-              canRecord={canEditOrder}
+              canRecord={canEditOrder && !closedContentLocked}
             />
 
-            <OrderAttachmentsSection orderId={selectedOrder.id} enabled={detailPanelOpen} />
+            <OrderAttachmentsSection
+              orderId={selectedOrder.id}
+              enabled={detailPanelOpen}
+              canMutateOverride={closedContentLocked ? false : undefined}
+            />
 
-            <OrderFeedSection orderId={selectedOrder.id} enabled={detailPanelOpen} canComment={canEditOrder} />
+            <OrderFeedSection
+              orderId={selectedOrder.id}
+              enabled={detailPanelOpen}
+              canComment={canEditOrder && !closedContentLocked}
+            />
 
             <div className="border-t border-border pt-5">
               <Label htmlFor="order-status" className="mb-2 block">
@@ -654,8 +668,8 @@ export default function OrderDetailPanel({
                 </SelectContent>
               </Select>
               )}
-              {selectedOrder.closedAt ? (
-                <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+              {isOrderCurrentlyClosed(selectedOrder) ? (
+                <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-closed-order-banner>
                   <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>
                   <p className="text-xs text-muted-foreground">{t("orders.lifecycle.closedAt", { date: selectedOrder.closedAt })}</p>
                   {paymentBalance && paymentBalance.remaining > 0.005 ? (

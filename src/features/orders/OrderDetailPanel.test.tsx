@@ -38,10 +38,29 @@ vi.mock("./useDeleteOrder", () => ({
 }));
 
 vi.mock("./useGetOrders", () => ({
+  useGetOrders: () => ({ orders: [], isLoading: false, error: null, refetch: vi.fn() }),
   useUpdateOrderTaxInvoiceNumber: () => ({
     mutateAsync: taxInvoiceHooks.mutateAsync,
     isPending: taxInvoiceHooks.isPending,
   }),
+}));
+
+vi.mock("./useCloseOrder", () => ({
+  useCloseOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCancelOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("./WarrantyOrderSection", () => ({
+  default: () => null,
+  WarrantyOrderSection: () => null,
+}));
+
+vi.mock("./OrderWarrantyCoverageSection", () => ({
+  OrderWarrantyCoverageSection: () => null,
+}));
+
+vi.mock("./OrderFeedSection", () => ({
+  default: () => <div data-testid="order-feed-stub" />,
 }));
 
 vi.mock("../workspaces/useGetWorkspace", () => ({
@@ -62,6 +81,22 @@ vi.mock("../workspaces/useGetWorkspace", () => ({
 
 vi.mock("../profiles/useGetProfile", () => ({
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
+  useGetProfile: () => ({ data: { id: "user-1" }, isLoading: false }),
+}));
+
+vi.mock("./useClosedOrderPermissions", () => ({
+  useClosedOrderActionPermissions: () => ({
+    role: "owner",
+    grants: { cancelClosed: [], deleteClosed: [] },
+    isLoading: false,
+    isError: false,
+    canCancelClosed: true,
+    canDeleteClosed: true,
+    canManageClosedContent: false,
+    isOwnerByOwnerId: true,
+    ownerCanManageClosedOrders: false,
+  }),
+  useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
 }));
 
 vi.mock("../services/useGetServices", () => ({
@@ -804,5 +839,48 @@ describe("OrderDetailPanel", () => {
 
     expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Tax invoice number")).not.toBeInTheDocument();
+  });
+});
+
+describe("OrderDetailPanel closed-order banner", () => {
+  const closedAt = "2026-11-05T14:59:54.258807+00:00";
+
+  beforeEach(() => {
+    industryState.slug = "auto_repair";
+    roleState.role = "owner";
+  });
+
+  it("shows the closure banner for a currently closed order", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "closed", closedAt },
+    });
+    expect(await screen.findByText("Order closed")).toBeInTheDocument();
+    expect(screen.getByText(`Closed at ${closedAt}`)).toBeInTheDocument();
+  });
+
+  it("hides the stale closure banner after cancel while closed_at remains", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "cancelled", closedAt },
+    });
+    expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+    expect(screen.queryByText("Order closed")).not.toBeInTheDocument();
+    expect(screen.queryByText(`Closed at ${closedAt}`)).not.toBeInTheDocument();
+  });
+
+  it("hides the stale closure banner after reopen while closed_at remains", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "in-progress", closedAt },
+    });
+    expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
+    expect(screen.queryByText("Order closed")).not.toBeInTheDocument();
+  });
+
+  it("shows the new closure banner when the order is closed again", async () => {
+    const nextClosedAt = "2026-11-06T10:00:00.000Z";
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "closed", closedAt: nextClosedAt },
+    });
+    expect(await screen.findByText("Order closed")).toBeInTheDocument();
+    expect(screen.getByText(`Closed at ${nextClosedAt}`)).toBeInTheDocument();
   });
 });
