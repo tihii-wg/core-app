@@ -40,7 +40,7 @@ describe("roleHasClosedOrderPermission", () => {
   });
 
   it("denies admin/manager/member by default", () => {
-    const empty = { cancelClosed: [] as const, deleteClosed: [] as const };
+    const empty = { cancelClosed: [] as Array<"admin" | "manager" | "member">, deleteClosed: [] as Array<"admin" | "manager" | "member"> };
     expect(roleHasClosedOrderPermission("admin", CLOSED_ORDER_PERMISSIONS.cancelClosed, empty)).toBe(false);
     expect(roleHasClosedOrderPermission("manager", CLOSED_ORDER_PERMISSIONS.deleteClosed, empty)).toBe(false);
     expect(roleHasClosedOrderPermission("member", CLOSED_ORDER_PERMISSIONS.cancelClosed, empty)).toBe(false);

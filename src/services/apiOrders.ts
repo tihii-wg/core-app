@@ -1619,11 +1619,25 @@ export async function setOrderLifecycleRegularCustomStatus(
   };
 }
 
+export type CloseOrderResult = {
+  ok?: boolean;
+  idempotent?: boolean;
+  order_id?: string;
+  closed_at?: string | null;
+  remaining?: number;
+  currency?: string;
+  /** Always the system lifecycle value after a successful close RPC. */
+  status: "closed";
+  customStatusId: string | null;
+  customStatus: { name: string; color: string | null } | null;
+};
+
 /**
  * Formal close via SECURITY DEFINER RPC. Never auto-invoked from payment recording.
  * Validates ledger remaining server-side; sets closed_at once; idempotent.
+ * Does not change payment/financial status — paid vs closed stay independent.
  */
-export async function closeOrder(orderId: string, workspaceId: string | undefined) {
+export async function closeOrder(orderId: string, workspaceId: string | undefined): Promise<CloseOrderResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const { data, error } = await supabase.rpc("close_order_if_settled", {
     p_order_id: orderId,
@@ -1635,7 +1649,56 @@ export async function closeOrder(orderId: string, workspaceId: string | undefine
     }
     throw new Error(mapCloseOrderError(error.message));
   }
-  return data as { ok?: boolean; idempotent?: boolean; closed_at?: string; remaining?: number };
+
+  const payload = (data ?? {}) as {
+    ok?: boolean;
+    idempotent?: boolean;
+    order_id?: string;
+    closed_at?: string | null;
+    remaining?: number;
+    currency?: string;
+    custom_status_id?: string | null;
+    status?: string;
+  };
+
+  let customStatusId =
+    typeof payload.custom_status_id === "string" && payload.custom_status_id.trim()
+      ? payload.custom_status_id.trim()
+      : payload.custom_status_id === null
+        ? null
+        : undefined;
+
+  if (customStatusId === undefined) {
+    const { data: row, error: readError } = await supabase
+      .from("orders")
+      .select("status, custom_status_id, closed_at")
+      .eq("id", orderId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle();
+    if (readError) throw new Error(readError.message);
+    customStatusId =
+      typeof (row as { custom_status_id?: unknown } | null)?.custom_status_id === "string"
+        ? String((row as { custom_status_id: string }).custom_status_id).trim() || null
+        : null;
+  }
+
+  let customStatus: { name: string; color: string | null } | null = null;
+  if (customStatusId) {
+    const names = await getStatusDefinitionsByIds(targetWorkspaceId, [customStatusId]).catch(() => new Map());
+    const found = names.get(customStatusId);
+    if (found) customStatus = { name: found.name, color: found.color };
+  }
+
+  const closedAt =
+    typeof payload.closed_at === "string" && payload.closed_at.trim() ? payload.closed_at : null;
+
+  return {
+    ...payload,
+    status: "closed",
+    closed_at: closedAt,
+    customStatusId: customStatusId ?? null,
+    customStatus,
+  };
 }
 
 export type CancelOrderResult = {
@@ -1643,7 +1706,8 @@ export type CancelOrderResult = {
   idempotent?: boolean;
   order_id?: string;
   custom_status_id?: string | null;
-  closed_at?: null;
+  /** Preserved when cancelling a previously closed order. */
+  closed_at?: string | null;
   /** Always the system lifecycle value after a successful cancel RPC. */
   status: "cancelled";
   customStatusId: string | null;
@@ -2354,6 +2418,10 @@ export const ORDER_SERVICES_MEMBER_UPDATE_SQL =
 export const OWNER_REGULAR_STATUS_ON_LIFECYCLE_SQL =
   "20261105110000_owner_regular_status_on_lifecycle.PRODUCTION.sql";
 
+/** Manual SQL: close clears stale custom status; delete cleans exclusive warranty_records. */
+export const LIFECYCLE_CLOSE_CANCEL_DELETE_SQL =
+  "20261105120000_lifecycle_close_cancel_delete_warranty.PRODUCTION.sql";
+
 /** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
 export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {
   const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
@@ -2431,6 +2499,11 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
     }
     if (/invoices_.*order_id|table ["']?invoices["']?/i.test(blob)) {
       return new Error(i18n.t("orders.errors.cannotDeleteWithInvoice"));
+    }
+    if (/warranty_records_order_id_fkey|table ["']?warranty_records["']?/i.test(blob)) {
+      return new Error(
+        i18n.t("orders.errors.deleteWarrantyRecordsSqlRequired", { file: LIFECYCLE_CLOSE_CANCEL_DELETE_SQL }),
+      );
     }
   }
   return new Error(error.message || i18n.t("common.somethingWentWrong"));

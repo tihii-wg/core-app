@@ -13,8 +13,8 @@ export const CLOSED_ORDER_GRANTABLE_ROLES = ["admin", "manager", "member"] as co
 export type ClosedOrderGrantableRole = (typeof CLOSED_ORDER_GRANTABLE_ROLES)[number];
 
 export type ClosedOrderPermissionGrants = {
-  cancelClosed: ClosedOrderGrantableRole[];
-  deleteClosed: ClosedOrderGrantableRole[];
+  cancelClosed: ReadonlyArray<ClosedOrderGrantableRole>;
+  deleteClosed: ReadonlyArray<ClosedOrderGrantableRole>;
 };
 
 const EMPTY_GRANTS: ClosedOrderPermissionGrants = { cancelClosed: [], deleteClosed: [] };

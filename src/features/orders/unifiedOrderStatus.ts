@@ -113,13 +113,11 @@ export function resolveCurrentUnifiedStatus(
   options: readonly UnifiedStatusOption[],
 ): UnifiedStatusOption | null {
   if (options.length === 0) return null;
-  // Lifecycle orders may still carry a normal custom_status_id (owner annotation).
-  if (isLifecycleOrderStatus(order) && options[0]?.kind === "definition" && order.customStatusId) {
-    const annotated = options.find((option) => option.id === order.customStatusId);
-    if (annotated) return annotated;
-  }
-  if (order.status === "cancelled" || order.status === "closed") {
-    return options.find((option) => option.systemStatus === order.status) ?? null;
+  // Lifecycle status is authoritative — never let a stale regular custom_status_id win.
+  if (order.status === "cancelled" || order.status === "closed" || Boolean(order.closedAt?.trim())) {
+    const lifecycleStatus: OrderStatus =
+      order.status === "cancelled" ? "cancelled" : order.status === "closed" ? "closed" : "closed";
+    return options.find((option) => option.systemStatus === lifecycleStatus) ?? null;
   }
   if (options[0]?.kind === "definition") {
     if (order.customStatusId) {

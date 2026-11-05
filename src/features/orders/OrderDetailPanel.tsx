@@ -166,6 +166,7 @@ export default function OrderDetailPanel({
                 order: selectedOrder,
                 workspaceRole,
                 grants: closedOrderPerms.grants,
+                isOwnerByOwnerId,
               })
             ? t("orders.errors.deleteClosedForbidden")
             : null;
@@ -178,6 +179,7 @@ export default function OrderDetailPanel({
       canWrite: canEditOrder,
       workspaceRole,
       grants: closedOrderPerms.grants,
+      isOwnerByOwnerId,
     }) &&
     isOrderFormallyClosed(selectedOrder);
   const linkedPaymentCount = selectedOrder
@@ -773,6 +775,16 @@ export default function OrderDetailPanel({
         onOpenChange={setCloseOpen}
         payments={payments}
         formatMoney={formatMoney}
+        onClosed={(result) => {
+          if (!selectedOrder) return;
+          onOrderUpdated({
+            ...selectedOrder,
+            status: "closed",
+            closedAt: result.closed_at ?? selectedOrder.closedAt,
+            customStatusId: result.customStatusId,
+            customStatus: result.customStatus,
+          });
+        }}
       />
 
       {selectedOrder ? (

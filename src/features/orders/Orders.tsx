@@ -332,6 +332,7 @@ export function Orders() {
             onEdit={setEditingOrder}
             onStatusChange={orderDetails.changeStatus}
             onCreateInvoice={handleCreateInvoice}
+            onOrderUpdated={orderDetails.syncOrder}
             onDeleted={(orderId) => {
               orderDetails.clearOrder(orderId);
               setEditingOrder((current) => (current?.id === orderId ? null : current));
@@ -590,6 +591,7 @@ export function Orders() {
                 onEdit={setEditingOrder}
                 onStatusChange={orderDetails.changeStatus}
                 onCreateInvoice={handleCreateInvoice}
+                onOrderUpdated={orderDetails.syncOrder}
                 onDeleted={(orderId) => {
                   orderDetails.clearOrder(orderId);
                   setEditingOrder((current) => (current?.id === orderId ? null : current));

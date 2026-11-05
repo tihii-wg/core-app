@@ -21,7 +21,7 @@ import {
 } from "../orders/useClosedOrderPermissions";
 
 function toggleRole(
-  list: ClosedOrderGrantableRole[],
+  list: ReadonlyArray<ClosedOrderGrantableRole>,
   role: ClosedOrderGrantableRole,
   enabled: boolean,
 ): ClosedOrderGrantableRole[] {
@@ -38,7 +38,7 @@ function RoleGrantGroup({
 }: {
   title: string;
   description: string;
-  roles: ClosedOrderGrantableRole[];
+  roles: ReadonlyArray<ClosedOrderGrantableRole>;
   disabled: boolean;
   onChange: (role: ClosedOrderGrantableRole, enabled: boolean) => void;
 }) {

@@ -190,14 +190,22 @@ describe("unifiedOrderStatus", () => {
     ).toEqual({ status: "cancelled", customStatusId: "d-waiting" });
   });
 
-  it("resolves current unified status from customStatusId on closed orders", () => {
+  it("never lets a stale customStatusId override closed/cancelled in selectors", () => {
     const options = unifiedStatusOptions(defaults, label);
+    // Selectors exclude lifecycle defs — current resolution must not fall back to a regular custom.
     expect(
       resolveCurrentUnifiedStatus(
         order({ status: "closed", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-progress" }),
         options,
+      ),
+    ).toBeNull();
+    const filters = unifiedStatusFilterOptions(defaults, label);
+    expect(
+      resolveCurrentUnifiedStatus(
+        order({ status: "cancelled", closedAt: null, customStatusId: "d-progress" }),
+        filters,
       )?.id,
-    ).toBe("d-progress");
+    ).toBe("d-cancelled");
   });
 
   it("board filter options keep closed/cancelled while selectors exclude them", () => {

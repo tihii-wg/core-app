@@ -125,10 +125,20 @@ describe("owner regular status on lifecycle orders", () => {
 
   it("closeOrder invokes close_order_if_settled RPC", async () => {
     rpc.mockResolvedValue({
-      data: { ok: true, closed_at: "2026-11-01T12:00:00.000Z", remaining: 0 },
+      data: {
+        ok: true,
+        status: "closed",
+        closed_at: "2026-11-01T12:00:00.000Z",
+        custom_status_id: null,
+        remaining: 0,
+      },
       error: null,
     });
-    await expect(closeOrder("order-1", "ws-1")).resolves.toMatchObject({ ok: true });
+    await expect(closeOrder("order-1", "ws-1")).resolves.toMatchObject({
+      ok: true,
+      status: "closed",
+      customStatusId: null,
+    });
     expect(rpc).toHaveBeenCalledWith("close_order_if_settled", {
       p_order_id: "order-1",
       p_workspace_id: "ws-1",

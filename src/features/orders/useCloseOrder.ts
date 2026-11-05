@@ -2,7 +2,13 @@ import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-q
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import type { Order } from "../../lib/types";
-import { cancelOrder, closeOrder, type CancelOrderResult, type OrdersPageResult } from "../../services/apiOrders";
+import {
+  cancelOrder,
+  closeOrder,
+  type CancelOrderResult,
+  type CloseOrderResult,
+  type OrdersPageResult,
+} from "../../services/apiOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
@@ -13,6 +19,23 @@ function invalidateOrderCaches(queryClient: QueryClient, workspaceId: string | u
   void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["payments", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
+  void queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
+}
+
+function patchOrderLists(
+  queryClient: QueryClient,
+  workspaceId: string | undefined,
+  patchOrder: (order: Order) => Order,
+) {
+  if (!workspaceId) return;
+  queryClient.setQueriesData({ queryKey: ["orders", workspaceId] }, (data: unknown) => {
+    if (Array.isArray(data)) return (data as Order[]).map(patchOrder);
+    if (data && typeof data === "object" && Array.isArray((data as OrdersPageResult).orders)) {
+      const page = data as OrdersPageResult;
+      return { ...page, orders: page.orders.map(patchOrder) };
+    }
+    return data;
+  });
 }
 
 /** Patch every cached order list/page so cancelled status is visible before refetch settles. */
@@ -22,26 +45,37 @@ export function patchCancelledOrderInCache(
   orderId: string,
   result: CancelOrderResult,
 ) {
-  if (!workspaceId) return;
-
-  const patchOrder = (order: Order): Order =>
+  patchOrderLists(queryClient, workspaceId, (order) =>
     order.id === orderId
       ? {
           ...order,
           status: "cancelled",
           customStatusId: result.customStatusId,
           customStatus: result.customStatus,
+          closedAt: result.closed_at ?? order.closedAt,
         }
-      : order;
+      : order,
+  );
+}
 
-  queryClient.setQueriesData({ queryKey: ["orders", workspaceId] }, (data: unknown) => {
-    if (Array.isArray(data)) return (data as Order[]).map(patchOrder);
-    if (data && typeof data === "object" && Array.isArray((data as OrdersPageResult).orders)) {
-      const page = data as OrdersPageResult;
-      return { ...page, orders: page.orders.map(patchOrder) };
-    }
-    return data;
-  });
+/** Patch caches so closed lifecycle status is visible before refetch settles. */
+export function patchClosedOrderInCache(
+  queryClient: QueryClient,
+  workspaceId: string | undefined,
+  orderId: string,
+  result: CloseOrderResult,
+) {
+  patchOrderLists(queryClient, workspaceId, (order) =>
+    order.id === orderId
+      ? {
+          ...order,
+          status: "closed",
+          closedAt: result.closed_at ?? order.closedAt,
+          customStatusId: result.customStatusId,
+          customStatus: result.customStatus,
+        }
+      : order,
+  );
 }
 
 export function useCloseOrder() {
@@ -54,6 +88,7 @@ export function useCloseOrder() {
       return closeOrder(orderId, workspaceId);
     },
     onSuccess: (result, orderId) => {
+      patchClosedOrderInCache(queryClient, workspaceId, orderId, result);
       invalidateOrderCaches(queryClient, workspaceId, orderId);
       toast.success(
         result?.idempotent ? i18n.t("orders.lifecycle.toast.alreadyClosed") : i18n.t("orders.lifecycle.toast.closed"),

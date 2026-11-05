@@ -7,6 +7,7 @@ import {
 } from "../../services/apiClosedOrderPermissions";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { canCancelClosedOrder, canDeleteClosedOrder } from "./closedOrderPermissions";
 
 export function closedOrderPermissionsQueryKey(workspaceId: string | undefined) {
@@ -24,9 +25,10 @@ export function useClosedOrderPermissionGrants(workspaceId?: string | null) {
   });
 }
 
-/** Resolved cancel/delete-closed flags for the current member (owner always true). */
+/** Resolved cancel/delete-closed flags (workspaces.owner_id always; else role grants). */
 export function useClosedOrderActionPermissions() {
   const role = useActiveWorkspaceRole();
+  const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const { data: grants, isLoading, isError } = useClosedOrderPermissionGrants();
   const safeGrants = grants ?? emptyClosedOrderGrants();
   return {
@@ -34,8 +36,8 @@ export function useClosedOrderActionPermissions() {
     grants: safeGrants,
     isLoading,
     isError,
-    canCancelClosed: canCancelClosedOrder(role, safeGrants),
-    canDeleteClosed: canDeleteClosedOrder(role, safeGrants),
+    canCancelClosed: isOwnerByOwnerId || canCancelClosedOrder(role, safeGrants),
+    canDeleteClosed: isOwnerByOwnerId || canDeleteClosedOrder(role, safeGrants),
   };
 }
 

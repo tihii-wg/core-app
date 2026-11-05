@@ -26,11 +26,13 @@ export function canOfferCancelOrderAction(opts: {
   canWrite: boolean;
   workspaceRole: string | null | undefined;
   grants: ClosedOrderPermissionGrants | null | undefined;
+  /** Authoritative `workspaces.owner_id === auth user` (preferred over membership role). */
+  isOwnerByOwnerId?: boolean;
 }): boolean {
   if (!opts.canWrite) return false;
   if (opts.order.status === "cancelled") return false;
   if (isOrderFormallyClosed(opts.order)) {
-    return canCancelClosedOrder(opts.workspaceRole, opts.grants);
+    return Boolean(opts.isOwnerByOwnerId) || canCancelClosedOrder(opts.workspaceRole, opts.grants);
   }
   return true;
 }
@@ -43,7 +45,8 @@ export function canOfferDeleteClosedOrderAction(opts: {
   order: Pick<Order, "closedAt" | "status">;
   workspaceRole: string | null | undefined;
   grants: ClosedOrderPermissionGrants | null | undefined;
+  isOwnerByOwnerId?: boolean;
 }): boolean {
   if (!isOrderFormallyClosed(opts.order)) return true;
-  return canDeleteClosedOrder(opts.workspaceRole, opts.grants);
+  return Boolean(opts.isOwnerByOwnerId) || canDeleteClosedOrder(opts.workspaceRole, opts.grants);
 }

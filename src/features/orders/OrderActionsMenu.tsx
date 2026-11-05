@@ -69,6 +69,8 @@ type OrderActionsMenuProps = {
   onCreateInvoice: (order: Order) => void;
   /** Called after a successful delete so the parent can close detail panels. */
   onDeleted?: (orderId: string) => void;
+  /** Merge lifecycle updates (close/cancel) into local detail state when open. */
+  onOrderUpdated?: (order: Order) => void;
   /** Extra classes for the trigger (e.g. a larger touch target on mobile cards). */
   triggerClassName?: string;
 };
@@ -89,6 +91,7 @@ export function OrderActionsMenu({
   onStatusChange,
   onCreateInvoice,
   onDeleted,
+  onOrderUpdated,
   triggerClassName,
 }: OrderActionsMenuProps) {
   const { t } = useTranslation();
@@ -134,6 +137,7 @@ export function OrderActionsMenu({
               order,
               workspaceRole: closedOrderPerms.role,
               grants: closedOrderPerms.grants,
+              isOwnerByOwnerId,
             })
           ? t("orders.errors.deleteClosedForbidden")
           : null;
@@ -143,6 +147,7 @@ export function OrderActionsMenu({
     canWrite,
     workspaceRole: closedOrderPerms.role,
     grants: closedOrderPerms.grants,
+    isOwnerByOwnerId,
   }) && formallyClosed;
 
   async function copyPublicStatusLink() {
@@ -392,6 +397,15 @@ export function OrderActionsMenu({
         onOpenChange={setCloseOpen}
         payments={payments}
         formatMoney={formatMoney}
+        onClosed={(result) => {
+          onOrderUpdated?.({
+            ...order,
+            status: "closed",
+            closedAt: result.closed_at ?? order.closedAt,
+            customStatusId: result.customStatusId,
+            customStatus: result.customStatus,
+          });
+        }}
       />
 
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
@@ -410,9 +424,15 @@ export function OrderActionsMenu({
               disabled={cancelOrderMutation.isPending}
               onClick={() => {
                 cancelOrderMutation.mutate(order.id, {
-                  onSuccess: () => {
+                  onSuccess: (result) => {
                     setCancelOpen(false);
-                    // List/board caches are patched inside useCancelOrder; reopen details to refresh.
+                    onOrderUpdated?.({
+                      ...order,
+                      status: "cancelled",
+                      customStatusId: result.customStatusId,
+                      customStatus: result.customStatus,
+                      closedAt: result.closed_at ?? order.closedAt,
+                    });
                   },
                 });
               }}

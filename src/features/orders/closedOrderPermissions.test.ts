@@ -11,16 +11,25 @@ describe("closed order UI permission helpers", () => {
     const empty = { cancelClosed: [], deleteClosed: [] };
     expect(canCancelClosedOrder("owner", empty)).toBe(true);
     expect(canDeleteClosedOrder("owner", empty)).toBe(true);
+    expect(
+      canOfferCancelOrderAction({
+        order: { status: "closed", closedAt: "2026-01-01T00:00:00.000Z" },
+        canWrite: true,
+        workspaceRole: "member",
+        grants: empty,
+        isOwnerByOwnerId: true,
+      }),
+    ).toBe(true);
   });
 
   it("admin can cancel but not delete when only cancellation is granted", () => {
-    const grants = { cancelClosed: ["admin" as const], deleteClosed: [] as const };
+    const grants = { cancelClosed: ["admin" as const], deleteClosed: [] as Array<"admin" | "manager" | "member"> };
     expect(canCancelClosedOrder("admin", grants)).toBe(true);
     expect(canDeleteClosedOrder("admin", grants)).toBe(false);
   });
 
   it("manager can delete but not cancel when only deletion is granted", () => {
-    const grants = { cancelClosed: [] as const, deleteClosed: ["manager" as const] };
+    const grants = { cancelClosed: [] as Array<"admin" | "manager" | "member">, deleteClosed: ["manager" as const] };
     expect(canCancelClosedOrder("manager", grants)).toBe(false);
     expect(canDeleteClosedOrder("manager", grants)).toBe(true);
   });

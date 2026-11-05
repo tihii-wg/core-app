@@ -25,6 +25,7 @@ type OrderCardProps = {
   onEdit: (order: Order) => void;
   onStatusChange: (order: Order, status: OrderStatus) => void;
   onCreateInvoice: (order: Order) => void;
+  onOrderUpdated?: (order: Order) => void;
   onDeleted?: (orderId: string) => void;
 };
 
@@ -49,6 +50,7 @@ export function OrderCard({
   onEdit,
   onStatusChange,
   onCreateInvoice,
+  onOrderUpdated,
   onDeleted,
 }: OrderCardProps) {
   const { t } = useTranslation();
@@ -84,6 +86,7 @@ export function OrderCard({
           onEdit={onEdit}
           onStatusChange={onStatusChange}
           onCreateInvoice={onCreateInvoice}
+          onOrderUpdated={onOrderUpdated}
           onDeleted={onDeleted}
           triggerClassName="size-10 shrink-0"
         />

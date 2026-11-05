@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "../../ui/Dialog";
 import type { Order } from "../../lib/types";
+import type { CloseOrderResult } from "../../services/apiOrders";
 import type { LedgerPayment } from "../finance/paymentTypes";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { isOrderFormallyClosed } from "./orderLifecycle";
@@ -22,6 +23,8 @@ type CloseOrderDialogProps = {
   payments: LedgerPayment[];
   invoiceId?: string | null;
   formatMoney: (amount: number) => string;
+  /** Called after a successful close so detail/list local state can show status=closed immediately. */
+  onClosed?: (result: CloseOrderResult) => void;
 };
 
 /**
@@ -35,6 +38,7 @@ export function CloseOrderDialog({
   payments,
   invoiceId,
   formatMoney,
+  onClosed,
 }: CloseOrderDialogProps) {
   const { t } = useTranslation();
   const closeOrder = useCloseOrder();
@@ -105,7 +109,10 @@ export function CloseOrderDialog({
             disabled={!canClose || closeOrder.isPending}
             onClick={() => {
               closeOrder.mutate(order.id, {
-                onSuccess: () => onOpenChange(false),
+                onSuccess: (result) => {
+                  onClosed?.(result);
+                  onOpenChange(false);
+                },
               });
             }}
           >

@@ -111,9 +111,15 @@ export function OrderStatusBadge({
   customStatus?: { name: string; color?: string | null } | null;
 }) {
   const { workflow } = useIndustryWorkflow();
-  // Prefer an explicit regular custom annotation (including owner notes on closed/cancelled)
-  // so board, list, and detail show the same label. Formal lifecycle still lives in
-  // closed_at / status / Close-Cancel actions and dedicated board columns.
+  // Formal lifecycle statuses always win. A stale custom_status_id must never hide
+  // closed/cancelled after close/cancel (payment/financial badges stay separate).
+  if (status === "cancelled" || status === "closed") {
+    return (
+      <StatusBadge variant={orderVariants[status]} dot>
+        {industryOrderStatusLabel(workflow, status)}
+      </StatusBadge>
+    );
+  }
   if (customStatus?.name) {
     return <EntityStatusBadge name={customStatus.name} color={customStatus.color} />;
   }
