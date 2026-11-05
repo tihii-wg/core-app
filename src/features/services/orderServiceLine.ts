@@ -1,16 +1,65 @@
 import type { OrderService, Service } from "../../lib/types";
+import {
+  catalogWarrantyFromDbRow,
+  resolveOrderLineWarrantyForKind,
+  type CatalogWarrantyDefaults,
+} from "../orders/catalogWarranty";
+import type { WorkspaceWarrantyDefaults } from "../orders/warranty";
 
 /**
- * Copies the current catalog name and price into a new order line snapshot.
- * Later catalog edits must not rewrite this line — order_services stores its own price.
+ * Copies the current catalog name, price, and warranty defaults into a new order line snapshot.
+ * Later catalog edits must not rewrite this line — order_services stores its own price/warranty.
  */
-export function catalogServiceToOrderLine(service: Pick<Service, "id" | "service_name" | "service_price">): OrderService {
+export function catalogServiceToOrderLine(
+  service: Pick<Service, "id" | "service_name" | "service_price"> &
+    Partial<Pick<Service, "warrantyType" | "warrantyMonths" | "warrantyKm">> & {
+      warranty_type?: unknown;
+      warranty_months?: unknown;
+      warranty_km?: unknown;
+      warranty_days?: unknown;
+      warranty_unit?: unknown;
+    },
+  workspaceDefaults?: WorkspaceWarrantyDefaults | null,
+): OrderService {
+  const catalog = catalogWarrantyFromService(service);
+  const warranty = resolveOrderLineWarrantyForKind(catalog, workspaceDefaults ?? null, "service");
+
   return {
     serviceId: service.id,
     serviceName: service.service_name,
     price: service.service_price ?? 0,
     quantity: 1,
+    warrantyMonths: warranty.warrantyMonths,
+    warrantyDays: warranty.warrantyDays,
+    warrantyKm: warranty.warrantyKm,
   };
+}
+
+export function catalogWarrantyFromService(
+  service: Partial<Pick<Service, "warrantyType" | "warrantyMonths" | "warrantyKm">> & {
+    warranty_type?: unknown;
+    warranty_months?: unknown;
+    warranty_km?: unknown;
+    warranty_days?: unknown;
+    warranty_unit?: unknown;
+  },
+): CatalogWarrantyDefaults {
+  if (service.warrantyType !== undefined || service.warrantyMonths !== undefined || service.warrantyKm !== undefined) {
+    return catalogWarrantyFromDbRow({
+      warranty_type: service.warrantyType,
+      warranty_months: service.warrantyMonths,
+      warranty_km: service.warrantyKm,
+      warranty_days: service.warranty_days,
+      warranty_unit: service.warranty_unit,
+    });
+  }
+  return catalogWarrantyFromDbRow({
+    warranty_type: service.warranty_type,
+    warranty_months: service.warranty_months,
+    warranty_km: service.warranty_km,
+    warranty_days: service.warranty_days,
+    warranty_unit: service.warranty_unit,
+  });
 }
 
 export function orderLineAmount(line: Pick<OrderService, "price" | "quantity">): number {

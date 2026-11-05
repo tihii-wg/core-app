@@ -137,13 +137,7 @@ export default function OrderMaterialLinesEditor({
       adjustQuantity(existingIndex, 1);
       return;
     }
-    const warranty = warrantyDefaults ? defaultsForKind(warrantyDefaults, "material") : null;
-    append({
-      ...catalogItemToOrderMaterial(item, 1, issueWarehouseId),
-      ...(warranty
-        ? { warrantyMonths: warranty.durationMonths, warrantyKm: warranty.mileageLimit, warrantyDays: null }
-        : {}),
-    });
+    append(catalogItemToOrderMaterial(item, 1, issueWarehouseId, warrantyDefaults));
   }
 
   function handleCreated(item: InventoryItem) {

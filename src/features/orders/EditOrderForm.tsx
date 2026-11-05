@@ -243,12 +243,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           errors={!!errors.services?.root}
           onSelect={(service) => {
             if (hasService(service.id, service.service_name)) return;
-            const warranty = defaultsForKind(warrantyDefaults, "service");
-            serviceAppend({
-              ...catalogServiceToOrderLine(service),
-              warrantyMonths: warranty.durationMonths,
-              warrantyKm: warranty.mileageLimit,
-            });
+            serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults));
             clearErrors("services");
           }}
           onCreate={(serviceName, price) => {
@@ -261,6 +256,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
               quantity: 1,
               warrantyMonths: warranty.durationMonths,
               warrantyKm: warranty.mileageLimit,
+              warrantyDays: null,
             });
             clearErrors("services");
           }}

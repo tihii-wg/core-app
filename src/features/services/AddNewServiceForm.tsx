@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -9,6 +10,8 @@ import { Textarea } from "../../ui/Textarea";
 import type { CreateMadalProps, addNewServiceFormData } from "../../lib/types";
 import { defaultServiceCategory, industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
+import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults } from "../orders/catalogWarranty";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import ServiceCombobox from "./ServiceCombobox";
 import useCreateNewService from "./useCreateNewService";
@@ -22,6 +25,9 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
   const { workflow } = useIndustryWorkflow();
   const copy = industryServiceCopy(workflow);
   const categoryOptions = industryServiceCategoryOptions(workflow);
+
+  const [warranty, setWarranty] = useState(emptyCatalogWarrantyFormValues);
+  const [warrantyError, setWarrantyError] = useState<string | null>(null);
 
   const {
     control,
@@ -40,18 +46,43 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
   });
 
   const onSubmit = (data: addNewServiceFormData) => {
-    mutate(data, {
-      onSuccess: () => {
-        reset({
-          serviceName: "",
-          status: "active",
-          category: defaultServiceCategory(workflow),
-          price: undefined,
-          description: "",
-        });
-        setCreateModalOpen(false);
+    let normalized;
+    try {
+      normalized = normalizeCatalogWarrantyDefaults(warranty);
+      setWarrantyError(null);
+    } catch {
+      setWarrantyError(
+        warranty.warrantyType === "both"
+          ? t("catalogWarranty.errors.bothRequired")
+          : warranty.warrantyType === "mileage"
+            ? t("catalogWarranty.errors.mileageRequired")
+            : t("catalogWarranty.errors.durationRequired"),
+      );
+      return;
+    }
+
+    mutate(
+      {
+        ...data,
+        warrantyType: normalized.warrantyType,
+        warrantyMonths: normalized.warrantyMonths,
+        warrantyKm: normalized.warrantyKm,
       },
-    });
+      {
+        onSuccess: () => {
+          reset({
+            serviceName: "",
+            status: "active",
+            category: defaultServiceCategory(workflow),
+            price: undefined,
+            description: "",
+          });
+          setWarranty(emptyCatalogWarrantyFormValues());
+          setWarrantyError(null);
+          setCreateModalOpen(false);
+        },
+      },
+    );
   };
 
   return (
@@ -139,6 +170,16 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
           <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
           <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
         </div>
+
+        <CatalogWarrantyFields
+          idPrefix="new-service"
+          value={warranty}
+          onChange={(next) => {
+            setWarranty(next);
+            setWarrantyError(null);
+          }}
+          error={warrantyError}
+        />
 
         <div className="flex justify-end gap-2">
           <Button

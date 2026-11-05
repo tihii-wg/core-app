@@ -387,12 +387,7 @@ export default function AddNewOrderForm({
 
               if (alreadyExists) return;
 
-              const warranty = defaultsForKind(warrantyDefaults, "service");
-              serviceAppend({
-                ...catalogServiceToOrderLine(service),
-                warrantyMonths: warranty.durationMonths,
-                warrantyKm: warranty.mileageLimit,
-              });
+              serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults));
               clearErrors("services");
             }}
             onCreate={(serviceName, price) => {
@@ -408,6 +403,7 @@ export default function AddNewOrderForm({
                 quantity: 1,
                 warrantyMonths: warranty.durationMonths,
                 warrantyKm: warranty.mileageLimit,
+                warrantyDays: null,
               });
               clearErrors("services");
             }}

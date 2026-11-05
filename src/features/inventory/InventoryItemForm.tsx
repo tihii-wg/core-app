@@ -10,7 +10,24 @@ import { Spinner } from "../../ui/Spinner";
 import type { InventoryItemFormData } from "../../lib/types";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
+import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults, type CatalogWarrantyDefaults } from "../orders/catalogWarranty";
 import { parseMarkupPercent, markupFieldError, sellingPriceFromMarkup } from "./markup";
+
+function warrantyFromFormDefaults(defaults: InventoryItemFormData): CatalogWarrantyDefaults {
+  if (defaults.warrantyType == null && defaults.warrantyMonths == null && defaults.warrantyKm == null) {
+    return emptyCatalogWarrantyFormValues();
+  }
+  try {
+    return normalizeCatalogWarrantyDefaults({
+      warrantyType: defaults.warrantyType ?? "none",
+      warrantyMonths: defaults.warrantyMonths,
+      warrantyKm: defaults.warrantyKm,
+    });
+  } catch {
+    return emptyCatalogWarrantyFormValues();
+  }
+}
 
 type InventoryItemFormProps = {
   defaultValues: InventoryItemFormData;
@@ -47,6 +64,8 @@ export default function InventoryItemForm({
   const inventoryCopy = industryInventoryCopy(workflow);
   const [markupText, setMarkupText] = useState(String(markupPercent));
   const [markupError, setMarkupError] = useState("");
+  const [warranty, setWarranty] = useState<CatalogWarrantyDefaults>(() => warrantyFromFormDefaults(defaultValues));
+  const [warrantyError, setWarrantyError] = useState<string | null>(null);
   const skipMarkupUpdate = useRef(true);
   const {
     control,
@@ -56,6 +75,17 @@ export default function InventoryItemForm({
     setValue,
     formState: { errors },
   } = useForm<InventoryItemFormData>({ defaultValues });
+
+  useEffect(() => {
+    setWarranty(warrantyFromFormDefaults(defaultValues));
+    setWarrantyError(null);
+  }, [
+    defaultValues.warrantyType,
+    defaultValues.warrantyMonths,
+    defaultValues.warrantyKm,
+    defaultValues.name,
+    defaultValues.sku,
+  ]);
 
   useEffect(() => {
     if (skipMarkupUpdate.current) {
@@ -83,8 +113,30 @@ export default function InventoryItemForm({
         }
         const parsed = parseMarkupPercent(markupText);
         if (parsed == null) return;
+
+        let normalized;
+        try {
+          normalized = normalizeCatalogWarrantyDefaults(warranty);
+          setWarrantyError(null);
+        } catch {
+          setWarrantyError(
+            warranty.warrantyType === "both"
+              ? t("catalogWarranty.errors.bothRequired")
+              : warranty.warrantyType === "mileage"
+                ? t("catalogWarranty.errors.mileageRequired")
+                : t("catalogWarranty.errors.durationRequired"),
+          );
+          return;
+        }
+
         onMarkupCommit(parsed);
-        onSubmit(lockQuantity ? { ...data, quantity: isCreate ? 0 : defaultValues.quantity } : data);
+        const withWarranty = {
+          ...data,
+          warrantyType: normalized.warrantyType,
+          warrantyMonths: normalized.warrantyMonths,
+          warrantyKm: normalized.warrantyKm,
+        };
+        onSubmit(lockQuantity ? { ...withWarranty, quantity: isCreate ? 0 : defaultValues.quantity } : withWarranty);
       })}
     >
       <div className="space-y-4 py-2">
@@ -276,6 +328,16 @@ export default function InventoryItemForm({
           <Label htmlFor="inventory-active">{t("inventory.active")}</Label>
           <Controller name="isActive" control={control} render={({ field }) => <Switch id="inventory-active" checked={field.value} onCheckedChange={field.onChange} />} />
         </div>
+
+        <CatalogWarrantyFields
+          idPrefix="inventory-item"
+          value={warranty}
+          onChange={(next) => {
+            setWarranty(next);
+            setWarrantyError(null);
+          }}
+          error={warrantyError}
+        />
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>

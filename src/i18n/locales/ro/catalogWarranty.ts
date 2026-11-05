@@ -1,0 +1,21 @@
+export default {
+  sectionTitle: "Garanție",
+  sectionHint: "Garanția implicită aplicată când acest element este adăugat într-o comandă. Liniile din comandă păstrează propria copie și pot fi modificate.",
+  typeLabel: "Tip garanție",
+  monthsLabel: "Durată (luni)",
+  monthsPlaceholder: "ex. 12",
+  kmLabel: "Limită kilometraj (km)",
+  kmPlaceholder: "ex. 20000",
+  types: {
+    none: "Fără garanție",
+    duration: "Doar durată",
+    mileage: "Doar kilometraj",
+    both: "Durată și kilometraj",
+  },
+  errors: {
+    incomplete: "Introduceți o durată și/sau un kilometraj pozitiv pentru tipul de garanție selectat.",
+    durationRequired: "Introduceți o durată pozitivă în luni.",
+    mileageRequired: "Introduceți o limită pozitivă de kilometraj.",
+    bothRequired: "Introduceți atât o durată, cât și o limită de kilometraj pozitive.",
+  },
+};

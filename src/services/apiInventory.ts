@@ -1,9 +1,41 @@
 import type { InventoryItem, InventoryItemFormData, InventoryListFilter, InventorySort, InventorySortField } from "../lib/types";
 import { DEFAULT_INVENTORY_MIN_QUANTITY } from "../features/inventory/inventoryDefaults";
 import { stockStatusFromQuantities } from "../features/inventory/stockStatus";
+import {
+  catalogWarrantyFromDbRow,
+  catalogWarrantyToDbPayload,
+  normalizeCatalogWarrantyDefaults,
+} from "../features/orders/catalogWarranty";
 import i18n from "../i18n";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
+
+let catalogWarrantyColumnsSupported: boolean | null = null;
+
+function isMissingCatalogWarrantyColumn(error: { code?: string; message?: string }) {
+  return (
+    (/warranty_type|warranty_months|warranty_km/i.test(error.message ?? "") &&
+      (error.code === "42703" || error.code === "PGRST204")) ||
+    false
+  );
+}
+
+function warrantyPayloadFromForm(input: Pick<InventoryItemFormData, "warrantyType" | "warrantyMonths" | "warrantyKm">) {
+  if (input.warrantyType === undefined && input.warrantyMonths === undefined && input.warrantyKm === undefined) {
+    return null;
+  }
+  try {
+    return catalogWarrantyToDbPayload(
+      normalizeCatalogWarrantyDefaults({
+        warrantyType: input.warrantyType ?? "none",
+        warrantyMonths: input.warrantyMonths,
+        warrantyKm: input.warrantyKm,
+      }),
+    );
+  } catch {
+    throw new Error(i18n.t("catalogWarranty.errors.incomplete"));
+  }
+}
 
 const inventorySortColumns: Record<InventorySortField, string> = {
   name: "name",
@@ -61,6 +93,8 @@ export function toInventoryItem(row: Record<string, unknown>): InventoryItem {
   // Matches public.inventory_items_with_status CASE expression.
   const stockStatus = stockStatusFromQuantities(quantity, minQuantity);
 
+  const warranty = catalogWarrantyFromDbRow(row);
+
   return {
     id: textValue(row.id),
     workspaceId: textValue(row.workspace_id),
@@ -79,6 +113,9 @@ export function toInventoryItem(row: Record<string, unknown>): InventoryItem {
     stockStatus,
     createdAt: textValue(row.created_at),
     updatedAt: textValue(row.updated_at),
+    warrantyType: warranty.warrantyType,
+    warrantyMonths: warranty.warrantyMonths,
+    warrantyKm: warranty.warrantyKm,
   };
 }
 
@@ -88,8 +125,9 @@ function resolveMinQuantity(value: number | null | undefined) {
   return DEFAULT_INVENTORY_MIN_QUANTITY;
 }
 
-function itemPayload(input: InventoryItemFormData, options?: { includeQuantity?: boolean }) {
+function itemPayload(input: InventoryItemFormData, options?: { includeQuantity?: boolean; includeWarranty?: boolean }) {
   const sku = input.sku.trim();
+  const warranty = options?.includeWarranty === false ? null : warrantyPayloadFromForm(input);
 
   return {
     name: input.name.trim(),
@@ -105,6 +143,7 @@ function itemPayload(input: InventoryItemFormData, options?: { includeQuantity?:
     supplier: input.supplier.trim() || null,
     location: input.location.trim() || null,
     is_active: input.isActive,
+    ...(warranty && catalogWarrantyColumnsSupported !== false ? warranty : {}),
   };
 }
 
@@ -177,15 +216,28 @@ export async function createInventoryItem(input: InventoryItemFormData, workspac
 
   // Catalog cards never create stock. Quantity always starts at 0; goods receipt (or
   // other warehouse ops) is the only path that increases inventory_items.quantity.
-  const { data, error } = await supabase
-    .from("inventory_items")
-    .insert({
-      workspace_id: resolvedWorkspaceId,
-      ...itemPayload({ ...input, quantity: 0 }, { includeQuantity: true }),
-      quantity: 0,
-    })
-    .select("id")
-    .maybeSingle();
+  const payload = {
+    workspace_id: resolvedWorkspaceId,
+    ...itemPayload({ ...input, quantity: 0 }, { includeQuantity: true }),
+    quantity: 0,
+  };
+
+  let { data, error } = await supabase.from("inventory_items").insert(payload).select("id").maybeSingle();
+
+  if (error && isMissingCatalogWarrantyColumn(error)) {
+    catalogWarrantyColumnsSupported = false;
+    ({ data, error } = await supabase
+      .from("inventory_items")
+      .insert({
+        workspace_id: resolvedWorkspaceId,
+        ...itemPayload({ ...input, quantity: 0 }, { includeQuantity: true, includeWarranty: false }),
+        quantity: 0,
+      })
+      .select("id")
+      .maybeSingle());
+  } else if (error == null && "warranty_type" in payload && catalogWarrantyColumnsSupported == null) {
+    catalogWarrantyColumnsSupported = true;
+  }
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.saveFailed"));
   if (!data || typeof (data as { id?: unknown }).id !== "string") throw new Error(i18n.t("inventory.errors.saveFailed"));
@@ -200,16 +252,34 @@ export async function updateInventoryItem({ id, ...input }: InventoryItemFormDat
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
   // Never write quantity from the catalog form — warehouse documents own stock.
-  const { data, error } = await supabase
+  const payload = {
+    ...itemPayload(input, { includeQuantity: false }),
+    updated_at: new Date().toISOString(),
+  };
+
+  let { data, error } = await supabase
     .from("inventory_items")
-    .update({
-      ...itemPayload(input, { includeQuantity: false }),
-      updated_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq("id", id)
     .eq("workspace_id", resolvedWorkspaceId)
     .select("id")
     .maybeSingle();
+
+  if (error && isMissingCatalogWarrantyColumn(error)) {
+    catalogWarrantyColumnsSupported = false;
+    ({ data, error } = await supabase
+      .from("inventory_items")
+      .update({
+        ...itemPayload(input, { includeQuantity: false, includeWarranty: false }),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("workspace_id", resolvedWorkspaceId)
+      .select("id")
+      .maybeSingle());
+  } else if (error == null && "warranty_type" in payload && catalogWarrantyColumnsSupported == null) {
+    catalogWarrantyColumnsSupported = true;
+  }
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.saveFailed"));
   if (!data) throw new Error(i18n.t("inventory.errors.updateNotFound"));
@@ -218,6 +288,11 @@ export async function updateInventoryItem({ id, ...input }: InventoryItemFormDat
   const updated = await getInventoryItem(id, resolvedWorkspaceId);
   if (!updated) throw new Error(i18n.t("inventory.errors.updateNotFound"));
   return updated;
+}
+
+/** @internal test helper */
+export function __resetCatalogWarrantyColumnCacheForTests() {
+  catalogWarrantyColumnsSupported = null;
 }
 
 export async function deleteInventoryItem(inventoryItemId: string, workspaceId: string | undefined) {

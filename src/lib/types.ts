@@ -253,6 +253,9 @@ export type UpdateOrderDetails = Omit<EditOrderFormData, "services" | "materials
   vehicleMileageSnapshot?: number | null;
   vehicleMileageUnitSnapshot?: MileageUnit | null;
 };
+/** Catalog default warranty mode stored on services / inventory_items. */
+export type CatalogWarrantyType = "none" | "duration" | "mileage" | "both";
+
 export interface addNewServiceFormData {
   serviceId?: string;
   serviceName: string;
@@ -260,6 +263,10 @@ export interface addNewServiceFormData {
   category?: serviceCategory | "";
   price: number | undefined;
   description?: string;
+  /** null = unconfigured (legacy). Explicit none/duration/mileage/both when set. */
+  warrantyType?: CatalogWarrantyType | null;
+  warrantyMonths?: number | null;
+  warrantyKm?: number | null;
 }
 
 export type EditServiceFormData = {
@@ -268,6 +275,9 @@ export type EditServiceFormData = {
   category: serviceCategory | "";
   price: number | undefined;
   description: string;
+  warrantyType?: CatalogWarrantyType | null;
+  warrantyMonths?: number | null;
+  warrantyKm?: number | null;
 };
 
 export type InventoryStockStatus = "in_stock" | "low_stock" | "out_of_stock";
@@ -299,6 +309,10 @@ export interface InventoryItem {
   stockStatus: InventoryStockStatus;
   createdAt: string;
   updatedAt: string;
+  /** null = unconfigured → workspace defaults when added to an order. */
+  warrantyType?: CatalogWarrantyType | null;
+  warrantyMonths?: number | null;
+  warrantyKm?: number | null;
 }
 
 export type InventoryItemFormData = {
@@ -314,6 +328,9 @@ export type InventoryItemFormData = {
   supplier: string;
   location: string;
   isActive: boolean;
+  warrantyType?: CatalogWarrantyType | null;
+  warrantyMonths?: number | null;
+  warrantyKm?: number | null;
 };
 
 export interface MockInventoryItem {
@@ -337,6 +354,10 @@ export interface Service {
   service_price: number;
   description: string;
   status: "active" | "inactive";
+  /** null = unconfigured → workspace defaults when added to an order. */
+  warrantyType?: CatalogWarrantyType | null;
+  warrantyMonths?: number | null;
+  warrantyKm?: number | null;
 }
 
 /** List/detail invoice fields aligned with public.invoices. */

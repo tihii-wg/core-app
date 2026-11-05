@@ -32,6 +32,9 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
         supplier: editQuery.item.supplier,
         location: editQuery.item.location,
         isActive: editQuery.item.isActive,
+        warrantyType: editQuery.item.warrantyType ?? "none",
+        warrantyMonths: editQuery.item.warrantyMonths ?? null,
+        warrantyKm: editQuery.item.warrantyKm ?? null,
       }
     : null;
 

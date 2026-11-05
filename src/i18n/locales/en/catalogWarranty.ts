@@ -1,0 +1,21 @@
+export default {
+  sectionTitle: "Warranty",
+  sectionHint: "Default warranty applied when this item is added to an order. Order lines keep their own snapshot and can still be overridden.",
+  typeLabel: "Warranty type",
+  monthsLabel: "Duration (months)",
+  monthsPlaceholder: "e.g. 12",
+  kmLabel: "Mileage limit (km)",
+  kmPlaceholder: "e.g. 20000",
+  types: {
+    none: "No warranty",
+    duration: "Duration only",
+    mileage: "Mileage only",
+    both: "Duration and mileage",
+  },
+  errors: {
+    incomplete: "Enter a positive duration and/or mileage for the selected warranty type.",
+    durationRequired: "Enter a positive duration in months.",
+    mileageRequired: "Enter a positive mileage limit in kilometers.",
+    bothRequired: "Enter both a positive duration and mileage limit.",
+  },
+};

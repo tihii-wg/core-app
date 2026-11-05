@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
@@ -12,8 +12,25 @@ import { Spinner } from "../../ui/Spinner";
 import type { EditServiceFormData, Service, serviceCategory } from "../../lib/types";
 import { defaultServiceCategory, industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
+import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults, type CatalogWarrantyDefaults } from "../orders/catalogWarranty";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import useUpdateService from "./useUpdateService";
+
+function warrantyFromService(service: Service): CatalogWarrantyDefaults {
+  if (service.warrantyType == null && service.warrantyMonths == null && service.warrantyKm == null) {
+    return emptyCatalogWarrantyFormValues();
+  }
+  try {
+    return normalizeCatalogWarrantyDefaults({
+      warrantyType: service.warrantyType ?? "none",
+      warrantyMonths: service.warrantyMonths,
+      warrantyKm: service.warrantyKm,
+    });
+  } catch {
+    return emptyCatalogWarrantyFormValues();
+  }
+}
 
 type EditServiceFormProps = {
   service: Service;
@@ -32,6 +49,9 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
   const { workflow } = useIndustryWorkflow();
   const copy = industryServiceCopy(workflow);
   const categoryOptions = industryServiceCategoryOptions(workflow, service.category);
+
+  const [warranty, setWarranty] = useState<CatalogWarrantyDefaults>(() => warrantyFromService(service));
+  const [warrantyError, setWarrantyError] = useState<string | null>(null);
 
   const {
     control,
@@ -59,6 +79,8 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
       price: service.service_price,
       description: service.description ?? "",
     });
+    setWarranty(warrantyFromService(service));
+    setWarrantyError(null);
   }, [
     service.id,
     service.service_name,
@@ -66,13 +88,37 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
     service.category,
     service.service_price,
     service.description,
+    service.warrantyType,
+    service.warrantyMonths,
+    service.warrantyKm,
     reset,
     workflow.slug,
   ]);
 
   const onSubmit = async (data: EditServiceFormData) => {
+    let normalized;
     try {
-      await updateService({ serviceId: service.id, ...data });
+      normalized = normalizeCatalogWarrantyDefaults(warranty);
+      setWarrantyError(null);
+    } catch {
+      setWarrantyError(
+        warranty.warrantyType === "both"
+          ? t("catalogWarranty.errors.bothRequired")
+          : warranty.warrantyType === "mileage"
+            ? t("catalogWarranty.errors.mileageRequired")
+            : t("catalogWarranty.errors.durationRequired"),
+      );
+      return;
+    }
+
+    try {
+      await updateService({
+        serviceId: service.id,
+        ...data,
+        warrantyType: normalized.warrantyType,
+        warrantyMonths: normalized.warrantyMonths,
+        warrantyKm: normalized.warrantyKm,
+      });
     } catch {
       return;
     }
@@ -162,6 +208,16 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
           <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
           <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
         </div>
+
+        <CatalogWarrantyFields
+          idPrefix="edit-service"
+          value={warranty}
+          onChange={(next) => {
+            setWarranty(next);
+            setWarrantyError(null);
+          }}
+          error={warrantyError}
+        />
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setEditModalOpen(false)}>

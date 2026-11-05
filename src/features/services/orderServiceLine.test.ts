@@ -14,6 +14,26 @@ describe("catalogServiceToOrderLine", () => {
       serviceName: "Oil change",
       price: 40,
       quantity: 1,
+      warrantyMonths: null,
+      warrantyDays: null,
+      warrantyKm: null,
+    });
+  });
+
+  it("snapshots catalog warranty defaults onto the order line", () => {
+    expect(
+      catalogServiceToOrderLine({
+        id: "svc-1",
+        service_name: "Oil change",
+        service_price: 40,
+        warrantyType: "both",
+        warrantyMonths: 6,
+        warrantyKm: 10000,
+      }),
+    ).toMatchObject({
+      warrantyMonths: 6,
+      warrantyKm: 10000,
+      warrantyDays: null,
     });
   });
 

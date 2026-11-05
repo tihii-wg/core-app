@@ -26,6 +26,9 @@ const emptyInventoryForm = {
   supplier: "",
   location: "",
   isActive: true,
+  warrantyType: "none" as const,
+  warrantyMonths: null,
+  warrantyKm: null,
 };
 
 type AddInventoryItemDialogProps = {
