@@ -156,9 +156,18 @@ function CoverageRow({
         )}
       >
         {expired
-          ? evaluation.status === "expired_mileage" && evaluation.expiresAtMileage != null
-            ? `${t("orders.warranty.indicator.expired")} · ${formatWarrantyKm(evaluation.expiresAtMileage, language)} km`
-            : `${t("orders.warranty.indicator.expired")}${dateLabel ? ` · ${dateLabel}` : ""}`
+          ? evaluation.status === "expired_mileage"
+            ? [
+                t("orders.warranty.status.expired_mileage"),
+                evaluation.expiresAtMileage != null
+                  ? t("orders.warranty.indicator.expiredAtKm", {
+                      value: formatWarrantyKm(evaluation.expiresAtMileage, language),
+                    })
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : [t("orders.warranty.status.expired_date"), dateLabel].filter(Boolean).join(" · ")
           : [dateLabel ? t("orders.warranty.indicator.untilDate", { date: dateLabel }) : null, remainingKm ? t("orders.warranty.indicator.remainingKm", { value: remainingKm }) : null]
               .filter(Boolean)
               .join(" · ")}

@@ -653,6 +653,7 @@ const orders: Messages<typeof en> = {
     daysLabel: "Garanție (zile)",
     kmLabel: "Garanție (km)",
     noLimit: "Fără limită",
+    whicheverFirst: "Garanția se încheie când se atinge oricare dintre limite, oricare vine prima.",
     line: {
       withCoverage: "Garanție: {{value}}",
       months_one: "{{count}} lună",

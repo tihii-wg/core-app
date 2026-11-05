@@ -72,16 +72,19 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
 
   const secondaryParts: string[] = [];
   if (expired) {
-    if (model.status === "expired_date" && dateLabel) {
-      secondaryParts.push(dateLabel);
-    } else if (model.status === "expired_mileage" && expiredMileage) {
-      secondaryParts.push(t("orders.warranty.indicator.expiredAtKm", { value: expiredMileage }));
+    if (model.status === "expired_date") {
+      secondaryParts.push(t("orders.warranty.status.expired_date"));
+      if (dateLabel) secondaryParts.push(dateLabel);
+    } else if (model.status === "expired_mileage") {
+      secondaryParts.push(t("orders.warranty.status.expired_mileage"));
+      if (expiredMileage) secondaryParts.push(t("orders.warranty.indicator.expiredAtKm", { value: expiredMileage }));
     } else if (dateLabel) {
       secondaryParts.push(dateLabel);
     }
   } else {
     if (dateLabel) secondaryParts.push(t("orders.warranty.indicator.untilDate", { date: dateLabel }));
-    if (remainingKm && model.remaining) {
+    // Show remaining mileage whenever known (including when both time and mileage limits apply).
+    if (remainingKm) {
       secondaryParts.push(t("orders.warranty.indicator.remainingKm", { value: remainingKm }));
     }
     if (model.coveredItemCount > 1) {

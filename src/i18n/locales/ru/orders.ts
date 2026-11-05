@@ -656,6 +656,7 @@ const orders: Messages<typeof en> = {
     daysLabel: "Гарантия (дни)",
     kmLabel: "Гарантия (км)",
     noLimit: "Без лимита",
+    whicheverFirst: "Гарантия заканчивается при достижении любого из лимитов — что наступит раньше.",
     line: {
       withCoverage: "Гарантия: {{value}}",
       months_one: "{{count}} месяц",

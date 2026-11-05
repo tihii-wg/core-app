@@ -1,11 +1,10 @@
 import { useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { Switch } from "../../ui/Switch";
 import {
   catalogWarrantyShowsKm,
   catalogWarrantyShowsMonths,
-  normalizeCatalogWarrantyType,
   type CatalogWarrantyDefaults,
   type CatalogWarrantyType,
 } from "./catalogWarranty";
@@ -19,28 +18,35 @@ type Props = {
   error?: string | null;
 };
 
+function deriveType(durationEnabled: boolean, mileageEnabled: boolean): CatalogWarrantyType {
+  if (durationEnabled && mileageEnabled) return "both";
+  if (durationEnabled) return "duration";
+  if (mileageEnabled) return "mileage";
+  return "none";
+}
+
 /**
  * Catalog-card warranty defaults editor.
- * Distinct from OrderLineWarrantyFields (order-item override / snapshot).
+ * Duration and mileage are independent toggles; both can apply at once (first limit wins).
  */
 export default function CatalogWarrantyFields({ value, onChange, idPrefix, disabled, error }: Props) {
   const { t } = useTranslation();
   const type = value.warrantyType ?? "none";
+  const durationEnabled = catalogWarrantyShowsMonths(type);
+  const mileageEnabled = catalogWarrantyShowsKm(type);
+  const bothEnabled = durationEnabled && mileageEnabled;
 
-  function setType(nextType: CatalogWarrantyType) {
+  function emit(nextDuration: boolean, nextMileage: boolean, months: number | null, km: number | null) {
+    const nextType = deriveType(nextDuration, nextMileage);
     if (nextType === "none") {
       onChange({ warrantyType: "none", warrantyMonths: null, warrantyKm: null });
       return;
     }
-    if (nextType === "duration") {
-      onChange({ warrantyType: "duration", warrantyMonths: value.warrantyMonths, warrantyKm: null });
-      return;
-    }
-    if (nextType === "mileage") {
-      onChange({ warrantyType: "mileage", warrantyMonths: null, warrantyKm: value.warrantyKm });
-      return;
-    }
-    onChange({ warrantyType: "both", warrantyMonths: value.warrantyMonths, warrantyKm: value.warrantyKm });
+    onChange({
+      warrantyType: nextType,
+      warrantyMonths: nextDuration ? months : null,
+      warrantyKm: nextMileage ? km : null,
+    });
   }
 
   return (
@@ -50,78 +56,73 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
         <p className="text-xs text-muted-foreground">{t("catalogWarranty.sectionHint")}</p>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-warranty-type`}>{t("catalogWarranty.typeLabel")}</Label>
-        <Select
-          value={type}
-          disabled={disabled}
-          onValueChange={(raw) => {
-            const next = normalizeCatalogWarrantyType(raw) ?? "none";
-            setType(next);
-          }}
-        >
-          <SelectTrigger id={`${idPrefix}-warranty-type`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">{t("catalogWarranty.types.none")}</SelectItem>
-            <SelectItem value="duration">{t("catalogWarranty.types.duration")}</SelectItem>
-            <SelectItem value="mileage">{t("catalogWarranty.types.mileage")}</SelectItem>
-            <SelectItem value="both">{t("catalogWarranty.types.both")}</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor={`${idPrefix}-warranty-duration-enabled`} className="text-sm font-normal">
+            {t("catalogWarranty.enableDuration")}
+          </Label>
+          <Switch
+            id={`${idPrefix}-warranty-duration-enabled`}
+            checked={durationEnabled}
+            disabled={disabled}
+            onCheckedChange={(checked) => emit(checked, mileageEnabled, value.warrantyMonths, value.warrantyKm)}
+          />
+        </div>
+        {durationEnabled ? (
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-warranty-months`}>{t("catalogWarranty.monthsLabel")}</Label>
+            <Input
+              id={`${idPrefix}-warranty-months`}
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              disabled={disabled}
+              value={value.warrantyMonths ?? ""}
+              placeholder={t("catalogWarranty.monthsPlaceholder")}
+              onChange={(event) =>
+                emit(true, mileageEnabled, normalizeWarrantyMonths(event.target.value), value.warrantyKm)
+              }
+            />
+          </div>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor={`${idPrefix}-warranty-mileage-enabled`} className="text-sm font-normal">
+            {t("catalogWarranty.enableMileage")}
+          </Label>
+          <Switch
+            id={`${idPrefix}-warranty-mileage-enabled`}
+            checked={mileageEnabled}
+            disabled={disabled}
+            onCheckedChange={(checked) => emit(durationEnabled, checked, value.warrantyMonths, value.warrantyKm)}
+          />
+        </div>
+        {mileageEnabled ? (
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-warranty-km`}>{t("catalogWarranty.kmLabel")}</Label>
+            <Input
+              id={`${idPrefix}-warranty-km`}
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              disabled={disabled}
+              value={value.warrantyKm ?? ""}
+              placeholder={t("catalogWarranty.kmPlaceholder")}
+              onChange={(event) =>
+                emit(durationEnabled, true, value.warrantyMonths, normalizeWarrantyKm(event.target.value))
+              }
+            />
+          </div>
+        ) : null}
       </div>
 
-      {(catalogWarrantyShowsMonths(type) || catalogWarrantyShowsKm(type)) && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {catalogWarrantyShowsMonths(type) && (
-            <div className="space-y-1.5">
-              <Label htmlFor={`${idPrefix}-warranty-months`}>{t("catalogWarranty.monthsLabel")}</Label>
-              <Input
-                id={`${idPrefix}-warranty-months`}
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                disabled={disabled}
-                value={value.warrantyMonths ?? ""}
-                placeholder={t("catalogWarranty.monthsPlaceholder")}
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    warrantyType: type,
-                    warrantyMonths: normalizeWarrantyMonths(event.target.value),
-                    warrantyKm: catalogWarrantyShowsKm(type) ? value.warrantyKm : null,
-                  })
-                }
-              />
-            </div>
-          )}
-          {catalogWarrantyShowsKm(type) && (
-            <div className="space-y-1.5">
-              <Label htmlFor={`${idPrefix}-warranty-km`}>{t("catalogWarranty.kmLabel")}</Label>
-              <Input
-                id={`${idPrefix}-warranty-km`}
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                disabled={disabled}
-                value={value.warrantyKm ?? ""}
-                placeholder={t("catalogWarranty.kmPlaceholder")}
-                onChange={(event) =>
-                  onChange({
-                    ...value,
-                    warrantyType: type,
-                    warrantyKm: normalizeWarrantyKm(event.target.value),
-                    warrantyMonths: catalogWarrantyShowsMonths(type) ? value.warrantyMonths : null,
-                  })
-                }
-              />
-            </div>
-          )}
-        </div>
-      )}
+      {bothEnabled ? (
+        <p className="text-xs text-muted-foreground" data-warranty-whichever-first>
+          {t("catalogWarranty.whicheverFirst")}
+        </p>
+      ) : null}
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

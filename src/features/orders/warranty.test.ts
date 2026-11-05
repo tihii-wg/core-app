@@ -130,6 +130,32 @@ describe("warranty helpers", () => {
     expect(evaluateWarranty({ snapshot: base, nowIso: "2027-01-01T00:00:00.000Z", currentMileage: 90000 }).status).toBe("expired_mileage");
   });
 
+  it("expires on the exact expiration date and exact mileage threshold", () => {
+    const base = {
+      startsAt: "2026-11-04T12:00:00.000Z",
+      endsOn: "2027-11-04",
+      startMileage: 80000,
+      expiresAtMileage: 90000,
+      durationMonths: 12,
+      mileageLimit: 10000,
+    };
+    expect(evaluateWarranty({ snapshot: base, nowIso: "2027-11-04T00:00:00.000Z", currentMileage: 85000 }).status).toBe("expired_date");
+    expect(evaluateWarranty({ snapshot: base, nowIso: "2027-01-01T00:00:00.000Z", currentMileage: 90000 }).status).toBe("expired_mileage");
+  });
+
+  it("does not expire by mileage when current mileage is unknown", () => {
+    const base = {
+      startsAt: "2026-11-04T12:00:00.000Z",
+      endsOn: "2027-11-04",
+      startMileage: 80000,
+      expiresAtMileage: 90000,
+      durationMonths: 12,
+      mileageLimit: 10000,
+    };
+    expect(evaluateWarranty({ snapshot: base, nowIso: "2027-01-01T00:00:00.000Z", currentMileage: null }).status).toBe("active");
+    expect(evaluateWarranty({ snapshot: base, nowIso: "2027-01-01T00:00:00.000Z", currentMileage: undefined }).status).toBe("active");
+  });
+
   it("expires by the first reached limit when both apply", () => {
     const base = {
       startsAt: "2026-11-04T12:00:00.000Z",
@@ -139,7 +165,9 @@ describe("warranty helpers", () => {
       durationMonths: 12,
       mileageLimit: 10000,
     };
+    // Mileage first (8 months in, over threshold)
     expect(evaluateWarranty({ snapshot: base, nowIso: "2027-06-01T00:00:00.000Z", currentMileage: 91000 }).status).toBe("expired_mileage");
+    // Date first (past endsOn, under mileage)
     expect(evaluateWarranty({ snapshot: base, nowIso: "2027-12-01T00:00:00.000Z", currentMileage: 82000 }).status).toBe("expired_date");
   });
 

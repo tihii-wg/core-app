@@ -49,17 +49,35 @@ describe("catalog warranty normalization", () => {
     expect(() => normalizeCatalogWarrantyDefaults({ warrantyType: "mileage", warrantyKm: null })).toThrow();
   });
 
-  it("requires both for combined warranty", () => {
-    expect(normalizeCatalogWarrantyDefaults({ warrantyType: "both", warrantyMonths: 12, warrantyKm: 20000 })).toEqual({
+  it("requires both for combined warranty and persists both limits together", () => {
+    expect(normalizeCatalogWarrantyDefaults({ warrantyType: "both", warrantyMonths: 24, warrantyKm: 20000 })).toEqual({
       warrantyType: "both",
-      warrantyMonths: 12,
+      warrantyMonths: 24,
       warrantyKm: 20000,
+    });
+    expect(catalogWarrantyToDbPayload({ warrantyType: "both", warrantyMonths: 24, warrantyKm: 20000 })).toEqual({
+      warranty_type: "both",
+      warranty_months: 24,
+      warranty_km: 20000,
     });
     expect(() => normalizeCatalogWarrantyDefaults({ warrantyType: "both", warrantyMonths: 12, warrantyKm: null })).toThrow();
   });
 
   it("treats unconfigured rows as null type", () => {
     expect(catalogWarrantyFromDbRow({})).toEqual({ warrantyType: null, warrantyMonths: null, warrantyKm: null });
+  });
+
+  it("keeps duration-only and mileage-only rows compatible", () => {
+    expect(catalogWarrantyFromDbRow({ warranty_type: "duration", warranty_months: 12 })).toEqual({
+      warrantyType: "duration",
+      warrantyMonths: 12,
+      warrantyKm: null,
+    });
+    expect(catalogWarrantyFromDbRow({ warranty_type: "mileage", warranty_km: 10000 })).toEqual({
+      warrantyType: "mileage",
+      warrantyMonths: null,
+      warrantyKm: 10000,
+    });
   });
 });
 

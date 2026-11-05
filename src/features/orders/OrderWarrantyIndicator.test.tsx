@@ -110,7 +110,8 @@ describe("OrderWarrantyIndicator", () => {
     });
     const { container } = renderWithQuery(<OrderWarrantyIndicator model={model} />);
     expect(screen.getByText("Warranty expired")).toBeInTheDocument();
-    expect(screen.getByText("01.10.2026")).toBeInTheDocument();
+    expect(screen.getByText(/Expired by date/)).toBeInTheDocument();
+    expect(screen.getByText(/01\.10\.2026/)).toBeInTheDocument();
     expect(container.querySelector("[data-warranty-expired='true']")).not.toBeNull();
     expect(screen.queryByText(/remaining/i)).toBeNull();
   });
@@ -132,7 +133,8 @@ describe("OrderWarrantyIndicator", () => {
     });
     renderWithQuery(<OrderWarrantyIndicator model={model} />);
     expect(screen.getByText("Warranty expired")).toBeInTheDocument();
-    expect(screen.getByText("90,000 km")).toBeInTheDocument();
+    expect(screen.getByText(/Expired by mileage/)).toBeInTheDocument();
+    expect(screen.getByText(/90,000 km/)).toBeInTheDocument();
   });
 
   it("shows covered item count when multiple items differ", () => {

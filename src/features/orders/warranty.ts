@@ -108,6 +108,17 @@ export function toDateOnlyUtc(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Time warranty is expired when the calendar date of `now` is on or after endsOn (YYYY-MM-DD).
+ * Boundary: current date >= expiration date → expired (not only the day after).
+ */
+export function isWarrantyDateExpired(endsOn: string | null | undefined, nowIso?: string): boolean {
+  if (!endsOn?.trim()) return false;
+  const now = nowIso ? new Date(nowIso) : new Date();
+  if (Number.isNaN(now.getTime())) return false;
+  return toDateOnlyUtc(now.toISOString()) >= endsOn.trim();
+}
+
 /** Add exact calendar days using UTC date parts of the start instant. */
 export function addCalendarDaysIso(startIso: string, days: number): string {
   const start = new Date(startIso);
@@ -188,17 +199,17 @@ export function evaluateWarranty(params: {
   }
 
   const endsOn = snapshot.endsOn;
-  if (endsOn) {
-    const end = new Date(`${endsOn}T23:59:59.999Z`);
-    if (!Number.isNaN(end.getTime()) && now.getTime() > end.getTime()) {
-      return {
-        status: "expired_date",
-        expiresOn: endsOn,
-        expiresAtMileage: snapshot.expiresAtMileage,
-        remainingMileage: remainingMileage(snapshot.expiresAtMileage, params.currentMileage),
-        reason: "expired_date",
-      };
-    }
+  // When both limits exist, the first reached expires the warranty (date OR mileage).
+  // Date boundary: calendar day >= endsOn. Mileage boundary: currentMileage >= threshold.
+  // Unknown mileage must not invent a value or falsely expire by mileage.
+  if (endsOn && isWarrantyDateExpired(endsOn, params.nowIso)) {
+    return {
+      status: "expired_date",
+      expiresOn: endsOn,
+      expiresAtMileage: snapshot.expiresAtMileage,
+      remainingMileage: remainingMileage(snapshot.expiresAtMileage, params.currentMileage),
+      reason: "expired_date",
+    };
   }
 
   const expiresAtMileage = snapshot.expiresAtMileage;
@@ -268,8 +279,11 @@ export function remainingDurationUntil(endsOn: string | null | undefined, nowIso
   if (!endsOn?.trim()) return null;
   const now = nowIso ? new Date(nowIso) : new Date();
   if (Number.isNaN(now.getTime())) return null;
-  const end = new Date(`${endsOn.trim()}T23:59:59.999Z`);
-  if (Number.isNaN(end.getTime()) || end.getTime() < now.getTime()) return null;
+  // Align with evaluateWarranty: on/after endsOn there is no remaining duration.
+  if (isWarrantyDateExpired(endsOn, nowIso)) return null;
+
+  const end = new Date(`${endsOn.trim()}T00:00:00.000Z`);
+  if (Number.isNaN(end.getTime())) return null;
 
   const startDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());

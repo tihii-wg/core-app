@@ -648,6 +648,7 @@ export default {
     daysLabel: "Warranty (days)",
     kmLabel: "Warranty (km)",
     noLimit: "No limit",
+    whicheverFirst: "Warranty ends when either limit is reached, whichever comes first.",
     line: {
       withCoverage: "Warranty: {{value}}",
       months_one: "{{count}} month",
