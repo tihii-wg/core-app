@@ -201,4 +201,57 @@ describe("closed order UI permission helpers", () => {
       }),
     ).toBe(true);
   });
+
+  it("cancelled orders are editable by workspace owner_id without the manage-closed setting", () => {
+    const cancelledAfterClose = { status: "cancelled" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    const cancelledNeverClosed = { status: "cancelled" as const, closedAt: null };
+
+    expect(
+      canMutateOrderContent({
+        order: cancelledAfterClose,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(true);
+    expect(
+      canMutateOrderContent({
+        order: cancelledNeverClosed,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(true);
+
+    for (const roleOwner of [false] as const) {
+      expect(
+        canMutateOrderContent({
+          order: cancelledAfterClose,
+          isOwnerByOwnerId: roleOwner,
+          ownerCanManageClosedOrders: false,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("admin/manager/member cannot use the cancelled-order owner exception", () => {
+    const cancelled = { status: "cancelled" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    expect(
+      canMutateOrderContent({
+        order: cancelled,
+        isOwnerByOwnerId: false,
+        ownerCanManageClosedOrders: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("ordinary closed orders still require owner_can_manage_closed_orders", () => {
+    const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    expect(
+      canMutateOrderContent({
+        order: closed,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(false);
+    expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: false })).toBe(false);
+  });
 });

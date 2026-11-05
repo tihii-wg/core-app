@@ -77,6 +77,7 @@ import {
 } from "./unifiedOrderStatus";
 import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
 import {
+  canMutateOrderContent,
   canOfferCancelOrderAction,
   canOfferDeleteClosedOrderAction,
 } from "./closedOrderPermissions";
@@ -137,14 +138,21 @@ export default function OrderDetailPanel({
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const canManageClosedContent = closedOrderPerms.canManageClosedContent;
+  const canMutateContent =
+    selectedOrder != null &&
+    canMutateOrderContent({
+      order: selectedOrder,
+      isOwnerByOwnerId,
+      ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+    });
   const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
   // Closed/cancelled statuses stay locked unless the owner manage-closed setting is on.
+  // Cancelled content editing uses canMutateContent (owner_id) — status selector stays locked.
   const lifecycleStatusLocked =
     selectedOrder != null &&
     ((isOrderFormallyClosed(selectedOrder) && !canManageClosedContent) ||
       (selectedOrder.status === "cancelled" && !isOrderFormallyClosed(selectedOrder)));
-  const closedContentLocked =
-    selectedOrder != null && isOrderFormallyClosed(selectedOrder) && !canManageClosedContent;
+  const closedContentLocked = selectedOrder != null && !canMutateContent;
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);

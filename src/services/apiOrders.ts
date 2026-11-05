@@ -1683,6 +1683,30 @@ export async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
 }
 
 /**
+ * True when auth.uid() is workspaces.owner_id (no manage-closed setting required).
+ * Never trusts membership role or client-supplied flags.
+ */
+export async function isWorkspaceOwnerIdOnServer(workspaceId: string) {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError) throw new Error(authError.message);
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("id", workspaceId)
+    .eq("owner_id", user.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data != null;
+}
+
+/**
  * True only when auth.uid() is workspaces.owner_id AND owner_can_manage_closed_orders.
  * Never trusts membership role or client-supplied flags.
  */
@@ -1714,7 +1738,8 @@ export async function ownerMayManageClosedOrdersOnServer(workspaceId: string) {
 
 /**
  * Defense-in-depth for order-linked mutations. Open orders pass through.
- * Formally closed orders require owner_id + owner_can_manage_closed_orders.
+ * Cancelled orders: workspace owner_id may mutate (independent of manage-closed setting).
+ * Ordinary closed orders require owner_id + owner_can_manage_closed_orders.
  */
 export async function assertClosedOrderMutableOnServer(orderId: string, workspaceId: string) {
   const { data, error } = await supabase
@@ -1730,6 +1755,11 @@ export async function assertClosedOrderMutableOnServer(orderId: string, workspac
   const closedAt =
     typeof (data as { closed_at?: unknown }).closed_at === "string" ? (data as { closed_at: string }).closed_at : null;
   if (!(Boolean(closedAt) || status === "closed")) return;
+
+  if (status === "cancelled") {
+    if (await isWorkspaceOwnerIdOnServer(workspaceId)) return;
+    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
 
   const mayManage = await ownerMayManageClosedOrdersOnServer(workspaceId);
   if (!mayManage) {
@@ -2270,8 +2300,13 @@ export async function updateOrder(
       : null;
   const isClosedRow = Boolean(existingClosedAt) || existingStatus === "closed";
   if (isClosedRow) {
-    const mayManage = await ownerMayManageClosedOrdersOnServer(workspaceId);
-    if (!mayManage) {
+    // Cancelled (incl. closed-then-cancelled): owner_id may edit lines/warranty.
+    // Ordinary closed rows still require owner_can_manage_closed_orders.
+    const mayMutate =
+      existingStatus === "cancelled"
+        ? await isWorkspaceOwnerIdOnServer(workspaceId)
+        : await ownerMayManageClosedOrdersOnServer(workspaceId);
+    if (!mayMutate) {
       throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
     }
   }
@@ -2660,6 +2695,10 @@ export const ORDER_SERVICES_MEMBER_UPDATE_SQL =
 /** Manual SQL: owner may set a normal custom_status_id on closed/cancelled orders. */
 export const OWNER_REGULAR_STATUS_ON_LIFECYCLE_SQL =
   "20261105110000_owner_regular_status_on_lifecycle.PRODUCTION.sql";
+
+/** Manual SQL: cancelled+owner may unlink warranty line FKs without rewriting snapshots. */
+export const CANCELLED_ORDER_OWNER_WARRANTY_EDIT_SQL =
+  "20261105210000_cancelled_order_owner_warranty_edit.PRODUCTION.sql";
 
 /** Manual SQL: close clears stale custom status; delete cleans exclusive warranty_records. */
 export const LIFECYCLE_CLOSE_CANCEL_DELETE_SQL =

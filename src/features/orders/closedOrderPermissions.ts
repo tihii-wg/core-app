@@ -23,13 +23,20 @@ export function ownerMayManageClosedOrders(opts: {
   return Boolean(opts.isOwnerByOwnerId && opts.ownerCanManageClosedOrders);
 }
 
-/** True when the order is open, or the caller may manage this closed order. */
+/**
+ * True when the order is open, or the caller may manage this closed/cancelled order.
+ *
+ * Cancelled orders (including closed-then-cancelled with preserved `closed_at`):
+ * workspace `owner_id` may edit contents without `owner_can_manage_closed_orders`.
+ * That setting remains required for ordinary closed (`status === "closed"`) orders.
+ */
 export function canMutateOrderContent(opts: {
   order: Pick<Order, "closedAt" | "status">;
   isOwnerByOwnerId: boolean;
   ownerCanManageClosedOrders: boolean;
 }): boolean {
   if (!isOrderFormallyClosed(opts.order)) return true;
+  if (opts.order.status === "cancelled" && opts.isOwnerByOwnerId) return true;
   return ownerMayManageClosedOrders(opts);
 }
 

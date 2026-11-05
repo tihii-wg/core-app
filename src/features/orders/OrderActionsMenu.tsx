@@ -47,6 +47,7 @@ import {
 } from "./unifiedOrderStatus";
 import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
 import {
+  canMutateOrderContent,
   canOfferCancelOrderAction,
   canOfferDeleteClosedOrderAction,
 } from "./closedOrderPermissions";
@@ -117,6 +118,11 @@ export function OrderActionsMenu({
   const formallyClosed = isOrderFormallyClosed(order);
   const closedOrderPerms = useClosedOrderActionPermissions();
   const canManageClosedContent = closedOrderPerms.canManageClosedContent;
+  const canMutateContent = canMutateOrderContent({
+    order,
+    isOwnerByOwnerId,
+    ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+  });
   const statusLockedForMenu =
     (formallyClosed && !canManageClosedContent) || (order.status === "cancelled" && !formallyClosed);
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
@@ -290,10 +296,12 @@ export function OrderActionsMenu({
 
           <DropdownMenuSeparator />
 
-          <DropdownMenuItem onSelect={() => onEdit(order)}>
-            <Pencil />
-            {t("common.edit")}
-          </DropdownMenuItem>
+          {canMutateContent ? (
+            <DropdownMenuItem onSelect={() => onEdit(order)}>
+              <Pencil />
+              {t("common.edit")}
+            </DropdownMenuItem>
+          ) : null}
           {invoiceNumber ? (
             <DropdownMenuItem disabled>
               <FileCheck2 />

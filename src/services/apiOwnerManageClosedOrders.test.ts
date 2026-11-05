@@ -169,6 +169,37 @@ describe("assertClosedOrderMutableOnServer authorization matrix", () => {
     await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).resolves.toBeUndefined();
     expect(from).toHaveBeenCalledTimes(1);
   });
+
+  it("allows cancelled orders for workspace owner_id without the manage-closed setting", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
+    from
+      .mockReturnValueOnce(
+        chain({
+          data: { status: "cancelled", closed_at: "2026-11-01T00:00:00.000Z" },
+          error: null,
+        }),
+      )
+      // isWorkspaceOwnerIdOnServer — owner_id match, no setting column required
+      .mockReturnValueOnce(chain({ data: { id: "ws-1" }, error: null }));
+
+    await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).resolves.toBeUndefined();
+  });
+
+  it("denies cancelled orders for non-owners even when manage-closed setting is ON", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "admin-1" } }, error: null });
+    from
+      .mockReturnValueOnce(
+        chain({
+          data: { status: "cancelled", closed_at: "2026-11-01T00:00:00.000Z" },
+          error: null,
+        }),
+      )
+      .mockReturnValueOnce(chain({ data: null, error: null }));
+
+    await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).rejects.toThrow(
+      /orders\.lifecycle\.errors\.orderAlreadyClosed/,
+    );
+  });
 });
 
 describe("updateOrder closed-order gate", () => {
@@ -229,5 +260,33 @@ describe("updateOrder closed-order gate", () => {
         "ws-1",
       ),
     ).rejects.toThrow(/orders\.lifecycle\.errors\.orderAlreadyClosed/);
+  });
+
+  it("does not apply the manage-closed rejection to cancelled orders for owner_id", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
+    from
+      .mockReturnValueOnce(
+        chain({
+          data: { client_id: "c1", status: "cancelled", closed_at: "2026-11-01T00:00:00.000Z" },
+          error: null,
+        }),
+      )
+      .mockReturnValueOnce(chain({ data: { id: "ws-1" }, error: null }));
+
+    // Past the cancelled+owner gate; later update mocks are incomplete so any error must not be the closed lock.
+    await expect(
+      updateOrder(
+        {
+          orderId: "order-1",
+          device: "Phone",
+          carNumber: "",
+          vin: "",
+          description: "x",
+          assignedEmployeeId: "",
+          deadline: "",
+        },
+        "ws-1",
+      ),
+    ).rejects.not.toThrow(/orders\.lifecycle\.errors\.orderAlreadyClosed/);
   });
 });
