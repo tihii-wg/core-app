@@ -50,9 +50,12 @@ describe("OrderWarrantyIndicator", () => {
       isWarrantyOrder: false,
       nowIso: now,
     });
-    renderWithQuery(<OrderWarrantyIndicator model={model} />);
+    const { container } = renderWithQuery(<OrderWarrantyIndicator model={model} />);
     expect(screen.getByText("Warranty · 8 months remaining")).toBeInTheDocument();
     expect(screen.getByText(/Until 04\.07\.2027/)).toBeInTheDocument();
+    const el = container.querySelector("[data-warranty-indicator]");
+    expect(el?.className).toContain("text-success");
+    expect(el?.getAttribute("data-warranty-status")).toBe("active");
   });
 
   it("shows active mileage-only remaining on the primary line", () => {
@@ -70,8 +73,9 @@ describe("OrderWarrantyIndicator", () => {
       nowIso: now,
       currentMileage: 82500,
     });
-    renderWithQuery(<OrderWarrantyIndicator model={model} />);
+    const { container } = renderWithQuery(<OrderWarrantyIndicator model={model} />);
     expect(screen.getByText(/Warranty · 7,500 km remaining/)).toBeInTheDocument();
+    expect(container.querySelector("[data-warranty-indicator]")?.className).toContain("text-success");
   });
 
   it("shows both limits when active", () => {
@@ -112,7 +116,12 @@ describe("OrderWarrantyIndicator", () => {
     expect(screen.getByText("Warranty expired")).toBeInTheDocument();
     expect(screen.getByText(/Expired by date/)).toBeInTheDocument();
     expect(screen.getByText(/01\.10\.2026/)).toBeInTheDocument();
-    expect(container.querySelector("[data-warranty-expired='true']")).not.toBeNull();
+    const el = container.querySelector("[data-warranty-indicator]");
+    expect(el?.className).toContain("text-muted-foreground");
+    expect(el?.className).not.toContain("text-success");
+    expect(el?.className).not.toContain("text-destructive");
+    expect(el?.getAttribute("data-warranty-expired")).toBe("true");
+    expect(el?.getAttribute("data-warranty-status")).toBe("expired_date");
     expect(screen.queryByText(/remaining/i)).toBeNull();
   });
 
@@ -131,10 +140,38 @@ describe("OrderWarrantyIndicator", () => {
       nowIso: now,
       currentMileage: 95000,
     });
-    renderWithQuery(<OrderWarrantyIndicator model={model} />);
+    const { container } = renderWithQuery(<OrderWarrantyIndicator model={model} />);
     expect(screen.getByText("Warranty expired")).toBeInTheDocument();
     expect(screen.getByText(/Expired by mileage/)).toBeInTheDocument();
     expect(screen.getByText(/90,000 km/)).toBeInTheDocument();
+    const el = container.querySelector("[data-warranty-indicator]");
+    expect(el?.className).toContain("text-muted-foreground");
+    expect(el?.getAttribute("data-warranty-status")).toBe("expired_mileage");
+  });
+
+  it("keeps pending (not-yet-closed) warranty label neutral gray", () => {
+    const model = buildOrderWarrantyIndicator({
+      snapshots: [
+        snapshot({
+          id: "r1",
+          endsOn: "2027-11-04",
+          expiresAtMileage: 90000,
+          durationMonths: 12,
+          mileageLimit: 10000,
+          startsAt: "2026-12-01T00:00:00.000Z",
+        }),
+      ],
+      isWarrantyOrder: false,
+      nowIso: now,
+      currentMileage: 80000,
+    });
+    expect(model.status).toBe("pending");
+    const { container } = renderWithQuery(<OrderWarrantyIndicator model={model} />);
+    const el = container.querySelector("[data-warranty-indicator]");
+    expect(el).not.toBeNull();
+    expect(el?.className).toContain("text-muted-foreground");
+    expect(el?.className).not.toContain("text-success");
+    expect(el?.getAttribute("data-warranty-status")).toBe("pending");
   });
 
   it("shows covered item count when multiple items differ", () => {

@@ -92,14 +92,14 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
     }
   }
 
+  // Under-order-number colors only: active = green, expired/pending/other = neutral gray.
+  const toneClass = model.status === "active" ? "text-success" : "text-muted-foreground";
+
   return (
     <div
-      className={cn(
-        "min-w-0 text-[11px] leading-snug",
-        expired ? "text-destructive" : model.nearExpiry ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
-        className,
-      )}
+      className={cn("min-w-0 text-[11px] leading-snug", toneClass, className)}
       data-warranty-indicator
+      data-warranty-status={model.status}
       data-warranty-near-expiry={model.nearExpiry ? "true" : undefined}
       data-warranty-expired={expired ? "true" : undefined}
     >
