@@ -53,12 +53,12 @@ describe("apiOrderEvents", () => {
     await expect(getOrderEvents("ws", "o")).rejects.toThrow("boom");
   });
 
-  it("builds one event per changed field", () => {
+  it("builds at most one event for a logical status transition", () => {
     expect(buildStatusEventInputs({ orderId: "o", source: "app", from: "new", to: "in-progress" })).toEqual([
       { orderId: "o", eventType: "status_changed", fieldName: "status", oldValue: "new", newValue: "in-progress", payload: { source: "app" } },
     ]);
 
-    const both = buildStatusEventInputs({
+    const customOnly = buildStatusEventInputs({
       orderId: "o",
       source: "board",
       from: "new",
@@ -67,8 +67,38 @@ describe("apiOrderEvents", () => {
       toCustomStatusId: "d1",
       toCustomStatusName: "QA",
     });
+    expect(customOnly).toHaveLength(1);
+    expect(customOnly[0]).toMatchObject({
+      fieldName: "custom_status_id",
+      oldValue: null,
+      newValue: "d1",
+      payload: { source: "board", new_name: "QA" },
+    });
+
+    // Status + custom in one action → still a single feed event (prefer custom names).
+    const both = buildStatusEventInputs({
+      orderId: "o",
+      source: "app",
+      from: "new",
+      to: "in-progress",
+      fromCustomStatusId: "d-new",
+      toCustomStatusId: "d-progress",
+      fromCustomStatusName: "New",
+      toCustomStatusName: "In Progress",
+    });
     expect(both).toHaveLength(1);
-    expect(both[0]).toMatchObject({ fieldName: "custom_status_id", oldValue: null, newValue: "d1", payload: { source: "board", new_name: "QA" } });
+    expect(both[0]).toMatchObject({
+      fieldName: "custom_status_id",
+      oldValue: "d-new",
+      newValue: "d-progress",
+      payload: {
+        source: "app",
+        old_name: "New",
+        new_name: "In Progress",
+        system_from: "new",
+        system_to: "in-progress",
+      },
+    });
 
     expect(buildStatusEventInputs({ orderId: "o", source: "app", from: "new", to: "new" })).toEqual([]);
   });

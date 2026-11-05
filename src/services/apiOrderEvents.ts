@@ -136,7 +136,16 @@ export async function recordOrderEvent(input: RecordOrderEventInput): Promise<Re
   }
 }
 
-/** Inputs for the events written when a status (system and/or custom) changes. Pure and unit-testable. */
+/**
+ * Inputs for a logical status transition.
+ *
+ * Emits at most ONE `status_changed` event so the order feed never shows duplicate
+ * "Status changed" lines for the same user action. When a custom status changes,
+ * prefer that row (includes display names); otherwise record the system status change.
+ *
+ * Prefer the DB trigger `crm_orders_status_event` as the canonical writer. App-layer
+ * callers should not also insert when that trigger is applied.
+ */
 export function buildStatusEventInputs(change: {
   orderId: string;
   source: string;
@@ -147,35 +156,41 @@ export function buildStatusEventInputs(change: {
   fromCustomStatusName?: string | null;
   toCustomStatusName?: string | null;
 }): RecordOrderEventInput[] {
-  const inputs: RecordOrderEventInput[] = [];
+  const statusChanged = (change.from ?? null) !== (change.to ?? null);
+  const customChanged = (change.fromCustomStatusId ?? null) !== (change.toCustomStatusId ?? null);
 
-  if ((change.from ?? null) !== (change.to ?? null)) {
-    inputs.push({
-      orderId: change.orderId,
-      eventType: "status_changed",
-      fieldName: "status",
-      oldValue: change.from,
-      newValue: change.to,
-      payload: { source: change.source },
-    });
-  }
-
-  if ((change.fromCustomStatusId ?? null) !== (change.toCustomStatusId ?? null)) {
-    inputs.push({
-      orderId: change.orderId,
-      eventType: "status_changed",
-      fieldName: "custom_status_id",
-      oldValue: change.fromCustomStatusId ?? null,
-      newValue: change.toCustomStatusId ?? null,
-      payload: {
-        source: change.source,
-        ...(change.fromCustomStatusName ? { old_name: change.fromCustomStatusName } : {}),
-        ...(change.toCustomStatusName ? { new_name: change.toCustomStatusName } : {}),
+  if (customChanged) {
+    return [
+      {
+        orderId: change.orderId,
+        eventType: "status_changed",
+        fieldName: "custom_status_id",
+        oldValue: change.fromCustomStatusId ?? null,
+        newValue: change.toCustomStatusId ?? null,
+        payload: {
+          source: change.source,
+          ...(change.fromCustomStatusName ? { old_name: change.fromCustomStatusName } : {}),
+          ...(change.toCustomStatusName ? { new_name: change.toCustomStatusName } : {}),
+          ...(statusChanged ? { system_from: change.from, system_to: change.to } : {}),
+        },
       },
-    });
+    ];
   }
 
-  return inputs;
+  if (statusChanged) {
+    return [
+      {
+        orderId: change.orderId,
+        eventType: "status_changed",
+        fieldName: "status",
+        oldValue: change.from,
+        newValue: change.to,
+        payload: { source: change.source },
+      },
+    ];
+  }
+
+  return [];
 }
 
 /** Records every event of a status change (sequentially, so ordering in the feed is deterministic). Never throws. */

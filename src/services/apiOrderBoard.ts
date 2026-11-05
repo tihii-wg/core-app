@@ -1,7 +1,5 @@
 import i18n from "../i18n";
 import type { OrderStatus } from "../lib/types";
-import { recordActivity } from "./apiActivityLog";
-import { recordStatusChangeEvents } from "./apiOrderEvents";
 import { updateOrderStatus } from "./apiOrders";
 import { assertCustomStatusTransition, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
 import supabase from "./supabase";
@@ -36,10 +34,9 @@ async function getCurrentCustomStatusId(orderId: string, workspaceId: string) {
 /**
  * Moves an order to a board column.
  *
- * Step 1 reuses `updateOrderStatus` (paid lock + tax-invoice gate stay enforced
- * server-side by the app layer). Step 2 stores `orders.custom_status_id`
- * (null for system columns). Requires the `custom_status_id` column from
- * `20261031000000_orders_custom_status.PRODUCTION.sql`.
+ * Uses a single `updateOrderStatus` write (system status + exact column custom id) so the
+ * DB trigger `crm_orders_status_event` records exactly one feed event. Does not dual-write
+ * via `crm_record_order_event`.
  *
  * Custom -> custom/system moves are checked against `status_transitions` first
  * (degrades to allowed when the table or rows are absent).
@@ -100,61 +97,19 @@ export async function moveOrderOnBoard(
     await assertCustomStatusTransition(resolved, fromCustomStatusId, customStatusId);
   }
 
-  // When the system status changes, updateOrderStatus also aligns custom_status_id to
-  // the matching definition (or null). Board moves then overwrite with the exact column
-  // target so a non-default custom column is not replaced by the default match.
-  let persistedCustomAfterSystem: string | null | undefined;
-  if (status !== currentStatus) {
-    const systemWrite = await updateOrderStatus(orderId, status, resolved, { recordActivity: false });
-    persistedCustomAfterSystem = systemWrite.customStatusId;
+  // No-op: already on this column — do not write activity or touch the row.
+  if (status === currentStatus && fromCustomStatusId === customStatusId) {
+    return {
+      status,
+      customStatusId,
+      customStatus: null as { name: string; color: string | null } | null,
+    };
   }
 
-  if (persistedCustomAfterSystem !== customStatusId) {
-    const { data, error } = await supabase
-      .from("orders")
-      .update({ custom_status_id: customStatusId })
-      .eq("id", orderId)
-      .eq("workspace_id", resolved)
-      .select("id");
-
-    if (error) {
-      if (isMissingCustomStatusColumn(error)) {
-        throw new Error(i18n.t("orders.board.errors.customStatusUnavailable"));
-      }
-      throw new Error(error.message);
-    }
-    if (!data || data.length === 0) throw new Error(i18n.t("orders.board.errors.moveFailed"));
-  }
-
-  if (status !== currentStatus || fromCustomStatusId !== customStatusId) {
-    await recordActivity({
-      workspaceId: resolved,
-      entityType: "order",
-      entityId: orderId,
-      event: "order.status_changed",
-      details: {
-        source: "board",
-        from: currentStatus,
-        to: status,
-        fromCustomStatusId,
-        toCustomStatusId: customStatusId,
-      },
-    });
-
-    // Feed entries keep the custom status names so they stay readable after a rename or delete.
-    const names = await getStatusDefinitionsByIds(
-      resolved,
-      [fromCustomStatusId, customStatusId].filter((id): id is string => Boolean(id)),
-    ).catch(() => new Map<string, { name: string }>());
-    await recordStatusChangeEvents({
-      orderId,
-      source: "board",
-      from: currentStatus,
-      to: status,
-      fromCustomStatusId,
-      toCustomStatusId: customStatusId,
-      fromCustomStatusName: fromCustomStatusId ? names.get(fromCustomStatusId)?.name ?? null : null,
-      toCustomStatusName: customStatusId ? names.get(customStatusId)?.name ?? null : null,
-    });
-  }
+  // Single UPDATE for system + custom status. Feed history comes from the DB trigger only.
+  // Activity log (reports) is still written once by updateOrderStatus.
+  return updateOrderStatus(orderId, status, resolved, {
+    customStatusId,
+    recordActivity: true,
+  });
 }

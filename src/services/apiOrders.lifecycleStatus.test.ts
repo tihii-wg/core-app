@@ -25,10 +25,6 @@ vi.mock("./apiActivityLog", () => ({
   recordActivity: vi.fn(async () => undefined),
 }));
 
-vi.mock("./apiOrderEvents", () => ({
-  recordStatusChangeEvents: vi.fn(async () => undefined),
-}));
-
 import {
   cancelOrder,
   closeOrder,

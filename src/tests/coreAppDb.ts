@@ -923,18 +923,39 @@ export function installSecurityModel() {
         ctx.fake.tables.order_materials = ctx.fake.all("order_materials").filter((row) => row.order_id !== oldRow.id);
         ctx.fake.tables.order_services = ctx.fake.all("order_services").filter((row) => row.order_id !== oldRow.id);
       }
-      if (op === "UPDATE" && oldRow && newRow && oldRow.status !== newRow.status) {
-        const lifecycle =
-          newRow.status === "closed" ? "close" : newRow.status === "cancelled" ? "cancel" : oldRow.status === "closed" || oldRow.status === "cancelled" ? "reopen" : null;
-        pushOrderEvent(ctx, {
-          workspaceId: newRow.workspace_id,
-          orderId: newRow.id,
-          eventType: "status_changed",
-          fieldName: "status",
-          oldValue: String(oldRow.status ?? ""),
-          newValue: String(newRow.status ?? ""),
-          payload: lifecycle ? { lifecycle } : {},
-        });
+      // Mirrors crm_orders_status_event@v2: one status_changed per UPDATE.
+      // When status changes, skip a separate custom_status_id row (avoids duplicate feed lines).
+      if (op === "UPDATE" && oldRow && newRow) {
+        const statusChanged = oldRow.status !== newRow.status;
+        if (statusChanged) {
+          const lifecycle =
+            newRow.status === "closed"
+              ? "close"
+              : newRow.status === "cancelled"
+                ? "cancel"
+                : oldRow.status === "closed" || oldRow.status === "cancelled"
+                  ? "reopen"
+                  : null;
+          pushOrderEvent(ctx, {
+            workspaceId: newRow.workspace_id,
+            orderId: newRow.id,
+            eventType: "status_changed",
+            fieldName: "status",
+            oldValue: String(oldRow.status ?? ""),
+            newValue: String(newRow.status ?? ""),
+            payload: lifecycle ? { lifecycle } : {},
+          });
+        } else if (oldRow.custom_status_id !== newRow.custom_status_id) {
+          pushOrderEvent(ctx, {
+            workspaceId: newRow.workspace_id,
+            orderId: newRow.id,
+            eventType: "status_changed",
+            fieldName: "custom_status_id",
+            oldValue: oldRow.custom_status_id == null ? null : String(oldRow.custom_status_id),
+            newValue: newRow.custom_status_id == null ? null : String(newRow.custom_status_id),
+            payload: {},
+          });
+        }
       }
       return null;
     },

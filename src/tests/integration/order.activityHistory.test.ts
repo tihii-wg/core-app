@@ -237,6 +237,24 @@ describe("order activity history", () => {
     await expect(getOrderEvents(WS.A, "order-a1")).resolves.toMatchObject({ events: [] });
   });
 
+  it("records exactly one status_changed feed event per operational status change", async () => {
+    fake.signInAs(USERS.member.id);
+    const before = eventsFor("order-a1").filter((event) => event.event_type === "status_changed").length;
+    await updateOrderStatus("order-a1", "in-progress", WS.A);
+    const afterFirst = eventsFor("order-a1").filter((event) => event.event_type === "status_changed");
+    expect(afterFirst.length - before).toBe(1);
+    expect(afterFirst[afterFirst.length - 1]).toMatchObject({
+      event_type: "status_changed",
+      field_name: "status",
+      old_value: "new",
+      new_value: "in-progress",
+    });
+
+    // Idempotent re-submit must not append another history row.
+    await updateOrderStatus("order-a1", "in-progress", WS.A);
+    expect(eventsFor("order-a1").filter((event) => event.event_type === "status_changed")).toHaveLength(afterFirst.length);
+  });
+
   it("rejects direct cancel writes and still records ordinary status changes", async () => {
     Object.assign(row("orders", "order-a1")!, { status: "paid", is_paid: true });
     fake.signInAs(USERS.owner.id);
