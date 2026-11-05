@@ -109,6 +109,9 @@ export function consolidateOrderMaterials(materials: OrderMaterial[]): OrderMate
         ...(warehouse ? { warehouseId: warehouse } : {}),
         ...(line.quantityIssued != null ? { quantityIssued: line.quantityIssued } : {}),
         ...(line.quantityReturned != null ? { quantityReturned: line.quantityReturned } : {}),
+        ...(line.warrantyMonths !== undefined ? { warrantyMonths: line.warrantyMonths } : {}),
+        ...(line.warrantyDays !== undefined ? { warrantyDays: line.warrantyDays } : {}),
+        ...(line.warrantyKm !== undefined ? { warrantyKm: line.warrantyKm } : {}),
       });
       continue;
     }
@@ -121,6 +124,9 @@ export function consolidateOrderMaterials(materials: OrderMaterial[]): OrderMate
       supplySource: source === "customer" ? "customer" : "one_time",
       ...(line.quantityIssued != null ? { quantityIssued: line.quantityIssued } : {}),
       ...(line.quantityReturned != null ? { quantityReturned: line.quantityReturned } : {}),
+      ...(line.warrantyMonths !== undefined ? { warrantyMonths: line.warrantyMonths } : {}),
+      ...(line.warrantyDays !== undefined ? { warrantyDays: line.warrantyDays } : {}),
+      ...(line.warrantyKm !== undefined ? { warrantyKm: line.warrantyKm } : {}),
     });
   }
 

@@ -27,9 +27,12 @@ const definition = (partial: Partial<StatusDefinition> & Pick<StatusDefinition, 
   addsToBackorders: partial.addsToBackorders ?? false,
 });
 
-const order = (partial: Partial<Pick<Order, "status" | "customStatusId">> = {}): Pick<Order, "status" | "customStatusId"> => ({
+const order = (
+  partial: Partial<Pick<Order, "status" | "customStatusId" | "closedAt">> = {},
+): Pick<Order, "status" | "customStatusId" | "closedAt"> => ({
   status: partial.status ?? "new",
   customStatusId: partial.customStatusId ?? null,
+  closedAt: partial.closedAt ?? null,
 });
 
 const label = (status: string) => status.toUpperCase();
@@ -164,5 +167,44 @@ describe("unifiedOrderStatus", () => {
       status: "waiting-parts",
       customStatusId: "d-named-cancelled",
     });
+  });
+
+  it("excludes closed and cancelled from selectable definitions even if mis-tagged normal", () => {
+    const leaky = [
+      definition({ id: "d-new", name: "New", systemStatus: "new", semanticAction: "normal" }),
+      definition({ id: "d-closed-leak", name: "Done", systemStatus: "closed", semanticAction: "normal" }),
+      definition({ id: "d-cancel-leak", name: "Drop", systemStatus: "cancelled", semanticAction: "normal" }),
+    ];
+    expect(selectableOrderStatusDefinitions(leaky).map((d) => d.id)).toEqual(["d-new"]);
+    expect(unifiedStatusOptions(leaky, label).map((o) => o.id)).toEqual(["d-new"]);
+  });
+
+  it("keeps lifecycle status when selecting a regular custom status on closed/cancelled orders", () => {
+    const options = unifiedStatusOptions(defaults, label);
+    const waiting = options.find((option) => option.id === "d-waiting")!;
+    expect(
+      resolveUnifiedStatusSelection(order({ status: "closed", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-new" }), waiting),
+    ).toEqual({ status: "closed", customStatusId: "d-waiting" });
+    expect(
+      resolveUnifiedStatusSelection(order({ status: "cancelled", closedAt: null, customStatusId: null }), waiting),
+    ).toEqual({ status: "cancelled", customStatusId: "d-waiting" });
+  });
+
+  it("resolves current unified status from customStatusId on closed orders", () => {
+    const options = unifiedStatusOptions(defaults, label);
+    expect(
+      resolveCurrentUnifiedStatus(
+        order({ status: "closed", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-progress" }),
+        options,
+      )?.id,
+    ).toBe("d-progress");
+  });
+
+  it("board filter options keep closed/cancelled while selectors exclude them", () => {
+    const selectable = unifiedStatusOptions(defaults, label).map((o) => o.id);
+    const filters = unifiedStatusFilterOptions(defaults, label).map((o) => o.id);
+    expect(selectable).not.toContain("d-closed");
+    expect(selectable).not.toContain("d-cancelled");
+    expect(filters).toEqual(expect.arrayContaining(["d-closed", "d-cancelled"]));
   });
 });

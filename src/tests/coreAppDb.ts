@@ -2,8 +2,9 @@
 // workspace_members follows supabase/migrations/20260929000000_production_baseline.sql.
 // The other tables follow the rules the app was hardened against (their policies are not in
 // the repo): members read/write their workspace's data, services are managed by owner/admin,
-// order_services is SELECT/INSERT/DELETE for members of the order's workspace (no UPDATE,
-// supabase/migrations/20260929000500_order_services_member_delete.sql), workspaces cannot be deleted and only the owner may
+// order_services is SELECT/INSERT/UPDATE/DELETE for members of the order's workspace
+// (DELETE: 20260929000500_order_services_member_delete.sql; UPDATE: 20261105100000_order_services_member_update.PRODUCTION.sql),
+// workspaces cannot be deleted and only the owner may
 // update them, owner_id is immutable, profiles are own-row only.
 // invoices / invoice_items follow supabase/migrations/20261004010000_invoices.sql and
 // 20261004020000_invoice_number_counters.sql and 20261004030000_protect_invoice_created_at.sql:
@@ -842,6 +843,10 @@ export function installSecurityModel() {
     order_services: {
       select: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
       insert: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
+      update: {
+        using: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
+        check: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
+      },
       delete: (row, ctx) => isMember(ctx.fake.all("orders").find((order) => order.id === row.order_id)?.workspace_id, ctx),
     },
     order_materials: {
@@ -865,7 +870,6 @@ export function installSecurityModel() {
     workspaces: { delete: false },
     profiles: { delete: false },
     workspace_members: { insert: ["workspace_id", "user_id", "role"], update: ["role", "deleted_at"], delete: false },
-    order_services: { update: false },
     order_materials: { insert: false, update: false, delete: false },
     inventory_movements: { insert: false, update: false, delete: false },
     // Mirrors warehouse bootstrap: authenticated is SELECT-only on live stock tables.

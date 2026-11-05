@@ -123,12 +123,16 @@ export function pickCustomStatusForSystemStatus(
   definitions: readonly StatusDefinition[],
   systemStatus: string,
 ): StatusDefinition | null {
+  // Lifecycle system codes are never ordinary selectable targets.
+  if (systemStatus === "closed" || systemStatus === "cancelled") return null;
   const matches = definitions
     .filter(
       (d) =>
         d.entity === "order" &&
         d.isActive &&
         d.semanticAction === "normal" &&
+        d.systemStatus !== "closed" &&
+        d.systemStatus !== "cancelled" &&
         (d.systemStatus ?? "") === systemStatus,
     )
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
@@ -525,8 +529,23 @@ export function isProtectedSemantic(action: StatusSemanticAction | string | null
   return action === "close" || action === "cancel";
 }
 
+/** True when a definition is a system close/cancel lifecycle status (not a regular configurable one). */
+export function isLifecycleOrderStatusDefinition(definition: Pick<StatusDefinition, "semanticAction" | "systemStatus">) {
+  return (
+    definition.semanticAction === "close" ||
+    definition.semanticAction === "cancel" ||
+    definition.systemStatus === "closed" ||
+    definition.systemStatus === "cancelled"
+  );
+}
+
 export function normalActiveOrderStatuses(definitions: readonly StatusDefinition[]) {
-  return definitions.filter((d) => d.entity === "order" && d.isActive && d.semanticAction === "normal");
+  return definitions.filter(
+    (d) =>
+      d.entity === "order" &&
+      d.isActive &&
+      !isLifecycleOrderStatusDefinition(d),
+  );
 }
 
 function mapLifecycleDbError(message: string) {

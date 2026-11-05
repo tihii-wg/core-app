@@ -72,6 +72,15 @@ export async function applyCatalogImmediateIssue(params: {
       throw new Error(i18n.t("orders.errors.cannotReduceBelowIssued"));
     }
 
+    // Keep desired warranty limits so syncOrderMaterialsRpc → apply_order_material_warranties
+    // still receives them after catalog issue RPCs (which do not round-trip warranty columns).
+    const withWarranty = (material: OrderMaterial): OrderMaterial => ({
+      ...material,
+      warrantyMonths: line.warrantyMonths,
+      warrantyDays: line.warrantyDays,
+      warrantyKm: line.warrantyKm,
+    });
+
     if (!existing?.id) {
       const { material } = await addAndIssueOrderCatalogMaterial({
         orderId: params.orderId,
@@ -81,7 +90,7 @@ export async function applyCatalogImmediateIssue(params: {
         price: line.price,
         idempotencyKey: crypto.randomUUID(),
       });
-      catalog.push(material);
+      catalog.push(withWarranty(material));
       issuedForCompensation.push({
         inventoryItemId: itemId,
         warehouseId,
@@ -102,18 +111,20 @@ export async function applyCatalogImmediateIssue(params: {
       if (delta > 0) {
         issuedForCompensation.push({ inventoryItemId: itemId, warehouseId, quantity: delta });
       }
-      catalog.push(material);
+      catalog.push(withWarranty(material));
       continue;
     }
 
     // Quantity unchanged or reduced toward (but not below) outstanding issued — no new issue.
     // sync_order_materials will persist the requested quantity without touching stock.
-    catalog.push({
-      ...existing,
-      quantity: line.quantity,
-      warehouseId,
-      supplySource: "catalog",
-    });
+    catalog.push(
+      withWarranty({
+        ...existing,
+        quantity: line.quantity,
+        warehouseId,
+        supplySource: "catalog",
+      }),
+    );
   }
 
   return { catalog, issuedForCompensation };

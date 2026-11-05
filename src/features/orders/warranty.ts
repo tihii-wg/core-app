@@ -67,12 +67,21 @@ export function normalizeWarrantyDays(value: unknown): number | null {
   return Math.floor(n);
 }
 
-export function hasWarrantyCoverage(limits: WarrantyLimits): boolean {
-  return Boolean(
+export function hasWarrantyCoverage(
+  limits: WarrantyLimits & { endsOn?: string | null; expiresAtMileage?: number | null },
+): boolean {
+  if (
     normalizeWarrantyMonths(limits.durationMonths) ||
-      normalizeWarrantyDays(limits.durationDays) ||
-      normalizeWarrantyKm(limits.mileageLimit),
-  );
+    normalizeWarrantyDays(limits.durationDays) ||
+    normalizeWarrantyKm(limits.mileageLimit)
+  ) {
+    return true;
+  }
+  // Activated DB snapshots are authoritative: ends_on / expires_at_mileage count even if
+  // duration_* columns are sparse on older rows.
+  if (typeof limits.endsOn === "string" && limits.endsOn.trim()) return true;
+  if (limits.expiresAtMileage != null && Number.isFinite(Number(limits.expiresAtMileage))) return true;
+  return false;
 }
 
 /** Add calendar months in a timezone-aware way using UTC date parts of the start instant. */

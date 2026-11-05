@@ -277,6 +277,40 @@ export function installReturnToWarehouseRpc() {
   };
 }
 
+/**
+ * Mirrors 20261104260000 apply_order_material_warranties (SECURITY DEFINER path for
+ * material warranty columns — authenticated has no direct UPDATE on order_materials).
+ */
+export function installApplyOrderMaterialWarrantiesRpc() {
+  fake.rpcs.apply_order_material_warranties = (args, ctx) => {
+    const order = orderFor(args, ctx);
+    if (!order) return fail("order_warranty:forbidden", "42501");
+    if (String(args.p_workspace_id ?? "") !== String(order.workspace_id)) {
+      return fail("order_warranty:order_not_found", "P0002");
+    }
+    if (order.closed_at) return { data: 0, error: null };
+    const payload = args.p_lines;
+    if (!Array.isArray(payload)) return { data: 0, error: null };
+
+    let updated = 0;
+    for (const raw of payload as Record<string, unknown>[]) {
+      const lineId = typeof raw.line_id === "string" ? raw.line_id.trim() : "";
+      const itemId = typeof raw.inventory_item_id === "string" ? raw.inventory_item_id.trim() : "";
+      const line = lineId
+        ? ctx.fake.all("order_materials").find((row) => row.id === lineId && row.order_id === order.id)
+        : itemId
+          ? ctx.fake.all("order_materials").find((row) => row.order_id === order.id && row.inventory_item_id === itemId)
+          : undefined;
+      if (!line) continue;
+      line.warranty_months = raw.warranty_months == null ? null : Number(raw.warranty_months);
+      line.warranty_days = raw.warranty_days == null ? null : Number(raw.warranty_days);
+      line.warranty_km = raw.warranty_km == null ? null : Number(raw.warranty_km);
+      updated += 1;
+    }
+    return { data: updated, error: null };
+  };
+}
+
 /** Installs atomic create/update+issue RPCs used by warehouse-first order material saves. */
 export function installAddAndIssueOrderCatalogMaterialRpcs() {
   installIssueFromWarehouseRpc();

@@ -41,12 +41,19 @@ const longOrder: Order = {
   updatedAt: "2026-10-22",
 };
 
-function renderCard(overrides: Partial<Order> = {}, extra: { onOpenClient?: (clientId: string) => void } = {}) {
+function renderCard(
+  overrides: Partial<Order> = {},
+  extra: {
+    onOpenClient?: (clientId: string) => void;
+    warrantyIndicator?: import("./warranty").OrderWarrantyIndicatorModel | null;
+  } = {},
+) {
   const onView = vi.fn();
   const onOpenClient = extra.onOpenClient ?? vi.fn();
   const utils = renderWithQuery(
     <OrderCard
       order={{ ...longOrder, ...overrides }}
+      warrantyIndicator={extra.warrantyIndicator}
       formatMoney={(value) => `MDL ${value.toFixed(2)}`}
       onView={onView}
       onOpenClient={extra.onOpenClient ? onOpenClient : undefined}
@@ -134,5 +141,38 @@ describe("OrderCard", () => {
     expect(await screen.findByRole("menu")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "View details" })).toBeInTheDocument();
     expect(onView).not.toHaveBeenCalled();
+  });
+
+  it("renders the warranty indicator under the order number when coverage is present", () => {
+    renderCard(
+      {},
+      {
+        warrantyIndicator: {
+          visible: true,
+          isWarrantyOrder: false,
+          coveredItemCount: 1,
+          status: "active",
+          evaluation: {
+            status: "active",
+            expiresOn: "2027-05-04",
+            expiresAtMileage: null,
+            remainingMileage: null,
+            reason: null,
+          },
+          remaining: { months: 6, days: 0, totalDays: 181 },
+          nearExpiry: false,
+          primary: null,
+        },
+      },
+    );
+
+    expect(screen.getByText("ORD-2026-000123")).toBeInTheDocument();
+    expect(screen.getByText(/Warranty · 6 months remaining/i)).toBeInTheDocument();
+    expect(document.querySelector("[data-warranty-indicator]")).not.toBeNull();
+  });
+
+  it("hides the warranty indicator when there is no coverage", () => {
+    const { container } = renderCard({}, { warrantyIndicator: { visible: false, isWarrantyOrder: false, coveredItemCount: 0, status: "none", evaluation: null, remaining: null, nearExpiry: false, primary: null } });
+    expect(container.querySelector("[data-warranty-indicator]")).toBeNull();
   });
 });

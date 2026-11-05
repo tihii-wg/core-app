@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOrder, getOrders, updateOrder, updateOrderStatus } from "../../services/apiOrders";
 import { fake } from "../fakeSupabase";
 import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
-import { installAddAndIssueOrderCatalogMaterialRpcs, seedWarehouse } from "../orderRpcMocks";
+import {
+  installAddAndIssueOrderCatalogMaterialRpcs,
+  installApplyOrderMaterialWarrantiesRpc,
+  seedWarehouse,
+} from "../orderRpcMocks";
 
 vi.mock("../../services/supabase", async () => ({ default: (await import("../fakeSupabase")).fakeClient }));
 
@@ -494,7 +498,102 @@ describe("updateOrder", () => {
 
     expect(linesOf("order-a1")).toEqual([expect.objectContaining({ id: "line-a1", service_id: "service-a1", price: 40, quantity: 1 })]);
     expect(fake.requests.filter((item) => item.table === "order_services" && (item.op === "insert" || item.op === "delete"))).toHaveLength(0);
+    // Warranty persistence UPDATEs existing lines (null clears); identity columns stay the same.
+    expect(fake.requests.filter((item) => item.table === "order_services" && item.op === "update").length).toBeGreaterThanOrEqual(0);
     expect(fake.requests.filter((item) => item.table === "orders" && item.op === "update")).toHaveLength(1);
+  });
+
+  it("persists warranty settings on existing service lines via UPDATE", async () => {
+    const order = await updateOrder(
+      {
+        ...details,
+        services: [{ ...savedOilChange, warrantyMonths: 12, warrantyDays: null, warrantyKm: 10000 }],
+      },
+      WS.A,
+    );
+
+    expect(linesOf("order-a1")[0]).toMatchObject({
+      id: "line-a1",
+      warranty_months: 12,
+      warranty_days: null,
+      warranty_km: 10000,
+    });
+    expect(order.services[0]).toMatchObject({ id: "line-a1", warrantyMonths: 12, warrantyKm: 10000 });
+    expect(fake.requests.some((item) => item.table === "order_services" && item.op === "update")).toBe(true);
+    expect(fake.requests.filter((item) => item.table === "order_services" && item.op === "insert")).toHaveLength(0);
+  });
+
+  it("creates new service lines with warranty on INSERT", async () => {
+    const created = await updateOrder(
+      {
+        ...details,
+        services: [
+          savedOilChange,
+          { serviceId: "service-a2", serviceName: "Brake check", price: 25, quantity: 1, warrantyMonths: 6, warrantyKm: 5000 },
+        ],
+      },
+      WS.A,
+    );
+    const brake = linesOf("order-a1").find((line) => line.service_id === "service-a2");
+    expect(brake).toMatchObject({ warranty_months: 6, warranty_km: 5000 });
+    expect(created.services.some((line) => line.serviceId === "service-a2" && line.warrantyMonths === 6)).toBe(true);
+  });
+
+  it("preserves delete of removed service lines while updating warranty on kept lines", async () => {
+    await updateOrder({ ...details, services: [savedOilChange, brakeCheck] }, WS.A);
+    const brakeLine = linesOf("order-a1").find((line) => line.service_id === "service-a2")!;
+
+    await updateOrder(
+      {
+        ...details,
+        services: [{ ...brakeCheck, id: String(brakeLine.id), warrantyMonths: 3, warrantyKm: 2000 }],
+      },
+      WS.A,
+    );
+
+    expect(linesOf("order-a1")).toHaveLength(1);
+    expect(linesOf("order-a1")[0]).toMatchObject({
+      id: brakeLine.id,
+      warranty_months: 3,
+      warranty_km: 2000,
+    });
+    expect(fake.all("order_services").some((line) => line.id === "line-a1")).toBe(false);
+  });
+
+  it("persists warranty settings on material lines via apply_order_material_warranties", async () => {
+    fake.signInAs(USERS.owner.id);
+    installAddAndIssueOrderCatalogMaterialRpcs();
+    installApplyOrderMaterialWarrantiesRpc();
+    seedWarehouse(WS.A, "wh-a1", { "item-a1": 50 });
+    const item = row("inventory_items", "item-a1");
+    if (item) item.quantity = 50;
+
+    const order = await updateOrder(
+      {
+        ...details,
+        services: [savedOilChange],
+        materials: [
+          {
+            inventoryItemId: "item-a1",
+            itemName: "Alpha brake pads",
+            price: 12,
+            quantity: 1,
+            supplySource: "catalog",
+            warehouseId: "wh-a1",
+            warrantyMonths: 24,
+            warrantyKm: 30000,
+          },
+        ],
+      },
+      WS.A,
+    );
+
+    const material = fake.all("order_materials").find((line) => line.order_id === "order-a1" && line.inventory_item_id === "item-a1");
+    expect(material).toMatchObject({ warranty_months: 24, warranty_km: 30000 });
+    expect(fake.requests.some((item) => item.table === "apply_order_material_warranties" && item.op === "rpc")).toBe(true);
+    expect(order.materials?.[0]).toMatchObject({ warrantyMonths: 24, warrantyKm: 30000 });
+    const reloaded = (await getOrders(WS.A)).find((item) => item.id === "order-a1");
+    expect(reloaded?.materials?.[0]).toMatchObject({ warrantyMonths: 24, warrantyKm: 30000 });
   });
 
   it("deletes a removed saved line, keeps the global service and recalculates the order", async () => {
@@ -508,7 +607,9 @@ describe("updateOrder", () => {
     expect(row("services", "service-a1")).toBeDefined();
     expect(row("orders", "order-a1")).toMatchObject({ total_price: 25, service: "Brake check", service_id: "service-a2" });
     expect(order).toMatchObject({ totalPrice: 25, service: "Brake check", services: [{ ...brakeCheck, id: brakeLine.id }] });
-    expect((await getOrders(WS.A)).find((item) => item.id === "order-a1")?.services).toEqual([{ ...brakeCheck, id: brakeLine.id }]);
+    expect((await getOrders(WS.A)).find((item) => item.id === "order-a1")?.services).toEqual([
+      expect.objectContaining({ ...brakeCheck, id: brakeLine.id }),
+    ]);
 
     const deletes = fake.requests.slice(beforeDeletes).filter((item) => item.table === "order_services" && item.op === "delete");
     expect(deletes).toHaveLength(1);

@@ -159,6 +159,11 @@ export function boardColumnKeyForOrder(order: Order, columns: readonly OrderBoar
  * `system_status` (docs «Статусы заказов»).
  */
 export function resolveBoardMove(order: Order, column: OrderBoardColumn): BoardMove | null {
+  // Lifecycle cards stay in close/cancel columns; use explicit Close/Cancel or the
+  // owner custom-status selector — never reopen via drag-and-drop.
+  if (order.status === "closed" || order.status === "cancelled" || Boolean(order.closedAt?.trim())) {
+    return null;
+  }
   if (column.kind === "unassigned") return null;
   if (column.kind === "system") {
     if (!column.systemStatus) return null;
@@ -170,6 +175,7 @@ export function resolveBoardMove(order: Order, column: OrderBoardColumn): BoardM
   if (!definition) return null;
   // Close/cancel columns are not ordinary drag targets — use explicit lifecycle actions.
   if (definition.semanticAction === "close" || definition.semanticAction === "cancel") return null;
+  if (definition.systemStatus === "closed" || definition.systemStatus === "cancelled") return null;
   const status = column.systemStatus ?? order.status;
   if (status === "closed" || status === "cancelled") return null;
   if (order.customStatusId === definition.id && order.status === status) return null;

@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { stubLocalStorage } from "../../tests/memoryStorage";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
@@ -36,6 +36,22 @@ const statusHooks = vi.hoisted(() => ({
   mutate: vi.fn(),
   isPending: false,
 }));
+
+const warrantyIndicatorState = vi.hoisted(() => ({
+  map: {} as Record<string, import("./warranty").OrderWarrantyIndicatorModel>,
+}));
+
+const getOrdersWarrantyIndicatorMap = vi.hoisted(() =>
+  vi.fn(async () => warrantyIndicatorState.map),
+);
+
+vi.mock("../../services/apiWarranty", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/apiWarranty")>();
+  return {
+    ...actual,
+    getOrdersWarrantyIndicatorMap,
+  };
+});
 
 const getClientMock = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -257,6 +273,8 @@ beforeEach(() => {
   awaitingPaymentState.isLoading = false;
   awaitingPaymentState.error = null;
   paymentsState.payments = [];
+  warrantyIndicatorState.map = {};
+  getOrdersWarrantyIndicatorMap.mockClear();
   getClientMock.mockReset();
   getClientMock.mockResolvedValue({
     id: "client-1",
@@ -299,6 +317,56 @@ describe("Orders page", () => {
     expect(screen.getByText("BMW")).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("1 total orders")).toBeInTheDocument();
+  });
+
+  it("renders the warranty indicator under the order number in the table list", async () => {
+    warrantyIndicatorState.map = {
+      "order-1": {
+        visible: true,
+        isWarrantyOrder: false,
+        coveredItemCount: 1,
+        status: "active",
+        evaluation: {
+          status: "active",
+          expiresOn: "2027-05-04",
+          expiresAtMileage: null,
+          remainingMileage: null,
+          reason: null,
+        },
+        remaining: { months: 6, days: 0, totalDays: 181 },
+        nearExpiry: false,
+        primary: null,
+      },
+    };
+
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
+    expect(await screen.findByText(/Warranty · 6 months remaining/i)).toBeInTheDocument();
+    expect(document.querySelector("[data-warranty-indicator]")).not.toBeNull();
+  });
+
+  it("does not render a warranty indicator when the order has no coverage", async () => {
+    warrantyIndicatorState.map = {
+      "order-1": {
+        visible: false,
+        isWarrantyOrder: false,
+        coveredItemCount: 0,
+        status: "none",
+        evaluation: null,
+        remaining: null,
+        nearExpiry: false,
+        primary: null,
+      },
+    };
+
+    renderWithQuery(<Orders />);
+
+    expect(screen.getByText("ORD-2026-003")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getOrdersWarrantyIndicatorMap).toHaveBeenCalled();
+    });
+    expect(document.querySelector("[data-warranty-indicator]")).toBeNull();
   });
 
   it("opens client details from the client name without opening the order", async () => {

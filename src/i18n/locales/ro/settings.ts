@@ -369,6 +369,10 @@ const settings: Messages<typeof en> = {
       submit: "Adaugă status",
       normalOnlyHint: "Statusurile noi sunt pași obișnuiți. Folosiți butoanele dedicate doar pentru Închidere/Anulare.",
     },
+    emptyConfigurable: "Încă nu există statusuri obișnuite. Adăugați pași de workflow mai jos.",
+    lifecycleTitle: "Acțiuni de ciclu de viață ale sistemului",
+    lifecycleDescription:
+      "Închiderea și anularea sunt acțiuni separate de ciclu de viață — nu statusuri configurabile obișnuite. Rămân disponibile pentru coloanele board și filtre.",
     toast: {
       created: "Status creat",
       updated: "Status actualizat",

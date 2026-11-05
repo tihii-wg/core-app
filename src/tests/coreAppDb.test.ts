@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fake } from "./fakeSupabase";
-import { USERS, WS, membership, seedCoreApp } from "./coreAppDb";
+import { USERS, WS, membership, row, seedCoreApp } from "./coreAppDb";
 
 const db = fake.client;
 
@@ -48,9 +48,18 @@ describe("fake Supabase security model", () => {
     expect(promote.error?.code).toBe("42501");
   });
 
-  it("refuses UPDATE on order_services and keeps owner_id immutable", async () => {
+  it("lets workspace members UPDATE their order_services lines and keeps owner_id immutable", async () => {
+    fake.signInAs(USERS.member.id);
+    const own = await db.from("order_services").update({ price: 41, warranty_months: 12 }).eq("id", "line-a1").select("id, price, warranty_months");
+    expect(own.error).toBeNull();
+    expect(own.data).toEqual([{ id: "line-a1", price: 41, warranty_months: 12 }]);
+
+    fake.signInAs(USERS.outsider.id);
+    const foreign = await db.from("order_services").update({ price: 1 }).eq("id", "line-a1").select("id");
+    expect(foreign).toMatchObject({ data: [], error: null });
+    expect(row("order_services", "line-a1")).toMatchObject({ price: 41 });
+
     fake.signInAs(USERS.owner.id);
-    expect((await db.from("order_services").update({ price: 1 }).eq("order_id", "order-a1")).error?.message).toBe("permission denied for table order_services");
     expect((await db.from("workspaces").update({ owner_id: USERS.admin.id }).eq("id", WS.A)).error?.code).toBe("42501");
   });
 

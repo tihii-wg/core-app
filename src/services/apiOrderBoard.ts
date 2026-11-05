@@ -2,7 +2,7 @@ import i18n from "../i18n";
 import type { OrderStatus } from "../lib/types";
 import { recordActivity } from "./apiActivityLog";
 import { recordStatusChangeEvents } from "./apiOrderEvents";
-import { updateOrderStatus } from "./apiOrders";
+import { setOrderLifecycleRegularCustomStatus, updateOrderStatus } from "./apiOrders";
 import { assertCustomStatusTransition, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
 import supabase from "./supabase";
 
@@ -62,16 +62,56 @@ export async function moveOrderOnBoard(
     if (definition.semanticAction === "cancel") {
       throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
     }
+    if (definition.systemStatus === "closed" || definition.systemStatus === "cancelled") {
+      throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
+    }
   }
 
-  if (status === "closed") {
-    throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
-  }
-  if (status === "cancelled") {
-    throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
+  // Owner annotation on closed/cancelled: custom_status_id only (status + closed_at preserved).
+  if (status === "closed" || status === "cancelled") {
+    if (!customStatusId) {
+      throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
+    }
+    const fromCustomStatusId = await getCurrentCustomStatusId(orderId, resolved);
+    const result = await setOrderLifecycleRegularCustomStatus(orderId, customStatusId, resolved);
+    if (fromCustomStatusId !== result.customStatusId) {
+      await recordActivity({
+        workspaceId: resolved,
+        entityType: "order",
+        entityId: orderId,
+        event: "order.status_changed",
+        details: {
+          source: "lifecycle_regular_custom",
+          from: result.status,
+          to: result.status,
+          fromCustomStatusId,
+          toCustomStatusId: result.customStatusId,
+          closedAt: result.closedAt,
+        },
+      });
+    }
+    return {
+      status: result.status,
+      customStatusId: result.customStatusId,
+      customStatus: result.customStatus,
+    };
   }
 
   const fromCustomStatusId = await getCurrentCustomStatusId(orderId, resolved);
+
+  // Open-order path must not run against a formally closed row.
+  const { data: existing, error: existingError } = await supabase
+    .from("orders")
+    .select("status, closed_at")
+    .eq("id", orderId)
+    .eq("workspace_id", resolved)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existing) throw new Error(i18n.t("orders.board.errors.moveFailed"));
+  if ((existing as { closed_at?: unknown }).closed_at) {
+    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
+
   if (fromCustomStatusId) {
     await assertCustomStatusTransition(resolved, fromCustomStatusId, customStatusId);
   }

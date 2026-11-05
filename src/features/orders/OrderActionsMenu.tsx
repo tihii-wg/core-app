@@ -26,6 +26,7 @@ import type { Order, OrderStatus } from "../../lib/types";
 import { industryOrderStatusLabel } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
@@ -93,8 +94,9 @@ export function OrderActionsMenu({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
-  // Owner membership role only — admin/manager stay locked. API re-checks owner_id.
+  // Paid unlock uses membership owner role; closed-order regular status uses owner_id.
   const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole());
+  const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const { canWrite } = useWorkspaceSubscription();
   const paidLocked = isOrderPaidLocked(order, isWorkspaceOwner);
   const paidBlocked = isPaidStatusOptionBlocked(order, requireTaxInvoiceNumber);
@@ -193,7 +195,9 @@ export function OrderActionsMenu({
           {statusOptions.map((option) => {
             const current = currentUnifiedStatus?.id === option.id;
             const blockedPaid = option.systemStatus === "paid" && paidBlocked && !current;
-            const locked = paidLocked || blockedPaid || formallyClosed;
+            // Owner (owner_id) may change regular custom status on closed/cancelled orders.
+            const lifecycleLocked = (formallyClosed || order.status === "cancelled") && !isOwnerByOwnerId;
+            const locked = paidLocked || blockedPaid || lifecycleLocked;
             return (
               <DropdownMenuItem
                 key={option.id}
@@ -203,7 +207,9 @@ export function OrderActionsMenu({
                     ? t("orders.errors.paidStatusLocked")
                     : blockedPaid
                       ? t("orders.taxInvoice.requiredHint")
-                      : undefined
+                      : lifecycleLocked
+                        ? t("orders.lifecycle.errors.orderAlreadyClosed")
+                        : undefined
                 }
                 onSelect={() => {
                   if (locked) return;

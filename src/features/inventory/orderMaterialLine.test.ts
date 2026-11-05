@@ -37,6 +37,26 @@ describe("order material freeform / catalog helpers", () => {
     expect(resolveMaterialSupplySource({ supplySource: "customer" })).toBe("customer");
   });
 
+  it("preserves warranty fields through consolidation", () => {
+    const result = consolidateOrderMaterials([
+      {
+        inventoryItemId: "i1",
+        itemName: "Pad",
+        price: 12,
+        quantity: 1,
+        supplySource: "catalog",
+        warrantyMonths: 24,
+        warrantyKm: 30000,
+      },
+      { itemName: "Gasket", price: 5, quantity: 1, supplySource: "one_time", warrantyDays: 15 },
+    ]);
+    expect(result.find((line) => line.inventoryItemId === "i1")).toMatchObject({
+      warrantyMonths: 24,
+      warrantyKm: 30000,
+    });
+    expect(result.find((line) => line.itemName === "Gasket")).toMatchObject({ warrantyDays: 15 });
+  });
+
   it("detects equivalent material sets for sync-skip", () => {
     const a = [{ inventoryItemId: "i1", itemName: "A", price: 1, quantity: 2, supplySource: "catalog" as const }];
     const b = [{ inventoryItemId: "i1", itemName: "Renamed", price: 99, quantity: 2, supplySource: "catalog" as const }];

@@ -58,6 +58,7 @@ import {
 } from "./taxInvoice";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import OrderWarehouseActions from "./OrderWarehouseActions";
 import OrderAttachmentsSection from "./OrderAttachmentsSection";
 import OrderFeedSection from "./OrderFeedSection";
@@ -132,9 +133,14 @@ export default function OrderDetailPanel({
     ? resolveCurrentUnifiedStatus(selectedOrder, statusOptions)
     : null;
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
-  // Owner role unlocks Paid status controls; admin/manager do not. API re-checks owner_id.
+  // Paid unlock uses membership owner role; closed-order regular status uses owner_id.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
+  const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
+  const lifecycleStatusLocked =
+    selectedOrder != null &&
+    (isOrderFormallyClosed(selectedOrder) || selectedOrder.status === "cancelled") &&
+    !isOwnerByOwnerId;
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
@@ -547,6 +553,7 @@ export default function OrderDetailPanel({
                 value={currentUnifiedStatus?.id ?? statusOptions[0]?.id ?? ""}
                 onValueChange={(value) => {
                   if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
+                  if (lifecycleStatusLocked) return;
                   const option = statusOptions.find((item) => item.id === value);
                   if (!option) return;
                   const move = resolveUnifiedStatusSelection(selectedOrder, option);
@@ -562,17 +569,19 @@ export default function OrderDetailPanel({
                         currentStatus: selectedOrder.status,
                       },
                       {
-                        onSuccess: () => {
+                        onSuccess: (result) => {
                           onOrderUpdated({
                             ...selectedOrder,
-                            status: move.status,
-                            customStatusId: move.customStatusId,
-                            customStatus: option.kind === "definition"
-                              ? { name: option.name, color: option.color }
-                              : null,
+                            status: result?.status ?? move.status,
+                            customStatusId: result?.customStatusId ?? move.customStatusId,
+                            customStatus:
+                              result?.customStatus ??
+                              (option.kind === "definition" ? { name: option.name, color: option.color } : null),
+                            // Lifecycle annotation must never clear closedAt from the detail panel.
+                            closedAt: selectedOrder.closedAt,
                             ...(move.status === "paid"
                               ? { isPaid: true, paymentStatus: "paid" as const }
-                              : selectedOrder.status === "paid"
+                              : selectedOrder.status === "paid" && move.status !== "closed" && move.status !== "cancelled"
                                 ? { isPaid: false, paymentStatus: "unpaid" as const }
                                 : {}),
                           });
@@ -584,7 +593,14 @@ export default function OrderDetailPanel({
 
                   onStatusChange(move.status);
                 }}
-                disabled={!canEditOrder || isStatusUpdating || isUnifiedStatusUpdating || isAssigneeUpdating || paidStatusLocked}
+                disabled={
+                  !canEditOrder ||
+                  isStatusUpdating ||
+                  isUnifiedStatusUpdating ||
+                  isAssigneeUpdating ||
+                  paidStatusLocked ||
+                  lifecycleStatusLocked
+                }
               >
                 <SelectTrigger id="order-status" className="w-full min-w-0">
                   <SelectValue />
@@ -596,13 +612,15 @@ export default function OrderDetailPanel({
                       <SelectItem
                         key={option.id}
                         value={option.id}
-                        disabled={paidStatusLocked || blocksPaid}
+                        disabled={paidStatusLocked || blocksPaid || lifecycleStatusLocked}
                         title={
                           paidStatusLocked
                             ? t("orders.errors.paidStatusLocked")
                             : blocksPaid
                               ? t("orders.taxInvoice.requiredHint")
-                              : undefined
+                              : lifecycleStatusLocked
+                                ? t("orders.lifecycle.errors.orderAlreadyClosed")
+                                : undefined
                         }
                       >
                         <span className="inline-flex min-w-0 items-center gap-2">

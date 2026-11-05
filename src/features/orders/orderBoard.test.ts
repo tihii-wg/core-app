@@ -140,4 +140,17 @@ describe("resolveBoardMove", () => {
     expect(resolveBoardMove(o, closeCol)).toBeNull();
     expect(resolveBoardMove(o, fakeCol)).toEqual({ status: "completed", customStatusId: "fake" });
   });
+
+  it("refuses dragging closed or cancelled orders onto ordinary columns", () => {
+    const columns = buildOrderBoardColumns(
+      [order({ id: "1", status: "closed", closedAt: "2026-11-01T00:00:00.000Z" })],
+      [
+        definition({ id: "progress", name: "In Progress", statusGroup: "in_progress", systemStatus: "in-progress" }),
+        definition({ id: "close", name: "Closed", statusGroup: "closed", semanticAction: "close", systemStatus: "closed" }),
+      ],
+    );
+    const progress = columns.find((column) => column.key === "progress")!;
+    expect(resolveBoardMove(order({ id: "1", status: "closed", closedAt: "2026-11-01T00:00:00.000Z" }), progress)).toBeNull();
+    expect(resolveBoardMove(order({ id: "2", status: "cancelled" }), progress)).toBeNull();
+  });
 });

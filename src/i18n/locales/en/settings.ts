@@ -366,6 +366,10 @@ export default {
       submit: "Add status",
       normalOnlyHint: "New statuses are ordinary workflow steps. Use Assign Close/Cancel only for the dedicated lifecycle actions.",
     },
+    emptyConfigurable: "No regular statuses yet. Add workflow steps below.",
+    lifecycleTitle: "System lifecycle actions",
+    lifecycleDescription:
+      "Close and Cancel are separate lifecycle actions — not ordinary configurable statuses. They stay available for board columns and filters.",
     toast: {
       created: "Status created",
       updated: "Status updated",

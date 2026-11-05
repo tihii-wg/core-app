@@ -39,11 +39,13 @@ describe("warranty helpers", () => {
     expect(normalizeWarrantyKm(0)).toBeNull();
   });
 
-  it("detects coverage for duration-only, mileage-only, both, and none", () => {
+  it("detects coverage for duration-only, mileage-only, both, activated endsOn, and none", () => {
     expect(hasWarrantyCoverage({ durationMonths: 12, mileageLimit: null })).toBe(true);
     expect(hasWarrantyCoverage({ durationMonths: null, mileageLimit: 10000 })).toBe(true);
     expect(hasWarrantyCoverage({ durationMonths: 6, mileageLimit: 5000 })).toBe(true);
     expect(hasWarrantyCoverage({ durationMonths: null, durationDays: 15, mileageLimit: null })).toBe(true);
+    expect(hasWarrantyCoverage({ durationMonths: null, mileageLimit: null, endsOn: "2027-01-01" })).toBe(true);
+    expect(hasWarrantyCoverage({ durationMonths: null, mileageLimit: null, expiresAtMileage: 90000 })).toBe(true);
     expect(hasWarrantyCoverage({ durationMonths: null, mileageLimit: null })).toBe(false);
   });
 

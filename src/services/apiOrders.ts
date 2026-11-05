@@ -908,10 +908,11 @@ function orderMaterialColumns() {
   const supply = orderMaterialSupplySourceSupported ? ", supply_source" : "";
   const warehouse = orderMaterialWarehouseIdSupported ? ", warehouse_id" : "";
   const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
-  return `${orderMaterialBaseColumns}${supply}${warehouse}${discount}`;
+  const warranty = orderLineWarrantySupported === false ? "" : ", warranty_months, warranty_days, warranty_km";
+  return `${orderMaterialBaseColumns}${supply}${warehouse}${discount}${warranty}`;
 }
 
-/** Runs an order_materials select; retries without missing optional columns (supply_source / discounts). */
+/** Runs an order_materials select; retries without missing optional columns (supply_source / discounts / warranty). */
 async function withOrderMaterialColumns<T extends { error: DbError }>(run: () => PromiseLike<T>): Promise<T> {
   let result = await run();
   if (orderMaterialSupplySourceSupported && isMissingSupplySourceColumn(result.error)) {
@@ -925,6 +926,17 @@ async function withOrderMaterialColumns<T extends { error: DbError }>(run: () =>
   if (orderLineDiscountSupported && isMissingLineDiscountColumn(result.error)) {
     orderLineDiscountSupported = false;
     result = await run();
+  }
+  if (
+    orderLineWarrantySupported !== false &&
+    result.error &&
+    /warranty_months|warranty_days|warranty_km/i.test(result.error.message ?? "") &&
+    (result.error.code === "42703" || result.error.code === "PGRST204")
+  ) {
+    orderLineWarrantySupported = false;
+    result = await run();
+  } else if (result.error == null && orderLineWarrantySupported == null) {
+    orderLineWarrantySupported = true;
   }
   return result;
 }
@@ -1527,7 +1539,7 @@ async function assertTaxInvoiceAllowsPaid(orderId: string, workspaceId: string) 
  * Verifies the signed-in user is `workspaces.owner_id` for this workspace.
  * Uses the authenticated Supabase client — never a client-supplied owner flag.
  */
-async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
+export async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
   const {
     data: { user },
     error: authError,
@@ -1545,6 +1557,66 @@ async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
 
   if (error) throw new Error(error.message);
   return data != null;
+}
+
+export type SetLifecycleRegularCustomStatusResult = {
+  status: OrderStatus;
+  customStatusId: string;
+  customStatus: { name: string; color: string | null } | null;
+  closedAt: string | null;
+};
+
+/**
+ * Owner-only: set a normal custom_status_id on a closed/cancelled order.
+ * Does not clear closed_at, change lifecycle status, or activate warranties.
+ * Requires 20261105110000_owner_regular_status_on_lifecycle.PRODUCTION.sql.
+ */
+export async function setOrderLifecycleRegularCustomStatus(
+  orderId: string,
+  customStatusId: string,
+  workspaceId: string | undefined,
+): Promise<SetLifecycleRegularCustomStatusResult> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const statusId = customStatusId.trim();
+  if (!statusId) throw new Error(i18n.t("orders.board.errors.unknownStatus"));
+
+  const { data, error } = await supabase.rpc("set_order_lifecycle_regular_custom_status", {
+    p_workspace_id: targetWorkspaceId,
+    p_order_id: orderId,
+    p_custom_status_id: statusId,
+  });
+
+  if (error) {
+    if (isMissingRpcError(error, "set_order_lifecycle_regular_custom_status")) {
+      throw new MissingRpcError(
+        "set_order_lifecycle_regular_custom_status",
+        i18n.t("orders.lifecycle.errors.rpcRequired"),
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  const status =
+    typeof payload.status === "string" && orderStatuses.has(payload.status as OrderStatus)
+      ? (payload.status as OrderStatus)
+      : "closed";
+  const nextCustomId =
+    typeof payload.custom_status_id === "string" && payload.custom_status_id.trim()
+      ? payload.custom_status_id
+      : statusId;
+  const closedAt =
+    typeof payload.closed_at === "string" && payload.closed_at.trim() ? payload.closed_at : null;
+
+  const defs = await getStatusDefinitionsByIds(targetWorkspaceId, [nextCustomId]).catch(() => new Map());
+  const def = defs.get(nextCustomId) ?? null;
+
+  return {
+    status,
+    customStatusId: nextCustomId,
+    customStatus: def ? { name: def.name, color: def.color } : null,
+    closedAt,
+  };
 }
 
 /**
@@ -2058,6 +2130,9 @@ export async function updateOrder(
     supply_source: line.supplySource ?? null,
     discount_type: line.discountType ?? null,
     discount_value: line.discountValue ?? null,
+    warranty_months: line.warrantyMonths ?? null,
+    warranty_days: line.warrantyDays ?? null,
+    warranty_km: line.warrantyKm ?? null,
   })));
 }
 
@@ -2270,6 +2345,14 @@ export const SAFE_CANCELLED_ORDER_DELETE_SQL = "20261104240000_safe_cancelled_or
 /** Manual SQL: delete cancelled orders auto-returns outstanding issued materials first. */
 export const DELETE_CANCELLED_AUTO_RETURN_SQL =
   "20261105090000_delete_cancelled_order_auto_return_materials.PRODUCTION.sql";
+
+/** Manual SQL: grant UPDATE + RLS for order_services (warranty / kind edits on existing lines). */
+export const ORDER_SERVICES_MEMBER_UPDATE_SQL =
+  "20261105100000_order_services_member_update.PRODUCTION.sql";
+
+/** Manual SQL: owner may set a normal custom_status_id on closed/cancelled orders. */
+export const OWNER_REGULAR_STATUS_ON_LIFECYCLE_SQL =
+  "20261105110000_owner_regular_status_on_lifecycle.PRODUCTION.sql";
 
 /** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
 export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {

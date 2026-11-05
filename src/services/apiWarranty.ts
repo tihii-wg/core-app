@@ -17,6 +17,10 @@ import supabase from "./supabase";
 const WARRANTY_RECORD_COLUMNS =
   "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, duration_days, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
 
+/** Pre-duration_days schema (20261104250000 without 20261104260000 hardening). */
+const WARRANTY_RECORD_COLUMNS_LEGACY =
+  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
+
 function requireWorkspaceId(workspaceId: string | undefined) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
   return workspaceId;
@@ -29,6 +33,10 @@ function isMissingRelationError(error: { code?: string } | null | undefined) {
 function isMissingColumnError(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return false;
   return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(error.message ?? "");
+}
+
+function isDurationDaysMissingError(error: { code?: string; message?: string } | null | undefined) {
+  return Boolean(error && isMissingColumnError(error) && /duration_days/i.test(error.message ?? ""));
 }
 
 function mapSnapshot(row: Record<string, unknown>): WarrantySnapshot {
@@ -49,40 +57,54 @@ function mapSnapshot(row: Record<string, unknown>): WarrantySnapshot {
   };
 }
 
-const WARRANTY_RECORD_COLUMNS_LEGACY =
-  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
+type WarrantyRecordFilter =
+  | { kind: "order_ids"; orderIds: string[] }
+  | { kind: "ids"; ids: string[] }
+  | { kind: "order_id"; orderId: string; orderByCreated?: boolean };
+
+/**
+ * Loads warranty_records with duration_days when present; falls back to the pre-hardening
+ * column list. Unlike the old indicator path, does NOT convert schema errors into [].
+ */
+async function fetchWarrantyRecordRows(
+  workspaceId: string,
+  filter: WarrantyRecordFilter,
+): Promise<Record<string, unknown>[]> {
+  const run = async (columns: string) => {
+    let query = supabase.from("warranty_records").select(columns).eq("workspace_id", workspaceId);
+    if (filter.kind === "order_ids") query = query.in("order_id", filter.orderIds);
+    else if (filter.kind === "ids") query = query.in("id", filter.ids);
+    else {
+      query = query.eq("order_id", filter.orderId);
+      if (filter.orderByCreated) query = query.order("created_at", { ascending: true });
+    }
+    return query;
+  };
+
+  let { data, error } = await run(WARRANTY_RECORD_COLUMNS);
+  if (isDurationDaysMissingError(error)) {
+    ({ data, error } = await run(WARRANTY_RECORD_COLUMNS_LEGACY));
+  }
+  if (error) throw new Error(error.message);
+  return (data ?? []) as unknown as Record<string, unknown>[];
+}
 
 export async function getWarrantyRecordsForOrder(workspaceId: string | undefined, orderId: string): Promise<WarrantySnapshot[]> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const id = orderId.trim();
   if (!id) return [];
 
-  const primary = await supabase
-    .from("warranty_records")
-    .select(WARRANTY_RECORD_COLUMNS)
-    .eq("workspace_id", targetWorkspaceId)
-    .eq("order_id", id)
-    .order("created_at", { ascending: true });
-
-  let rows = (primary.data ?? null) as Record<string, unknown>[] | null;
-  let error = primary.error;
-
-  if (error && isMissingColumnError(error) && /duration_days/i.test(error.message ?? "")) {
-    const legacy = await supabase
-      .from("warranty_records")
-      .select(WARRANTY_RECORD_COLUMNS_LEGACY)
-      .eq("workspace_id", targetWorkspaceId)
-      .eq("order_id", id)
-      .order("created_at", { ascending: true });
-    rows = (legacy.data ?? null) as Record<string, unknown>[] | null;
-    error = legacy.error;
+  try {
+    const rows = await fetchWarrantyRecordRows(targetWorkspaceId, { kind: "order_id", orderId: id, orderByCreated: true });
+    return rows.map(mapSnapshot);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Detail panel: soft-fail only when the warranty schema is not deployed yet.
+    if (/PGRST205|42P01|does not exist|Could not find the table|schema cache/i.test(message)) {
+      return [];
+    }
+    throw error instanceof Error ? error : new Error(message);
   }
-
-  if (error) {
-    if (isMissingRelationError(error) || isMissingColumnError(error)) return [];
-    throw new Error(error.message);
-  }
-  return (rows ?? []).map(mapSnapshot);
 }
 
 export type WarrantyClaimInput = {
@@ -114,11 +136,13 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
     .eq("is_active", true);
 
   if (error && isMissingColumnError(error) && /is_active/i.test(error.message ?? "")) {
-    ({ data, error } = await supabase
+    const legacy = await supabase
       .from("warranty_order_claims")
       .select("id, warranty_order_id, warranty_record_id, validity_status, accepted_outside_period, current_mileage_at_claim")
       .eq("workspace_id", targetWorkspaceId)
-      .eq("warranty_order_id", id));
+      .eq("warranty_order_id", id);
+    data = legacy.data as typeof data;
+    error = legacy.error;
   }
 
   if (error) {
@@ -130,16 +154,18 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
   if (rows.length === 0) return [];
 
   const recordIds = rows.map((row) => String(row.warranty_record_id));
-  const { data: records, error: recordsError } = await supabase
-    .from("warranty_records")
-    .select(WARRANTY_RECORD_COLUMNS)
-    .eq("workspace_id", targetWorkspaceId)
-    .in("id", recordIds);
-
-  if (recordsError && !isMissingRelationError(recordsError) && !isMissingColumnError(recordsError)) {
-    throw new Error(recordsError.message);
+  let records: Record<string, unknown>[] = [];
+  try {
+    records = await fetchWarrantyRecordRows(targetWorkspaceId, { kind: "ids", ids: recordIds });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/PGRST205|42P01|does not exist|Could not find the table|schema cache/i.test(message)) {
+      records = [];
+    } else {
+      throw error instanceof Error ? error : new Error(message);
+    }
   }
-  const byId = new Map(((records ?? []) as Record<string, unknown>[]).map((row) => [String(row.id), mapSnapshot(row)]));
+  const byId = new Map(records.map((row) => [String(row.id), mapSnapshot(row)]));
 
   return rows.map((row) => ({
     id: String(row.id),
@@ -181,14 +207,19 @@ export async function getOrdersWarrantyIndicatorMap(
       .in("warranty_order_id", claimOrderIds)
       .eq("is_active", true);
     if (claimsError && isMissingColumnError(claimsError) && /is_active/i.test(claimsError.message ?? "")) {
-      ({ data: claims, error: claimsError } = await supabase
+      const legacy = await supabase
         .from("warranty_order_claims")
         .select("warranty_order_id, warranty_record_id")
         .eq("workspace_id", targetWorkspaceId)
-        .in("warranty_order_id", claimOrderIds));
+        .in("warranty_order_id", claimOrderIds);
+      claims = legacy.data as typeof claims;
+      claimsError = legacy.error;
     }
     if (claimsError) {
-      if (!(isMissingRelationError(claimsError) || isMissingColumnError(claimsError))) throw new Error(claimsError.message);
+      // Claims table may be undeployed; originals still load below. Other errors surface.
+      if (!(isMissingRelationError(claimsError) || /Could not find the table|does not exist/i.test(claimsError.message ?? ""))) {
+        throw new Error(claimsError.message);
+      }
     } else {
       const recordIds = new Set<string>();
       for (const row of (claims ?? []) as Record<string, unknown>[]) {
@@ -201,41 +232,27 @@ export async function getOrdersWarrantyIndicatorMap(
         claimRecordIdsByOrderId.set(orderId, list);
       }
       if (recordIds.size > 0) {
-        const { data: records, error: recordsError } = await supabase
-          .from("warranty_records")
-          .select(WARRANTY_RECORD_COLUMNS)
-          .eq("workspace_id", targetWorkspaceId)
-          .in("id", [...recordIds]);
-        if (recordsError) {
-          if (!(isMissingRelationError(recordsError) || isMissingColumnError(recordsError))) throw new Error(recordsError.message);
-        } else {
-          const byId = new Map(((records ?? []) as Record<string, unknown>[]).map((row) => [String(row.id), mapSnapshot(row)]));
-          for (const [orderId, ids] of claimRecordIdsByOrderId) {
-            snapshotsByOrderId.set(
-              orderId,
-              ids.map((id) => byId.get(id)).filter((row): row is WarrantySnapshot => Boolean(row)),
-            );
-          }
+        // Throws on real DB errors; falls back when duration_days is absent.
+        const records = await fetchWarrantyRecordRows(targetWorkspaceId, { kind: "ids", ids: [...recordIds] });
+        const byId = new Map(records.map((row) => [String(row.id), mapSnapshot(row)]));
+        for (const [orderId, ids] of claimRecordIdsByOrderId) {
+          snapshotsByOrderId.set(
+            orderId,
+            ids.map((id) => byId.get(id)).filter((row): row is WarrantySnapshot => Boolean(row)),
+          );
         }
       }
     }
   }
 
   if (originalOrderIds.length > 0) {
-    const { data: records, error: recordsError } = await supabase
-      .from("warranty_records")
-      .select(WARRANTY_RECORD_COLUMNS)
-      .eq("workspace_id", targetWorkspaceId)
-      .in("order_id", originalOrderIds);
-    if (recordsError) {
-      if (!(isMissingRelationError(recordsError) || isMissingColumnError(recordsError))) throw new Error(recordsError.message);
-    } else {
-      for (const row of (records ?? []) as Record<string, unknown>[]) {
-        const snapshot = mapSnapshot(row);
-        const list = snapshotsByOrderId.get(snapshot.orderId) ?? [];
-        list.push(snapshot);
-        snapshotsByOrderId.set(snapshot.orderId, list);
-      }
+    // Throws on real DB errors; falls back when duration_days is absent — never silent empty map.
+    const records = await fetchWarrantyRecordRows(targetWorkspaceId, { kind: "order_ids", orderIds: originalOrderIds });
+    for (const row of records) {
+      const snapshot = mapSnapshot(row);
+      const list = snapshotsByOrderId.get(snapshot.orderId) ?? [];
+      list.push(snapshot);
+      snapshotsByOrderId.set(snapshot.orderId, list);
     }
   }
 
@@ -250,7 +267,10 @@ export async function getOrdersWarrantyIndicatorMap(
       .eq("workspace_id", targetWorkspaceId)
       .in("id", vehicleIds);
     if (vehiclesError) {
-      if (!(isMissingRelationError(vehiclesError) || isMissingColumnError(vehiclesError))) throw new Error(vehiclesError.message);
+      // Mileage is optional for time-only warranties; surface unexpected errors.
+      if (!(isMissingRelationError(vehiclesError) || isMissingColumnError(vehiclesError))) {
+        throw new Error(vehiclesError.message);
+      }
     } else {
       for (const row of (vehicles ?? []) as Record<string, unknown>[]) {
         const id = String(row.id ?? "");

@@ -41,14 +41,20 @@ describe("OrderStatusBadge", () => {
     expect(screen.getByText("system:completed")).toBeTruthy();
   });
 
-  it("shows system Cancelled even when a custom status named Cancelled is attached", () => {
-    render(<OrderStatusBadge status="cancelled" customStatus={{ name: "Cancelled", color: "#111" }} />);
+  it("shows the owner regular custom annotation on cancelled orders", () => {
+    render(<OrderStatusBadge status="cancelled" customStatus={{ name: "Waiting client", color: "#111" }} />);
+    expect(screen.getByText("Waiting client")).toBeTruthy();
+    expect(screen.queryByText("system:cancelled")).toBeNull();
+  });
+
+  it("falls back to system Cancelled when no custom annotation is set", () => {
+    render(<OrderStatusBadge status="cancelled" customStatus={null} />);
     expect(screen.getByText("system:cancelled")).toBeTruthy();
   });
 
-  it("ignores a stale ordinary custom status after system cancellation", () => {
-    render(<OrderStatusBadge status="cancelled" customStatus={{ name: "In Progress", color: "#0f0" }} />);
-    expect(screen.getByText("system:cancelled")).toBeTruthy();
-    expect(screen.queryByText("In Progress")).toBeNull();
+  it("shows the same custom annotation for closed orders as list/board/detail", () => {
+    render(<OrderStatusBadge status="closed" customStatus={{ name: "Archived workshop", color: "#0f0" }} />);
+    expect(screen.getByText("Archived workshop")).toBeTruthy();
+    expect(screen.queryByText("system:closed")).toBeNull();
   });
 });
