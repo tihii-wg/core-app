@@ -369,7 +369,8 @@ export default {
     emptyConfigurable: "No regular statuses yet. Add workflow steps below.",
     lifecycleTitle: "System lifecycle actions",
     lifecycleDescription:
-      "Close and Cancel are separate lifecycle actions — not ordinary configurable statuses. They stay available for board columns and filters.",
+      "Close and Cancel are reserved system lifecycle states. They are managed only by dedicated Close/Cancel actions — not renameable, recolorable, or selectable as ordinary statuses.",
+    lifecycleReadOnly: "Reserved — view only",
     toast: {
       created: "Status created",
       updated: "Status updated",
@@ -387,6 +388,8 @@ export default {
       inUse: "This status is used by orders. Replace it before deleting.",
       cannotDeleteDefault: "Choose another default status before deleting this one",
       cannotDeleteProtected: "Clear the Close/Cancel assignment before deleting this status",
+      cannotModifyLifecycle: "Reserved Close and Cancel statuses cannot be renamed, recolored, or deactivated",
+      cannotCreateLifecycleSystemStatus: "Closed and Cancelled are reserved lifecycle states and cannot be created as ordinary statuses",
       inactiveDefault: "Activate the status before making it the default",
       protectedDefault: "Close and Cancel statuses cannot be the default for new orders",
       orderOnly: "Only order statuses can be set as the order default",

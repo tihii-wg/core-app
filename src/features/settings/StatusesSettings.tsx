@@ -298,28 +298,7 @@ export function StatusesSettings() {
                               })}
                             </p>
                           </div>
-                          {canEdit ? (
-                            <div className="flex flex-wrap gap-1">
-                              {status.semanticAction !== "normal" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setSemantic.mutate({ statusId: status.id, action: "normal" })}
-                                >
-                                  {t("settings.statuses.clearSemantic")}
-                                </Button>
-                              ) : null}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => updateStatus.mutate({ id: status.id, isActive: !status.isActive })}
-                              >
-                                {status.isActive ? t("settings.statuses.deactivate") : t("settings.statuses.activate")}
-                              </Button>
-                            </div>
-                          ) : null}
+                          <p className="text-xs text-muted-foreground">{t("settings.statuses.lifecycleReadOnly")}</p>
                         </li>
                       ))}
                     </ul>

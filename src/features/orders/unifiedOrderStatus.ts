@@ -1,8 +1,11 @@
 import type { Order, OrderStatus } from "../../lib/types";
-import type { StatusDefinition } from "../../services/apiStatusDefinitions";
+import {
+  isLifecycleOrderStatusDefinition,
+  pickCustomStatusForSystemStatus,
+  type StatusDefinition,
+} from "../../services/apiStatusDefinitions";
 import { ORDER_STATUSES } from "../industries/industryWorkflow";
 import { activeOrderDefinitions, isOrderStatus, type BoardMove } from "./orderBoard";
-import { pickCustomStatusForSystemStatus } from "../../services/apiStatusDefinitions";
 
 export type UnifiedStatusOption =
   | {
@@ -26,12 +29,7 @@ export type UnifiedStatusOption =
 
 /** Active order definitions a user may pick as an ordinary status (not close/cancel). */
 export function selectableOrderStatusDefinitions(definitions: readonly StatusDefinition[]) {
-  return activeOrderDefinitions(definitions).filter(
-    (definition) =>
-      definition.semanticAction === "normal" &&
-      definition.systemStatus !== "closed" &&
-      definition.systemStatus !== "cancelled",
-  );
+  return activeOrderDefinitions(definitions).filter((definition) => !isLifecycleOrderStatusDefinition(definition));
 }
 
 /** True when the order is in a formal lifecycle state (closed and/or cancelled). */
@@ -144,14 +142,8 @@ export function resolveUnifiedStatusSelection(
   if (option.semanticAction === "close" || option.semanticAction === "cancel") return null;
   if (option.systemStatus === "closed" || option.systemStatus === "cancelled") return null;
 
-  // Closed/cancelled: keep lifecycle `status`; only a normal custom definition may change.
-  if (isLifecycleOrderStatus(order)) {
-    if (option.kind !== "definition" || option.semanticAction !== "normal") return null;
-    if (order.customStatusId === option.id) return null;
-    const lifecycleStatus: OrderStatus =
-      order.status === "cancelled" ? "cancelled" : order.status === "closed" ? "closed" : "closed";
-    return { status: lifecycleStatus, customStatusId: option.id };
-  }
+  // Closed/cancelled are lifecycle-only: ordinary selectors must not change them.
+  if (isLifecycleOrderStatus(order)) return null;
 
   if (option.kind === "definition") {
     const status = option.systemStatus ?? (isOrderStatus(order.status) ? order.status : null);

@@ -281,6 +281,10 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
   const color = input.color?.trim() || null;
   const entity = input.entity ?? "order";
 
+  if (entity === "order" && (systemStatus === "closed" || systemStatus === "cancelled")) {
+    throw new Error(i18n.t("settings.statuses.errors.cannotCreateLifecycleSystemStatus"));
+  }
+
   // Pre-allocate a unique code among siblings (system_status is NOT unique).
   const siblings = await getStatusDefinitions(resolved, entity);
   const taken = new Set(siblings.map((s) => s.code).filter((c): c is string => Boolean(c)));
@@ -333,6 +337,39 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
 
 export async function updateStatusDefinition(input: UpdateStatusDefinitionInput, workspaceId: string | undefined) {
   const resolved = requireWorkspaceId(workspaceId);
+
+  let existing: StatusDefinition | null = null;
+  {
+    const { data: existingRow, error: existingError } = await supabase
+      .from("status_definitions")
+      .select(statusColumns)
+      .eq("id", input.id)
+      .eq("workspace_id", resolved)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (existingError && isMissingLifecycleColumn(existingError)) {
+      const legacy = await supabase
+        .from("status_definitions")
+        .select(statusColumnsLegacy)
+        .eq("id", input.id)
+        .eq("workspace_id", resolved)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (legacy.error) throw new Error(legacy.error.message);
+      if (!legacy.data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+      existing = toStatusDefinition(legacy.data as Record<string, unknown>);
+    } else if (existingError) {
+      throw new Error(existingError.message);
+    } else if (!existingRow) {
+      throw new Error(i18n.t("settings.statuses.errors.notFound"));
+    } else {
+      existing = toStatusDefinition(existingRow as Record<string, unknown>);
+    }
+  }
+  if (existing.entity === "order" && isLifecycleOrderStatusDefinition(existing)) {
+    throw new Error(i18n.t("settings.statuses.errors.cannotModifyLifecycle"));
+  }
+
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) {
     const name = input.name.trim();
@@ -466,7 +503,7 @@ export async function deleteStatusDefinition(statusId: string, workspaceId: stri
 
   const { data: row, error: loadError } = await supabase
     .from("status_definitions")
-    .select("id, is_default, semantic_action")
+    .select("id, is_default, semantic_action, system_status, entity")
     .eq("id", statusId)
     .eq("workspace_id", resolved)
     .is("deleted_at", null)
@@ -477,7 +514,13 @@ export async function deleteStatusDefinition(statusId: string, workspaceId: stri
     throw new Error(i18n.t("settings.statuses.errors.cannotDeleteDefault"));
   }
   const action = (row as { semantic_action?: string }).semantic_action;
-  if (action === "close" || action === "cancel") {
+  const systemStatus = (row as { system_status?: string | null }).system_status;
+  if (
+    action === "close" ||
+    action === "cancel" ||
+    systemStatus === "closed" ||
+    systemStatus === "cancelled"
+  ) {
     throw new Error(i18n.t("settings.statuses.errors.cannotDeleteProtected"));
   }
 

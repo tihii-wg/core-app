@@ -372,7 +372,8 @@ const settings: Messages<typeof en> = {
     emptyConfigurable: "Încă nu există statusuri obișnuite. Adăugați pași de workflow mai jos.",
     lifecycleTitle: "Acțiuni de ciclu de viață ale sistemului",
     lifecycleDescription:
-      "Închiderea și anularea sunt acțiuni separate de ciclu de viață — nu statusuri configurabile obișnuite. Rămân disponibile pentru coloanele board și filtre.",
+      "Închiderea și anularea sunt stări de sistem rezervate. Se gestionează doar prin acțiunile dedicate — nu pot fi redenumite, recolorate sau selectate ca statusuri obișnuite.",
+    lifecycleReadOnly: "Rezervat — doar vizualizare",
     toast: {
       created: "Status creat",
       updated: "Status actualizat",
@@ -390,6 +391,8 @@ const settings: Messages<typeof en> = {
       inUse: "Statusul este folosit de comenzi. Înlocuiți-l înainte de ștergere.",
       cannotDeleteDefault: "Alegeți alt status implicit înainte de ștergere",
       cannotDeleteProtected: "Eliminați atribuirea Închidere/Anulare înainte de ștergere",
+      cannotModifyLifecycle: "Statusurile rezervate Închidere și Anulare nu pot fi redenumite, recolorate sau dezactivate",
+      cannotCreateLifecycleSystemStatus: "Closed și Cancelled sunt stări rezervate și nu pot fi create ca statusuri obișnuite",
       inactiveDefault: "Activați statusul înainte de a-l face implicit",
       protectedDefault: "Statusurile de Închidere/Anulare nu pot fi implicite",
       orderOnly: "Doar statusurile de comandă pot fi implicite pentru comenzi",

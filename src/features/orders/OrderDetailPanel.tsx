@@ -133,14 +133,12 @@ export default function OrderDetailPanel({
     ? resolveCurrentUnifiedStatus(selectedOrder, statusOptions)
     : null;
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
-  // Paid unlock uses membership owner role; closed-order regular status uses owner_id.
+  // Paid unlock uses membership owner role. Lifecycle status is never editable via the ordinary selector.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
   const lifecycleStatusLocked =
-    selectedOrder != null &&
-    (isOrderFormallyClosed(selectedOrder) || selectedOrder.status === "cancelled") &&
-    !isOwnerByOwnerId;
+    selectedOrder != null && (isOrderFormallyClosed(selectedOrder) || selectedOrder.status === "cancelled");
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
@@ -549,13 +547,24 @@ export default function OrderDetailPanel({
 
             <div className="border-t border-border pt-5">
               <Label htmlFor="order-status" className="mb-2 block">
-                {paidStatusLocked ? t("orders.actions.statusLocked") : t("orders.detail.updateStatus")}
+                {lifecycleStatusLocked || paidStatusLocked
+                  ? t("orders.actions.statusLocked")
+                  : t("orders.detail.updateStatus")}
               </Label>
+              {lifecycleStatusLocked ? (
+                <div id="order-status" className="flex items-center gap-2">
+                  <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
+                  <span className="text-xs text-muted-foreground">
+                    {selectedOrder.status === "cancelled"
+                      ? t("orders.lifecycle.errors.orderAlreadyCancelled")
+                      : t("orders.lifecycle.errors.orderAlreadyClosed")}
+                  </span>
+                </div>
+              ) : (
               <Select
                 value={currentUnifiedStatus?.id ?? statusOptions[0]?.id ?? ""}
                 onValueChange={(value) => {
                   if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
-                  if (lifecycleStatusLocked) return;
                   const option = statusOptions.find((item) => item.id === value);
                   if (!option) return;
                   const move = resolveUnifiedStatusSelection(selectedOrder, option);
@@ -571,15 +580,13 @@ export default function OrderDetailPanel({
                         currentStatus: selectedOrder.status,
                       },
                       {
-                        onSuccess: (result) => {
+                        onSuccess: () => {
                           onOrderUpdated({
                             ...selectedOrder,
-                            status: result?.status ?? move.status,
-                            customStatusId: result?.customStatusId ?? move.customStatusId,
+                            status: move.status,
+                            customStatusId: move.customStatusId,
                             customStatus:
-                              result?.customStatus ??
-                              (option.kind === "definition" ? { name: option.name, color: option.color } : null),
-                            // Lifecycle annotation must never clear closedAt from the detail panel.
+                              option.kind === "definition" ? { name: option.name, color: option.color } : null,
                             closedAt: selectedOrder.closedAt,
                             ...(move.status === "paid"
                               ? { isPaid: true, paymentStatus: "paid" as const }
@@ -600,8 +607,7 @@ export default function OrderDetailPanel({
                   isStatusUpdating ||
                   isUnifiedStatusUpdating ||
                   isAssigneeUpdating ||
-                  paidStatusLocked ||
-                  lifecycleStatusLocked
+                  paidStatusLocked
                 }
               >
                 <SelectTrigger id="order-status" className="w-full min-w-0">
@@ -614,15 +620,13 @@ export default function OrderDetailPanel({
                       <SelectItem
                         key={option.id}
                         value={option.id}
-                        disabled={paidStatusLocked || blocksPaid || lifecycleStatusLocked}
+                        disabled={paidStatusLocked || blocksPaid}
                         title={
                           paidStatusLocked
                             ? t("orders.errors.paidStatusLocked")
                             : blocksPaid
                               ? t("orders.taxInvoice.requiredHint")
-                              : lifecycleStatusLocked
-                                ? t("orders.lifecycle.errors.orderAlreadyClosed")
-                                : undefined
+                              : undefined
                         }
                       >
                         <span className="inline-flex min-w-0 items-center gap-2">
@@ -640,6 +644,7 @@ export default function OrderDetailPanel({
                   })}
                 </SelectContent>
               </Select>
+              )}
               {selectedOrder.closedAt ? (
                 <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
                   <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>

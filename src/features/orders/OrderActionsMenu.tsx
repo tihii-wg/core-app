@@ -97,7 +97,7 @@ export function OrderActionsMenu({
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
-  // Paid unlock uses membership owner role; closed-order regular status uses owner_id.
+  // Paid unlock uses membership owner role; closed-order cancel/delete uses owner_id.
   const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole());
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const { canWrite } = useWorkspaceSubscription();
@@ -191,64 +191,68 @@ export function OrderActionsMenu({
 
           <DropdownMenuSeparator />
           <DropdownMenuLabel>
-            {paidLocked
+            {formallyClosed || order.status === "cancelled" || paidLocked
               ? t("orders.actions.statusLocked")
               : statusBusy
                 ? t("orders.actions.updatingStatus")
                 : t("orders.actions.changeStatus")}
           </DropdownMenuLabel>
-          {statusOptions.map((option) => {
-            const current = currentUnifiedStatus?.id === option.id;
-            const blockedPaid = option.systemStatus === "paid" && paidBlocked && !current;
-            // Owner (owner_id) may change regular custom status on closed/cancelled orders.
-            const lifecycleLocked = (formallyClosed || order.status === "cancelled") && !isOwnerByOwnerId;
-            const locked = paidLocked || blockedPaid || lifecycleLocked;
-            return (
-              <DropdownMenuItem
-                key={option.id}
-                disabled={current || statusBusy || locked}
-                title={
-                  paidLocked
-                    ? t("orders.errors.paidStatusLocked")
-                    : blockedPaid
-                      ? t("orders.taxInvoice.requiredHint")
-                      : lifecycleLocked
-                        ? t("orders.lifecycle.errors.orderAlreadyClosed")
+          {formallyClosed || order.status === "cancelled" ? (
+            <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+              {order.status === "cancelled"
+                ? t("orders.lifecycle.errors.orderAlreadyCancelled")
+                : t("orders.lifecycle.errors.orderAlreadyClosed")}
+            </p>
+          ) : (
+            statusOptions.map((option) => {
+              const current = currentUnifiedStatus?.id === option.id;
+              const blockedPaid = option.systemStatus === "paid" && paidBlocked && !current;
+              const locked = paidLocked || blockedPaid;
+              return (
+                <DropdownMenuItem
+                  key={option.id}
+                  disabled={current || statusBusy || locked}
+                  title={
+                    paidLocked
+                      ? t("orders.errors.paidStatusLocked")
+                      : blockedPaid
+                        ? t("orders.taxInvoice.requiredHint")
                         : undefined
-                }
-                onSelect={() => {
-                  if (locked) return;
-                  const move = resolveUnifiedStatusSelection(order, option);
-                  if (!move) return;
-                  if (option.kind === "definition" || move.customStatusId !== null || order.customStatusId) {
-                    moveOnBoard({
-                      orderId: order.id,
-                      status: move.status,
-                      customStatusId: move.customStatusId,
-                      currentStatus: order.status,
-                    });
-                    return;
                   }
-                  onStatusChange(order, move.status);
-                }}
-              >
-                {current ? <Check /> : <span className="size-4" aria-hidden />}
-                {option.color ? (
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
-                    style={{ backgroundColor: option.color }}
-                  />
-                ) : null}
-                {option.name}
-              </DropdownMenuItem>
-            );
-          })}
-          {paidLocked ? (
+                  onSelect={() => {
+                    if (locked) return;
+                    const move = resolveUnifiedStatusSelection(order, option);
+                    if (!move) return;
+                    if (option.kind === "definition" || move.customStatusId !== null || order.customStatusId) {
+                      moveOnBoard({
+                        orderId: order.id,
+                        status: move.status,
+                        customStatusId: move.customStatusId,
+                        currentStatus: order.status,
+                      });
+                      return;
+                    }
+                    onStatusChange(order, move.status);
+                  }}
+                >
+                  {current ? <Check /> : <span className="size-4" aria-hidden />}
+                  {option.color ? (
+                    <span
+                      aria-hidden
+                      className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
+                      style={{ backgroundColor: option.color }}
+                    />
+                  ) : null}
+                  {option.name}
+                </DropdownMenuItem>
+              );
+            })
+          )}
+          {paidLocked && !(formallyClosed || order.status === "cancelled") ? (
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {t("orders.actions.paidStatusImmutable")}
             </p>
-          ) : paidBlocked ? (
+          ) : paidBlocked && !(formallyClosed || order.status === "cancelled") ? (
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {t("orders.taxInvoice.paidRequiresNumber")}
             </p>

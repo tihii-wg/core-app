@@ -179,15 +179,15 @@ describe("unifiedOrderStatus", () => {
     expect(unifiedStatusOptions(leaky, label).map((o) => o.id)).toEqual(["d-new"]);
   });
 
-  it("keeps lifecycle status when selecting a regular custom status on closed/cancelled orders", () => {
+  it("rejects ordinary status selection on closed/cancelled orders", () => {
     const options = unifiedStatusOptions(defaults, label);
     const waiting = options.find((option) => option.id === "d-waiting")!;
     expect(
       resolveUnifiedStatusSelection(order({ status: "closed", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-new" }), waiting),
-    ).toEqual({ status: "closed", customStatusId: "d-waiting" });
+    ).toBeNull();
     expect(
       resolveUnifiedStatusSelection(order({ status: "cancelled", closedAt: null, customStatusId: null }), waiting),
-    ).toEqual({ status: "cancelled", customStatusId: "d-waiting" });
+    ).toBeNull();
   });
 
   it("never lets a stale customStatusId override closed/cancelled in selectors", () => {

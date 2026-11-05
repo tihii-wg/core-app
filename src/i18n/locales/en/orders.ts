@@ -606,6 +606,7 @@ export default {
       useCloseAction: "Use Close order. Status changes cannot close an order.",
       useCancelAction: "Use Cancel order. Status changes cannot cancel an order.",
       orderAlreadyClosed: "This order is formally closed. Status cannot be changed here.",
+      orderAlreadyCancelled: "This order is cancelled. Status cannot be changed here.",
       cancelNotPersisted: "Cancellation did not persist. The order was not marked cancelled. Nothing was changed in the UI.",
     },
   },

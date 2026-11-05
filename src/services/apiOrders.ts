@@ -1857,8 +1857,11 @@ export async function updateOrderStatus(
     typeof (existing as { custom_status_id?: unknown }).custom_status_id === "string"
       ? ((existing as { custom_status_id: string }).custom_status_id.trim() || null)
       : null;
-  if ((existing as { closed_at?: unknown }).closed_at) {
+  if ((existing as { closed_at?: unknown }).closed_at || currentStatus === "closed") {
     throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
+  if (currentStatus === "cancelled") {
+    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
   }
 
   let ownerMayChangePaid = false;

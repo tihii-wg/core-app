@@ -3,7 +3,7 @@ import { useGetWorkspace } from "./useGetWorkspace";
 
 /**
  * Authoritative owner check for UI: `workspaces.owner_id === profiles.id`.
- * Prefer this over membership `role === "owner"` when unlocking closed-order status edits.
+ * Prefer this over membership `role === "owner"` for closed-order cancel/delete privileges.
  * API/RPC still re-check `workspaces.owner_id` via auth.uid().
  */
 export function useIsWorkspaceOwnerId() {

@@ -104,4 +104,36 @@ describe("closed order UI permission helpers", () => {
       }),
     ).toBe(true);
   });
+
+  it("owner_id bypasses role grants for cancel and delete of closed orders", () => {
+    const empty = { cancelClosed: [], deleteClosed: [] };
+    const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    const closedCancelled = { status: "cancelled" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    expect(
+      canOfferCancelOrderAction({
+        order: closed,
+        canWrite: true,
+        workspaceRole: "member",
+        grants: empty,
+        isOwnerByOwnerId: true,
+      }),
+    ).toBe(true);
+    expect(
+      canOfferDeleteClosedOrderAction({
+        order: closedCancelled,
+        workspaceRole: "member",
+        grants: empty,
+        isOwnerByOwnerId: true,
+      }),
+    ).toBe(true);
+    expect(
+      canOfferCancelOrderAction({
+        order: closed,
+        canWrite: true,
+        workspaceRole: "member",
+        grants: empty,
+        isOwnerByOwnerId: false,
+      }),
+    ).toBe(false);
+  });
 });

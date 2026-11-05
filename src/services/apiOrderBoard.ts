@@ -2,7 +2,7 @@ import i18n from "../i18n";
 import type { OrderStatus } from "../lib/types";
 import { recordActivity } from "./apiActivityLog";
 import { recordStatusChangeEvents } from "./apiOrderEvents";
-import { setOrderLifecycleRegularCustomStatus, updateOrderStatus } from "./apiOrders";
+import { updateOrderStatus } from "./apiOrders";
 import { assertCustomStatusTransition, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
 import supabase from "./supabase";
 
@@ -67,39 +67,18 @@ export async function moveOrderOnBoard(
     }
   }
 
-  // Owner annotation on closed/cancelled: custom_status_id only (status + closed_at preserved).
+  // Closed/cancelled are lifecycle-only — ordinary board moves must not reopen or re-annotate them.
   if (status === "closed" || status === "cancelled") {
-    if (!customStatusId) {
-      throw new Error(i18n.t("orders.lifecycle.errors.useCloseAction"));
-    }
-    const fromCustomStatusId = await getCurrentCustomStatusId(orderId, resolved);
-    const result = await setOrderLifecycleRegularCustomStatus(orderId, customStatusId, resolved);
-    if (fromCustomStatusId !== result.customStatusId) {
-      await recordActivity({
-        workspaceId: resolved,
-        entityType: "order",
-        entityId: orderId,
-        event: "order.status_changed",
-        details: {
-          source: "lifecycle_regular_custom",
-          from: result.status,
-          to: result.status,
-          fromCustomStatusId,
-          toCustomStatusId: result.customStatusId,
-          closedAt: result.closedAt,
-        },
-      });
-    }
-    return {
-      status: result.status,
-      customStatusId: result.customStatusId,
-      customStatus: result.customStatus,
-    };
+    throw new Error(
+      status === "cancelled"
+        ? i18n.t("orders.lifecycle.errors.useCancelAction")
+        : i18n.t("orders.lifecycle.errors.useCloseAction"),
+    );
   }
 
   const fromCustomStatusId = await getCurrentCustomStatusId(orderId, resolved);
 
-  // Open-order path must not run against a formally closed row.
+  // Open-order path must not run against a formally closed or cancelled row.
   const { data: existing, error: existingError } = await supabase
     .from("orders")
     .select("status, closed_at")
@@ -108,8 +87,13 @@ export async function moveOrderOnBoard(
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (!existing) throw new Error(i18n.t("orders.board.errors.moveFailed"));
-  if ((existing as { closed_at?: unknown }).closed_at) {
+  const existingStatus =
+    typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
+  if ((existing as { closed_at?: unknown }).closed_at || existingStatus === "closed") {
     throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
+  if (existingStatus === "cancelled") {
+    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
   }
 
   if (fromCustomStatusId) {

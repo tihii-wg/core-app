@@ -157,37 +157,39 @@ describe("owner regular status on lifecycle orders", () => {
     });
   });
 
-  it("moveOrderOnBoard routes closed/cancelled selections through the owner lifecycle RPC", async () => {
-    rpc.mockResolvedValue({
-      data: {
-        ok: true,
-        status: "cancelled",
-        closed_at: null,
-        custom_status_id: "d-progress",
-      },
-      error: null,
-    });
-    from.mockImplementation((table: string) => {
-      if (table === "orders") {
-        return thenable({ data: { custom_status_id: "d-old" }, error: null });
-      }
-      return thenable({ data: null, error: null });
-    });
+  it("moveOrderOnBoard rejects closed/cancelled target statuses", async () => {
+    await expect(
+      moveOrderOnBoard(
+        {
+          orderId: "order-1",
+          status: "cancelled",
+          customStatusId: "d-progress",
+          currentStatus: "cancelled",
+        },
+        "ws-1",
+      ),
+    ).rejects.toThrow(/cancel/i);
+    await expect(
+      moveOrderOnBoard(
+        {
+          orderId: "order-1",
+          status: "closed",
+          customStatusId: "d-progress",
+          currentStatus: "closed",
+        },
+        "ws-1",
+      ),
+    ).rejects.toThrow(/close/i);
+    expect(rpc).not.toHaveBeenCalled();
+  });
 
-    const result = await moveOrderOnBoard(
-      {
-        orderId: "order-1",
-        status: "cancelled",
-        customStatusId: "d-progress",
-        currentStatus: "cancelled",
-      },
-      "ws-1",
+  it("updateOrderStatus rejects reopen of cancelled orders", async () => {
+    from.mockImplementation(() =>
+      thenable({
+        data: { id: "order-1", status: "cancelled", closed_at: null, custom_status_id: null },
+        error: null,
+      }),
     );
-
-    expect(rpc).toHaveBeenCalledWith("set_order_lifecycle_regular_custom_status", expect.any(Object));
-    expect(result).toMatchObject({
-      status: "cancelled",
-      customStatusId: "d-progress",
-    });
+    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(/cancel/i);
   });
 });

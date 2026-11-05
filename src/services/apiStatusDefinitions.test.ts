@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assertCustomStatusTransition,
+  createStatusDefinition,
   getStatusTransitions,
   isCustomStatusTransitionAllowed,
+  isLifecycleOrderStatusDefinition,
   pickCustomStatusForSystemStatus,
+  updateStatusDefinition,
   type StatusDefinition,
 } from "./apiStatusDefinitions";
 
@@ -142,5 +145,84 @@ describe("pickCustomStatusForSystemStatus", () => {
       "completed",
     );
     expect(picked?.id).toBe("a");
+  });
+});
+
+describe("lifecycle status definition protection", () => {
+  beforeEach(() => {
+    from.mockReset();
+  });
+
+  function def(partial: Partial<StatusDefinition> & Pick<StatusDefinition, "id">): StatusDefinition {
+    return {
+      workspaceId: "ws-1",
+      entity: "order",
+      name: partial.name ?? partial.id,
+      color: partial.color ?? null,
+      statusGroup: "done",
+      systemStatus: null,
+      code: null,
+      semanticAction: "normal",
+      sortOrder: 0,
+      isDefault: false,
+      isActive: true,
+      showOverdueBadge: false,
+      addsToBackorders: false,
+      ...partial,
+    };
+  }
+
+  it("treats close/cancel semantic and closed/cancelled system codes as lifecycle", () => {
+    expect(isLifecycleOrderStatusDefinition(def({ id: "1", semanticAction: "close" }))).toBe(true);
+    expect(isLifecycleOrderStatusDefinition(def({ id: "2", semanticAction: "cancel" }))).toBe(true);
+    expect(isLifecycleOrderStatusDefinition(def({ id: "3", systemStatus: "closed" }))).toBe(true);
+    expect(isLifecycleOrderStatusDefinition(def({ id: "4", systemStatus: "cancelled" }))).toBe(true);
+    expect(isLifecycleOrderStatusDefinition(def({ id: "5", systemStatus: "new", semanticAction: "normal" }))).toBe(false);
+  });
+
+  it("createStatusDefinition rejects closed/cancelled system_status", async () => {
+    await expect(
+      createStatusDefinition({ name: "Done", statusGroup: "done", systemStatus: "closed", entity: "order" }, "ws-1"),
+    ).rejects.toThrow(/reserved|lifecycle|Closed|Cancelled/i);
+    await expect(
+      createStatusDefinition(
+        { name: "Dropped", statusGroup: "canceled", systemStatus: "cancelled", entity: "order" },
+        "ws-1",
+      ),
+    ).rejects.toThrow(/reserved|lifecycle|Closed|Cancelled/i);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("updateStatusDefinition rejects reserved lifecycle rows", async () => {
+    from.mockImplementation(() => {
+      const chain: Record<string, unknown> = {};
+      chain.select = () => chain;
+      chain.eq = () => chain;
+      chain.is = () => chain;
+      chain.maybeSingle = () =>
+        Promise.resolve({
+          data: {
+            id: "d-closed",
+            workspace_id: "ws-1",
+            entity: "order",
+            name: "Closed",
+            color: null,
+            status_group: "done",
+            system_status: "closed",
+            code: "closed",
+            semantic_action: "close",
+            sort_order: 0,
+            is_default: false,
+            is_active: true,
+            show_overdue_badge: false,
+            adds_to_backorders: false,
+          },
+          error: null,
+        });
+      return chain;
+    });
+    await expect(updateStatusDefinition({ id: "d-closed", name: "Renamed" }, "ws-1")).rejects.toThrow(
+      /reserved|lifecycle|rename|recolor|cannot/i,
+    );
   });
 });
