@@ -8,9 +8,26 @@ import { Textarea } from "../../ui/Textarea";
 import { ORDER_COMMENT_MAX_LENGTH } from "../../services/apiOrderComments";
 import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
-import { describeOrderEvent, type OrderEventDescription } from "./orderFeed";
+import {
+  describeOrderEvent,
+  orderEventCategory,
+  type OrderEventCategory,
+  type OrderEventDescription,
+} from "./orderFeed";
 import { useCreateOrderComment, useDeleteOrderComment, useGetOrderComments, useGetOrderEvents } from "./useOrderFeed";
 import type { OrderStatus } from "../../lib/types";
+
+const categoryDotClass: Record<OrderEventCategory, string> = {
+  lifecycle: "bg-foreground/70",
+  status: "bg-primary/70",
+  payment: "bg-emerald-600",
+  refund: "bg-amber-600",
+  service: "bg-sky-600",
+  inventory: "bg-violet-600",
+  field: "bg-slate-500",
+  warranty: "bg-teal-600",
+  other: "bg-muted-foreground/60",
+};
 
 type OrderFeedSectionProps = {
   orderId: string;
@@ -137,9 +154,13 @@ export default function OrderFeedSection({ orderId, enabled, canComment }: Order
           <ol className="space-y-3 border-l border-border pl-4">
             {events.events.map((event) => {
               const description = describeOrderEvent(event, statusLabel);
+              const category = orderEventCategory(event);
               return (
-                <li key={event.id} className="relative min-w-0">
-                  <span aria-hidden="true" className="absolute top-1.5 -left-[1.3125rem] size-2 rounded-full bg-primary/70" />
+                <li key={event.id} className="relative min-w-0" data-event-category={category} data-event-type={event.eventType}>
+                  <span
+                    aria-hidden="true"
+                    className={`absolute top-1.5 -left-[1.3125rem] size-2 rounded-full ${categoryDotClass[category]}`}
+                  />
                   <p className="text-sm [overflow-wrap:anywhere] text-foreground">{eventText(t, description)}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {event.actorName ?? t("orders.feed.unknownAuthor")}

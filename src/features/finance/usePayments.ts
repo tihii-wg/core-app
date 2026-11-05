@@ -47,6 +47,8 @@ export function invalidatePaymentViews(queryClient: ReturnType<typeof useQueryCl
   void queryClient.invalidateQueries({ queryKey: ["expenses", workspaceId] });
   // A payment with `account_id` moves the cash account balance (ledger rows live in finance_transactions).
   void queryClient.invalidateQueries({ queryKey: ["finance-accounts", workspaceId] });
+  // Payment ledger INSERT is mirrored into order_events by the DB trigger — refresh the timeline.
+  void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
   // Dashboard financials re-read orders/invoices/payments via the keys above.
   // Reports use the same workspace-scoped orders + payments queries.
 }

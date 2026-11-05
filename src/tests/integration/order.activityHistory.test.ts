@@ -37,6 +37,8 @@ describe("order activity history", () => {
       WS.A,
     );
 
+    expect(eventsFor(String(created.id)).filter((event) => event.event_type === "order_created")).toHaveLength(1);
+
     const added = eventsFor(String(created.id)).filter((event) => event.event_type === "service_added");
     expect(added).toHaveLength(2);
 
@@ -253,6 +255,64 @@ describe("order activity history", () => {
     // Idempotent re-submit must not append another history row.
     await updateOrderStatus("order-a1", "in-progress", WS.A);
     expect(eventsFor("order-a1").filter((event) => event.event_type === "status_changed")).toHaveLength(afterFirst.length);
+  });
+
+  it("records one payment_recorded event per ledger insert with settlement details", async () => {
+    fake.signInAs(USERS.member.id);
+    Object.assign(row("orders", "order-a1")!, { total_price: 100, status: "in-progress" });
+
+    const before = eventsFor("order-a1").filter((event) => event.event_type === "payment_recorded").length;
+
+    const first = await fake.client
+      .from("payments")
+      .insert({
+        id: "pay-partial-1",
+        workspace_id: WS.A,
+        order_id: "order-a1",
+        kind: "payment",
+        amount: 40,
+        currency_code: "EUR",
+        payment_method: "cash",
+        paid_at: "2026-11-05T12:00:00.000Z",
+      })
+      .select()
+      .single();
+    expect(first.error).toBeNull();
+
+    const paymentEvents = eventsFor("order-a1").filter((event) => event.event_type === "payment_recorded");
+    expect(paymentEvents.length - before).toBe(1);
+    expect(paymentEvents[paymentEvents.length - 1]?.payload).toMatchObject({
+      payment_id: "pay-partial-1",
+      amount: 40,
+      settlement: "partial",
+      remaining_after: 60,
+      currency_code: "EUR",
+      payment_method: "cash",
+    });
+
+    const second = await fake.client
+      .from("payments")
+      .insert({
+        id: "pay-balance-1",
+        workspace_id: WS.A,
+        order_id: "order-a1",
+        kind: "payment",
+        amount: 60,
+        currency_code: "EUR",
+        payment_method: "card",
+        paid_at: "2026-11-05T13:00:00.000Z",
+      })
+      .select()
+      .single();
+    expect(second.error).toBeNull();
+
+    const afterBalance = eventsFor("order-a1").filter((event) => event.event_type === "payment_recorded");
+    expect(afterBalance).toHaveLength(paymentEvents.length + 1);
+    expect(afterBalance[afterBalance.length - 1]?.payload).toMatchObject({
+      payment_id: "pay-balance-1",
+      settlement: "balance",
+      remaining_after: 0,
+    });
   });
 
   it("rejects direct cancel writes and still records ordinary status changes", async () => {

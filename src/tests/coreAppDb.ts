@@ -863,6 +863,10 @@ export function installSecurityModel() {
       select: (row, ctx) => isMember(ctx.fake.all("invoices").find((invoice) => invoice.id === row.invoice_id)?.workspace_id, ctx),
       insert: (row, ctx) => isMember(ctx.fake.all("invoices").find((invoice) => invoice.id === row.invoice_id)?.workspace_id, ctx),
     },
+    payments: {
+      select: (row, ctx) => isMember(row.workspace_id, ctx),
+      insert: (row, ctx) => isMember(row.workspace_id, ctx),
+    },
   };
 
   fake.grants = {
@@ -923,6 +927,21 @@ export function installSecurityModel() {
         ctx.fake.tables.order_materials = ctx.fake.all("order_materials").filter((row) => row.order_id !== oldRow.id);
         ctx.fake.tables.order_services = ctx.fake.all("order_services").filter((row) => row.order_id !== oldRow.id);
       }
+      if (op === "INSERT" && newRow) {
+        pushOrderEvent(ctx, {
+          workspaceId: newRow.workspace_id,
+          orderId: newRow.id,
+          eventType: "order_created",
+          fieldName: "orders",
+          newValue: newRow.number == null ? String(newRow.id) : String(newRow.number),
+          payload: {
+            order_number: newRow.number,
+            status: newRow.status,
+            client_id: newRow.client_id,
+            total_price: newRow.total_price,
+          },
+        });
+      }
       // Mirrors crm_orders_status_event@v2: one status_changed per UPDATE.
       // When status changes, skip a separate custom_status_id row (avoids duplicate feed lines).
       if (op === "UPDATE" && oldRow && newRow) {
@@ -956,7 +975,95 @@ export function installSecurityModel() {
             payload: {},
           });
         }
+
+        const fieldKeys = [
+          "client_id",
+          "vehicle_id",
+          "employee_id",
+          "device",
+          "description",
+          "vin",
+          "car_number",
+          "malfunction",
+          "manager_notes",
+          "technician_notes",
+          "conclusion",
+          "vehicle_mileage_snapshot",
+        ] as const;
+        const changes: Record<string, { from: unknown; to: unknown }> = {};
+        for (const key of fieldKeys) {
+          if (oldRow[key] !== newRow[key]) {
+            changes[key] = { from: oldRow[key] ?? null, to: newRow[key] ?? null };
+          }
+        }
+        if (Object.keys(changes).length > 0) {
+          pushOrderEvent(ctx, {
+            workspaceId: newRow.workspace_id,
+            orderId: newRow.id,
+            eventType: "order_field_changed",
+            fieldName: "orders",
+            payload: { changes },
+          });
+        }
       }
+      return null;
+    },
+    payments: (op, _oldRow, newRow, ctx) => {
+      if (op !== "INSERT" || !newRow || !newRow.order_id) return null;
+      const orderId = String(newRow.order_id);
+      const workspaceId = newRow.workspace_id;
+      const already = ctx.fake
+        .all("order_events")
+        .some(
+          (event) =>
+            event.order_id === orderId &&
+            ["payment_recorded", "payment_refunded", "payment_voided"].includes(String(event.event_type)) &&
+            (event.payload as { payment_id?: string } | null)?.payment_id === newRow.id,
+        );
+      if (already) return null;
+
+      const order = ctx.fake.all("orders").find((row) => row.id === orderId);
+      const total = Number(order?.total_price ?? 0);
+      // INSERT trigger runs before the row is appended — include newRow explicitly.
+      const existing = ctx.fake.all("payments").filter((row) => row.order_id === orderId && row.id !== newRow.id);
+      const ledger = [...existing, newRow];
+      const signed = (row: Row) => {
+        const amount = Number(row.amount ?? 0);
+        return row.kind === "refund" || row.kind === "void" ? -amount : amount;
+      };
+      const net = ledger.reduce((sum, row) => sum + signed(row), 0);
+      const priorNet = existing.reduce((sum, row) => sum + signed(row), 0);
+      const remaining = Math.max(0, Math.round((total - net) * 100) / 100);
+      const kind = String(newRow.kind ?? "payment");
+      let eventType = "payment_recorded";
+      let settlement = "partial";
+      if (kind === "refund") {
+        eventType = "payment_refunded";
+        settlement = "refund";
+      } else if (kind === "void") {
+        eventType = "payment_voided";
+        settlement = "void";
+      } else if (remaining <= 0.005) {
+        settlement = priorNet > 0.005 ? "balance" : "full";
+      }
+      pushOrderEvent(ctx, {
+        workspaceId,
+        orderId,
+        eventType,
+        fieldName: "payments",
+        newValue: String(newRow.amount ?? ""),
+        payload: {
+          payment_id: newRow.id,
+          kind,
+          amount: Number(newRow.amount ?? 0),
+          currency_code: newRow.currency_code,
+          payment_method: newRow.payment_method,
+          settlement,
+          remaining_after: remaining,
+          net_paid_after: Math.round(net * 100) / 100,
+          order_total: total,
+        },
+      });
       return null;
     },
     order_services: (op, oldRow, newRow, ctx) => {

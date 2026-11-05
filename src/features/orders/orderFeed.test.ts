@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { OrderEvent } from "../../services/apiOrderEvents";
-import { buildMaterialLineEventPayload, buildServiceLineEventPayload, describeOrderEvent } from "./orderFeed";
+import {
+  buildMaterialLineEventPayload,
+  buildPaymentTimelinePayload,
+  buildServiceLineEventPayload,
+  classifyPaymentSettlement,
+  describeOrderEvent,
+  orderEventCategory,
+} from "./orderFeed";
 
 const event = (partial: Partial<OrderEvent>): OrderEvent => ({
   id: "e",
@@ -146,5 +153,123 @@ describe("describeOrderEvent", () => {
       key: "generic",
       params: { type: "field_changed", field: "deadline", from: "a", to: "b" },
     });
+  });
+
+  it("classifies payment settlements for partial, full, and balance payments", () => {
+    expect(classifyPaymentSettlement({ kind: "payment", remainingAfter: 40, priorNetPaid: 0 })).toBe("partial");
+    expect(classifyPaymentSettlement({ kind: "payment", remainingAfter: 0, priorNetPaid: 0 })).toBe("full");
+    expect(classifyPaymentSettlement({ kind: "payment", remainingAfter: 0, priorNetPaid: 40 })).toBe("balance");
+    expect(classifyPaymentSettlement({ kind: "refund", remainingAfter: 40, priorNetPaid: 60 })).toBe("refund");
+  });
+
+  it("describes partial, full, balance, refund, and void payment events distinctly", () => {
+    expect(
+      describeOrderEvent(
+        event({
+          eventType: "payment_recorded",
+          payload: buildPaymentTimelinePayload({
+            paymentId: "p1",
+            kind: "payment",
+            amount: 40,
+            currencyCode: "EUR",
+            paymentMethod: "cash",
+            settlement: "partial",
+            remainingAfter: 60,
+            netPaidAfter: 40,
+            orderTotal: 100,
+          }),
+        }),
+        label,
+      ),
+    ).toMatchObject({
+      key: "paymentPartial",
+      params: { amount: "40", currency: "EUR", method: "cash", remaining: "60" },
+    });
+
+    expect(
+      describeOrderEvent(
+        event({
+          eventType: "payment_recorded",
+          payload: buildPaymentTimelinePayload({
+            paymentId: "p2",
+            kind: "payment",
+            amount: 100,
+            currencyCode: "EUR",
+            paymentMethod: "card",
+            settlement: "full",
+            remainingAfter: 0,
+            netPaidAfter: 100,
+            orderTotal: 100,
+          }),
+        }),
+        label,
+      ).key,
+    ).toBe("paymentFull");
+
+    expect(
+      describeOrderEvent(
+        event({
+          eventType: "payment_recorded",
+          payload: buildPaymentTimelinePayload({
+            paymentId: "p3",
+            kind: "payment",
+            amount: 60,
+            currencyCode: "EUR",
+            paymentMethod: "bank-transfer",
+            settlement: "balance",
+            remainingAfter: 0,
+            netPaidAfter: 100,
+            orderTotal: 100,
+          }),
+        }),
+        label,
+      ).key,
+    ).toBe("paymentBalance");
+
+    expect(
+      describeOrderEvent(
+        event({
+          eventType: "payment_refunded",
+          payload: buildPaymentTimelinePayload({
+            paymentId: "r1",
+            kind: "refund",
+            amount: 20,
+            currencyCode: "EUR",
+            paymentMethod: "cash",
+            settlement: "refund",
+            remainingAfter: 20,
+            netPaidAfter: 80,
+            orderTotal: 100,
+            relatedPaymentId: "p2",
+          }),
+        }),
+        label,
+      ).key,
+    ).toBe("paymentRefund");
+
+    expect(orderEventCategory(event({ eventType: "payment_recorded" }))).toBe("payment");
+    expect(orderEventCategory(event({ eventType: "payment_refunded" }))).toBe("refund");
+    expect(orderEventCategory(event({ eventType: "warranty_activated" }))).toBe("warranty");
+    expect(orderEventCategory(event({ eventType: "order_created" }))).toBe("lifecycle");
+  });
+
+  it("describes order creation, field edits, and warranty events", () => {
+    expect(
+      describeOrderEvent(event({ eventType: "order_created", payload: { order_number: "ORD-1" }, newValue: "ORD-1" }), label),
+    ).toEqual({ key: "orderCreated", params: { number: "ORD-1" } });
+
+    expect(
+      describeOrderEvent(
+        event({
+          eventType: "order_field_changed",
+          payload: { changes: { vin: { from: "A", to: "B" }, device: { from: "X", to: "Y" } } },
+        }),
+        label,
+      ).params.fields,
+    ).toContain("VIN");
+
+    expect(
+      describeOrderEvent(event({ eventType: "warranty_activated", payload: { item_name: "Battery" } }), label),
+    ).toEqual({ key: "warrantyActivated", params: { item: "Battery" } });
   });
 });

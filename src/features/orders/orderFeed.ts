@@ -6,6 +6,8 @@ export type OrderEventDescriptionKey =
   | "orderClosed"
   | "orderCancelled"
   | "orderReopened"
+  | "orderCreated"
+  | "orderFieldChanged"
   | "serviceAdded"
   | "workAdded"
   | "serviceRemoved"
@@ -17,13 +19,35 @@ export type OrderEventDescriptionKey =
   | "materialUpdated"
   | "materialIssued"
   | "materialReturned"
+  | "paymentPartial"
+  | "paymentFull"
+  | "paymentBalance"
+  | "paymentRefund"
+  | "paymentVoid"
+  | "warrantyActivated"
+  | "warrantyUpdated"
+  | "warrantyClaimCreated"
+  | "warrantyClaimUpdated"
   | "generic";
+
+export type OrderEventCategory =
+  | "lifecycle"
+  | "status"
+  | "payment"
+  | "refund"
+  | "service"
+  | "inventory"
+  | "field"
+  | "warranty"
+  | "other";
 
 export type OrderEventDescription = {
   /** i18n key under `orders.feed.events`. */
   key: OrderEventDescriptionKey;
   params: Record<string, string>;
 };
+
+export type PaymentSettlement = "partial" | "full" | "balance" | "refund" | "void";
 
 const EMPTY = "—";
 
@@ -87,6 +111,89 @@ function updatedLineParams(event: OrderEvent) {
   };
 }
 
+function methodLabel(method: string | null) {
+  if (!method) return EMPTY;
+  return method.replace(/_/g, "-");
+}
+
+function fieldChangeSummary(event: OrderEvent): string {
+  const changes = event.payload.changes;
+  if (!changes || typeof changes !== "object" || Array.isArray(changes)) return EMPTY;
+  const keys = Object.keys(changes as Record<string, unknown>);
+  if (keys.length === 0) return EMPTY;
+  const labels: Record<string, string> = {
+    client_id: "client",
+    vehicle_id: "vehicle",
+    employee_id: "technician",
+    manager_id: "manager",
+    device: "device",
+    description: "description",
+    vin: "VIN",
+    car_number: "plate",
+    malfunction: "complaint",
+    manager_notes: "manager notes",
+    technician_notes: "technician notes",
+    conclusion: "conclusion",
+    vehicle_mileage_snapshot: "mileage",
+  };
+  return keys.map((key) => labels[key] ?? key).join(", ");
+}
+
+/**
+ * Pure settlement classifier used by tests and UI. Mirrors the SQL trigger rules:
+ * - refund / void kinds stay distinct
+ * - remaining ≈ 0 and prior net > 0 → balance
+ * - remaining ≈ 0 and no prior net → full
+ * - otherwise partial
+ */
+export function classifyPaymentSettlement(input: {
+  kind: string;
+  remainingAfter: number;
+  priorNetPaid: number;
+}): PaymentSettlement {
+  if (input.kind === "refund") return "refund";
+  if (input.kind === "void") return "void";
+  if (input.remainingAfter <= 0.005) {
+    return input.priorNetPaid > 0.005 ? "balance" : "full";
+  }
+  return "partial";
+}
+
+/** Pure payload builder for payment timeline events (mirrors DB trigger shape). */
+export function buildPaymentTimelinePayload(input: {
+  paymentId: string;
+  kind: "payment" | "refund" | "void";
+  amount: number;
+  currencyCode: string;
+  paymentMethod: string;
+  settlement: PaymentSettlement;
+  remainingAfter: number;
+  netPaidAfter: number;
+  orderTotal: number;
+  relatedPaymentId?: string | null;
+  invoiceId?: string | null;
+  note?: string | null;
+  paidAt?: string | null;
+}) {
+  return {
+    source: "trigger",
+    payment_id: input.paymentId,
+    kind: input.kind,
+    amount: input.amount,
+    signed_amount: input.kind === "payment" ? input.amount : -input.amount,
+    currency_code: input.currencyCode,
+    payment_method: input.paymentMethod,
+    settlement: input.settlement,
+    remaining_after: input.remainingAfter,
+    net_paid_after: input.netPaidAfter,
+    order_total: input.orderTotal,
+    ...(input.relatedPaymentId ? { related_payment_id: input.relatedPaymentId } : {}),
+    ...(input.invoiceId ? { invoice_id: input.invoiceId } : {}),
+    ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    ...(input.paidAt ? { paid_at: input.paidAt } : {}),
+  };
+}
+
 /**
  * Turns a raw `order_events` row into an i18n key + params. Pure.
  * Snapshots in the payload (item_name, quantity, price, changes) win over live catalog data.
@@ -107,7 +214,31 @@ function statusChangedNames(event: OrderEvent, statusLabel: (value: string) => s
   };
 }
 
+function paymentParams(event: OrderEvent) {
+  const amount = payloadNumber(event, "amount");
+  const remaining = payloadNumber(event, "remaining_after");
+  const currency = payloadText(event, "currency_code") ?? "";
+  const method = methodLabel(payloadText(event, "payment_method"));
+  return {
+    amount: formatAmount(amount),
+    currency,
+    method,
+    remaining: formatAmount(remaining),
+  };
+}
+
 export function describeOrderEvent(event: OrderEvent, statusLabel: (value: string) => string): OrderEventDescription {
+  if (event.eventType === "order_created") {
+    return {
+      key: "orderCreated",
+      params: { number: payloadText(event, "order_number") ?? event.newValue ?? EMPTY },
+    };
+  }
+
+  if (event.eventType === "order_field_changed") {
+    return { key: "orderFieldChanged", params: { fields: fieldChangeSummary(event) } };
+  }
+
   if (event.eventType === "status_changed") {
     const lifecycle = payloadText(event, "lifecycle");
     const names = statusChangedNames(event, statusLabel);
@@ -152,6 +283,43 @@ export function describeOrderEvent(event: OrderEvent, statusLabel: (value: strin
     return { key: "materialReturned", params: lineSnapshotParams(event) };
   }
 
+  if (event.eventType === "payment_recorded") {
+    const settlement = payloadText(event, "settlement") ?? "partial";
+    const params = paymentParams(event);
+    if (settlement === "full") return { key: "paymentFull", params };
+    if (settlement === "balance") return { key: "paymentBalance", params };
+    return { key: "paymentPartial", params };
+  }
+  if (event.eventType === "payment_refunded") {
+    return { key: "paymentRefund", params: paymentParams(event) };
+  }
+  if (event.eventType === "payment_voided") {
+    return { key: "paymentVoid", params: paymentParams(event) };
+  }
+
+  if (event.eventType === "warranty_activated") {
+    return { key: "warrantyActivated", params: { item: itemName(event) } };
+  }
+  if (event.eventType === "warranty_updated") {
+    return { key: "warrantyUpdated", params: { item: itemName(event) } };
+  }
+  if (event.eventType === "warranty_claim_created") {
+    return {
+      key: "warrantyClaimCreated",
+      params: { status: payloadText(event, "validity_status") ?? event.newValue ?? EMPTY },
+    };
+  }
+  if (event.eventType === "warranty_claim_updated") {
+    const status = changePair(event, "validity_status");
+    return {
+      key: "warrantyClaimUpdated",
+      params: {
+        from: status?.from ?? event.oldValue ?? EMPTY,
+        to: status?.to ?? event.newValue ?? payloadText(event, "validity_status") ?? EMPTY,
+      },
+    };
+  }
+
   return {
     key: "generic",
     params: {
@@ -161,6 +329,43 @@ export function describeOrderEvent(event: OrderEvent, statusLabel: (value: strin
       to: event.newValue ?? EMPTY,
     },
   };
+}
+
+/** Visual category for timeline markers. */
+export function orderEventCategory(event: OrderEvent): OrderEventCategory {
+  switch (event.eventType) {
+    case "order_created":
+    case "order_field_changed":
+      return event.eventType === "order_created" ? "lifecycle" : "field";
+    case "status_changed": {
+      const lifecycle = payloadText(event, "lifecycle");
+      if (lifecycle === "close" || lifecycle === "cancel" || lifecycle === "reopen") return "lifecycle";
+      if (event.newValue === "closed" || event.newValue === "cancelled") return "lifecycle";
+      return "status";
+    }
+    case "payment_recorded":
+      return "payment";
+    case "payment_refunded":
+    case "payment_voided":
+      return "refund";
+    case "service_added":
+    case "service_removed":
+    case "service_updated":
+      return "service";
+    case "material_added":
+    case "material_removed":
+    case "material_updated":
+    case "material_issued":
+    case "material_returned":
+      return "inventory";
+    case "warranty_activated":
+    case "warranty_updated":
+    case "warranty_claim_created":
+    case "warranty_claim_updated":
+      return "warranty";
+    default:
+      return "other";
+  }
 }
 
 /** Pure helper: builds the payload shape written by DB line triggers (for unit tests). */
