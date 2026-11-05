@@ -416,7 +416,7 @@ comment on function public.cancel_order(uuid, uuid) is
   'managed-object: core-app/cancel_order@v4 — open: owner_id or orders.edit; closed: owner_id or orders.cancel_closed; preserves closed_at and history; no finance/warranty/inventory deletes.';
 
 -- ---------------------------------------------------------------------------
--- 6) delete_order_with_payments @v6
+-- 6) delete_order_with_payments @v7 — auto-return outstanding materials on delete
 -- ---------------------------------------------------------------------------
 
 create or replace function public.delete_order_with_payments(
@@ -656,11 +656,10 @@ begin
     ) into v_outstanding;
   end if;
 
+  -- Outstanding issued stock is returned automatically for EVERY cancelled order
+  -- (including previously closed then cancelled). Cancellation itself never returns
+  -- stock; only this delete path does. Never raise issued_materials_on_closed_order.
   if v_outstanding then
-    if v_order.closed_at is not null then
-      raise exception 'order_delete:issued_materials_on_closed_order' using errcode = 'P0001';
-    end if;
-
     if to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)') is null then
       raise exception 'order_delete:return_rpc_missing — return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text) is required'
         using errcode = 'P0001';
@@ -901,7 +900,7 @@ revoke all on function public.delete_order_with_payments(uuid, uuid) from public
 grant execute on function public.delete_order_with_payments(uuid, uuid) to authenticated, service_role;
 
 comment on function public.delete_order_with_payments(uuid, uuid) is
-  'managed-object: core-app/delete_order_with_payments@v6 — always cancelled-first; non-closed: owner_id or orders.delete; closed: owner_id or orders.delete_closed; financial/warranty/inventory safeguards unchanged; activity_log audit before delete.';
+  'managed-object: core-app/delete_order_with_payments@v7 — cancelled-first; auto-returns outstanding issued materials via return_order_materials_to_warehouse (open or previously-closed); non-closed: owner_id or orders.delete; closed: owner_id or orders.delete_closed; financial/warranty safeguards unchanged; activity_log audit before delete.';
 
 -- Re-create lifecycle guard trigger (function replaced above).
 drop trigger if exists orders_lifecycle_guard_bu on public.orders;
@@ -962,6 +961,12 @@ begin
   end if;
   if v_def is null or v_def !~* 'crm_is_workspace_owner_id|crm_has_closed_order_permission' then
     v_problems := v_problems || 'delete_order missing owner/closed permission path; ';
+  end if;
+  if v_def ~* 'raise exception ''order_delete:issued_materials_on_closed_order''' then
+    v_problems := v_problems || 'delete_order still blocks closed orders with issued materials; ';
+  end if;
+  if v_def is null or v_def !~* 'return_order_materials_to_warehouse' then
+    v_problems := v_problems || 'delete_order missing auto inventory return; ';
   end if;
 
   select pg_get_functiondef('public.order_lifecycle_guard()'::regprocedure) into v_def;

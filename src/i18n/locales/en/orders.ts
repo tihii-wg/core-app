@@ -466,6 +466,8 @@ export default {
       "Deleting a cancelled order requires the reviewed database function delete_order_with_payments. Apply supabase/manual/{{file}} on MAIN after review. Nothing was deleted.",
     deleteIssuedRequiresCancelled:
       "Orders with outstanding issued warehouse materials can only be deleted after they are cancelled. Cancel the order first, then delete to return stock.",
+    deleteIssuedClosedAutoReturnRequired:
+      "This cancelled order still has issued materials, and the database still blocks closed-order auto-return. Apply supabase/manual/{{file}} on MAIN after review so deletion returns stock automatically. Nothing was deleted.",
     deleteReturnRpcMissing:
       "Deleting a cancelled order with issued materials requires delete_order_with_payments so stock can be returned atomically. Apply the safe cancelled-order delete SQL. Nothing was deleted.",
     deleteMaterialsReturnFailed:

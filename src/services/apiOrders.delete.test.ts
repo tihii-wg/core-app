@@ -83,7 +83,9 @@ describe("mapOrderDeleteDbError", () => {
   });
 
   it("maps stock return failures", () => {
-    expect(mapOrderDeleteDbError({ message: "order_delete:issued_materials_on_closed_order" }).message).toMatch(/cancel/i);
+    expect(mapOrderDeleteDbError({ message: "order_delete:issued_materials_on_closed_order" }).message).toMatch(
+      /auto-return|20261105090000_delete_cancelled_order_auto_return_materials/i,
+    );
     expect(mapOrderDeleteDbError({ message: "order_delete:materials_ledger_mismatch item=x" }).message).toMatch(
       /material|warehouse|return/i,
     );

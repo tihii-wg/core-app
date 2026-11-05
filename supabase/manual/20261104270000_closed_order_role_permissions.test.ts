@@ -64,6 +64,14 @@ describe("closed order role permissions SQL @v2", () => {
     expect(closedPermIdx).toBeGreaterThan(cancelledIdx);
   });
 
+  it("auto-returns outstanding materials for cancelled orders including previously closed", () => {
+    const del = sql.slice(sql.indexOf("create or replace function public.delete_order_with_payments"));
+    const body = del.slice(0, del.indexOf("$fn$;") + 5);
+    expect(body).toMatch(/return_order_materials_to_warehouse/);
+    expect(body).not.toMatch(/raise exception 'order_delete:issued_materials_on_closed_order'/);
+    expect(body).toMatch(/materials_outstanding_after_return/);
+  });
+
   it("writes activity_log audit before deleting the order", () => {
     const del = sql.slice(sql.indexOf("create or replace function public.delete_order_with_payments"));
     const auditIdx = del.indexOf("activity_log");

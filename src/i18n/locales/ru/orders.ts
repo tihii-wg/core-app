@@ -474,6 +474,8 @@ const orders: Messages<typeof en> = {
       "Удаление отменённого заказа требует delete_order_with_payments. Примените supabase/manual/{{file}} на MAIN. Ничего не удалено.",
     deleteIssuedRequiresCancelled:
       "Заказ с выданными со склада материалами можно удалить только после отмены. Сначала отмените заказ — при удалении остаток будет возвращён на склад.",
+    deleteIssuedClosedAutoReturnRequired:
+      "У этого отменённого заказа ещё есть выданные материалы, а база всё ещё блокирует автовозврат для закрытых заказов. Примените supabase/manual/{{file}} на MAIN после проверки. Ничего не удалено.",
     deleteReturnRpcMissing:
       "Для удаления отменённого заказа с выданными материалами нужна delete_order_with_payments, чтобы вернуть склад атомарно. Ничего не удалено.",
     deleteMaterialsReturnFailed:

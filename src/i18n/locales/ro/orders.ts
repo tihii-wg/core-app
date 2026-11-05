@@ -471,6 +471,8 @@ const orders: Messages<typeof en> = {
       "Ștergerea unei comenzi anulate necesită delete_order_with_payments. Aplicați supabase/manual/{{file}} pe MAIN. Nu s-a șters nimic.",
     deleteIssuedRequiresCancelled:
       "Comenzile cu materiale eliberate din depozit pot fi șterse doar după anulare. Anulați comanda, apoi ștergeți pentru a returna stocul.",
+    deleteIssuedClosedAutoReturnRequired:
+      "Această comandă anulată are încă materiale eliberate, iar baza de date încă blochează returnarea automată pentru comenzi închise. Aplicați supabase/manual/{{file}} pe MAIN după revizuire. Nu s-a șters nimic.",
     deleteReturnRpcMissing:
       "Ștergerea unei comenzi anulate cu materiale eliberate necesită delete_order_with_payments pentru returnarea atomică a stocului. Nu s-a șters nimic.",
     deleteMaterialsReturnFailed:

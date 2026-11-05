@@ -2267,6 +2267,10 @@ function isMissingRelationError(error: { code?: string } | null | undefined) {
 /** Manual SQL enabling cancelled-only delete + Storage cleanup queue. */
 export const SAFE_CANCELLED_ORDER_DELETE_SQL = "20261104240000_safe_cancelled_order_delete.PRODUCTION.sql";
 
+/** Manual SQL: delete cancelled orders auto-returns outstanding issued materials first. */
+export const DELETE_CANCELLED_AUTO_RETURN_SQL =
+  "20261105090000_delete_cancelled_order_auto_return_materials.PRODUCTION.sql";
+
 /** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
 export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {
   const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
@@ -2322,11 +2326,12 @@ export function mapOrderDeleteDbError(error: { code?: string; message?: string; 
   if (/order_delete:not_found/i.test(blob)) {
     return new Error(orderPermissionMessage());
   }
-  if (
-    /order_delete:issued_materials_require_cancelled_order|order_delete:issued_materials_on_closed_order/i.test(blob) ||
-    /Cannot delete an order with outstanding issued materials/i.test(blob)
-  ) {
+  if (/order_delete:issued_materials_require_cancelled_order/i.test(blob)) {
     return new Error(i18n.t("orders.errors.deleteIssuedRequiresCancelled"));
+  }
+  // Legacy MAIN blocker for closed+issued; fixed by DELETE_CANCELLED_AUTO_RETURN_SQL (@v7).
+  if (/order_delete:issued_materials_on_closed_order/i.test(blob) || /Cannot delete an order with outstanding issued materials/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.deleteIssuedClosedAutoReturnRequired", { file: DELETE_CANCELLED_AUTO_RETURN_SQL }));
   }
   if (/order_delete:return_rpc_missing|order_delete:inventory_ledger_missing/i.test(blob)) {
     return new Error(i18n.t("orders.errors.deleteReturnRpcMissing"));
