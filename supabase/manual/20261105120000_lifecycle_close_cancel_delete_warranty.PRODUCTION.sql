@@ -1,5 +1,5 @@
 -- =============================================================================
--- Core App — Lifecycle close + warranty-safe delete @v8 (MAIN)
+-- Core App — Lifecycle close + warranty-safe delete @v8.1 (MAIN)
 -- Script: 20261105120000_lifecycle_close_cancel_delete_warranty.PRODUCTION.sql
 -- Target: MAIN only (pundggjzzaqzbvykbxvo). Manual apply. Do not run against TEST.
 -- =============================================================================
@@ -11,21 +11,23 @@
 --    so UI badges could keep showing "In Progress" after a successful close
 --    while payment badges correctly showed Paid. Close must persist status=closed
 --    and clear/replace custom_status_id with the close semantic (or NULL).
+--    Idempotent re-close must also repair status/custom without rewriting closed_at.
 --
 -- 2) delete_order_with_payments @v7 never deleted exclusive warranty_records,
 --    so deleting a closed→cancelled order failed with:
 --      warranty_records_order_id_fkey
---    Exclusive snapshots (wr.order_id = this order) are safe to remove only when
---    no other order depends on them (warranty_source_order_id / claims).
+--    Exclusive snapshots (wr.workspace_id + wr.order_id = this order) are removed
+--    only after dependency checks; trg_orders_block_delete_with_warranty still
+--    blocks when external warranty_source_order_id / claims remain.
 --
 -- 3) Retain @v7 auto-return of outstanding materials during delete (including
---    previously closed then cancelled). Cancellation itself never changes stock.
+--    previously closed then cancelled). Cancellation itself never returns stock.
 --
 -- Does NOT:
 --   • cascade-delete warranties belonging to other orders
---   • refund payments or rewrite financial history during cancel
+--   • refund payments or rewrite financial history during cancel/close
 --   • weaken workspace isolation / closed-order permission grants
---   • drop or disable warranty_records_order_id_fkey
+--   • drop, disable, or alter warranty_records_order_id_fkey / delete trigger
 --
 -- Idempotent. Transactional. Fail-closed preflight.
 -- =============================================================================
@@ -35,16 +37,44 @@ begin;
 do $pre$
 declare
   v_problems text := '';
+  v_has_warranty_trigger boolean := false;
+  v_fk text;
+  v_col text;
 begin
   if to_regclass('public.orders') is null then
     v_problems := v_problems || 'orders missing; ';
+  else
+    foreach v_col in array array['id', 'workspace_id', 'status', 'custom_status_id', 'closed_at']
+    loop
+      if not exists (
+        select 1 from pg_catalog.pg_attribute a
+        where a.attrelid = 'public.orders'::regclass
+          and a.attname = v_col and a.attnum > 0 and not a.attisdropped
+      ) then
+        v_problems := v_problems || format('orders.%s missing; ', v_col);
+      end if;
+    end loop;
   end if;
+
   if to_regprocedure('public.delete_order_with_payments(uuid,uuid)') is null then
     v_problems := v_problems || 'delete_order_with_payments missing; ';
+  end if;
+  if to_regprocedure('public.close_order_if_settled(uuid,uuid)') is null then
+    v_problems := v_problems || 'close_order_if_settled missing; ';
   end if;
   if to_regprocedure('public.return_order_materials_to_warehouse(uuid,jsonb,uuid,text,text)') is null then
     v_problems := v_problems || 'return_order_materials_to_warehouse missing; ';
   end if;
+  if to_regprocedure('public.order_lifecycle_guard()') is null then
+    v_problems := v_problems || 'order_lifecycle_guard missing; ';
+  end if;
+  if to_regclass('public.order_lifecycle_tokens') is null then
+    v_problems := v_problems || 'order_lifecycle_tokens missing; ';
+  end if;
+  if to_regclass('public.status_definitions') is null then
+    v_problems := v_problems || 'status_definitions missing; ';
+  end if;
+
   if to_regclass('public.order_materials') is null then
     v_problems := v_problems || 'order_materials missing; ';
   else
@@ -85,12 +115,93 @@ begin
   ) then
     v_problems := v_problems || 'workspaces.owner_id missing; ';
   end if;
+
+  -- Warranty hardening trigger requires helper + tables + RESTRICT FKs.
+  select exists (
+    select 1
+    from pg_catalog.pg_trigger t
+    join pg_catalog.pg_class c on c.oid = t.tgrelid
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'orders'
+      and t.tgname = 'trg_orders_block_delete_with_warranty'
+      and not t.tgisinternal
+  ) into v_has_warranty_trigger;
+
+  if v_has_warranty_trigger then
+    if to_regprocedure('public.order_delete_blocked_by_warranty(uuid,uuid)') is null then
+      v_problems := v_problems || 'order_delete_blocked_by_warranty missing (required by trg_orders_block_delete_with_warranty); ';
+    end if;
+    if to_regprocedure('public.orders_block_delete_with_warranty()') is null then
+      v_problems := v_problems || 'orders_block_delete_with_warranty() missing; ';
+    end if;
+  end if;
+
+  if to_regclass('public.warranty_records') is not null then
+    foreach v_col in array array['id', 'workspace_id', 'order_id']
+    loop
+      if not exists (
+        select 1 from pg_catalog.pg_attribute a
+        where a.attrelid = 'public.warranty_records'::regclass
+          and a.attname = v_col and a.attnum > 0 and not a.attisdropped
+      ) then
+        v_problems := v_problems || format('warranty_records.%s missing; ', v_col);
+      end if;
+    end loop;
+
+    select pg_get_constraintdef(c.oid) into v_fk
+    from pg_catalog.pg_constraint c
+    where c.conrelid = 'public.warranty_records'::regclass
+      and c.contype = 'f'
+      and pg_get_constraintdef(c.oid) ilike '%order_id%references%orders%'
+    order by case when c.conname = 'warranty_records_order_id_fkey' then 0 else 1 end
+    limit 1;
+    if v_fk is null then
+      v_problems := v_problems || 'warranty_records.order_id FK missing; ';
+    elsif v_fk ~* 'on delete (cascade|set null|set default)' then
+      v_problems := v_problems || 'warranty_records.order_id FK must remain RESTRICT (found: ' || v_fk || '); ';
+    end if;
+  elsif v_has_warranty_trigger then
+    v_problems := v_problems || 'warranty_records missing but delete-warranty trigger is installed; ';
+  end if;
+
+  if to_regclass('public.warranty_order_claims') is not null then
+    foreach v_col in array array['id', 'workspace_id', 'warranty_order_id', 'warranty_record_id']
+    loop
+      if not exists (
+        select 1 from pg_catalog.pg_attribute a
+        where a.attrelid = 'public.warranty_order_claims'::regclass
+          and a.attname = v_col and a.attnum > 0 and not a.attisdropped
+      ) then
+        v_problems := v_problems || format('warranty_order_claims.%s missing; ', v_col);
+      end if;
+    end loop;
+  elsif v_has_warranty_trigger then
+    v_problems := v_problems || 'warranty_order_claims missing but delete-warranty trigger is installed; ';
+  end if;
+
+  if exists (
+    select 1 from pg_catalog.pg_attribute a
+    where a.attrelid = 'public.orders'::regclass
+      and a.attname = 'warranty_source_order_id' and a.attnum > 0 and not a.attisdropped
+  ) then
+    select pg_get_constraintdef(c.oid) into v_fk
+    from pg_catalog.pg_constraint c
+    where c.conrelid = 'public.orders'::regclass
+      and c.contype = 'f'
+      and pg_get_constraintdef(c.oid) ilike '%warranty_source_order_id%references%orders%'
+    order by case when c.conname = 'orders_warranty_source_order_id_fkey' then 0 else 1 end
+    limit 1;
+    if v_fk is not null and v_fk ~* 'on delete (cascade|set null|set default)' then
+      v_problems := v_problems || 'orders.warranty_source_order_id FK must remain RESTRICT; ';
+    end if;
+  end if;
+
   if v_problems <> '' then
-    raise exception 'delete_cancelled_auto_return preflight failed: %', v_problems;
+    raise exception 'lifecycle_close_cancel_delete_warranty preflight failed: %', v_problems;
   end if;
 end;
 $pre$;
-
 create or replace function public.crm_is_workspace_owner_id(
   p_workspace_id uuid
 )
@@ -631,8 +742,9 @@ begin
   end if;
 
   -- ---- Warranty dependencies (exclusive cleanup; never touch other orders) ----
-  -- warranty_records.order_id = original order that created the snapshot on close.
-  -- Block when claim orders still reference this order or its warranty rows.
+  -- Block first so trg_orders_block_delete_with_warranty will also pass after cleanup.
+  -- External deps: other orders.warranty_source_order_id OR claims from other orders
+  -- that reference THIS order's warranty_records. Those must remain blocked.
   if to_regprocedure('public.order_delete_blocked_by_warranty(uuid,uuid)') is not null then
     v_warranty_block := public.order_delete_blocked_by_warranty(p_workspace_id, p_order_id);
     if v_warranty_block is not null and length(btrim(v_warranty_block)) > 0 then
@@ -664,14 +776,17 @@ begin
     end if;
   end if;
 
-  -- Claim rows for THIS order as the warranty claim order (if any).
+  -- Claims owned by THIS order as the claim-order side (must precede snapshot delete
+  -- because warranty_order_claims.warranty_record_id is ON DELETE RESTRICT).
   if to_regclass('public.warranty_order_claims') is not null then
     delete from public.warranty_order_claims c
     where c.workspace_id = p_workspace_id
       and c.warranty_order_id = p_order_id;
   end if;
 
-  -- Exclusive warranty snapshots owned by this order (safe after dependency checks).
+  -- Exclusive snapshots created when THIS order closed (workspace_id + order_id scoped).
+  -- After this, trg_orders_block_delete_with_warranty sees no remaining exclusive rows
+  -- and still blocks if an external dependency was missed above.
   if to_regclass('public.warranty_records') is not null then
     delete from public.warranty_records wr
     where wr.workspace_id = p_workspace_id
@@ -724,7 +839,7 @@ revoke all on function public.delete_order_with_payments(uuid, uuid) from public
 grant execute on function public.delete_order_with_payments(uuid, uuid) to authenticated, service_role;
 
 comment on function public.delete_order_with_payments(uuid, uuid) is
-  'managed-object: core-app/delete_order_with_payments@v8 — cancelled-first; auto-return outstanding materials; remove exclusive warranty_records after dependency checks; owner_id / delete_closed for closed.';
+  'managed-object: core-app/delete_order_with_payments@v8.1 — cancelled-first; auto-return outstanding materials; remove exclusive warranty_records after dependency checks; owner_id / delete_closed for closed; preserves warranty RESTRICT FKs and delete trigger.';
 
 -- ---------------------------------------------------------------------------
 -- close_order_if_settled @v4 — persist status=closed; clear stale custom_status_id
@@ -804,6 +919,51 @@ begin
   end if;
 
   if v_order.closed_at is not null then
+    -- Closed-then-cancelled orders must not be forced back to status=closed.
+    if v_order.status = 'cancelled' then
+      raise exception 'order_lifecycle:cannot_close_cancelled' using errcode = 'P0001';
+    end if;
+
+    -- Repair lifecycle display fields without rewriting closed_at / payments.
+    select d.id into v_close_status_id
+    from public.status_definitions d
+    where d.workspace_id = p_workspace_id
+      and d.entity = 'order'
+      and d.deleted_at is null
+      and d.is_active
+      and d.semantic_action = 'close'
+    order by d.sort_order, d.name, d.id
+    limit 1;
+
+    if v_order.status is distinct from 'closed'
+       or v_order.custom_status_id is distinct from v_close_status_id then
+      insert into public.order_lifecycle_tokens (order_id, op, created_by)
+      values (p_order_id, 'close', v_uid)
+      on conflict (order_id, op) do update
+        set created_by = excluded.created_by, created_at = now();
+
+      update public.orders o
+         set status = 'closed',
+             custom_status_id = v_close_status_id
+       where o.id = p_order_id
+         and o.workspace_id = p_workspace_id
+         and o.closed_at is not distinct from v_order.closed_at
+         and (
+           o.status is distinct from 'closed'
+           or o.custom_status_id is distinct from v_close_status_id
+         );
+
+      delete from public.order_lifecycle_tokens
+      where order_id = p_order_id and op = 'close';
+
+      select o.custom_status_id into v_close_status_id
+      from public.orders o
+      where o.id = p_order_id and o.workspace_id = p_workspace_id;
+    else
+      v_close_status_id := v_order.custom_status_id;
+    end if;
+
+    -- Fill only missing warranty snapshots (idempotent; never duplicates).
     if to_regprocedure('public.activate_order_warranties(uuid,uuid,timestamptz)') is not null then
       v_warranty_count := public.activate_order_warranties(p_workspace_id, p_order_id, v_order.closed_at);
     end if;
@@ -814,7 +974,7 @@ begin
       'order_id', v_order.id,
       'status', 'closed',
       'closed_at', v_order.closed_at,
-      'custom_status_id', v_order.custom_status_id,
+      'custom_status_id', v_close_status_id,
       'remaining', round(v_remaining, 2),
       'currency', coalesce(v_currency, ''),
       'warranties_activated', v_warranty_count
@@ -943,12 +1103,13 @@ revoke all on function public.close_order_if_settled(uuid, uuid) from public, an
 grant execute on function public.close_order_if_settled(uuid, uuid) to authenticated, service_role;
 
 comment on function public.close_order_if_settled(uuid, uuid) is
-  'managed-object: core-app/close_order_if_settled@v4 — formal close when settled; status=closed; clears stale custom_status_id; activates warranties once; no payment/inventory changes; owner_id or orders.edit.';
+  'managed-object: core-app/close_order_if_settled@v4.1 — formal close when settled; status=closed; clears stale custom_status_id; idempotent repair preserves closed_at; activates missing warranties only; no payment/inventory changes; owner_id or orders.edit.';
 
 do $assert$
 declare
   v_problems text := '';
   v_def text;
+  v_fk text;
 begin
   select pg_get_functiondef('public.delete_order_with_payments(uuid,uuid)'::regprocedure) into v_def;
   if v_def is null then
@@ -957,20 +1118,35 @@ begin
     if v_def ~* 'raise exception ''order_delete:issued_materials_on_closed_order''' then
       v_problems := v_problems || 'still raises issued_materials_on_closed_order; ';
     end if;
-    if v_def !~* 'return_order_materials_to_warehouse' then
+    if position('return_order_materials_to_warehouse' in v_def) = 0 then
       v_problems := v_problems || 'missing return_order_materials_to_warehouse call; ';
     end if;
-    if v_def !~* 'not_cancelled' then
+    if position('order_delete:not_cancelled' in v_def) = 0 then
       v_problems := v_problems || 'missing cancelled-first check; ';
     end if;
-    if v_def !~* 'warranty_records' then
-      v_problems := v_problems || 'missing warranty_records cleanup; ';
+    if position('delete from public.warranty_records' in v_def) = 0 then
+      v_problems := v_problems || 'missing exclusive warranty_records delete; ';
     end if;
-    if v_def !~* 'order_delete_blocked_by_warranty|has_warranty_orders' then
+    if position('wr.workspace_id = p_workspace_id' in v_def) = 0
+       or position('wr.order_id = p_order_id' in v_def) = 0 then
+      v_problems := v_problems || 'warranty_records delete not scoped to workspace_id+order_id; ';
+    end if;
+    if position('delete from public.warranty_order_claims' in v_def) = 0 then
+      v_problems := v_problems || 'missing warranty_order_claims cleanup before snapshots; ';
+    end if;
+    if position('c.warranty_order_id = p_order_id' in v_def) = 0 then
+      v_problems := v_problems || 'claims cleanup not scoped to deleted order; ';
+    end if;
+    if position('order_delete_blocked_by_warranty' in v_def) = 0
+       and position('order_delete:has_warranty_orders' in v_def) = 0 then
       v_problems := v_problems || 'missing warranty dependency guard; ';
     end if;
-    if v_def !~* 'materials_outstanding_after_return' then
+    if position('materials_outstanding_after_return' in v_def) = 0 then
       v_problems := v_problems || 'missing post-return outstanding assertion; ';
+    end if;
+    if position('crm_has_closed_order_permission' in v_def) = 0
+       and position('orders.delete_closed' in v_def) = 0 then
+      v_problems := v_problems || 'missing closed-order delete permission path; ';
     end if;
   end if;
 
@@ -978,21 +1154,53 @@ begin
   if v_def is null then
     v_problems := v_problems || 'close_order_if_settled missing; ';
   else
-    if v_def ~* 'custom_status_id = coalesce' then
+    if position('custom_status_id = coalesce($1, o.custom_status_id)' in v_def) > 0 then
       v_problems := v_problems || 'close still coalesces stale custom_status_id; ';
     end if;
-    if v_def !~* '''closed''' then
-      v_problems := v_problems || 'close missing status=closed; ';
+    if position('status = ''closed''' in v_def) = 0 then
+      v_problems := v_problems || 'close missing status=closed assignment; ';
     end if;
-    if v_def !~* 'crm_is_workspace_owner_id' then
+    if position('crm_is_workspace_owner_id' in v_def) = 0 then
       v_problems := v_problems || 'close missing owner_id bypass; ';
     end if;
+    -- Idempotent repair must preserve closed_at (compare, never assign a new now()).
+    if position('o.closed_at is not distinct from v_order.closed_at' in v_def) = 0 then
+      v_problems := v_problems || 'idempotent close missing closed_at preservation guard; ';
+    end if;
+    if position('''status'', ''closed''' in v_def) = 0 then
+      v_problems := v_problems || 'close response missing status=closed payload; ';
+    end if;
+  end if;
+
+  -- Constraints must remain RESTRICT when present.
+  if to_regclass('public.warranty_records') is not null then
+    select pg_get_constraintdef(c.oid) into v_fk
+    from pg_catalog.pg_constraint c
+    where c.conrelid = 'public.warranty_records'::regclass
+      and c.contype = 'f'
+      and pg_get_constraintdef(c.oid) ilike '%order_id%references%orders%'
+    order by case when c.conname = 'warranty_records_order_id_fkey' then 0 else 1 end
+    limit 1;
+    if v_fk is not null and v_fk ~* 'on delete (cascade|set null|set default)' then
+      v_problems := v_problems || 'warranty_records.order_id FK was weakened; ';
+    end if;
+  end if;
+
+  if exists (
+    select 1
+    from pg_catalog.pg_trigger t
+    join pg_catalog.pg_class c on c.oid = t.tgrelid
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'orders'
+      and t.tgname = 'trg_orders_block_delete_with_warranty' and not t.tgisinternal
+  ) and to_regprocedure('public.order_delete_blocked_by_warranty(uuid,uuid)') is null then
+    v_problems := v_problems || 'delete-warranty trigger present without helper RPC; ';
   end if;
 
   if v_problems <> '' then
     raise exception 'lifecycle_close_cancel_delete_warranty post-apply failed: %', v_problems;
   end if;
-  raise notice 'lifecycle_close_cancel_delete_warranty @v8 OK';
+  raise notice 'lifecycle_close_cancel_delete_warranty @v8.1 OK';
 end;
 $assert$;
 
@@ -1000,8 +1208,13 @@ commit;
 
 -- Post-apply verification (read-only):
 -- select pg_get_functiondef('public.close_order_if_settled(uuid,uuid)'::regprocedure)
---   like '%custom_status_id = $1%' as clears_stale_custom;
+--   like '%o.closed_at is not distinct from v_order.closed_at%' as idempotent_preserves_closed_at;
+-- select pg_get_functiondef('public.close_order_if_settled(uuid,uuid)'::regprocedure)
+--   like '%custom_status_id = coalesce($1, o.custom_status_id)%' as stale_coalesce_gone; -- expect false
 -- select pg_get_functiondef('public.delete_order_with_payments(uuid,uuid)'::regprocedure)
---   like '%warranty_records%' as deletes_exclusive_warranties;
+--   like '%delete from public.warranty_records wr%' as deletes_exclusive_warranties;
 -- select conname, pg_get_constraintdef(oid) from pg_constraint
---  where conname = 'warranty_records_order_id_fkey'; -- still ON DELETE RESTRICT
+--  where conrelid = 'public.warranty_records'::regclass and contype = 'f'
+--    and pg_get_constraintdef(oid) ilike '%order_id%'; -- still RESTRICT / NO ACTION
+-- select tgname from pg_trigger t join pg_class c on c.oid = t.tgrelid
+--  where c.relname = 'orders' and tgname = 'trg_orders_block_delete_with_warranty';
