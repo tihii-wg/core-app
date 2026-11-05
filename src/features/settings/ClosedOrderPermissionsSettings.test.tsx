@@ -5,8 +5,8 @@ import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { ClosedOrderPermissionsSettings } from "./ClosedOrderPermissionsSettings";
 
 const grantsFixture = vi.hoisted(() => ({
-  cancelClosed: ["admin"] as ("admin" | "manager" | "member")[],
-  deleteClosed: ["manager"] as ("admin" | "manager" | "member")[],
+  cancelClosed: ["admin"] as const,
+  deleteClosed: ["manager"] as const,
 }));
 
 vi.mock("../orders/useClosedOrderPermissions", () => ({
