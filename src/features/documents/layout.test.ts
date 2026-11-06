@@ -188,6 +188,27 @@ describe("renderLayoutToHtml", () => {
     expect(html).not.toContain(">SKU<");
     expect(html).toContain("Oil change");
     expect(html).toContain("Hello");
+    expect(html).toContain("Дата");
+  });
+
+  it("localizes signature date caption from ctx.locale and allows dateLabel override", () => {
+    const base: DocumentLayout = {
+      version: 1,
+      page: { size: "A4", orientation: "portrait", marginsMm: 10, fontSizePt: 10 },
+      blocks: [{ id: "sig", kind: "signatures", enabled: true, labels: ["Исполнитель"] }],
+    };
+    expect(renderLayoutToHtml(base, emptyPrintContext({ locale: "en" }))).toContain(">Date<");
+    expect(renderLayoutToHtml(base, emptyPrintContext({ locale: "ro" }))).toContain(">Data<");
+    expect(renderLayoutToHtml(base, emptyPrintContext({ locale: "ru" }))).toContain(">Дата<");
+
+    const overridden: DocumentLayout = {
+      ...base,
+      blocks: [{ id: "sig", kind: "signatures", enabled: true, labels: ["X"], dateLabel: "Дата подписи <b>" }],
+    };
+    const html = renderLayoutToHtml(overridden, emptyPrintContext({ locale: "en" }));
+    expect(html).toContain("Дата подписи &lt;b&gt;");
+    expect(html).not.toContain(">Date<");
+    expect(isDocumentLayout(overridden)).toBe(true);
   });
 
   it("renders safely on empty context", () => {

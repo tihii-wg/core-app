@@ -591,6 +591,10 @@ const settings: Messages<typeof en> = {
     showTotalsRow: "Строка итогов",
     totalsRows: "Строки итогов",
     selectBlock: "Выберите блок, чтобы настроить его.",
+    builder: {
+      signatureDate: "Дата",
+      dateCaption: "Подпись даты",
+    },
     documentTypes: {
       work_order: "Заказ-наряд",
       act: "Акт выполненных работ",

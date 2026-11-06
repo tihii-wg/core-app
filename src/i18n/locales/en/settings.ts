@@ -586,6 +586,10 @@ export default {
     showTotalsRow: "Show totals row",
     totalsRows: "Totals rows",
     selectBlock: "Select a block to edit its settings.",
+    builder: {
+      signatureDate: "Date",
+      dateCaption: "Date caption",
+    },
     documentTypes: {
       work_order: "Work order",
       act: "Act of completed works",

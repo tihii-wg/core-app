@@ -590,6 +590,10 @@ const settings: Messages<typeof en> = {
     showTotalsRow: "Afișează rândul de totaluri",
     totalsRows: "Rânduri totaluri",
     selectBlock: "Selectați un bloc pentru a-i edita setările.",
+    builder: {
+      signatureDate: "Data",
+      dateCaption: "Etichetă dată",
+    },
     documentTypes: {
       work_order: "Foaie de lucru",
       act: "Act de lucrări",

@@ -634,23 +634,40 @@ function BlockSettingsPanel({
       ) : null}
 
       {block.kind === "signatures" ? (
-        <div className="space-y-1">
-          <Label htmlFor={`sig-${block.id}`}>{t("settings.printTemplates.signatures")}</Label>
-          <Textarea
-            id={`sig-${block.id}`}
-            className="min-h-20 text-xs"
-            value={block.labels.join("\n")}
-            disabled={!canEdit}
-            onChange={(event) =>
-              onChange({
-                ...block,
-                labels: event.target.value
-                  .split("\n")
-                  .map((line) => line.trim())
-                  .filter(Boolean),
-              })
-            }
-          />
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <Label htmlFor={`sig-${block.id}`}>{t("settings.printTemplates.signatures")}</Label>
+            <Textarea
+              id={`sig-${block.id}`}
+              className="min-h-20 text-xs"
+              value={block.labels.join("\n")}
+              disabled={!canEdit}
+              onChange={(event) =>
+                onChange({
+                  ...block,
+                  labels: event.target.value
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean),
+                })
+              }
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={`sig-date-${block.id}`}>{t("settings.printTemplates.builder.dateCaption")}</Label>
+            <Input
+              id={`sig-date-${block.id}`}
+              value={block.dateLabel ?? ""}
+              disabled={!canEdit}
+              placeholder={t("settings.printTemplates.builder.signatureDate")}
+              onChange={(event) =>
+                onChange({
+                  ...block,
+                  dateLabel: event.target.value,
+                })
+              }
+            />
+          </div>
         </div>
       ) : null}
 

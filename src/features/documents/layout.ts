@@ -1,6 +1,8 @@
 /** Versioned print-document layout model + HTML renderer for the visual builder. */
 
 import type { InvoiceDocument, Order, OrderMaterial, OrderService } from "../../lib/types";
+import i18n, { currentLanguage } from "../../i18n";
+import { isAppLanguage } from "../../i18n/languages";
 import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import { vatIncludedAmount } from "../finance/vat";
 import { lineNet } from "../orders/orderTotals";
@@ -55,7 +57,7 @@ export type TableBlock = LayoutBlockBase & {
 export type TotalsBlock = LayoutBlockBase & { kind: "totals"; rows: TotalsRow[] };
 export type WarrantyBlock = LayoutBlockBase & { kind: "warranty" };
 export type TextBlock = LayoutBlockBase & { kind: "text"; html: string };
-export type SignaturesBlock = LayoutBlockBase & { kind: "signatures"; labels: string[] };
+export type SignaturesBlock = LayoutBlockBase & { kind: "signatures"; labels: string[]; dateLabel?: string };
 export type SpacerBlock = LayoutBlockBase & { kind: "spacer"; heightMm?: number };
 export type DividerBlock = LayoutBlockBase & { kind: "divider" };
 
@@ -156,7 +158,12 @@ function parseBlock(value: unknown): LayoutBlock | null {
       return { ...base, kind: "text", html: typeof value.html === "string" ? value.html : "" };
     case "signatures":
       if (!Array.isArray(value.labels) || !value.labels.every((item) => typeof item === "string")) return null;
-      return { ...base, kind: "signatures", labels: value.labels };
+      return {
+        ...base,
+        kind: "signatures",
+        labels: value.labels,
+        dateLabel: typeof value.dateLabel === "string" ? value.dateLabel : undefined,
+      };
     case "spacer":
       return {
         ...base,
@@ -436,12 +443,20 @@ function renderCompanyHeader(block: CompanyHeaderBlock, ctx: PrintContext, showC
   return `<div style="text-align:${align};margin-bottom:12px">${parts.join("")}</div>`;
 }
 
-function renderSignatures(block: SignaturesBlock) {
+function resolveSignatureDateLabel(block: SignaturesBlock, ctx: PrintContext) {
+  const override = block.dateLabel?.trim();
+  if (override) return escapeHtmlText(override);
+  const lng = isAppLanguage(ctx.locale) ? ctx.locale : currentLanguage();
+  return escapeHtmlText(i18n.getFixedT(lng)("settings.printTemplates.builder.signatureDate"));
+}
+
+function renderSignatures(block: SignaturesBlock, ctx: PrintContext) {
   if (block.labels.length === 0) return "";
+  const dateCaption = resolveSignatureDateLabel(block, ctx);
   const cells = block.labels
     .map(
       (label) =>
-        `<div style="flex:1;min-width:140px"><div style="border-bottom:1px solid #333;height:28px;margin-bottom:4px"></div><div style="font-size:0.9em">${escapeHtmlText(label)}</div><div style="margin-top:12px;border-bottom:1px solid #333;height:20px"></div><div style="font-size:0.85em;color:#666">Date</div></div>`,
+        `<div style="flex:1;min-width:140px"><div style="border-bottom:1px solid #333;height:28px;margin-bottom:4px"></div><div style="font-size:0.9em">${escapeHtmlText(label)}</div><div style="margin-top:12px;border-bottom:1px solid #333;height:20px"></div><div style="font-size:0.85em;color:#666">${dateCaption}</div></div>`,
     )
     .join("");
   return `<div style="display:flex;gap:24px;margin-top:28px">${cells}</div>`;
@@ -465,7 +480,7 @@ function renderBlock(block: LayoutBlock, ctx: PrintContext, showCents: boolean):
     case "text":
       return `<div style="margin:8px 0">${applyTemplateVariables(block.html, ctx, { showCents, currency: ctx.currency, locale: ctx.locale })}</div>`;
     case "signatures":
-      return renderSignatures(block);
+      return renderSignatures(block, ctx);
     case "spacer":
       return `<div style="height:${block.heightMm ?? 8}mm"></div>`;
     case "divider":

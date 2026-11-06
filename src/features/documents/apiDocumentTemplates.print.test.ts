@@ -39,7 +39,15 @@ vi.mock("../../services/printContext", () => ({
 }));
 
 vi.mock("../../i18n", () => ({
-  default: { t: (key: string) => key },
+  default: {
+    t: (key: string) => key,
+    getFixedT: () => (key: string) => key,
+  },
+  currentLanguage: () => "en",
+}));
+
+vi.mock("../../i18n/languages", () => ({
+  isAppLanguage: (value: string | null | undefined) => value === "en" || value === "ro" || value === "ru",
 }));
 
 import {

@@ -17,21 +17,144 @@ function Tabs({
   )
 }
 
+type DragSession = {
+  pointerId: number
+  startX: number
+  startScrollLeft: number
+  active: boolean
+  moved: boolean
+}
+
+function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
+  if (!ref) return
+  if (typeof ref === 'function') {
+    ref(value)
+    return
+  }
+  ;(ref as React.MutableRefObject<T | null>).current = value
+}
+
 function TabsList({
   className,
+  ref,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+  onLostPointerCapture,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List>) {
+  const listRef = React.useRef<HTMLDivElement | null>(null)
+  const dragRef = React.useRef<DragSession | null>(null)
+  const [overflows, setOverflows] = React.useState(false)
+  const [dragging, setDragging] = React.useState(false)
+
+  const updateOverflow = React.useCallback(() => {
+    const el = listRef.current
+    if (!el) {
+      setOverflows(false)
+      return
+    }
+    setOverflows(el.scrollWidth > el.clientWidth)
+  }, [])
+
+  React.useLayoutEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    updateOverflow()
+    const observer = new ResizeObserver(() => updateOverflow())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [updateOverflow])
+
+  const endDrag = React.useCallback((el: HTMLDivElement, session: DragSession) => {
+    dragRef.current = null
+    setDragging(false)
+    if (!session.moved) return
+    const suppressClick = (event: MouseEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      el.removeEventListener('click', suppressClick, true)
+    }
+    el.addEventListener('click', suppressClick, true)
+  }, [])
+
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      listRef.current = node
+      assignRef(ref, node)
+    },
+    [ref],
+  )
+
   return (
     <TabsPrimitive.List
+      {...props}
+      ref={setRefs}
       data-slot="tabs-list"
       className={cn(
         // min-h (not fixed h) so labels keep their own vertical space; overflow scrolls horizontally without clipping text.
         'bg-secondary text-muted-foreground inline-flex min-h-9 w-fit max-w-full min-w-0 shrink-0 items-center justify-start overflow-x-auto overscroll-x-contain rounded-lg p-[3px]',
         // Hide the scrollbar chrome so it never overlays labels; trackpad/touch/shift-wheel/keyboard scrolling still work.
         '[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:h-0 [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:bg-transparent',
+        overflows && !dragging && 'cursor-grab',
+        dragging && 'cursor-grabbing select-none',
         className,
       )}
-      {...props}
+      onPointerDown={(event) => {
+        onPointerDown?.(event)
+        if (event.defaultPrevented) return
+        if (event.pointerType !== 'mouse' || event.button !== 0) return
+        const el = listRef.current
+        if (!el) return
+        // Re-check overflow so a stale ResizeObserver state cannot enable drag.
+        if (el.scrollWidth <= el.clientWidth) return
+        dragRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startScrollLeft: el.scrollLeft,
+          active: false,
+          moved: false,
+        }
+      }}
+      onPointerMove={(event) => {
+        onPointerMove?.(event)
+        if (event.defaultPrevented) return
+        const session = dragRef.current
+        const el = listRef.current
+        if (!session || !el || session.pointerId !== event.pointerId) return
+        const dx = event.clientX - session.startX
+        if (!session.active) {
+          if (Math.abs(dx) <= 5) return
+          session.active = true
+          session.moved = true
+          el.setPointerCapture(event.pointerId)
+          setDragging(true)
+        }
+        el.scrollLeft = session.startScrollLeft - dx
+        event.preventDefault()
+      }}
+      onPointerUp={(event) => {
+        onPointerUp?.(event)
+        const session = dragRef.current
+        const el = listRef.current
+        if (!session || !el || session.pointerId !== event.pointerId) return
+        endDrag(el, session)
+      }}
+      onPointerCancel={(event) => {
+        onPointerCancel?.(event)
+        const session = dragRef.current
+        const el = listRef.current
+        if (!session || !el || session.pointerId !== event.pointerId) return
+        endDrag(el, session)
+      }}
+      onLostPointerCapture={(event) => {
+        onLostPointerCapture?.(event)
+        const session = dragRef.current
+        const el = listRef.current
+        if (!session || !el || session.pointerId !== event.pointerId) return
+        endDrag(el, session)
+      }}
     />
   )
 }
