@@ -41,13 +41,15 @@ function renderCard(overrides: Partial<InventoryItem> = {}) {
 }
 
 describe("InventoryCard", () => {
-  it("shows name, SKU, supplier, stock status, quantity and price", () => {
+  it("shows name, SKU, supplier, stock status, quantity and purchase price", () => {
     renderCard();
     expect(screen.getByText("Front brake pads ceramic long name")).toBeInTheDocument();
     expect(screen.getByText("BP-CER-2026-XL")).toBeInTheDocument();
     expect(screen.getByText(/Acme Distribution International/)).toBeInTheDocument();
     expect(screen.getByText(/2 pcs/)).toBeInTheDocument();
-    expect(screen.getByText("MDL 25.00")).toBeInTheDocument();
+    expect(screen.getByText("Purchase Price")).toBeInTheDocument();
+    expect(screen.getByText("MDL 10.00")).toBeInTheDocument();
+    expect(screen.queryByText("MDL 25.00")).not.toBeInTheDocument();
   });
 
   it("omits the supplier line when the item has no supplier", () => {

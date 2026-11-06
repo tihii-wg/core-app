@@ -106,6 +106,8 @@ describe("Inventory supplier column and filter", () => {
 
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
     expect(headers.indexOf("Supplier")).toBe(headers.indexOf("SKU") + 1);
+    expect(headers).toContain("Purchase Price");
+    expect(headers).not.toContain("Selling Price");
 
     const table = screen.getByRole("table");
     expect(within(table).getAllByText("Acme")).toHaveLength(2);

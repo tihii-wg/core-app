@@ -41,14 +41,15 @@ import { Card, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 /** Fixed sort for the attention query so it stays cacheable while the table sort changes. */
 const attentionSort: InventorySort = { field: "quantity", ascending: true };
 
-type SortLabelKey = "name" | "sku" | "quantity" | "purchasePrice" | "sellingPrice" | "createdAt" | "updatedAt";
+type SortLabelKey = "name" | "sku" | "quantity" | "purchasePrice" | "createdAt" | "updatedAt";
+
+const DEFAULT_SORT_VALUE = "created_at.desc";
 
 const sortOptions: { value: string; labelKey: SortLabelKey; field: InventorySortField; ascending: boolean }[] = [
   { value: "name.asc", labelKey: "name", field: "name", ascending: true },
   { value: "sku.asc", labelKey: "sku", field: "sku", ascending: true },
   { value: "quantity.desc", labelKey: "quantity", field: "quantity", ascending: false },
   { value: "purchase_price.desc", labelKey: "purchasePrice", field: "purchase_price", ascending: false },
-  { value: "selling_price.desc", labelKey: "sellingPrice", field: "selling_price", ascending: false },
   { value: "created_at.desc", labelKey: "createdAt", field: "created_at", ascending: false },
   { value: "updated_at.desc", labelKey: "updatedAt", field: "updated_at", ascending: false },
 ];
@@ -66,7 +67,7 @@ export function Inventory() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
-  const [sortValue, setSortValue] = useState("created_at.desc");
+  const [sortValue, setSortValue] = useState(DEFAULT_SORT_VALUE);
   const [createOpen, setCreateOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -87,7 +88,17 @@ export function Inventory() {
   }, [searchParams, setSearchParams]);
 
   const debouncedSearch = useDebounce(searchQuery, 400);
-  const sortOption = sortOptions.find((option) => option.value === sortValue) ?? sortOptions[5];
+  // Drop removed sort keys (e.g. former selling_price) back to the list default.
+  useEffect(() => {
+    if (!sortOptions.some((option) => option.value === sortValue)) {
+      setSortValue(DEFAULT_SORT_VALUE);
+    }
+  }, [sortValue]);
+
+  const sortOption =
+    sortOptions.find((option) => option.value === sortValue) ??
+    sortOptions.find((option) => option.value === DEFAULT_SORT_VALUE) ??
+    sortOptions[0];
   const sort: InventorySort = { field: sortOption.field, ascending: sortOption.ascending };
 
   const { data: workspace } = useGetWorkspace(workspaceId);
@@ -173,13 +184,9 @@ export function Inventory() {
     {
       key: "purchasePrice",
       header: t("inventory.fields.purchasePrice"),
-      cell: (item) => <span className="tabular-nums text-muted-foreground">{formatWorkspaceMoney(item.purchasePrice, workspace?.currency)}</span>,
-      className: "hidden 2xl:table-cell text-right whitespace-nowrap",
-    },
-    {
-      key: "sellingPrice",
-      header: t("inventory.fields.sellingPrice"),
-      cell: (item) => <span className="font-medium tabular-nums">{formatWorkspaceMoney(item.sellingPrice, workspace?.currency)}</span>,
+      cell: (item) => (
+        <span className="font-medium tabular-nums">{formatWorkspaceMoney(item.purchasePrice, workspace?.currency)}</span>
+      ),
       className: "hidden sm:table-cell text-right whitespace-nowrap",
     },
     {

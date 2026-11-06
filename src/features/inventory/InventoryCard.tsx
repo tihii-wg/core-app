@@ -88,7 +88,10 @@ export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: I
         <span className={cn("tabular-nums text-sm", quantityClass(item))}>
           {item.quantity} {item.unit}
         </span>
-        <span className="ml-auto font-semibold tabular-nums text-foreground">{formatMoney(item.sellingPrice)}</span>
+        <span className="ml-auto text-right">
+          <span className="mr-1.5 text-xs text-muted-foreground">{t("inventory.fields.purchasePrice")}</span>
+          <span className="font-semibold tabular-nums text-foreground">{formatMoney(item.purchasePrice)}</span>
+        </span>
       </div>
     </article>
   );
