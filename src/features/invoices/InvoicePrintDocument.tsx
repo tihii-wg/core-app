@@ -1,6 +1,15 @@
 import { useTranslation } from "react-i18next";
 import type { InvoiceDocument, InvoiceItem } from "../../lib/types";
 import { lineTotal, type InvoiceSections } from "./invoiceItemSections";
+import {
+  INVOICE_PRINT_INK as INK,
+  INVOICE_PRINT_MUTED as MUTED,
+  INVOICE_PRINT_PRIMARY as PRIMARY,
+  INVOICE_PRINT_PRIMARY_DARK as PRIMARY_DARK,
+  INVOICE_PRINT_TINT as TINT,
+  INVOICE_PRINT_TINT_STRONG as TINT_STRONG,
+  INVOICE_PRINT_ZEBRA as ZEBRA,
+} from "./invoicePrintTheme";
 
 export type InvoiceSupplierInfo = {
   /** Legal/business name shown as the supplier. */
@@ -24,14 +33,6 @@ type InvoicePrintDocumentProps = {
   supplier: InvoiceSupplierInfo;
   formatMoney: (value: number) => string;
 };
-
-const PRIMARY = "#1a6de0";
-const PRIMARY_DARK = "#1e3a8a";
-const TINT = "#eff6ff";
-const TINT_STRONG = "#dbeafe";
-const ZEBRA = "#f8fafc";
-const INK = "#1f2933";
-const MUTED = "#64748b";
 
 function statusAccent(status: InvoiceDocument["status"]) {
   switch (status) {

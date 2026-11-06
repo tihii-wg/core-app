@@ -6,21 +6,23 @@ import { Loader2, Printer } from "lucide-react";
 import { Button } from "../../ui/Button";
 import type { Invoice, InvoiceDocument } from "../../lib/types";
 import { getInvoice } from "../../services/apiInvoices";
+import { printInvoiceDocument } from "../../services/apiDocumentTemplates";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
-import { usePrintInvoiceDocument } from "../documents/usePrintInvoiceDocument";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 
 /**
- * Quick-print for one invoice row. Uses a workspace invoice template when present
- * (default preferred); otherwise keeps the fixed InvoicePrintRoot output.
+ * Quick-print for one invoice row. Prefers the workspace invoice template (default first).
+ * Falls back to InvoicePrintRoot when templates are missing or layout rendering fails.
  */
 export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Invoice; triggerClassName?: string }) {
   const { t } = useTranslation();
+  const { workspaceId } = useActiveWorkspaceId();
   const [legacyActive, setLegacyActive] = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
   const { data: templates = [] } = useGetDocumentTemplates();
-  const printInvoice = usePrintInvoiceDocument();
 
   const preferredTemplate = useMemo(() => {
     const invoiceTemplates = templates
@@ -50,7 +52,23 @@ export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Inv
     setLegacyActive(false);
   }, [legacyActive, documentQuery.error, invoice.id, t]);
 
-  const busy = legacyActive || printInvoice.isPending;
+  const busy = legacyActive || templateBusy;
+
+  async function printWithTemplate(templateId: string) {
+    setTemplateBusy(true);
+    try {
+      const result = await printInvoiceDocument(invoice.id, templateId, workspaceId ?? invoice.workspaceId);
+      if (result === "unavailable") {
+        setLegacyActive(true);
+        return;
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+      setLegacyActive(true);
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
 
   return (
     <>
@@ -66,7 +84,7 @@ export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Inv
           event.stopPropagation();
           if (busy) return;
           if (preferredTemplate) {
-            printInvoice.mutate({ invoiceId: invoice.id, templateId: preferredTemplate.id });
+            void printWithTemplate(preferredTemplate.id);
             return;
           }
           setLegacyActive(true);

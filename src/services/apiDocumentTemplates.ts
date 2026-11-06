@@ -1,10 +1,21 @@
 import i18n from "../i18n";
+import { applyCommonStyleToLayout } from "../features/documents/applyCommonStyle";
+import { createLayoutFromTemplate } from "../features/documents/createFromTemplate";
 import { defaultLayoutForType, defaultTemplateName } from "../features/documents/defaultLayouts";
+import {
+  defaultDocumentStyle,
+  fontFamilyCss,
+  isDocumentStyle,
+  parseDocumentStyle,
+  stylePageToLayoutPage,
+  type DocumentStyle,
+} from "../features/documents/documentStyle";
 import {
   isDocumentLayout,
   layoutPageCss,
   parseDocumentLayout,
   renderLayoutToHtml,
+  toLayoutRenderStyle,
   type DocumentLayout,
   type DocumentTemplateType,
 } from "../features/documents/layout";
@@ -26,11 +37,15 @@ export type DocumentTemplate = {
   isAvailableToAll: boolean;
   isActive: boolean;
   isDefault: boolean;
-  /** Visual builder layout; null = legacy body_html-only template. */
+  /** Visual builder layout; null = legacy body_html-only template (or style rows). */
   layout: DocumentLayout | null;
+  /** When documentType === 'style', parsed DocumentStyle from the layout column. */
+  style: DocumentStyle | null;
   /** Raw template HTML (`body_html`); empty string when absent. Sanitise before rendering. */
   bodyHtml: string;
 };
+
+export const DOCUMENT_STYLE_TYPE = "style";
 
 const templateColumns =
   "id, workspace_id, name, document_type, body_html, layout, is_default, width_mm, height_mm, show_cents, is_available_to_all, is_active, deleted_at";
@@ -50,24 +65,59 @@ function parseLayoutField(value: unknown): DocumentLayout | null {
 }
 
 export function toDocumentTemplate(row: Record<string, unknown>): DocumentTemplate {
+  const documentType = typeof row.document_type === "string" ? row.document_type : "";
+  const rawLayout = "layout" in row ? row.layout : null;
+  const isStyleRow = documentType === DOCUMENT_STYLE_TYPE;
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     name: typeof row.name === "string" ? row.name : "",
-    documentType: typeof row.document_type === "string" ? row.document_type : "",
+    documentType,
     widthMm: toNullableNumber(row.width_mm),
     heightMm: toNullableNumber(row.height_mm),
     showCents: row.show_cents !== false,
     isAvailableToAll: row.is_available_to_all !== false,
     isActive: row.is_active !== false,
     isDefault: row.is_default === true,
-    layout: "layout" in row ? parseLayoutField(row.layout) : null,
+    layout: isStyleRow ? null : parseLayoutField(rawLayout),
+    style: isStyleRow ? parseDocumentStyle(rawLayout) : null,
     bodyHtml: typeof row.body_html === "string" ? row.body_html : "",
   };
 }
 
 export function isBuilderDocumentType(value: string): value is DocumentTemplateType {
   return value === "work_order" || value === "act" || value === "invoice";
+}
+
+export function isDocumentStyleType(value: string): boolean {
+  return value === DOCUMENT_STYLE_TYPE;
+}
+
+/** Built-in style always available — printing never fails because the style row is missing. */
+export function resolveDocumentStyle(style: DocumentStyle | null | undefined): DocumentStyle {
+  if (style && isDocumentStyle(style)) return style;
+  return defaultDocumentStyle();
+}
+
+export function documentStyleToRenderStyle(style: DocumentStyle) {
+  const resolved = resolveDocumentStyle(style);
+  return toLayoutRenderStyle({
+    colors: resolved.colors,
+    title: resolved.title,
+    table: resolved.table,
+    sharedHeader: resolved.sharedHeader,
+    sharedFooter: resolved.sharedFooter,
+    fontFamilyCss: fontFamilyCss(resolved.font.family),
+  });
+}
+
+/** Effective page CSS: style page/font when layout.useStyle, else layout.page. */
+export function resolvePrintPageCss(layout: DocumentLayout, style: DocumentStyle) {
+  if (layout.useStyle === true) {
+    const page = stylePageToLayoutPage(style.page, style.font);
+    return layoutPageCss(page, fontFamilyCss(style.font.family));
+  }
+  return layoutPageCss(layout.page);
 }
 
 /** Returns [] when `document_templates` is not applied yet. Retries without layout/body_html if absent. */
@@ -117,11 +167,17 @@ function printHtmlDocument(html: string) {
 }
 
 /** Renders a template (layout preferred, else legacy body_html) into a full print document. */
-export function renderTemplateDocument(template: DocumentTemplate, ctx: PrintContext) {
+export function renderTemplateDocument(
+  template: DocumentTemplate,
+  ctx: PrintContext,
+  documentStyle?: DocumentStyle | null,
+) {
   const layout = template.layout && isDocumentLayout(template.layout) ? template.layout : null;
   if (layout) {
-    const body = renderLayoutToHtml(layout, ctx, { showCents: template.showCents });
-    return buildPrintDocument(body, template.name, layoutPageCss(layout.page));
+    const style = resolveDocumentStyle(documentStyle);
+    const renderStyle = layout.useStyle === true ? documentStyleToRenderStyle(style) : null;
+    const body = renderLayoutToHtml(layout, ctx, { showCents: template.showCents, style: renderStyle });
+    return buildPrintDocument(body, template.name, resolvePrintPageCss(layout, style));
   }
   if (!template.bodyHtml.trim()) return null;
   const html = applyTemplateVariables(template.bodyHtml, ctx, {
@@ -130,6 +186,22 @@ export function renderTemplateDocument(template: DocumentTemplate, ctx: PrintCon
     showCents: template.showCents,
   });
   return buildPrintDocument(html, template.name);
+}
+
+/**
+ * Loads the workspace default DocumentStyle row, or the built-in default when missing/invalid.
+ * Never throws for missing style — printing must keep working.
+ */
+export async function getWorkspaceDocumentStyle(workspaceId: string | undefined): Promise<DocumentStyle> {
+  try {
+    const resolved = requireWorkspaceId(workspaceId);
+    const templates = await getDocumentTemplates(resolved);
+    const styleRow = templates.find((template) => template.documentType === DOCUMENT_STYLE_TYPE && template.isActive);
+    if (styleRow?.style) return resolveDocumentStyle(styleRow.style);
+  } catch {
+    // fall through
+  }
+  return defaultDocumentStyle();
 }
 
 /**
@@ -166,13 +238,17 @@ export async function printOrderDocument(
   }
   if (!data) return "unavailable";
   const template = toDocumentTemplate(data as Record<string, unknown>);
+  const kind: DocumentTemplateType = template.documentType === "act" ? "act" : "work_order";
 
-  const ctx = await buildOrderPrintContext(orderId, resolved);
+  const [ctx, documentStyle] = await Promise.all([
+    buildOrderPrintContext(orderId, resolved, kind),
+    getWorkspaceDocumentStyle(resolved),
+  ]);
   if (ctx.order && !ctx.order.orderNumber.trim()) {
     ctx.order = { ...ctx.order, orderNumber: i18n.t("orders.emptyOrderLabel") };
   }
 
-  const documentHtml = renderTemplateDocument(template, ctx);
+  const documentHtml = renderTemplateDocument(template, ctx, documentStyle);
   if (!documentHtml) return "unavailable";
   printHtmlDocument(documentHtml);
   return "printed";
@@ -209,11 +285,18 @@ export async function printInvoiceDocument(
   }
   if (!data) return "unavailable";
   const template = toDocumentTemplate(data as Record<string, unknown>);
-  const ctx = await buildInvoicePrintContext(invoiceId, resolved);
-  const documentHtml = renderTemplateDocument(template, ctx);
-  if (!documentHtml) return "unavailable";
-  printHtmlDocument(documentHtml);
-  return "printed";
+  try {
+    const [ctx, documentStyle] = await Promise.all([
+      buildInvoicePrintContext(invoiceId, resolved),
+      getWorkspaceDocumentStyle(resolved),
+    ]);
+    const documentHtml = renderTemplateDocument(template, ctx, documentStyle);
+    if (!documentHtml) return "unavailable";
+    printHtmlDocument(documentHtml);
+    return "printed";
+  } catch {
+    return "unavailable";
+  }
 }
 
 /** Max stored template HTML (characters) — guards against pasting huge documents into a text column. */
@@ -279,6 +362,7 @@ export async function createDocumentTemplate(
   documentType: DocumentTemplateType,
   workspaceId: string | undefined,
   name?: string,
+  options: { isDefault?: boolean } = {},
 ) {
   const resolved = requireWorkspaceId(workspaceId);
   const layout = defaultLayoutForType(documentType);
@@ -291,7 +375,7 @@ export async function createDocumentTemplate(
       document_type: documentType,
       layout,
       body_html: emptyCtxBody,
-      is_default: false,
+      is_default: options.isDefault === true,
       is_active: true,
       is_available_to_all: true,
       show_cents: true,
@@ -300,6 +384,163 @@ export async function createDocumentTemplate(
     .single();
   if (error) mapTemplateWriteError(error);
   return toDocumentTemplate(data as Record<string, unknown>);
+}
+
+/**
+ * Ensures the workspace has a default invoice template (Standard invoice).
+ * One insert when none exist; ignores unique-index conflicts if a default already appeared.
+ */
+export async function ensureDefaultInvoiceTemplate(workspaceId: string | undefined): Promise<DocumentTemplate | null> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const templates = await getDocumentTemplates(resolved);
+  const invoices = templates.filter((template) => template.documentType === "invoice" && template.isActive);
+  if (invoices.length > 0) {
+    return invoices.find((template) => template.isDefault) ?? invoices[0] ?? null;
+  }
+  try {
+    return await createDocumentTemplate("invoice", resolved, i18n.t("settings.printTemplates.standardInvoice"), {
+      isDefault: true,
+    });
+  } catch (error) {
+    // Unique index on default: another client created it — reload.
+    const again = await getDocumentTemplates(resolved);
+    const found = again.find((template) => template.documentType === "invoice" && template.isDefault);
+    if (found) return found;
+    if (error instanceof Error) throw error;
+    return null;
+  }
+}
+
+/**
+ * Ensures a default DocumentStyle row (document_type = 'style', is_default = true).
+ * Stores DocumentStyle JSON in the layout column. Ignores unique-index races.
+ */
+export async function ensureDefaultDocumentStyle(workspaceId: string | undefined): Promise<DocumentTemplate | null> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const templates = await getDocumentTemplates(resolved);
+  const existing = templates.find((template) => template.documentType === DOCUMENT_STYLE_TYPE && template.isActive);
+  if (existing) return existing;
+  const style = defaultDocumentStyle();
+  try {
+    const { data, error } = await supabase
+      .from("document_templates")
+      .insert({
+        workspace_id: resolved,
+        name: i18n.t("settings.printTemplates.documentStyle"),
+        document_type: DOCUMENT_STYLE_TYPE,
+        layout: style,
+        body_html: "",
+        is_default: true,
+        is_active: true,
+        is_available_to_all: true,
+        show_cents: true,
+      })
+      .select(templateColumns)
+      .single();
+    if (error) mapTemplateWriteError(error);
+    return toDocumentTemplate(data as Record<string, unknown>);
+  } catch (error) {
+    const again = await getDocumentTemplates(resolved);
+    const found = again.find((template) => template.documentType === DOCUMENT_STYLE_TYPE && template.isDefault);
+    if (found) return found;
+    if (error instanceof Error) throw error;
+    return null;
+  }
+}
+
+/** Saves DocumentStyle JSON into the style template's layout column. */
+export async function saveDocumentStyle(
+  templateId: string,
+  style: DocumentStyle,
+  workspaceId: string | undefined,
+  name?: string,
+) {
+  const resolved = requireWorkspaceId(workspaceId);
+  if (!isDocumentStyle(style)) throw new Error(i18n.t("settings.printTemplates.errors.invalidLayout"));
+  const patch: Record<string, unknown> = {
+    layout: style,
+    body_html: "",
+    document_type: DOCUMENT_STYLE_TYPE,
+  };
+  if (typeof name === "string") patch.name = name.trim() || name;
+  const { data, error } = await supabase
+    .from("document_templates")
+    .update(patch)
+    .eq("workspace_id", resolved)
+    .eq("id", templateId)
+    .is("deleted_at", null)
+    .select("id");
+  if (error) mapTemplateWriteError(error);
+  if (!data || data.length === 0) throw new Error(i18n.t("settings.printTemplates.errors.notSaved"));
+}
+
+/**
+ * Creates the other document types from a source template's layout (mapped sources/tokens).
+ * Returns created templates and any unmapped tokens from the first conversion.
+ */
+export async function createTemplatesFromSource(
+  sourceTemplateId: string,
+  workspaceId: string | undefined,
+  targets: DocumentTemplateType[],
+): Promise<{ created: DocumentTemplate[]; unmappedTokens: string[] }> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const templates = await getDocumentTemplates(resolved);
+  const source = templates.find((template) => template.id === sourceTemplateId);
+  if (!source || !source.layout || !isBuilderDocumentType(source.documentType)) {
+    throw new Error(i18n.t("settings.printTemplates.errors.notSaved"));
+  }
+  const fromType = source.documentType;
+  const created: DocumentTemplate[] = [];
+  let unmappedTokens: string[] = [];
+  for (const toType of targets) {
+    if (toType === fromType) continue;
+    const { layout, unmappedTokens: unmapped } = createLayoutFromTemplate(source.layout, fromType, toType);
+    if (unmappedTokens.length === 0) unmappedTokens = unmapped;
+    const bodyHtml = renderLayoutToHtml(layout, emptyPrintContext({ locale: "ru", documentKind: toType }), {
+      style: documentStyleToRenderStyle(defaultDocumentStyle()),
+    });
+    const { data, error } = await supabase
+      .from("document_templates")
+      .insert({
+        workspace_id: resolved,
+        name: `${source.name} → ${defaultTemplateName(toType)}`.slice(0, 200),
+        document_type: toType,
+        layout,
+        body_html: bodyHtml,
+        is_default: false,
+        is_active: true,
+        is_available_to_all: true,
+        show_cents: source.showCents,
+      })
+      .select(templateColumns)
+      .single();
+    if (error) mapTemplateWriteError(error);
+    created.push(toDocumentTemplate(data as Record<string, unknown>));
+  }
+  return { created, unmappedTokens };
+}
+
+/** Sets useStyle=true and replaces default hex colors with theme refs on all builder templates. */
+export async function applyCommonStyleToAllTemplates(workspaceId: string | undefined): Promise<number> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const templates = await getDocumentTemplates(resolved);
+  let updated = 0;
+  for (const template of templates) {
+    if (!isBuilderDocumentType(template.documentType) || !template.layout) continue;
+    const next = applyCommonStyleToLayout(template.layout);
+    const bodyHtml = renderLayoutToHtml(next, emptyPrintContext({ locale: "ru", documentKind: template.documentType }), {
+      style: documentStyleToRenderStyle(await getWorkspaceDocumentStyle(resolved)),
+    });
+    const { error } = await supabase
+      .from("document_templates")
+      .update({ layout: next, body_html: bodyHtml })
+      .eq("workspace_id", resolved)
+      .eq("id", template.id)
+      .is("deleted_at", null);
+    if (error) mapTemplateWriteError(error);
+    updated += 1;
+  }
+  return updated;
 }
 
 export async function duplicateDocumentTemplate(templateId: string, workspaceId: string | undefined) {
@@ -392,6 +633,12 @@ export async function setDefaultDocumentTemplate(templateId: string, workspaceId
 }
 
 /** Snapshot body_html from a layout + context (or empty context). */
-export function snapshotBodyHtmlFromLayout(layout: DocumentLayout, ctx: PrintContext, showCents = true) {
-  return renderLayoutToHtml(layout, ctx, { showCents });
+export function snapshotBodyHtmlFromLayout(
+  layout: DocumentLayout,
+  ctx: PrintContext,
+  showCents = true,
+  documentStyle?: DocumentStyle | null,
+) {
+  const style = layout.useStyle === true ? documentStyleToRenderStyle(resolveDocumentStyle(documentStyle)) : null;
+  return renderLayoutToHtml(layout, ctx, { showCents, style });
 }

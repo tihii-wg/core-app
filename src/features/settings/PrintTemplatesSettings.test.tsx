@@ -23,6 +23,7 @@ const template = {
   isActive: true,
   isDefault: false,
   layout: defaultWorkOrderLayout(),
+  style: null,
   bodyHtml: "<p>legacy</p>",
 };
 
@@ -66,6 +67,15 @@ vi.mock("../../services/printContext", () => ({
   listRecentOrdersForPrintPreview: async () => [{ id: "o1", orderNumber: "ORD-1", clientName: "Ada" }],
   listRecentInvoicesForPrintPreview: async () => [],
 }));
+
+vi.mock("../../services/apiDocumentTemplates", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/apiDocumentTemplates")>();
+  return {
+    ...actual,
+    ensureDefaultInvoiceTemplate: vi.fn(async () => null),
+    ensureDefaultDocumentStyle: vi.fn(async () => null),
+  };
+});
 
 vi.mock("react-hot-toast", () => ({
   default: { success: vi.fn(), error: vi.fn() },

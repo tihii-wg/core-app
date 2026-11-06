@@ -1,11 +1,17 @@
+import i18n, { currentLanguage } from "../../i18n";
+import { isAppLanguage } from "../../i18n/languages";
 import type { Client, InvoiceDocument, Order, OrderMaterial, OrderService, Vehicle } from "../../lib/types";
 import type { LegalEntity } from "../../services/apiLegalEntities";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import type { WarrantySnapshot } from "../orders/warranty";
 import type { PaymentBalance } from "../finance/paymentTypes";
 import { vatIncludedAmount } from "../finance/vat";
+import type { InvoiceSections } from "../invoices/invoiceItemSections";
 import { computeOrderMoney, lineNet } from "../orders/orderTotals";
 import { amountInWords, normalizeAmountInWordsLocale } from "./amountInWords";
+
+/** Mirrors layout.DocumentTemplateType — kept local to avoid import cycles. */
+export type PrintDocumentKind = "work_order" | "act" | "invoice";
 
 export type VariableGroup =
   | "order"
@@ -16,13 +22,16 @@ export type VariableGroup =
   | "money"
   | "warranty"
   | "tables"
-  | "invoice";
+  | "invoice"
+  | "document";
 
 export type TemplateVariableKind = "text" | "money" | "date" | "datetime" | "number" | "html";
 
 export type PrintContext = {
   order: Order | null;
   invoice: InvoiceDocument | null;
+  /** Works/materials split for invoice tables (from classifyInvoiceItems). */
+  invoiceSections: InvoiceSections | null;
   client: Client | null;
   vehicle: Vehicle | null;
   workspace: WorkspaceDetails | null;
@@ -36,6 +45,8 @@ export type PrintContext = {
   paymentBalance: PaymentBalance | null;
   warrantyRecords: WarrantySnapshot[];
   printedAt: Date;
+  /** Which document is being printed — drives #ДОКУМЕНТ-* tokens. */
+  documentKind: PrintDocumentKind | null;
 };
 
 export type TemplateVariable = {
@@ -48,6 +59,7 @@ export type TemplateVariable = {
 };
 
 export const VARIABLE_GROUPS: VariableGroup[] = [
+  "document",
   "order",
   "invoice",
   "client",
@@ -63,6 +75,7 @@ export function emptyPrintContext(partial: Partial<PrintContext> = {}): PrintCon
   return {
     order: null,
     invoice: null,
+    invoiceSections: null,
     client: null,
     vehicle: null,
     workspace: null,
@@ -75,8 +88,32 @@ export function emptyPrintContext(partial: Partial<PrintContext> = {}): PrintCon
     paymentBalance: null,
     warrantyRecords: [],
     printedAt: new Date(0),
+    documentKind: null,
     ...partial,
   };
+}
+
+function documentTitleLabel(kind: PrintDocumentKind | null, locale: string): string | null {
+  if (!kind) return null;
+  const lng = isAppLanguage(locale) ? locale : currentLanguage();
+  const t = i18n.getFixedT(lng);
+  if (kind === "invoice") return t("settings.printTemplates.docTitleInvoice");
+  if (kind === "act") return t("settings.printTemplates.docTitleAct");
+  return t("settings.printTemplates.docTitleWorkOrder");
+}
+
+function documentNumber(ctx: PrintContext): string | null {
+  if (ctx.documentKind === "invoice" || (ctx.documentKind == null && ctx.invoice)) {
+    return text(ctx.invoice?.invoiceNumber);
+  }
+  return text(ctx.order?.orderNumber);
+}
+
+function documentDate(ctx: PrintContext): string | null {
+  if (ctx.documentKind === "invoice" || (ctx.documentKind == null && ctx.invoice && !ctx.order)) {
+    return text(ctx.invoice?.createdAt);
+  }
+  return text(ctx.order?.createdAt);
 }
 
 function text(value: string | null | undefined) {
@@ -110,6 +147,18 @@ function companyIban(ctx: PrintContext) {
 
 function companyBank(ctx: PrintContext) {
   return text(ctx.legalEntity?.bankName) || text(ctx.workspace?.bankName);
+}
+
+function companyRegistration(ctx: PrintContext) {
+  return text(ctx.legalEntity?.registrationNumber) || text(ctx.workspace?.registrationNumber);
+}
+
+function companyBankCode(ctx: PrintContext) {
+  return text(ctx.legalEntity?.bankCode) || text(ctx.workspace?.bankCode);
+}
+
+function companyExtraInfo(ctx: PrintContext) {
+  return text(ctx.legalEntity?.additionalInfo) || text(ctx.workspace?.printExtraInfo);
 }
 
 function moneyLines(order: Order | null) {
@@ -280,6 +329,32 @@ function logoHtml(ctx: PrintContext) {
  * schema are intentionally omitted (e.g. company phone, order notes).
  */
 export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
+  // Cross-document (resolved from documentKind)
+  {
+    token: "#ДОКУМЕНТ-НАЗВАНИЕ",
+    group: "document",
+    labelKey: "settings.printTemplates.variables.document.title.label",
+    descriptionKey: "settings.printTemplates.variables.document.title.description",
+    kind: "text",
+    resolve: (ctx) => documentTitleLabel(ctx.documentKind, ctx.locale),
+  },
+  {
+    token: "#ДОКУМЕНТ-НОМЕР",
+    group: "document",
+    labelKey: "settings.printTemplates.variables.document.number.label",
+    descriptionKey: "settings.printTemplates.variables.document.number.description",
+    kind: "text",
+    resolve: (ctx) => documentNumber(ctx),
+  },
+  {
+    token: "#ДОКУМЕНТ-ДАТА",
+    group: "document",
+    labelKey: "settings.printTemplates.variables.document.date.label",
+    descriptionKey: "settings.printTemplates.variables.document.date.description",
+    kind: "date",
+    resolve: (ctx) => documentDate(ctx),
+  },
+
   // Order
   {
     token: "#ЗАКАЗ-НОМЕР",
@@ -400,6 +475,80 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     labelKey: "settings.printTemplates.variables.invoice.buyerIdno.label",
     kind: "text",
     resolve: buyerIdno,
+  },
+  {
+    token: "#СЧЁТ-СТАТУС",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.status.label",
+    kind: "text",
+    resolve: (ctx) => text(ctx.invoice?.status),
+  },
+  {
+    token: "#СЧЁТ-ОПИСАНИЕ",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.notes.label",
+    kind: "text",
+    resolve: (ctx) => text(ctx.invoice?.description),
+  },
+  {
+    token: "#СЧЁТ-ЗАКАЗ",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.orderNumber.label",
+    kind: "text",
+    resolve: (ctx) => text(ctx.invoice?.orderNumber) || text(ctx.order?.orderNumber),
+  },
+  {
+    token: "#СЧЁТ-ОПЛАЧЕН",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.paidAt.label",
+    kind: "date",
+    resolve: (ctx) => text(ctx.invoice?.paidAt),
+  },
+  {
+    token: "#СЧЁТ-УСТРОЙСТВО",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.device.label",
+    kind: "text",
+    resolve: (ctx) => text(ctx.invoice?.device) || text(ctx.order?.device),
+  },
+  {
+    token: "#СЧЁТ-НОМЕР-АВТО",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.carNumber.label",
+    kind: "text",
+    resolve: (ctx) => text(ctx.invoice?.carNumber) || text(ctx.order?.carNumber) || text(ctx.vehicle?.licensePlate),
+  },
+  {
+    token: "#СЧЁТ-VIN",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.vin.label",
+    kind: "text",
+    resolve: (ctx) => text(ctx.invoice?.vin) || text(ctx.order?.vin) || text(ctx.vehicle?.vin),
+  },
+  {
+    token: "#СЧЁТ-СУММА-РАБОТ",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.worksSubtotal.label",
+    kind: "money",
+    resolve: (ctx) => ctx.invoiceSections?.worksSubtotal ?? null,
+  },
+  {
+    token: "#СЧЁТ-СУММА-МАТЕРИАЛОВ",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.materialsSubtotal.label",
+    kind: "money",
+    resolve: (ctx) => ctx.invoiceSections?.materialsSubtotal ?? null,
+  },
+  {
+    token: "#СЧЁТ-К-ОПЛАТЕ",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.amountDue.label",
+    kind: "money",
+    resolve: (ctx) => {
+      if (!ctx.invoice) return null;
+      if (ctx.invoice.status === "paid") return 0;
+      return ctx.invoiceSections?.grandTotal ?? ctx.invoice.total;
+    },
   },
 
   // Client
@@ -551,6 +700,27 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     labelKey: "settings.printTemplates.variables.company.bank.label",
     kind: "text",
     resolve: companyBank,
+  },
+  {
+    token: "#КОМПАНИЯ-РЕГИСТРАЦИЯ",
+    group: "company",
+    labelKey: "settings.printTemplates.variables.company.registration.label",
+    kind: "text",
+    resolve: companyRegistration,
+  },
+  {
+    token: "#КОМПАНИЯ-БИК",
+    group: "company",
+    labelKey: "settings.printTemplates.variables.company.bankCode.label",
+    kind: "text",
+    resolve: companyBankCode,
+  },
+  {
+    token: "#КОМПАНИЯ-ДОПИНФО",
+    group: "company",
+    labelKey: "settings.printTemplates.variables.company.extraInfo.label",
+    kind: "text",
+    resolve: companyExtraInfo,
   },
   {
     token: "#КОМПАНИЯ-ЛОГОТИП",

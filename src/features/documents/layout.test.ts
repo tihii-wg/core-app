@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { documentStyleToRenderStyle } from "../../services/apiDocumentTemplates";
+import type { InvoiceDocument, Order } from "../../lib/types";
 import { defaultActLayout, defaultInvoiceLayout, defaultWorkOrderLayout } from "./defaultLayouts";
+import { defaultDocumentStyle } from "./documentStyle";
 import {
   isDocumentLayout,
   parseDocumentLayout,
@@ -8,7 +11,6 @@ import {
   type TableBlock,
 } from "./layout";
 import { emptyPrintContext } from "./templateVariables";
-import type { InvoiceDocument, Order } from "../../lib/types";
 
 const fullOrder: Order = {
   id: "o1",
@@ -84,12 +86,13 @@ describe("isDocumentLayout", () => {
     expect(isDocumentLayout(defaultWorkOrderLayout())).toBe(true);
     expect(isDocumentLayout(defaultActLayout())).toBe(true);
     expect(isDocumentLayout(defaultInvoiceLayout())).toBe(true);
+    expect(isDocumentLayout({ ...defaultWorkOrderLayout(), version: 1 })).toBe(true);
   });
 
   it("rejects invalid JSON shapes", () => {
     expect(isDocumentLayout(null)).toBe(false);
     expect(isDocumentLayout({})).toBe(false);
-    expect(isDocumentLayout({ version: 2, page: { size: "A4", orientation: "portrait", marginsMm: 10, fontSizePt: 10 }, blocks: [] })).toBe(false);
+    expect(isDocumentLayout({ version: 3, page: { size: "A4", orientation: "portrait", marginsMm: 10, fontSizePt: 10 }, blocks: [] })).toBe(false);
     expect(isDocumentLayout({ version: 1, page: { size: "A3", orientation: "portrait", marginsMm: 10, fontSizePt: 10 }, blocks: [] })).toBe(false);
     expect(
       isDocumentLayout({
@@ -212,7 +215,9 @@ describe("renderLayoutToHtml", () => {
   });
 
   it("renders safely on empty context", () => {
-    const html = renderLayoutToHtml(defaultWorkOrderLayout(), emptyPrintContext());
+    const html = renderLayoutToHtml(defaultWorkOrderLayout(), emptyPrintContext({ documentKind: "work_order", locale: "ru" }), {
+      style: documentStyleToRenderStyle(defaultDocumentStyle()),
+    });
     expect(html).toContain("Заказ-наряд");
     expect(html).not.toContain("undefined");
   });
@@ -247,12 +252,31 @@ describe("renderLayoutToHtml", () => {
   });
 
   it("renders default layouts for order and invoice", () => {
-    const orderHtml = renderLayoutToHtml(defaultWorkOrderLayout(), emptyPrintContext({ order: fullOrder, currency: "MDL", locale: "ru" }));
+    const style = documentStyleToRenderStyle(defaultDocumentStyle());
+    const orderHtml = renderLayoutToHtml(
+      defaultWorkOrderLayout(),
+      emptyPrintContext({ order: fullOrder, currency: "MDL", locale: "ru", documentKind: "work_order" }),
+      { style },
+    );
     expect(orderHtml).toContain("ORD-1");
     expect(orderHtml).toContain("Oil change");
     const invoiceHtml = renderLayoutToHtml(
       defaultInvoiceLayout(),
-      emptyPrintContext({ invoice: fullInvoice, order: fullOrder, currency: "MDL", locale: "ru" }),
+      emptyPrintContext({
+        invoice: fullInvoice,
+        order: fullOrder,
+        currency: "MDL",
+        locale: "ru",
+        documentKind: "invoice",
+        invoiceSections: {
+          works: fullInvoice.items.filter((item) => item.serviceId),
+          materials: fullInvoice.items.filter((item) => !item.serviceId),
+          worksSubtotal: 200,
+          materialsSubtotal: 0,
+          grandTotal: 200,
+        },
+      }),
+      { style },
     );
     expect(invoiceHtml).toContain("INV-1");
     expect(invoiceHtml).toContain("Labour");

@@ -70,8 +70,37 @@ describe("renderTemplateDocument", () => {
       is_available_to_all: true,
       is_active: true,
     });
-    const html = renderTemplateDocument(template, emptyPrintContext());
-    expect(html).toContain("Заказ-наряд");
+    const html = renderTemplateDocument(
+      template,
+      emptyPrintContext({
+        documentKind: "work_order",
+        locale: "en",
+        order: {
+          id: "o1",
+          clientId: "c1",
+          clientName: "Ada",
+          orderNumber: "ORD-1",
+          device: "",
+          vin: "",
+          carNumber: "",
+          service: "",
+          services: [],
+          materials: [],
+          description: "",
+          status: "new",
+          assignedEmployeeId: "",
+          assignedEmployeeName: "",
+          deadline: "",
+          totalPrice: 0,
+          isPaid: false,
+          paymentStatus: "unpaid",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    );
+    expect(html).toMatch(/Work order|docTitleWorkOrder/);
+    expect(html).toContain("ORD-1");
     expect(html).not.toContain("LEGACY_ONLY");
   });
 

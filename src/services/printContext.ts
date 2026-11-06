@@ -1,7 +1,9 @@
 import type { Client, InvoiceDocument, Order, Vehicle } from "../lib/types";
+import type { DocumentTemplateType } from "../features/documents/layout";
 import type { PrintContext } from "../features/documents/templateVariables";
 import { emptyPrintContext } from "../features/documents/templateVariables";
 import { invoicePaymentBalance, orderPaymentBalance } from "../features/finance/paymentCalculations";
+import { classifyInvoiceItems, type InvoiceOrderLines } from "../features/invoices/invoiceItemSections";
 import { getWorkspaceLogoUrl } from "../features/workspaces/workspaceAvatar";
 import { getClient } from "./apiClients";
 import { getInvoice, getInvoices } from "./apiInvoices";
@@ -56,7 +58,11 @@ async function workspacePrintBase(resolved: string) {
  * Loads everything needed to resolve print-template variables for one order.
  * Soft-fails missing optional tables (vehicles, legal entities, warranty, payments, logo).
  */
-export async function buildOrderPrintContext(orderId: string, workspaceId: string | undefined): Promise<PrintContext> {
+export async function buildOrderPrintContext(
+  orderId: string,
+  workspaceId: string | undefined,
+  documentKind: DocumentTemplateType = "work_order",
+): Promise<PrintContext> {
   const resolved = requireWorkspaceId(workspaceId);
   const order = await getOrder(orderId, resolved);
 
@@ -73,6 +79,7 @@ export async function buildOrderPrintContext(orderId: string, workspaceId: strin
   return emptyPrintContext({
     order,
     invoice: null,
+    invoiceSections: null,
     client,
     vehicle,
     workspace: base.workspace,
@@ -85,6 +92,7 @@ export async function buildOrderPrintContext(orderId: string, workspaceId: strin
     paymentBalance,
     warrantyRecords,
     printedAt: new Date(),
+    documentKind: documentKind === "invoice" ? "work_order" : documentKind,
   });
 }
 
@@ -110,10 +118,27 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
   const warrantyRecords =
     order != null ? await soft(getWarrantyRecordsForOrder(resolved, order.id), []) : [];
   const paymentBalance = invoicePaymentBalance(invoice, payments);
+  const orderLines: InvoiceOrderLines | null = order
+    ? {
+        services: (order.services ?? []).map((line) => ({
+          serviceId: line.serviceId || null,
+          serviceName: line.serviceName,
+          price: line.price,
+          quantity: line.quantity,
+        })),
+        materials: (order.materials ?? []).map((line) => ({
+          itemName: line.itemName,
+          price: line.price,
+          quantity: line.quantity,
+        })),
+      }
+    : null;
+  const invoiceSections = classifyInvoiceItems(invoice.items ?? [], orderLines);
 
   return emptyPrintContext({
     order,
     invoice,
+    invoiceSections,
     client,
     vehicle,
     workspace: base.workspace,
@@ -126,6 +151,7 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
     paymentBalance,
     warrantyRecords,
     printedAt: new Date(),
+    documentKind: "invoice",
   });
 }
 
