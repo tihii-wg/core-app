@@ -17,6 +17,7 @@ import { Clients } from "./features/clients/Clients";
 import { VehicleDetailsPage } from "./features/vehicles/VehicleDetailsPage";
 import { Employees } from "./features/employees/Employees";
 import { Inventory } from "./features/inventory/Inventory";
+import { SupplierPage } from "./features/suppliers/SupplierPage";
 import { Warehouses } from "./features/warehouses/Warehouses";
 import { Services } from "./features/services/Services";
 import { Invoices } from "./features/invoices/Invoices";
@@ -80,6 +81,7 @@ export function AppRoutes() {
           <Route path="/:locale/:workspaceId/vehicles/:vehicleId" element={<VehicleDetailsPage />} />
           <Route path="/:locale/:workspaceId/employees" element={<Employees />} />
           <Route path="/:locale/:workspaceId/inventory" element={<Inventory />} />
+          <Route path="/:locale/:workspaceId/suppliers/:supplierName" element={<SupplierPage />} />
           <Route path="/:locale/:workspaceId/warehouses" element={<Warehouses />} />
           <Route path="/:locale/:workspaceId/services" element={<Services />} />
           <Route path="/:locale/:workspaceId/invoices" element={<Invoices />} />

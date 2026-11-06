@@ -90,11 +90,13 @@ vi.mock("./WarehouseOpsPanel", () => ({ WarehouseOpsPanel: () => null }));
 vi.mock("./AddInventoryItemDialog", () => ({ AddInventoryItemDialog: () => null }));
 vi.mock("./EditInventoryItemDialog", () => ({ EditInventoryItemDialog: () => null }));
 vi.mock("./DeleteInventoryItemDialog", () => ({ DeleteInventoryItemDialog: () => null }));
-vi.mock("./InventoryDetailPanel", () => ({ default: () => null }));
+vi.mock("./InventoryDetailPanel", () => ({
+  default: ({ open }: { open: boolean }) => (open ? <div role="dialog" aria-label="Item detail panel" /> : null),
+}));
 
 function renderPage() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={["/en/ws-1/inventory"]}>
       <Inventory />
     </MemoryRouter>,
   );
@@ -115,6 +117,24 @@ describe("Inventory supplier column and filter", () => {
 
     const towelRow = within(table).getByText("Shop towel").closest("tr");
     expect(towelRow?.textContent).toContain("—");
+  });
+
+  it("renders supplier as a link to the encoded supplier route and click does not open the row panel", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const table = screen.getByRole("table");
+    const acmeLinks = within(table).getAllByRole("link", { name: "Acme" });
+    expect(acmeLinks[0]).toHaveAttribute("href", "/en/ws-1/suppliers/Acme");
+
+    const betaLink = within(table).getByRole("link", { name: "Beta" });
+    expect(betaLink).toHaveAttribute("href", "/en/ws-1/suppliers/Beta");
+
+    await user.click(acmeLinks[0]!);
+    expect(screen.queryByRole("dialog", { name: "Item detail panel" })).not.toBeInTheDocument();
+
+    await user.click(within(table).getByText("Brake pads"));
+    expect(screen.getByRole("dialog", { name: "Item detail panel" })).toBeInTheDocument();
   });
 
   it("filters by supplier and restores the full list with All suppliers", async () => {

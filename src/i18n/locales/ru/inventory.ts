@@ -117,6 +117,7 @@ const inventory: Messages<typeof en> = {
       toWarehouse: "На склад",
       warehousePlaceholder: "Выберите склад",
       reason: "Причина",
+      supplier: "Поставщик",
       comment: "Комментарий",
       lines: "Строки",
       itemPlaceholder: "Выберите позицию",

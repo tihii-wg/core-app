@@ -20,5 +20,6 @@ import onboarding from "./onboarding";
 import vehicles from "./vehicles";
 import stage9 from "./stage9";
 import catalogWarranty from "./catalogWarranty";
+import suppliers from "./suppliers";
 
-export const ro = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, warehouses, employees, settings, team, reports, finance, invoices, onboarding, vehicles, stage9, catalogWarranty };
+export const ro = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, warehouses, employees, settings, team, reports, finance, invoices, onboarding, vehicles, stage9, catalogWarranty, suppliers };

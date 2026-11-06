@@ -1,8 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type { InventoryItem } from "../../lib/types";
 import { InventoryCard } from "./InventoryCard";
+
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
+}));
 
 const item: InventoryItem = {
   id: "item-1",
@@ -29,13 +34,15 @@ function renderCard(overrides: Partial<InventoryItem> = {}) {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   render(
-    <InventoryCard
-      item={{ ...item, ...overrides }}
-      formatMoney={(v) => (v == null ? "—" : `MDL ${v.toFixed(2)}`)}
-      onView={onView}
-      onEdit={onEdit}
-      onDelete={onDelete}
-    />,
+    <MemoryRouter initialEntries={["/en/ws-1/inventory"]}>
+      <InventoryCard
+        item={{ ...item, ...overrides }}
+        formatMoney={(v) => (v == null ? "—" : `MDL ${v.toFixed(2)}`)}
+        onView={onView}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    </MemoryRouter>,
   );
   return { onView, onEdit, onDelete };
 }
@@ -55,6 +62,15 @@ describe("InventoryCard", () => {
   it("omits the supplier line when the item has no supplier", () => {
     renderCard({ supplier: "" });
     expect(screen.queryByText(/Supplier:/)).not.toBeInTheDocument();
+  });
+
+  it("links the supplier name without opening the card", async () => {
+    const user = userEvent.setup();
+    const { onView } = renderCard();
+    const link = screen.getByRole("link", { name: "Acme Distribution International" });
+    expect(link).toHaveAttribute("href", "/en/ws-1/suppliers/Acme%20Distribution%20International");
+    await user.click(link);
+    expect(onView).not.toHaveBeenCalled();
   });
 
   it("keeps edit/delete in the menu without opening the item", async () => {

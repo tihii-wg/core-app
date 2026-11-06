@@ -101,7 +101,12 @@ export function QuickGoodsReceiptDialog({
 
     setError(null);
     receive.mutate(
-      { warehouseId, comment: comment.trim() || undefined, lines },
+      {
+        warehouseId,
+        comment: comment.trim() || undefined,
+        supplierName: item.supplier?.trim() || null,
+        lines,
+      },
       {
         onSuccess: () => {
           onReceived?.(item.id);

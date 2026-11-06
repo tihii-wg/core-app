@@ -1,5 +1,6 @@
 import i18n from "../i18n";
 import { lineAmount, sumLineAmounts, type OpLineInput, type WarehouseOpKind } from "../features/inventory/warehouseOps";
+import { getInventoryItems } from "./apiInventory";
 import { isMissingTableError, requireWorkspaceId } from "./missingTable";
 import supabase from "./supabase";
 
@@ -28,6 +29,26 @@ export type GoodsReceiptRecord = OpBase & {
   warehouseId: string | null;
   status: "draft" | "posted";
   receivedAt: string;
+  /** Free-text supplier (matches inventory_items.supplier). Null on legacy/mixed receipts. */
+  supplierName: string | null;
+};
+
+/** Receipt listed on a supplier page; `matchedByLegacy` when supplier_name was null and match came from line items. */
+export type SupplierDelivery = GoodsReceiptRecord & {
+  matchedByLegacy: boolean;
+};
+
+export type SupplierDeliveriesPage = {
+  rows: SupplierDelivery[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  /** Full merged list size (exact + legacy), not just the current page. */
+  totalCount: number;
+  /** Sum of `total` for posted receipts across the full merged list. */
+  postedTotal: number;
+  /** Max receivedAt/createdAt across the full merged list (ISO string), or null. */
+  lastDeliveryAt: string | null;
 };
 
 export type StockTransferRecord = OpBase & {
@@ -138,6 +159,9 @@ export function toWarehouseOp(
   };
   if (kind === "receipt") {
     const status = row.status === "draft" ? "draft" : "posted";
+    const supplierRaw = row.supplier_name;
+    const supplierName =
+      typeof supplierRaw === "string" && supplierRaw.trim() ? supplierRaw.trim() : null;
     return {
       ...base,
       kind,
@@ -145,6 +169,7 @@ export function toWarehouseOp(
       status,
       posted: status === "posted",
       receivedAt: toText(row.received_at),
+      supplierName,
     };
   }
   const postedAt = toId(row.posted_at);
@@ -224,9 +249,28 @@ export async function getWriteOffs(workspaceId: string | undefined) {
   return (await listOps("writeOff", workspaceId)) as WarehouseOpsResult<WriteOffRecord>;
 }
 
-export type CreateGoodsReceiptInput = { warehouseId: string; comment?: string; lines: OpLineInput[] };
+export type CreateGoodsReceiptInput = {
+  warehouseId: string;
+  comment?: string;
+  /** Free-text supplier; trimmed, empty → null. Written to goods_receipts.supplier_name. */
+  supplierName?: string | null;
+  lines: OpLineInput[];
+};
 export type CreateStockTransferInput = { fromWarehouseId: string; toWarehouseId: string; comment?: string; lines: OpLineInput[] };
 export type CreateWriteOffInput = { warehouseId: string; reason?: string; comment?: string; lines: OpLineInput[] };
+
+function isMissingSupplierNameColumn(error: DbError | null | undefined) {
+  if (!error) return false;
+  if (error.code === "PGRST204" || error.code === "42703") {
+    return /supplier_name/i.test(`${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`);
+  }
+  return /supplier_name/i.test(error.message ?? "") && /schema cache|does not exist|column/i.test(error.message ?? "");
+}
+
+function normalizeSupplierName(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed || null;
+}
 
 function lineRows(config: OpConfig, workspaceId: string, docId: string, lines: OpLineInput[]) {
   return lines.map((line, position) => ({
@@ -255,11 +299,17 @@ async function createOp(
   const config = configs[kind];
   if (lines.length === 0) throw new Error(i18n.t("inventory.ops.errors.noLines"));
 
-  const { data, error } = await supabase
-    .from(config.doc)
-    .insert({ ...header, workspace_id: resolved, total: sumLineAmounts(lines) })
-    .select("id")
-    .single();
+  let insertHeader = { ...header, workspace_id: resolved, total: sumLineAmounts(lines) };
+  let { data, error } = await supabase.from(config.doc).insert(insertHeader).select("id").single();
+
+  // goods_receipts.supplier_name is optional until the SQL is applied — retry without it.
+  if (error && kind === "receipt" && isMissingSupplierNameColumn(error) && "supplier_name" in insertHeader) {
+    const { supplier_name: _unused, ...withoutSupplier } = insertHeader;
+    void _unused;
+    insertHeader = withoutSupplier;
+    ({ data, error } = await supabase.from(config.doc).insert(insertHeader).select("id").single());
+  }
+
   if (error || !data) throw mapWarehouseOpsError(error ?? {}, "inventory.ops.errors.createFailed");
 
   const docId = String((data as Record<string, unknown>).id);
@@ -273,11 +323,17 @@ async function createOp(
 }
 
 export function createGoodsReceipt(input: CreateGoodsReceiptInput, workspaceId: string | undefined) {
+  const supplierName = normalizeSupplierName(input.supplierName);
   return createOp(
     "receipt",
     workspaceId,
     // The column default is 'posted' (imports) — browser-created receipts are always drafts until posted via RPC.
-    { warehouse_id: input.warehouseId, status: "draft", comment: input.comment?.trim() || null },
+    {
+      warehouse_id: input.warehouseId,
+      status: "draft",
+      comment: input.comment?.trim() || null,
+      supplier_name: supplierName,
+    },
     input.lines,
   );
 }
@@ -304,6 +360,222 @@ async function postOp(kind: WarehouseOpKind, id: string) {
   const config = configs[kind];
   const { error } = await supabase.rpc(config.postRpc, { [config.postArg]: id });
   if (error) throw mapWarehouseOpsError(error, "inventory.ops.errors.postFailed");
+}
+
+const SUPPLIER_DELIVERIES_PAGE_SIZE = 50;
+const IN_FILTER_CHUNK_SIZE = 200;
+
+/** Escapes `\`, `%`, and `_` so an `ilike` pattern behaves as exact case-insensitive equality. */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+function emptySupplierDeliveriesPage(page: number, pageSize: number): SupplierDeliveriesPage {
+  return {
+    rows: [],
+    page,
+    pageSize,
+    hasMore: false,
+    totalCount: 0,
+    postedTotal: 0,
+    lastDeliveryAt: null,
+  };
+}
+
+type DbResult<T> = { data: T[] | null; error: { message?: string; code?: string } | null };
+
+/** Runs `.in()` queries in chunks of 200 ids and concatenates rows. */
+async function selectInChunks<T>(
+  ids: string[],
+  fetchChunk: (chunk: string[]) => PromiseLike<DbResult<T>>,
+): Promise<{ rows: T[]; error: { message?: string; code?: string } | null }> {
+  if (ids.length === 0) return { rows: [], error: null };
+  const rows: T[] = [];
+  for (let i = 0; i < ids.length; i += IN_FILTER_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + IN_FILTER_CHUNK_SIZE);
+    const { data, error } = await fetchChunk(chunk);
+    if (error) return { rows, error };
+    if (data) rows.push(...data);
+  }
+  return { rows, error: null };
+}
+
+async function hydrateReceiptDocs(
+  workspaceId: string,
+  docs: Record<string, unknown>[],
+): Promise<GoodsReceiptRecord[]> {
+  if (docs.length === 0) return [];
+  const config = configs.receipt;
+  const linesByDoc = new Map<string, Record<string, unknown>[]>();
+  const itemIds = new Set<string>();
+  const docIds = docs.map((doc) => String(doc.id));
+
+  const { rows: lineRows, error: linesError } = await selectInChunks<Record<string, unknown>>(docIds, (chunk) =>
+    supabase
+      .from(config.lines)
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .in(config.fk, chunk)
+      .order("position", { ascending: true }),
+  );
+  if (linesError) {
+    if (isMissingTableError(linesError, config.lines)) return [];
+    throw new Error(linesError.message);
+  }
+  for (const row of lineRows) {
+    const key = String(row[config.fk]);
+    linesByDoc.set(key, [...(linesByDoc.get(key) ?? []), row]);
+    if (row.inventory_item_id) itemIds.add(String(row.inventory_item_id));
+  }
+
+  const names = await getItemNames(workspaceId, [...itemIds]);
+  return docs.map(
+    (doc) =>
+      toWarehouseOp(
+        "receipt",
+        doc,
+        (linesByDoc.get(String(doc.id)) ?? []).map((line) => toLine(line, names)),
+      ) as GoodsReceiptRecord,
+  );
+}
+
+function receiptHeaderSortKey(doc: Record<string, unknown>) {
+  return toText(doc.received_at) || toText(doc.created_at) || "";
+}
+
+function receiptHeaderIsPosted(doc: Record<string, unknown>) {
+  return doc.status !== "draft";
+}
+
+type SupplierReceiptHeader = {
+  doc: Record<string, unknown>;
+  matchedByLegacy: boolean;
+};
+
+/**
+ * Goods receipts for a supplier: exact `supplier_name` match (case-insensitive) plus legacy
+ * receipts with null supplier_name that include catalog lines from that supplier.
+ */
+export async function getSupplierDeliveries(
+  workspaceId: string | undefined,
+  supplierName: string,
+  page = 1,
+  pageSize = SUPPLIER_DELIVERIES_PAGE_SIZE,
+): Promise<SupplierDeliveriesPage> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const name = supplierName.trim();
+  if (!name) return emptySupplierDeliveriesPage(1, pageSize);
+
+  const config = configs.receipt;
+  const safePage = Math.max(1, Math.floor(page) || 1);
+  const safeSize = Math.min(100, Math.max(1, Math.floor(pageSize) || SUPPLIER_DELIVERIES_PAGE_SIZE));
+  const likePattern = escapeLikePattern(name);
+
+  // Exact match (case-insensitive). Escaped pattern ≈ lower(col) = lower(value).
+  const { data: exactRows, error: exactError } = await supabase
+    .from(config.doc)
+    .select("*")
+    .eq("workspace_id", resolved)
+    .is("deleted_at", null)
+    .ilike("supplier_name", likePattern)
+    .order("received_at", { ascending: false });
+  if (exactError) {
+    if (isMissingTableError(exactError, config.doc)) return emptySupplierDeliveriesPage(safePage, safeSize);
+    // Column missing: skip exact match and rely on legacy item-supplier fallback only.
+    if (!isMissingSupplierNameColumn(exactError)) throw new Error(exactError.message);
+  }
+
+  const exactDocs = (exactRows ?? []) as Record<string, unknown>[];
+  const exactIds = new Set(exactDocs.map((doc) => String(doc.id)));
+
+  // Legacy: receipts with null supplier_name that use items from this supplier.
+  const { data: itemRows, error: itemsError } = await supabase
+    .from("inventory_items")
+    .select("id")
+    .eq("workspace_id", resolved)
+    .ilike("supplier", likePattern);
+  if (itemsError) throw new Error(itemsError.message);
+
+  const itemIds = ((itemRows ?? []) as { id?: unknown }[]).map((row) => String(row.id)).filter(Boolean);
+  let legacyDocs: Record<string, unknown>[] = [];
+  if (itemIds.length > 0) {
+    const { rows: legacyLineRows, error: legacyLinesError } = await selectInChunks<{ goods_receipt_id?: unknown }>(
+      itemIds,
+      (chunk) =>
+        supabase
+          .from(config.lines)
+          .select("goods_receipt_id")
+          .eq("workspace_id", resolved)
+          .in("inventory_item_id", chunk),
+    );
+    if (legacyLinesError) {
+      if (!isMissingTableError(legacyLinesError, config.lines)) throw new Error(legacyLinesError.message);
+    } else {
+      const legacyReceiptIds = [
+        ...new Set(
+          legacyLineRows
+            .map((row) => String(row.goods_receipt_id ?? ""))
+            .filter((id) => id && !exactIds.has(id)),
+        ),
+      ];
+      if (legacyReceiptIds.length > 0) {
+        const { rows: legacyReceiptRows, error: legacyReceiptsError } = await selectInChunks<Record<string, unknown>>(
+          legacyReceiptIds,
+          (chunk) =>
+            supabase
+              .from(config.doc)
+              .select("*")
+              .eq("workspace_id", resolved)
+              .is("deleted_at", null)
+              .is("supplier_name", null)
+              .in("id", chunk)
+              .order("received_at", { ascending: false }),
+        );
+        if (legacyReceiptsError) throw new Error(legacyReceiptsError.message);
+        legacyDocs = legacyReceiptRows;
+      }
+    }
+  }
+
+  const mergedHeaders: SupplierReceiptHeader[] = [
+    ...exactDocs.map((doc) => ({ doc, matchedByLegacy: false })),
+    ...legacyDocs.map((doc) => ({ doc, matchedByLegacy: true })),
+  ].sort((a, b) => receiptHeaderSortKey(b.doc).localeCompare(receiptHeaderSortKey(a.doc)));
+
+  const totalCount = mergedHeaders.length;
+  const postedTotal = mergedHeaders.reduce(
+    (sum, header) => (receiptHeaderIsPosted(header.doc) ? sum + toNum(header.doc.total) : sum),
+    0,
+  );
+  const lastDeliveryAt = mergedHeaders[0] ? receiptHeaderSortKey(mergedHeaders[0].doc) || null : null;
+
+  const start = (safePage - 1) * safeSize;
+  const pageHeaders = mergedHeaders.slice(start, start + safeSize);
+  const hydrated = await hydrateReceiptDocs(
+    resolved,
+    pageHeaders.map((header) => header.doc),
+  );
+  const rows: SupplierDelivery[] = hydrated.map((row, index) => ({
+    ...row,
+    matchedByLegacy: pageHeaders[index]?.matchedByLegacy ?? false,
+  }));
+
+  return {
+    rows,
+    page: safePage,
+    pageSize: safeSize,
+    hasMore: start + safeSize < totalCount,
+    totalCount,
+    postedTotal,
+    lastDeliveryAt,
+  };
+}
+
+/** Catalog parts with this supplier (same filter as the Inventory supplier dropdown). */
+export async function getSupplierParts(workspaceId: string | undefined, supplierName: string) {
+  const name = supplierName.trim();
+  if (!name) return [];
+  return getInventoryItems(undefined, "all", { field: "name", ascending: true }, workspaceId, name);
 }
 
 /** Posts a draft receipt: warehouse_stock and inventory_items.quantity increase (server side only). */

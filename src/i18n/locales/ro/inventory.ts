@@ -113,6 +113,7 @@ const inventory: Messages<typeof en> = {
       toWarehouse: "În depozitul",
       warehousePlaceholder: "Selectează depozitul",
       reason: "Motiv",
+      supplier: "Furnizor",
       comment: "Comentariu",
       lines: "Linii",
       itemPlaceholder: "Selectează articolul",

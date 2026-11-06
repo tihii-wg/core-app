@@ -10,6 +10,7 @@ import {
 } from "../../ui/DropdownMenu";
 import { InventoryStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
+import { SupplierLink } from "../suppliers/SupplierLink";
 import { quantityClass } from "./inventoryDisplay";
 import { effectiveStockStatus } from "./stockStatus";
 
@@ -78,8 +79,9 @@ export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: I
       </div>
 
       {item.supplier ? (
-        <p className="mt-1 truncate text-[13px] text-muted-foreground" title={item.supplier}>
-          {t("inventory.fields.supplier")}: {item.supplier}
+        <p className="mt-1 truncate text-[13px] text-muted-foreground">
+          {t("inventory.fields.supplier")}:{" "}
+          <SupplierLink supplier={item.supplier} className="text-[13px]" />
         </p>
       ) : null}
 

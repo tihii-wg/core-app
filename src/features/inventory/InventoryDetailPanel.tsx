@@ -14,6 +14,7 @@ import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useInventoryMovements } from "./useInventoryMovements";
+import { SupplierLink } from "../suppliers/SupplierLink";
 import { QuickGoodsReceiptDialog } from "./QuickGoodsReceiptDialog";
 import { effectiveStockStatus } from "./stockStatus";
 
@@ -118,7 +119,15 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
               <DetailRow label={t("inventory.fields.unit")} value={item.unit || "—"} />
               <DetailRow label={t("inventory.fields.purchasePrice")} value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
               <DetailRow label={t("inventory.fields.sellingPrice")} value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
-              {item.supplier?.trim() ? <DetailRow label={t("inventory.fields.supplier")} value={item.supplier} /> : null}
+              {item.supplier?.trim() ? (
+                <div className="flex items-start justify-between gap-4 py-2.5">
+                  <span className="shrink-0 text-[13px] text-muted-foreground">{t("inventory.fields.supplier")}</span>
+                  <SupplierLink
+                    supplier={item.supplier}
+                    className="min-w-0 text-right text-[13px] font-medium [overflow-wrap:anywhere]"
+                  />
+                </div>
+              ) : null}
               {item.location?.trim() ? <DetailRow label={t("inventory.fields.location")} value={item.location} /> : null}
               <DetailRow label={t("inventory.fields.created")} value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
               <DetailRow label={t("inventory.fields.updated")} value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />

@@ -37,6 +37,7 @@ import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { languageFromPath } from "../../i18n/languages";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
+import { SupplierLink } from "../suppliers/SupplierLink";
 
 /** Fixed sort for the attention query so it stays cacheable while the table sort changes. */
 const attentionSort: InventorySort = { field: "quantity", ascending: true };
@@ -148,9 +149,11 @@ export function Inventory() {
       key: "supplier",
       header: t("inventory.fields.supplier"),
       cell: (item) => (
-        <span className="block max-w-[10rem] truncate text-muted-foreground" title={item.supplier || undefined}>
-          {item.supplier || "—"}
-        </span>
+        <SupplierLink
+          supplier={item.supplier}
+          className="block max-w-[10rem] truncate"
+          emptyClassName="block max-w-[10rem] truncate text-muted-foreground"
+        />
       ),
       className: "hidden md:table-cell",
     },

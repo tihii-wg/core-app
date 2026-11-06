@@ -106,6 +106,7 @@ export default {
       toWarehouse: "To warehouse",
       warehousePlaceholder: "Select warehouse",
       reason: "Reason",
+      supplier: "Supplier",
       comment: "Comment",
       lines: "Lines",
       itemPlaceholder: "Select item",

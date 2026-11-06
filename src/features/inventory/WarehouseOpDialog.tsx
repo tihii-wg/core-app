@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Plus, Trash2 } from "lucide-react";
@@ -11,6 +11,7 @@ import { Spinner } from "../../ui/Spinner";
 import type { InventoryItem } from "../../lib/types";
 import type { WarehouseRecord } from "../../services/apiWarehouses";
 import type { WarehouseStockRecord } from "../../services/apiWarehouseStock";
+import { useGetInventorySuppliers } from "./useGetInventorySuppliers";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
 import { useCreateGoodsReceipt, useCreateStockTransfer, useCreateWriteOff } from "./useWarehouseOps";
 import {
@@ -124,12 +125,29 @@ function OpForm({
   // Parent list with zero active items (not a filtered search) — empty catalog for this workspace.
   const catalogEmpty = items.filter((item) => item.isActive).length === 0 && createdItems.length === 0;
 
+  const { suppliers } = useGetInventorySuppliers();
   const [warehouseId, setWarehouseId] = useState(activeWarehouses.find((w) => w.isDefault)?.id ?? activeWarehouses[0]?.id ?? "");
   const [toWarehouseId, setToWarehouseId] = useState("");
   const [reason, setReason] = useState("other");
   const [comment, setComment] = useState("");
+  const [supplierName, setSupplierName] = useState("");
   const [lines, setLines] = useState<DraftLine[]>(() => [newLine()]);
   const [error, setError] = useState<string | null>(null);
+
+  const commonLineSupplier = useMemo(() => {
+    if (kind !== "receipt") return "";
+    const names = new Set(
+      lines
+        .map((line) => itemById.get(line.itemId)?.supplier?.trim() ?? "")
+        .filter(Boolean),
+    );
+    return names.size === 1 ? [...names][0]! : "";
+  }, [kind, lines, itemById]);
+
+  useEffect(() => {
+    if (kind !== "receipt" || !commonLineSupplier) return;
+    setSupplierName((current) => (current.trim() ? current : commonLineSupplier));
+  }, [kind, commonLineSupplier]);
 
   const sourceStock = useMemo(
     () => (kind === "receipt" ? undefined : stockByItemForWarehouse(stock, warehouseId)),
@@ -188,7 +206,17 @@ function OpForm({
 
     setError(null);
     const options = { onSuccess: onDone };
-    if (kind === "receipt") createReceipt.mutate({ warehouseId, comment, lines: parsedLines }, options);
+    if (kind === "receipt") {
+      createReceipt.mutate(
+        {
+          warehouseId,
+          comment,
+          supplierName: supplierName.trim() || null,
+          lines: parsedLines,
+        },
+        options,
+      );
+    }
     else if (kind === "transfer") createTransfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId, comment, lines: parsedLines }, options);
     else createWriteOff.mutate({ warehouseId, reason, comment, lines: parsedLines }, options);
   }
@@ -359,6 +387,27 @@ function OpForm({
               </>
             )}
           </div>
+
+          {kind === "receipt" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="op-supplier">{t("inventory.ops.fields.supplier")}</Label>
+              <Input
+                id="op-supplier"
+                list="op-supplier-suggestions"
+                maxLength={200}
+                value={supplierName}
+                onChange={(event) => setSupplierName(event.target.value)}
+                disabled={isPending}
+                placeholder={t("inventory.form.supplierPlaceholder")}
+                autoComplete="off"
+              />
+              <datalist id="op-supplier-suggestions">
+                {suppliers.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="op-comment">{t("inventory.ops.fields.comment")}</Label>
