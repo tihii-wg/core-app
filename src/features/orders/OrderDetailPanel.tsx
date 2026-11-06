@@ -67,9 +67,9 @@ import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
+import { CancelOrderDialog } from "./CancelOrderDialog";
 import { CloseOrderDialog } from "./CloseOrderDialog";
 import { isOrderCurrentlyClosed, isOrderFormallyClosed } from "./orderLifecycle";
-import { useCancelOrder } from "./useCloseOrder";
 import {
   resolveCurrentUnifiedStatus,
   resolveUnifiedStatusSelection,
@@ -112,7 +112,6 @@ export default function OrderDetailPanel({
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
-  const cancelOrder = useCancelOrder();
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
   const showClientVehicles = industrySupportsClientVehicles(workflow);
@@ -697,7 +696,7 @@ export default function OrderDetailPanel({
                     <Lock className="size-3.5" />
                     {t("orders.lifecycle.closeAction")}
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating || cancelOrder.isPending}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
                     <CircleX className="size-3.5" />
                     {t("orders.lifecycle.cancelAction")}
                   </Button>
@@ -705,7 +704,7 @@ export default function OrderDetailPanel({
               ) : null}
               {showCancelClosedAction ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating || cancelOrder.isPending}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
                     <CircleX className="size-3.5" />
                     {t("orders.lifecycle.cancelAction")}
                   </Button>
@@ -771,6 +770,7 @@ export default function OrderDetailPanel({
                       number: selectedOrder.orderNumber || t("orders.emptyOrderLabel"),
                     })}
               </DialogDescription>
+              <p className="text-sm text-muted-foreground">{t("orders.cancelFinance.deleteRemovesAll")}</p>
             </DialogHeader>
             {deleteBlockedReason ? (
               <p className="text-sm text-destructive" role="alert">
@@ -828,49 +828,21 @@ export default function OrderDetailPanel({
         }}
       />
 
-      {selectedOrder ? (
-        <Dialog
-          open={cancelOpen}
-          onOpenChange={(open) => {
-            if (cancelOrder.isPending) return;
-            setCancelOpen(open);
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("orders.lifecycle.cancelTitle")}</DialogTitle>
-              <DialogDescription>
-                {t("orders.lifecycle.cancelDescription", { number: selectedOrder.orderNumber })}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelOrder.isPending}>
-                {t("common.cancel")}
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={cancelOrder.isPending}
-                onClick={() => {
-                  cancelOrder.mutate(selectedOrder.id, {
-                    onSuccess: (result) => {
-                      setCancelOpen(false);
-                      onOrderUpdated({
-                        ...selectedOrder,
-                        status: "cancelled",
-                        customStatusId: result.customStatusId,
-                        customStatus: result.customStatus,
-                      });
-                    },
-                  });
-                }}
-              >
-                {cancelOrder.isPending ? t("common.saving") : t("orders.lifecycle.confirmCancel")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+      <CancelOrderDialog
+        order={selectedOrder}
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        onCancelled={(result) => {
+          if (!selectedOrder) return;
+          onOrderUpdated({
+            ...selectedOrder,
+            status: "cancelled",
+            customStatusId: result.customStatusId,
+            customStatus: result.customStatus,
+            closedAt: result.closed_at ?? selectedOrder.closedAt,
+          });
+        }}
+      />
     </Sheet>
   );
 }

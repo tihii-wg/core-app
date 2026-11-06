@@ -1,13 +1,17 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
+import { formatWorkspaceMoney, workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 import {
-  cancelOrder,
+  cancelOrderWithPaymentVoid,
   closeOrder,
   type CancelOrderResult,
+  type CancelOrderWithPaymentVoidResult,
   type CloseOrderResult,
 } from "../../services/apiOrders";
+import { invalidatePaymentViews } from "../finance/usePayments";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { patchOrderLists } from "./orderCache";
 
@@ -20,6 +24,25 @@ function invalidateOrderCaches(queryClient: QueryClient, workspaceId: string | u
   void queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
+}
+
+export type CancelOrderMutationInput =
+  | string
+  | {
+      orderId: string;
+      voidPayments?: boolean;
+      reason?: string | null;
+    };
+
+function normalizeCancelInput(input: CancelOrderMutationInput) {
+  if (typeof input === "string") {
+    return { orderId: input, voidPayments: false, reason: null as string | null };
+  }
+  return {
+    orderId: input.orderId,
+    voidPayments: input.voidPayments === true,
+    reason: input.reason ?? null,
+  };
 }
 
 /** Patch every cached order list/page so cancelled status is visible before refetch settles. */
@@ -85,19 +108,45 @@ export function useCloseOrder() {
 export function useCancelOrder() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const { data: workspace } = useGetWorkspace(workspaceId);
+  const currency = workspace?.currency ?? workspacePreferenceDefaults.currency;
   const guardWrite = useGuardSubscriptionWrite();
   return useMutation({
-    mutationFn: (orderId: string) => {
+    mutationFn: (input: CancelOrderMutationInput) => {
       guardWrite();
-      return cancelOrder(orderId, workspaceId);
+      const normalized = normalizeCancelInput(input);
+      return cancelOrderWithPaymentVoid(normalized.orderId, workspaceId, {
+        voidPayments: normalized.voidPayments,
+        reason: normalized.reason,
+      });
     },
-    onSuccess: (result, orderId) => {
+    onSuccess: (result: CancelOrderWithPaymentVoidResult, input) => {
+      const orderId = typeof input === "string" ? input : input.orderId;
       // Only toast after the RPC succeeded; patch caches so list/board/detail agree immediately.
       patchCancelledOrderInCache(queryClient, workspaceId, orderId, result);
       invalidateOrderCaches(queryClient, workspaceId, orderId);
-      toast.success(
-        result?.idempotent ? i18n.t("orders.lifecycle.toast.alreadyCancelled") : i18n.t("orders.lifecycle.toast.cancelled"),
-      );
+      invalidatePaymentViews(queryClient, workspaceId);
+
+      if (result.voidedCount > 0) {
+        toast.success(
+          i18n.t("orders.cancelFinance.toast.cancelledAndVoided", {
+            count: result.voidedCount,
+            amount: formatWorkspaceMoney(result.voidedTotal, currency),
+          }),
+        );
+      } else {
+        toast.success(
+          result.idempotent
+            ? i18n.t("orders.lifecycle.toast.alreadyCancelled")
+            : i18n.t("orders.lifecycle.toast.cancelled"),
+        );
+      }
+
+      if (result.skipped.length > 0) {
+        toast(i18n.t("orders.cancelFinance.toast.skippedRefunded", { count: result.skipped.length }), {
+          id: "cancel-order-skipped-refunds",
+        });
+      }
     },
     onError: (error: Error) => toast.error(error.message || i18n.t("common.somethingWentWrong")),
   });

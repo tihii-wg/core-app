@@ -625,6 +625,26 @@ export default {
       cancelNotPersisted: "Cancellation did not persist. The order was not marked cancelled. Nothing was changed in the UI.",
     },
   },
+  cancelFinance: {
+    paymentsTitle: "Payments on this order",
+    voidPayments: "Void the payments of this order",
+    voidHint: "Voided payments disappear from finances, after which the order can be deleted completely.",
+    reasonLabel: "Void reason",
+    defaultReason: "Order cancelled {{number}}",
+    reasonTooShort: "Enter a reason (at least 8 characters)",
+    refundedWarning:
+      "Payments with refunds ({{count}}) cannot be voided automatically — they will keep the order from being deleted.",
+    confirmWithVoid: "Cancel order and void payments",
+    toast: {
+      cancelledAndVoided: "Order cancelled, voided {{count}} payment(s) totaling {{amount}}",
+      skippedRefunded: "Could not void payments with refunds: {{count}}",
+    },
+    errors: {
+      voidForbidden: "You do not have permission to void payments for this order.",
+    },
+    deleteRemovesAll:
+      "Voided payments and warranties are removed with the order; issued materials return to stock.",
+  },
   warranty: {
     badge: "Warranty",
     claimBadge: "Warranty order",

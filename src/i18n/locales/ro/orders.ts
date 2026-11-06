@@ -630,6 +630,26 @@ const orders: Messages<typeof en> = {
       cancelNotPersisted: "Anularea nu a fost salvată. Comanda nu a fost marcată ca anulată. Interfața nu s-a schimbat.",
     },
   },
+  cancelFinance: {
+    paymentsTitle: "Plăți pe comandă",
+    voidPayments: "Anulează plățile acestei comenzi",
+    voidHint: "Plățile anulate dispar din finanțe, după care comanda poate fi ștearsă complet.",
+    reasonLabel: "Motivul anulării plăților",
+    defaultReason: "Anulare comandă {{number}}",
+    reasonTooShort: "Introduceți un motiv (minimum 8 caractere)",
+    refundedWarning:
+      "Plățile cu rambursare ({{count}}) nu pot fi anulate automat — vor bloca ștergerea comenzii.",
+    confirmWithVoid: "Anulează comanda și plățile",
+    toast: {
+      cancelledAndVoided: "Comandă anulată, {{count}} plăți anulate în valoare de {{amount}}",
+      skippedRefunded: "Nu s-au anulat plățile cu rambursare: {{count}}",
+    },
+    errors: {
+      voidForbidden: "Nu ai dreptul să anulezi plățile acestei comenzi.",
+    },
+    deleteRemovesAll:
+      "Odată cu comanda se șterg plățile anulate și garanțiile; materialele eliberate revin în stoc.",
+  },
   warranty: {
     badge: "Garanție",
     claimBadge: "Comandă în garanție",

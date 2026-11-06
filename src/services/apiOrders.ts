@@ -1941,26 +1941,17 @@ export type CancelOrderResult = {
   customStatus: { name: string; color: string | null } | null;
 };
 
-/** Formal cancel via RPC. Does not set closed_at, create refunds, or touch inventory. */
-export async function cancelOrder(orderId: string, workspaceId: string | undefined): Promise<CancelOrderResult> {
-  const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase.rpc("cancel_order", {
-    p_order_id: orderId,
-    p_workspace_id: targetWorkspaceId,
-  });
-  if (error) {
-    if (isMissingRpcError(error, "cancel_order")) {
-      throw new MissingRpcError("cancel_order", i18n.t("orders.lifecycle.errors.rpcRequired"));
-    }
-    throw new Error(mapCancelOrderError(error.message));
-  }
-
+async function resolveCancelOrderResult(
+  orderId: string,
+  targetWorkspaceId: string,
+  data: unknown,
+): Promise<CancelOrderResult> {
   const payload = (data ?? {}) as {
     ok?: boolean;
     idempotent?: boolean;
     order_id?: string;
     custom_status_id?: string | null;
-    closed_at?: null;
+    closed_at?: string | null;
   };
 
   // Prefer the RPC-reported custom_status_id; fall back to a fresh read so UI/cache
@@ -1998,9 +1989,119 @@ export async function cancelOrder(orderId: string, workspaceId: string | undefin
 
   return {
     ...payload,
+    closed_at: typeof payload.closed_at === "string" ? payload.closed_at : payload.closed_at === null ? null : undefined,
     status: "cancelled",
     customStatusId: customStatusId ?? null,
     customStatus,
+  };
+}
+
+/** Formal cancel via RPC. Does not set closed_at, create refunds, or touch inventory. */
+export async function cancelOrder(orderId: string, workspaceId: string | undefined): Promise<CancelOrderResult> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc("cancel_order", {
+    p_order_id: orderId,
+    p_workspace_id: targetWorkspaceId,
+  });
+  if (error) {
+    if (isMissingRpcError(error, "cancel_order")) {
+      throw new MissingRpcError("cancel_order", i18n.t("orders.lifecycle.errors.rpcRequired"));
+    }
+    throw new Error(mapCancelOrderError(error.message));
+  }
+
+  return resolveCancelOrderResult(orderId, targetWorkspaceId, data);
+}
+
+export type CancelOrderSkippedPayment = {
+  paymentId: string;
+  amount: number;
+  reason: "has_refund";
+};
+
+export type CancelOrderWithPaymentVoidResult = CancelOrderResult & {
+  voidedCount: number;
+  voidedTotal: number;
+  skipped: CancelOrderSkippedPayment[];
+  /** True when the combined RPC was missing and plain cancelOrder was used instead. */
+  voidUnavailable?: boolean;
+};
+
+export type CancelOrderWithPaymentVoidOptions = {
+  voidPayments: boolean;
+  reason?: string | null;
+};
+
+const CANCEL_WITH_VOID_RPC = "crm_cancel_order_with_payment_void";
+
+function mapCancelWithVoidError(message: string) {
+  if (/order_payment_void:forbidden/i.test(message)) {
+    return i18n.t("orders.cancelFinance.errors.voidForbidden");
+  }
+  return mapCancelOrderError(message);
+}
+
+function mapSkippedPayments(value: unknown): CancelOrderSkippedPayment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const record = row as Record<string, unknown>;
+    const paymentId = typeof record.payment_id === "string" ? record.payment_id : "";
+    if (!paymentId) return [];
+    const amount = typeof record.amount === "number" ? record.amount : Number(record.amount);
+    return [
+      {
+        paymentId,
+        amount: Number.isFinite(amount) ? amount : 0,
+        reason: "has_refund" as const,
+      },
+    ];
+  });
+}
+
+/**
+ * Cancel an order and optionally void its original payments in one transaction.
+ * Falls back to plain `cancelOrder` when the combined RPC is not installed.
+ */
+export async function cancelOrderWithPaymentVoid(
+  orderId: string,
+  workspaceId: string | undefined,
+  options: CancelOrderWithPaymentVoidOptions,
+): Promise<CancelOrderWithPaymentVoidResult> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc(CANCEL_WITH_VOID_RPC, {
+    p_order_id: orderId,
+    p_workspace_id: targetWorkspaceId,
+    p_void_payments: options.voidPayments === true,
+    p_reason: options.reason?.trim() ? options.reason.trim() : null,
+  });
+
+  if (error) {
+    if (isMissingRpcError(error, CANCEL_WITH_VOID_RPC)) {
+      const cancelled = await cancelOrder(orderId, targetWorkspaceId);
+      return {
+        ...cancelled,
+        voidedCount: 0,
+        voidedTotal: 0,
+        skipped: [],
+        voidUnavailable: true,
+      };
+    }
+    throw new Error(mapCancelWithVoidError(error.message));
+  }
+
+  const cancelled = await resolveCancelOrderResult(orderId, targetWorkspaceId, data);
+  const payload = (data ?? {}) as Record<string, unknown>;
+  const voidedCount =
+    typeof payload.voided_count === "number" ? payload.voided_count : Number(payload.voided_count) || 0;
+  const voidedTotal =
+    typeof payload.voided_total === "number" ? payload.voided_total : Number(payload.voided_total) || 0;
+
+  return {
+    ...cancelled,
+    voidedCount: Number.isFinite(voidedCount) ? voidedCount : 0,
+    voidedTotal: Number.isFinite(voidedTotal) ? voidedTotal : 0,
+    skipped: mapSkippedPayments(payload.skipped),
   };
 }
 

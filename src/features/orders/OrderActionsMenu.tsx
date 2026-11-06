@@ -35,8 +35,8 @@ import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useDeleteOrder } from "./useDeleteOrder";
 import { isOrderFormallyClosed } from "./orderLifecycle";
+import { CancelOrderDialog } from "./CancelOrderDialog";
 import { CloseOrderDialog } from "./CloseOrderDialog";
-import { useCancelOrder } from "./useCloseOrder";
 import { useGetPayments } from "../finance/usePayments";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
@@ -114,7 +114,6 @@ export function OrderActionsMenu({
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [copyingPublicLink, setCopyingPublicLink] = useState(false);
-  const cancelOrderMutation = useCancelOrder();
   const { payments } = useGetPayments();
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
@@ -383,6 +382,7 @@ export function OrderActionsMenu({
                     number: order.orderNumber || t("orders.emptyOrderLabel"),
                   })}
             </DialogDescription>
+            <p className="text-sm text-muted-foreground">{t("orders.cancelFinance.deleteRemovesAll")}</p>
           </DialogHeader>
           {deleteBlockedReason ? (
             <p className="text-sm text-destructive" role="alert">
@@ -433,40 +433,20 @@ export function OrderActionsMenu({
         }}
       />
 
-      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <DialogContent onClick={stop}>
-          <DialogHeader>
-            <DialogTitle>{t("orders.lifecycle.cancelTitle")}</DialogTitle>
-            <DialogDescription>{t("orders.lifecycle.cancelDescription", { number: order.orderNumber })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setCancelOpen(false)} disabled={cancelOrderMutation.isPending}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={cancelOrderMutation.isPending}
-              onClick={() => {
-                cancelOrderMutation.mutate(order.id, {
-                  onSuccess: (result) => {
-                    setCancelOpen(false);
-                    onOrderUpdated?.({
-                      ...order,
-                      status: "cancelled",
-                      customStatusId: result.customStatusId,
-                      customStatus: result.customStatus,
-                      closedAt: result.closed_at ?? order.closedAt,
-                    });
-                  },
-                });
-              }}
-            >
-              {cancelOrderMutation.isPending ? t("common.saving") : t("orders.lifecycle.confirmCancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CancelOrderDialog
+        order={order}
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        onCancelled={(result) => {
+          onOrderUpdated?.({
+            ...order,
+            status: "cancelled",
+            customStatusId: result.customStatusId,
+            customStatus: result.customStatus,
+            closedAt: result.closed_at ?? order.closedAt,
+          });
+        }}
+      />
     </>
   );
 }
