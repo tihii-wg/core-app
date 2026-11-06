@@ -1210,7 +1210,9 @@ async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]
     p_materials: payload,
   });
 
-  if (error) throw new Error(materialsSyncError(error));
+  if (error) {
+    throw mapOrderWarrantyDbError(error) ?? new Error(materialsSyncError(error));
+  }
   const mapped = mapMaterialLines((data ?? []) as OrderMaterialLine[]);
 
   if (!workspaceId) return mapped;
@@ -2739,7 +2741,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       .eq("order_id", orderId)
       .in("id", scopedIds)
       .select("id");
-    if (deleteError) throw new Error(deleteError.message);
+    if (deleteError) throw mapOrderWarrantyDbError(deleteError) ?? new Error(deleteError.message);
     if (!deletedLines || deletedLines.length !== scopedIds.length) throw new Error(orderPermissionMessage());
   }
 
@@ -2851,6 +2853,26 @@ export const REOPEN_CANCELLED_ORDER_SQL = "20261105220000_reopen_cancelled_order
 /** Manual SQL: close clears stale custom status; delete cleans exclusive warranty_records. */
 export const LIFECYCLE_CLOSE_CANCEL_DELETE_SQL =
   "20261105120000_lifecycle_close_cancel_delete_warranty.PRODUCTION.sql";
+
+/**
+ * Map warranty line-removal DB failures to localized copy (never surface raw codes).
+ * Returns null when the error is unrelated so callers can keep their existing fallback.
+ */
+export function mapOrderWarrantyDbError(error: {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+}): Error | null {
+  const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  if (/warranty_records:snapshot_immutable/i.test(blob)) {
+    return new Error(i18n.t("orders.warranty.errors.snapshotImmutable"));
+  }
+  if (/warranty_records:has_claims/i.test(blob)) {
+    return new Error(i18n.t("orders.warranty.errors.hasClaims"));
+  }
+  return null;
+}
 
 /** Map order-delete FK / integrity / RPC failures to localized copy (never surface raw SQL). */
 export function mapOrderDeleteDbError(error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {

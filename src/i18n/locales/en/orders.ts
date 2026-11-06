@@ -691,6 +691,9 @@ export default {
       schemaRequired: "Apply the order warranty SQL on MAIN before using warranty links.",
       deleteBlocked: "This order has linked warranty claim orders. Remove or re-link those claims first.",
       deleteBlockedByClaims: "Linked warranty orders still reference this order: {{docs}}. Nothing was deleted.",
+      snapshotImmutable:
+        "This line has an active warranty. Only the workspace owner can remove it — on a cancelled order or after the order is returned to work.",
+      hasClaims: "A warranty claim order already references this line's warranty. The line cannot be removed.",
     },
   },
 };

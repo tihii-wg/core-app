@@ -1060,7 +1060,13 @@ describe("tax invoice requirement", () => {
   });
 
   it("does not gate non-paid statuses even when the requirement is enabled", async () => {
-    const { updates } = statusSetup({ required: true, taxNumber: null, clientType: "organization" });
+    // Start from a different open status so the write is not treated as an idempotent no-op.
+    const { updates } = statusSetup({
+      required: true,
+      taxNumber: null,
+      clientType: "organization",
+      currentStatus: "in-progress",
+    });
     await updateOrderStatus("order-1", "completed", "ws-1");
     expect(updates[0]).toEqual({ status: "completed", custom_status_id: null });
   });

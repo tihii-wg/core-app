@@ -701,6 +701,9 @@ const orders: Messages<typeof en> = {
       schemaRequired: "Aplicați SQL-ul modulului de garanție pe MAIN înainte de utilizare.",
       deleteBlocked: "Comanda are cereri de garanție legate. Eliminați sau relegați-le mai întâi.",
       deleteBlockedByClaims: "Comenzi de garanție legate încă referă această comandă: {{docs}}. Nimic nu a fost șters.",
+      snapshotImmutable:
+        "Această poziție are o garanție activă. Doar proprietarul o poate elimina — pe o comandă anulată sau pe o comandă readusă în lucru.",
+      hasClaims: "Pe garanția acestei poziții există deja o comandă de garanție. Poziția nu poate fi eliminată.",
     },
   },
 };
