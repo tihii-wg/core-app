@@ -57,6 +57,16 @@ vi.mock("../workspaces/useGetWorkspace", () => ({
   useGetWorkspace: () => ({ data: { currency: "MDL" } }),
 }));
 
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useWorkspaceSubscription: () => ({ canWrite: true }),
+}));
+
+vi.mock("../warehouses/useGetWarehouses", () => ({
+  useGetWarehouses: () => ({ data: [{ id: "wh-1", isActive: true }], isLoading: false }),
+}));
+
+vi.mock("./QuickGoodsReceiptDialog", () => ({ QuickGoodsReceiptDialog: () => null }));
+
 vi.mock("../profiles/useGetProfile", () => ({
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
 }));

@@ -311,6 +311,26 @@ const inventory: Messages<typeof en> = {
     updateNotFound: "Articolul de stoc nu a fost găsit sau nu ai permisiunea de a-l modifica.",
     deleteNotFound: "Articolul de stoc nu a fost găsit sau nu ai permisiunea de a-l șterge.",
   },
+  purge: {
+    title: "Ștergere piesă",
+    usedInOrdersTitle: "Piesa este folosită în comenzi",
+    usedInOrdersHint: "Pentru a șterge piesa, anulează mai întâi aceste comenzi.",
+    ownerOnly: "Doar proprietarul spațiului poate șterge complet piesa. Poți să o marchezi ca inactivă.",
+    willRemove:
+      "Vor fi eliminate: stoc {{quantity}}, mișcări de depozit {{movements}}, loturi {{batches}}, numere de serie {{serials}}, linii din documente ciornă {{draftLines}}.",
+    postedNote: "Documentele postate se păstrează — liniile rămân fără legătură către piesă ({{count}}).",
+    cancelledOrdersNote: "În comenzile anulate ({{count}}) poziția rămâne ca piesă unică.",
+    confirmIrreversible: "Înțeleg că această acțiune nu poate fi anulată",
+    deletePermanently: "Șterge definitiv",
+    markInactive: "Marchează inactivă",
+    errors: {
+      usedInOrders: "Piesa este folosită în comenzi: {{orders}}. Anulează mai întâi aceste comenzi.",
+      ownerOnly: "Doar proprietarul spațiului poate șterge piesa.",
+    },
+    toast: {
+      purged: "Piesa și istoricul ei de depozit au fost șterse",
+    },
+  },
   byIndustry: {
     auto_repair: {
       title: "Piese",

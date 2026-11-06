@@ -304,6 +304,26 @@ export default {
     updateNotFound: "Inventory item was not found or you do not have permission to change it.",
     deleteNotFound: "Inventory item was not found or you do not have permission to delete it.",
   },
+  purge: {
+    title: "Delete part",
+    usedInOrdersTitle: "This part is used in orders",
+    usedInOrdersHint: "To delete the part, cancel these orders first.",
+    ownerOnly: "Only the workspace owner can fully delete this part. You can mark it inactive instead.",
+    willRemove:
+      "Will be removed: stock {{quantity}}, warehouse movements {{movements}}, batches {{batches}}, serial numbers {{serials}}, draft document lines {{draftLines}}.",
+    postedNote: "Posted documents will be kept — their lines stay without a link to the part ({{count}}).",
+    cancelledOrdersNote: "In cancelled orders ({{count}}) the line will remain as a one-time part.",
+    confirmIrreversible: "I understand this cannot be undone",
+    deletePermanently: "Delete permanently",
+    markInactive: "Mark inactive",
+    errors: {
+      usedInOrders: "This part is used in orders: {{orders}}. Cancel those orders first.",
+      ownerOnly: "Only the workspace owner can delete this part.",
+    },
+    toast: {
+      purged: "Part and its warehouse history were deleted",
+    },
+  },
   byIndustry: {
     auto_repair: {
       title: "Parts",

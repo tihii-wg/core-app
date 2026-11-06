@@ -1,13 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createInventoryItem, distinctSupplierNames, getInventoryItems, getInventorySuppliers, toInventoryItem } from "./apiInventory";
+import {
+  createInventoryItem,
+  distinctSupplierNames,
+  getInventoryItemDeletePreview,
+  getInventoryItems,
+  getInventorySuppliers,
+  purgeInventoryItem,
+  toInventoryItem,
+  toInventoryItemDeletePreview,
+  toPurgeInventoryItemResult,
+} from "./apiInventory";
+import { MissingRpcError } from "./missingRpc";
 
 const getUser = vi.hoisted(() => vi.fn());
 const from = vi.hoisted(() => vi.fn());
+const rpc = vi.hoisted(() => vi.fn());
 
 vi.mock("./supabase", () => ({
   default: {
     auth: { getUser },
     from,
+    rpc,
   },
 }));
 
@@ -93,6 +106,135 @@ describe("inventory suppliers", () => {
   it("refuses to load suppliers without a workspace", async () => {
     await expect(getInventorySuppliers(undefined)).rejects.toThrow("No active workspace selected");
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe("inventory item purge RPCs", () => {
+  beforeEach(() => {
+    rpc.mockReset();
+  });
+
+  it("maps preview jsonb to camelCase including blocking orders", () => {
+    expect(
+      toInventoryItemDeletePreview({
+        item_id: "item-1",
+        item_name: "Pads",
+        is_owner: true,
+        can_delete: false,
+        blocking_orders: [{ order_id: "o1", number: "ORD-1", status: "in-progress" }],
+        cancelled_orders_count: 2,
+        stock_quantity: "3.5",
+        movements_count: 4,
+        stock_rows_count: 1,
+        batches_count: 0,
+        serials_count: 1,
+        reservations_count: 0,
+        draft_document_lines_count: 2,
+        posted_document_lines_count: 5,
+      }),
+    ).toEqual({
+      itemId: "item-1",
+      itemName: "Pads",
+      isOwner: true,
+      canDelete: false,
+      blockingOrders: [{ orderId: "o1", number: "ORD-1", status: "in-progress" }],
+      cancelledOrdersCount: 2,
+      stockQuantity: 3.5,
+      movementsCount: 4,
+      stockRowsCount: 1,
+      batchesCount: 0,
+      serialsCount: 1,
+      reservationsCount: 0,
+      draftDocumentLinesCount: 2,
+      postedDocumentLinesCount: 5,
+    });
+  });
+
+  it("maps purge jsonb to camelCase", () => {
+    expect(
+      toPurgeInventoryItemResult({
+        item_id: "item-1",
+        deleted: true,
+        detached_cancelled_order_lines: 1,
+        deleted_movements: 3,
+        deleted_stock_rows: 2,
+        deleted_draft_document_lines: 4,
+      }),
+    ).toEqual({
+      itemId: "item-1",
+      deleted: true,
+      detachedCancelledOrderLines: 1,
+      deletedMovements: 3,
+      deletedStockRows: 2,
+      deletedDraftDocumentLines: 4,
+    });
+  });
+
+  it("calls the preview RPC and returns the mapped preview", async () => {
+    rpc.mockResolvedValue({
+      data: {
+        item_id: "item-1",
+        item_name: "Pads",
+        is_owner: true,
+        can_delete: true,
+        blocking_orders: [],
+        cancelled_orders_count: 0,
+        stock_quantity: 0,
+        movements_count: 1,
+        stock_rows_count: 0,
+        batches_count: 0,
+        serials_count: 0,
+        reservations_count: 0,
+        draft_document_lines_count: 0,
+        posted_document_lines_count: 0,
+      },
+      error: null,
+    });
+
+    await expect(getInventoryItemDeletePreview("item-1", "ws-1")).resolves.toMatchObject({
+      itemId: "item-1",
+      canDelete: true,
+      movementsCount: 1,
+    });
+    expect(rpc).toHaveBeenCalledWith("crm_inventory_item_delete_preview", { p_item_id: "item-1" });
+  });
+
+  it("maps used_in_orders with order numbers from error.details", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: "inventory_item_purge:used_in_orders", details: "ORD-1, ORD-2" },
+    });
+    await expect(purgeInventoryItem("item-1", "ws-1")).rejects.toThrow(/ORD-1, ORD-2/);
+  });
+
+  it("maps owner_only and not_found purge errors", async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "inventory_item_purge:owner_only" },
+    });
+    await expect(purgeInventoryItem("item-1", "ws-1")).rejects.toThrow(/workspace owner/i);
+
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "inventory_item_purge:not_found" },
+    });
+    await expect(purgeInventoryItem("item-1", "ws-1")).rejects.toThrow(/not found/i);
+  });
+
+  it("throws MissingRpcError when the preview RPC is not installed", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "Could not find the function crm_inventory_item_delete_preview" },
+    });
+    await expect(getInventoryItemDeletePreview("item-1", "ws-1")).rejects.toBeInstanceOf(MissingRpcError);
+  });
+
+  it("throws MissingRpcError when the purge RPC is not installed", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST202", message: "Could not find the function crm_purge_inventory_item" },
+    });
+    await expect(purgeInventoryItem("item-1", "ws-1")).rejects.toBeInstanceOf(MissingRpcError);
   });
 });
 

@@ -7,8 +7,44 @@ import {
   normalizeCatalogWarrantyDefaults,
 } from "../features/orders/catalogWarranty";
 import i18n from "../i18n";
+import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
+
+const PREVIEW_RPC = "crm_inventory_item_delete_preview";
+const PURGE_RPC = "crm_purge_inventory_item";
+
+export type InventoryItemDeleteBlockingOrder = {
+  orderId: string;
+  number: string;
+  status: string;
+};
+
+export type InventoryItemDeletePreview = {
+  itemId: string;
+  itemName: string;
+  isOwner: boolean;
+  canDelete: boolean;
+  blockingOrders: InventoryItemDeleteBlockingOrder[];
+  cancelledOrdersCount: number;
+  stockQuantity: number;
+  movementsCount: number;
+  stockRowsCount: number;
+  batchesCount: number;
+  serialsCount: number;
+  reservationsCount: number;
+  draftDocumentLinesCount: number;
+  postedDocumentLinesCount: number;
+};
+
+export type PurgeInventoryItemResult = {
+  itemId: string;
+  deleted: true;
+  detachedCancelledOrderLines: number;
+  deletedMovements: number;
+  deletedStockRows: number;
+  deletedDraftDocumentLines: number;
+};
 
 let catalogWarrantyColumnsSupported: boolean | null = null;
 
@@ -302,4 +338,115 @@ export async function deleteInventoryItem(inventoryItemId: string, workspaceId: 
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.deleteFailed"));
   if (!data?.length) throw new Error(i18n.t("inventory.errors.deleteNotFound"));
+}
+
+function countValue(value: unknown) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function mapBlockingOrders(value: unknown): InventoryItemDeleteBlockingOrder[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const record = row as Record<string, unknown>;
+    const orderId = textValue(record.order_id);
+    const number = textValue(record.number);
+    if (!orderId || !number) return [];
+    return [{ orderId, number, status: textValue(record.status) }];
+  });
+}
+
+/** @internal test helper — maps preview RPC jsonb to camelCase. */
+export function toInventoryItemDeletePreview(payload: Record<string, unknown>): InventoryItemDeletePreview {
+  return {
+    itemId: textValue(payload.item_id),
+    itemName: textValue(payload.item_name),
+    isOwner: payload.is_owner === true,
+    canDelete: payload.can_delete === true,
+    blockingOrders: mapBlockingOrders(payload.blocking_orders),
+    cancelledOrdersCount: countValue(payload.cancelled_orders_count),
+    stockQuantity: countValue(payload.stock_quantity),
+    movementsCount: countValue(payload.movements_count),
+    stockRowsCount: countValue(payload.stock_rows_count),
+    batchesCount: countValue(payload.batches_count),
+    serialsCount: countValue(payload.serials_count),
+    reservationsCount: countValue(payload.reservations_count),
+    draftDocumentLinesCount: countValue(payload.draft_document_lines_count),
+    postedDocumentLinesCount: countValue(payload.posted_document_lines_count),
+  };
+}
+
+/** @internal test helper — maps purge RPC jsonb to camelCase. */
+export function toPurgeInventoryItemResult(payload: Record<string, unknown>): PurgeInventoryItemResult {
+  return {
+    itemId: textValue(payload.item_id),
+    deleted: true,
+    detachedCancelledOrderLines: countValue(payload.detached_cancelled_order_lines),
+    deletedMovements: countValue(payload.deleted_movements),
+    deletedStockRows: countValue(payload.deleted_stock_rows),
+    deletedDraftDocumentLines: countValue(payload.deleted_draft_document_lines),
+  };
+}
+
+type RpcLikeError = { code?: string; message?: string; details?: string | null };
+
+function purgeInventoryError(error: RpcLikeError): Error {
+  const message = error.message ?? "";
+  if (/inventory_item_purge:used_in_orders/i.test(message)) {
+    const orders = typeof error.details === "string" ? error.details : "";
+    return new Error(i18n.t("inventory.purge.errors.usedInOrders", { orders }));
+  }
+  if (/inventory_item_purge:owner_only/i.test(message)) {
+    return new Error(i18n.t("inventory.purge.errors.ownerOnly"));
+  }
+  if (/inventory_item_purge:not_found/i.test(message)) {
+    return new Error(i18n.t("inventory.errors.deleteNotFound"));
+  }
+  if (/inventory_item_purge:not_authenticated|inventory_item_purge:not_member/i.test(message)) {
+    return new Error(i18n.t("inventory.errors.permission"));
+  }
+  return new Error(message || i18n.t("inventory.errors.deleteFailed"));
+}
+
+export async function getInventoryItemDeletePreview(
+  itemId: string,
+  workspaceId: string | undefined,
+): Promise<InventoryItemDeletePreview> {
+  requireWorkspaceId(workspaceId);
+  const id = itemId.trim();
+  if (!id) throw new Error(i18n.t("inventory.errors.deleteNotFound"));
+
+  const { data, error } = await supabase.rpc(PREVIEW_RPC, { p_item_id: id });
+  if (error) {
+    if (isMissingRpcError(error, PREVIEW_RPC)) {
+      throw new MissingRpcError(PREVIEW_RPC, i18n.t("inventory.errors.deleteFailed"));
+    }
+    throw purgeInventoryError(error);
+  }
+  if (!data || typeof data !== "object") {
+    throw new Error(i18n.t("inventory.errors.deleteFailed"));
+  }
+  return toInventoryItemDeletePreview(data as Record<string, unknown>);
+}
+
+export async function purgeInventoryItem(
+  itemId: string,
+  workspaceId: string | undefined,
+): Promise<PurgeInventoryItemResult> {
+  requireWorkspaceId(workspaceId);
+  const id = itemId.trim();
+  if (!id) throw new Error(i18n.t("inventory.errors.deleteNotFound"));
+
+  const { data, error } = await supabase.rpc(PURGE_RPC, { p_item_id: id });
+  if (error) {
+    if (isMissingRpcError(error, PURGE_RPC)) {
+      throw new MissingRpcError(PURGE_RPC, i18n.t("inventory.errors.deleteFailed"));
+    }
+    throw purgeInventoryError(error);
+  }
+  if (!data || typeof data !== "object") {
+    throw new Error(i18n.t("inventory.errors.deleteFailed"));
+  }
+  return toPurgeInventoryItemResult(data as Record<string, unknown>);
 }
