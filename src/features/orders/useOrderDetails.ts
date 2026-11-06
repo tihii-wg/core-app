@@ -78,6 +78,7 @@ export function useOrderDetails() {
         status: result.status,
         customStatusId: result.customStatusId,
         customStatus: result.customStatus,
+        ...(Object.prototype.hasOwnProperty.call(result, "closedAt") ? { closedAt: result.closedAt ?? null } : {}),
         ...(result.status === "paid"
           ? { isPaid: true, paymentStatus: "paid" as const }
           : leftPaid

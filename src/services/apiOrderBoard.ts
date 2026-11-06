@@ -75,7 +75,8 @@ export async function moveOrderOnBoard(
 
   const fromCustomStatusId = await getCurrentCustomStatusId(orderId, resolved);
 
-  // Open-order path must not run against a formally closed or cancelled row.
+  // Open-order path must not run against a formally closed row (status=closed).
+  // Cancelled → open is handled inside updateOrderStatus via reopen_cancelled_order (owner_id).
   const { data: existing, error: existingError } = await supabase
     .from("orders")
     .select("status, closed_at")
@@ -86,15 +87,9 @@ export async function moveOrderOnBoard(
   if (!existing) throw new Error(i18n.t("orders.board.errors.moveFailed"));
   const existingStatus =
     typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
-  // Closed-order mutation gate is enforced inside updateOrderStatus (owner manage setting).
-  // Keep a specific cancelled message for non-closed cancelled rows.
-  const isClosedRow =
-    Boolean((existing as { closed_at?: unknown }).closed_at) || existingStatus === "closed";
-  if (!isClosedRow && existingStatus === "cancelled") {
-    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
-  }
+  // Closed-order mutation / cancelled reopen gates are enforced inside updateOrderStatus.
 
-  if (fromCustomStatusId) {
+  if (fromCustomStatusId && existingStatus !== "cancelled") {
     await assertCustomStatusTransition(resolved, fromCustomStatusId, customStatusId);
   }
 

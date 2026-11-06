@@ -52,9 +52,9 @@ export function resolveWarrantyStartAt(
 }
 
 /**
- * Whether the order has ever been formally closed (timestamp) or is currently
- * marked closed. Used for authorization / content locks — `closed_at` is not
- * cleared on cancel or owner status changes, so this stays true after reopen.
+ * Whether the order is formally closed right now (active `closed_at` and/or
+ * status=closed). Cancel preserves `closed_at`; owner reopen clears it so this
+ * becomes false and the normal Close Order workflow returns.
  */
 export function isOrderFormallyClosed(order: Pick<Order, "closedAt" | "status">) {
   return Boolean(order.closedAt?.trim()) || order.status === "closed";
@@ -62,8 +62,8 @@ export function isOrderFormallyClosed(order: Pick<Order, "closedAt" | "status">)
 
 /**
  * Whether the order is in the live closed lifecycle state right now.
- * Use for the detail-card closure banner — do not treat a historical `closed_at`
- * after cancel/reopen as the current status.
+ * Use for the detail-card closure banner — cancelled or reopened orders must
+ * not show the closed-state message even if history still has past closures.
  */
 export function isOrderCurrentlyClosed(order: Pick<Order, "status" | "closedAt">) {
   return order.status === "closed" && Boolean(order.closedAt?.trim());

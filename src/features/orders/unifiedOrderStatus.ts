@@ -138,16 +138,17 @@ export function resolveCurrentUnifiedStatus(
 export function resolveUnifiedStatusSelection(
   order: Pick<Order, "status" | "customStatusId" | "closedAt">,
   option: UnifiedStatusOption,
-  opts?: { allowManageClosed?: boolean },
+  opts?: { allowManageClosed?: boolean; allowReopenCancelled?: boolean },
 ): BoardMove | null {
   if (option.semanticAction === "close" || option.semanticAction === "cancel") return null;
   if (option.systemStatus === "closed" || option.systemStatus === "cancelled") return null;
 
-  // Closed/cancelled are lifecycle-only unless the owner manage-closed override is active.
-  // Cancelled-without-close stays locked (no reopen via ordinary selector).
-  if (isLifecycleOrderStatus(order)) {
+  // Cancelled → open requires the owner reopen exception (clears closed_at via RPC).
+  if (order.status === "cancelled") {
+    if (!opts?.allowReopenCancelled) return null;
+  } else if (isLifecycleOrderStatus(order)) {
+    // Ordinary closed rows need the owner manage-closed override.
     if (!opts?.allowManageClosed) return null;
-    if (order.status === "cancelled" && !order.closedAt?.trim()) return null;
   }
 
   if (option.kind === "definition") {

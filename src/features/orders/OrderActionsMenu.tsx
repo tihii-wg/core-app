@@ -124,7 +124,7 @@ export function OrderActionsMenu({
     ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
   });
   const statusLockedForMenu =
-    (formallyClosed && !canManageClosedContent) || (order.status === "cancelled" && !formallyClosed);
+    order.status === "cancelled" ? !isOwnerByOwnerId : formallyClosed && !canManageClosedContent;
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
   const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
@@ -234,6 +234,7 @@ export function OrderActionsMenu({
                     if (locked) return;
                     const move = resolveUnifiedStatusSelection(order, option, {
                       allowManageClosed: canManageClosedContent,
+                      allowReopenCancelled: isOwnerByOwnerId,
                     });
                     if (!move) return;
                     if (option.kind === "definition" || move.customStatusId !== null || order.customStatusId) {

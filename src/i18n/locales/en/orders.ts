@@ -618,6 +618,7 @@ export default {
       useCancelAction: "Use Cancel order. Status changes cannot cancel an order.",
       orderAlreadyClosed: "This order is formally closed. Status cannot be changed here.",
       orderAlreadyCancelled: "This order is cancelled. Status cannot be changed here.",
+      invalidReopenStatus: "Choose an open workflow status to reopen this cancelled order.",
       cancelNotPersisted: "Cancellation did not persist. The order was not marked cancelled. Nothing was changed in the UI.",
     },
   },

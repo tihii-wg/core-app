@@ -146,12 +146,13 @@ export default function OrderDetailPanel({
       ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
     });
   const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
-  // Closed/cancelled statuses stay locked unless the owner manage-closed setting is on.
-  // Cancelled content editing uses canMutateContent (owner_id) — status selector stays locked.
+  // Cancelled: owner_id may reopen via status change (clears closed_at). Ordinary closed
+  // still requires owner_can_manage_closed_orders. Non-owners stay locked on both.
   const lifecycleStatusLocked =
     selectedOrder != null &&
-    ((isOrderFormallyClosed(selectedOrder) && !canManageClosedContent) ||
-      (selectedOrder.status === "cancelled" && !isOrderFormallyClosed(selectedOrder)));
+    (selectedOrder.status === "cancelled"
+      ? !isOwnerByOwnerId
+      : isOrderFormallyClosed(selectedOrder) && !canManageClosedContent);
   const closedContentLocked = selectedOrder != null && !canMutateContent;
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
@@ -598,6 +599,7 @@ export default function OrderDetailPanel({
                   if (!option) return;
                   const move = resolveUnifiedStatusSelection(selectedOrder, option, {
                     allowManageClosed: canManageClosedContent,
+                    allowReopenCancelled: isOwnerByOwnerId,
                   });
                   if (!move) return;
                   if (move.status === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
@@ -611,17 +613,21 @@ export default function OrderDetailPanel({
                         currentStatus: selectedOrder.status,
                       },
                       {
-                        onSuccess: () => {
+                        onSuccess: (result) => {
                           onOrderUpdated({
                             ...selectedOrder,
-                            status: move.status,
-                            customStatusId: move.customStatusId,
+                            status: result.status,
+                            customStatusId: result.customStatusId,
                             customStatus:
-                              option.kind === "definition" ? { name: option.name, color: option.color } : null,
-                            closedAt: selectedOrder.closedAt,
-                            ...(move.status === "paid"
+                              result.customStatus ??
+                              (option.kind === "definition" ? { name: option.name, color: option.color } : null),
+                            closedAt:
+                              Object.prototype.hasOwnProperty.call(result, "closedAt")
+                                ? (result.closedAt ?? null)
+                                : selectedOrder.closedAt,
+                            ...(result.status === "paid"
                               ? { isPaid: true, paymentStatus: "paid" as const }
-                              : selectedOrder.status === "paid" && move.status !== "closed" && move.status !== "cancelled"
+                              : selectedOrder.status === "paid" && result.status !== "closed" && result.status !== "cancelled"
                                 ? { isPaid: false, paymentStatus: "unpaid" as const }
                                 : {}),
                           });

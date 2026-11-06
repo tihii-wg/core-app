@@ -2008,11 +2008,100 @@ function mapCancelOrderError(message: string) {
   return message;
 }
 
+function mapReopenCancelledOrderError(message: string) {
+  const parsed = parseLifecycleRpcError(message);
+  if (parsed.code === "forbidden" || parsed.code === "workspace_mismatch") {
+    return i18n.t("orders.lifecycle.errors.forbidden");
+  }
+  if (parsed.code === "order_not_found") return orderPermissionMessage();
+  if (parsed.code === "not_cancelled") return i18n.t("orders.lifecycle.errors.orderAlreadyCancelled");
+  if (parsed.code === "invalid_reopen_status" || parsed.code === "replace_target_invalid") {
+    return i18n.t("orders.lifecycle.errors.invalidReopenStatus");
+  }
+  return message;
+}
+
 export type UpdateOrderStatusResult = {
   status: OrderStatus;
   customStatusId: string | null;
   customStatus: { name: string; color: string | null } | null;
+  /** Present after reopen-from-cancelled (always null) so UI clears stale closed banners. */
+  closedAt?: string | null;
 };
+
+export type ReopenCancelledOrderResult = {
+  ok?: boolean;
+  order_id?: string;
+  status: OrderStatus;
+  closedAt: null;
+  customStatusId: string | null;
+  customStatus: { name: string; color: string | null } | null;
+};
+
+/**
+ * Owner-only: reopen a cancelled order into an open workflow status.
+ * Clears active `closed_at` via reopen token; preserves order_events / warranties.
+ */
+export async function reopenCancelledOrder(
+  orderId: string,
+  workspaceId: string | undefined,
+  status: OrderStatus,
+  options?: { customStatusId?: string | null },
+): Promise<ReopenCancelledOrderResult> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  if (status === "closed" || status === "cancelled") {
+    throw new Error(i18n.t("orders.lifecycle.errors.invalidReopenStatus"));
+  }
+
+  const { data, error } = await supabase.rpc("reopen_cancelled_order", {
+    p_order_id: orderId,
+    p_workspace_id: targetWorkspaceId,
+    p_status: status,
+    p_custom_status_id: options?.customStatusId ?? null,
+  });
+  if (error) {
+    if (isMissingRpcError(error, "reopen_cancelled_order")) {
+      throw new MissingRpcError("reopen_cancelled_order", i18n.t("orders.lifecycle.errors.rpcRequired"));
+    }
+    throw new Error(mapReopenCancelledOrderError(error.message));
+  }
+
+  const payload = (data ?? {}) as {
+    ok?: boolean;
+    order_id?: string;
+    status?: string;
+    closed_at?: string | null;
+    custom_status_id?: string | null;
+  };
+
+  const nextStatus =
+    typeof payload.status === "string" && orderStatuses.has(payload.status as OrderStatus)
+      ? (payload.status as OrderStatus)
+      : status;
+
+  let customStatusId =
+    typeof payload.custom_status_id === "string" && payload.custom_status_id.trim()
+      ? payload.custom_status_id.trim()
+      : payload.custom_status_id === null
+        ? null
+        : (options?.customStatusId ?? null);
+
+  let customStatus: { name: string; color: string | null } | null = null;
+  if (customStatusId) {
+    const found = (await getStatusDefinitionsByIds(targetWorkspaceId, [customStatusId]).catch(() => new Map())).get(
+      customStatusId,
+    );
+    customStatus = found ? { name: found.name, color: found.color } : null;
+  }
+
+  return {
+    ...payload,
+    status: nextStatus,
+    closedAt: null,
+    customStatusId: customStatusId ?? null,
+    customStatus,
+  };
+}
 
 /**
  * Sole application write path that can set `orders.status = paid` / `is_paid`.
@@ -2029,7 +2118,8 @@ export type UpdateOrderStatusResult = {
  * Non-owner updates keep `.neq("status","paid")` so a concurrent Paid write cannot be overwritten.
  *
  * Does NOT perform formal close/cancel — use `closeOrder` / `cancelOrder`.
- * Rejects `closed` and `cancelled` at the app layer.
+ * Rejects writing `closed` / `cancelled` at the app layer.
+ * Cancelled → open is a real lifecycle reopen via `reopen_cancelled_order` (owner_id only).
  *
  * Order feed history (`order_events`) is written by the DB trigger
  * `crm_orders_status_event` — this function must not also call `crm_record_order_event`.
@@ -2077,6 +2167,63 @@ export async function updateOrderStatus(
     typeof (existing as { custom_status_id?: unknown }).custom_status_id === "string"
       ? ((existing as { custom_status_id: string }).custom_status_id.trim() || null)
       : null;
+
+  // Cancelled → open: owner_id only via reopen RPC (clears closed_at). Independent of manage-closed.
+  if (currentStatus === "cancelled") {
+    const isOwner = await isWorkspaceOwnerIdOnServer(targetWorkspaceId);
+    if (!isOwner) {
+      throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
+    }
+
+    const matched = hasCustomOverride
+      ? null
+      : await resolveCustomStatusForSystemStatus(targetWorkspaceId, status).catch(() => null);
+    const nextCustomStatusId = hasCustomOverride ? (options!.customStatusId ?? null) : (matched?.id ?? null);
+
+    let nextCustomStatus: { name: string; color: string | null } | null = matched
+      ? { name: matched.name, color: matched.color }
+      : null;
+    if (hasCustomOverride && nextCustomStatusId) {
+      const found = (await getStatusDefinitionsByIds(targetWorkspaceId, [nextCustomStatusId]).catch(() => new Map())).get(
+        nextCustomStatusId,
+      );
+      nextCustomStatus = found ? { name: found.name, color: found.color } : null;
+    } else if (hasCustomOverride) {
+      nextCustomStatus = null;
+    }
+
+    if (status === "paid") {
+      await assertTaxInvoiceAllowsPaid(orderId, targetWorkspaceId);
+    }
+
+    const reopened = await reopenCancelledOrder(orderId, targetWorkspaceId, status, {
+      customStatusId: nextCustomStatusId,
+    });
+
+    if (options?.recordActivity !== false) {
+      await recordActivity({
+        workspaceId: targetWorkspaceId,
+        entityType: "order",
+        entityId: orderId,
+        event: "order.status_changed",
+        details: {
+          from: currentStatus,
+          to: reopened.status,
+          fromCustomStatusId,
+          toCustomStatusId: reopened.customStatusId,
+          lifecycle: "reopen",
+        },
+      });
+    }
+
+    return {
+      status: reopened.status,
+      customStatusId: reopened.customStatusId,
+      customStatus: reopened.customStatus ?? nextCustomStatus,
+      closedAt: null,
+    };
+  }
+
   const isClosedRow =
     Boolean((existing as { closed_at?: unknown }).closed_at) || currentStatus === "closed";
   if (isClosedRow) {
@@ -2086,8 +2233,6 @@ export async function updateOrderStatus(
     if (!mayManage) {
       throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
     }
-  } else if (currentStatus === "cancelled") {
-    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
   }
 
   let ownerMayChangePaid = false;
@@ -2699,6 +2844,9 @@ export const OWNER_REGULAR_STATUS_ON_LIFECYCLE_SQL =
 /** Manual SQL: cancelled+owner may unlink warranty line FKs without rewriting snapshots. */
 export const CANCELLED_ORDER_OWNER_WARRANTY_EDIT_SQL =
   "20261105210000_cancelled_order_owner_warranty_edit.PRODUCTION.sql";
+
+/** Manual SQL: owner reopens cancelled → open status and clears active closed_at. */
+export const REOPEN_CANCELLED_ORDER_SQL = "20261105220000_reopen_cancelled_order.PRODUCTION.sql";
 
 /** Manual SQL: close clears stale custom status; delete cleans exclusive warranty_records. */
 export const LIFECYCLE_CLOSE_CANCEL_DELETE_SQL =

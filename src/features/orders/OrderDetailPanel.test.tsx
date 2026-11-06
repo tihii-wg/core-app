@@ -115,6 +115,12 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
   useActiveWorkspaceRole: () => roleState.role,
 }));
 
+const ownerIdState = vi.hoisted(() => ({ isOwner: true }));
+
+vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
+  useIsWorkspaceOwnerId: () => ownerIdState.isOwner,
+}));
+
 vi.mock("./OrderAttachmentsSection", () => ({
   default: () => <div data-testid="order-attachments-stub" />,
 }));
@@ -271,6 +277,7 @@ function renderPanel(
 beforeEach(() => {
   industryState.slug = "auto_repair";
   roleState.role = "owner";
+  ownerIdState.isOwner = true;
   updateOrderHooks.isPending = false;
   updateOrderHooks.mutateAsync.mockReset();
   taxInvoiceHooks.isPending = false;
@@ -867,12 +874,32 @@ describe("OrderDetailPanel closed-order banner", () => {
     expect(screen.queryByText(`Closed at ${closedAt}`)).not.toBeInTheDocument();
   });
 
-  it("hides the stale closure banner after reopen while closed_at remains", async () => {
+  it("hides the closure banner after reopen clears closed_at and shows Close Order", async () => {
     renderPanel(vi.fn(), vi.fn(), {
-      order: { ...order, status: "in-progress", closedAt },
+      order: { ...order, status: "in-progress", closedAt: null },
     });
     expect(await screen.findByRole("heading", { name: /ORD-2026-003/ })).toBeInTheDocument();
     expect(screen.queryByText("Order closed")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Close order/i })).toBeInTheDocument();
+  });
+
+  it("lets the workspace owner change status on a cancelled order", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "cancelled", closedAt },
+    });
+    expect(await screen.findByRole("combobox", { name: /Update Status/i })).toBeEnabled();
+    expect(screen.queryByText(/Status cannot be changed here/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Close order/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps cancelled status locked for non-owners", async () => {
+    ownerIdState.isOwner = false;
+    roleState.role = "admin";
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "cancelled", closedAt },
+    });
+    expect(await screen.findByText(/This order is cancelled/i)).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Update Status/i })).not.toBeInTheDocument();
   });
 
   it("shows the new closure banner when the order is closed again", async () => {

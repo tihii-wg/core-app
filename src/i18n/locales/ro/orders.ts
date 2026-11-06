@@ -623,6 +623,7 @@ const orders: Messages<typeof en> = {
       useCancelAction: "Folosiți «Anulează comanda». Schimbarea obișnuită de status nu este permisă.",
       orderAlreadyClosed: "Comanda este închisă formal. Statusul nu poate fi schimbat aici.",
       orderAlreadyCancelled: "Comanda este anulată. Statusul nu poate fi schimbat aici.",
+      invalidReopenStatus: "Alegeți un status activ pentru a redeschide comanda anulată.",
       cancelNotPersisted: "Anularea nu a fost salvată. Comanda nu a fost marcată ca anulată. Interfața nu s-a schimbat.",
     },
   },
