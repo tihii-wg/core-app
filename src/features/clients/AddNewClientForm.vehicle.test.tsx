@@ -121,4 +121,42 @@ describe("AddNewClientForm optional vehicle", () => {
     expect(createClientMock).not.toHaveBeenCalled();
     expect(createVehicleMock).not.toHaveBeenCalled();
   });
+
+  it("prefills the name and calls onCreated with the new client", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    const setCreateModalOpen = vi.fn();
+    renderWithQuery(
+      <AddNewClientForm setCreateModalOpen={setCreateModalOpen} initialName="Nina New" onCreated={onCreated} />,
+    );
+
+    expect(screen.getByLabelText(/^Full name/i)).toHaveValue("Nina New");
+    await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
+    await user.click(screen.getByRole("button", { name: /Add Client/i }));
+
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(onCreated).toHaveBeenCalledWith({
+      client: expect.objectContaining({ id: "client-1", name: "Ada" }),
+      vehicleId: null,
+    });
+    expect(setCreateModalOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("returns the created vehicle id via onCreated", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    renderWithQuery(<AddNewClientForm setCreateModalOpen={() => {}} initialName="Nina New" onCreated={onCreated} />);
+
+    await user.click(screen.getByLabelText("Add a vehicle"));
+    await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
+    await user.type(screen.getByLabelText(/^Make$/), "Toyota");
+    await user.type(screen.getByLabelText(/^VIN$/), "1HGBH41JXMN109186");
+    await user.click(screen.getByRole("button", { name: /Add Client/i }));
+
+    await vi.waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(onCreated).toHaveBeenCalledWith({
+      client: expect.objectContaining({ id: "client-1" }),
+      vehicleId: "veh-1",
+    });
+  });
 });

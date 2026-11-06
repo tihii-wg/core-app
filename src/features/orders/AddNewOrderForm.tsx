@@ -6,11 +6,12 @@ import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
-import type { addNewOrderFormData, CreateMadalProps, Vehicle } from "../../lib/types";
+import type { addNewOrderFormData, Client, CreateMadalProps, Vehicle } from "../../lib/types";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,9 +21,6 @@ import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
-import { clientPhoneRules, clientTypeRules } from "../clients/clientValidation";
-import ClientTypeSelect from "../clients/ClientTypeSelect";
-import { industryClientCopy } from "../industries/industryWorkflow";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -53,11 +51,20 @@ export default function AddNewOrderForm({
   const { t } = useTranslation();
   const { services } = useGetServices();
   const [clientName, setClientName] = useState(initialClientName);
-  // Explicit create mode — typing a name that already exists must not auto-reuse that client.
-  const [createNewClient, setCreateNewClient] = useState(false);
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [clientDialogInitialName, setClientDialogInitialName] = useState("");
+  /** Clients just created in this session — shown immediately before the list refetch lands. */
+  const [extraClients, setExtraClients] = useState<Client[]>([]);
+  const pendingVehicleIdRef = useRef<string | null>(null);
+  const clientInputRef = useRef<HTMLInputElement | null>(null);
   const debouncedClientSearch = useDebounce(clientName.trim(), 250);
   const clientListSearch = debouncedClientSearch || searchQuery;
   const { clients } = useGetClients(clientListSearch);
+  const clientsForCombobox = useMemo(() => {
+    const base = clients ?? [];
+    const extras = extraClients.filter((extra) => !base.some((client) => client.id === extra.id));
+    return extras.length > 0 ? [...extras, ...base] : base;
+  }, [clients, extraClients]);
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: createOrder } = useCreateOrder();
@@ -73,7 +80,6 @@ export default function AddNewOrderForm({
     partsMileageLimit: workspace?.warrantyPartsKm ?? null,
   };
   const { workflow, copy } = useIndustryWorkflow();
-  const clientCopy = industryClientCopy(workflow);
   const showVehicles = industrySupportsClientVehicles(workflow);
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const submitLockRef = useRef(false);
@@ -116,17 +122,22 @@ export default function AddNewOrderForm({
   /** Client-vehicle industries: order-level make/plate/VIN are obsolete — use the vehicle selector only. */
   const hideDuplicateVehicleAssetFields = showVehicles;
   const typedClientName = clientName.trim();
-  const isNewClient = createNewClient && typedClientName !== "" && !selectedClientId;
-  const newClientType = useWatch({ control, name: "newClientType" });
-  const isNewOrganization = isNewClient && newClientType === "organization";
   const selectedClient = useMemo(
-    () => (selectedClientId ? (clients ?? []).find((client) => client.id === selectedClientId) : undefined),
-    [clients, selectedClientId],
+    () => (selectedClientId ? clientsForCombobox.find((client) => client.id === selectedClientId) : undefined),
+    [clientsForCombobox, selectedClientId],
   );
 
   useEffect(() => {
     if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
   }, [clearErrors, hideDuplicateVehicleAssetFields]);
+
+  useEffect(() => {
+    const pending = pendingVehicleIdRef.current;
+    if (!pending || !selectedClientId) return;
+    if (!clientVehicles.some((vehicle) => vehicle.id === pending)) return;
+    setValue("vehicleId", pending);
+    pendingVehicleIdRef.current = null;
+  }, [clientVehicles, selectedClientId, setValue]);
 
   const {
     fields: serviceField,
@@ -161,8 +172,8 @@ export default function AddNewOrderForm({
     submitLockRef.current = true;
 
     try {
-      // Typed name without an explicit select or create must not silently reuse/create by name.
-      if (typedClientName && !data.clientId && !createNewClient) {
+      // Typed name without an explicit select must not silently reuse/create by name.
+      if (typedClientName && !data.clientId) {
         toast.error(t("clients.combobox.selectOrCreate"));
         submitLockRef.current = false;
         return;
@@ -171,7 +182,7 @@ export default function AddNewOrderForm({
       const selectedVehicleId = data.vehicleId?.trim() || "";
       if (showVehicles && selectedVehicleId) {
         try {
-          // Prefer the live hook list; fall back to cache for a vehicle just created inline
+          // Prefer the live hook list; fall back to cache for a vehicle just created
           // before the parent form re-renders from query invalidation.
           const cachedVehicles =
             queryClient.getQueryData<Vehicle[]>(clientVehiclesQueryKey(workspaceId, selectedClientId)) ?? [];
@@ -180,7 +191,7 @@ export default function AddNewOrderForm({
             cachedVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
           const hasVisitMileage = Boolean(data.currentMileage?.trim());
           if (!selectedVehicle) {
-            // Empty mileage needs no vehicle row write — keep the order create unblocked after inline create.
+            // Empty mileage needs no vehicle row write — keep the order create unblocked after create.
             if (hasVisitMileage) throw new Error(t("vehicles.errors.invalidSelection"));
           } else {
             guardWrite();
@@ -210,12 +221,7 @@ export default function AddNewOrderForm({
 
       await createOrder({
         clientId: data.clientId || undefined,
-        // Only send a create-name when the user explicitly chose “Create new client”.
-        clientName: data.clientId ? clientName.trim() : createNewClient ? clientName.trim() : "",
-        clientType: createNewClient ? data.newClientType : undefined,
-        clientTaxId: createNewClient ? data.newClientTaxId : undefined,
-        clientContactPerson: createNewClient ? data.newClientContactPerson : undefined,
-        clientPhone: createNewClient ? data.newClientPhone : undefined,
+        clientName: data.clientId ? clientName.trim() : "",
         vehicleId: data.vehicleId || null,
         // Vehicle industries: OrderVehicleFields snapshots device/plate/VIN from the selected vehicle.
         device: data.device?.trim() ?? "",
@@ -245,43 +251,49 @@ export default function AddNewOrderForm({
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
-          <Label htmlFor="client">{isNewOrganization ? t("orders.form.organizationNameLabel") : t("orders.form.clientLabel")}</Label>
+          <Label htmlFor="client">{t("orders.form.clientLabel")}</Label>
           <Controller
             name="clientId"
             control={control}
             render={({ field }) => (
               <ClientCombobox
-                inputRef={field.ref}
+                inputRef={(node) => {
+                  clientInputRef.current = node;
+                  if (typeof field.ref === "function") field.ref(node);
+                  else if (field.ref) (field.ref as { current: HTMLInputElement | null }).current = node;
+                }}
                 errors={!!errors.clientId}
-                clients={clients ?? []}
+                clients={clientsForCombobox}
                 value={clientName}
                 onChange={(value) => {
                   setClientName(value);
-                  setCreateNewClient(false);
                   field.onChange("");
                   setValue("vehicleId", "");
+                  pendingVehicleIdRef.current = null;
                   if (isSubmitted) {
                     void trigger("clientId");
                   }
                 }}
                 onSelect={(client) => {
-                  setCreateNewClient(false);
                   setClientName(client.name);
                   field.onChange(client.id);
                   setValue("vehicleId", "");
+                  pendingVehicleIdRef.current = null;
                 }}
                 onCreateRequest={(name) => {
-                  setCreateNewClient(true);
                   setClientName(name);
                   field.onChange("");
                   setValue("vehicleId", "");
+                  pendingVehicleIdRef.current = null;
+                  setClientDialogInitialName(name);
+                  setClientDialogOpen(true);
                 }}
               />
             )}
           />
 
           {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>}
-          {selectedClientId && !isNewClient ? (
+          {selectedClientId ? (
             <p className="text-xs text-muted-foreground">
               {t("clients.combobox.selectedHint", {
                 name: selectedClient?.name || clientName,
@@ -290,68 +302,6 @@ export default function AddNewOrderForm({
             </p>
           ) : null}
           <p className="text-xs text-muted-foreground">{t("orders.form.draftHint")}</p>
-
-          {isNewClient && (
-            <div className="space-y-4 pt-1.5">
-              <div className="space-y-1.5">
-                <Label htmlFor="newClientType">{clientCopy.typeLabel}</Label>
-                <Controller
-                  name="newClientType"
-                  control={control}
-                  defaultValue="individual"
-                  shouldUnregister
-                  rules={clientTypeRules()}
-                  render={({ field }) => <ClientTypeSelect id="newClientType" value={field.value} onChange={field.onChange} />}
-                />
-                {errors.newClientType && <p className="text-xs text-destructive">{errors.newClientType.message}</p>}
-              </div>
-              {isNewOrganization && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="newClientTaxId">{t("orders.form.idnoLabel")}</Label>
-                    <Input id="newClientTaxId" {...register("newClientTaxId", { shouldUnregister: true })} placeholder={t("clients.form.taxIdPlaceholder")} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="newClientContactPerson">{t("orders.form.contactNameLabel")}</Label>
-                    <Input id="newClientContactPerson" {...register("newClientContactPerson", { shouldUnregister: true })} placeholder={t("clients.form.contactPersonPlaceholder")} />
-                  </div>
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="newClientPhone">{t("clients.form.phoneLabel")}</Label>
-                <Input
-                  id="newClientPhone"
-                  {...register("newClientPhone", { ...clientPhoneRules(), shouldUnregister: true })}
-                  placeholder={t("clients.form.phonePlaceholder")}
-                  className={errors.newClientPhone ? "border-destructive" : ""}
-                />
-                {errors.newClientPhone && <p className="text-xs text-destructive">{errors.newClientPhone.message}</p>}
-              </div>
-            </div>
-          )}
-
-          {/* <Controller
-            name="clientId"
-            control={control}
-            rules={{
-              required: "Client is required",
-            }}
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className={errors.clientId ? "border-destructive" : ""}>
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients?.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-          {errors.clientId && <p className="text-xs text-destructive">{errors.clientId.message}</p>} */}
         </div>
 
         {showVehicles && selectedClientId ? (
@@ -525,6 +475,27 @@ export default function AddNewOrderForm({
           {isSubmitting ? <Spinner className="h-4 w-4" /> : t("orders.form.saveDraft")}
         </Button>
       </div>
+
+      <AddClientDialog
+        open={clientDialogOpen}
+        initialName={clientDialogInitialName}
+        onOpenChange={(open) => {
+          setClientDialogOpen(open);
+          if (!open) {
+            window.requestAnimationFrame(() => clientInputRef.current?.focus());
+          }
+        }}
+        onCreated={({ client, vehicleId }) => {
+          setExtraClients((previous) => [client, ...previous.filter((item) => item.id !== client.id)]);
+          setClientName(client.name);
+          setValue("clientId", client.id, { shouldDirty: true, shouldValidate: true });
+          pendingVehicleIdRef.current = vehicleId;
+          setValue("vehicleId", vehicleId ?? "", { shouldDirty: true });
+          if (vehicleId) {
+            void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, client.id) });
+          }
+        }}
+      />
     </form>
   );
 }

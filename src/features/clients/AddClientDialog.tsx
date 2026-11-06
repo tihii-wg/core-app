@@ -1,9 +1,17 @@
+import type { Client } from "../../lib/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { industryClientCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import AddNewClientForm from "./AddNewClienForm";
 
-export function AddClientDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+type AddClientDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialName?: string;
+  onCreated?: (result: { client: Client; vehicleId: string | null }) => void;
+};
+
+export function AddClientDialog({ open, onOpenChange, initialName, onCreated }: AddClientDialogProps) {
   const { workflow } = useIndustryWorkflow();
   const copy = industryClientCopy(workflow);
 
@@ -15,7 +23,7 @@ export function AddClientDialog({ open, onOpenChange }: { open: boolean; onOpenC
           <DialogDescription>{copy.addDialogDescription}</DialogDescription>
         </DialogHeader>
 
-        <AddNewClientForm setCreateModalOpen={onOpenChange} />
+        <AddNewClientForm setCreateModalOpen={onOpenChange} initialName={initialName} onCreated={onCreated} />
       </DialogContent>
     </Dialog>
   );

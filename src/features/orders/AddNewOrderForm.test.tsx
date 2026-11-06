@@ -42,8 +42,53 @@ vi.mock("./useCreateOrder", () => ({
   }),
 }));
 
+const clientsState = vi.hoisted(() => ({
+  clients: [] as {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    balance: number;
+    created_at: string;
+    client_type: "individual" | "organization" | null;
+    tax_id: string | null;
+    contact_person: string | null;
+  }[],
+}));
+
 vi.mock("../clients/useGetClients", () => ({
-  useGetClients: () => ({ clients: [] }),
+  useGetClients: () => ({ clients: clientsState.clients }),
+}));
+
+const createClientMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../clients/useCreateNewClient", () => ({
+  useCreateNewClient: () => ({
+    mutateAsync: createClientMock,
+  }),
+}));
+
+vi.mock("../../services/apiVehicles", async () => {
+  const actual = await vi.importActual<typeof import("../../services/apiVehicles")>("../../services/apiVehicles");
+  return {
+    ...actual,
+    createVehicle: (...args: unknown[]) => createVehicleMock(...args),
+  };
+});
+
+vi.mock("../workspaces/useGetWorkspace", () => ({
+  useGetWorkspace: () => ({
+    data: {
+      defaultPhoneConsent: false,
+      defaultEmailConsent: false,
+      showClientMiddleName: false,
+      warrantyServiceMonths: null,
+      warrantyServiceKm: null,
+      warrantyPartsMonths: null,
+      warrantyPartsKm: null,
+    },
+  }),
 }));
 
 vi.mock("../services/useGetServices", () => ({
@@ -116,17 +161,37 @@ describe("AddNewOrderForm client validation", () => {
     createOrderMock.mockResolvedValue({ id: "order-1" });
     persistMileageMock.mockReset();
     persistMileageMock.mockResolvedValue(null);
+    createClientMock.mockReset();
+    createClientMock.mockImplementation(async (input: { clientName?: string; phone?: string }) => [
+      {
+        id: "client-new",
+        name: input.clientName?.trim() || "Nina New",
+        email: "",
+        phone: input.phone?.trim() || "+37369123456",
+        address: "",
+        balance: 0,
+        created_at: "",
+        client_type: "individual" as const,
+        tax_id: null,
+        contact_person: null,
+      },
+    ]);
     createVehicleMock.mockReset();
-    createVehicleMock.mockImplementation(async (input: { make?: string | null; model?: string | null; vin?: string | null; licensePlate?: string | null }) => {
+    createVehicleMock.mockImplementation(async (...args: unknown[]) => {
+      // useCreateVehicle passes (input); apiVehicles.createVehicle passes (workspaceId, clientId, input).
+      const input = (
+        args.length >= 3 ? args[2] : args[0]
+      ) as { make?: string | null; model?: string | null; vin?: string | null; licensePlate?: string | null };
+      const clientId = typeof args[1] === "string" ? args[1] : "client-new";
       const created = {
         id: "veh-new",
         workspaceId: "ws-1",
-        clientId: "client-1",
-        make: input.make?.trim() || "Honda",
-        model: input.model?.trim() || "Civic",
+        clientId,
+        make: input?.make?.trim() || "Honda",
+        model: input?.model?.trim() || "Civic",
         year: 2020,
-        vin: input.vin?.trim() || "2HGES16575H123456",
-        licensePlate: input.licensePlate?.trim() || "XYZ999",
+        vin: input?.vin?.trim() || "2HGES16575H123456",
+        licensePlate: input?.licensePlate?.trim() || "XYZ999",
         initialMileage: null,
         currentMileage: null,
         mileageUnit: null,
@@ -144,6 +209,7 @@ describe("AddNewOrderForm client validation", () => {
     employeesState.industrySlug = "auto_repair";
     employeesState.services = [];
     vehiclesState.vehicles = [];
+    clientsState.clients = [];
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.setPointerCapture = () => {};
     Element.prototype.releasePointerCapture = () => {};
@@ -382,51 +448,69 @@ describe("AddNewOrderForm client validation", () => {
     expect(setCreateModalOpen).not.toHaveBeenCalledWith(false);
   });
 
-  async function startCreateNewClient(user: ReturnType<typeof userEvent.setup>, name: string) {
+  async function openCreateClientDialog(user: ReturnType<typeof userEvent.setup>, name: string) {
     const clientInput = screen.getByLabelText(/^(Client|Customer|Organization name)$/);
     await user.clear(clientInput);
     await user.type(clientInput, name);
     await user.click(await screen.findByRole("button", { name: /Create new client/i }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   }
 
-  it("asks for the phone of a new client with the client form's validation", async () => {
+  it("opens the full client dialog with the typed name prefilled", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
-    await startCreateNewClient(user, "Nina New");
-    expect(screen.getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
-    expect(screen.queryByLabelText(/Email/i)).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("Phone *"), "069123456");
-    await user.click(saveDraftButton());
-
-    expect(await screen.findByText("Phone must be in format +37300000000")).toBeInTheDocument();
-
-    await user.clear(screen.getByLabelText(/^Client$/));
-    expect(screen.queryByLabelText("Phone *")).not.toBeInTheDocument();
+    await openCreateClientDialog(user, "Nina New");
+    expect(screen.getByLabelText(/^Full name/i)).toHaveValue("Nina New");
+    expect(screen.getByRole("button", { name: /Add Client/i })).toBeInTheDocument();
+    expect(createOrderMock).not.toHaveBeenCalled();
   });
 
-  it("shows the organization name, IDNO and contact name fields only for a new organization", async () => {
+  it("does not submit the order when the nested client dialog is saved", async () => {
     const user = userEvent.setup();
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await startCreateNewClient(user, "Fleet SRL");
-    expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
+    await openCreateClientDialog(user, "Nina New");
+    await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
+    await user.click(screen.getByRole("button", { name: /Add Client/i }));
 
-    await user.click(screen.getByRole("combobox", { name: "Client type *" }));
-    await user.click(await screen.findByRole("option", { name: "Organization" }));
+    await vi.waitFor(() => expect(createClientMock).toHaveBeenCalledTimes(1));
+    expect(createOrderMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Client$/)).toHaveValue("Nina New");
+    expect(screen.getByText(/Selected: Nina New · \+37369123456/i)).toBeInTheDocument();
+  });
 
-    expect(screen.getByLabelText(/^Organization name$/)).toHaveValue("Fleet SRL");
-    expect(screen.getByLabelText("IDNO")).toBeInTheDocument();
-    expect(screen.getByLabelText("Contact name")).toBeInTheDocument();
+  it("selects the created vehicle on the order form when one was added in the dialog", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
-    await user.click(screen.getByRole("combobox", { name: "Client type *" }));
-    await user.click(await screen.findByRole("option", { name: "Individual" }));
+    await openCreateClientDialog(user, "Nina New");
+    await user.type(screen.getByLabelText(/^Phone \*$/), "+37369123456");
+    await user.click(screen.getByLabelText("Add a vehicle"));
+    await user.type(screen.getByLabelText(/^Make$/), "Toyota");
+    await user.type(screen.getByLabelText(/^VIN$/), "1HGBH41JXMN109186");
+    await user.click(screen.getByRole("button", { name: /Add Client/i }));
 
-    expect(screen.getByLabelText(/^Client$/)).toHaveValue("Fleet SRL");
-    expect(screen.queryByLabelText("IDNO")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(createVehicleMock).toHaveBeenCalledTimes(1));
+    expect(createOrderMock).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(screen.getByLabelText(/^Client$/)).toHaveValue("Nina New"));
+    await vi.waitFor(() => {
+      const vehicleSelect = screen.getByRole("combobox", { name: /Vehicle/i });
+      expect(vehicleSelect).toHaveTextContent(/Toyota/i);
+    });
+  });
+
+  it("keeps the typed client name when the create dialog is cancelled", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
+
+    await openCreateClientDialog(user, "Nina New");
+    await user.click(screen.getByRole("button", { name: /^Cancel$/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^Client$/)).toHaveValue("Nina New");
+    expect(createClientMock).not.toHaveBeenCalled();
+    expect(createOrderMock).not.toHaveBeenCalled();
   });
 
   it("adds a custom service to the order", async () => {
@@ -507,15 +591,34 @@ describe("AddNewOrderForm client validation", () => {
           resolveCreate = resolve;
         }),
     );
+    clientsState.clients = [
+      {
+        id: "client-1",
+        name: "Ada",
+        email: "",
+        phone: "+37369123456",
+        address: "",
+        balance: 0,
+        created_at: "",
+        client_type: "individual",
+        tax_id: null,
+        contact_person: null,
+      },
+    ];
     employeesState.employees = [{ id: "emp-1", name: "Ada", status: "active", role: "technician", profile_id: "user-1" }];
     employeesState.industrySlug = "home_services";
 
     const user = userEvent.setup();
     const setCreateModalOpen = vi.fn();
-    renderWithQuery(<AddNewOrderForm setCreateModalOpen={setCreateModalOpen} searchQuery="" />);
+    renderWithQuery(
+      <AddNewOrderForm
+        setCreateModalOpen={setCreateModalOpen}
+        searchQuery=""
+        initialClientId="client-1"
+        initialClientName="Ada"
+      />,
+    );
 
-    await startCreateNewClient(user, "Ada");
-    await user.type(screen.getByLabelText("Phone *"), "+37369123456");
     await user.type(screen.getByLabelText(/Job \/ location/i), "Kitchen");
     await addCustomService(user, "Install sink", "100");
     const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });

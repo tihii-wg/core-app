@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,7 +7,7 @@ import { Button } from "../../ui/Button";
 import { Label } from "../../ui/Label";
 import { Spinner } from "../../ui/Spinner";
 import { Switch } from "../../ui/Switch";
-import type { ClientFormValues, CreateMadalProps } from "../../lib/types";
+import type { Client, ClientFormValues, CreateMadalProps } from "../../lib/types";
 import { createVehicle } from "../../services/apiVehicles";
 import { useCreateNewClient } from "./useCreateNewClient";
 import ClientFormFields from "./ClientFormFields";
@@ -20,7 +20,14 @@ import { VehicleFields } from "../vehicles/VehicleFields";
 import { clientVehiclesQueryKey } from "../vehicles/useGetClientVehicles";
 import { emptyVehicleFormValues, vehicleFormValuesToInput, type VehicleFormValues } from "../vehicles/vehicleForm";
 
-export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProps) {
+export type AddNewClientFormProps = CreateMadalProps & {
+  /** Prefills the name field (company name when the type is organization). */
+  initialName?: string;
+  /** Called after a successful save, before the dialog closes. */
+  onCreated?: (result: { client: Client; vehicleId: string | null }) => void;
+};
+
+export default function AddNewClientForm({ setCreateModalOpen, initialName, onCreated }: AddNewClientFormProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
@@ -34,7 +41,7 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
 
   const emptyClient: ClientFormValues = {
     clientType: "individual",
-    clientName: "",
+    clientName: initialName?.trim() ?? "",
     middleName: "",
     taxId: "",
     contactPerson: "",
@@ -67,7 +74,26 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
     if (!addVehicle) resetVehicle(emptyVehicleFormValues());
   }, [addVehicle, resetVehicle]);
 
+  useEffect(() => {
+    const name = initialName?.trim() ?? "";
+    if (!name) return;
+    reset((current) => ({ ...current, clientName: name }));
+  }, [initialName, reset]);
+
   const busy = isSubmitting || vehicleSaving;
+
+  function finish(client: Client, vehicleId: string | null) {
+    onCreated?.({ client, vehicleId });
+    reset({
+      ...emptyClient,
+      clientName: "",
+      phoneNotificationsConsent: Boolean(workspace?.defaultPhoneConsent),
+      emailNotificationsConsent: Boolean(workspace?.defaultEmailConsent),
+    });
+    resetVehicle(emptyVehicleFormValues());
+    setAddVehicle(false);
+    setCreateModalOpen(false);
+  }
 
   const onSubmit = async (data: ClientFormValues) => {
     if (showVehicleOption && addVehicle) {
@@ -99,9 +125,11 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
       }
 
       setVehicleSaving(true);
+      let vehicleId: string | null = null;
       try {
         guardWrite();
-        await createVehicle(workspaceId, createdClient.id, vehicleInput);
+        const vehicle = await createVehicle(workspaceId, createdClient.id, vehicleInput);
+        vehicleId = vehicle.id;
         void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, createdClient.id) });
         toast.success(t("vehicles.toast.created"), { id: "create-client-vehicle" });
       } catch (error) {
@@ -111,15 +139,13 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
         setVehicleSaving(false);
       }
 
-      reset(emptyClient);
-      resetVehicle(emptyVehicleFormValues());
-      setAddVehicle(false);
-      setCreateModalOpen(false);
+      finish(createdClient, vehicleId);
       return;
     }
 
+    let createdClients;
     try {
-      await createClient({
+      createdClients = await createClient({
         ...data,
         workspace_id: workspaceId ?? "",
       });
@@ -127,14 +153,24 @@ export default function AddNewClientForm({ setCreateModalOpen }: CreateMadalProp
       return;
     }
 
-    reset(emptyClient);
-    resetVehicle(emptyVehicleFormValues());
-    setAddVehicle(false);
-    setCreateModalOpen(false);
+    const createdClient = createdClients?.[0];
+    if (!createdClient?.id) {
+      toast.error(t("clients.toast.createFailed"));
+      return;
+    }
+
+    finish(createdClient, null);
   };
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    // Nested inside the order <form> via a portal — stop bubbling so Save never creates an order.
+    event.preventDefault();
+    event.stopPropagation();
+    void handleSubmit(onSubmit)(event);
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form onSubmit={handleFormSubmit}>
       <div className="space-y-4 py-4">
         <ClientFormFields idPrefix="client" control={control} register={register} errors={errors} disabled={busy} />
 
