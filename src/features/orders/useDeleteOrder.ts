@@ -32,6 +32,8 @@ export function useDeleteOrder() {
       void queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
       invalidatePaymentViews(queryClient, workspaceId);
       const returned = result.materialsReturned?.length ?? 0;
       toast.success(

@@ -14,6 +14,7 @@ import {
 import type { Order, OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { patchOrderInLists } from "./orderCache";
 
 /** Patches taxInvoiceNumber on every cached orders list/page for this workspace. */
 export function patchOrderTaxInvoiceInCache(
@@ -170,12 +171,34 @@ export function useUpdateOrderStatus() {
       guardWrite();
       return updateOrderStatus(orderId, status, workspaceId);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
+    onMutate: async ({ orderId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["orders", workspaceId] });
+      const previous = queryClient.getQueriesData({ queryKey: ["orders", workspaceId] });
+      patchOrderInLists(queryClient, workspaceId, orderId, { status });
+      return { previous };
     },
-    onError: (error) => {
+    onError: (error, _vars, context) => {
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          queryClient.setQueryData(key, data);
+        }
+      }
       toast.error(error.message || i18n.t("orders.toast.statusUpdateFailed"), { id: "update-order-status" });
+    },
+    onSuccess: (result, { orderId }) => {
+      const patch: Partial<Order> = {
+        status: result.status,
+        customStatusId: result.customStatusId,
+        customStatus: result.customStatus,
+      };
+      if (Object.prototype.hasOwnProperty.call(result, "closedAt")) {
+        patch.closedAt = result.closedAt ?? null;
+      }
+      patchOrderInLists(queryClient, workspaceId, orderId, patch);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
     },
   });
 }

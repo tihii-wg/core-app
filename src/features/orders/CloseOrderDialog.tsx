@@ -17,6 +17,7 @@ import type { CloseOrderResult } from "../../services/apiOrders";
 import type { LedgerPayment, PaymentBalance } from "../finance/paymentTypes";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { OrderPaymentForm } from "../finance/PaymentFormDialog";
+import { paymentsQueryKey } from "../finance/usePayments";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { isOrderFormallyClosed } from "./orderLifecycle";
 import { useCloseOrder } from "./useCloseOrder";
@@ -39,18 +40,6 @@ function recordableBalance(balance: PaymentBalance): PaymentBalance {
   return balance.isLegacyUnreconciled
     ? { ...balance, remaining: balance.total, netPaid: 0, status: "unpaid" }
     : balance;
-}
-
-function paymentsFromCache(
-  queryClient: ReturnType<typeof useQueryClient>,
-  workspaceId: string | undefined,
-): LedgerPayment[] | null {
-  if (!workspaceId) return null;
-  const entries = queryClient.getQueriesData<LedgerPayment[]>({ queryKey: ["payments", workspaceId] });
-  for (const [, data] of entries) {
-    if (Array.isArray(data)) return data;
-  }
-  return null;
 }
 
 /**
@@ -107,9 +96,20 @@ export function CloseOrderDialog({
   async function handlePaymentRecorded(_amount: number) {
     if (!order) return;
     const currentOrder = order;
+    const listKey = paymentsQueryKey(workspaceId);
 
-    await queryClient.refetchQueries({ queryKey: ["payments", workspaceId] });
-    const fresh = paymentsFromCache(queryClient, workspaceId) ?? effectivePayments;
+    let fresh: LedgerPayment[];
+    try {
+      await queryClient.refetchQueries({ queryKey: listKey, exact: true });
+      const cached = queryClient.getQueryData<LedgerPayment[]>(listKey);
+      fresh = Array.isArray(cached) ? cached : effectivePayments;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      toast.error(message || t("common.somethingWentWrong"));
+      // Keep dialog open; never auto-close from stale ledger data.
+      return;
+    }
+
     setPaymentsOverride(fresh);
 
     const nextBalance = orderPaymentBalance(currentOrder, fresh, invoiceId);

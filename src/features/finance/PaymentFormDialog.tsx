@@ -131,8 +131,11 @@ export function OrderPaymentForm({
       {
         onSuccess: () => {
           void (async () => {
-            await onRecorded?.(values.amount);
-            onDone();
+            try {
+              await onRecorded?.(values.amount);
+            } finally {
+              onDone();
+            }
           })();
         },
       },

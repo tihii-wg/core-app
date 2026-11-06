@@ -622,9 +622,7 @@ export default function OrderDetailPanel({
                               result.customStatus ??
                               (option.kind === "definition" ? { name: option.name, color: option.color } : null),
                             closedAt:
-                              Object.prototype.hasOwnProperty.call(result, "closedAt")
-                                ? (result.closedAt ?? null)
-                                : selectedOrder.closedAt,
+                              "closedAt" in result ? (result.closedAt ?? null) : selectedOrder.closedAt,
                             ...(result.status === "paid"
                               ? { isPaid: true, paymentStatus: "paid" as const }
                               : selectedOrder.status === "paid" && result.status !== "closed" && result.status !== "cancelled"

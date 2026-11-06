@@ -9,7 +9,16 @@ vi.mock("./supabase", () => ({
   default: {
     from,
     rpc,
-    auth: { getUser },
+    auth: {
+      getUser,
+      getSession: async () => {
+        const result = await getUser();
+        return {
+          data: { session: result?.data?.user ? { user: result.data.user } : null },
+          error: result?.error ?? null,
+        };
+      },
+    },
   },
 }));
 
@@ -179,13 +188,46 @@ describe("owner regular status on lifecycle orders", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("updateOrderStatus rejects reopen of cancelled orders", async () => {
-    from.mockImplementation(() =>
-      thenable({
+  it("updateOrderStatus reopens cancelled orders via RPC for workspace owners", async () => {
+    from.mockImplementation((table: string) => {
+      if (table === "workspaces") {
+        return thenable({ data: { owner_can_manage_closed_orders: false }, error: null });
+      }
+      return thenable({
         data: { id: "order-1", status: "cancelled", closed_at: null, custom_status_id: null },
         error: null,
+      });
+    });
+    rpc.mockResolvedValue({
+      data: { ok: true, status: "in-progress", closed_at: null, custom_status_id: null },
+      error: null,
+    });
+    await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).resolves.toMatchObject({
+      status: "in-progress",
+      closedAt: null,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      "reopen_cancelled_order",
+      expect.objectContaining({
+        p_order_id: "order-1",
+        p_workspace_id: "ws-1",
+        p_status: "in-progress",
       }),
     );
+  });
+
+  it("updateOrderStatus rejects cancelled reopen for non-owners", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "member-1" } }, error: null });
+    from.mockImplementation((table: string) => {
+      if (table === "workspaces") {
+        return thenable({ data: null, error: null });
+      }
+      return thenable({
+        data: { id: "order-1", status: "cancelled", closed_at: null, custom_status_id: null },
+        error: null,
+      });
+    });
     await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(/cancel/i);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

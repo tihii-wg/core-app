@@ -2,16 +2,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteOrderAttachment, listOrderAttachments, toOrderAttachment, uploadOrderAttachment } from "./apiOrderAttachments";
 
 const getUser = vi.hoisted(() => vi.fn());
+const getSession = vi.hoisted(() =>
+  vi.fn(async () => {
+    const result = await getUser();
+    return {
+      data: { session: result?.data?.user ? { user: result.data.user } : null },
+      error: result?.error ?? null,
+    };
+  }),
+);
 const from = vi.hoisted(() => vi.fn());
 const storageFrom = vi.hoisted(() => vi.fn());
+const assertClosedOrderMutableOnServer = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("./supabase", () => ({
   default: {
-    auth: { getUser },
+    auth: { getUser, getSession },
     from,
     storage: { from: storageFrom },
   },
 }));
+
+vi.mock("./apiOrders", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./apiOrders")>();
+  return {
+    ...actual,
+    assertClosedOrderMutableOnServer,
+  };
+});
 
 function tableChain(result: { data: unknown; error: unknown }) {
   const chain: Record<string, unknown> = {
@@ -77,8 +95,11 @@ describe("listOrderAttachments", () => {
 describe("uploadOrderAttachment", () => {
   beforeEach(() => {
     getUser.mockReset();
+    getSession.mockClear();
     from.mockReset();
     storageFrom.mockReset();
+    assertClosedOrderMutableOnServer.mockReset();
+    assertClosedOrderMutableOnServer.mockResolvedValue(undefined);
     getUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
   });
 
@@ -157,6 +178,8 @@ describe("deleteOrderAttachment", () => {
   beforeEach(() => {
     from.mockReset();
     storageFrom.mockReset();
+    assertClosedOrderMutableOnServer.mockReset();
+    assertClosedOrderMutableOnServer.mockResolvedValue(undefined);
   });
 
   it("requires the attachment to belong to the workspace and order before deleting", async () => {

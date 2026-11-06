@@ -24,6 +24,8 @@ export function useUpdateOrder() {
       queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
       toast.success(i18n.t("orders.toast.updated"), { id: "update-order" });
     },
     onError: (error) => {

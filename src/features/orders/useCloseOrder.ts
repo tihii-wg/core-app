@@ -1,16 +1,15 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
-import type { Order } from "../../lib/types";
 import {
   cancelOrder,
   closeOrder,
   type CancelOrderResult,
   type CloseOrderResult,
-  type OrdersPageResult,
 } from "../../services/apiOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { patchOrderLists } from "./orderCache";
 
 function invalidateOrderCaches(queryClient: QueryClient, workspaceId: string | undefined, orderId: string) {
   void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
@@ -20,22 +19,7 @@ function invalidateOrderCaches(queryClient: QueryClient, workspaceId: string | u
   void queryClient.invalidateQueries({ queryKey: ["payments", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
   void queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
-}
-
-function patchOrderLists(
-  queryClient: QueryClient,
-  workspaceId: string | undefined,
-  patchOrder: (order: Order) => Order,
-) {
-  if (!workspaceId) return;
-  queryClient.setQueriesData({ queryKey: ["orders", workspaceId] }, (data: unknown) => {
-    if (Array.isArray(data)) return (data as Order[]).map(patchOrder);
-    if (data && typeof data === "object" && Array.isArray((data as OrdersPageResult).orders)) {
-      const page = data as OrdersPageResult;
-      return { ...page, orders: page.orders.map(patchOrder) };
-    }
-    return data;
-  });
+  void queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
 }
 
 /** Patch every cached order list/page so cancelled status is visible before refetch settles. */

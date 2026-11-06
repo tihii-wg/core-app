@@ -1661,27 +1661,82 @@ async function assertTaxInvoiceAllowsPaid(orderId: string, workspaceId: string) 
 }
 
 /**
+ * Local session user id (no Auth network round-trip). UI gates only — RLS still enforces.
+ */
+export async function getCurrentUserId(): Promise<string | null> {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw new Error(error.message);
+  return data.session?.user?.id ?? null;
+}
+
+export type WorkspaceOwnerGate = {
+  isOwner: boolean;
+  mayManageClosed: boolean;
+};
+
+/**
+ * One session read + one workspaces row for owner_id / manage-closed gates.
+ * Memoized per workspace for the duration of a single status-change call stack.
+ */
+const ownerGateInflight = new Map<string, Promise<WorkspaceOwnerGate>>();
+
+export async function getWorkspaceOwnerGate(workspaceId: string): Promise<WorkspaceOwnerGate> {
+  const existing = ownerGateInflight.get(workspaceId);
+  if (existing) return existing;
+
+  const pending = (async (): Promise<WorkspaceOwnerGate> => {
+    const userId = await getCurrentUserId();
+    if (!userId) return { isOwner: false, mayManageClosed: false };
+
+    const { data, error } = await supabase
+      .from("workspaces")
+      .select("owner_can_manage_closed_orders")
+      .eq("id", workspaceId)
+      .eq("owner_id", userId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (error) {
+      const missingManageColumn =
+        /owner_can_manage_closed_orders/i.test(error.message ?? "") &&
+        (error.code === "42703" || error.code === "PGRST204");
+      if (missingManageColumn) {
+        // Column missing: manage-closed is off; still detect ownership via a minimal select.
+        const owned = await supabase
+          .from("workspaces")
+          .select("id")
+          .eq("id", workspaceId)
+          .eq("owner_id", userId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (owned.error) {
+          // Same PostgREST schema error from a coarse mock, or unexpected failure — fail closed.
+          return { isOwner: false, mayManageClosed: false };
+        }
+        return { isOwner: owned.data != null, mayManageClosed: false };
+      }
+      throw new Error(error.message);
+    }
+
+    return {
+      isOwner: data != null,
+      mayManageClosed:
+        data != null && (data as { owner_can_manage_closed_orders?: unknown }).owner_can_manage_closed_orders === true,
+    };
+  })().finally(() => {
+    queueMicrotask(() => ownerGateInflight.delete(workspaceId));
+  });
+
+  ownerGateInflight.set(workspaceId, pending);
+  return pending;
+}
+
+/**
  * Verifies the signed-in user is `workspaces.owner_id` for this workspace.
  * Uses the authenticated Supabase client — never a client-supplied owner flag.
  */
 export async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError) throw new Error(authError.message);
-  if (!user) return false;
-
-  const { data, error } = await supabase
-    .from("workspaces")
-    .select("id")
-    .eq("id", workspaceId)
-    .eq("owner_id", user.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data != null;
+  return (await getWorkspaceOwnerGate(workspaceId)).isOwner;
 }
 
 /**
@@ -1689,23 +1744,7 @@ export async function isAuthenticatedWorkspaceOwner(workspaceId: string) {
  * Never trusts membership role or client-supplied flags.
  */
 export async function isWorkspaceOwnerIdOnServer(workspaceId: string) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError) throw new Error(authError.message);
-  if (!user) return false;
-
-  const { data, error } = await supabase
-    .from("workspaces")
-    .select("id")
-    .eq("id", workspaceId)
-    .eq("owner_id", user.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  return data != null;
+  return (await getWorkspaceOwnerGate(workspaceId)).isOwner;
 }
 
 /**
@@ -1713,29 +1752,7 @@ export async function isWorkspaceOwnerIdOnServer(workspaceId: string) {
  * Never trusts membership role or client-supplied flags.
  */
 export async function ownerMayManageClosedOrdersOnServer(workspaceId: string) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError) throw new Error(authError.message);
-  if (!user) return false;
-
-  const { data, error } = await supabase
-    .from("workspaces")
-    .select("owner_can_manage_closed_orders")
-    .eq("id", workspaceId)
-    .eq("owner_id", user.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) {
-    // Column not applied yet → treat as disabled (safe default).
-    if (/owner_can_manage_closed_orders/i.test(error.message ?? "") && (error.code === "42703" || error.code === "PGRST204")) {
-      return false;
-    }
-    throw new Error(error.message);
-  }
-  return data != null && (data as { owner_can_manage_closed_orders?: unknown }).owner_can_manage_closed_orders === true;
+  return (await getWorkspaceOwnerGate(workspaceId)).mayManageClosed;
 }
 
 /**
@@ -2127,6 +2144,23 @@ export async function reopenCancelledOrder(
  * `crm_orders_status_event` — this function must not also call `crm_record_order_event`.
  * Workspace `activity_log` remains an app-layer audit trail (reports), separate from the feed.
  */
+function queueStatusActivity(
+  workspaceId: string,
+  orderId: string,
+  details: Record<string, unknown>,
+) {
+  void recordActivity({
+    workspaceId,
+    entityType: "order",
+    entityId: orderId,
+    event: "order.status_changed",
+    details,
+  }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[updateOrderStatus] activity_log insert failed:", message);
+  });
+}
+
 export async function updateOrderStatus(
   orderId: string,
   status: OrderStatus,
@@ -2139,6 +2173,14 @@ export async function updateOrderStatus(
      * default match for `status`. Enables a single UPDATE for board moves.
      */
     customStatusId?: string | null;
+    /**
+     * When provided, skip the orders SELECT (caller already loaded status/closed_at/custom).
+     */
+    preloaded?: {
+      status: string;
+      closedAt: string | null;
+      customStatusId: string | null;
+    };
   },
 ): Promise<UpdateOrderStatusResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
@@ -2153,27 +2195,41 @@ export async function updateOrderStatus(
     throw new Error(i18n.t("orders.lifecycle.errors.useCancelAction"));
   }
 
-  const { data: existing, error: loadError } = await supabase
-    .from("orders")
-    .select("id, status, closed_at, custom_status_id")
-    .eq("id", orderId)
-    .eq("workspace_id", targetWorkspaceId)
-    .maybeSingle();
+  let currentStatus: string;
+  let fromCustomStatusId: string | null;
+  let closedAt: string | null;
 
-  if (loadError) throw new Error(loadError.message);
-  if (!existing) throw new Error(orderPermissionMessage());
+  if (options?.preloaded) {
+    currentStatus = options.preloaded.status;
+    fromCustomStatusId = options.preloaded.customStatusId;
+    closedAt = options.preloaded.closedAt;
+  } else {
+    const { data: existing, error: loadError } = await supabase
+      .from("orders")
+      .select("id, status, closed_at, custom_status_id")
+      .eq("id", orderId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle();
 
-  const currentStatus =
-    typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
-  const fromCustomStatusId =
-    typeof (existing as { custom_status_id?: unknown }).custom_status_id === "string"
-      ? ((existing as { custom_status_id: string }).custom_status_id.trim() || null)
-      : null;
+    if (loadError) throw new Error(loadError.message);
+    if (!existing) throw new Error(orderPermissionMessage());
+
+    currentStatus =
+      typeof (existing as { status?: unknown }).status === "string" ? (existing as { status: string }).status : "";
+    fromCustomStatusId =
+      typeof (existing as { custom_status_id?: unknown }).custom_status_id === "string"
+        ? ((existing as { custom_status_id: string }).custom_status_id.trim() || null)
+        : null;
+    closedAt =
+      typeof (existing as { closed_at?: unknown }).closed_at === "string"
+        ? (existing as { closed_at: string }).closed_at
+        : null;
+  }
 
   // Cancelled → open: owner_id only via reopen RPC (clears closed_at). Independent of manage-closed.
   if (currentStatus === "cancelled") {
-    const isOwner = await isWorkspaceOwnerIdOnServer(targetWorkspaceId);
-    if (!isOwner) {
+    const gate = await getWorkspaceOwnerGate(targetWorkspaceId);
+    if (!gate.isOwner) {
       throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
     }
 
@@ -2203,18 +2259,12 @@ export async function updateOrderStatus(
     });
 
     if (options?.recordActivity !== false) {
-      await recordActivity({
-        workspaceId: targetWorkspaceId,
-        entityType: "order",
-        entityId: orderId,
-        event: "order.status_changed",
-        details: {
-          from: currentStatus,
-          to: reopened.status,
-          fromCustomStatusId,
-          toCustomStatusId: reopened.customStatusId,
-          lifecycle: "reopen",
-        },
+      queueStatusActivity(targetWorkspaceId, orderId, {
+        from: currentStatus,
+        to: reopened.status,
+        fromCustomStatusId,
+        toCustomStatusId: reopened.customStatusId,
+        lifecycle: "reopen",
       });
     }
 
@@ -2226,13 +2276,12 @@ export async function updateOrderStatus(
     };
   }
 
-  const isClosedRow =
-    Boolean((existing as { closed_at?: unknown }).closed_at) || currentStatus === "closed";
+  const isClosedRow = Boolean(closedAt) || currentStatus === "closed";
   if (isClosedRow) {
     // Owner + owner_can_manage_closed_orders may change status on closed rows.
     // Non-owners and owners with the setting off stay blocked.
-    const mayManage = await ownerMayManageClosedOrdersOnServer(targetWorkspaceId);
-    if (!mayManage) {
+    const gate = await getWorkspaceOwnerGate(targetWorkspaceId);
+    if (!gate.mayManageClosed) {
       throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
     }
   }
@@ -2250,7 +2299,8 @@ export async function updateOrderStatus(
       };
     }
     if (status !== "paid") {
-      ownerMayChangePaid = await isAuthenticatedWorkspaceOwner(targetWorkspaceId);
+      const gate = await getWorkspaceOwnerGate(targetWorkspaceId);
+      ownerMayChangePaid = gate.isOwner;
       if (!ownerMayChangePaid) {
         throw new Error(i18n.t("orders.errors.paidStatusLocked"));
       }
@@ -2272,10 +2322,15 @@ export async function updateOrderStatus(
   let nextCustomStatus: { name: string; color: string | null } | null = matched
     ? { name: matched.name, color: matched.color }
     : null;
+
+  const definitionIds = [...new Set([nextCustomStatusId, fromCustomStatusId].filter(Boolean))] as string[];
+  const definitionsById =
+    definitionIds.length > 0
+      ? await getStatusDefinitionsByIds(targetWorkspaceId, definitionIds).catch(() => new Map())
+      : new Map();
+
   if (hasCustomOverride && nextCustomStatusId) {
-    const found = (await getStatusDefinitionsByIds(targetWorkspaceId, [nextCustomStatusId]).catch(() => new Map())).get(
-      nextCustomStatusId,
-    );
+    const found = definitionsById.get(nextCustomStatusId);
     nextCustomStatus = found ? { name: found.name, color: found.color } : null;
   } else if (hasCustomOverride) {
     nextCustomStatus = null;
@@ -2284,9 +2339,7 @@ export async function updateOrderStatus(
   // Idempotent: same system + custom status must not rewrite or append history/activity.
   if (status === currentStatus && nextCustomStatusId === fromCustomStatusId) {
     if (!nextCustomStatus && fromCustomStatusId) {
-      const keep = (await getStatusDefinitionsByIds(targetWorkspaceId, [fromCustomStatusId]).catch(() => new Map())).get(
-        fromCustomStatusId,
-      );
+      const keep = definitionsById.get(fromCustomStatusId);
       nextCustomStatus = keep ? { name: keep.name, color: keep.color } : null;
     }
     return {
@@ -2330,14 +2383,7 @@ export async function updateOrderStatus(
       if (legacy.error) throw new Error(legacy.error.message);
       if (!legacy.data || legacy.data.length === 0) throw new Error(orderPermissionMessage());
       if (options?.recordActivity !== false) {
-        await recordActivity({
-          workspaceId: targetWorkspaceId,
-          entityType: "order",
-          entityId: orderId,
-          event: "order.status_changed",
-          details: { from: currentStatus || null, to: status },
-        });
-        // order_events: DB trigger only (when applied). Do not dual-write via RPC.
+        queueStatusActivity(targetWorkspaceId, orderId, { from: currentStatus || null, to: status });
       }
       return { status, customStatusId: null, customStatus: null };
     }
@@ -2358,19 +2404,12 @@ export async function updateOrderStatus(
   }
 
   if (options?.recordActivity !== false) {
-    await recordActivity({
-      workspaceId: targetWorkspaceId,
-      entityType: "order",
-      entityId: orderId,
-      event: "order.status_changed",
-      details: {
-        from: currentStatus || null,
-        to: status,
-        fromCustomStatusId,
-        toCustomStatusId: nextCustomStatusId,
-      },
+    queueStatusActivity(targetWorkspaceId, orderId, {
+      from: currentStatus || null,
+      to: status,
+      fromCustomStatusId,
+      toCustomStatusId: nextCustomStatusId,
     });
-    // order_events / order feed: sole writer is `crm_orders_status_event` (DB trigger).
   }
 
   return {

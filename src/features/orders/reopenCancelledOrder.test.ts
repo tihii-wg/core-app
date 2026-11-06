@@ -70,7 +70,16 @@ const rpc = vi.hoisted(() => vi.fn());
 
 vi.mock("../../services/supabase", () => ({
   default: {
-    auth: { getUser },
+    auth: {
+      getUser,
+      getSession: async () => {
+        const result = await getUser();
+        return {
+          data: { session: result?.data?.user ? { user: result.data.user } : null },
+          error: result?.error ?? null,
+        };
+      },
+    },
     from,
     rpc,
   },

@@ -13,7 +13,16 @@ vi.mock("./supabase", () => ({
   default: {
     from,
     rpc,
-    auth: { getUser },
+    auth: {
+      getUser,
+      getSession: async () => {
+        const result = await getUser();
+        return {
+          data: { session: result?.data?.user ? { user: result.data.user } : null },
+          error: result?.error ?? null,
+        };
+      },
+    },
   },
 }));
 
@@ -173,20 +182,14 @@ describe("order status history — single source of truth", () => {
   });
 
   it("Kanban moveOrderOnBoard uses one updateOrderStatus write and does not call recordStatusChangeEvents", async () => {
-    let calls = 0;
+    let orderCalls = 0;
     from.mockImplementation((table: string) => {
       if (table === "orders") {
-        calls += 1;
-        // getCurrentCustomStatusId + existing status check share from(); then updateOrderStatus load+update
-        if (calls <= 2) {
+        orderCalls += 1;
+        // One preloaded SELECT in moveOrderOnBoard, then a single UPDATE in updateOrderStatus.
+        if (orderCalls === 1) {
           return thenable({
             data: { status: "new", closed_at: null, custom_status_id: "d-new" },
-            error: null,
-          });
-        }
-        if (calls === 3) {
-          return thenable({
-            data: { id: "order-1", status: "new", closed_at: null, custom_status_id: "d-new" },
             error: null,
           });
         }
@@ -208,6 +211,7 @@ describe("order status history — single source of truth", () => {
       "ws-1",
     );
 
+    expect(orderCalls).toBe(2);
     expect(recordActivity).toHaveBeenCalledTimes(1);
     expect(recordStatusChangeEvents).not.toHaveBeenCalled();
     expect(recordOrderEvent).not.toHaveBeenCalled();

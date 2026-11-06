@@ -5,12 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement, ReactNode } from "react";
 import type { Order } from "../../lib/types";
 import type { LedgerPayment } from "../finance/paymentTypes";
+import { paymentsQueryKey } from "../finance/usePayments";
 import { CloseOrderDialog } from "./CloseOrderDialog";
 
 const closeMutate = vi.hoisted(() => vi.fn());
 const closeMutateAsync = vi.hoisted(() => vi.fn());
 const recordMutate = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
 const queryClientRef = vi.hoisted(() => ({ current: null as QueryClient | null }));
 
 vi.mock("./useCloseOrder", () => ({
@@ -21,12 +23,16 @@ vi.mock("./useCloseOrder", () => ({
   }),
 }));
 
-vi.mock("../finance/usePayments", () => ({
-  useRecordPayment: () => ({
-    mutate: recordMutate,
-    isPending: false,
-  }),
-}));
+vi.mock("../finance/usePayments", async () => {
+  const actual = await vi.importActual<typeof import("../finance/usePayments")>("../finance/usePayments");
+  return {
+    ...actual,
+    useRecordPayment: () => ({
+      mutate: recordMutate,
+      isPending: false,
+    }),
+  };
+});
 
 vi.mock("../finance/useFinanceAccounts", () => ({
   useFinanceAccounts: () => ({ data: [], isLoading: false }),
@@ -44,7 +50,7 @@ vi.mock("../profiles/useGetProfile", () => ({
 }));
 
 vi.mock("react-hot-toast", () => ({
-  default: { success: toastSuccess, error: vi.fn() },
+  default: { success: toastSuccess, error: toastError },
 }));
 
 const baseOrder: Order = {
@@ -93,14 +99,14 @@ function makePayment(amount: number, overrides: Partial<LedgerPayment> = {}): Le
 function renderDialog(ui: ReactElement, seedPayments: LedgerPayment[] = []) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClientRef.current = client;
-  client.setQueryData(["payments", "ws-1", {}], seedPayments);
+  client.setQueryData(paymentsQueryKey("ws-1"), seedPayments);
   vi.spyOn(client, "refetchQueries").mockImplementation(async () => undefined);
 
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   }
 
-  return render(ui, { wrapper: Wrapper });
+  return { ...render(ui, { wrapper: Wrapper }), client };
 }
 
 describe("CloseOrderDialog payment-to-close", () => {
@@ -113,6 +119,7 @@ describe("CloseOrderDialog payment-to-close", () => {
     closeMutateAsync.mockReset();
     recordMutate.mockReset();
     toastSuccess.mockReset();
+    toastError.mockReset();
     onOpenChange.mockReset();
     onClosed.mockReset();
     queryClientRef.current = null;
@@ -126,7 +133,7 @@ describe("CloseOrderDialog payment-to-close", () => {
 
     recordMutate.mockImplementation((input: { amount: number }, opts?: { onSuccess?: () => void }) => {
       const client = queryClientRef.current;
-      const key = ["payments", "ws-1", {}] as const;
+      const key = paymentsQueryKey("ws-1");
       const existing = (client?.getQueryData(key) as LedgerPayment[] | undefined) ?? [];
       client?.setQueryData(key, [...existing, makePayment(input.amount, { id: `pay-${existing.length + 1}` })]);
       opts?.onSuccess?.();
@@ -287,5 +294,61 @@ describe("CloseOrderDialog payment-to-close", () => {
     expect(closeMutate).toHaveBeenCalledWith("order-1", expect.any(Object));
     expect(onClosed).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("ignores a filtered payments cache when computing balance after record", async () => {
+    const user = userEvent.setup();
+    const { client } = renderDialog(
+      <CloseOrderDialog
+        order={baseOrder}
+        open
+        onOpenChange={onOpenChange}
+        payments={[]}
+        formatMoney={formatMoney}
+        canRecordPayment
+        onClosed={onClosed}
+      />,
+    );
+
+    // Settled-looking filtered cache must not be used for close decisions.
+    client.setQueryData(paymentsQueryKey("ws-1", { orderId: "order-1" }), [makePayment(100, { id: "filtered-full" })]);
+
+    const amount = screen.getByLabelText(/Amount/i);
+    await user.clear(amount);
+    await user.type(amount, "40");
+    await user.click(screen.getByRole("button", { name: /Record payment/i }));
+
+    await waitFor(() => {
+      expect(recordMutate).toHaveBeenCalledTimes(1);
+      expect(closeMutateAsync).not.toHaveBeenCalled();
+      expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/Remaining: MDL 60\.00/i));
+    });
+  });
+
+  it("shows an error toast and does not close when payments refetch fails", async () => {
+    const user = userEvent.setup();
+    const { client } = renderDialog(
+      <CloseOrderDialog
+        order={baseOrder}
+        open
+        onOpenChange={onOpenChange}
+        payments={[]}
+        formatMoney={formatMoney}
+        canRecordPayment
+        onClosed={onClosed}
+      />,
+    );
+
+    vi.spyOn(client, "refetchQueries").mockRejectedValue(new Error("payments offline"));
+
+    await user.click(screen.getByRole("button", { name: /Record payment/i }));
+
+    await waitFor(() => {
+      expect(recordMutate).toHaveBeenCalledTimes(1);
+      expect(toastError).toHaveBeenCalledWith("payments offline");
+      expect(closeMutateAsync).not.toHaveBeenCalled();
+    });
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByRole("button", { name: /Record payment/i })).toBeInTheDocument();
   });
 });

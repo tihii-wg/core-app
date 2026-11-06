@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getUser = vi.hoisted(() => vi.fn());
+const getSession = vi.hoisted(() =>
+  vi.fn(async () => {
+    const result = await getUser();
+    return {
+      data: { session: result?.data?.user ? { user: result.data.user } : null },
+      error: result?.error ?? null,
+    };
+  }),
+);
 const from = vi.hoisted(() => vi.fn());
 
 vi.mock("./supabase", () => ({
   default: {
-    auth: { getUser },
+    auth: { getUser, getSession },
     from,
   },
 }));
