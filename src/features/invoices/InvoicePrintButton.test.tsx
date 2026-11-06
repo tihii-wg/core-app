@@ -5,11 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { Invoice, InvoiceDocument } from "../../lib/types";
 
 const getInvoiceMock = vi.fn();
+const printInvoiceMutate = vi.fn();
 vi.mock("../../services/apiInvoices", () => ({
   getInvoice: (...args: unknown[]) => getInvoiceMock(...args),
 }));
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ currency: "MDL", formatMoney: (value: number) => `${value.toFixed(2)} MDL` }),
+}));
+vi.mock("../documents/useGetDocumentTemplates", () => ({
+  useGetDocumentTemplates: () => ({ data: [], isLoading: false, error: null }),
+}));
+vi.mock("../documents/usePrintInvoiceDocument", () => ({
+  usePrintInvoiceDocument: () => ({ mutate: printInvoiceMutate, isPending: false }),
 }));
 vi.mock("./useInvoiceDocumentData", () => ({
   useInvoiceDocumentData: () => ({
@@ -64,7 +71,7 @@ function renderButton(onRowClick = vi.fn()) {
 }
 
 describe("InvoicePrintButton", () => {
-  it("loads the clicked invoice and opens the print workflow without row navigation", async () => {
+  it("falls back to InvoicePrintRoot when the workspace has no invoice template", async () => {
     const user = userEvent.setup();
     let resolveDocument: (value: InvoiceDocument) => void = () => {};
     getInvoiceMock.mockReturnValue(new Promise<InvoiceDocument>((resolve) => { resolveDocument = resolve; }));

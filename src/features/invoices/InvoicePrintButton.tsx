@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -6,35 +6,51 @@ import { Loader2, Printer } from "lucide-react";
 import { Button } from "../../ui/Button";
 import type { Invoice, InvoiceDocument } from "../../lib/types";
 import { getInvoice } from "../../services/apiInvoices";
+import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
+import { usePrintInvoiceDocument } from "../documents/usePrintInvoiceDocument";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 
 /**
- * Quick-print for one invoice row. Loads the full invoice document,
- * assembles the printable data through the same hook the detail
- * panel uses (workspace settings, legal entity, logo, works /
- * materials), and only then opens the browser print dialog via
- * InvoicePrintRoot. The invoice detail panel is never opened.
+ * Quick-print for one invoice row. Uses a workspace invoice template when present
+ * (default preferred); otherwise keeps the fixed InvoicePrintRoot output.
  */
 export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Invoice; triggerClassName?: string }) {
   const { t } = useTranslation();
-  const [active, setActive] = useState(false);
+  const [legacyActive, setLegacyActive] = useState(false);
+  const { data: templates = [] } = useGetDocumentTemplates();
+  const printInvoice = usePrintInvoiceDocument();
+
+  const preferredTemplate = useMemo(() => {
+    const invoiceTemplates = templates
+      .filter(
+        (template) =>
+          template.isActive &&
+          template.documentType === "invoice" &&
+          (Boolean(template.layout) || Boolean(template.bodyHtml.trim())),
+      )
+      .slice()
+      .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
+    return invoiceTemplates[0] ?? null;
+  }, [templates]);
 
   const documentQuery = useQuery({
     queryKey: ["invoice-row-print", invoice.workspaceId, invoice.id],
     queryFn: () => getInvoice(invoice.id, invoice.workspaceId),
-    enabled: active,
+    enabled: legacyActive,
     retry: false,
   });
 
   useEffect(() => {
-    if (!active || !documentQuery.error) return;
-    toast.error(documentQuery.error instanceof Error ? documentQuery.error.message : t("invoices.detail.loadErrorTitle"), { id: `invoice-print-${invoice.id}` });
-    setActive(false);
-  }, [active, documentQuery.error, invoice.id, t]);
+    if (!legacyActive || !documentQuery.error) return;
+    toast.error(documentQuery.error instanceof Error ? documentQuery.error.message : t("invoices.detail.loadErrorTitle"), {
+      id: `invoice-print-${invoice.id}`,
+    });
+    setLegacyActive(false);
+  }, [legacyActive, documentQuery.error, invoice.id, t]);
 
-  const busy = active;
+  const busy = legacyActive || printInvoice.isPending;
 
   return (
     <>
@@ -47,15 +63,19 @@ export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Inv
         aria-label={t("invoices.actions.print")}
         title={t("invoices.actions.print")}
         onClick={(event) => {
-          // Never trigger the row's detail-panel navigation.
           event.stopPropagation();
-          if (!busy) setActive(true);
+          if (busy) return;
+          if (preferredTemplate) {
+            printInvoice.mutate({ invoiceId: invoice.id, templateId: preferredTemplate.id });
+            return;
+          }
+          setLegacyActive(true);
         }}
       >
         {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Printer aria-hidden="true" />}
       </Button>
-      {active && documentQuery.data ? (
-        <InvoiceRowPrintJob invoice={documentQuery.data} onDone={() => setActive(false)} />
+      {legacyActive && documentQuery.data ? (
+        <InvoiceRowPrintJob invoice={documentQuery.data} onDone={() => setLegacyActive(false)} />
       ) : null}
     </>
   );

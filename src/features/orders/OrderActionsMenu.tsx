@@ -109,7 +109,15 @@ export function OrderActionsMenu({
   const deleteOrder = useDeleteOrder();
   const printOrder = usePrintOrderDocument();
   const { data: templates = [] } = useGetDocumentTemplates();
-  const printTemplates = templates.filter((template) => template.isActive && template.bodyHtml.trim());
+  const printTemplates = templates
+    .filter(
+      (template) =>
+        template.isActive &&
+        (template.documentType === "work_order" || template.documentType === "act") &&
+        (Boolean(template.layout) || Boolean(template.bodyHtml.trim())),
+    )
+    .slice()
+    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);

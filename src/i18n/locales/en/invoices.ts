@@ -53,6 +53,9 @@ export default {
     sendEmail: "Send by Email",
     print: "Print",
   },
+  print: {
+    unavailable: "This invoice print template is unavailable.",
+  },
   erroneous: {
     banner: "This invoice is marked as sent in error. It is not a valid bill. New payments and email send are blocked. The linked order is unchanged.",
     markTitle: "Mark invoice as sent in error?",

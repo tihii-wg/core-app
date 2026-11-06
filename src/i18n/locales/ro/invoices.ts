@@ -58,6 +58,9 @@ const invoices: Messages<typeof en> = {
     sendEmail: "Trimite prin e-mail",
     print: "Tipărește",
   },
+  print: {
+    unavailable: "Șablonul de tipărire al facturii nu este disponibil.",
+  },
   erroneous: {
     banner:
       "Această factură este marcată ca trimisă din greșeală. Nu este o factură validă. Plățile noi și trimiterea pe e-mail sunt blocate. Comanda asociată rămâne neschimbată.",
