@@ -1,5 +1,9 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { getSupplierDeliveries, getSupplierParts } from "../../services/apiWarehouseOps";
+import {
+  getSupplierDeliveries,
+  getSupplierParts,
+  getSupplierReturnsForSupplier,
+} from "../../services/apiWarehouseOps";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 export function useSupplierDeliveries(supplierName: string | undefined) {
@@ -22,6 +26,17 @@ export function useSupplierParts(supplierName: string | undefined) {
   return useQuery({
     queryKey: ["supplier-parts", workspaceId, name],
     queryFn: () => getSupplierParts(workspaceId, name),
+    enabled: Boolean(workspaceId) && Boolean(name),
+  });
+}
+
+export function useSupplierReturns(supplierName: string | undefined) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const name = supplierName?.trim() ?? "";
+
+  return useQuery({
+    queryKey: ["supplier-returns", workspaceId, name],
+    queryFn: () => getSupplierReturnsForSupplier(workspaceId, name),
     enabled: Boolean(workspaceId) && Boolean(name),
   });
 }

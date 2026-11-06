@@ -8,6 +8,8 @@ export type OpLine = {
   id: string;
   inventoryItemId: string | null;
   itemName: string;
+  /** Live catalog SKU when inventoryItemId is set; null otherwise. */
+  itemSku: string | null;
   quantity: number;
   unitCost: number;
   amount: number;
@@ -65,7 +67,20 @@ export type WriteOffRecord = OpBase & {
   postedAt: string | null;
 };
 
-export type WarehouseOpRecord = GoodsReceiptRecord | StockTransferRecord | WriteOffRecord;
+export type SupplierReturnRecord = OpBase & {
+  kind: "supplierReturn";
+  warehouseId: string | null;
+  goodsReceiptId: string | null;
+  supplierName: string | null;
+  reason: string;
+  postedAt: string | null;
+  /** Cash/bank account that received money back from the supplier (null until refunded). */
+  refundAccountId: string | null;
+  /** Linked finance_transactions income row (null until refunded). */
+  financeTransactionId: string | null;
+};
+
+export type WarehouseOpRecord = GoodsReceiptRecord | StockTransferRecord | WriteOffRecord | SupplierReturnRecord;
 
 export type WarehouseOpsResult<T> = {
   /** False when the operations tables are not applied yet (crm_ro_v1). */
@@ -85,6 +100,13 @@ const configs: Record<WarehouseOpKind, OpConfig> = {
   receipt: { doc: "goods_receipts", lines: "goods_receipt_lines", fk: "goods_receipt_id", postRpc: "crm_post_goods_receipt", postArg: "p_receipt_id" },
   transfer: { doc: "stock_transfers", lines: "stock_transfer_lines", fk: "stock_transfer_id", postRpc: "crm_post_stock_transfer", postArg: "p_transfer_id" },
   writeOff: { doc: "write_offs", lines: "write_off_lines", fk: "write_off_id", postRpc: "crm_post_write_off", postArg: "p_write_off_id" },
+  supplierReturn: {
+    doc: "supplier_returns",
+    lines: "supplier_return_lines",
+    fk: "supplier_return_id",
+    postRpc: "crm_post_supplier_return",
+    postArg: "p_return_id",
+  },
 };
 
 const LIST_LIMIT = 100;
@@ -119,28 +141,46 @@ export function cleanRpcMessage(message: string | undefined) {
 }
 
 export function mapWarehouseOpsError(error: DbError, fallbackKey: "inventory.ops.errors.createFailed" | "inventory.ops.errors.postFailed") {
-  if (isMissingRpcError(error)) return new Error(i18n.t("inventory.ops.errors.rpcMissing"));
+  if (isMissingRpcError(error)) {
+    if (/crm_post_supplier_return/i.test(`${error.message ?? ""} ${error.details ?? ""}`)) {
+      return new Error(i18n.t("inventory.ops.errors.supplierReturnRpcMissing"));
+    }
+    return new Error(i18n.t("inventory.ops.errors.rpcMissing"));
+  }
   if (isMissingTableError(error)) return unavailableError();
   if (isPermissionError(error)) return new Error(i18n.t("inventory.ops.errors.permission"));
   if (error.code === "55000") return new Error(i18n.t("inventory.ops.errors.alreadyPosted"));
   if (error.code === "P0002") return new Error(i18n.t("inventory.ops.errors.notFound"));
   if (error.code === "23514") return new Error(i18n.t("inventory.ops.errors.insufficientStock", { detail: cleanRpcMessage(error.message) }));
   if (error.code === "22023") return new Error(i18n.t("inventory.ops.errors.invalid", { detail: cleanRpcMessage(error.message) }));
+  // RPCs often raise with "crm_post_*: human message" and no SQLSTATE — surface the cleaned text.
+  if (/^crm_post_[a-z_]+:/i.test(error.message ?? "")) {
+    const cleaned = cleanRpcMessage(error.message);
+    if (cleaned) return new Error(cleaned);
+  }
   return new Error(i18n.t(fallbackKey));
 }
 
-function toLine(row: Record<string, unknown>, names: Map<string, string>): OpLine {
+type ItemLookup = { name: string; sku: string | null };
+
+function toLine(row: Record<string, unknown>, catalog: Map<string, ItemLookup>): OpLine {
   const inventoryItemId = toId(row.inventory_item_id);
   const storedName = toText(row.item_name);
+  const lookup = inventoryItemId ? catalog.get(inventoryItemId) : undefined;
   return {
     id: String(row.id),
     inventoryItemId,
     // Prefer the live inventory name; fall back to the name frozen on the line.
-    itemName: (inventoryItemId ? names.get(inventoryItemId) : undefined) || storedName,
+    itemName: lookup?.name || storedName,
+    itemSku: lookup?.sku ?? null,
     quantity: toNum(row.quantity),
     unitCost: toNum(row.unit_cost),
     amount: toNum(row.amount),
   };
+}
+
+function normalizeOptionalSupplierName(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 export function toWarehouseOp(
@@ -159,9 +199,6 @@ export function toWarehouseOp(
   };
   if (kind === "receipt") {
     const status = row.status === "draft" ? "draft" : "posted";
-    const supplierRaw = row.supplier_name;
-    const supplierName =
-      typeof supplierRaw === "string" && supplierRaw.trim() ? supplierRaw.trim() : null;
     return {
       ...base,
       kind,
@@ -169,26 +206,47 @@ export function toWarehouseOp(
       status,
       posted: status === "posted",
       receivedAt: toText(row.received_at),
-      supplierName,
+      supplierName: normalizeOptionalSupplierName(row.supplier_name),
     };
   }
   const postedAt = toId(row.posted_at);
   if (kind === "transfer") {
     return { ...base, kind, fromWarehouseId: toId(row.from_warehouse_id), toWarehouseId: toId(row.to_warehouse_id), postedAt, posted: postedAt != null };
   }
+  if (kind === "supplierReturn") {
+    return {
+      ...base,
+      kind,
+      warehouseId: toId(row.warehouse_id),
+      goodsReceiptId: toId(row.goods_receipt_id),
+      supplierName: normalizeOptionalSupplierName(row.supplier_name),
+      reason: toText(row.reason),
+      postedAt,
+      posted: postedAt != null,
+      refundAccountId: toId(row.refund_account_id),
+      financeTransactionId: toId(row.finance_transaction_id),
+    };
+  }
   return { ...base, kind, warehouseId: toId(row.warehouse_id), reason: toText(row.reason), postedAt, posted: postedAt != null };
 }
 
-/** Item names for operation lines (best-effort second lookup, same approach as warehouse stock). */
+/** Item name + SKU for operation lines (best-effort second lookup, same approach as warehouse stock). */
 async function getItemNames(workspaceId: string, itemIds: string[]) {
-  const names = new Map<string, string>();
-  if (itemIds.length === 0) return names;
-  const { data, error } = await supabase.from("inventory_items").select("id, name").eq("workspace_id", workspaceId).in("id", itemIds);
-  if (error) return names;
+  const catalog = new Map<string, ItemLookup>();
+  if (itemIds.length === 0) return catalog;
+  const { data, error } = await supabase
+    .from("inventory_items")
+    .select("id, name, sku")
+    .eq("workspace_id", workspaceId)
+    .in("id", itemIds);
+  if (error) return catalog;
   for (const item of (data ?? []) as Record<string, unknown>[]) {
-    if (typeof item.name === "string") names.set(String(item.id), item.name);
+    const id = String(item.id);
+    const name = typeof item.name === "string" ? item.name : "";
+    const skuRaw = typeof item.sku === "string" ? item.sku.trim() : "";
+    catalog.set(id, { name, sku: skuRaw || null });
   }
-  return names;
+  return catalog;
 }
 
 async function listOps<K extends WarehouseOpKind>(kind: K, workspaceId: string | undefined) {
@@ -356,10 +414,305 @@ export function createWriteOff(input: CreateWriteOffInput, workspaceId: string |
   );
 }
 
+export type SupplierReturnRefundInput = {
+  accountId: string;
+  /** When omitted/null, the combined post RPC uses the posted return total. */
+  amount?: number | null;
+  comment?: string | null;
+};
+
+export type CreateSupplierReturnInput = {
+  warehouseId: string;
+  goodsReceiptId?: string | null;
+  supplierName?: string | null;
+  reason?: string;
+  comment?: string;
+  lines: OpLineInput[];
+  /** When set, posts via crm_post_supplier_return_with_refund. */
+  refund?: SupplierReturnRefundInput | null;
+};
+
+export type CreateAndPostSupplierReturnResult = {
+  returnId: string;
+  /** True when refund was requested but the combined RPC is missing (plain post succeeded). */
+  refundSkipped: boolean;
+};
+
+export type RecordSupplierReturnRefundInput = {
+  accountId: string;
+  amount: number;
+  occurredAt?: string | null;
+  comment?: string | null;
+};
+
+export function createSupplierReturn(input: CreateSupplierReturnInput, workspaceId: string | undefined) {
+  return createOp(
+    "supplierReturn",
+    workspaceId,
+    {
+      warehouse_id: input.warehouseId,
+      goods_receipt_id: input.goodsReceiptId?.trim() || null,
+      supplier_name: normalizeSupplierName(input.supplierName),
+      reason: input.reason?.trim() || null,
+      comment: input.comment?.trim() || null,
+    },
+    input.lines,
+  );
+}
+
 async function postOp(kind: WarehouseOpKind, id: string) {
   const config = configs[kind];
   const { error } = await supabase.rpc(config.postRpc, { [config.postArg]: id });
   if (error) throw mapWarehouseOpsError(error, "inventory.ops.errors.postFailed");
+}
+
+async function deleteSupplierReturnDraft(returnId: string, workspaceId: string) {
+  const config = configs.supplierReturn;
+  await supabase.from(config.lines).delete().eq(config.fk, returnId).eq("workspace_id", workspaceId);
+  await supabase.from(config.doc).delete().eq("id", returnId).eq("workspace_id", workspaceId);
+}
+
+const SUPPLIER_RETURN_REFUND_CODES = [
+  "forbidden",
+  "not_posted",
+  "already_refunded",
+  "amount_positive",
+  "amount_exceeds_total",
+  "account_invalid",
+  "account_no_income",
+  "currency_mismatch",
+  "not_found",
+] as const;
+
+type SupplierReturnRefundCode = (typeof SUPPLIER_RETURN_REFUND_CODES)[number];
+
+function parseSupplierReturnRefundCode(message: string | undefined): SupplierReturnRefundCode | null {
+  const match = /supplier_return_refund:([a-z_]+)/i.exec(message ?? "");
+  if (!match) return null;
+  const code = match[1] as SupplierReturnRefundCode;
+  return (SUPPLIER_RETURN_REFUND_CODES as readonly string[]).includes(code) ? code : null;
+}
+
+function supplierReturnRefundMessage(code: SupplierReturnRefundCode, details?: string | null) {
+  switch (code) {
+    case "forbidden":
+      return i18n.t("inventory.supplierReturn.refund.errors.forbidden");
+    case "not_posted":
+      return i18n.t("inventory.supplierReturn.refund.errors.notPosted");
+    case "already_refunded":
+      return i18n.t("inventory.supplierReturn.refund.errors.alreadyRefunded");
+    case "amount_positive":
+      return i18n.t("inventory.supplierReturn.refund.errors.amountPositive");
+    case "amount_exceeds_total": {
+      const total = toNum(details);
+      return i18n.t("inventory.supplierReturn.refund.errors.amountExceeds", {
+        total: Number.isFinite(total) ? total : details ?? "?",
+      });
+    }
+    case "account_invalid":
+      return i18n.t("inventory.supplierReturn.refund.errors.accountInvalid");
+    case "account_no_income":
+      return i18n.t("inventory.supplierReturn.refund.errors.accountNoIncome");
+    case "currency_mismatch":
+      return i18n.t("inventory.supplierReturn.refund.errors.currencyMismatch");
+    case "not_found":
+      return i18n.t("inventory.supplierReturn.refund.errors.notFound");
+  }
+}
+
+/** Maps supplier_return_refund:* RPC errors to localized copy. */
+export function mapSupplierReturnRefundError(error: DbError) {
+  const code = parseSupplierReturnRefundCode(error.message);
+  if (code) {
+    return new Error(supplierReturnRefundMessage(code, error.details));
+  }
+  if (isMissingRpcError(error)) {
+    return new Error(i18n.t("inventory.ops.errors.supplierReturnRpcMissing"));
+  }
+  if (isPermissionError(error)) {
+    return new Error(i18n.t("inventory.supplierReturn.refund.errors.forbidden"));
+  }
+  const cleaned = cleanRpcMessage(error.message);
+  if (cleaned) return new Error(cleaned);
+  return new Error(i18n.t("inventory.ops.errors.postFailed"));
+}
+
+async function postSupplierReturnWithOptionalRefund(
+  returnId: string,
+  refund: SupplierReturnRefundInput | null | undefined,
+): Promise<{ refundSkipped: boolean }> {
+  if (!refund?.accountId.trim()) {
+    await postOp("supplierReturn", returnId);
+    return { refundSkipped: false };
+  }
+
+  const { error } = await supabase.rpc("crm_post_supplier_return_with_refund", {
+    p_return_id: returnId,
+    p_account_id: refund.accountId.trim(),
+    p_amount: refund.amount == null || !Number.isFinite(refund.amount) ? null : refund.amount,
+    p_comment: refund.comment?.trim() || null,
+  });
+
+  if (!error) return { refundSkipped: false };
+
+  if (isMissingRpcError(error)) {
+    // Combined RPC not applied yet — post the return and let the UI warn about skipped money.
+    await postOp("supplierReturn", returnId);
+    return { refundSkipped: true };
+  }
+
+  if (parseSupplierReturnRefundCode(error.message)) {
+    throw mapSupplierReturnRefundError(error);
+  }
+  throw mapWarehouseOpsError(error, "inventory.ops.errors.postFailed");
+}
+
+/**
+ * Creates a draft supplier return and posts it (optionally with a refund income).
+ * On post failure the draft is deleted so the user can retry cleanly.
+ */
+export async function createAndPostSupplierReturn(
+  input: CreateSupplierReturnInput,
+  workspaceId: string | undefined,
+): Promise<CreateAndPostSupplierReturnResult> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const { refund, ...draftInput } = input;
+  const returnId = await createSupplierReturn(draftInput, resolved);
+  try {
+    const { refundSkipped } = await postSupplierReturnWithOptionalRefund(returnId, refund);
+    return { returnId, refundSkipped };
+  } catch (error) {
+    await deleteSupplierReturnDraft(returnId, resolved);
+    throw error;
+  }
+}
+
+/** Records money received back from the supplier for an already posted return (once). */
+export async function recordSupplierReturnRefund(
+  returnId: string,
+  input: RecordSupplierReturnRefundInput,
+) {
+  const id = returnId.trim();
+  if (!id) throw new Error(i18n.t("inventory.supplierReturn.refund.errors.notFound"));
+
+  const { error } = await supabase.rpc("crm_record_supplier_return_refund", {
+    p_return_id: id,
+    p_account_id: input.accountId.trim(),
+    p_amount: input.amount,
+    p_occurred_at: input.occurredAt?.trim() || null,
+    p_comment: input.comment?.trim() || null,
+  });
+  if (error) throw mapSupplierReturnRefundError(error);
+}
+
+export async function getSupplierReturns(workspaceId: string | undefined) {
+  return (await listOps("supplierReturn", workspaceId)) as WarehouseOpsResult<SupplierReturnRecord>;
+}
+
+/** Posted returns for one goods receipt → inventory_item_id → returned quantity. */
+export async function getReturnedQuantitiesForReceipt(
+  workspaceId: string | undefined,
+  receiptId: string,
+): Promise<Map<string, number>> {
+  const resolved = requireWorkspaceId(workspaceId);
+  const result = new Map<string, number>();
+  const id = receiptId.trim();
+  if (!id) return result;
+
+  const config = configs.supplierReturn;
+  const { data: returns, error: returnsError } = await supabase
+    .from(config.doc)
+    .select("id")
+    .eq("workspace_id", resolved)
+    .eq("goods_receipt_id", id)
+    .is("deleted_at", null)
+    .not("posted_at", "is", null);
+  if (returnsError) {
+    if (isMissingTableError(returnsError, config.doc)) return result;
+    throw new Error(returnsError.message);
+  }
+
+  const returnIds = ((returns ?? []) as { id?: unknown }[]).map((row) => String(row.id)).filter(Boolean);
+  if (returnIds.length === 0) return result;
+
+  const { rows: lineRows, error: linesError } = await selectInChunks<Record<string, unknown>>(returnIds, (chunk) =>
+    supabase
+      .from(config.lines)
+      .select("inventory_item_id, quantity")
+      .eq("workspace_id", resolved)
+      .in("supplier_return_id", chunk),
+  );
+  if (linesError) {
+    if (isMissingTableError(linesError, config.lines)) return result;
+    throw new Error(linesError.message);
+  }
+
+  for (const row of lineRows) {
+    const itemId = toId(row.inventory_item_id);
+    if (!itemId) continue;
+    result.set(itemId, roundQtySafe((result.get(itemId) ?? 0) + toNum(row.quantity)));
+  }
+  return result;
+}
+
+function roundQtySafe(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/** Supplier returns whose supplier_name matches (escaped case-insensitive). */
+export async function getSupplierReturnsForSupplier(workspaceId: string | undefined, supplierName: string) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const name = supplierName.trim();
+  if (!name) return [] as SupplierReturnRecord[];
+
+  const config = configs.supplierReturn;
+  const { data, error } = await supabase
+    .from(config.doc)
+    .select("*")
+    .eq("workspace_id", resolved)
+    .is("deleted_at", null)
+    .ilike("supplier_name", escapeLikePattern(name))
+    .order("created_at", { ascending: false })
+    .limit(LIST_LIMIT);
+  if (error) {
+    if (isMissingTableError(error, config.doc)) return [];
+    throw new Error(error.message);
+  }
+
+  const docs = (data ?? []) as Record<string, unknown>[];
+  if (docs.length === 0) return [];
+
+  const linesByDoc = new Map<string, Record<string, unknown>[]>();
+  const itemIds = new Set<string>();
+  const { rows: lineRows, error: linesError } = await selectInChunks<Record<string, unknown>>(
+    docs.map((doc) => String(doc.id)),
+    (chunk) =>
+      supabase
+        .from(config.lines)
+        .select("*")
+        .eq("workspace_id", resolved)
+        .in(config.fk, chunk)
+        .order("position", { ascending: true }),
+  );
+  if (linesError) {
+    if (isMissingTableError(linesError, config.lines)) return [];
+    throw new Error(linesError.message);
+  }
+  for (const row of lineRows) {
+    const key = String(row[config.fk]);
+    linesByDoc.set(key, [...(linesByDoc.get(key) ?? []), row]);
+    if (row.inventory_item_id) itemIds.add(String(row.inventory_item_id));
+  }
+
+  const catalog = await getItemNames(resolved, [...itemIds]);
+  return docs.map(
+    (doc) =>
+      toWarehouseOp(
+        "supplierReturn",
+        doc,
+        (linesByDoc.get(String(doc.id)) ?? []).map((line) => toLine(line, catalog)),
+      ) as SupplierReturnRecord,
+  );
 }
 
 const SUPPLIER_DELIVERIES_PAGE_SIZE = 50;
@@ -601,3 +954,5 @@ export async function createAndPostGoodsReceipt(input: CreateGoodsReceiptInput, 
 export const postStockTransfer = (transferId: string) => postOp("transfer", transferId);
 /** Decreases warehouse_stock and inventory_items.quantity. */
 export const postWriteOff = (writeOffId: string) => postOp("writeOff", writeOffId);
+/** Decreases stock via receipt batches or FIFO; no finance entries. */
+export const postSupplierReturn = (returnId: string) => postOp("supplierReturn", returnId);

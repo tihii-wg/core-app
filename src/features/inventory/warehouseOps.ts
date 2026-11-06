@@ -4,7 +4,7 @@
  * validate drafts and preview totals before they are saved.
  */
 
-export type WarehouseOpKind = "receipt" | "transfer" | "writeOff";
+export type WarehouseOpKind = "receipt" | "transfer" | "writeOff" | "supplierReturn";
 
 export type OpLineInput = {
   inventoryItemId: string;
@@ -116,6 +116,7 @@ export function previewStockAfter(
       // inventory_items.quantity (total) stays unchanged: stock only moves between warehouses.
       return { from: roundQty(current.from - quantity), to: roundQty(current.to + quantity), total: current.total };
     case "writeOff":
+    case "supplierReturn":
       return { from: roundQty(current.from - quantity), to: current.to, total: roundQty(current.total - quantity) };
   }
 }

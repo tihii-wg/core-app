@@ -42,6 +42,7 @@ type MovementRow = {
   order_material_id?: string | null;
   warehouse_id?: string | null;
   movement_type?: string;
+  document_type?: string | null;
   quantity?: number;
   reason?: string | null;
   created_by?: string | null;
@@ -51,12 +52,16 @@ type MovementRow = {
 const movementTypes = new Set<InventoryMovementType>(["issue", "return", "adjustment"]);
 
 const movementColumnsWithWarehouse =
+  "id, workspace_id, inventory_item_id, order_id, order_material_id, warehouse_id, movement_type, document_type, quantity, reason, created_by, created_at";
+const movementColumnsWithWarehouseNoDoc =
   "id, workspace_id, inventory_item_id, order_id, order_material_id, warehouse_id, movement_type, quantity, reason, created_by, created_at";
 const movementColumnsLegacy =
   "id, workspace_id, inventory_item_id, order_id, order_material_id, movement_type, quantity, reason, created_by, created_at";
 
 export function toInventoryMovement(row: MovementRow): InventoryMovement {
   const movementType = movementTypes.has(row.movement_type as InventoryMovementType) ? (row.movement_type as InventoryMovementType) : "adjustment";
+  const documentType =
+    typeof row.document_type === "string" && row.document_type.trim() ? row.document_type.trim() : null;
   return {
     id: String(row.id ?? ""),
     workspaceId: String(row.workspace_id ?? ""),
@@ -65,6 +70,7 @@ export function toInventoryMovement(row: MovementRow): InventoryMovement {
     orderMaterialId: row.order_material_id ? String(row.order_material_id) : null,
     warehouseId: row.warehouse_id ? String(row.warehouse_id) : null,
     movementType,
+    documentType,
     quantity: Number(row.quantity ?? 0),
     reason: typeof row.reason === "string" ? row.reason : null,
     createdBy: row.created_by ? String(row.created_by) : null,
@@ -184,6 +190,12 @@ function isMissingWarehouseIdColumn(error: { code?: string; message?: string } |
   return /warehouse_id/i.test(message) && (/column/i.test(message) || error.code === "42703" || error.code === "PGRST204");
 }
 
+function isMissingDocumentTypeColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  return /document_type/i.test(message) && (/column/i.test(message) || error.code === "42703" || error.code === "PGRST204");
+}
+
 export async function getInventoryMovements(workspaceId: string | undefined, options?: { inventoryItemId?: string; orderId?: string; limit?: number }) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
@@ -204,7 +216,15 @@ export async function getInventoryMovements(workspaceId: string | undefined, opt
   if (!primary.error) {
     return ((primary.data ?? []) as MovementRow[]).map(toInventoryMovement);
   }
-  if (!isMissingWarehouseIdColumn(primary.error)) {
+  if (isMissingDocumentTypeColumn(primary.error)) {
+    const withoutDoc = await run(movementColumnsWithWarehouseNoDoc);
+    if (!withoutDoc.error) {
+      return ((withoutDoc.data ?? []) as MovementRow[]).map(toInventoryMovement);
+    }
+    if (!isMissingWarehouseIdColumn(withoutDoc.error)) {
+      throw new Error(withoutDoc.error.message || i18n.t("inventory.errors.loadFailed"));
+    }
+  } else if (!isMissingWarehouseIdColumn(primary.error)) {
     throw new Error(primary.error.message || i18n.t("inventory.errors.loadFailed"));
   }
 

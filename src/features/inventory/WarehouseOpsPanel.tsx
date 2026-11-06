@@ -10,7 +10,8 @@ import { Skeleton } from "../../ui/Skeleton";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
-import type { WarehouseOpRecord } from "../../services/apiWarehouseOps";
+import type { GoodsReceiptRecord, SupplierReturnRecord, WarehouseOpRecord } from "../../services/apiWarehouseOps";
+import { useFinanceAccounts } from "../finance/useFinanceAccounts";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -22,15 +23,19 @@ import { useGetInventoryItems } from "./useGetInventoryItems";
 import {
   useGetGoodsReceipts,
   useGetStockTransfers,
+  useGetSupplierReturns,
   useGetWriteOffs,
   usePostGoodsReceipt,
   usePostStockTransfer,
+  usePostSupplierReturn,
   usePostWriteOff,
 } from "./useWarehouseOps";
+import { SupplierReturnDialog } from "./SupplierReturnDialog";
+import { SupplierReturnRefundBadge, SupplierReturnRefundDialog } from "./SupplierReturnRefundDialog";
 import { WarehouseOpDialog } from "./WarehouseOpDialog";
 import type { WarehouseOpKind } from "./warehouseOps";
 
-const kinds: WarehouseOpKind[] = ["receipt", "transfer", "writeOff"];
+const kinds: WarehouseOpKind[] = ["receipt", "transfer", "writeOff", "supplierReturn"];
 const itemsSort = { field: "name", ascending: true } as const;
 
 type OpsQuery = {
@@ -65,6 +70,7 @@ export function WarehouseOpsPanel() {
   const receipts = useGetGoodsReceipts();
   const transfers = useGetStockTransfers();
   const writeOffs = useGetWriteOffs();
+  const supplierReturns = useGetSupplierReturns();
   const warehousesQuery = useGetWarehouses();
   const stockQuery = useGetWarehouseStock();
   const { items } = useGetInventoryItems("", "all", itemsSort);
@@ -72,13 +78,32 @@ export function WarehouseOpsPanel() {
   const postReceipt = usePostGoodsReceipt();
   const postTransfer = usePostStockTransfer();
   const postWriteOff = usePostWriteOff();
+  const postSupplierReturn = usePostSupplierReturn();
+
+  const [returnReceipt, setReturnReceipt] = useState<GoodsReceiptRecord | null>(null);
+  const [detailOp, setDetailOp] = useState<WarehouseOpRecord | null>(null);
+  const [refundReturn, setRefundReturn] = useState<SupplierReturnRecord | null>(null);
+
+  const { data: financeAccounts = [] } = useFinanceAccounts();
+  const accountNames = useMemo(
+    () => new Map(financeAccounts.map((account) => [account.id, account.name])),
+    [financeAccounts],
+  );
 
   const queries: Record<WarehouseOpKind, OpsQuery> = {
     receipt: receipts as OpsQuery,
     transfer: transfers as OpsQuery,
     writeOff: writeOffs as OpsQuery,
+    supplierReturn: supplierReturns as OpsQuery,
   };
-  const posting = { receipt: postReceipt, transfer: postTransfer, writeOff: postWriteOff }[toPost?.kind ?? "receipt"];
+  const posting = {
+    receipt: postReceipt,
+    transfer: postTransfer,
+    writeOff: postWriteOff,
+    supplierReturn: postSupplierReturn,
+  }[toPost?.kind ?? "receipt"];
+  const canReturnToSupplier = canWrite && can(WAREHOUSE_OP_PERMISSIONS.supplierReturn.create);
+  const canRecordRefund = canWrite && can("finance.transactions.income");
 
   const warehouseNames = useMemo(
     () => new Map((warehousesQuery.data ?? []).map((warehouse) => [warehouse.id, warehouse.name])),
@@ -157,9 +182,15 @@ export function WarehouseOpsPanel() {
       <ul className="divide-y divide-border rounded-lg border border-border">
         {rows.map((op) => {
           const summary = op.lines.map((line) => `${line.itemName} × ${line.quantity}`).join(", ");
+          const supplierLabel =
+            op.kind === "receipt" || op.kind === "supplierReturn" ? op.supplierName?.trim() || null : null;
           return (
             <li key={op.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 space-y-0.5">
+              <button
+                type="button"
+                className="min-w-0 flex-1 space-y-0.5 text-left"
+                onClick={() => setDetailOp(op)}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-foreground">{op.number ?? `#${op.id.slice(0, 8)}`}</span>
                   <StatusBadge variant={op.posted ? "success" : "warning"} dot>
@@ -168,12 +199,41 @@ export function WarehouseOpsPanel() {
                   <span className="text-xs text-muted-foreground">{formatDate(op.createdAt, i18n.language)}</span>
                 </div>
                 <p className="truncate text-xs text-muted-foreground">{whereLabel(op)}</p>
+                {supplierLabel ? (
+                  <p className="truncate text-xs text-muted-foreground">{supplierLabel}</p>
+                ) : null}
                 <p className="truncate text-xs text-muted-foreground" title={summary}>
                   {summary || t("inventory.ops.noLinesShort")}
                 </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
+                {op.kind === "supplierReturn" && op.financeTransactionId ? (
+                  <div className="pt-1">
+                    <SupplierReturnRefundBadge
+                      amount={op.total}
+                      accountName={
+                        (op.refundAccountId && accountNames.get(op.refundAccountId)) ||
+                        t("inventory.supplierReturn.refund.account")
+                      }
+                    />
+                  </div>
+                ) : null}
+              </button>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <span className="text-sm font-medium tabular-nums">{formatMoney(op.total)}</span>
+                {op.kind === "receipt" && op.posted && canReturnToSupplier ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setReturnReceipt(op)}
+                  >
+                    {t("inventory.supplierReturn.action")}
+                  </Button>
+                ) : null}
+                {op.kind === "supplierReturn" && op.posted && !op.financeTransactionId && canRecordRefund ? (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setRefundReturn(op)}>
+                    {t("inventory.supplierReturn.refund.recordAction")}
+                  </Button>
+                ) : null}
                 {!op.posted && canWrite && canPost(op.kind) ? (
                   <Button type="button" size="sm" variant="outline" onClick={() => setToPost(op)}>
                     <CheckCheck />
@@ -283,6 +343,103 @@ export function WarehouseOpsPanel() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SupplierReturnDialog
+        open={Boolean(returnReceipt)}
+        onOpenChange={(open) => {
+          if (!open) setReturnReceipt(null);
+        }}
+        receipt={returnReceipt}
+        warehouseName={returnReceipt ? warehouseName(returnReceipt.warehouseId) : "—"}
+      />
+
+      <Dialog
+        open={Boolean(detailOp)}
+        onOpenChange={(open) => {
+          if (!open) setDetailOp(null);
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {detailOp
+                ? `${t(`inventory.ops.${detailOp.kind}.tab`)} ${detailOp.number ?? detailOp.id.slice(0, 8)}`
+                : ""}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              {detailOp ? t(`inventory.ops.${detailOp.kind}.tab`) : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {detailOp ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">{whereLabel(detailOp)}</p>
+              {(detailOp.kind === "receipt" || detailOp.kind === "supplierReturn") && detailOp.supplierName ? (
+                <p>
+                  {t("inventory.ops.fields.supplier")}:{" "}
+                  <span className="font-medium">{detailOp.supplierName}</span>
+                </p>
+              ) : null}
+              {(detailOp.kind === "writeOff" || detailOp.kind === "supplierReturn") && detailOp.reason ? (
+                <p>
+                  {t("inventory.ops.fields.reason")}: <span className="font-medium">{detailOp.reason}</span>
+                </p>
+              ) : null}
+              <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                {detailOp.lines.map((line) => (
+                  <li key={line.id} className="flex justify-between gap-2 px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block font-medium">{line.itemName}</span>
+                      {line.itemSku ? (
+                        <span className="block font-mono text-xs text-muted-foreground">{line.itemSku}</span>
+                      ) : null}
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {line.quantity} · {formatMoney(line.unitCost)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-medium tabular-nums">{formatMoney(line.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-right font-semibold tabular-nums">{formatMoney(detailOp.total)}</p>
+              {detailOp.kind === "supplierReturn" && detailOp.financeTransactionId ? (
+                <SupplierReturnRefundBadge
+                  amount={detailOp.total}
+                  accountName={
+                    (detailOp.refundAccountId && accountNames.get(detailOp.refundAccountId)) ||
+                    t("inventory.supplierReturn.refund.account")
+                  }
+                />
+              ) : null}
+              {detailOp.kind === "supplierReturn" &&
+              detailOp.posted &&
+              !detailOp.financeTransactionId &&
+              canRecordRefund ? (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRefundReturn(detailOp);
+                      setDetailOp(null);
+                    }}
+                  >
+                    {t("inventory.supplierReturn.refund.recordAction")}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <SupplierReturnRefundDialog
+        open={Boolean(refundReturn)}
+        onOpenChange={(open) => {
+          if (!open) setRefundReturn(null);
+        }}
+        returnDoc={refundReturn}
+      />
     </Card>
   );
 }

@@ -72,7 +72,8 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
     [warehouseRows],
   );
 
-  function movementLabel(type: InventoryMovementType) {
+  function movementLabel(type: InventoryMovementType, documentType: string | null) {
+    if (documentType === "supplier_return") return t("inventory.detail.movementSupplierReturn");
     if (type === "issue") return t("inventory.detail.movementIssue");
     if (type === "return") return t("inventory.detail.movementReturn");
     return t("inventory.detail.movementAdjustment");
@@ -183,14 +184,22 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
               ) : (
                 <ul className="divide-y divide-border rounded-md border border-border">
                   {movements.map((movement) => {
-                    const sign = movement.movementType === "return" || movement.movementType === "adjustment" ? "+" : "−";
+                    const isSupplierReturn = movement.documentType === "supplier_return";
+                    const sign =
+                      isSupplierReturn || movement.movementType === "issue"
+                        ? "−"
+                        : movement.movementType === "return" || movement.movementType === "adjustment"
+                          ? "+"
+                          : "−";
                     const warehouseName = movement.warehouseId
                       ? warehouseNames.get(movement.warehouseId) ?? t("inventory.detail.unknownWarehouse")
                       : null;
                     return (
                       <li key={movement.id} className="flex items-start justify-between gap-3 px-3 py-2 text-[13px]">
                         <div className="min-w-0 space-y-0.5">
-                          <p className="font-medium text-foreground">{movementLabel(movement.movementType)}</p>
+                          <p className="font-medium text-foreground">
+                            {movementLabel(movement.movementType, movement.documentType)}
+                          </p>
                           <p className="text-muted-foreground tabular-nums">
                             {formatWorkspaceDate(movement.createdAt, workspace?.dateFormat, workspace?.timezone)}
                             {warehouseName ? ` · ${warehouseName}` : ""}

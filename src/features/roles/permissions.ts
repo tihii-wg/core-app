@@ -12,6 +12,7 @@ export const WAREHOUSE_OP_PERMISSIONS = {
   receipt: { create: "inventory.receipts.create", edit: "inventory.receipts.edit" },
   transfer: { create: "inventory.transfers.create", edit: "inventory.transfers.edit" },
   writeOff: { create: "inventory.write_offs.create", edit: "inventory.write_offs.edit" },
+  supplierReturn: { create: "inventory.supplier_returns.create", edit: "inventory.supplier_returns.edit" },
 } as const;
 
 /**

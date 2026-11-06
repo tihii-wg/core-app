@@ -690,3 +690,75 @@ export function combinedOutstanding(
     }).length,
   };
 }
+
+export type AwaitingPaymentRow<T extends Pick<Order, "id" | "totalPrice" | "isPaid" | "status" | "createdAt">> = {
+  order: T;
+  remaining: number;
+};
+
+export type AwaitingPaymentSelection<T extends Pick<Order, "id" | "totalPrice" | "isPaid" | "status" | "createdAt">> = {
+  orders: Array<AwaitingPaymentRow<T>>;
+  /** Non-draft unpaid invoices with no usable order row (no orderId, missing order, or cancelled order). */
+  standaloneInvoiceCount: number;
+  /** Equals `combinedOutstanding(...).unpaidCount` under the same inputs. */
+  totalCount: number;
+};
+
+/**
+ * Orders/invoices awaiting payment for the Dashboard toggle list.
+ * Uses the same outstanding rules as `combinedOutstanding` / `outstandingOrderBalances`.
+ */
+export function selectAwaitingPayment<T extends Pick<Order, "id" | "totalPrice" | "isPaid" | "status" | "createdAt">>(
+  orders: T[],
+  invoices: Pick<Invoice, "id" | "total" | "amount" | "status" | "orderId">[],
+  payments: LedgerPayment[],
+): AwaitingPaymentSelection<T> {
+  const orderById = new Map(orders.map((order) => [order.id, order]));
+  const invoicedOrderIds = new Set(invoices.filter((inv) => inv.orderId).map((inv) => inv.orderId as string));
+
+  const rows: Array<AwaitingPaymentRow<T>> = [];
+  const includedOrderIds = new Set<string>();
+  let standaloneInvoiceCount = 0;
+
+  for (const invoice of invoices) {
+    if (invoice.status === "draft") continue;
+    const balance = invoicePaymentBalance(invoice, payments);
+    if (balance.isLegacyUnreconciled || balance.remaining <= MONEY_EPS) continue;
+
+    if (!invoice.orderId) {
+      standaloneInvoiceCount += 1;
+      continue;
+    }
+
+    const order = orderById.get(invoice.orderId);
+    if (!order || order.status === "cancelled") {
+      standaloneInvoiceCount += 1;
+      continue;
+    }
+
+    if (includedOrderIds.has(order.id)) continue;
+    includedOrderIds.add(order.id);
+    rows.push({ order, remaining: balance.remaining });
+  }
+
+  for (const order of orders) {
+    if (order.status === "cancelled") continue;
+    if (invoicedOrderIds.has(order.id)) continue;
+    if (includedOrderIds.has(order.id)) continue;
+    const balance = orderPaymentBalance(order, payments);
+    if (balance.isLegacyUnreconciled || balance.remaining <= MONEY_EPS) continue;
+    includedOrderIds.add(order.id);
+    rows.push({ order, remaining: balance.remaining });
+  }
+
+  rows.sort((a, b) => {
+    if (b.remaining !== a.remaining) return b.remaining - a.remaining;
+    return b.order.createdAt.localeCompare(a.order.createdAt);
+  });
+
+  return {
+    orders: rows,
+    standaloneInvoiceCount,
+    totalCount: rows.length + standaloneInvoiceCount,
+  };
+}

@@ -42,7 +42,8 @@ export function InventoryMovementsPanel() {
     });
   }, [itemFilter, movements, typeFilter, warehouseFilter]);
 
-  function movementLabel(type: InventoryMovementType) {
+  function movementLabel(type: InventoryMovementType, documentType: string | null) {
+    if (documentType === "supplier_return") return t("inventory.detail.movementSupplierReturn");
     if (type === "issue") return t("inventory.detail.movementIssue");
     if (type === "return") return t("inventory.detail.movementReturn");
     return t("inventory.detail.movementAdjustment");
@@ -122,7 +123,13 @@ export function InventoryMovementsPanel() {
         {!isLoading && !isError && rows.length > 0 ? (
           <ul className="divide-y divide-border rounded-lg border border-border">
             {rows.map((movement) => {
-              const sign = movement.movementType === "return" || movement.movementType === "adjustment" ? "+" : "−";
+              const isSupplierReturn = movement.documentType === "supplier_return";
+              const sign =
+                isSupplierReturn || movement.movementType === "issue"
+                  ? "−"
+                  : movement.movementType === "return" || movement.movementType === "adjustment"
+                    ? "+"
+                    : "−";
               const productName = itemNames.get(movement.inventoryItemId) ?? t("inventory.history.unknownProduct");
               const warehouseName = movement.warehouseId
                 ? warehouseNames.get(movement.warehouseId) ?? t("inventory.detail.unknownWarehouse")
@@ -131,7 +138,7 @@ export function InventoryMovementsPanel() {
                 <li key={movement.id} className="flex items-start justify-between gap-3 px-3 py-2.5 text-[13px]">
                   <div className="min-w-0 space-y-0.5">
                     <p className="font-medium text-foreground">
-                      {movementLabel(movement.movementType)}
+                      {movementLabel(movement.movementType, movement.documentType)}
                       <span className="font-normal text-muted-foreground"> · {productName}</span>
                     </p>
                     <p className="text-muted-foreground tabular-nums">

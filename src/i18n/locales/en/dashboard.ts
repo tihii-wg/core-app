@@ -24,6 +24,7 @@ export default {
     openOrdersHint: "Open orders will show up here.",
     noLowStock: "No low stock items",
     lowStockHint: "Items at or below their minimum will show up here.",
+    noAwaitingPayment: "All orders are paid",
   },
   errors: {
     orders: "Could not load orders",
@@ -44,6 +45,9 @@ export default {
   lists: {
     recentOrders: "Recent Orders",
     activeOrders: "Active Orders",
+    awaitingPayment: "Awaiting payment",
+    toPay: "To pay",
+    moreUnpaidInvoices: "More unpaid invoices without an order: {{count}}",
     lowStockItems: "Low Stock Items",
     lowStockQuantity: "{{quantity}} {{unit}} (min {{min}})",
     lowStockQuantityHint: "{{quantity}} {{unit}} remaining (minimum: {{min}})",

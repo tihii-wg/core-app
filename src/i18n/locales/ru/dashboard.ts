@@ -31,6 +31,7 @@ const dashboard: Messages<typeof en> = {
     openOrdersHint: "Открытые заказы появятся здесь.",
     noLowStock: "Нет товаров с низким остатком",
     lowStockHint: "Здесь появятся товары, остаток которых не выше минимального.",
+    noAwaitingPayment: "Все заказы оплачены",
   },
   errors: {
     orders: "Не удалось загрузить заказы",
@@ -51,6 +52,9 @@ const dashboard: Messages<typeof en> = {
   lists: {
     recentOrders: "Последние заказы",
     activeOrders: "Активные заказы",
+    awaitingPayment: "Ждут оплаты",
+    toPay: "К оплате",
+    moreUnpaidInvoices: "Ещё неоплаченных счетов без заказа: {{count}}",
     lowStockItems: "Заканчиваются на складе",
     lowStockQuantity: "{{quantity}} {{unit}} (мин. {{min}})",
     lowStockQuantityHint: "Осталось {{quantity}} {{unit}} (минимум: {{min}})",

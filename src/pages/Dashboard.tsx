@@ -43,6 +43,7 @@ import { effectiveStockStatus } from "../features/inventory/stockStatus";
 import { orderPaymentBalance } from "../features/finance/paymentCalculations";
 import { useGetPayments } from "../features/finance/usePayments";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
+import { useDashboardFinancials } from "../features/dashboard/useDashboardFinancials";
 import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
 import { DashboardQuickActions } from "../features/dashboard/DashboardQuickActions";
 import {
@@ -57,6 +58,8 @@ import { cn } from "../lib/utils";
 import { currentIntlLocale } from "../i18n";
 
 type QuickActionDialog = "order" | "client" | "inventory";
+type DashboardListView = "recent" | "active" | "lowStock" | "awaitingPayment";
+type DashboardOrderListView = "recent" | "active";
 
 const toggleCardClass = cn(
   statCardClassName,
@@ -101,9 +104,11 @@ export default function Dashboard() {
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
   const orderDetails = useOrderDetails();
-  const [listView, setListView] = useState<"recent" | "active" | "lowStock">("recent");
+  const [listView, setListView] = useState<DashboardListView>("recent");
+  const [previousOrderListView, setPreviousOrderListView] = useState<DashboardOrderListView>("recent");
   const showActiveOrders = listView === "active";
   const showLowStock = listView === "lowStock";
+  const showAwaitingPayment = listView === "awaitingPayment";
   const [editInventoryId, setEditInventoryId] = useState<string | null>(null);
   const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
   const dialogProps = (dialog: QuickActionDialog) => ({
@@ -141,6 +146,7 @@ export default function Dashboard() {
   const { payments } = useGetPayments();
 
   const now = new Date();
+  const { awaitingPayment } = useDashboardFinancials(now);
   const today = localDateKey(now);
   const taskOverview = taskOverviewCounts(workspaceOrders, today);
   const week = thisWeekStats(
@@ -180,7 +186,19 @@ export default function Dashboard() {
     return selectOrdersByActivityIds(workspaceOrders, orderIds, RECENT_ORDERS_LIMIT);
   }, [recentActivityIds, workspaceOrders]);
 
-  const listedOrders = showActiveOrders ? activeOrders : recentOrders;
+  const awaitingRemainingByOrderId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of awaitingPayment.orders) {
+      map.set(row.order.id, row.remaining);
+    }
+    return map;
+  }, [awaitingPayment.orders]);
+
+  const listedOrders = showAwaitingPayment
+    ? awaitingPayment.orders.map((row) => row.order)
+    : showActiveOrders
+      ? activeOrders
+      : recentOrders;
   const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(listedOrders);
 
   const paymentStatusByOrder = useMemo(() => {
@@ -190,6 +208,23 @@ export default function Dashboard() {
     }
     return map;
   }, [listedOrders, payments]);
+
+  function toggleAwaitingPayment() {
+    if (listView === "awaitingPayment") {
+      setListView(previousOrderListView);
+      return;
+    }
+    if (listView === "recent" || listView === "active") {
+      setPreviousOrderListView(listView);
+    }
+    setListView("awaitingPayment");
+  }
+
+  function ordersListTitle() {
+    if (showAwaitingPayment) return t("dashboard.lists.awaitingPayment");
+    if (showActiveOrders) return t("dashboard.lists.activeOrders");
+    return t("dashboard.lists.recentOrders");
+  }
 
   const openActivity = (event: ActivityItem) => {
     if (event.kind === "client-created") return;
@@ -251,6 +286,20 @@ export default function Dashboard() {
       cell: (order) => <span className="font-medium tabular-nums">{formatMoney(order.totalPrice)}</span>,
       className: "text-right whitespace-nowrap",
     },
+    ...(showAwaitingPayment
+      ? [
+          {
+            key: "toPay",
+            header: t("dashboard.lists.toPay"),
+            cell: (order: Order) => (
+              <span className="font-semibold tabular-nums text-warning">
+                {formatMoney(awaitingRemainingByOrderId.get(order.id) ?? 0)}
+              </span>
+            ),
+            className: "text-right whitespace-nowrap",
+          } satisfies Column<Order>,
+        ]
+      : []),
   ];
 
   const lowStockColumns: Column<InventoryItem>[] = [
@@ -375,7 +424,11 @@ export default function Dashboard() {
           </span>
         </button>
 
-        <DashboardFinancialCards now={now} />
+        <DashboardFinancialCards
+          now={now}
+          awaitingActive={showAwaitingPayment}
+          onToggleAwaiting={toggleAwaitingPayment}
+        />
 
         <button
           type="button"
@@ -462,7 +515,7 @@ export default function Dashboard() {
         ) : (
           <div className="min-w-0">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold text-foreground">{showActiveOrders ? t("dashboard.lists.activeOrders") : t("dashboard.lists.recentOrders")}</h2>
+              <h2 className="text-[15px] font-semibold text-foreground">{ordersListTitle()}</h2>
               {viewAllLink(`/${locale}/${routeWorkspaceId}/orders`)}
             </div>
             <DataTable
@@ -474,6 +527,8 @@ export default function Dashboard() {
               emptyState={
                 ordersError ? (
                   ordersErrorState
+                ) : showAwaitingPayment ? (
+                  <EmptyState icon={ClipboardList} title={t("dashboard.empty.noAwaitingPayment")} />
                 ) : showActiveOrders ? (
                   <EmptyState icon={ClipboardList} title={t("dashboard.empty.noActiveOrders")} description={t("dashboard.empty.openOrdersHint")} />
                 ) : (
@@ -481,6 +536,16 @@ export default function Dashboard() {
                 )
               }
             />
+            {showAwaitingPayment && awaitingPayment.standaloneInvoiceCount > 0 ? (
+              <p className="mt-3 text-[13px] text-muted-foreground">
+                <Link
+                  to={`/${locale}/${routeWorkspaceId}/invoices`}
+                  className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+                >
+                  {t("dashboard.lists.moreUnpaidInvoices", { count: awaitingPayment.standaloneInvoiceCount })}
+                </Link>
+              </p>
+            ) : null}
           </div>
         )}
 

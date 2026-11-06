@@ -110,6 +110,7 @@ describe("previewStockAfter", () => {
 
   it("write-off reduces source and total", () => {
     expect(previewStockAfter("writeOff", current, 3)).toEqual({ from: 7, to: 4, total: 11 });
+    expect(previewStockAfter("supplierReturn", current, 3)).toEqual({ from: 7, to: 4, total: 11 });
   });
 });
 

@@ -572,6 +572,8 @@ export type InventoryMovement = {
   /** Present when inventory_movements.warehouse_id exists (crm_ro_v1). */
   warehouseId: string | null;
   movementType: InventoryMovementType;
+  /** Optional document_type from inventory_movements (e.g. supplier_return). */
+  documentType: string | null;
   quantity: number;
   reason: string | null;
   createdBy: string | null;

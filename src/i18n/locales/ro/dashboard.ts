@@ -29,6 +29,7 @@ const dashboard: Messages<typeof en> = {
     openOrdersHint: "Comenzile deschise vor apărea aici.",
     noLowStock: "Niciun articol cu stoc redus",
     lowStockHint: "Articolele la sau sub stocul minim vor apărea aici.",
+    noAwaitingPayment: "Toate comenzile sunt achitate",
   },
   errors: {
     orders: "Comenzile nu au putut fi încărcate",
@@ -49,6 +50,9 @@ const dashboard: Messages<typeof en> = {
   lists: {
     recentOrders: "Comenzi recente",
     activeOrders: "Comenzi active",
+    awaitingPayment: "Așteaptă plata",
+    toPay: "De plată",
+    moreUnpaidInvoices: "Alte facturi neachitate fără comandă: {{count}}",
     lowStockItems: "Articole cu stoc redus",
     lowStockQuantity: "{{quantity}} {{unit}} (min {{min}})",
     lowStockQuantityHint: "{{quantity}} {{unit}} rămase (minim: {{min}})",

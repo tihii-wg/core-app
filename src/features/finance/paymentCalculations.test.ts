@@ -24,6 +24,7 @@ import {
   refundableRemaining,
   remainingForTotal,
   roundMoney,
+  selectAwaitingPayment,
   wouldExceedRemaining,
 } from "./paymentCalculations";
 import type { LedgerPayment } from "./paymentTypes";
@@ -223,6 +224,75 @@ describe("invoice outstanding", () => {
     const inv = invoice({ id: "inv-1", status: "sent", total: 100, amount: 100 });
     expect(invoicePaymentBalance(inv, [payment({ id: "p1", kind: "payment", amount: 30, invoiceId: "inv-1" })]).remaining).toBe(70);
     expect(combinedOutstanding([], [inv], [payment({ id: "p1", kind: "payment", amount: 30, invoiceId: "inv-1" })]).invoicePart).toBe(70);
+  });
+});
+
+describe("selectAwaitingPayment", () => {
+  it("matches combinedOutstanding.unpaidCount on mixed fixtures", () => {
+    const orders = [
+      order({ id: "o-open", totalPrice: 80, status: "in-progress", createdAt: "2026-06-01T10:00:00Z" }),
+      order({ id: "o-invoiced", totalPrice: 200, status: "completed", createdAt: "2026-06-02T10:00:00Z" }),
+      order({ id: "o-cancelled", totalPrice: 50, status: "cancelled", createdAt: "2026-06-03T10:00:00Z" }),
+      order({ id: "o-legacy", totalPrice: 40, status: "paid", isPaid: true, createdAt: "2026-06-04T10:00:00Z" }),
+      order({ id: "o-paid", totalPrice: 30, status: "completed", createdAt: "2026-06-05T10:00:00Z" }),
+    ];
+    const invoices = [
+      invoice({
+        id: "inv-order",
+        status: "sent",
+        orderId: "o-invoiced",
+        total: 150,
+        amount: 150,
+      }),
+      invoice({
+        id: "inv-standalone",
+        status: "sent",
+        orderId: undefined,
+        total: 60,
+        amount: 60,
+      }),
+      invoice({
+        id: "inv-cancelled-order",
+        status: "sent",
+        orderId: "o-cancelled",
+        total: 50,
+        amount: 50,
+      }),
+    ];
+    const payments = [
+      payment({ id: "p-partial", kind: "payment", amount: 50, invoiceId: "inv-order" }),
+      payment({ id: "p-paid-order", kind: "payment", amount: 30, orderId: "o-paid" }),
+    ];
+
+    const awaiting = selectAwaitingPayment(orders, invoices, payments);
+    const outstanding = combinedOutstanding(orders, invoices, payments);
+
+    expect(awaiting.totalCount).toBe(outstanding.unpaidCount);
+    expect(awaiting.standaloneInvoiceCount).toBe(2); // standalone + cancelled-linked
+    expect(awaiting.orders.map((row) => row.order.id)).toEqual(["o-invoiced", "o-open"]);
+    expect(awaiting.orders[0]?.remaining).toBe(100); // invoice remaining, not order total
+    expect(awaiting.orders[1]?.remaining).toBe(80);
+  });
+
+  it("excludes cancelled and legacy-paid orders without an unpaid invoice path", () => {
+    const awaiting = selectAwaitingPayment(
+      [
+        order({ id: "o-cancelled", totalPrice: 50, status: "cancelled" }),
+        order({ id: "o-legacy", totalPrice: 40, status: "paid", isPaid: true }),
+      ],
+      [],
+      [],
+    );
+    expect(awaiting.orders).toEqual([]);
+    expect(awaiting.totalCount).toBe(0);
+    expect(awaiting.totalCount).toBe(combinedOutstanding(
+      [
+        order({ id: "o-cancelled", totalPrice: 50, status: "cancelled" }),
+        order({ id: "o-legacy", totalPrice: 40, status: "paid", isPaid: true }),
+      ],
+      [],
+      [],
+    ).unpaidCount);
   });
 });
 

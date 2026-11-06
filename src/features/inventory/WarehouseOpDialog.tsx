@@ -13,7 +13,12 @@ import type { WarehouseRecord } from "../../services/apiWarehouses";
 import type { WarehouseStockRecord } from "../../services/apiWarehouseStock";
 import { useGetInventorySuppliers } from "./useGetInventorySuppliers";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
-import { useCreateGoodsReceipt, useCreateStockTransfer, useCreateWriteOff } from "./useWarehouseOps";
+import {
+  useCreateGoodsReceipt,
+  useCreateStockTransfer,
+  useCreateSupplierReturn,
+  useCreateWriteOff,
+} from "./useWarehouseOps";
 import {
   assignCreatedItemToOpLines,
   parseDecimalInput,
@@ -106,7 +111,9 @@ function OpForm({
   const createReceipt = useCreateGoodsReceipt();
   const createTransfer = useCreateStockTransfer();
   const createWriteOff = useCreateWriteOff();
-  const isPending = createReceipt.isPending || createTransfer.isPending || createWriteOff.isPending;
+  const createSupplierReturn = useCreateSupplierReturn();
+  const isPending =
+    createReceipt.isPending || createTransfer.isPending || createWriteOff.isPending || createSupplierReturn.isPending;
 
   const activeWarehouses = useMemo(() => warehouses.filter((warehouse) => warehouse.isActive), [warehouses]);
   // Items created during this draft stay selectable until the parent inventory query catches up.
@@ -128,7 +135,7 @@ function OpForm({
   const { suppliers } = useGetInventorySuppliers();
   const [warehouseId, setWarehouseId] = useState(activeWarehouses.find((w) => w.isDefault)?.id ?? activeWarehouses[0]?.id ?? "");
   const [toWarehouseId, setToWarehouseId] = useState("");
-  const [reason, setReason] = useState("other");
+  const [reason, setReason] = useState(kind === "writeOff" ? "other" : "");
   const [comment, setComment] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [lines, setLines] = useState<DraftLine[]>(() => [newLine()]);
@@ -153,6 +160,7 @@ function OpForm({
     () => (kind === "receipt" ? undefined : stockByItemForWarehouse(stock, warehouseId)),
     [kind, stock, warehouseId],
   );
+  const needsSupplierField = kind === "receipt" || kind === "supplierReturn";
 
   const parsedLines = lines.map((line) => ({
     inventoryItemId: line.itemId,
@@ -204,6 +212,10 @@ function OpForm({
       return setError(issueMessage(t, issue, (index) => String(index + 1)));
     }
 
+    if (kind === "supplierReturn" && reason.trim().length < 3) {
+      return setError(t("inventory.supplierReturn.reasonRequired"));
+    }
+
     setError(null);
     const options = { onSuccess: onDone };
     if (kind === "receipt") {
@@ -216,9 +228,22 @@ function OpForm({
         },
         options,
       );
+    } else if (kind === "transfer") {
+      createTransfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId, comment, lines: parsedLines }, options);
+    } else if (kind === "writeOff") {
+      createWriteOff.mutate({ warehouseId, reason, comment, lines: parsedLines }, options);
+    } else {
+      createSupplierReturn.mutate(
+        {
+          warehouseId,
+          supplierName: supplierName.trim() || null,
+          reason: reason.trim(),
+          comment,
+          lines: parsedLines,
+        },
+        options,
+      );
     }
-    else if (kind === "transfer") createTransfer.mutate({ fromWarehouseId: warehouseId, toWarehouseId, comment, lines: parsedLines }, options);
-    else createWriteOff.mutate({ warehouseId, reason, comment, lines: parsedLines }, options);
   }
 
   if (activeWarehouses.length === 0) {
@@ -289,6 +314,21 @@ function OpForm({
                   <SelectItem value="other">{t("inventory.ops.reasons.other")}</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          ) : null}
+
+          {kind === "supplierReturn" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="op-return-reason">{t("inventory.supplierReturn.reason")}</Label>
+              <textarea
+                id="op-return-reason"
+                className="min-h-[4.5rem] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+                value={reason}
+                maxLength={500}
+                disabled={isPending}
+                onChange={(event) => setReason(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">{t("inventory.supplierReturn.financeHint")}</p>
             </div>
           ) : null}
 
@@ -388,7 +428,7 @@ function OpForm({
             )}
           </div>
 
-          {kind === "receipt" ? (
+          {needsSupplierField ? (
             <div className="space-y-1.5">
               <Label htmlFor="op-supplier">{t("inventory.ops.fields.supplier")}</Label>
               <Input

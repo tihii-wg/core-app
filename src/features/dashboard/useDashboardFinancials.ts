@@ -6,7 +6,13 @@ import { getPayments, PaymentsUnavailableError } from "../../services/apiPayment
 import { localDateKey } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { combinedOutstanding, netReceiptsOnDate } from "../finance/paymentCalculations";
+import {
+  combinedOutstanding,
+  netReceiptsOnDate,
+  selectAwaitingPayment,
+  type AwaitingPaymentSelection,
+} from "../finance/paymentCalculations";
+import type { Order } from "../../lib/types";
 
 export type DashboardFinancials = {
   revenueToday: number;
@@ -16,6 +22,7 @@ export type DashboardFinancials = {
   outstandingAmount: number;
   unpaidOrders: number;
   hasOrders: boolean;
+  awaitingPayment: AwaitingPaymentSelection<Order>;
   isLoading: boolean;
   isError: boolean;
 };
@@ -66,6 +73,7 @@ export function useDashboardFinancials(now: Date): DashboardFinancials {
   const revenueToday = useMemo(() => netReceiptsOnDate(payments, todayKey, currency), [payments, todayKey, currency]);
   const revenueYesterday = useMemo(() => netReceiptsOnDate(payments, yesterdayKey, currency), [payments, yesterdayKey, currency]);
   const outstanding = useMemo(() => combinedOutstanding(orders, invoices, payments), [orders, invoices, payments]);
+  const awaitingPayment = useMemo(() => selectAwaitingPayment(orders, invoices, payments), [orders, invoices, payments]);
 
   const paymentsUnavailable = paymentsQueryError instanceof PaymentsUnavailableError;
 
@@ -76,6 +84,7 @@ export function useDashboardFinancials(now: Date): DashboardFinancials {
     outstandingAmount: outstanding.amount,
     unpaidOrders: outstanding.unpaidCount,
     hasOrders: orders.length > 0,
+    awaitingPayment,
     isLoading: ordersLoading || invoicesLoading || paymentsLoading,
     isError: ordersError || invoicesError || (paymentsError && !paymentsUnavailable),
   };

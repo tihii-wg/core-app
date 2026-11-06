@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanRpcMessage,
   createAndPostGoodsReceipt,
+  createAndPostSupplierReturn,
   createGoodsReceipt,
   escapeLikePattern,
   getGoodsReceipts,
   getSupplierDeliveries,
   isMissingRpcError,
+  mapSupplierReturnRefundError,
   mapWarehouseOpsError,
   postGoodsReceipt,
+  recordSupplierReturnRefund,
   toWarehouseOp,
 } from "./apiWarehouseOps";
 
@@ -386,5 +389,191 @@ describe("apiWarehouseOps", () => {
 
     expect(insert.mock.calls.map(([table]) => table)).toEqual(["goods_receipts", "goods_receipt_lines"]);
     expect(rpc).toHaveBeenCalledWith("crm_post_goods_receipt", { p_receipt_id: "r2" });
+  });
+
+  it("createAndPostSupplierReturn posts successfully without refund", async () => {
+    const insert = vi.fn();
+    const result = chain({ data: { id: "sr1" }, error: null });
+    from.mockImplementation((table: string) => ({
+      insert: (payload: unknown) => {
+        insert(table, payload);
+        return result;
+      },
+      delete: () => chain({ data: null, error: null }),
+    }));
+    rpc.mockResolvedValueOnce({ data: { status: "posted" }, error: null });
+
+    await expect(
+      createAndPostSupplierReturn(
+        {
+          warehouseId: "wh",
+          goodsReceiptId: "r1",
+          supplierName: "Acme",
+          reason: "Defective batch",
+          lines: [{ inventoryItemId: "i1", itemName: "Filter", quantity: 2, unitCost: 4 }],
+        },
+        "ws",
+      ),
+    ).resolves.toEqual({ returnId: "sr1", refundSkipped: false });
+
+    expect(insert.mock.calls.map(([table]) => table)).toEqual(["supplier_returns", "supplier_return_lines"]);
+    expect(insert.mock.calls[0][1]).toMatchObject({
+      warehouse_id: "wh",
+      goods_receipt_id: "r1",
+      supplier_name: "Acme",
+      reason: "Defective batch",
+    });
+    expect(rpc).toHaveBeenCalledWith("crm_post_supplier_return", { p_return_id: "sr1" });
+  });
+
+  it("createAndPostSupplierReturn with refund calls the combined RPC", async () => {
+    const result = chain({ data: { id: "sr3" }, error: null });
+    from.mockImplementation(() => ({
+      insert: () => result,
+      delete: () => chain({ data: null, error: null }),
+    }));
+    rpc.mockResolvedValueOnce({
+      data: { supplier_return_id: "sr3", status: "posted", refund: { finance_transaction_id: "ft1" } },
+      error: null,
+    });
+
+    await expect(
+      createAndPostSupplierReturn(
+        {
+          warehouseId: "wh",
+          reason: "Defective",
+          lines: [{ inventoryItemId: "i1", itemName: "Filter", quantity: 1, unitCost: 10 }],
+          refund: { accountId: "acc-1", amount: 10, comment: "cash back" },
+        },
+        "ws",
+      ),
+    ).resolves.toEqual({ returnId: "sr3", refundSkipped: false });
+
+    expect(rpc).toHaveBeenCalledWith("crm_post_supplier_return_with_refund", {
+      p_return_id: "sr3",
+      p_account_id: "acc-1",
+      p_amount: 10,
+      p_comment: "cash back",
+    });
+    expect(rpc).not.toHaveBeenCalledWith("crm_post_supplier_return", expect.anything());
+  });
+
+  it("createAndPostSupplierReturn falls back when combined RPC is missing", async () => {
+    const result = chain({ data: { id: "sr4" }, error: null });
+    from.mockImplementation(() => ({
+      insert: () => result,
+      delete: () => chain({ data: null, error: null }),
+    }));
+    rpc
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST202", message: "Could not find the function" } })
+      .mockResolvedValueOnce({ data: { status: "posted" }, error: null });
+
+    await expect(
+      createAndPostSupplierReturn(
+        {
+          warehouseId: "wh",
+          reason: "Defective",
+          lines: [{ inventoryItemId: "i1", itemName: "Filter", quantity: 1, unitCost: 10 }],
+          refund: { accountId: "acc-1", amount: 10 },
+        },
+        "ws",
+      ),
+    ).resolves.toEqual({ returnId: "sr4", refundSkipped: true });
+
+    expect(rpc).toHaveBeenNthCalledWith(1, "crm_post_supplier_return_with_refund", expect.any(Object));
+    expect(rpc).toHaveBeenNthCalledWith(2, "crm_post_supplier_return", { p_return_id: "sr4" });
+  });
+
+  it("createAndPostSupplierReturn deletes the draft and surfaces cleaned RPC message on post failure", async () => {
+    const insert = vi.fn();
+    const deleted: string[] = [];
+    const result = chain({ data: { id: "sr2" }, error: null });
+    from.mockImplementation((table: string) => ({
+      insert: (payload: unknown) => {
+        insert(table, payload);
+        return result;
+      },
+      delete: () => {
+        deleted.push(table);
+        const self = chain({ data: null, error: null });
+        return {
+          ...self,
+          eq: () => ({
+            eq: () => chain({ data: null, error: null }),
+          }),
+        };
+      },
+    }));
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "crm_post_supplier_return: can return at most 2" },
+    });
+
+    await expect(
+      createAndPostSupplierReturn(
+        {
+          warehouseId: "wh",
+          reason: "Too many",
+          lines: [{ inventoryItemId: "i1", itemName: "Filter", quantity: 4, unitCost: 4 }],
+        },
+        "ws",
+      ),
+    ).rejects.toThrow(/can return at most 2/);
+
+    expect(deleted).toEqual(["supplier_return_lines", "supplier_returns"]);
+  });
+
+  it("maps supplier return refund error codes", () => {
+    expect(mapSupplierReturnRefundError({ message: "supplier_return_refund:already_refunded" }).message).toMatch(
+      /already recorded|уже записан|deja înregistrată/i,
+    );
+    expect(
+      mapSupplierReturnRefundError({ message: "supplier_return_refund:amount_exceeds_total", details: "42.5" }).message,
+    ).toMatch(/42\.5/);
+    expect(mapSupplierReturnRefundError({ message: "supplier_return_refund:forbidden" }).message).toMatch(
+      /permission|прав|dreptul/i,
+    );
+  });
+
+  it("recordSupplierReturnRefund calls the dedicated RPC", async () => {
+    rpc.mockResolvedValueOnce({ data: { finance_transaction_id: "ft1" }, error: null });
+    await recordSupplierReturnRefund("sr1", {
+      accountId: "acc-1",
+      amount: 15,
+      occurredAt: "2026-11-06T12:00:00.000Z",
+      comment: "later",
+    });
+    expect(rpc).toHaveBeenCalledWith("crm_record_supplier_return_refund", {
+      p_return_id: "sr1",
+      p_account_id: "acc-1",
+      p_amount: 15,
+      p_occurred_at: "2026-11-06T12:00:00.000Z",
+      p_comment: "later",
+    });
+  });
+
+  it("maps supplier return records from posted_at and goods_receipt_id", () => {
+    const base = {
+      id: "sr1",
+      workspace_id: "w",
+      created_at: "2026-11-06T00:00:00Z",
+      warehouse_id: "wh",
+      goods_receipt_id: "r1",
+      supplier_name: "Acme",
+      reason: "Defect",
+      posted_at: "2026-11-06T01:00:00Z",
+      total: 10,
+      refund_account_id: "acc-1",
+      finance_transaction_id: "ft-1",
+    };
+    expect(toWarehouseOp("supplierReturn", base, [])).toMatchObject({
+      kind: "supplierReturn",
+      posted: true,
+      goodsReceiptId: "r1",
+      supplierName: "Acme",
+      reason: "Defect",
+      refundAccountId: "acc-1",
+      financeTransactionId: "ft-1",
+    });
   });
 });

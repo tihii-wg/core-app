@@ -3,18 +3,26 @@ import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import {
   createAndPostGoodsReceipt,
+  createAndPostSupplierReturn,
   createGoodsReceipt,
   createStockTransfer,
+  createSupplierReturn,
   createWriteOff,
   getGoodsReceipts,
+  getReturnedQuantitiesForReceipt,
   getStockTransfers,
+  getSupplierReturns,
   getWriteOffs,
   postGoodsReceipt,
   postStockTransfer,
+  postSupplierReturn,
   postWriteOff,
+  recordSupplierReturnRefund,
   type CreateGoodsReceiptInput,
   type CreateStockTransferInput,
+  type CreateSupplierReturnInput,
   type CreateWriteOffInput,
+  type RecordSupplierReturnRefundInput,
 } from "../../services/apiWarehouseOps";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
@@ -49,6 +57,25 @@ export function useGetWriteOffs() {
   });
 }
 
+export function useGetSupplierReturns() {
+  const { workspaceId } = useActiveWorkspaceId();
+  return useQuery({
+    queryKey: [OPS_KEY, "supplierReturn", workspaceId],
+    queryFn: () => getSupplierReturns(workspaceId),
+    enabled: Boolean(workspaceId),
+  });
+}
+
+export function useReturnedQuantitiesForReceipt(receiptId: string | null | undefined, enabled = true) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const id = receiptId?.trim() ?? "";
+  return useQuery({
+    queryKey: [OPS_KEY, "returned-qty", workspaceId, id],
+    queryFn: () => getReturnedQuantitiesForReceipt(workspaceId, id),
+    enabled: Boolean(workspaceId) && Boolean(id) && enabled,
+  });
+}
+
 function useCreateOp<TInput>(kind: WarehouseOpKind, create: (input: TInput, workspaceId: string | undefined) => Promise<string>) {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
@@ -72,6 +99,30 @@ function useCreateOp<TInput>(kind: WarehouseOpKind, create: (input: TInput, work
 export const useCreateGoodsReceipt = () => useCreateOp<CreateGoodsReceiptInput>("receipt", createGoodsReceipt);
 export const useCreateStockTransfer = () => useCreateOp<CreateStockTransferInput>("transfer", createStockTransfer);
 export const useCreateWriteOff = () => useCreateOp<CreateWriteOffInput>("writeOff", createWriteOff);
+export const useCreateSupplierReturn = () => useCreateOp<CreateSupplierReturnInput>("supplierReturn", createSupplierReturn);
+
+async function invalidateAfterStockChange(queryClient: ReturnType<typeof useQueryClient>, workspaceId: string | undefined, kind: WarehouseOpKind) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: [OPS_KEY, kind, workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["inventory-movements", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["supplier-deliveries", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["supplier-parts", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["supplier-returns", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: [OPS_KEY, "returned-qty", workspaceId] }),
+  ]);
+}
+
+async function invalidateFinanceAfterRefund(queryClient: ReturnType<typeof useQueryClient>, workspaceId: string | undefined) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["finance-accounts", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["payments", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: [OPS_KEY, "supplierReturn", workspaceId] }),
+    queryClient.invalidateQueries({ queryKey: ["supplier-returns", workspaceId] }),
+  ]);
+}
 
 /**
  * Integrated receive: draft + post in one mutation using the same create/post APIs as
@@ -102,6 +153,52 @@ export function useCreateAndPostGoodsReceipt() {
   });
 }
 
+/** Create + post a supplier return; rolls back the draft if post fails. */
+export function useCreateAndPostSupplierReturn() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+
+  return useMutation({
+    mutationFn: (input: CreateSupplierReturnInput) => {
+      guardWrite();
+      return createAndPostSupplierReturn(input, workspaceId);
+    },
+    onSuccess: async (result) => {
+      await invalidateAfterStockChange(queryClient, workspaceId, "supplierReturn");
+      await invalidateFinanceAfterRefund(queryClient, workspaceId);
+      toast.success(i18n.t("inventory.supplierReturn.success"));
+      if (result.refundSkipped) {
+        toast.error(i18n.t("inventory.supplierReturn.refund.refundSkipped"));
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("inventory.ops.errors.postFailed"));
+    },
+  });
+}
+
+/** Record money back from the supplier for an already posted return. */
+export function useRecordSupplierReturnRefund() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+
+  return useMutation({
+    mutationFn: ({ returnId, input }: { returnId: string; input: RecordSupplierReturnRefundInput }) => {
+      guardWrite();
+      return recordSupplierReturnRefund(returnId, input);
+    },
+    onSuccess: async () => {
+      await invalidateFinanceAfterRefund(queryClient, workspaceId);
+      toast.success(i18n.t("inventory.supplierReturn.refund.success"));
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("inventory.ops.errors.postFailed"));
+    },
+  });
+}
+
 function usePostOp(kind: WarehouseOpKind, post: (id: string) => Promise<void>) {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
@@ -113,12 +210,7 @@ function usePostOp(kind: WarehouseOpKind, post: (id: string) => Promise<void>) {
       return post(id);
     },
     onSuccess: async () => {
-      // Stock changed server-side: refresh documents, item quantities and per-warehouse stock.
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: [OPS_KEY, kind, workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] }),
-        queryClient.invalidateQueries({ queryKey: ["warehouse-stock", workspaceId] }),
-      ]);
+      await invalidateAfterStockChange(queryClient, workspaceId, kind);
       toast.success(i18n.t("inventory.ops.toast.posted"));
     },
     onError: (error: Error) => {
@@ -130,3 +222,4 @@ function usePostOp(kind: WarehouseOpKind, post: (id: string) => Promise<void>) {
 export const usePostGoodsReceipt = () => usePostOp("receipt", postGoodsReceipt);
 export const usePostStockTransfer = () => usePostOp("transfer", postStockTransfer);
 export const usePostWriteOff = () => usePostOp("writeOff", postWriteOff);
+export const usePostSupplierReturn = () => usePostOp("supplierReturn", postSupplierReturn);
