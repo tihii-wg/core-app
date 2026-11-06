@@ -33,6 +33,18 @@ type PaymentFormDialogProps = {
   balance: PaymentBalance;
 };
 
+export type OrderPaymentFormProps = {
+  orderId?: string | null;
+  invoiceId?: string | null;
+  balance: PaymentBalance;
+  /** Called after a successful record (and after any `onRecorded` work finishes). */
+  onDone: () => void;
+  /** Optional hook for embedders (e.g. Close order) that need the recorded amount. */
+  onRecorded?: (amount: number) => void | Promise<void>;
+  /** When false, hides the form Cancel button (parent dialog owns dismiss). Default true. */
+  showCancelButton?: boolean;
+};
+
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <p className="text-xs text-destructive">{message}</p>;
@@ -58,7 +70,7 @@ export function PaymentFormDialog({ open, onOpenChange, target, orderId, invoice
           </DialogDescription>
         </DialogHeader>
         {open && (
-          <PaymentForm
+          <OrderPaymentForm
             key={`${orderId ?? ""}:${invoiceId ?? ""}:${balance.remaining}`}
             orderId={orderId}
             invoiceId={invoiceId}
@@ -71,17 +83,15 @@ export function PaymentFormDialog({ open, onOpenChange, target, orderId, invoice
   );
 }
 
-function PaymentForm({
+/** Reusable order/invoice payment form — embedded by CloseOrderDialog and PaymentFormDialog. */
+export function OrderPaymentForm({
   orderId,
   invoiceId,
   balance,
   onDone,
-}: {
-  orderId?: string | null;
-  invoiceId?: string | null;
-  balance: PaymentBalance;
-  onDone: () => void;
-}) {
+  onRecorded,
+  showCancelButton = true,
+}: OrderPaymentFormProps) {
   const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
   const { mutate: record, isPending } = useRecordPayment();
@@ -96,7 +106,7 @@ function PaymentForm({
     formState: { errors },
   } = useForm<PaymentFormValues>({
     defaultValues: {
-      amount: remaining > 0 ? remaining : undefined as unknown as number,
+      amount: remaining > 0 ? remaining : (undefined as unknown as number),
       paidAt: defaultPaidAt(),
       paymentMethod: "cash",
       accountId: NO_ACCOUNT,
@@ -118,7 +128,14 @@ function PaymentForm({
         note: values.note,
         accountId: values.accountId && values.accountId !== NO_ACCOUNT ? values.accountId : null,
       },
-      { onSuccess: onDone },
+      {
+        onSuccess: () => {
+          void (async () => {
+            await onRecorded?.(values.amount);
+            onDone();
+          })();
+        },
+      },
     );
   }
 
@@ -250,9 +267,11 @@ function PaymentForm({
       </div>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" onClick={onDone} disabled={isPending}>
-          {t("common.cancel")}
-        </Button>
+        {showCancelButton ? (
+          <Button type="button" variant="outline" onClick={onDone} disabled={isPending}>
+            {t("common.cancel")}
+          </Button>
+        ) : null}
         <Button type="submit" disabled={isPending || remaining <= 0}>
           {isPending ? <Spinner className="size-4" /> : null}
           {t("finance.payments.record")}

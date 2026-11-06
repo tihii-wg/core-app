@@ -817,6 +817,7 @@ export default function OrderDetailPanel({
         onOpenChange={setCloseOpen}
         payments={payments}
         formatMoney={formatMoney}
+        canRecordPayment={canEditOrder && !closedContentLocked}
         onClosed={(result) => {
           if (!selectedOrder) return;
           onOrderUpdated({

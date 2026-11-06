@@ -38,6 +38,11 @@ vi.mock("../workspaces/useGetWorkspace", () => ({
 
 vi.mock("../profiles/useGetProfile", () => ({
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
+  useGetProfile: () => ({ data: { id: "user-1" }, isLoading: false }),
+}));
+
+vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
+  useIsWorkspaceOwnerId: () => true,
 }));
 
 vi.mock("../employees/useGetEmployees", () => ({
@@ -79,7 +84,7 @@ vi.mock("./useMoveOrderOnBoard", () => ({
 }));
 
 vi.mock("./useCloseOrder", () => ({
-  useCloseOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCloseOrder: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useCancelOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -91,8 +96,15 @@ vi.mock("./useClosedOrderPermissions", () => ({
     isError: false,
     canCancelClosed: true,
     canDeleteClosed: true,
+    canManageClosedContent: false,
+    isOwnerByOwnerId: true,
+    ownerCanManageClosedOrders: false,
   }),
   useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
+}));
+
+vi.mock("../finance/useFinanceAccounts", () => ({
+  useFinanceAccounts: () => ({ data: [], isLoading: false }),
 }));
 
 vi.mock("./OrderAttachmentsSection", () => ({

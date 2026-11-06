@@ -501,6 +501,8 @@ describe("OrderDetailPanel", () => {
       device: "BMW",
       services: [],
       service: "",
+      // No linked vehicle — empty vehicle fields would otherwise render "—" placeholders.
+      vehicleId: null,
     };
 
     renderPanel(vi.fn(), vi.fn(), { order: sparse });

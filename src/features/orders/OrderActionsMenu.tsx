@@ -29,6 +29,7 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
 import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
@@ -99,7 +100,8 @@ export function OrderActionsMenu({
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
   // Paid unlock uses membership owner role; closed-order cancel/delete uses owner_id.
-  const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole());
+  const workspaceRole = useActiveWorkspaceRole();
+  const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const { canWrite } = useWorkspaceSubscription();
   const paidLocked = isOrderPaidLocked(order, isWorkspaceOwner);
@@ -123,6 +125,8 @@ export function OrderActionsMenu({
     isOwnerByOwnerId,
     ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
   });
+  // Same gate as PaymentHistorySection + closed-content lock (no recording on locked closed orders).
+  const canRecordPayment = withSubscriptionWriteAccess(Boolean(workspaceRole), canWrite) && canMutateContent;
   const statusLockedForMenu =
     order.status === "cancelled" ? !isOwnerByOwnerId : formallyClosed && !canManageClosedContent;
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
@@ -417,6 +421,7 @@ export function OrderActionsMenu({
         onOpenChange={setCloseOpen}
         payments={payments}
         formatMoney={formatMoney}
+        canRecordPayment={canRecordPayment}
         onClosed={(result) => {
           onOrderUpdated?.({
             ...order,
