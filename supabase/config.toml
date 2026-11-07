@@ -1,0 +1,11 @@
+# Edge Function JWT verification overrides.
+# These functions authenticate callers themselves (cron token or owner JWT).
+
+[functions.workspace-backup]
+verify_jwt = false
+
+[functions.backup-google-oauth]
+verify_jwt = false
+
+[functions.backup-github-connect]
+verify_jwt = false

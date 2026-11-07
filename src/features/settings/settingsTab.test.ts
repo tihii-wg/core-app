@@ -43,6 +43,10 @@ describe("settings tabs", () => {
     expect(settingsTabFromSearch("taxes")).toBe("taxes");
   });
 
+  it("opens the backups tab", () => {
+    expect(settingsTabFromSearch("backups")).toBe("backups");
+  });
+
   it("opens the stage 7-9 migration and modules tabs", () => {
     expect(settingsTabFromSearch("migration")).toBe("migration");
     expect(settingsTabFromSearch("modules")).toBe("modules");
