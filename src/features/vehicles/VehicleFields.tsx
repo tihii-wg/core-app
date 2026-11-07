@@ -2,8 +2,10 @@ import type { FieldErrors, UseFormRegister, UseFormSetValue, UseFormWatch } from
 import { useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { MileageInput } from "../../ui/MileageInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { parseOptionalVehicleNumber } from "../../services/apiVehicles";
+import { mileageValidate } from "../../lib/mileage";
 import { optionalVinValidate } from "../../lib/vin";
 import { MILEAGE_UNITS, mileageUnitAbbreviation } from "./vehicleMileage";
 import { VEHICLE_FUEL_TYPES, type VehicleFormValues } from "./vehicleForm";
@@ -130,15 +132,10 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
             {t("vehicles.fields.initialMileage")}
             {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
           </Label>
-          <Input
+          <MileageInput
             id={`${idPrefix}-initial-mileage`}
-            inputMode="numeric"
             {...register("initialMileage", {
-              validate: (value) => {
-                if (!value.trim()) return true;
-                const n = parseOptionalVehicleNumber(value);
-                return (n != null && n >= 0) || t("vehicles.validation.mileageNonNegative");
-              },
+              validate: (value) => mileageValidate(value, t),
             })}
             placeholder={t("vehicles.placeholders.initialMileage")}
             disabled={disabled}
@@ -150,15 +147,10 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
             {t("vehicles.fields.currentMileage")}
             {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
           </Label>
-          <Input
+          <MileageInput
             id={`${idPrefix}-current-mileage`}
-            inputMode="numeric"
             {...register("currentMileage", {
-              validate: (value) => {
-                if (!value.trim()) return true;
-                const n = parseOptionalVehicleNumber(value);
-                return (n != null && n >= 0) || t("vehicles.validation.mileageNonNegative");
-              },
+              validate: (value) => mileageValidate(value, t),
             })}
             placeholder={t("vehicles.placeholders.currentMileage")}
             disabled={disabled}

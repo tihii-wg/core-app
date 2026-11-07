@@ -1,6 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { currentIntlLocale } from "../../i18n";
+import { formatMileageInput, parseMileageInput } from "../../lib/mileage";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { MileageInput } from "../../ui/MileageInput";
 import { Switch } from "../../ui/Switch";
 import {
   catalogWarrantyShowsKm,
@@ -31,10 +35,21 @@ function deriveType(durationEnabled: boolean, mileageEnabled: boolean): CatalogW
  */
 export default function CatalogWarrantyFields({ value, onChange, idPrefix, disabled, error }: Props) {
   const { t } = useTranslation();
+  const locale = currentIntlLocale();
   const type = value.warrantyType ?? "none";
   const durationEnabled = catalogWarrantyShowsMonths(type);
   const mileageEnabled = catalogWarrantyShowsKm(type);
   const bothEnabled = durationEnabled && mileageEnabled;
+
+  const [kmText, setKmText] = useState(() =>
+    value.warrantyKm != null ? formatMileageInput(value.warrantyKm, locale) : "",
+  );
+  const kmFocused = useRef(false);
+
+  useEffect(() => {
+    if (kmFocused.current) return;
+    setKmText(value.warrantyKm != null ? formatMileageInput(value.warrantyKm, locale) : "");
+  }, [value.warrantyKm, locale]);
 
   function emit(nextDuration: boolean, nextMileage: boolean, months: number | null, km: number | null) {
     const nextType = deriveType(nextDuration, nextMileage);
@@ -47,6 +62,18 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
       warrantyMonths: nextDuration ? months : null,
       warrantyKm: nextMileage ? km : null,
     });
+  }
+
+  function commitKm(raw: string) {
+    let next: number | null = null;
+    try {
+      const parsed = parseMileageInput(raw);
+      next = parsed != null && parsed > 0 ? parsed : null;
+    } catch {
+      next = null;
+    }
+    emit(durationEnabled, true, value.warrantyMonths, next);
+    setKmText(next != null ? formatMileageInput(next, locale) : raw.trim() === "" ? "" : raw);
   }
 
   return (
@@ -101,18 +128,25 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
         {mileageEnabled ? (
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-warranty-km`}>{t("catalogWarranty.kmLabel")}</Label>
-            <Input
+            <MileageInput
               id={`${idPrefix}-warranty-km`}
-              type="number"
-              min={1}
-              step={1}
-              inputMode="numeric"
               disabled={disabled}
-              value={value.warrantyKm ?? ""}
+              value={kmText}
               placeholder={t("catalogWarranty.kmPlaceholder")}
-              onChange={(event) =>
-                emit(durationEnabled, true, value.warrantyMonths, normalizeWarrantyKm(event.target.value))
-              }
+              onFocus={() => {
+                kmFocused.current = true;
+              }}
+              onChange={(event) => {
+                setKmText(event.target.value);
+                const soft = normalizeWarrantyKm(event.target.value);
+                if (soft !== (value.warrantyKm ?? null) && (soft != null || event.target.value.trim() === "")) {
+                  emit(durationEnabled, true, value.warrantyMonths, soft);
+                }
+              }}
+              onBlur={() => {
+                kmFocused.current = false;
+                commitKm(kmText);
+              }}
             />
             <p className="text-xs text-muted-foreground">{t("catalogWarranty.kmOrderHint")}</p>
           </div>

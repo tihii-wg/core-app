@@ -90,6 +90,8 @@ export default {
     yearRange: "Year must be between 1886 and 2200",
     mileageNonNegative: "Mileage must be zero or greater",
     mileageWholeNonNegative: "Mileage must be a whole number zero or greater",
+    mileageInvalid: "Enter mileage as a whole number, for example 100 000",
+    mileageTooLarge: "Mileage is too large (maximum 9 999 999)",
     mileageUnitInvalid: "Mileage unit must be kilometers (km) or miles (mi)",
     displacementPositive: "Engine displacement must be greater than zero",
     vinInvalid: "VIN must contain exactly 17 valid characters (A–Z and 0–9, excluding I, O, and Q)",

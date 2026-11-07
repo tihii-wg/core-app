@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { formatMileageInput } from "../../lib/mileage";
 import { cn } from "../../lib/utils";
 import { mileageUnitAbbreviation } from "../vehicles/vehicleMileage";
 import { isWarrantyExpired, snapshotMileageUnit, type OrderWarrantyIndicatorModel, type RemainingDuration } from "./warranty";
@@ -12,7 +13,7 @@ export function formatWarrantyEndsOn(endsOn: string | null | undefined): string 
 }
 
 export function formatWarrantyKm(value: number, language: string): string {
-  return new Intl.NumberFormat(language || "en", { maximumFractionDigits: 0 }).format(Math.max(0, Math.floor(value)));
+  return formatMileageInput(Math.max(0, Math.floor(value)), language || "en");
 }
 
 type TranslateFn = (key: string, options?: { count?: number; value?: string; date?: string }) => string;

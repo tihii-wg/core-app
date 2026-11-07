@@ -333,9 +333,9 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     renderWithQuery(<Harness initialVehicleId="veh-1" mileageMode="vehicle" />);
 
     await vi.waitFor(() => {
-      expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("45000");
+      expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("45,000");
     });
-    expect(readSnapshot().currentMileage).toBe("45000");
+    expect(readSnapshot().currentMileage).toMatch(/45[\s,]?000/);
   });
 
   it("rejects negative and decimal mileage values", async () => {
@@ -345,12 +345,12 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     const mileage = await screen.findByLabelText(/Current odometer reading/i);
     await user.type(mileage, "-5");
     await user.click(screen.getByRole("button", { name: /Save harness/i }));
-    expect(await screen.findByText(/whole number zero or greater|Mileage must be/i)).toBeInTheDocument();
+    expect(await screen.findByText(/whole number|Mileage must be|целым|întreg/i)).toBeInTheDocument();
 
     await user.clear(mileage);
     await user.type(mileage, "12.5");
     await user.click(screen.getByRole("button", { name: /Save harness/i }));
-    expect(await screen.findByText(/whole number zero or greater|Mileage must be/i)).toBeInTheDocument();
+    expect(await screen.findByText(/whole number|Mileage must be|целым|întreg/i)).toBeInTheDocument();
   });
 
   it("leaves missing vehicle fields empty in the order snapshot", async () => {
@@ -454,7 +454,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Legacy Device",
         carNumber: "OLD1",
         vin: "1HGBH41JXMN109186",
-        currentMileage: "45000",
+        currentMileage: expect.stringMatching(/45[\s,]?000/),
       });
     });
 

@@ -2,14 +2,14 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import type { Vehicle } from "../../lib/types";
+import { mileageValidate } from "../../lib/mileage";
 import { Button } from "../../ui/Button";
-import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { MileageInput } from "../../ui/MileageInput";
 import {
   mileageFormValueFromVehicle,
   parseVisitMileage,
   vehicleInputWithCurrentMileage,
-  visitMileageValidate,
 } from "../orders/orderVehicleMileage";
 import { mileageUnitAbbreviation, mileageUnitLabel } from "./vehicleMileage";
 import { useUpdateVehicle } from "./useVehicleMutations";
@@ -70,23 +70,15 @@ export function VehicleMileageForm({ vehicle, canEdit }: VehicleMileageFormProps
         {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
       </Label>
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start">
-        <div className="relative w-full min-w-0 max-w-full sm:max-w-[12rem]">
-          <Input
-            id="vehicle-detail-current-mileage"
-            inputMode="numeric"
-            className={`w-full min-w-0 ${unitAbbr ? "pr-10" : ""}`}
-            placeholder={t("vehicles.placeholders.currentMileage")}
-            disabled={!canEdit || busy}
-            {...register("currentMileage", {
-              validate: (value) => visitMileageValidate(value, t("vehicles.validation.mileageWholeNonNegative")),
-            })}
-          />
-          {unitAbbr ? (
-            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
-              {unitAbbr}
-            </span>
-          ) : null}
-        </div>
+        <MileageInput
+          id="vehicle-detail-current-mileage"
+          unitSuffix={unitAbbr || undefined}
+          placeholder={t("vehicles.placeholders.currentMileage")}
+          disabled={!canEdit || busy}
+          {...register("currentMileage", {
+            validate: (value) => mileageValidate(value, t),
+          })}
+        />
         <Button type="submit" size="sm" disabled={!canEdit || busy || !isDirty}>
           {busy ? t("common.saving") : t("common.save")}
         </Button>

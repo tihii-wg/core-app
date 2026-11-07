@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { formatMileageInput } from "../../lib/mileage";
 import type { MileageUnit, Vehicle } from "../../lib/types";
 
 export const MILEAGE_UNITS = ["km", "mi"] as const;
@@ -38,7 +39,7 @@ export function formatVehicleMileage(
   options?: { locale?: string; empty?: string },
 ): string {
   if (value == null || !Number.isFinite(value)) return options?.empty ?? t("common.noValue");
-  const formatted = value.toLocaleString(options?.locale, { maximumFractionDigits: 0 });
+  const formatted = formatMileageInput(value, options?.locale ?? "en");
   if (unit === "km" || unit === "mi") return `${formatted} ${mileageUnitAbbreviation(unit, t)}`;
   return `${formatted} (${t("vehicles.mileage.unitUnknownShort")})`;
 }

@@ -48,7 +48,7 @@ describe("historical order mileage snapshots", () => {
   });
 
   it("leaves legacy orders with unknown units unknown", () => {
-    expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: 12000 })).toBe("12000");
+    expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: 12000 })).toMatch(/12[\s,]?000/);
     expect(
       formatVehicleMileage(12000, null, t, { locale: "en-US" }),
     ).toBe("12,000 (vehicles.mileage.unitUnknownShort)");

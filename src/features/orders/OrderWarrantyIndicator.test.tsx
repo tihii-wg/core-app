@@ -219,7 +219,7 @@ describe("OrderWarrantyIndicator", () => {
     expect(i18n.t("orders.warranty.indicator.remainingDays", { count: 1 })).toBe("Осталось 1 день");
     expect(
       i18n.t("orders.warranty.indicator.remainingKm", { value: formatWarrantyKm(7500, "ru"), unit: "км" }),
-    ).toBe("Осталось 7\u00A0500 км");
+    ).toBe("Осталось 7 500 км");
     expect(i18n.t("orders.warranty.indicator.expired")).toBe("Гарантия истекла");
   });
 

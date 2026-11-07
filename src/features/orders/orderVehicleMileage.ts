@@ -1,40 +1,43 @@
 import type { QueryClient } from "@tanstack/react-query";
-import i18n from "../../i18n";
+import i18n, { currentIntlLocale } from "../../i18n";
+import { formatMileageInput, MileageParseError, parseMileageInput } from "../../lib/mileage";
 import type { MileageUnit, Order, Vehicle, VehicleInput } from "../../lib/types";
-import { parseOptionalVehicleNumber, updateVehicle } from "../../services/apiVehicles";
+import { updateVehicle } from "../../services/apiVehicles";
 import { clientVehiclesQueryKey } from "../vehicles/useGetClientVehicles";
 
 /** Form string → non-negative whole number, or null when empty. Throws for invalid input. */
 export function parseVisitMileage(raw: string | null | undefined): number | null {
-  const trimmed = (raw ?? "").trim();
-  if (!trimmed) return null;
-  const n = parseOptionalVehicleNumber(trimmed);
-  if (n == null || !Number.isInteger(n) || n < 0) {
-    throw new Error(i18n.t("vehicles.validation.mileageWholeNonNegative"));
+  try {
+    return parseMileageInput(raw);
+  } catch (error) {
+    if (error instanceof MileageParseError) throw new Error(i18n.t(error.i18nKey));
+    throw error;
   }
-  return n;
 }
 
 /** Validate a visit-mileage form value for react-hook-form (empty allowed). */
-export function visitMileageValidate(value: string, message: string): true | string {
+export function visitMileageValidate(value: string, fallbackMessage?: string): true | string {
   if (!value.trim()) return true;
   try {
     parseVisitMileage(value);
     return true;
-  } catch {
-    return message;
+  } catch (error) {
+    if (error instanceof Error && error.message) return error.message;
+    return fallbackMessage ?? "vehicles.validation.mileageInvalid";
   }
 }
 
 export function mileageFormValueFromVehicle(vehicle: Vehicle | null | undefined): string {
-  return vehicle?.currentMileage != null ? String(vehicle.currentMileage) : "";
+  return vehicle?.currentMileage != null ? formatMileageInput(vehicle.currentMileage, currentIntlLocale()) : "";
 }
 
 /** Prefill edit forms from the order's historical snapshot (not the vehicle's live reading). */
 export function mileageFormValueFromOrder(
   order: Pick<Order, "vehicleMileageSnapshot"> | null | undefined,
 ): string {
-  return order?.vehicleMileageSnapshot != null ? String(order.vehicleMileageSnapshot) : "";
+  return order?.vehicleMileageSnapshot != null
+    ? formatMileageInput(order.vehicleMileageSnapshot, currentIntlLocale())
+    : "";
 }
 
 /**

@@ -25,6 +25,29 @@ const baseVehicle: Vehicle = {
   deletedAt: null,
 };
 
+describe("vehicleForm mileage parsing", () => {
+  it("accepts grouped mileage and saves a whole integer", () => {
+    const values = emptyVehicleFormValues();
+    values.initialMileage = "100 000";
+    values.currentMileage = "100 000";
+    const input = vehicleFormValuesToInput(values);
+    expect(input.initialMileage).toBe(100_000);
+    expect(input.currentMileage).toBe(100_000);
+  });
+
+  it("rejects decimal mileage with the shared invalid message", () => {
+    const values = emptyVehicleFormValues();
+    values.currentMileage = "120 500,5";
+    expect(() => vehicleFormValuesToInput(values)).toThrow(/whole number|целым|întreg|mileageInvalid/);
+  });
+
+  it("prefills edit forms with grouped mileage", () => {
+    const values = vehicleToFormValues({ ...baseVehicle, currentMileage: 100_000, initialMileage: 100_000 });
+    expect(values.currentMileage).toMatch(/100[\s,]?000/);
+    expect(values.initialMileage).toMatch(/100[\s,]?000/);
+  });
+});
+
 describe("vehicleForm mileage unit", () => {
   it("starts create forms with an unset unit (never invents km/mi)", () => {
     expect(emptyVehicleFormValues().mileageUnit).toBe("");

@@ -17,6 +17,7 @@ vi.mock("../../i18n", () => ({
   default: {
     t: (key: string) => key,
   },
+  currentIntlLocale: () => "en-US",
 }));
 
 vi.mock("../../services/apiVehicles", async (importOriginal) => {
@@ -56,16 +57,18 @@ describe("orderVehicleMileage", () => {
     expect(parseVisitMileage("  ")).toBeNull();
     expect(parseVisitMileage("0")).toBe(0);
     expect(parseVisitMileage("45200")).toBe(45200);
-    expect(() => parseVisitMileage("-1")).toThrow(/mileageWholeNonNegative/);
-    expect(() => parseVisitMileage("12.5")).toThrow(/mileageWholeNonNegative/);
-    expect(() => parseVisitMileage("abc")).toThrow(/mileageWholeNonNegative/);
+    expect(parseVisitMileage("120 500")).toBe(120_500);
+    expect(() => parseVisitMileage("-1")).toThrow(/mileageInvalid/);
+    expect(() => parseVisitMileage("12.5")).toThrow(/mileageInvalid/);
+    expect(() => parseVisitMileage("abc")).toThrow(/mileageInvalid/);
   });
 
   it("validates form values without requiring a value", () => {
     expect(visitMileageValidate("", "bad")).toBe(true);
     expect(visitMileageValidate("100", "bad")).toBe(true);
-    expect(visitMileageValidate("-3", "bad")).toBe("bad");
-    expect(visitMileageValidate("1.2", "bad")).toBe("bad");
+    expect(visitMileageValidate("120 500", "bad")).toBe(true);
+    expect(visitMileageValidate("-3", "bad")).toMatch(/mileageInvalid/);
+    expect(visitMileageValidate("1.2", "bad")).toMatch(/mileageInvalid/);
   });
 
   it("does not clear existing mileage when the form value is empty", () => {
@@ -162,8 +165,15 @@ describe("orderVehicleMileage", () => {
   });
 
   it("prefills edit forms from the order snapshot, not the live vehicle reading", () => {
-    expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: 85500 })).toBe("85500");
+    expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: 85500 })).toMatch(/85[\s,]?500/);
     expect(mileageFormValueFromOrder({ vehicleMileageSnapshot: null })).toBe("");
     expect(mileageFormValueFromOrder(undefined)).toBe("");
+  });
+
+  it("updates vehicle current mileage from grouped visit input", () => {
+    expect(resolveVehicleMileageUpdate(vehicle, "120 500")).toEqual({
+      update: true,
+      currentMileage: 120_500,
+    });
   });
 });

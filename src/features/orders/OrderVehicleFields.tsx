@@ -6,16 +6,17 @@ import { Controller, useWatch } from "react-hook-form";
 import { Plus } from "lucide-react";
 import type { Vehicle } from "../../lib/types";
 import { Button } from "../../ui/Button";
-import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { MileageInput } from "../../ui/MileageInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { mileageValidate } from "../../lib/mileage";
 import { orderAssetFieldsFromVehicle, vehicleDisplayLabel, vehicleSummaryDetails } from "../../services/apiVehicles";
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useCreateVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
 import { mileageUnitAbbreviation, mileageUnitLabel } from "../vehicles/vehicleMileage";
 import { VehicleFieldsGrid } from "./VehicleFieldsGrid";
-import { mileageFormValueFromVehicle, visitMileageValidate } from "./orderVehicleMileage";
+import { mileageFormValueFromVehicle } from "./orderVehicleMileage";
 
 const NONE = "__none__";
 
@@ -247,24 +248,15 @@ export function OrderVehicleFields<T extends FieldValues>({
                 <span className="ml-1 font-normal text-muted-foreground">({mileageUnitAbbr})</span>
               ) : null}
             </Label>
-            <div className="relative w-full min-w-0 max-w-full sm:max-w-[12rem]">
-              <Input
-                id="order-vehicle-current-mileage"
-                inputMode="numeric"
-                className={`w-full min-w-0 ${mileageUnitAbbr ? "pr-10" : ""}`}
-                placeholder={t("vehicles.placeholders.currentMileage")}
-                disabled={disabled}
-                {...register("currentMileage" as Path<T>, {
-                  validate: (value) =>
-                    visitMileageValidate(String(value ?? ""), t("vehicles.validation.mileageWholeNonNegative")),
-                })}
-              />
-              {mileageUnitAbbr ? (
-                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
-                  {mileageUnitAbbr}
-                </span>
-              ) : null}
-            </div>
+            <MileageInput
+              id="order-vehicle-current-mileage"
+              unitSuffix={mileageUnitAbbr || undefined}
+              placeholder={t("vehicles.placeholders.currentMileage")}
+              disabled={disabled}
+              {...register("currentMileage" as Path<T>, {
+                validate: (value) => mileageValidate(String(value ?? ""), t),
+              })}
+            />
             {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
             <p className="text-xs text-muted-foreground">
               {t("vehicles.mileage.readingUnit", {

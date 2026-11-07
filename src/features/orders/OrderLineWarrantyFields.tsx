@@ -1,7 +1,11 @@
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { currentIntlLocale } from "../../i18n";
+import { formatMileageInput, parseMileageInput } from "../../lib/mileage";
 import type { MileageUnit } from "../../lib/types";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { MileageInput } from "../../ui/MileageInput";
 import { mileageUnitAbbreviation } from "../vehicles/vehicleMileage";
 import { normalizeWarrantyKm, normalizeWarrantyMonths, normalizeWarrantyDays } from "./warranty";
 
@@ -31,9 +35,34 @@ export default function OrderLineWarrantyFields({
   onChange,
 }: Props) {
   const { t } = useTranslation();
+  const locale = currentIntlLocale();
   const hasDuration = (months != null && months > 0) || (days != null && days > 0);
   const hasMileage = km != null && km > 0;
   const unitAbbr = mileageUnitAbbreviation(mileageUnit, t);
+
+  const [kmText, setKmText] = useState(() => (km != null ? formatMileageInput(km, locale) : ""));
+  const kmFocused = useRef(false);
+
+  useEffect(() => {
+    if (kmFocused.current) return;
+    setKmText(km != null ? formatMileageInput(km, locale) : "");
+  }, [km, locale]);
+
+  function commitKm(raw: string) {
+    let next: number | null = null;
+    try {
+      const parsed = parseMileageInput(raw);
+      next = parsed != null && parsed > 0 ? parsed : null;
+    } catch {
+      next = null;
+    }
+    onChange({
+      warrantyMonths: months ?? null,
+      warrantyDays: days ?? null,
+      warrantyKm: next,
+    });
+    setKmText(next != null ? formatMileageInput(next, locale) : raw.trim() === "" ? "" : raw);
+  }
 
   return (
     <div className="mt-2 space-y-2">
@@ -86,22 +115,29 @@ export default function OrderLineWarrantyFields({
           <Label htmlFor={`${idPrefix}-warranty-km`} className="text-xs text-muted-foreground">
             {t("orders.warranty.kmLabel", { unit: unitAbbr })}
           </Label>
-          <Input
+          <MileageInput
             id={`${idPrefix}-warranty-km`}
-            type="number"
-            min={1}
-            step={1}
-            inputMode="numeric"
             disabled={disabled}
-            value={km ?? ""}
+            value={kmText}
             placeholder={t("orders.warranty.noLimit")}
-            onChange={(event) =>
-              onChange({
-                warrantyMonths: months ?? null,
-                warrantyDays: days ?? null,
-                warrantyKm: normalizeWarrantyKm(event.target.value),
-              })
-            }
+            onFocus={() => {
+              kmFocused.current = true;
+            }}
+            onChange={(event) => {
+              setKmText(event.target.value);
+              const soft = normalizeWarrantyKm(event.target.value);
+              if (soft !== (km ?? null) && (soft != null || event.target.value.trim() === "")) {
+                onChange({
+                  warrantyMonths: months ?? null,
+                  warrantyDays: days ?? null,
+                  warrantyKm: soft,
+                });
+              }
+            }}
+            onBlur={() => {
+              kmFocused.current = false;
+              commitKm(kmText);
+            }}
           />
         </div>
       </div>

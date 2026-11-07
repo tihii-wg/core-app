@@ -19,10 +19,12 @@ import {
   syncOrderEmployees,
   technicianIdOrNull,
 } from "./apiOrderTeam";
+import { assertStoredMileage, MileageParseError } from "../lib/mileage";
 import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
 import { isUuid } from "../lib/uuid";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
+import i18n from "../i18n";
 import { assertVehicleAssignable } from "./apiVehicles";
 import {
   consolidateOrderMaterials,
@@ -71,7 +73,6 @@ import { recordActivity } from "./apiActivityLog";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
-import i18n from "../i18n";
 
 export const ORDERS_PAGE_SIZES = [25, 50, 100] as const;
 export type OrdersPageSize = (typeof ORDERS_PAGE_SIZES)[number];
@@ -639,12 +640,21 @@ function orderServiceTechnicianInsertFields(service: { technicianId?: string | n
   return { technician_id: technicianIdOrNull(service.technicianId) };
 }
 
+function storedMileageOrThrow(value: number | null | undefined): number | null {
+  try {
+    return assertStoredMileage(value);
+  } catch (error) {
+    if (error instanceof MileageParseError) throw new Error(i18n.t(error.i18nKey));
+    throw error;
+  }
+}
+
 function orderServiceWarrantyInsertFields(service: Pick<ResolvedServiceLine, "warrantyMonths" | "warrantyDays" | "warrantyKm">) {
   if (orderLineWarrantySupported === false) return {};
   return {
     warranty_months: mapWarrantyMonths(service.warrantyMonths) ?? null,
     warranty_days: mapWarrantyMonths(service.warrantyDays) ?? null,
-    warranty_km: mapWarrantyMonths(service.warrantyKm) ?? null,
+    warranty_km: storedMileageOrThrow(mapWarrantyMonths(service.warrantyKm) ?? null),
   };
 }
 
@@ -792,8 +802,15 @@ export function orderMileageSnapshotFields(input: {
 }): Record<string, unknown> {
   if (!orderMileageSnapshotSupported) return {};
   if (input.vehicleMileageSnapshot === undefined) return {};
+  let snapshot: number | null;
+  try {
+    snapshot = assertStoredMileage(input.vehicleMileageSnapshot);
+  } catch (error) {
+    if (error instanceof MileageParseError) throw new Error(i18n.t(error.i18nKey));
+    throw error;
+  }
   return {
-    vehicle_mileage_snapshot: input.vehicleMileageSnapshot,
+    vehicle_mileage_snapshot: snapshot,
     vehicle_mileage_unit_snapshot: input.vehicleMileageUnitSnapshot ?? null,
   };
 }
@@ -1368,7 +1385,7 @@ async function persistOrderMaterialWarranties(
         ...(itemId ? { inventory_item_id: itemId } : {}),
         warranty_months: mapWarrantyMonths(line.warrantyMonths) ?? null,
         warranty_days: mapWarrantyMonths(line.warrantyDays) ?? null,
-        warranty_km: mapWarrantyMonths(line.warrantyKm) ?? null,
+        warranty_km: storedMileageOrThrow(mapWarrantyMonths(line.warrantyKm) ?? null),
       };
     })
     .filter((row) => Boolean(row.line_id || row.inventory_item_id));
@@ -3389,7 +3406,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
         .update({
           warranty_months: mapWarrantyMonths(service.warrantyMonths) ?? null,
           warranty_days: mapWarrantyMonths(service.warrantyDays) ?? null,
-          warranty_km: mapWarrantyMonths(service.warrantyKm) ?? null,
+          warranty_km: storedMileageOrThrow(mapWarrantyMonths(service.warrantyKm) ?? null),
         })
         .eq("id", lineId)
         .eq("order_id", orderId);

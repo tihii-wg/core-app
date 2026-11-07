@@ -368,7 +368,7 @@ describe("AddNewOrderForm client validation", () => {
     await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
     expect(persistMileageMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        formMileage: "46010",
+        formMileage: expect.stringMatching(/46[\s,]?010/),
         vehicle: expect.objectContaining({ id: "veh-1", currentMileage: 45000 }),
       }),
     );

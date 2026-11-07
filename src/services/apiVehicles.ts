@@ -1,5 +1,6 @@
 import i18n from "../i18n";
 import type { Vehicle, VehicleInput } from "../lib/types";
+import { assertStoredMileage, MileageParseError } from "../lib/mileage";
 import { nullIfEmptyNumber, nullIfEmptyText } from "../lib/nullish";
 import { assertValidOptionalVin } from "../lib/vin";
 import { isMileageUnit, parseMileageUnit } from "../features/vehicles/vehicleMileage";
@@ -119,15 +120,22 @@ export function toVehicle(row: Record<string, unknown>): Vehicle {
   };
 }
 
+function storedMileageOrThrow(value: number | null | undefined): number | null {
+  try {
+    return assertStoredMileage(value);
+  } catch (error) {
+    if (error instanceof MileageParseError) throw new Error(i18n.t(error.i18nKey));
+    throw error;
+  }
+}
+
 function validateVehicleInput(input: VehicleInput) {
   const year = input.year ?? null;
   if (year != null && (!Number.isInteger(year) || year < 1886 || year > 2200)) {
     throw new Error(i18n.t("vehicles.validation.yearRange"));
   }
-  const initial = input.initialMileage ?? null;
-  if (initial != null && initial < 0) throw new Error(i18n.t("vehicles.validation.mileageNonNegative"));
-  const current = input.currentMileage ?? null;
-  if (current != null && current < 0) throw new Error(i18n.t("vehicles.validation.mileageNonNegative"));
+  storedMileageOrThrow(input.initialMileage ?? null);
+  storedMileageOrThrow(input.currentMileage ?? null);
   const displacement = input.engineDisplacement ?? null;
   if (displacement != null && displacement <= 0) throw new Error(i18n.t("vehicles.validation.displacementPositive"));
   if (input.mileageUnit != null && !isMileageUnit(input.mileageUnit)) {
@@ -144,8 +152,8 @@ function payloadFromInput(input: VehicleInput) {
     year: input.year ?? null,
     vin: assertValidOptionalVin(input.vin),
     license_plate: nullIfEmptyText(input.licensePlate ?? null)?.toUpperCase() ?? null,
-    initial_mileage: input.initialMileage ?? null,
-    current_mileage: input.currentMileage ?? null,
+    initial_mileage: storedMileageOrThrow(input.initialMileage ?? null),
+    current_mileage: storedMileageOrThrow(input.currentMileage ?? null),
     engine_displacement: input.engineDisplacement ?? null,
     fuel_type: nullIfEmptyText(input.fuelType ?? null),
   };

@@ -90,6 +90,8 @@ export default {
     yearRange: "Anul trebuie să fie între 1886 și 2200",
     mileageNonNegative: "Kilometrajul trebuie să fie zero sau mai mare",
     mileageWholeNonNegative: "Kilometrajul trebuie să fie un număr întreg zero sau mai mare",
+    mileageInvalid: "Introduceți kilometrajul ca număr întreg, de exemplu 100 000",
+    mileageTooLarge: "Kilometraj prea mare (maximum 9 999 999)",
     mileageUnitInvalid: "Unitatea de kilometraj trebuie să fie kilometri (km) sau mile (mi)",
     displacementPositive: "Capacitatea cilindrică trebuie să fie mai mare decât zero",
     vinInvalid: "VIN-ul trebuie să conțină exact 17 caractere valide (A–Z și 0–9, fără I, O și Q)",

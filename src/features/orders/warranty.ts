@@ -3,6 +3,7 @@
  * Snapshots (DB) are authoritative after close; these helpers evaluate status from snapshots + current mileage.
  */
 
+import { parseMileageInput } from "../../lib/mileage";
 import type { MileageUnit } from "../../lib/types";
 import { convertMileage, isMileageUnit, parseMileageUnit } from "../vehicles/vehicleMileage";
 
@@ -60,9 +61,13 @@ export function normalizeWarrantyMonths(value: unknown): number | null {
 
 export function normalizeWarrantyKm(value: unknown): number | null {
   if (value == null || value === "") return null;
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.floor(n);
+  try {
+    const n = parseMileageInput(typeof value === "string" || typeof value === "number" ? value : String(value));
+    if (n == null || n <= 0) return null;
+    return n;
+  } catch {
+    return null;
+  }
 }
 
 export function normalizeWarrantyDays(value: unknown): number | null {

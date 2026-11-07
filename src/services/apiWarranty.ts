@@ -1,4 +1,5 @@
 import i18n from "../i18n";
+import { assertStoredMileage, MileageParseError } from "../lib/mileage";
 import type { MileageUnit, Order } from "../lib/types";
 import {
   buildOrderWarrantyIndicator,
@@ -14,6 +15,15 @@ import {
 } from "../features/orders/warranty";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import supabase from "./supabase";
+
+function storedMileageOrThrow(value: number | null | undefined): number | null {
+  try {
+    return assertStoredMileage(value);
+  } catch (error) {
+    if (error instanceof MileageParseError) throw new Error(i18n.t(error.i18nKey));
+    throw error;
+  }
+}
 
 const WARRANTY_RECORD_COLUMNS =
   "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, duration_days, mileage_limit, mileage_unit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
@@ -418,7 +428,7 @@ export async function saveWarrantyOrderLink(params: {
         warranty_record_id: claim.warrantyRecordId,
         validity_status: evaluation.status,
         accepted_outside_period: Boolean(claim.acceptedOutsidePeriod),
-        current_mileage_at_claim: claim.currentMileageAtClaim ?? params.currentMileage,
+        current_mileage_at_claim: storedMileageOrThrow(claim.currentMileageAtClaim ?? params.currentMileage),
         is_active: true,
       };
     });

@@ -1,7 +1,8 @@
 import type { MileageUnit, Vehicle, VehicleInput } from "../../lib/types";
 import { parseOptionalVehicleNumber } from "../../services/apiVehicles";
+import { formatMileageInput, MileageParseError, parseMileageInput } from "../../lib/mileage";
 import { normalizeVin, optionalVinValidate } from "../../lib/vin";
-import i18n from "../../i18n";
+import i18n, { currentIntlLocale } from "../../i18n";
 import { isMileageUnit } from "./vehicleMileage";
 
 export const VEHICLE_FUEL_TYPES = ["petrol", "diesel", "hybrid", "electric", "lpg", "other"] as const;
@@ -35,6 +36,11 @@ export function emptyVehicleFormValues(): VehicleFormValues {
   };
 }
 
+function formatMileageFormValue(value: number | null | undefined): string {
+  if (value == null) return "";
+  return formatMileageInput(value, currentIntlLocale());
+}
+
 export function vehicleToFormValues(vehicle?: Vehicle | null): VehicleFormValues {
   if (!vehicle) return emptyVehicleFormValues();
   return {
@@ -43,33 +49,33 @@ export function vehicleToFormValues(vehicle?: Vehicle | null): VehicleFormValues
     year: vehicle.year != null ? String(vehicle.year) : "",
     vin: vehicle.vin ?? "",
     licensePlate: vehicle.licensePlate ?? "",
-    initialMileage: vehicle.initialMileage != null ? String(vehicle.initialMileage) : "",
-    currentMileage: vehicle.currentMileage != null ? String(vehicle.currentMileage) : "",
+    initialMileage: formatMileageFormValue(vehicle.initialMileage),
+    currentMileage: formatMileageFormValue(vehicle.currentMileage),
     mileageUnit: vehicle.mileageUnit ?? "",
     engineDisplacement: vehicle.engineDisplacement != null ? String(vehicle.engineDisplacement) : "",
     fuelType: vehicle.fuelType ?? "",
   };
 }
 
+function parseMileageField(raw: string): number | null {
+  try {
+    return parseMileageInput(raw);
+  } catch (error) {
+    if (error instanceof MileageParseError) throw new Error(i18n.t(error.i18nKey));
+    throw error;
+  }
+}
+
 /** Convert form strings to a VehicleInput; throws localized errors for invalid numbers/VIN. */
 export function vehicleFormValuesToInput(values: VehicleFormValues): VehicleInput {
   const year = parseOptionalVehicleNumber(values.year);
-  const initialMileage = parseOptionalVehicleNumber(values.initialMileage);
-  const currentMileage = parseOptionalVehicleNumber(values.currentMileage);
+  const initialMileage = parseMileageField(values.initialMileage);
+  const currentMileage = parseMileageField(values.currentMileage);
   const engineDisplacement = parseOptionalVehicleNumber(values.engineDisplacement);
   const mileageUnit: MileageUnit | null = values.mileageUnit === "" ? null : values.mileageUnit;
 
   if (values.year.trim() && (year == null || !Number.isInteger(year) || year < 1886 || year > 2200)) {
     throw new Error(i18n.t("vehicles.validation.yearRange"));
-  }
-  if (values.initialMileage.trim() && (initialMileage == null || initialMileage < 0)) {
-    throw new Error(i18n.t("vehicles.validation.mileageNonNegative"));
-  }
-  if (values.currentMileage.trim() && (currentMileage == null || currentMileage < 0)) {
-    throw new Error(i18n.t("vehicles.validation.mileageNonNegative"));
-  }
-  if (values.engineDisplacement.trim() && (engineDisplacement == null || engineDisplacement <= 0)) {
-    throw new Error(i18n.t("vehicles.validation.displacementPositive"));
   }
   if (mileageUnit != null && !isMileageUnit(mileageUnit)) {
     throw new Error(i18n.t("vehicles.validation.mileageUnitInvalid"));
