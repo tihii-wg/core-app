@@ -211,6 +211,7 @@ const inventory: Messages<typeof en> = {
     stock: "Остатки",
     supplier: "Поставщик",
     allSuppliers: "Все поставщики",
+    allIncludingInactive: "Все, включая неактивные",
   },
   sort: {
     ariaLabel: "Сортировка склада",
@@ -288,6 +289,11 @@ const inventory: Messages<typeof en> = {
     noLines: "Укажите количество хотя бы по одной позиции",
     exceedsMax: "{{name}}: можно вернуть не более {{max}}",
     financeHint: "Деньги от поставщика учитываются отдельно в разделе Финансы.",
+    removeFromCatalog: "Удалить запчасть из каталога после возврата",
+    removeHint: "Остаток станет 0 и запчасть нигде не используется. История прихода и возврата сохранится.",
+    removeOwnerOnly: "Удалить может только владелец — запчасть будет отмечена неактивной",
+    removedToast: "Возврат проведён. Удалено из каталога: {{count}}",
+    removeFailed: "Не удалось удалить: {{items}}",
     opType: "Возврат поставщику",
     refund: {
       section: "Деньги от поставщика",

@@ -61,16 +61,20 @@ describe("inventory items", () => {
     await createInventoryItem(form, WS.A);
     await createInventoryItem({ ...form, name: "Old bulb", sku: "OB-1", quantity: 0, isActive: false }, WS.A);
 
-    expect((await getInventoryItems("", "all", sortByName, WS.A)).map((item) => item.name)).toEqual(["Alpha brake pads", "Old bulb", "Spark plug"]);
+    expect((await getInventoryItems("", "active", sortByName, WS.A)).map((item) => item.name)).toEqual(["Alpha brake pads", "Spark plug"]);
+    expect((await getInventoryItems("", "all", sortByName, WS.A)).map((item) => item.name)).toEqual([
+      "Alpha brake pads",
+      "Old bulb",
+      "Spark plug",
+    ]);
     // Create always stores quantity 0 — Alpha (seeded stock) sorts first when descending by quantity.
     expect((await getInventoryItems("", "all", { field: "quantity", ascending: false }, WS.A)).map((item) => item.name)).toEqual([
       "Alpha brake pads",
       "Spark plug",
-      "Old bulb",
     ]);
     expect((await getInventoryItems("spark", "all", sortByName, WS.A)).map((item) => item.name)).toEqual(["Spark plug"]);
     expect((await getInventoryItems("", "low_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Alpha brake pads"]);
-    expect((await getInventoryItems("", "out_of_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Old bulb", "Spark plug"]);
+    expect((await getInventoryItems("", "out_of_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Spark plug"]);
     expect((await getInventoryItems("", "inactive", sortByName, WS.A)).map((item) => item.name)).toEqual(["Old bulb"]);
     expect(await getInventoryItems("", "all", sortByName, WS.C)).toEqual([]);
   });

@@ -200,6 +200,7 @@ export default {
     stock: "Stock",
     supplier: "Supplier",
     allSuppliers: "All suppliers",
+    allIncludingInactive: "All, including inactive",
   },
   sort: {
     ariaLabel: "Sort inventory",
@@ -277,6 +278,11 @@ export default {
     noLines: "Enter a quantity for at least one line",
     exceedsMax: "{{name}}: can return at most {{max}}",
     financeHint: "Money back from the supplier is recorded separately in Finance.",
+    removeFromCatalog: "Remove part from catalog after return",
+    removeHint: "Stock will be 0 and the part is unused elsewhere. Receipt and return history are kept.",
+    removeOwnerOnly: "Only the owner can delete — the part will be marked inactive instead.",
+    removedToast: "Return posted. Removed from catalog: {{count}}",
+    removeFailed: "Could not remove: {{items}}",
     opType: "Return to supplier",
     refund: {
       section: "Money from supplier",

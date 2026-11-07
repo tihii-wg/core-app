@@ -207,6 +207,7 @@ const inventory: Messages<typeof en> = {
     stock: "Stoc",
     supplier: "Furnizor",
     allSuppliers: "Toți furnizorii",
+    allIncludingInactive: "Toate, inclusiv inactive",
   },
   sort: {
     ariaLabel: "Sortează stocul",
@@ -284,6 +285,11 @@ const inventory: Messages<typeof en> = {
     noLines: "Indică cantitatea pentru cel puțin o poziție",
     exceedsMax: "{{name}}: se pot returna cel mult {{max}}",
     financeHint: "Banii de la furnizor se înregistrează separat în secțiunea Finanțe.",
+    removeFromCatalog: "Șterge piesa din catalog după returnare",
+    removeHint: "Stocul va fi 0 și piesa nu este folosită în altă parte. Istoricul recepției și returnării rămâne.",
+    removeOwnerOnly: "Doar proprietarul poate șterge — piesa va fi marcată ca inactivă",
+    removedToast: "Returnare postată. Șterse din catalog: {{count}}",
+    removeFailed: "Nu s-a putut șterge: {{items}}",
     opType: "Returnare către furnizor",
     refund: {
       section: "Bani de la furnizor",

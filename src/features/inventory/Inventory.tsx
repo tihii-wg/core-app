@@ -66,7 +66,7 @@ export function Inventory() {
   const { canWrite: canMutateInventory } = useWorkspaceSubscription();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
-  const [stockFilter, setStockFilter] = useState<InventoryListFilter>("all");
+  const [stockFilter, setStockFilter] = useState<InventoryListFilter>("active");
   const [supplierFilter, setSupplierFilter] = useState("all");
   const [sortValue, setSortValue] = useState(DEFAULT_SORT_VALUE);
   const [createOpen, setCreateOpen] = useState(false);
@@ -118,14 +118,15 @@ export function Inventory() {
     refetch: refetchAttention,
   } = useGetInventoryItems("", "all", attentionSort);
   const detailQuery = useGetInventoryItem(detailId);
-  const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "all" || supplierFilter !== "all";
+  const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "active" || supplierFilter !== "all";
 
   const stockFilters = [
-    { value: "all", label: t("common.all") },
+    { value: "active", label: t("common.all") },
     { value: "in_stock", label: t("status.inventory.in_stock") },
     { value: "low_stock", label: t("status.inventory.low_stock") },
     { value: "out_of_stock", label: t("status.inventory.out_of_stock") },
     { value: "inactive", label: t("inventory.inactive") },
+    { value: "all", label: t("inventory.filters.allIncludingInactive") },
   ];
 
   const columns: Column<InventoryItem>[] = [
@@ -335,7 +336,7 @@ export function Inventory() {
           ]}
           onClearFilters={() => {
             setSearchQuery("");
-            setStockFilter("all");
+            setStockFilter("active");
             setSupplierFilter("all");
           }}
         />

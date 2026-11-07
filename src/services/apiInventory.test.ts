@@ -88,8 +88,37 @@ describe("inventory suppliers", () => {
     await getInventoryItems("brake", "low_stock", { field: "name", ascending: true }, "ws-1", "Acme");
 
     expect(calls.some((call) => call.method === "or")).toBe(true);
+    expect(calls).toContainEqual({ method: "eq", args: ["is_active", true] });
     expect(calls).toContainEqual({ method: "eq", args: ["stock_status", "low_stock"] });
     expect(calls).toContainEqual({ method: "eq", args: ["supplier", "Acme"] });
+  });
+
+  it("filter 'active' shows active parts only", async () => {
+    const { chain, calls } = recordingQuery({ data: [], error: null });
+    from.mockReturnValue(chain);
+
+    await getInventoryItems(undefined, "active", { field: "name", ascending: true }, "ws-1");
+
+    expect(calls).toContainEqual({ method: "eq", args: ["is_active", true] });
+    expect(calls.some((call) => call.method === "eq" && call.args[0] === "stock_status")).toBe(false);
+  });
+
+  it("filter 'all' does not constrain is_active (orders, warehouses and reports need inactive parts)", async () => {
+    const { chain, calls } = recordingQuery({ data: [], error: null });
+    from.mockReturnValue(chain);
+
+    await getInventoryItems(undefined, "all", { field: "name", ascending: true }, "ws-1");
+
+    expect(calls.some((call) => call.method === "eq" && call.args[0] === "is_active")).toBe(false);
+  });
+
+  it("filter 'inactive' shows inactive parts only", async () => {
+    const { chain, calls } = recordingQuery({ data: [], error: null });
+    from.mockReturnValue(chain);
+
+    await getInventoryItems(undefined, "inactive", { field: "name", ascending: true }, "ws-1");
+
+    expect(calls).toContainEqual({ method: "eq", args: ["is_active", false] });
   });
 
   it("loads distinct suppliers for the workspace, ignoring missing values", async () => {

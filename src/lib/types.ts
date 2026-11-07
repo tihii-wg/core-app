@@ -319,7 +319,7 @@ export type EditServiceFormData = {
 
 export type InventoryStockStatus = "in_stock" | "low_stock" | "out_of_stock";
 
-export type InventoryListFilter = "all" | InventoryStockStatus | "inactive";
+export type InventoryListFilter = "all" | "active" | InventoryStockStatus | "inactive";
 
 export type InventorySortField = "name" | "sku" | "quantity" | "purchase_price" | "selling_price" | "created_at" | "updated_at";
 

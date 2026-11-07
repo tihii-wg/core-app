@@ -205,8 +205,12 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
 
   if (filter === "inactive") {
     query = query.eq("is_active", false);
+  } else if (filter === "active") {
+    // Inventory page default: active parts only.
+    query = query.eq("is_active", true);
   } else if (filter !== "all") {
-    query = query.eq("stock_status", filter);
+    // Stock-status filters: active parts only. "all" keeps every part (orders, warehouses, reports need inactive ones too).
+    query = query.eq("is_active", true).eq("stock_status", filter);
   }
 
   const supplierName = supplier?.trim();
