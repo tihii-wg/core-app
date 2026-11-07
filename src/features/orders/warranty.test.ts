@@ -84,15 +84,18 @@ describe("warranty helpers", () => {
   });
 
   it("formats line warranty labels without inventing coverage", () => {
-    const t = (key: string, options?: { count?: number; value?: string }) => {
+    const t = (key: string, options?: { count?: number; value?: string; unit?: string }) => {
       if (key.endsWith(".withCoverage")) return `Warranty: ${options?.value}`;
       if (key.includes(".months")) return `${options?.count} months`;
       if (key.includes(".days")) return `${options?.count} days`;
-      if (key.includes(".km")) return `${options?.value} km`;
+      if (key.includes(".km")) return `${options?.value} ${options?.unit ?? "km"}`;
       return key;
     };
-    expect(formatWarrantyLimitsLabel({ durationMonths: 3, mileageLimit: 10000 }, t, (n) => String(n))).toBe(
+    expect(formatWarrantyLimitsLabel({ durationMonths: 3, mileageLimit: 10000 }, t, (n) => String(n), "km")).toBe(
       "Warranty: 3 months / 10000 km",
+    );
+    expect(formatWarrantyLimitsLabel({ durationMonths: 3, mileageLimit: 31069 }, t, (n) => String(n), "mi")).toBe(
+      "Warranty: 3 months / 31069 mi",
     );
     expect(formatWarrantyLimitsLabel({ durationMonths: null, durationDays: 15, mileageLimit: null }, t, (n) => String(n))).toBe(
       "Warranty: 15 days",
@@ -169,6 +172,38 @@ describe("warranty helpers", () => {
     expect(evaluateWarranty({ snapshot: base, nowIso: "2027-06-01T00:00:00.000Z", currentMileage: 91000 }).status).toBe("expired_mileage");
     // Date first (past endsOn, under mileage)
     expect(evaluateWarranty({ snapshot: base, nowIso: "2027-12-01T00:00:00.000Z", currentMileage: 82000 }).status).toBe("expired_date");
+  });
+
+  it("converts vehicle mi reading into a km snapshot unit for expiry and remaining", () => {
+    // Snapshot limit 90_000 km; vehicle at 56_000 mi ≈ 90_124 km → expired.
+    const base = {
+      startsAt: "2026-11-04T12:00:00.000Z",
+      endsOn: "2027-11-04",
+      startMileage: 80000,
+      expiresAtMileage: 90000,
+      durationMonths: 12,
+      mileageLimit: 10000,
+      mileageUnit: "km" as const,
+    };
+    expect(
+      evaluateWarranty({
+        snapshot: base,
+        nowIso: "2027-01-01T00:00:00.000Z",
+        currentMileage: 56000,
+        currentMileageUnit: "mi",
+      }).status,
+    ).toBe("expired_mileage");
+
+    // 50_000 mi ≈ 80_467 km → remaining ≈ 9_533 km in snapshot unit.
+    const active = evaluateWarranty({
+      snapshot: base,
+      nowIso: "2027-01-01T00:00:00.000Z",
+      currentMileage: 50000,
+      currentMileageUnit: "mi",
+    });
+    expect(active.status).toBe("active");
+    expect(active.remainingMileage).toBeGreaterThan(9000);
+    expect(active.remainingMileage).toBeLessThan(10000);
   });
 
   it("reports remaining mileage while active", () => {

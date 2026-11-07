@@ -160,6 +160,30 @@ describe("copy catalog warranty into order-item snapshots", () => {
     ).toEqual({ warrantyMonths: null, warrantyDays: null, warrantyKm: 10000 });
   });
 
+  it("converts catalog km into order miles when resolving a line snapshot", () => {
+    expect(
+      resolveOrderLineWarrantySnapshot(
+        { warrantyType: "mileage", warrantyMonths: null, warrantyKm: 50000 },
+        null,
+        "mi",
+      ),
+    ).toEqual({ warrantyMonths: null, warrantyDays: null, warrantyKm: 31069 });
+    expect(
+      catalogServiceToOrderLine(
+        {
+          id: "s",
+          service_name: "Oil",
+          service_price: 10,
+          warrantyType: "mileage",
+          warrantyMonths: null,
+          warrantyKm: 50000,
+        },
+        null,
+        "mi",
+      ).warrantyKm,
+    ).toBe(31069);
+  });
+
   it("order-item override does not require mutating catalog defaults", () => {
     const catalog = { warrantyType: "both" as const, warrantyMonths: 12, warrantyKm: 20000 };
     const snapshot = resolveOrderLineWarrantyForKind(catalog, workspaceDefaults, "service");

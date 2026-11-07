@@ -766,6 +766,7 @@ const settings: Messages<typeof en> = {
         status: { label: "Status", description: "Numele statusului personalizat sau statusul de sistem" },
         description: { label: "Descriere", description: "Descrierea comenzii / reclamația" },
         mileage: { label: "Kilometraj vizită", description: "Citirea odometrului salvată pe comandă" },
+        mileageUnit: { label: "Unitate kilometraj", description: "km sau mi pentru kilometrajul vizitei pe comandă" },
         taxInvoice: { label: "Factură fiscală", description: "Numărul facturii fiscale pe comandă" },
       },
       client: {

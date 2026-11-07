@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFieldArrayRemove, UseFormGetValues, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
-import type { InventoryItem, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
+import type { InventoryItem, MileageUnit, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
+import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -48,6 +49,8 @@ type OrderMaterialLinesEditorProps = {
   /** When true, warranty inputs are read-only (e.g. order already closed). */
   warrantyDisabled?: boolean;
   warrantyDefaults?: WorkspaceWarrantyDefaults;
+  /** Order mileage unit for catalog→line conversion and warranty field labels. */
+  orderMileageUnit?: MileageUnit;
   isSubmitted?: boolean;
   errors?: {
     root?: { message?: string };
@@ -86,6 +89,7 @@ export default function OrderMaterialLinesEditor({
   disabled = false,
   warrantyDisabled = false,
   warrantyDefaults,
+  orderMileageUnit = "km",
   isSubmitted = false,
   errors,
 }: OrderMaterialLinesEditorProps) {
@@ -137,7 +141,7 @@ export default function OrderMaterialLinesEditor({
       adjustQuantity(existingIndex, 1);
       return;
     }
-    append(catalogItemToOrderMaterial(item, 1, issueWarehouseId, warrantyDefaults));
+    append(catalogItemToOrderMaterial(item, 1, issueWarehouseId, warrantyDefaults, orderMileageUnit));
   }
 
   function handleCreated(item: InventoryItem) {
@@ -180,7 +184,11 @@ export default function OrderMaterialLinesEditor({
           supplySource,
         }),
         ...(warranty
-          ? { warrantyMonths: warranty.durationMonths, warrantyKm: warranty.mileageLimit, warrantyDays: null }
+          ? {
+              warrantyMonths: warranty.durationMonths,
+              warrantyKm: catalogWarrantyKmToOrderUnit(warranty.mileageLimit, orderMileageUnit),
+              warrantyDays: null,
+            }
           : {}),
       });
       setFreeName("");
@@ -584,6 +592,7 @@ export default function OrderMaterialLinesEditor({
                   months={line?.warrantyMonths}
                   days={line?.warrantyDays}
                   km={line?.warrantyKm}
+                  mileageUnit={orderMileageUnit}
                   disabled={disabled || warrantyDisabled}
                   onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                     setValue(`materials.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });

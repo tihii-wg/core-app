@@ -55,6 +55,10 @@ export default {
   mileage: {
     kilometers: "Kilometers (km)",
     miles: "Miles (mi)",
+    abbr: {
+      km: "km",
+      mi: "mi",
+    },
     unitUnknown: "Unit not set",
     unitUnknownShort: "unit?",
     unitHint: "Applies to this vehicle’s odometer readings. Changing the unit does not convert past values.",

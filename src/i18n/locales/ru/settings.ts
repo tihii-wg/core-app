@@ -767,6 +767,7 @@ const settings: Messages<typeof en> = {
         status: { label: "Статус", description: "Название пользовательского статуса или системный статус" },
         description: { label: "Описание", description: "Описание заказа / жалоба" },
         mileage: { label: "Пробег визита", description: "Показания одометра, сохранённые в заказе" },
+        mileageUnit: { label: "Единица пробега", description: "км или ми для пробега визита в заказе" },
         taxInvoice: { label: "Налоговая накладная", description: "Номер фискального счёта в заказе" },
       },
       client: {

@@ -5,7 +5,10 @@ import type { OrderWarrantyIndicatorModel } from "./warranty";
 import { getOrdersWarrantyIndicatorMap } from "../../services/apiWarranty";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
-type OrderWarrantyInput = Pick<Order, "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "closedAt">;
+type OrderWarrantyInput = Pick<
+  Order,
+  "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "vehicleMileageUnitSnapshot" | "closedAt"
+>;
 
 /**
  * Batched warranty indicator map for the current orders page / board set.
@@ -18,7 +21,7 @@ export function useOrdersWarrantyIndicators(orders: readonly OrderWarrantyInput[
       orders
         .map(
           (order) =>
-            `${order.id}:${order.warrantySourceOrderId ?? ""}:${order.vehicleId ?? ""}:${order.closedAt ?? ""}:${order.vehicleMileageSnapshot ?? ""}`,
+            `${order.id}:${order.warrantySourceOrderId ?? ""}:${order.vehicleId ?? ""}:${order.closedAt ?? ""}:${order.vehicleMileageSnapshot ?? ""}:${order.vehicleMileageUnitSnapshot ?? ""}`,
         )
         .sort()
         .join("|"),

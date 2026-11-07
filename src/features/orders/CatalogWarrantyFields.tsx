@@ -114,6 +114,7 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
                 emit(durationEnabled, true, value.warrantyMonths, normalizeWarrantyKm(event.target.value))
               }
             />
+            <p className="text-xs text-muted-foreground">{t("catalogWarranty.kmOrderHint")}</p>
           </div>
         ) : null}
       </div>

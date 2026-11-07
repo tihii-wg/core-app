@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
-import { isWarrantyExpired, type OrderWarrantyIndicatorModel, type RemainingDuration } from "./warranty";
+import { mileageUnitAbbreviation } from "../vehicles/vehicleMileage";
+import { isWarrantyExpired, snapshotMileageUnit, type OrderWarrantyIndicatorModel, type RemainingDuration } from "./warranty";
 
 /** Format YYYY-MM-DD as DD.MM.YYYY (matches warranty indicator copy across locales). */
 export function formatWarrantyEndsOn(endsOn: string | null | undefined): string | null {
@@ -38,6 +39,7 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
   if (!model?.visible) return null;
 
   const language = i18n.language || "en";
+  const unit = mileageUnitAbbreviation(snapshotMileageUnit(model.primary), t);
   const label = model.isWarrantyOrder ? t("orders.warranty.claimBadge") : t("orders.warranty.badge");
   const evaluation = model.evaluation;
   const expired = isWarrantyExpired(model.status);
@@ -65,7 +67,7 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
           });
     primaryText = `${label} · ${remainingText}`;
   } else if (remainingKm) {
-    primaryText = `${label} · ${t("orders.warranty.indicator.remainingKm", { value: remainingKm })}`;
+    primaryText = `${label} · ${t("orders.warranty.indicator.remainingKm", { value: remainingKm, unit })}`;
   } else if (model.isWarrantyOrder) {
     primaryText = label;
   }
@@ -77,7 +79,7 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
       if (dateLabel) secondaryParts.push(dateLabel);
     } else if (model.status === "expired_mileage") {
       secondaryParts.push(t("orders.warranty.status.expired_mileage"));
-      if (expiredMileage) secondaryParts.push(t("orders.warranty.indicator.expiredAtKm", { value: expiredMileage }));
+      if (expiredMileage) secondaryParts.push(t("orders.warranty.indicator.expiredAtKm", { value: expiredMileage, unit }));
     } else if (dateLabel) {
       secondaryParts.push(dateLabel);
     }
@@ -85,7 +87,7 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
     if (dateLabel) secondaryParts.push(t("orders.warranty.indicator.untilDate", { date: dateLabel }));
     // Show remaining mileage whenever known (including when both time and mileage limits apply).
     if (remainingKm) {
-      secondaryParts.push(t("orders.warranty.indicator.remainingKm", { value: remainingKm }));
+      secondaryParts.push(t("orders.warranty.indicator.remainingKm", { value: remainingKm, unit }));
     }
     if (model.coveredItemCount > 1) {
       secondaryParts.push(t("orders.warranty.indicator.coveredItems", { count: model.coveredItemCount }));

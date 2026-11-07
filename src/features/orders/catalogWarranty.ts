@@ -1,8 +1,11 @@
 /**
  * Catalog default warranty helpers.
- * Catalog stores defaults; order lines snapshot them. Activation stays on order close.
+ * Catalog stores defaults in km; order lines snapshot them in the order's mileage unit.
+ * Activation stays on order close.
  */
 
+import type { MileageUnit } from "../../lib/types";
+import { convertMileage } from "../vehicles/vehicleMileage";
 import {
   normalizeWarrantyDays,
   normalizeWarrantyKm,
@@ -125,14 +128,39 @@ export function catalogWarrantyFromDbRow(row: {
   }
 }
 
+/** Catalog/workspace warranty_km is always kilometers; convert into the order's unit for the line. */
+export function catalogWarrantyKmToOrderUnit(
+  km: number | null | undefined,
+  orderUnit: MileageUnit = "km",
+): number | null {
+  const normalized = normalizeWarrantyKm(km);
+  if (normalized == null) return null;
+  if (orderUnit === "km") return normalized;
+  return convertMileage(normalized, "km", orderUnit);
+}
+
+/** Convert an order-line warranty_km between order mileage units (form vehicle switch). */
+export function convertOrderLineWarrantyKm(
+  km: number | null | undefined,
+  fromUnit: MileageUnit,
+  toUnit: MileageUnit,
+): number | null {
+  const normalized = normalizeWarrantyKm(km);
+  if (normalized == null) return null;
+  if (fromUnit === toUnit) return normalized;
+  return convertMileage(normalized, fromUnit, toUnit);
+}
+
 /**
  * Snapshot for a new order line.
  * - Catalog type set → use catalog (including explicit none → all null).
  * - Catalog unconfigured (type null) → workspace defaults for that kind.
+ * Mileage limits from catalog/workspace stay in km until converted with `orderUnit`.
  */
 export function resolveOrderLineWarrantySnapshot(
   catalog: CatalogWarrantyDefaults | null | undefined,
   workspaceFallback: WarrantyLimits | null | undefined,
+  orderUnit: MileageUnit = "km",
 ): OrderLineWarrantySnapshot {
   const type = catalog?.warrantyType ?? null;
 
@@ -142,7 +170,7 @@ export function resolveOrderLineWarrantySnapshot(
       return {
         warrantyMonths: normalized.warrantyMonths,
         warrantyDays: null,
-        warrantyKm: normalized.warrantyKm,
+        warrantyKm: catalogWarrantyKmToOrderUnit(normalized.warrantyKm, orderUnit),
       };
     } catch {
       return { warrantyMonths: null, warrantyDays: null, warrantyKm: null };
@@ -152,7 +180,7 @@ export function resolveOrderLineWarrantySnapshot(
   return {
     warrantyMonths: normalizeWarrantyMonths(workspaceFallback?.durationMonths) ?? null,
     warrantyDays: normalizeWarrantyDays(workspaceFallback?.durationDays) ?? null,
-    warrantyKm: normalizeWarrantyKm(workspaceFallback?.mileageLimit) ?? null,
+    warrantyKm: catalogWarrantyKmToOrderUnit(workspaceFallback?.mileageLimit, orderUnit),
   };
 }
 
@@ -160,9 +188,10 @@ export function resolveOrderLineWarrantyForKind(
   catalog: CatalogWarrantyDefaults | null | undefined,
   workspaceDefaults: WorkspaceWarrantyDefaults | null | undefined,
   kind: WarrantyItemKind,
+  orderUnit: MileageUnit = "km",
 ): OrderLineWarrantySnapshot {
   const fallback = workspaceDefaults ? defaultsForKind(workspaceDefaults, kind) : null;
-  return resolveOrderLineWarrantySnapshot(catalog, fallback);
+  return resolveOrderLineWarrantySnapshot(catalog, fallback, orderUnit);
 }
 
 /** Form default when creating a new catalog card (explicit no warranty). */

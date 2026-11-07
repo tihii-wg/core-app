@@ -14,7 +14,8 @@ import {
   saveWarrantyOrderLink,
   type WarrantyClaimInput,
 } from "../../services/apiWarranty";
-import { isWarrantyExpired } from "./warranty";
+import { isWarrantyExpired, snapshotMileageUnit } from "./warranty";
+import { formatVehicleMileage } from "../vehicles/vehicleMileage";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetOrders } from "./useGetOrders";
 
@@ -73,12 +74,13 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
     }
   }, [claimsQuery.data]);
 
+  const orderMileageUnit = order.vehicleMileageUnitSnapshot ?? "km";
   const evaluations = useMemo(() => {
     return (recordsQuery.data ?? []).map((snapshot) => ({
       snapshot,
-      evaluation: evaluateSnapshotAgainstVehicle(snapshot, currentMileage),
+      evaluation: evaluateSnapshotAgainstVehicle(snapshot, currentMileage, undefined, orderMileageUnit),
     }));
-  }, [recordsQuery.data, currentMileage]);
+  }, [recordsQuery.data, currentMileage, orderMileageUnit]);
 
   async function persist(nextEnabled: boolean, nextSourceId: string, nextRecordIds: string[], nextAcceptExpired: boolean) {
     if (!workspaceId) return;
@@ -94,7 +96,9 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
       if (!source) throw new Error(t("orders.warranty.errors.selectOriginal"));
       const claims: WarrantyClaimInput[] = nextRecordIds.map((recordId) => {
         const snapshot = (recordsQuery.data ?? []).find((row) => row.id === recordId);
-        const evaluation = snapshot ? evaluateSnapshotAgainstVehicle(snapshot, currentMileage) : null;
+        const evaluation = snapshot
+          ? evaluateSnapshotAgainstVehicle(snapshot, currentMileage, undefined, orderMileageUnit)
+          : null;
         return {
           warrantyRecordId: recordId,
           acceptedOutsidePeriod: Boolean(evaluation && isWarrantyExpired(evaluation.status) && nextAcceptExpired),
@@ -174,7 +178,13 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
               </p>
               <p>
                 {t("orders.warranty.startMileage")}:{" "}
-                {sourceOrder.vehicleMileageSnapshot != null ? sourceOrder.vehicleMileageSnapshot : "—"}
+                {sourceOrder.vehicleMileageSnapshot != null
+                  ? formatVehicleMileage(
+                      sourceOrder.vehicleMileageSnapshot,
+                      sourceOrder.vehicleMileageUnitSnapshot ?? "km",
+                      t,
+                    )
+                  : "—"}
               </p>
             </div>
           )}
@@ -204,10 +214,10 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
                         {t(`orders.warranty.status.${evaluation.status}`)}
                         {evaluation.expiresOn ? ` · ${t("orders.warranty.expiresOn")}: ${evaluation.expiresOn}` : ""}
                         {evaluation.expiresAtMileage != null
-                          ? ` · ${t("orders.warranty.expiresAtMileage")}: ${evaluation.expiresAtMileage}`
+                          ? ` · ${t("orders.warranty.expiresAtMileage")}: ${formatVehicleMileage(evaluation.expiresAtMileage, snapshotMileageUnit(snapshot), t)}`
                           : ""}
                         {evaluation.remainingMileage != null
-                          ? ` · ${t("orders.warranty.remainingMileage")}: ${evaluation.remainingMileage}`
+                          ? ` · ${t("orders.warranty.remainingMileage")}: ${formatVehicleMileage(evaluation.remainingMileage, snapshotMileageUnit(snapshot), t)}`
                           : ""}
                       </span>
                       {expired && checked && (

@@ -4,12 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import type { Order } from "../../lib/types";
 import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { mileageUnitAbbreviation } from "../vehicles/vehicleMileage";
 import { formatWarrantyEndsOn, formatWarrantyKm, remainingDurationLabel } from "./OrderWarrantyIndicator";
 import {
   buildOrderWarrantyIndicator,
   evaluateWarranty,
   hasWarrantyCoverage,
   isWarrantyExpired,
+  snapshotMileageUnit,
   type WarrantySnapshot,
 } from "./warranty";
 import { OrderLineWarrantyBadge } from "./OrderLineWarrantyBadge";
@@ -37,6 +39,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
 
   const snapshots = recordsQuery.data ?? [];
   const mileage = currentMileage ?? order.vehicleMileageSnapshot ?? null;
+  const orderUnit = order.vehicleMileageUnitSnapshot ?? "km";
 
   const configuredLines = useMemo(() => {
     const services = (order.services ?? [])
@@ -70,13 +73,25 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
 
   const activated = order.closedAt && snapshots.length > 0;
   const lines = activated
-    ? snapshots.map((snapshot) => ({ snapshot, evaluation: evaluateWarranty({ snapshot, currentMileage: mileage }) }))
+    ? snapshots.map((snapshot) => ({
+        snapshot,
+        evaluation: evaluateWarranty({
+          snapshot,
+          currentMileage: mileage,
+          currentMileageUnit: orderUnit,
+        }),
+      }))
     : [];
 
   if (!activated && configuredLines.length === 0) return null;
 
   const summary = activated
-    ? buildOrderWarrantyIndicator({ snapshots, currentMileage: mileage, isWarrantyOrder: false })
+    ? buildOrderWarrantyIndicator({
+        snapshots,
+        currentMileage: mileage,
+        currentMileageUnit: orderUnit,
+        isWarrantyOrder: false,
+      })
     : null;
 
   return (
@@ -112,7 +127,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
           {configuredLines.map((line) => (
             <li key={line.key} className="min-w-0">
               <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{line.name}</p>
-              <OrderLineWarrantyBadge limits={line.limits} />
+              <OrderLineWarrantyBadge limits={line.limits} mileageUnit={orderUnit} />
             </li>
           ))}
         </ul>
@@ -131,6 +146,7 @@ function CoverageRow({
   language: string;
 }) {
   const { t } = useTranslation();
+  const unit = mileageUnitAbbreviation(snapshotMileageUnit(snapshot), t);
   const dateLabel = formatWarrantyEndsOn(evaluation.expiresOn);
   const remainingKm =
     evaluation.remainingMileage != null && evaluation.remainingMileage > 0
@@ -143,6 +159,7 @@ function CoverageRow({
       <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{snapshot.itemName}</p>
       <OrderLineWarrantyBadge
         activated
+        mileageUnit={snapshotMileageUnit(snapshot)}
         limits={{
           durationMonths: snapshot.durationMonths,
           durationDays: snapshot.durationDays ?? null,
@@ -162,13 +179,17 @@ function CoverageRow({
                 evaluation.expiresAtMileage != null
                   ? t("orders.warranty.indicator.expiredAtKm", {
                       value: formatWarrantyKm(evaluation.expiresAtMileage, language),
+                      unit,
                     })
                   : null,
               ]
                 .filter(Boolean)
                 .join(" · ")
             : [t("orders.warranty.status.expired_date"), dateLabel].filter(Boolean).join(" · ")
-          : [dateLabel ? t("orders.warranty.indicator.untilDate", { date: dateLabel }) : null, remainingKm ? t("orders.warranty.indicator.remainingKm", { value: remainingKm }) : null]
+          : [
+              dateLabel ? t("orders.warranty.indicator.untilDate", { date: dateLabel }) : null,
+              remainingKm ? t("orders.warranty.indicator.remainingKm", { value: remainingKm, unit }) : null,
+            ]
               .filter(Boolean)
               .join(" · ")}
       </p>

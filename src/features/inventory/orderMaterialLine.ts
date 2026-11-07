@@ -1,4 +1,4 @@
-import type { InventoryItem, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
+import type { InventoryItem, MileageUnit, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
 import {
   catalogWarrantyFromDbRow,
   resolveOrderLineWarrantyForKind,
@@ -70,13 +70,19 @@ export function catalogItemToOrderMaterial(
   quantity = 1,
   warehouseId?: string,
   workspaceDefaults?: WorkspaceWarrantyDefaults | null,
+  orderUnit: MileageUnit = "km",
 ): OrderMaterial {
   const qty = parseOrderMaterialQuantity(quantity);
   if (qty == null) {
     throw new Error("Material quantity must be a positive whole number");
   }
   const warehouse = warehouseId?.trim();
-  const warranty = resolveOrderLineWarrantyForKind(catalogWarrantyFromInventoryItem(item), workspaceDefaults ?? null, "material");
+  const warranty = resolveOrderLineWarrantyForKind(
+    catalogWarrantyFromInventoryItem(item),
+    workspaceDefaults ?? null,
+    "material",
+    orderUnit,
+  );
   return {
     inventoryItemId: item.id,
     itemName: item.name,

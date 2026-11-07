@@ -1,5 +1,5 @@
 import i18n from "../i18n";
-import type { Order } from "../lib/types";
+import type { MileageUnit, Order } from "../lib/types";
 import {
   buildOrderWarrantyIndicator,
   evaluateWarranty,
@@ -12,14 +12,19 @@ import {
   type WarrantySnapshot,
   type WarrantyStatusCode,
 } from "../features/orders/warranty";
+import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import supabase from "./supabase";
 
 const WARRANTY_RECORD_COLUMNS =
-  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, duration_days, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
+  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, duration_days, mileage_limit, mileage_unit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
 
 /** Pre-duration_days schema (20261104250000 without 20261104260000 hardening). */
 const WARRANTY_RECORD_COLUMNS_LEGACY =
   "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
+
+/** duration_days present but mileage_unit not yet applied. */
+const WARRANTY_RECORD_COLUMNS_NO_MILEAGE_UNIT =
+  "id, order_id, item_kind, item_name, order_service_id, order_material_id, duration_months, duration_days, mileage_limit, starts_at, starts_on, ends_on, start_mileage, expires_at_mileage";
 
 function requireWorkspaceId(workspaceId: string | undefined) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
@@ -39,6 +44,10 @@ function isDurationDaysMissingError(error: { code?: string; message?: string } |
   return Boolean(error && isMissingColumnError(error) && /duration_days/i.test(error.message ?? ""));
 }
 
+function isMileageUnitMissingError(error: { code?: string; message?: string } | null | undefined) {
+  return Boolean(error && isMissingColumnError(error) && /mileage_unit/i.test(error.message ?? ""));
+}
+
 function mapSnapshot(row: Record<string, unknown>): WarrantySnapshot {
   return {
     id: String(row.id),
@@ -50,6 +59,7 @@ function mapSnapshot(row: Record<string, unknown>): WarrantySnapshot {
     durationMonths: normalizeWarrantyMonths(row.duration_months),
     durationDays: normalizeWarrantyDays(row.duration_days),
     mileageLimit: normalizeWarrantyKm(row.mileage_limit),
+    mileageUnit: parseMileageUnit(row.mileage_unit) ?? "km",
     startsAt: typeof row.starts_at === "string" ? row.starts_at : typeof row.starts_on === "string" ? `${row.starts_on}T00:00:00.000Z` : "",
     endsOn: typeof row.ends_on === "string" ? row.ends_on : null,
     startMileage: row.start_mileage == null ? null : Number(row.start_mileage),
@@ -82,6 +92,9 @@ async function fetchWarrantyRecordRows(
   };
 
   let { data, error } = await run(WARRANTY_RECORD_COLUMNS);
+  if (isMileageUnitMissingError(error)) {
+    ({ data, error } = await run(WARRANTY_RECORD_COLUMNS_NO_MILEAGE_UNIT));
+  }
   if (isDurationDaysMissingError(error)) {
     ({ data, error } = await run(WARRANTY_RECORD_COLUMNS_LEGACY));
   }
@@ -186,7 +199,10 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
  */
 export async function getOrdersWarrantyIndicatorMap(
   workspaceId: string | undefined,
-  orders: readonly Pick<Order, "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "closedAt">[],
+  orders: readonly Pick<
+    Order,
+    "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "vehicleMileageUnitSnapshot" | "closedAt"
+  >[],
   nowIso?: string,
 ): Promise<Record<string, OrderWarrantyIndicatorModel>> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
@@ -259,11 +275,11 @@ export async function getOrdersWarrantyIndicatorMap(
   const vehicleIds = [
     ...new Set(orders.map((order) => order.vehicleId?.trim()).filter((id): id is string => Boolean(id))),
   ];
-  const mileageByVehicleId = new Map<string, number>();
+  const mileageByVehicleId = new Map<string, { mileage: number; unit: MileageUnit | null }>();
   if (vehicleIds.length > 0) {
     const { data: vehicles, error: vehiclesError } = await supabase
       .from("vehicles")
-      .select("id, current_mileage")
+      .select("id, current_mileage, mileage_unit")
       .eq("workspace_id", targetWorkspaceId)
       .in("id", vehicleIds);
     if (vehiclesError) {
@@ -275,21 +291,27 @@ export async function getOrdersWarrantyIndicatorMap(
       for (const row of (vehicles ?? []) as Record<string, unknown>[]) {
         const id = String(row.id ?? "");
         const mileage = row.current_mileage == null ? null : Number(row.current_mileage);
-        if (id && mileage != null && Number.isFinite(mileage)) mileageByVehicleId.set(id, Math.floor(mileage));
+        if (id && mileage != null && Number.isFinite(mileage)) {
+          mileageByVehicleId.set(id, { mileage: Math.floor(mileage), unit: parseMileageUnit(row.mileage_unit) });
+        }
       }
     }
   }
 
   for (const order of orders) {
     const vehicleId = order.vehicleId?.trim() || "";
+    const fromVehicle = vehicleId ? mileageByVehicleId.get(vehicleId) : undefined;
     const currentMileage =
-      (vehicleId ? mileageByVehicleId.get(vehicleId) : undefined) ??
+      fromVehicle?.mileage ??
       (order.vehicleMileageSnapshot != null && Number.isFinite(order.vehicleMileageSnapshot)
         ? Math.floor(order.vehicleMileageSnapshot)
         : null);
+    const currentMileageUnit =
+      fromVehicle?.unit ?? parseMileageUnit(order.vehicleMileageUnitSnapshot) ?? "km";
     result[order.id] = buildOrderWarrantyIndicator({
       snapshots: snapshotsByOrderId.get(order.id) ?? [],
       currentMileage,
+      currentMileageUnit,
       isWarrantyOrder: Boolean(order.warrantySourceOrderId),
       nowIso,
     });
@@ -323,8 +345,9 @@ export function evaluateSnapshotAgainstVehicle(
   snapshot: WarrantySnapshot,
   currentMileage: number | null | undefined,
   nowIso?: string,
+  currentMileageUnit?: MileageUnit | null,
 ): WarrantyEvaluation {
-  return evaluateWarranty({ snapshot, currentMileage, nowIso });
+  return evaluateWarranty({ snapshot, currentMileage, currentMileageUnit, nowIso });
 }
 
 /**

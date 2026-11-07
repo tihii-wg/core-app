@@ -8,6 +8,7 @@ export default {
   monthsPlaceholder: "ex. 12",
   kmLabel: "Limită kilometraj (km)",
   kmPlaceholder: "ex. 20000",
+  kmOrderHint: "În comandă, pentru vehiculele în mile, valoarea se convertește automat.",
   whicheverFirst: "Garanția se încheie când se atinge oricare dintre limite, oricare vine prima.",
   types: {
     none: "Fără garanție",

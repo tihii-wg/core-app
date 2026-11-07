@@ -188,7 +188,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   const summary = selectedVehicle ? vehicleSummaryDetails(selectedVehicle) : null;
   // Only show km/mi next to the reading when the vehicle has an explicit unit.
   // Never invent a unit or show "ед.?" as if it were a disabled selector.
-  const mileageUnitAbbr = selectedVehicle ? mileageUnitAbbreviation(selectedVehicle.mileageUnit) : "";
+  const mileageUnitAbbr = selectedVehicle ? mileageUnitAbbreviation(selectedVehicle.mileageUnit, t) : "";
 
   return (
     <div className="space-y-2">

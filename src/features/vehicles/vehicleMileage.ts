@@ -15,9 +15,9 @@ export function parseMileageUnit(value: unknown): MileageUnit | null {
 }
 
 /** Abbreviation for labels (km / mi). Empty when unit is unknown — never invent a unit. */
-export function mileageUnitAbbreviation(unit: MileageUnit | null | undefined): string {
-  if (unit === "km") return "km";
-  if (unit === "mi") return "mi";
+export function mileageUnitAbbreviation(unit: MileageUnit | null | undefined, t?: TFunction): string {
+  if (unit === "km") return t ? String(t("vehicles.mileage.abbr.km")) : "km";
+  if (unit === "mi") return t ? String(t("vehicles.mileage.abbr.mi")) : "mi";
   return "";
 }
 
@@ -39,7 +39,7 @@ export function formatVehicleMileage(
 ): string {
   if (value == null || !Number.isFinite(value)) return options?.empty ?? t("common.noValue");
   const formatted = value.toLocaleString(options?.locale, { maximumFractionDigits: 0 });
-  if (unit === "km" || unit === "mi") return `${formatted} ${mileageUnitAbbreviation(unit)}`;
+  if (unit === "km" || unit === "mi") return `${formatted} ${mileageUnitAbbreviation(unit, t)}`;
   return `${formatted} (${t("vehicles.mileage.unitUnknownShort")})`;
 }
 
@@ -53,10 +53,57 @@ export function formatVehicleMileageFromVehicle(
   return formatVehicleMileage(value, vehicle.mileageUnit, t, options);
 }
 
+/** Exact km-per-mile factor used for whole-unit round-trips (50_000 km ↔ 31_069 mi). */
+export const KM_PER_MILE = 1.609344;
+
 /** Convert a reading to kilometers for cross-unit comparison only. Never use for display/storage. */
 export function mileageToCanonicalKm(value: number, unit: MileageUnit): number {
-  if (unit === "mi") return value * 1.609344;
+  if (unit === "mi") return value * KM_PER_MILE;
   return value;
+}
+
+/**
+ * Convert a whole mileage value between km and mi.
+ * Same unit → returned unchanged; null/non-finite → null.
+ * Round-trip tolerance is ±1 whole unit because of Math.round (documented in tests).
+ */
+export function convertMileage(
+  value: number | null | undefined,
+  from: MileageUnit | null | undefined,
+  to: MileageUnit | null | undefined,
+): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const fromUnit = isMileageUnit(from) ? from : null;
+  const toUnit = isMileageUnit(to) ? to : null;
+  if (!fromUnit || !toUnit) return null;
+  if (fromUnit === toUnit) return value;
+  if (fromUnit === "km" && toUnit === "mi") return Math.round(value / KM_PER_MILE);
+  return Math.round(value * KM_PER_MILE);
+}
+
+/**
+ * Order mileage unit: saved snapshot first, else the selected vehicle, else kilometers.
+ */
+export function resolveOrderMileageUnit(params: {
+  snapshotUnit?: MileageUnit | null;
+  vehicleUnit?: MileageUnit | null;
+}): MileageUnit {
+  if (isMileageUnit(params.snapshotUnit)) return params.snapshotUnit;
+  if (isMileageUnit(params.vehicleUnit)) return params.vehicleUnit;
+  return "km";
+}
+
+/**
+ * Live order-form unit while editing: selected vehicle wins so switching cars converts lines;
+ * falls back to the order snapshot when no vehicle is selected.
+ */
+export function resolveFormOrderMileageUnit(params: {
+  vehicleUnit?: MileageUnit | null;
+  snapshotUnit?: MileageUnit | null;
+}): MileageUnit {
+  if (isMileageUnit(params.vehicleUnit)) return params.vehicleUnit;
+  if (isMileageUnit(params.snapshotUnit)) return params.snapshotUnit;
+  return "km";
 }
 
 /**

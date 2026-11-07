@@ -22,5 +22,8 @@ describe("OrderLineWarrantyBadge", () => {
 
     rerender(<OrderLineWarrantyBadge limits={{ durationMonths: 3, mileageLimit: 10000 }} />);
     expect(screen.getByText(/Warranty: 3 months \/ 10,000 km/)).toBeInTheDocument();
+
+    rerender(<OrderLineWarrantyBadge limits={{ durationMonths: null, mileageLimit: 31069 }} mileageUnit="mi" />);
+    expect(screen.getByText(/Warranty: 31,069 mi/)).toBeInTheDocument();
   });
 });

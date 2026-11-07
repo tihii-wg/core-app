@@ -454,6 +454,7 @@ export default function OrderDetailPanel({
                             </p>
                             <OrderLineWarrantyBadge
                               activated={Boolean(selectedOrder.closedAt)}
+                              mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
                               limits={{
                                 durationMonths: line.warrantyMonths ?? null,
                                 durationDays: line.warrantyDays ?? null,
@@ -504,6 +505,7 @@ export default function OrderDetailPanel({
                                 <p>{line.itemName}</p>
                                 <OrderLineWarrantyBadge
                                   activated={Boolean(selectedOrder.closedAt)}
+                                  mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
                                   limits={{
                                     durationMonths: line.warrantyMonths ?? null,
                                     durationDays: line.warrantyDays ?? null,

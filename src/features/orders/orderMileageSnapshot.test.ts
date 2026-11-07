@@ -3,7 +3,11 @@ import { formatVehicleMileage } from "../vehicles/vehicleMileage";
 import { buildOrderMileageSnapshot, mileageFormValueFromOrder } from "./orderVehicleMileage";
 import { orderMileageSnapshotFields, resetOrderMileageSnapshotSupport } from "../../services/apiOrders";
 
-const t = ((key: string) => key) as never;
+const t = ((key: string) => {
+  if (key === "vehicles.mileage.abbr.km") return "km";
+  if (key === "vehicles.mileage.abbr.mi") return "mi";
+  return key;
+}) as never;
 
 describe("historical order mileage snapshots", () => {
   it("stores a miles snapshot when the vehicle uses miles", () => {

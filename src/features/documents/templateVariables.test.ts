@@ -179,4 +179,20 @@ describe("template variable registry", () => {
     expect(withCents).toMatch(/170/);
     expect(noCents).toMatch(/170/);
   });
+
+  it("formats mileage tokens with the vehicle/order unit", () => {
+    const miContext = fullContext();
+    miContext.order = orderFixture({
+      vehicleMileageSnapshot: 31069,
+      vehicleMileageUnitSnapshot: "mi",
+    });
+    if (miContext.vehicle) miContext.vehicle = { ...miContext.vehicle, mileageUnit: "mi", currentMileage: 31069 };
+    const out = applyTemplateVariables("#ЗАКАЗ-ПРОБЕГ / #АВТО-ПРОБЕГ / #ЕДИНИЦА-ПРОБЕГА", miContext, {
+      locale: "en",
+      currency: "MDL",
+    });
+    expect(out).toContain("mi");
+    expect(out).toMatch(/31[,.]?069/);
+    expect(out).toContain("mi");
+  });
 });

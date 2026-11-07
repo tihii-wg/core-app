@@ -762,6 +762,7 @@ export default {
         status: { label: "Status", description: "Custom status name or system status" },
         description: { label: "Description", description: "Order description / complaint" },
         mileage: { label: "Visit mileage", description: "Odometer reading saved on the order" },
+        mileageUnit: { label: "Mileage unit", description: "km or mi for the order visit mileage" },
         taxInvoice: { label: "Tax invoice number", description: "Fiscal invoice number on the order" },
       },
       client: {

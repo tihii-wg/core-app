@@ -8,6 +8,7 @@ export default {
   monthsPlaceholder: "e.g. 12",
   kmLabel: "Mileage limit (km)",
   kmPlaceholder: "e.g. 20000",
+  kmOrderHint: "On orders for vehicles in miles this value is converted automatically.",
   whicheverFirst: "Warranty ends when either limit is reached, whichever comes first.",
   types: {
     none: "No warranty",

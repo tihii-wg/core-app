@@ -4,10 +4,16 @@ import type { Client, InvoiceDocument, Order, OrderMaterial, OrderService, Vehic
 import type { LegalEntity } from "../../services/apiLegalEntities";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import type { WarrantySnapshot } from "../orders/warranty";
+import { snapshotMileageUnit } from "../orders/warranty";
 import type { PaymentBalance } from "../finance/paymentTypes";
 import { vatIncludedAmount } from "../finance/vat";
 import type { InvoiceSections } from "../invoices/invoiceItemSections";
 import { computeOrderMoney, lineNet } from "../orders/orderTotals";
+import {
+  formatVehicleMileage,
+  mileageUnitAbbreviation,
+  resolveOrderMileageUnit,
+} from "../vehicles/vehicleMileage";
 import { amountInWords, normalizeAmountInWordsLocale } from "./amountInWords";
 
 /** Mirrors layout.DocumentTemplateType — kept local to avoid import cycles. */
@@ -302,14 +308,23 @@ function buildCombinedTable(ctx: PrintContext) {
   return html + tableEnd();
 }
 
+function printMileageT(locale: string) {
+  const lng = isAppLanguage(locale) ? locale : currentLanguage();
+  return i18n.getFixedT(lng);
+}
+
 function buildWarrantyList(ctx: PrintContext) {
   if (ctx.warrantyRecords.length === 0) return "";
+  const t = printMileageT(ctx.locale);
   const items = ctx.warrantyRecords
     .map((row) => {
       const name = escapeHtmlText(row.itemName || "—");
       const untilDate = row.endsOn ? escapeHtmlText(row.endsOn) : "—";
+      const unit = snapshotMileageUnit(row);
       const untilMileage =
-        row.expiresAtMileage != null && Number.isFinite(row.expiresAtMileage) ? String(row.expiresAtMileage) : "—";
+        row.expiresAtMileage != null && Number.isFinite(row.expiresAtMileage)
+          ? escapeHtmlText(formatVehicleMileage(row.expiresAtMileage, unit, t, { locale: ctx.locale }))
+          : "—";
       return `<li><strong>${name}</strong> — until ${untilDate}, until mileage ${untilMileage}</li>`;
     })
     .join("");
@@ -401,10 +416,31 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     group: "order",
     labelKey: "settings.printTemplates.variables.order.mileage.label",
     descriptionKey: "settings.printTemplates.variables.order.mileage.description",
-    kind: "number",
+    kind: "text",
     resolve: (ctx) => {
       const value = ctx.order?.vehicleMileageSnapshot;
-      return value == null || !Number.isFinite(value) ? null : value;
+      if (value == null || !Number.isFinite(value)) return null;
+      const unit = resolveOrderMileageUnit({
+        snapshotUnit: ctx.order?.vehicleMileageUnitSnapshot,
+        vehicleUnit: ctx.vehicle?.mileageUnit,
+      });
+      return formatVehicleMileage(value, unit, printMileageT(ctx.locale), { locale: ctx.locale });
+    },
+  },
+  {
+    token: "#ЕДИНИЦА-ПРОБЕГА",
+    group: "order",
+    labelKey: "settings.printTemplates.variables.order.mileageUnit.label",
+    descriptionKey: "settings.printTemplates.variables.order.mileageUnit.description",
+    kind: "text",
+    resolve: (ctx) => {
+      const snapshotUnit = ctx.order?.vehicleMileageUnitSnapshot;
+      const vehicleUnit = ctx.vehicle?.mileageUnit;
+      if (snapshotUnit !== "km" && snapshotUnit !== "mi" && vehicleUnit !== "km" && vehicleUnit !== "mi") {
+        return null;
+      }
+      const unit = resolveOrderMileageUnit({ snapshotUnit, vehicleUnit });
+      return mileageUnitAbbreviation(unit, printMileageT(ctx.locale)) || null;
     },
   },
   {
@@ -637,10 +673,11 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     token: "#АВТО-ПРОБЕГ",
     group: "vehicle",
     labelKey: "settings.printTemplates.variables.vehicle.mileage.label",
-    kind: "number",
+    kind: "text",
     resolve: (ctx) => {
       const value = ctx.vehicle?.currentMileage;
-      return value == null || !Number.isFinite(value) ? null : value;
+      if (value == null || !Number.isFinite(value)) return null;
+      return formatVehicleMileage(value, ctx.vehicle?.mileageUnit, printMileageT(ctx.locale), { locale: ctx.locale });
     },
   },
   {

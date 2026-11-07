@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -21,6 +21,7 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 import { canMutateOrderContent } from "./closedOrderPermissions";
 import { defaultsForKind } from "./warranty";
+import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -43,6 +44,7 @@ import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
+import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 
 type EditOrderFormProps = {
   order: Order;
@@ -140,11 +142,32 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
   const watchedServices = useWatch({ control, name: "services" });
   const watchedMaterials = useWatch({ control, name: "materials" });
+  const selectedVehicleId = useWatch({ control, name: "vehicleId" });
   /** Client-vehicle industries: order-level make/plate/VIN inputs are removed; preserve stored values on save. */
   const hideDuplicateVehicleAssetFields = showVehicles;
   // Saved lines keep their stored discount; lines added in this form get the client discount (as updateOrder stamps them).
   const { rows: clientDiscounts } = useGetClientDiscounts(order.clientId || null, Boolean(order.clientId));
   const orderMoney = previewOrderMoney(watchedServices, watchedMaterials, clientDiscounts, { skipSaved: true });
+  const selectedVehicle = useMemo(
+    () => (selectedVehicleId ? clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId) : undefined),
+    [clientVehicles, selectedVehicleId],
+  );
+  const mileageUnitHandlers = useMemo(
+    () => ({
+      getServices: () => getValues("services") ?? [],
+      getMaterials: () => getValues("materials") ?? [],
+      setServiceWarrantyKm: (index: number, warrantyKm: number | null) =>
+        setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true }),
+      setMaterialWarrantyKm: (index: number, warrantyKm: number | null) =>
+        setValue(`materials.${index}.warrantyKm`, warrantyKm, { shouldDirty: true }),
+    }),
+    [getValues, setValue],
+  );
+  const orderMileageUnit = useOrderMileageUnitSync({
+    vehicleUnit: selectedVehicle?.mileageUnit,
+    snapshotUnit: order.vehicleMileageUnitSnapshot,
+    handlers: mileageUnitHandlers,
+  });
 
   useEffect(() => {
     if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
@@ -252,7 +275,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           errors={!!errors.services?.root}
           onSelect={(service) => {
             if (hasService(service.id, service.service_name)) return;
-            serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults));
+            serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit));
             clearErrors("services");
           }}
           onCreate={(serviceName, price) => {
@@ -264,7 +287,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
               price,
               quantity: 1,
               warrantyMonths: warranty.durationMonths,
-              warrantyKm: warranty.mileageLimit,
+              warrantyKm: catalogWarrantyKmToOrderUnit(warranty.mileageLimit, orderMileageUnit),
               warrantyDays: null,
             });
             clearErrors("services");
@@ -297,6 +320,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                   months={watchedServices?.[index]?.warrantyMonths}
                   days={watchedServices?.[index]?.warrantyDays}
                   km={watchedServices?.[index]?.warrantyKm}
+                  mileageUnit={orderMileageUnit}
                   disabled={warrantyDisabled}
                   onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                     setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
@@ -322,6 +346,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         disabled={isSubmitting}
         warrantyDisabled={warrantyDisabled}
         warrantyDefaults={warrantyDefaults}
+        orderMileageUnit={orderMileageUnit}
         isSubmitted={isSubmitted}
         errors={errors.materials}
       />

@@ -1,4 +1,4 @@
-import type { OrderService, Service } from "../../lib/types";
+import type { MileageUnit, OrderService, Service } from "../../lib/types";
 import {
   catalogWarrantyFromDbRow,
   resolveOrderLineWarrantyForKind,
@@ -9,6 +9,7 @@ import type { WorkspaceWarrantyDefaults } from "../orders/warranty";
 /**
  * Copies the current catalog name, price, and warranty defaults into a new order line snapshot.
  * Later catalog edits must not rewrite this line — order_services stores its own price/warranty.
+ * Catalog warranty_km is in km; pass `orderUnit` to convert into the order's mileage unit.
  */
 export function catalogServiceToOrderLine(
   service: Pick<Service, "id" | "service_name" | "service_price"> &
@@ -20,9 +21,10 @@ export function catalogServiceToOrderLine(
       warranty_unit?: unknown;
     },
   workspaceDefaults?: WorkspaceWarrantyDefaults | null,
+  orderUnit: MileageUnit = "km",
 ): OrderService {
   const catalog = catalogWarrantyFromService(service);
-  const warranty = resolveOrderLineWarrantyForKind(catalog, workspaceDefaults ?? null, "service");
+  const warranty = resolveOrderLineWarrantyForKind(catalog, workspaceDefaults ?? null, "service", orderUnit);
 
   return {
     serviceId: service.id,

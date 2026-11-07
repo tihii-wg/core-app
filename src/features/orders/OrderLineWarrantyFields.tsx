@@ -1,12 +1,16 @@
 import { useTranslation } from "react-i18next";
+import type { MileageUnit } from "../../lib/types";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { mileageUnitAbbreviation } from "../vehicles/vehicleMileage";
 import { normalizeWarrantyKm, normalizeWarrantyMonths, normalizeWarrantyDays } from "./warranty";
 
 type Props = {
   months: number | null | undefined;
   days?: number | null | undefined;
   km: number | null | undefined;
+  /** Order mileage unit for the warranty km field label. */
+  mileageUnit?: MileageUnit;
   disabled?: boolean;
   idPrefix: string;
   onChange: (next: { warrantyMonths: number | null; warrantyDays: number | null; warrantyKm: number | null }) => void;
@@ -15,11 +19,21 @@ type Props = {
 /**
  * Per-line warranty editors: months and/or exact days, plus optional mileage.
  * Duration and mileage are independent; when both are set, the first limit reached ends coverage.
+ * Mileage values are in the order's unit (not catalog km).
  */
-export default function OrderLineWarrantyFields({ months, days, km, disabled, idPrefix, onChange }: Props) {
+export default function OrderLineWarrantyFields({
+  months,
+  days,
+  km,
+  mileageUnit = "km",
+  disabled,
+  idPrefix,
+  onChange,
+}: Props) {
   const { t } = useTranslation();
   const hasDuration = (months != null && months > 0) || (days != null && days > 0);
   const hasMileage = km != null && km > 0;
+  const unitAbbr = mileageUnitAbbreviation(mileageUnit, t);
 
   return (
     <div className="mt-2 space-y-2">
@@ -70,7 +84,7 @@ export default function OrderLineWarrantyFields({ months, days, km, disabled, id
         </div>
         <div className="space-y-1 col-span-2 sm:col-span-1">
           <Label htmlFor={`${idPrefix}-warranty-km`} className="text-xs text-muted-foreground">
-            {t("orders.warranty.kmLabel")}
+            {t("orders.warranty.kmLabel", { unit: unitAbbr })}
           </Label>
           <Input
             id={`${idPrefix}-warranty-km`}

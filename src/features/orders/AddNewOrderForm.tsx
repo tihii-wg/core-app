@@ -41,6 +41,8 @@ import { previewOrderMoney } from "./orderMoneyPreview";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { defaultsForKind } from "./warranty";
+import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
+import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 
 export default function AddNewOrderForm({
   setCreateModalOpen,
@@ -118,6 +120,7 @@ export default function AddNewOrderForm({
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
 
   const selectedClientId = useWatch({ control, name: "clientId" });
+  const selectedVehicleId = useWatch({ control, name: "vehicleId" });
   const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? selectedClientId || null : null);
   /** Client-vehicle industries: order-level make/plate/VIN are obsolete — use the vehicle selector only. */
   const hideDuplicateVehicleAssetFields = showVehicles;
@@ -126,6 +129,25 @@ export default function AddNewOrderForm({
     () => (selectedClientId ? clientsForCombobox.find((client) => client.id === selectedClientId) : undefined),
     [clientsForCombobox, selectedClientId],
   );
+  const selectedVehicle = useMemo(
+    () => (selectedVehicleId ? clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId) : undefined),
+    [clientVehicles, selectedVehicleId],
+  );
+  const mileageUnitHandlers = useMemo(
+    () => ({
+      getServices: () => getValues("services") ?? [],
+      getMaterials: () => getValues("materials") ?? [],
+      setServiceWarrantyKm: (index: number, warrantyKm: number | null) =>
+        setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true }),
+      setMaterialWarrantyKm: (index: number, warrantyKm: number | null) =>
+        setValue(`materials.${index}.warrantyKm`, warrantyKm, { shouldDirty: true }),
+    }),
+    [getValues, setValue],
+  );
+  const orderMileageUnit = useOrderMileageUnitSync({
+    vehicleUnit: selectedVehicle?.mileageUnit,
+    handlers: mileageUnitHandlers,
+  });
 
   useEffect(() => {
     if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
@@ -337,7 +359,7 @@ export default function AddNewOrderForm({
 
               if (alreadyExists) return;
 
-              serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults));
+              serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit));
               clearErrors("services");
             }}
             onCreate={(serviceName, price) => {
@@ -352,7 +374,7 @@ export default function AddNewOrderForm({
                 price,
                 quantity: 1,
                 warrantyMonths: warranty.durationMonths,
-                warrantyKm: warranty.mileageLimit,
+                warrantyKm: catalogWarrantyKmToOrderUnit(warranty.mileageLimit, orderMileageUnit),
                 warrantyDays: null,
               });
               clearErrors("services");
@@ -394,6 +416,7 @@ export default function AddNewOrderForm({
                       months={watchedServices?.[index]?.warrantyMonths}
                       days={watchedServices?.[index]?.warrantyDays}
                       km={watchedServices?.[index]?.warrantyKm}
+                      mileageUnit={orderMileageUnit}
                       disabled={isSubmitting}
                       onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                         setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
@@ -419,6 +442,7 @@ export default function AddNewOrderForm({
           inventoryItems={activeInventory}
           disabled={isSubmitting}
           warrantyDefaults={warrantyDefaults}
+          orderMileageUnit={orderMileageUnit}
           isSubmitted={isSubmitted}
           errors={errors.materials}
         />

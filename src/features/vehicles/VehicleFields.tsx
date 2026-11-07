@@ -26,7 +26,7 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
   const unitUnset = "__unset__";
   // Only show a unit abbreviation next to mileage inputs when a real unit is selected.
   // Never show "ед.?" / "unit?" as if it were a disabled control.
-  const unitAbbr = mileageUnitAbbreviation(mileageUnit || null);
+  const unitAbbr = mileageUnitAbbreviation(mileageUnit || null, t);
 
   return (
     <div className="space-y-4">
