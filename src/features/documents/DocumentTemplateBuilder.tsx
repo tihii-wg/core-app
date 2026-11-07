@@ -51,6 +51,7 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { cn } from "../../lib/utils";
 import { defaultLayoutForType } from "./defaultLayouts";
 import {
+  isDocumentLayout,
   migrateLayoutToV2,
   newBlockId,
   type BlockStyle,
@@ -183,6 +184,8 @@ type DocumentTemplateBuilderProps = {
   onDirtyChange?: (dirty: boolean) => void;
   /** When set, Save applies the layout locally instead of persisting (used by DocumentStyleEditor). */
   onSaveLayout?: (layout: DocumentLayout) => void | Promise<void>;
+  /** Switch to the visual canvas designer (converts current blocks on open). */
+  onConvertToCanvas?: () => void;
 };
 
 /* -------------------------------------------------------------------------------------------------
@@ -1611,6 +1614,7 @@ export function DocumentTemplateBuilder({
   onClose,
   onDirtyChange,
   onSaveLayout,
+  onConvertToCanvas,
 }: DocumentTemplateBuilderProps) {
   const { t } = useTranslation();
   const confirmUnsaved = useUnsavedChangesConfirm();
@@ -1618,10 +1622,11 @@ export function DocumentTemplateBuilder({
   const { workspaceId } = useActiveWorkspaceId();
   const save = useSaveDocumentTemplateLayout();
   const documentType = (isBuilderType(template.documentType) ? template.documentType : "work_order") as DocumentTemplateType;
-  const initialLayout = useMemo(
-    () => migrateLayoutToV2(cloneLayout(template.layout ?? defaultLayoutForType(documentType))),
-    [template.layout, documentType],
-  );
+  const initialLayout = useMemo(() => {
+    const raw = template.layout;
+    if (raw && isDocumentLayout(raw)) return migrateLayoutToV2(cloneLayout(raw));
+    return migrateLayoutToV2(cloneLayout(defaultLayoutForType(documentType)));
+  }, [template.layout, documentType]);
   const [layout, setLayout] = useState<DocumentLayout>(initialLayout);
   const [name, setName] = useState(template.name);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(layout.blocks[0]?.id ?? null);
@@ -1883,6 +1888,11 @@ export function DocumentTemplateBuilder({
           <Button type="button" variant="outline" size="sm" disabled={!canEdit || savePending} onClick={resetToDefault}>
             <RotateCcw />
             {t("settings.printTemplates.resetDefault")}
+          </Button>
+        ) : null}
+        {onConvertToCanvas ? (
+          <Button type="button" variant="outline" size="sm" disabled={!canEdit || savePending} onClick={onConvertToCanvas}>
+            {t("settings.printTemplates.canvas.convertToCanvas")}
           </Button>
         ) : null}
         <Button type="button" size="sm" loading={savePending} disabled={!canEdit || savePending || !dirty} onClick={handleSave}>

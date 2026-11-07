@@ -18,6 +18,7 @@ import {
   isBuilderDocumentType,
   isDocumentStyleType,
 } from "../../services/apiDocumentTemplates";
+import { CanvasDesigner, templateIsCanvas } from "../documents/canvas/CanvasDesigner";
 import { DocumentStyleEditor } from "../documents/DocumentStyleEditor";
 import { DocumentTemplateBuilder } from "../documents/DocumentTemplateBuilder";
 import type { DocumentTemplateType } from "../documents/layout";
@@ -64,6 +65,7 @@ export function PrintTemplatesSettings() {
   const remove = useDeleteDocumentTemplate();
   const setDefault = useSetDefaultDocumentTemplate();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [forceSimpleMode, setForceSimpleMode] = useState(false);
   const [createType, setCreateType] = useState<DocumentTemplateType>("work_order");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -106,14 +108,16 @@ export function PrintTemplatesSettings() {
   const editing = data.find((template) => template.id === editingId) ?? null;
   const editingStyle = editing?.documentType === DOCUMENT_STYLE_TYPE;
 
-  async function openEditor(template: DocumentTemplate) {
+  async function openEditor(template: DocumentTemplate, simple = false) {
     if (editingId && editorDirty && !(await confirmUnsaved())) return;
     setEditingId(template.id);
+    setForceSimpleMode(simple);
     setEditorDirty(false);
   }
 
   function closeEditor() {
     setEditingId(null);
+    setForceSimpleMode(false);
     setEditorDirty(false);
   }
 
@@ -408,12 +412,29 @@ export function PrintTemplatesSettings() {
                       </div>
                     </div>
                     {editing && !editingStyle && editing.id === template.id ? (
-                      <DocumentTemplateBuilder
-                        template={template}
-                        canEdit={canEdit}
-                        onClose={closeEditor}
-                        onDirtyChange={setEditorDirty}
-                      />
+                      forceSimpleMode || (!templateIsCanvas(template) && template.layout) ? (
+                        <DocumentTemplateBuilder
+                          template={template}
+                          canEdit={canEdit}
+                          onClose={closeEditor}
+                          onDirtyChange={setEditorDirty}
+                          onConvertToCanvas={
+                            canEdit
+                              ? () => {
+                                  setForceSimpleMode(false);
+                                }
+                              : undefined
+                          }
+                        />
+                      ) : (
+                        <CanvasDesigner
+                          template={template}
+                          canEdit={canEdit}
+                          onClose={closeEditor}
+                          onDirtyChange={setEditorDirty}
+                          onOpenSimpleMode={() => setForceSimpleMode(true)}
+                        />
+                      )
                     ) : null}
                   </li>
                 ))}

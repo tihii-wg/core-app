@@ -1,7 +1,7 @@
 import i18n from "../i18n";
 import { applyCommonStyleToLayout } from "../features/documents/applyCommonStyle";
 import { createLayoutFromTemplate } from "../features/documents/createFromTemplate";
-import { defaultLayoutForType, defaultTemplateName } from "../features/documents/defaultLayouts";
+import { defaultTemplateName } from "../features/documents/defaultLayouts";
 import {
   defaultDocumentStyle,
   fontFamilyCss,
@@ -10,6 +10,14 @@ import {
   stylePageToLayoutPage,
   type DocumentStyle,
 } from "../features/documents/documentStyle";
+import { defaultCanvasLayoutForType } from "../features/documents/canvas/defaultCanvasLayouts";
+import { isCanvasDocumentLayout, parseCanvasDocumentLayout } from "../features/documents/canvas/guards";
+import {
+  canvasPageCss,
+  renderCanvasLayoutToHtml,
+  renderCanvasLayoutToHtmlSync,
+} from "../features/documents/canvas/renderCanvasLayout";
+import type { CanvasDocumentLayout } from "../features/documents/canvas/types";
 import {
   isDocumentLayout,
   layoutPageCss,
@@ -25,6 +33,8 @@ import { buildInvoicePrintContext, buildOrderPrintContext } from "./printContext
 import { isMissingTableError, requireWorkspaceId } from "./missingTable";
 import supabase from "./supabase";
 
+export type StoredDocumentLayout = DocumentLayout | CanvasDocumentLayout;
+
 /** Print templates live in `document_templates` (Appendix A, section 9). */
 export type DocumentTemplate = {
   id: string;
@@ -37,8 +47,8 @@ export type DocumentTemplate = {
   isAvailableToAll: boolean;
   isActive: boolean;
   isDefault: boolean;
-  /** Visual builder layout; null = legacy body_html-only template (or style rows). */
-  layout: DocumentLayout | null;
+  /** Visual builder layout (blocks v1/v2 or canvas v3); null = legacy body_html-only (or style rows). */
+  layout: StoredDocumentLayout | null;
   /** When documentType === 'style', parsed DocumentStyle from the layout column. */
   style: DocumentStyle | null;
   /** Raw template HTML (`body_html`); empty string when absent. Sanitise before rendering. */
@@ -59,9 +69,14 @@ function toNullableNumber(value: unknown) {
   return Number.isFinite(n) ? n : null;
 }
 
-function parseLayoutField(value: unknown): DocumentLayout | null {
+function parseLayoutField(value: unknown): StoredDocumentLayout | null {
   if (value == null) return null;
+  if (isCanvasDocumentLayout(value)) return parseCanvasDocumentLayout(value);
   return parseDocumentLayout(value);
+}
+
+export function isStoredDocumentLayout(value: unknown): value is StoredDocumentLayout {
+  return isCanvasDocumentLayout(value) || isDocumentLayout(value);
 }
 
 export function toDocumentTemplate(row: Record<string, unknown>): DocumentTemplate {
@@ -112,7 +127,10 @@ export function documentStyleToRenderStyle(style: DocumentStyle) {
 }
 
 /** Effective page CSS: style page/font when layout.useStyle, else layout.page. */
-export function resolvePrintPageCss(layout: DocumentLayout, style: DocumentStyle) {
+export function resolvePrintPageCss(layout: StoredDocumentLayout, style: DocumentStyle) {
+  if (isCanvasDocumentLayout(layout)) {
+    return canvasPageCss(layout, layout.useStyle === true ? fontFamilyCss(style.font.family) : undefined);
+  }
   if (layout.useStyle === true) {
     const page = stylePageToLayoutPage(style.page, style.font);
     return layoutPageCss(page, fontFamilyCss(style.font.family));
@@ -172,9 +190,16 @@ export function renderTemplateDocument(
   ctx: PrintContext,
   documentStyle?: DocumentStyle | null,
 ) {
-  const layout = template.layout && isDocumentLayout(template.layout) ? template.layout : null;
+  const layout = template.layout && isStoredDocumentLayout(template.layout) ? template.layout : null;
   if (layout) {
     const style = resolveDocumentStyle(documentStyle);
+    if (isCanvasDocumentLayout(layout)) {
+      const body = renderCanvasLayoutToHtmlSync(layout, ctx, {
+        showCents: template.showCents,
+        colors: layout.useStyle === true ? style.colors : null,
+      });
+      return buildPrintDocument(body, template.name, resolvePrintPageCss(layout, style));
+    }
     const renderStyle = layout.useStyle === true ? documentStyleToRenderStyle(style) : null;
     const body = renderLayoutToHtml(layout, ctx, { showCents: template.showCents, style: renderStyle });
     return buildPrintDocument(body, template.name, resolvePrintPageCss(layout, style));
@@ -186,6 +211,24 @@ export function renderTemplateDocument(
     showCents: template.showCents,
   });
   return buildPrintDocument(html, template.name);
+}
+
+/** Async render (canvas QR codes as real images). Falls back to sync renderTemplateDocument. */
+export async function renderTemplateDocumentAsync(
+  template: DocumentTemplate,
+  ctx: PrintContext,
+  documentStyle?: DocumentStyle | null,
+) {
+  const layout = template.layout && isCanvasDocumentLayout(template.layout) ? template.layout : null;
+  if (layout) {
+    const style = resolveDocumentStyle(documentStyle);
+    const body = await renderCanvasLayoutToHtml(layout, ctx, {
+      showCents: template.showCents,
+      colors: layout.useStyle === true ? style.colors : null,
+    });
+    return buildPrintDocument(body, template.name, resolvePrintPageCss(layout, style));
+  }
+  return renderTemplateDocument(template, ctx, documentStyle);
 }
 
 /**
@@ -248,7 +291,7 @@ export async function printOrderDocument(
     ctx.order = { ...ctx.order, orderNumber: i18n.t("orders.emptyOrderLabel") };
   }
 
-  const documentHtml = renderTemplateDocument(template, ctx, documentStyle);
+  const documentHtml = await renderTemplateDocumentAsync(template, ctx, documentStyle);
   if (!documentHtml) return "unavailable";
   printHtmlDocument(documentHtml);
   return "printed";
@@ -290,7 +333,7 @@ export async function printInvoiceDocument(
       buildInvoicePrintContext(invoiceId, resolved),
       getWorkspaceDocumentStyle(resolved),
     ]);
-    const documentHtml = renderTemplateDocument(template, ctx, documentStyle);
+    const documentHtml = await renderTemplateDocumentAsync(template, ctx, documentStyle);
     if (!documentHtml) return "unavailable";
     printHtmlDocument(documentHtml);
     return "printed";
@@ -331,7 +374,7 @@ export async function updateDocumentTemplateBody(templateId: string, bodyHtml: s
 
 export type SaveDocumentTemplateLayoutInput = {
   templateId: string;
-  layout: DocumentLayout;
+  layout: StoredDocumentLayout;
   bodyHtml: string;
   name?: string;
   workspaceId: string | undefined;
@@ -340,7 +383,7 @@ export type SaveDocumentTemplateLayoutInput = {
 /** Saves layout JSON and a rendered body_html snapshot for legacy readers. */
 export async function saveDocumentTemplateLayout(input: SaveDocumentTemplateLayoutInput) {
   const resolved = requireWorkspaceId(input.workspaceId);
-  if (!isDocumentLayout(input.layout)) throw new Error(i18n.t("settings.printTemplates.errors.invalidLayout"));
+  if (!isStoredDocumentLayout(input.layout)) throw new Error(i18n.t("settings.printTemplates.errors.invalidLayout"));
   if (input.bodyHtml.length > MAX_TEMPLATE_BODY_LENGTH) throw new Error(i18n.t("settings.printTemplates.errors.tooLong"));
   const patch: Record<string, unknown> = {
     layout: input.layout,
@@ -365,8 +408,10 @@ export async function createDocumentTemplate(
   options: { isDefault?: boolean } = {},
 ) {
   const resolved = requireWorkspaceId(workspaceId);
-  const layout = defaultLayoutForType(documentType);
-  const emptyCtxBody = renderLayoutToHtml(layout, emptyPrintContext({ locale: "ru" }));
+  const layout = defaultCanvasLayoutForType(documentType);
+  const emptyCtxBody = renderCanvasLayoutToHtmlSync(layout, emptyPrintContext({ locale: "ru" }), {
+    colors: defaultDocumentStyle().colors,
+  });
   const { data, error } = await supabase
     .from("document_templates")
     .insert({
@@ -486,7 +531,7 @@ export async function createTemplatesFromSource(
   const resolved = requireWorkspaceId(workspaceId);
   const templates = await getDocumentTemplates(resolved);
   const source = templates.find((template) => template.id === sourceTemplateId);
-  if (!source || !source.layout || !isBuilderDocumentType(source.documentType)) {
+  if (!source || !source.layout || !isBuilderDocumentType(source.documentType) || isCanvasDocumentLayout(source.layout)) {
     throw new Error(i18n.t("settings.printTemplates.errors.notSaved"));
   }
   const fromType = source.documentType;
@@ -526,7 +571,7 @@ export async function applyCommonStyleToAllTemplates(workspaceId: string | undef
   const templates = await getDocumentTemplates(resolved);
   let updated = 0;
   for (const template of templates) {
-    if (!isBuilderDocumentType(template.documentType) || !template.layout) continue;
+    if (!isBuilderDocumentType(template.documentType) || !template.layout || isCanvasDocumentLayout(template.layout)) continue;
     const next = applyCommonStyleToLayout(template.layout);
     const bodyHtml = renderLayoutToHtml(next, emptyPrintContext({ locale: "ru", documentKind: template.documentType }), {
       style: documentStyleToRenderStyle(await getWorkspaceDocumentStyle(resolved)),
@@ -634,11 +679,18 @@ export async function setDefaultDocumentTemplate(templateId: string, workspaceId
 
 /** Snapshot body_html from a layout + context (or empty context). */
 export function snapshotBodyHtmlFromLayout(
-  layout: DocumentLayout,
+  layout: StoredDocumentLayout,
   ctx: PrintContext,
   showCents = true,
   documentStyle?: DocumentStyle | null,
 ) {
+  if (isCanvasDocumentLayout(layout)) {
+    const resolved = resolveDocumentStyle(documentStyle);
+    return renderCanvasLayoutToHtmlSync(layout, ctx, {
+      showCents,
+      colors: layout.useStyle === true ? resolved.colors : null,
+    });
+  }
   const style = layout.useStyle === true ? documentStyleToRenderStyle(resolveDocumentStyle(documentStyle)) : null;
   return renderLayoutToHtml(layout, ctx, { showCents, style });
 }
