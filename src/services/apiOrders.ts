@@ -582,7 +582,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
           // Re-apply warranties from the original form `materials` — merge/RPC round-trips can drop them.
           const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
           const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, synced);
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withWarranty, productPercent ?? 0, new Set());
+          const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
         } else {
           const withWarranty = await persistOrderMaterialWarranties(
             orderId,
@@ -590,7 +591,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
             materials,
             applied.catalog,
           );
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withWarranty, productPercent ?? 0, new Set());
+          const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
         }
       } else {
         const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
@@ -818,6 +820,8 @@ let orderHeaderDiscountSupported = true;
 // (20261101070000_order_line_discounts_rpc.PRODUCTION.sql). Nothing is cached for it: when the RPC is missing the
 // save fails loudly (see stampMaterialLineDiscounts) instead of persisting totals that differ from the preview.
 const SET_LINE_DISCOUNTS_RPC = "crm_set_order_line_discounts";
+/** Manual SQL 20261107120000 — set order_materials.price for catalog lines after sync. */
+const SET_MATERIAL_PRICES_RPC = "crm_set_order_material_prices";
 
 /** Optional `order_materials.supply_source` (one_time / customer / catalog). Absent until PART E SQL is applied. */
 let orderMaterialSupplySourceSupported = true;
@@ -928,6 +932,110 @@ function materialDiscountError(error: DbError) {
  * where the database grants it). If neither can write, this THROWS a clear error: the form previewed the discounted
  * total, so silently saving lines without it would leave preview and saved totals apart.
  */
+/** Map order_material_price:* DB exceptions to localized copy. Returns null when unrelated. */
+export function mapOrderMaterialPriceDbError(error: {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+}): Error | null {
+  const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  if (/order_material_price:not_authenticated/i.test(blob)) {
+    return new Error(i18n.t("clients.errors.notAuthenticated"));
+  }
+  if (/order_material_price:forbidden/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.materialPriceForbidden"));
+  }
+  if (/order_material_price:invalid_price|order_material_price:invalid_line|order_material_price:invalid_args|order_material_price:line_not_found/i.test(blob)) {
+    return new Error(i18n.t("orders.errors.materialPriceInvalid"));
+  }
+  if (/order_lifecycle:closed_order_immutable/i.test(blob)) {
+    return new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+  }
+  return null;
+}
+
+/**
+ * After sync_order_materials (which always writes catalog selling_price), apply form prices that differ
+ * via crm_set_order_material_prices. Missing RPC fails loudly when a custom catalog price was entered.
+ */
+async function applyCustomCatalogMaterialPrices(
+  orderId: string,
+  desired: readonly OrderMaterial[],
+  persisted: OrderMaterial[],
+): Promise<OrderMaterial[]> {
+  const payload: { line_id: string; price: number }[] = [];
+  let customPriceRequested = false;
+
+  for (const line of desired) {
+    if (!isCatalogOrderMaterial(line)) continue;
+    const formPrice = Number(line.price);
+    if (!Number.isFinite(formPrice) || formPrice < 0) {
+      throw new Error(i18n.t("orders.errors.materialPriceInvalid"));
+    }
+    const rounded = roundMoney(formPrice);
+    const matched = matchPersistedMaterialLine(line, persisted);
+    if (!matched?.id) continue;
+    const saved = Number(matched.price);
+    if (Number.isFinite(saved) && Math.abs(roundMoney(saved) - rounded) < 0.0001) continue;
+    customPriceRequested = true;
+    payload.push({ line_id: String(matched.id), price: rounded });
+  }
+
+  if (payload.length === 0) return persisted;
+
+  const { error } = await supabase.rpc(SET_MATERIAL_PRICES_RPC, {
+    p_order_id: orderId,
+    p_lines: payload,
+  });
+
+  if (error) {
+    if (isMissingRpcError(error, SET_MATERIAL_PRICES_RPC)) {
+      if (customPriceRequested) {
+        throw new Error(i18n.t("orders.errors.materialPriceRpcRequired"));
+      }
+      return persisted;
+    }
+    throw mapOrderMaterialPriceDbError(error) ?? new Error(error.message);
+  }
+
+  const byId = new Map(payload.map((row) => [row.line_id, row.price]));
+  return persisted.map((line) => {
+    if (!line.id) return line;
+    const next = byId.get(line.id);
+    return next === undefined ? line : { ...line, price: next };
+  });
+}
+
+/**
+ * Re-send existing material line discounts after unit prices change so percent discounts /
+ * discount_total stay aligned with the new prices (crm_set_order_line_discounts).
+ */
+async function refreshMaterialLineDiscountsAfterPriceChange(
+  orderId: string,
+  lines: OrderMaterial[],
+): Promise<void> {
+  if (!orderLineDiscountSupported) return;
+  const stamped = lines.filter((line) => line.id && lineHasDiscount(line));
+  if (stamped.length === 0) return;
+
+  const { error: rpcError } = await supabase.rpc(SET_LINE_DISCOUNTS_RPC, {
+    p_order_id: orderId,
+    p_lines: stamped.map((line) => ({
+      order_material_id: line.id,
+      discount_type: line.discountType,
+      discount_value: Number(line.discountValue),
+    })),
+  });
+  if (!rpcError) return;
+  if (isMissingRpcError(rpcError, SET_LINE_DISCOUNTS_RPC)) return;
+  if (rpcError.code === "42703") {
+    orderLineDiscountSupported = false;
+    return;
+  }
+  throw materialDiscountError(rpcError);
+}
+
 async function stampMaterialLineDiscounts(orderId: string, lines: OrderMaterial[], percent: number, existingIds: ReadonlySet<string>): Promise<OrderMaterial[]> {
   if (!(percent > 0) || !orderLineDiscountSupported) return lines;
   const ids = lines.filter((line) => line.id && !existingIds.has(line.id) && !lineHasDiscount(line)).map((line) => String(line.id));
@@ -2926,7 +3034,15 @@ export async function updateOrder(
     if (orderMaterialsMatch(existingMapped, desiredMaterials)) {
       // Qty/identity unchanged — still re-apply warranty snapshots (match includes warranty tokens,
       // so this path is warranty-equal; persist is idempotent and keeps DB/UI aligned).
+      // Catalog sync key omits price — apply form prices via RPC when they diverge.
       materialLines = await persistOrderMaterialWarranties(orderId, workspaceId, desiredMaterials, existingMapped);
+      const beforePrices = materialLines.map((line) => Number(line.price));
+      materialLines = await applyCustomCatalogMaterialPrices(orderId, desiredMaterials, materialLines);
+      const pricesChanged = materialLines.some((line, index) => Math.abs(Number(line.price) - (beforePrices[index] ?? 0)) > 0.0001);
+      if (pricesChanged) {
+        await refreshMaterialLineDiscountsAfterPriceChange(orderId, materialLines);
+        materialsRpcRan = true;
+      }
     } else if (desiredMaterials.length > 0) {
       assertCatalogWarehousesSelected(desiredMaterials);
       const percent = clientDiscountPercent(clientDiscounts, "product_order");
@@ -2945,6 +3061,15 @@ export async function updateOrder(
         const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), workspaceId);
         // Always re-apply from desiredMaterials so form warranty snapshots win over RPC round-trips.
         materialLines = await persistOrderMaterialWarranties(orderId, workspaceId, desiredMaterials, synced);
+        const beforeCustom = materialLines.map((line) => Number(line.price));
+        materialLines = await applyCustomCatalogMaterialPrices(orderId, desiredMaterials, materialLines);
+        const customPricesApplied = materialLines.some(
+          (line, index) => Math.abs(Number(line.price) - (beforeCustom[index] ?? 0)) > 0.0001,
+        );
+        // Re-apply existing percent discounts only when unit prices changed (new-line stamps still run below).
+        if (customPricesApplied) {
+          await refreshMaterialLineDiscountsAfterPriceChange(orderId, materialLines);
+        }
       } else {
         materialLines = await syncOrderMaterialsRpc(orderId, freeform, workspaceId);
       }
@@ -3058,6 +3183,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   const unsaved: OrderService[] = [];
   const kindChanges: { id: string; kind: OrderServiceKind | null }[] = [];
   const technicianChanges: { id: string; technicianId: string | null }[] = [];
+  const priceChanges: { id: string; price: number; quantity: number }[] = [];
 
   for (const service of services) {
     const index = service.id ? unclaimed.findIndex((line) => line.id === service.id) : -1;
@@ -3074,6 +3200,13 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
         if (nextTech !== prevTech) {
           technicianChanges.push({ id: String(line.id), technicianId: nextTech });
         }
+      }
+      const nextPrice = roundMoney(Number(service.price) || 0);
+      const nextQty = Number(service.quantity) || 1;
+      const prevPrice = roundMoney(Number(line.price) || 0);
+      const prevQty = Number(line.quantity) || 1;
+      if (Math.abs(nextPrice - prevPrice) > 0.0001 || nextQty !== prevQty) {
+        priceChanges.push({ id: String(line.id), price: nextPrice, quantity: nextQty });
       }
     } else unsaved.push(service);
   }
@@ -3226,6 +3359,21 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     if (line) line.technician_id = change.technicianId;
   }
 
+  // Unit price / qty on kept lines (form may edit catalog defaults for this order only).
+  for (const change of priceChanges) {
+    const { error: priceError } = await supabase
+      .from("order_services")
+      .update({ price: change.price, quantity: change.quantity })
+      .eq("id", change.id)
+      .eq("order_id", orderId);
+    if (priceError) throw mapOrderWarrantyDbError(priceError) ?? new Error(priceError.message);
+    const line = kept.find((item) => item.id === change.id);
+    if (line) {
+      line.price = change.price;
+      line.quantity = change.quantity;
+    }
+  }
+
   // Per-line warranty on kept + newly inserted lines. Skip when the form omitted warranty keys
   // entirely (all undefined) so a partial dirty payload cannot null out a saved snapshot.
   if (orderLineWarrantySupported !== false) {
@@ -3263,7 +3411,16 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   }
 
   const lines = [...kept, ...inserted];
-  if (newLines.length === 0 && removedIds.length === 0 && kindChanges.length === 0) return { lines, summary: null };
+  // Price/qty edits on kept lines must also rewrite orders.total_price.
+  if (
+    newLines.length === 0 &&
+    removedIds.length === 0 &&
+    kindChanges.length === 0 &&
+    priceChanges.length === 0 &&
+    technicianChanges.length === 0
+  ) {
+    return { lines, summary: null };
+  }
 
   const { data: materialRows, error: materialRowsError } = await withLineDiscountColumns(() =>
     supabase.from("order_materials").select(orderLineDiscountSupported ? "price, quantity, discount_type, discount_value" : "price, quantity").eq("order_id", orderId),

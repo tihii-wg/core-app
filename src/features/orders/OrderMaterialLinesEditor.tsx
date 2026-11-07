@@ -27,6 +27,7 @@ import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { defaultIssueWarehouseId, issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
+import OrderLinePriceField from "./OrderLinePriceField";
 import { defaultsForKind, type WorkspaceWarrantyDefaults } from "./warranty";
 
 type MaterialsFormSlice = { materials: OrderMaterial[] };
@@ -386,7 +387,30 @@ export default function OrderMaterialLinesEditor({
                       />
                     )}
                     <p className="text-[12px] text-muted-foreground">{sourceLabel}</p>
-                    {catalog || freeformIdentityLocked ? (
+                    {catalog ? (
+                      <Controller
+                        name={`materials.${index}.price`}
+                        control={control}
+                        rules={{
+                          validate: (value) => {
+                            const number = typeof value === "number" ? value : Number(value);
+                            if (value === "" || !Number.isFinite(number) || number < 0) return t("orders.form.freeformPriceInvalid") as string;
+                            return true;
+                          },
+                        }}
+                        render={({ field: priceField }) => (
+                          <OrderLinePriceField
+                            id={`order-material-price-${field.id}`}
+                            value={priceField.value as number | "" | null | undefined}
+                            catalogPrice={inventoryItems.find((item) => item.id === itemId)?.sellingPrice ?? null}
+                            disabled={disabled}
+                            errorMessage={errors?.[index]?.price?.message as string | undefined}
+                            formatMoney={formatMoney}
+                            onChange={priceField.onChange}
+                          />
+                        )}
+                      />
+                    ) : freeformIdentityLocked ? (
                       <p className="text-[13px] text-muted-foreground">
                         {t("orders.detail.price")}: <span className="tabular-nums">{formatMoney(unitPrice)}</span>
                       </p>

@@ -47,6 +47,7 @@ import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
+import OrderLinePriceField from "./OrderLinePriceField";
 import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 
 type EditOrderFormProps = {
@@ -322,7 +323,6 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="font-medium">{field.serviceName}</p>
-                    <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(field.price)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <OrderServiceKindSelect
@@ -336,6 +336,30 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                     </Button>
                   </div>
                 </div>
+                <Controller
+                  name={`services.${index}.price`}
+                  control={control}
+                  rules={{
+                    validate: (value) => {
+                      const number = typeof value === "number" ? value : Number(value);
+                      if ((value as unknown) === "" || !Number.isFinite(number) || number < 0) {
+                        return t("orders.form.freeformPriceInvalid") as string;
+                      }
+                      return true;
+                    },
+                  }}
+                  render={({ field: priceField }) => (
+                    <OrderLinePriceField
+                      id={`edit-service-price-${index}`}
+                      value={priceField.value as number | "" | null | undefined}
+                      catalogPrice={activeServices?.find((service) => service.id === field.serviceId)?.service_price ?? null}
+                      disabled={warrantyDisabled}
+                      errorMessage={errors.services?.[index]?.price?.message}
+                      formatMoney={formatMoney}
+                      onChange={priceField.onChange}
+                    />
+                  )}
+                />
                 <OrderLinePerformerSelect
                   id={`edit-service-performer-${index}`}
                   value={watchedServices?.[index]?.technicianId ?? ""}

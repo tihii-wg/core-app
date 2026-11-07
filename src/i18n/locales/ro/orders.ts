@@ -267,6 +267,9 @@ const orders: Messages<typeof en> = {
     freeformNamePlaceholder: "ex. Garnitură specială",
     freeformNameRequired: "Introduceți denumirea",
     freeformPriceInvalid: "Introduceți un preț valid (≥ 0)",
+    linePrice: "Preț",
+    catalogPriceHint: "Catalog: {{price}}",
+    resetToCatalogPrice: "Revino la prețul din catalog",
     freeformHistoryLocked:
       "Denumirea, prețul și sursa sunt blocate după eliberare sau returnare. Cantitatea poate fi modificată (nu sub cantitatea eliberată).",
     freeformHistoryLockedRemove: "Liniile cu istoric de eliberare sau returnare nu pot fi eliminate din comandă.",
@@ -467,6 +470,10 @@ const orders: Messages<typeof en> = {
     materialDiscountRpcMissing:
       "Reducerea clientului la produse nu a putut fi salvată pe liniile de materiale: lipsește funcția crm_set_order_line_discounts. Aplicați supabase/manual/20261101070000_order_line_discounts_rpc.PRODUCTION.sql. Totalurile din formular nu au fost salvate.",
     materialDiscountFailed: "Reducerile pe materiale nu au putut fi salvate.",
+    materialPriceRpcRequired:
+      "Pentru a schimba prețul unei piese pe comandă, aplicați SQL 20261107120000_order_material_line_prices.",
+    materialPriceForbidden: "Nu aveți dreptul de a schimba prețurile pe această comandă.",
+    materialPriceInvalid: "Preț invalid.",
     cannotDeleteWithInvoice:
       "Această comandă are încă o factură. Marcați-o ca trimisă din greșeală și ștergeți-o mai întâi. Nu s-a șters nimic.",
     cannotDeleteWithInvoiceDocs:

@@ -261,6 +261,9 @@ export default {
     freeformNamePlaceholder: "e.g. Special gasket",
     freeformNameRequired: "Enter a part name",
     freeformPriceInvalid: "Enter a valid non-negative price",
+    linePrice: "Price",
+    catalogPriceHint: "Catalog: {{price}}",
+    resetToCatalogPrice: "Reset to catalog price",
     freeformHistoryLocked:
       "Name, price, and source are locked after this line has been issued or returned. You can still change quantity (not below issued).",
     freeformHistoryLockedRemove: "Lines with issue or return history cannot be removed from the order.",
@@ -462,6 +465,10 @@ export default {
     materialDiscountRpcMissing:
       "The client's product discount could not be saved on the material lines: the database function crm_set_order_line_discounts is missing. Apply supabase/manual/20261101070000_order_line_discounts_rpc.PRODUCTION.sql. The totals shown in the form were not saved.",
     materialDiscountFailed: "Could not save the material discounts.",
+    materialPriceRpcRequired:
+      "To change a part price on an order, apply SQL 20261107120000_order_material_line_prices.",
+    materialPriceForbidden: "You do not have permission to change prices on this order.",
+    materialPriceInvalid: "Invalid price.",
     cannotDeleteWithInvoice:
       "This order still has an invoice. Mark the invoice as sent in error and delete it first. Nothing was deleted.",
     cannotDeleteWithInvoiceDocs:

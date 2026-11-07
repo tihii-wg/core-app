@@ -149,8 +149,15 @@ vi.mock("./orderVehicleMileage", async (importOriginal) => {
 
 async function addCustomService(user: ReturnType<typeof userEvent.setup>, name: string, price: string) {
   await user.type(screen.getByLabelText(/^Service$/), name);
-  await user.type(screen.getByLabelText("Price"), price);
-  await user.click(screen.getByRole("button", { name: "Add" }));
+  const addButton = await screen.findByRole("button", { name: "Add" });
+  // Scope to the combobox create row so per-line OrderLinePriceField inputs are ignored.
+  const createRow = addButton.closest("div");
+  const priceInput = createRow
+    ? within(createRow as HTMLElement).getByLabelText(/^Price$/)
+    : screen.getAllByLabelText(/^Price$/).at(-1)!;
+  await user.clear(priceInput);
+  await user.type(priceInput, price);
+  await user.click(addButton);
 }
 
 const saveDraftButton = () => screen.getByRole("button", { name: "Save draft order" });

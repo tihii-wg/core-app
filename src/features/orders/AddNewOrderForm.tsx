@@ -37,6 +37,7 @@ import { buildOrderMileageSnapshot, persistOrderVehicleMileage } from "./orderVe
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
+import OrderLinePriceField from "./OrderLinePriceField";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
 import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
 import OrderTotalsSummary from "./OrderTotalsSummary";
@@ -401,14 +402,11 @@ export default function AddNewOrderForm({
           {serviceField.length > 0 && (
             <div className="space-y-2">
               {serviceField.map((field, index) => {
-                const unitPrice = watchedServices?.[index]?.price ?? field.price ?? 0;
-
                 return (
                   <div key={field.id} className="space-y-2 rounded-md border p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
-                        <p className="text-[13px] text-muted-foreground tabular-nums">{formatMoney(unitPrice)}</p>
                       </div>
                       <OrderServiceKindSelect
                         value={watchedServices?.[index]?.kind}
@@ -427,6 +425,30 @@ export default function AddNewOrderForm({
                         {t("orders.form.remove")}
                       </Button>
                     </div>
+                    <Controller
+                      name={`services.${index}.price`}
+                      control={control}
+                      rules={{
+                        validate: (value) => {
+                          const number = typeof value === "number" ? value : Number(value);
+                          if ((value as unknown) === "" || !Number.isFinite(number) || number < 0) {
+                            return t("orders.form.freeformPriceInvalid") as string;
+                          }
+                          return true;
+                        },
+                      }}
+                      render={({ field: priceField }) => (
+                        <OrderLinePriceField
+                          id={`create-service-price-${index}`}
+                          value={priceField.value as number | "" | null | undefined}
+                          catalogPrice={activeServices?.find((service) => service.id === field.serviceId)?.service_price ?? null}
+                          disabled={isSubmitting}
+                          errorMessage={errors.services?.[index]?.price?.message}
+                          formatMoney={formatMoney}
+                          onChange={priceField.onChange}
+                        />
+                      )}
+                    />
                     <OrderLinePerformerSelect
                       id={`create-service-performer-${index}`}
                       value={watchedServices?.[index]?.technicianId ?? ""}

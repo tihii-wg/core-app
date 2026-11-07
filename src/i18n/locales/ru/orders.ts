@@ -270,6 +270,9 @@ const orders: Messages<typeof en> = {
     freeformNamePlaceholder: "например, Специальная прокладка",
     freeformNameRequired: "Укажите название",
     freeformPriceInvalid: "Укажите корректную неотрицательную цену",
+    linePrice: "Цена",
+    catalogPriceHint: "Каталог: {{price}}",
+    resetToCatalogPrice: "Вернуть цену из каталога",
     freeformHistoryLocked:
       "Название, цена и источник заблокированы после выдачи или возврата. Количество можно менять (не ниже выданного).",
     freeformHistoryLockedRemove: "Строки с историей выдачи или возврата нельзя удалить из заказа.",
@@ -470,6 +473,10 @@ const orders: Messages<typeof en> = {
     materialDiscountRpcMissing:
       "Скидку клиента на товары не удалось сохранить в строках материалов: в БД нет функции crm_set_order_line_discounts. Примените supabase/manual/20261101070000_order_line_discounts_rpc.PRODUCTION.sql. Итоги из формы не сохранены.",
     materialDiscountFailed: "Не удалось сохранить скидки на материалы.",
+    materialPriceRpcRequired:
+      "Чтобы менять цену запчасти в заказе, примените SQL 20261107120000_order_material_line_prices",
+    materialPriceForbidden: "Нет прав менять цену в заказе",
+    materialPriceInvalid: "Неверная цена",
     cannotDeleteWithInvoice:
       "У этого заказа ещё есть счёт. Сначала отметьте его как ошибочный и удалите. Ничего не удалено.",
     cannotDeleteWithInvoiceDocs:
