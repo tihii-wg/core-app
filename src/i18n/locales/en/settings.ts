@@ -1501,8 +1501,25 @@ export default {
     description: "Automatic copies of workspace data to Google Drive or GitHub.",
     ownerOnlyNote: "Only the workspace owner can manage backups.",
     destination: "Where to save",
+    destinationHint: "Choose Google Drive or a private GitHub repository.",
     unavailable: "Backups are not available yet.",
     lastCopy: "Last backup",
+    connectProviderFirst: "Connect {{provider}} first",
+    master: {
+      title: "Backups",
+      description:
+        "Automatically save a copy of company data (orders, clients, inventory, documents, files).",
+    },
+    confirmDisable: {
+      title: "Turn off automatic backups?",
+      description: "The storage connection will be kept.",
+      confirm: "Turn off",
+    },
+    confirmSwitchProvider: {
+      title: "Switch backup destination?",
+      description: "Disconnect {{current}} and switch to {{next}}? You will need to connect the new destination.",
+      confirm: "Switch",
+    },
     providers: {
       google: "Google Drive",
       github: "GitHub",
@@ -1548,6 +1565,7 @@ export default {
     },
     history: {
       title: "History",
+      collapsedTitle: "Backup history",
       empty: "No backups yet.",
       date: "Date",
       trigger: "Trigger",

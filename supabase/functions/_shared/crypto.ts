@@ -52,11 +52,10 @@ export async function signOAuthState(payload: OAuthStatePayload, secret: string)
   return `${body}.${bytesToBase64Url(signature)}`;
 }
 
-/** Verify signed state; returns payload or null when invalid / expired. */
-export async function verifyOAuthState(
+/** Decode signed state payload when HMAC is valid (ignores expiry). */
+export async function peekOAuthState(
   state: string,
   secret: string,
-  nowMs: number = Date.now(),
 ): Promise<OAuthStatePayload | null> {
   const parts = state.split(".");
   if (parts.length !== 2) return null;
@@ -80,11 +79,22 @@ export async function verifyOAuthState(
     ) {
       return null;
     }
-    if (payload.exp * 1000 < nowMs) return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+/** Verify signed state; returns payload or null when invalid / expired. */
+export async function verifyOAuthState(
+  state: string,
+  secret: string,
+  nowMs: number = Date.now(),
+): Promise<OAuthStatePayload | null> {
+  const payload = await peekOAuthState(state, secret);
+  if (!payload) return null;
+  if (payload.exp * 1000 < nowMs) return null;
+  return payload;
 }
 
 export function oauthStateExpiresAt(nowMs: number = Date.now(), ttlMinutes = 10): number {

@@ -1,5 +1,6 @@
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
-import { oauthStateExpiresAt, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
+import { oauthStateExpiresAt, peekOAuthState, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
+import { buildBackupOAuthRedirect } from "../_shared/oauthRedirect.ts";
 import { bearerToken, requireEnv, serviceClient, userClient } from "../_shared/supabase.ts";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file email";
@@ -20,7 +21,6 @@ Deno.serve(async (req) => {
     if (path.endsWith("/callback") && req.method === "GET") {
       return await handleCallback(url, appUrl);
     }
-    // Allow bare function URL with ?action=start for invoke-style calls
     if (req.method === "POST") {
       const body = (await req.json()) as { workspaceId?: string; locale?: string };
       return await handleStartPost(req, body.workspaceId ?? "", body.locale ?? "en", appUrl);
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 });
 
 async function handleStart(req: Request, url: URL, appUrl: string): Promise<Response> {
-  const workspaceId = url.searchParams.get("workspaceId")?.trim() ?? "";
+  const workspaceId = url.searchParams.get("workspaceId")?.trim() || url.searchParams.get("ws")?.trim() || "";
   const locale = url.searchParams.get("locale")?.trim() || "en";
   return handleStartPost(req, workspaceId, locale, appUrl);
 }
@@ -74,23 +74,42 @@ async function handleStartPost(req: Request, workspaceId: string, locale: string
   return jsonResponse({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` }, 200, appUrl);
 }
 
+async function resolveCallbackContext(url: URL, state: string, secret: string) {
+  const peeked = state ? await peekOAuthState(state, secret) : null;
+  return {
+    workspaceId: peeked?.workspaceId ?? url.searchParams.get("ws"),
+    locale: peeked?.locale ?? url.searchParams.get("locale"),
+  };
+}
+
 async function handleCallback(url: URL, appUrl: string): Promise<Response> {
   const code = url.searchParams.get("code")?.trim() ?? "";
   const state = url.searchParams.get("state")?.trim() ?? "";
   const oauthError = url.searchParams.get("error");
+  const secret = requireEnv("BACKUP_OAUTH_STATE_SECRET");
+  const ctx = await resolveCallbackContext(url, state, secret);
 
-  const fallback = `${appUrl}/en/settings?tab=backups&error=oauth`;
+  const errorRedirect = (error: string) =>
+    Response.redirect(
+      buildBackupOAuthRedirect({
+        appUrl,
+        error,
+        workspaceId: ctx.workspaceId,
+        locale: ctx.locale,
+        ws: url.searchParams.get("ws"),
+        localeParam: url.searchParams.get("locale"),
+      }),
+      302,
+    );
+
   if (oauthError || !code || !state) {
-    return Response.redirect(`${appUrl}/en/settings?tab=backups&error=${encodeURIComponent(oauthError || "oauth")}`, 302);
+    return errorRedirect(oauthError || "oauth");
   }
 
-  const payload = await verifyOAuthState(state, requireEnv("BACKUP_OAUTH_STATE_SECRET"));
+  const payload = await verifyOAuthState(state, secret);
   if (!payload) {
-    return Response.redirect(`${appUrl}/en/settings?tab=backups&error=invalid_state`, 302);
+    return errorRedirect("invalid_state");
   }
-
-  const locale = payload.locale || "en";
-  const redirectBase = `${appUrl}/${locale}/${payload.workspaceId}/settings?tab=backups`;
 
   try {
     const redirectUri = `${requireEnv("SUPABASE_URL").replace(/\/$/, "")}/functions/v1/backup-google-oauth/callback`;
@@ -111,7 +130,15 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
       error?: string;
     };
     if (!tokenRes.ok || !tokenJson.refresh_token) {
-      return Response.redirect(`${redirectBase}&error=${encodeURIComponent(tokenJson.error || "token")}`, 302);
+      return Response.redirect(
+        buildBackupOAuthRedirect({
+          appUrl,
+          workspaceId: payload.workspaceId,
+          locale: payload.locale,
+          error: tokenJson.error || "token",
+        }),
+        302,
+      );
     }
 
     let email: string | null = null;
@@ -126,13 +153,21 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
     }
 
     const admin = serviceClient();
-    const secret = JSON.stringify({ type: "google", refresh_token: tokenJson.refresh_token });
+    const secretPayload = JSON.stringify({ type: "google", refresh_token: tokenJson.refresh_token });
     const { error: setError } = await admin.rpc("crm_backup_set_credential", {
       p_workspace_id: payload.workspaceId,
-      p_secret: secret,
+      p_secret: secretPayload,
     });
     if (setError) {
-      return Response.redirect(`${redirectBase}&error=credential`, 302);
+      return Response.redirect(
+        buildBackupOAuthRedirect({
+          appUrl,
+          workspaceId: payload.workspaceId,
+          locale: payload.locale,
+          error: "credential",
+        }),
+        302,
+      );
     }
 
     await admin.from("workspace_backup_settings").upsert(
@@ -145,8 +180,16 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
       { onConflict: "workspace_id" },
     );
 
-    return Response.redirect(`${redirectBase}&connected=google`, 302);
+    return Response.redirect(
+      buildBackupOAuthRedirect({
+        appUrl,
+        workspaceId: payload.workspaceId,
+        locale: payload.locale,
+        connected: "google",
+      }),
+      302,
+    );
   } catch {
-    return Response.redirect(fallback, 302);
+    return errorRedirect("oauth");
   }
 }

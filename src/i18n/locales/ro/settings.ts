@@ -1507,8 +1507,25 @@ const settings: Messages<typeof en> = {
     description: "Copii automate ale datelor spațiului de lucru în Google Drive sau GitHub.",
     ownerOnlyNote: "Doar proprietarul spațiului de lucru poate gestiona copiile de rezervă.",
     destination: "Unde se salvează",
+    destinationHint: "Alegeți Google Drive sau un repository GitHub privat.",
     unavailable: "Copiile de rezervă nu sunt încă disponibile.",
     lastCopy: "Ultima copie",
+    connectProviderFirst: "Conectați mai întâi {{provider}}",
+    master: {
+      title: "Copie de rezervă",
+      description:
+        "Salvați automat o copie a datelor firmei (comenzi, clienți, stoc, documente, fișiere).",
+    },
+    confirmDisable: {
+      title: "Dezactivați copierea automată?",
+      description: "Conexiunea la stocare rămâne.",
+      confirm: "Dezactivați",
+    },
+    confirmSwitchProvider: {
+      title: "Schimbați destinația?",
+      description: "Deconectați {{current}} și treceți la {{next}}? Va trebui să conectați noua destinație.",
+      confirm: "Schimbați",
+    },
     providers: {
       google: "Google Drive",
       github: "GitHub",
@@ -1554,6 +1571,7 @@ const settings: Messages<typeof en> = {
     },
     history: {
       title: "Istoric",
+      collapsedTitle: "Istoricul copiilor",
       empty: "Încă nu există copii de rezervă.",
       date: "Dată",
       trigger: "Declanșare",

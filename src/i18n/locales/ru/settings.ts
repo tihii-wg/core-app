@@ -1510,8 +1510,25 @@ const settings: Messages<typeof en> = {
     description: "Автоматические копии данных рабочего пространства в Google Drive или GitHub.",
     ownerOnlyNote: "Управлять резервными копиями может только владелец рабочего пространства.",
     destination: "Куда сохранять",
+    destinationHint: "Выберите Google Drive или приватный репозиторий GitHub.",
     unavailable: "Резервное копирование пока недоступно.",
     lastCopy: "Последняя копия",
+    connectProviderFirst: "Сначала подключите {{provider}}",
+    master: {
+      title: "Резервное копирование",
+      description:
+        "Автоматически сохранять копию данных компании (заказы, клиенты, склад, документы, файлы).",
+    },
+    confirmDisable: {
+      title: "Отключить автоматическое резервное копирование?",
+      description: "Подключение к хранилищу сохранится.",
+      confirm: "Отключить",
+    },
+    confirmSwitchProvider: {
+      title: "Сменить место хранения?",
+      description: "Отключить {{current}} и перейти на {{next}}? Новое хранилище нужно будет подключить заново.",
+      confirm: "Сменить",
+    },
     providers: {
       google: "Google Drive",
       github: "GitHub",
@@ -1557,6 +1574,7 @@ const settings: Messages<typeof en> = {
     },
     history: {
       title: "История",
+      collapsedTitle: "История копий",
       empty: "Пока нет резервных копий.",
       date: "Дата",
       trigger: "Запуск",
