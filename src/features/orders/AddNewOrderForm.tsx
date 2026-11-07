@@ -29,6 +29,9 @@ import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscriptio
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
+import OrderTeamSelect from "./OrderTeamSelect";
+import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
+import { mergeOrderTeam } from "./orderTeam";
 import { OrderVehicleFields } from "./OrderVehicleFields";
 import { buildOrderMileageSnapshot, persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
@@ -112,9 +115,19 @@ export default function AddNewOrderForm({
       materials: [],
       description: "",
       assignedEmployeeId: "",
+      team: [],
       deadline: "",
     },
   });
+
+  /** Adds a line performer to the team chips as a helper when not already present. */
+  function addPerformerToTeam(employeeId: string | null | undefined) {
+    const id = employeeId?.trim();
+    if (!id) return;
+    const current = getValues("team") ?? [];
+    if (current.some((member) => member.employeeId === id)) return;
+    setValue("team", mergeOrderTeam({ team: current, lineTechnicianIds: [id] }), { shouldDirty: true });
+  }
 
   // Keep typed plate/VIN across industry switches; drop stale required/VIN errors when hidden.
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
@@ -258,6 +271,7 @@ export default function AddNewOrderForm({
         services: data.services ?? [],
         materials: data.materials,
         assignedEmployeeId: data.assignedEmployeeId || undefined,
+        team: data.team ?? [],
         deadline: data.deadline,
       });
     } catch {
@@ -359,7 +373,9 @@ export default function AddNewOrderForm({
 
               if (alreadyExists) return;
 
-              serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit));
+              const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
+              serviceAppend(line);
+              addPerformerToTeam(line.technicianId);
               clearErrors("services");
             }}
             onCreate={(serviceName, price) => {
@@ -411,6 +427,16 @@ export default function AddNewOrderForm({
                         {t("orders.form.remove")}
                       </Button>
                     </div>
+                    <OrderLinePerformerSelect
+                      id={`create-service-performer-${index}`}
+                      value={watchedServices?.[index]?.technicianId ?? ""}
+                      options={technicianOptions}
+                      disabled={isSubmitting}
+                      onChange={(technicianId) => {
+                        setValue(`services.${index}.technicianId`, technicianId || null, { shouldDirty: true });
+                        addPerformerToTeam(technicianId);
+                      }}
+                    />
                     <OrderLineWarrantyFields
                       idPrefix={`create-service-${index}`}
                       months={watchedServices?.[index]?.warrantyMonths}
@@ -483,6 +509,21 @@ export default function AddNewOrderForm({
             </div>
           </div>
         </div>
+
+        <Controller
+          name="team"
+          control={control}
+          render={({ field }) => (
+            <OrderTeamSelect
+              id="order-team"
+              label={t("orders.team.title")}
+              value={field.value ?? []}
+              options={technicianOptions}
+              disabled={isSubmitting}
+              onChange={field.onChange}
+            />
+          )}
+        />
 
         <OrderTotalsSummary
           money={orderMoney}

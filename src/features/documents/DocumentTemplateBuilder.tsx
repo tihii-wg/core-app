@@ -134,7 +134,19 @@ const SOURCE_FALLBACK_LABEL: Record<TableSource, string> = {
   invoiceMaterials: "Invoice materials",
 };
 
-const COLUMN_KEYS: TableColumnKey[] = ["index", "name", "sku", "qty", "unit", "price", "discount", "vat", "sum", "warranty"];
+const COLUMN_KEYS: TableColumnKey[] = [
+  "index",
+  "name",
+  "sku",
+  "qty",
+  "unit",
+  "price",
+  "discount",
+  "vat",
+  "sum",
+  "warranty",
+  "performer",
+];
 const TOTAL_KEYS: TotalsRowKey[] = ["servicesSum", "materialsSum", "discount", "vat", "total", "paid", "remaining", "totalWords"];
 
 type WidthPreset = { id: string; label: string; widths: number[] };

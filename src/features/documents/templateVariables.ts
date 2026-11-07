@@ -777,6 +777,19 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: (ctx) => text(ctx.order?.assignedEmployeeName),
   },
   {
+    token: "#КОМАНДА",
+    group: "staff",
+    labelKey: "settings.printTemplates.variables.staff.team.label",
+    kind: "text",
+    resolve: (ctx) =>
+      text(
+        (ctx.order?.team ?? [])
+          .map((member) => member.name?.trim() ?? "")
+          .filter(Boolean)
+          .join(", "),
+      ),
+  },
+  {
     token: "#ПРИНЯЛ",
     group: "staff",
     labelKey: "settings.printTemplates.variables.staff.acceptedBy.label",

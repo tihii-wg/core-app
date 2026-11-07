@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import OrderTeamAvatars from "./OrderTeamAvatars";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
 
 type OrderCardProps = {
@@ -111,6 +112,7 @@ export function OrderCard({
         <div className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
           <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
           <PaymentStatusBadge status={resolvedPaymentStatus} />
+          {order.team && order.team.length > 0 ? <OrderTeamAvatars team={order.team} /> : null}
         </div>
         <span className={cn("shrink-0 text-right")}>
           <span className="block font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>

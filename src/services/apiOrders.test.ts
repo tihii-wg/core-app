@@ -100,6 +100,7 @@ describe("createOrder", () => {
       if (table === "services") return serviceQueries.shift();
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -147,6 +148,7 @@ describe("createOrder", () => {
       if (table === "services") return existingService;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -183,6 +185,7 @@ describe("createOrder", () => {
       if (table === "services") return existingService;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -204,6 +207,7 @@ describe("createOrder", () => {
       if (table === "services") return existingService;
       if (table === "employees") return missingEmployee;
       if (table === "workspace_members") return missingMember();
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -230,6 +234,7 @@ describe("createOrder", () => {
       if (table === "employees") return unlinkedEmployee;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -273,6 +278,7 @@ describe("createOrder", () => {
       if (table === "services") return existingService;
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -351,6 +357,7 @@ describe("getOrders", () => {
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -408,6 +415,7 @@ describe("getOrders", () => {
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -450,6 +458,7 @@ describe("getOrders", () => {
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -491,6 +500,7 @@ describe("getOrders", () => {
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -551,6 +561,7 @@ describe("updateOrder", () => {
       if (table === "workspace_members") return activeMember();
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -614,6 +625,7 @@ describe("updateOrder", () => {
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -669,6 +681,7 @@ describe("updateOrder", () => {
       if (table === "orders") return orders;
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -777,6 +790,7 @@ describe("updateOrderStatus", () => {
         return log;
       }
       if (extras?.[table]) return extras[table];
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
   }
@@ -834,6 +848,7 @@ describe("updateOrderStatus", () => {
       if (table === "orders") return orders;
       if (table === "status_definitions") return statusDefinitionsWith([def]);
       if (table === "activity_log") return { insert: () => Promise.resolve({ data: null, error: null }) };
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -881,6 +896,7 @@ describe("updateOrderStatus", () => {
       if (table === "orders") return orders;
       if (table === "workspaces") return workspaces;
       if (table === "status_definitions") return emptyStatusDefinitions();
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -899,6 +915,7 @@ describe("updateOrderStatus", () => {
       if (table === "workspaces") return workspaces;
       if (table === "status_definitions") return emptyStatusDefinitions();
       if (table === "activity_log") return { insert: () => Promise.resolve({ data: null, error: null }) };
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -1033,6 +1050,7 @@ describe("tax invoice requirement", () => {
       if (table === "workspaces") return workspaceChain;
       if (table === "status_definitions") return emptyStatusDefinitions();
       if (table === "activity_log") return { insert: () => Promise.resolve({ data: null, error: null }) };
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
     return { updates };
@@ -1119,6 +1137,7 @@ describe("tax invoice requirement", () => {
     from.mockImplementation((table: string) => {
       if (table === "orders") return ordersChain;
       if (table === "workspaces") return workspaceChain;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -1157,6 +1176,7 @@ describe("tax invoice requirement", () => {
     from.mockImplementation((table: string) => {
       if (table === "orders") return ordersChain;
       if (table === "workspaces") return workspaceChain;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -1179,6 +1199,7 @@ describe("tax invoice requirement", () => {
     };
     from.mockImplementation((table: string) => {
       if (table === "orders") return chain;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 
@@ -1217,6 +1238,7 @@ describe("tax invoice requirement", () => {
       if (table === "order_services") return orderServices;
       if (table === "order_materials") return orderMaterials;
       if (table === "employees") return employees;
+      if (table === "order_employees") return query({ data: [], error: null });
       throw new Error(`Unexpected table ${table}`);
     });
 

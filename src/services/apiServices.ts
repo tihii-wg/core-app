@@ -35,8 +35,20 @@ function isMissingCatalogWarrantyColumn(error: SupabaseError) {
   );
 }
 
+let defaultTechnicianColumnSupported: boolean | null = null;
+
+function isMissingDefaultTechnicianColumn(error: SupabaseError) {
+  return (
+    /\bdefault_technician_id\b/i.test(error.message ?? "") &&
+    (error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(error.message ?? ""))
+  );
+}
+
 function mapServiceRow(row: Record<string, unknown>): Service {
   const warranty = catalogWarrantyFromDbRow(row);
+  const rawDefault = row.default_technician_id;
+  const defaultTechnicianId =
+    typeof rawDefault === "string" && rawDefault.trim() ? rawDefault.trim() : rawDefault === null ? null : undefined;
   return {
     id: String(row.id ?? ""),
     service_name: String(row.service_name ?? ""),
@@ -48,7 +60,14 @@ function mapServiceRow(row: Record<string, unknown>): Service {
     warrantyType: warranty.warrantyType,
     warrantyMonths: warranty.warrantyMonths,
     warrantyKm: warranty.warrantyKm,
+    ...(defaultTechnicianId !== undefined ? { defaultTechnicianId } : {}),
   };
+}
+
+function defaultTechnicianPayload(input: Pick<addNewServiceFormData, "defaultTechnicianId">) {
+  if (input.defaultTechnicianId === undefined || defaultTechnicianColumnSupported === false) return {};
+  const trimmed = typeof input.defaultTechnicianId === "string" ? input.defaultTechnicianId.trim() : "";
+  return { default_technician_id: trimmed || null };
 }
 
 function warrantyPayloadFromForm(input: Pick<addNewServiceFormData, "warrantyType" | "warrantyMonths" | "warrantyKm">) {
@@ -90,6 +109,7 @@ export async function createService(input: addNewServiceFormData, workspaceId: s
     description: input.description || null,
     category: input.category || null,
     status: input.status,
+    ...defaultTechnicianPayload(input),
   };
 
   const insertPayload =
@@ -99,11 +119,29 @@ export async function createService(input: addNewServiceFormData, workspaceId: s
 
   let { data, error } = await supabase.from("services").insert([insertPayload]).select(serviceSelect);
 
+  if (error && isMissingDefaultTechnicianColumn(error)) {
+    defaultTechnicianColumnSupported = false;
+    const withoutTech = { ...base };
+    delete (withoutTech as { default_technician_id?: unknown }).default_technician_id;
+    const retryPayload =
+      catalogWarrantyColumnsSupported === false || !warranty ? withoutTech : { ...withoutTech, ...warranty };
+    ({ data, error } = await supabase.from("services").insert([retryPayload]).select(serviceSelect));
+  }
+
   if (error && warranty && isMissingCatalogWarrantyColumn(error)) {
     catalogWarrantyColumnsSupported = false;
-    ({ data, error } = await supabase.from("services").insert([base]).select(serviceSelect));
+    const withoutWarranty = { ...base };
+    ({ data, error } = await supabase.from("services").insert([withoutWarranty]).select(serviceSelect));
+    if (error && isMissingDefaultTechnicianColumn(error)) {
+      defaultTechnicianColumnSupported = false;
+      delete (withoutWarranty as { default_technician_id?: unknown }).default_technician_id;
+      ({ data, error } = await supabase.from("services").insert([withoutWarranty]).select(serviceSelect));
+    }
   } else if (error == null && warranty && catalogWarrantyColumnsSupported == null) {
     catalogWarrantyColumnsSupported = true;
+  }
+  if (error == null && input.defaultTechnicianId !== undefined && defaultTechnicianColumnSupported == null) {
+    defaultTechnicianColumnSupported = true;
   }
 
   const permissionMessage = i18n.t("services.errors.createPermission");
@@ -146,6 +184,7 @@ export async function updateService(input: addNewServiceFormData, workspaceId: s
     description: input.description || null,
     category: input.category || null,
     status: input.status,
+    ...defaultTechnicianPayload(input),
   };
 
   const updatePayload =
@@ -161,17 +200,47 @@ export async function updateService(input: addNewServiceFormData, workspaceId: s
     .select(serviceSelect)
     .maybeSingle();
 
-  if (error && warranty && isMissingCatalogWarrantyColumn(error)) {
-    catalogWarrantyColumnsSupported = false;
+  if (error && isMissingDefaultTechnicianColumn(error)) {
+    defaultTechnicianColumnSupported = false;
+    const withoutTech = { ...base };
+    delete (withoutTech as { default_technician_id?: unknown }).default_technician_id;
+    const retryPayload =
+      catalogWarrantyColumnsSupported === false || !warranty ? withoutTech : { ...withoutTech, ...warranty };
     ({ data, error } = await supabase
       .from("services")
-      .update(base)
+      .update(retryPayload)
       .eq("id", input.serviceId)
       .eq("workspace_id", targetWorkspaceId)
       .select(serviceSelect)
       .maybeSingle());
+  }
+
+  if (error && warranty && isMissingCatalogWarrantyColumn(error)) {
+    catalogWarrantyColumnsSupported = false;
+    const withoutWarranty = { ...base };
+    ({ data, error } = await supabase
+      .from("services")
+      .update(withoutWarranty)
+      .eq("id", input.serviceId)
+      .eq("workspace_id", targetWorkspaceId)
+      .select(serviceSelect)
+      .maybeSingle());
+    if (error && isMissingDefaultTechnicianColumn(error)) {
+      defaultTechnicianColumnSupported = false;
+      delete (withoutWarranty as { default_technician_id?: unknown }).default_technician_id;
+      ({ data, error } = await supabase
+        .from("services")
+        .update(withoutWarranty)
+        .eq("id", input.serviceId)
+        .eq("workspace_id", targetWorkspaceId)
+        .select(serviceSelect)
+        .maybeSingle());
+    }
   } else if (error == null && warranty && catalogWarrantyColumnsSupported == null) {
     catalogWarrantyColumnsSupported = true;
+  }
+  if (error == null && input.defaultTechnicianId !== undefined && defaultTechnicianColumnSupported == null) {
+    defaultTechnicianColumnSupported = true;
   }
 
   const permissionMessage = i18n.t("services.errors.editPermission");

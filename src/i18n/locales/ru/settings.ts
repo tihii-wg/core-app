@@ -681,6 +681,7 @@ const settings: Messages<typeof en> = {
       vat: "НДС",
       sum: "Сумма",
       warranty: "Гарантия",
+      performer: "Исполнитель",
     },
     sources: {
       services: "Услуги",
@@ -802,6 +803,7 @@ const settings: Messages<typeof en> = {
       },
       staff: {
         assignee: { label: "Исполнитель" },
+        team: { label: "Команда" },
         acceptedBy: { label: "Принял", description: "Имя создателя заказа" },
         printedAt: { label: "Дата печати" },
       },

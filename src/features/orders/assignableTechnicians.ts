@@ -36,3 +36,26 @@ export function assignableTechnicians(employees: Employee[] | undefined, current
 
   return options.sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * Assignable technicians plus employees already referenced on the order (team chips, line performers)
+ * that are no longer assignable (e.g. inactive), so saved chips and selects keep a readable name.
+ */
+export function assignableTeamOptions(
+  employees: Employee[] | undefined,
+  currentAssigneeId: string | null | undefined,
+  referenced: Array<{ id: string | null | undefined; name?: string | null }>,
+): AssignableTechnician[] {
+  const options = assignableTechnicians(employees, currentAssigneeId);
+  const known = new Set(options.map((option) => option.id));
+
+  for (const entry of referenced) {
+    const id = entry.id?.trim() ?? "";
+    if (!id || known.has(id)) continue;
+    const employee = (employees ?? []).find((candidate) => String(candidate.id) === id);
+    options.push({ id, name: employee?.name?.trim() || entry.name?.trim() || id });
+    known.add(id);
+  }
+
+  return options.sort((a, b) => a.name.localeCompare(b.name));
+}

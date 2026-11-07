@@ -6,9 +6,19 @@ import type {
   OrderService,
   OrderServiceKind,
   OrderStatus,
+  OrderTeamMember,
   PaymentStatus,
   UpdateOrderDetails,
 } from "../lib/types";
+import {
+  isOrderServiceTechnicianSupported,
+  loadOrderTeamsByOrderIds,
+  mapOrderTeamDbError,
+  markOrderServiceTechnicianUnsupported,
+  resolveOrderIdsForEmployeeFilter,
+  syncOrderEmployees,
+  technicianIdOrNull,
+} from "./apiOrderTeam";
 import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
@@ -318,6 +328,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       warrantyMonths: mapWarrantyMonths(service.warrantyMonths) ?? null,
       warrantyDays: mapWarrantyMonths(service.warrantyDays) ?? null,
       warrantyKm: mapWarrantyMonths(service.warrantyKm) ?? null,
+      technicianId: technicianIdOrNull(service.technicianId),
     });
   }
 
@@ -426,6 +437,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
             ...(withKind && service.kind ? { kind: service.kind } : {}),
             ...(orderLineDiscountSupported && lineHasDiscount(service) ? { discount_type: service.discountType, discount_value: service.discountValue } : {}),
             ...orderServiceWarrantyInsertFields(service),
+            ...orderServiceTechnicianInsertFields(service),
           })),
         ),
       ),
@@ -433,7 +445,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     if (!orderLineDiscountSupported) writtenServiceLines = stampedLines.map(stripServiceDiscount);
 
     if (orderServicesError) {
-      // Retry without warranty columns when the schema has not been upgraded yet.
+      const teamMapped = mapOrderTeamDbError(orderServicesError);
+      // Retry without warranty / technician columns when the schema has not been upgraded yet.
       if (
         orderLineWarrantySupported !== false &&
         /warranty_months|warranty_days|warranty_km/i.test(orderServicesError.message ?? "") &&
@@ -453,6 +466,64 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
                 ...(orderLineDiscountSupported && lineHasDiscount(service)
                   ? { discount_type: service.discountType, discount_value: service.discountValue }
                   : {}),
+                ...orderServiceTechnicianInsertFields(service),
+              })),
+            ),
+          ),
+        );
+        if (retryError) {
+          if (isMissingOrderServiceTechnicianColumn(retryError)) {
+            markOrderServiceTechnicianUnsupported();
+            const { error: retryNoTech } = await withLineDiscountColumns(() =>
+              withOrderServiceKind((_columns, withKind) =>
+                supabase.from("order_services").insert(
+                  stampedLines.map((service) => ({
+                    order_id: order.id,
+                    service_id: service.id,
+                    service_name: service.name,
+                    price: service.price,
+                    quantity: service.quantity,
+                    ...(withKind && service.kind ? { kind: service.kind } : {}),
+                    ...(orderLineDiscountSupported && lineHasDiscount(service)
+                      ? { discount_type: service.discountType, discount_value: service.discountValue }
+                      : {}),
+                  })),
+                ),
+              ),
+            );
+            if (!retryNoTech) {
+              // ok
+            } else {
+              const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+              if (rollbackError) {
+                throw new Error(`${retryNoTech.message}; order rollback failed: ${rollbackError.message}`);
+              }
+              throw mapOrderTeamDbError(retryNoTech) ?? new Error(retryNoTech.message);
+            }
+          } else {
+            const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+            if (rollbackError) {
+              throw new Error(`${retryError.message}; order rollback failed: ${rollbackError.message}`);
+            }
+            throw mapOrderTeamDbError(retryError) ?? new Error(retryError.message);
+          }
+        }
+      } else if (isMissingOrderServiceTechnicianColumn(orderServicesError)) {
+        markOrderServiceTechnicianUnsupported();
+        const { error: retryError } = await withLineDiscountColumns(() =>
+          withOrderServiceKind((_columns, withKind) =>
+            supabase.from("order_services").insert(
+              stampedLines.map((service) => ({
+                order_id: order.id,
+                service_id: service.id,
+                service_name: service.name,
+                price: service.price,
+                quantity: service.quantity,
+                ...(withKind && service.kind ? { kind: service.kind } : {}),
+                ...(orderLineDiscountSupported && lineHasDiscount(service)
+                  ? { discount_type: service.discountType, discount_value: service.discountValue }
+                  : {}),
+                ...orderServiceWarrantyInsertFields(service),
               })),
             ),
           ),
@@ -462,16 +533,33 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
           if (rollbackError) {
             throw new Error(`${retryError.message}; order rollback failed: ${rollbackError.message}`);
           }
-          throw new Error(retryError.message);
+          throw mapOrderTeamDbError(retryError) ?? new Error(retryError.message);
         }
       } else {
         const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
         if (rollbackError) {
           throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
         }
-        throw new Error(orderServicesError.message);
+        throw teamMapped ?? new Error(orderServicesError.message);
       }
     }
+  }
+
+  try {
+    await syncOrderEmployees({
+      workspaceId: targetWorkspaceId,
+      orderId: String(order.id),
+      assignedEmployeeId: employeeId,
+      team: input.team,
+      lineTechnicianIds: stampedLines.map((line) => line.technicianId),
+    });
+  } catch (error) {
+    const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+    if (rollbackError) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message}; order rollback failed: ${rollbackError.message}`);
+    }
+    throw error;
   }
 
   let writtenMaterialLines: OrderMaterial[] = [];
@@ -540,7 +628,13 @@ type ResolvedServiceLine = {
   warrantyMonths?: number | null;
   warrantyDays?: number | null;
   warrantyKm?: number | null;
+  technicianId?: string | null;
 };
+
+function orderServiceTechnicianInsertFields(service: { technicianId?: string | null }) {
+  if (!isOrderServiceTechnicianSupported()) return {};
+  return { technician_id: technicianIdOrNull(service.technicianId) };
+}
 
 function orderServiceWarrantyInsertFields(service: Pick<ResolvedServiceLine, "warrantyMonths" | "warrantyDays" | "warrantyKm">) {
   if (orderLineWarrantySupported === false) return {};
@@ -624,6 +718,7 @@ type OrderServiceLine = {
   kind?: string | null;
   discount_type?: string | null;
   discount_value?: number | string | null;
+  technician_id?: string | null;
 };
 type OrderMaterialLine = {
   id?: string;
@@ -875,7 +970,15 @@ let orderLineWarrantySupported: boolean | null = null;
 function orderServiceColumns() {
   const discount = orderLineDiscountSupported ? ", discount_type, discount_value" : "";
   const warranty = orderLineWarrantySupported === false ? "" : ", warranty_months, warranty_days, warranty_km";
-  return `${orderServiceKindSupported ? `${orderServiceBaseColumns}, kind` : orderServiceBaseColumns}${discount}${warranty}`;
+  const technician = isOrderServiceTechnicianSupported() ? ", technician_id" : "";
+  return `${orderServiceKindSupported ? `${orderServiceBaseColumns}, kind` : orderServiceBaseColumns}${discount}${warranty}${technician}`;
+}
+
+function isMissingOrderServiceTechnicianColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/\btechnician_id\b/i.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
 }
 
 function isMissingOrderServiceKindColumn(error: { code?: string; message?: string } | null | undefined) {
@@ -890,8 +993,8 @@ async function withOrderServiceKind<T extends { error: { code?: string; message?
   run: (columns: string, withKind: boolean) => PromiseLike<T>,
 ): Promise<T> {
   const first = await run(orderServiceColumns(), orderServiceKindSupported);
-  if (first.error && /warranty_months|warranty_days|warranty_km/i.test(first.error.message ?? "") && (first.error.code === "42703" || first.error.code === "PGRST204")) {
-    orderLineWarrantySupported = false;
+  if (first.error && isMissingOrderServiceTechnicianColumn(first.error)) {
+    markOrderServiceTechnicianUnsupported();
     const retry = await run(orderServiceColumns(), orderServiceKindSupported);
     if (orderServiceKindSupported && isMissingOrderServiceKindColumn(retry.error)) {
       orderServiceKindSupported = false;
@@ -899,9 +1002,27 @@ async function withOrderServiceKind<T extends { error: { code?: string; message?
     }
     return retry;
   }
+  if (first.error && /warranty_months|warranty_days|warranty_km/i.test(first.error.message ?? "") && (first.error.code === "42703" || first.error.code === "PGRST204")) {
+    orderLineWarrantySupported = false;
+    const retry = await run(orderServiceColumns(), orderServiceKindSupported);
+    if (orderServiceKindSupported && isMissingOrderServiceKindColumn(retry.error)) {
+      orderServiceKindSupported = false;
+      return run(orderServiceColumns(), false);
+    }
+    if (retry.error && isMissingOrderServiceTechnicianColumn(retry.error)) {
+      markOrderServiceTechnicianUnsupported();
+      return run(orderServiceColumns(), orderServiceKindSupported);
+    }
+    return retry;
+  }
   if (orderServiceKindSupported && isMissingOrderServiceKindColumn(first.error)) {
     orderServiceKindSupported = false;
-    return run(orderServiceColumns(), false);
+    const retry = await run(orderServiceColumns(), false);
+    if (retry.error && isMissingOrderServiceTechnicianColumn(retry.error)) {
+      markOrderServiceTechnicianUnsupported();
+      return run(orderServiceColumns(), false);
+    }
+    return retry;
   }
   if (first.error == null && orderLineWarrantySupported == null) orderLineWarrantySupported = true;
   return first;
@@ -1022,25 +1143,35 @@ function mapWarrantyMonths(value: unknown): number | null | undefined {
   return Math.floor(n);
 }
 
-function mapServiceLines(serviceLines: OrderServiceLine[]): OrderService[] {
-  return serviceLines.map((line) => ({
-    ...(line.id ? { id: String(line.id) } : {}),
-    serviceId: String(line.service_id ?? ""),
-    serviceName: String(line.service_name ?? ""),
-    price: Number(line.price ?? 0),
-    quantity: Number(line.quantity ?? 1),
-    ...(toOrderServiceKind(line.kind) ? { kind: toOrderServiceKind(line.kind) } : {}),
-    ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
-    ...(mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) !== undefined
-      ? { warrantyMonths: mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) }
-      : {}),
-    ...(mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) !== undefined
-      ? { warrantyDays: mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) }
-      : {}),
-    ...(mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) !== undefined
-      ? { warrantyKm: mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) }
-      : {}),
-  }));
+function mapServiceLines(
+  serviceLines: OrderServiceLine[],
+  employees: Array<{ id: string; name: string }> = [],
+): OrderService[] {
+  const nameById = new Map(employees.map((employee) => [String(employee.id), employee.name?.trim() || String(employee.id)]));
+  return serviceLines.map((line) => {
+    const technicianId =
+      typeof line.technician_id === "string" && line.technician_id.trim() ? line.technician_id.trim() : null;
+    return {
+      ...(line.id ? { id: String(line.id) } : {}),
+      serviceId: String(line.service_id ?? ""),
+      serviceName: String(line.service_name ?? ""),
+      price: Number(line.price ?? 0),
+      quantity: Number(line.quantity ?? 1),
+      ...(toOrderServiceKind(line.kind) ? { kind: toOrderServiceKind(line.kind) } : {}),
+      ...(toLineDiscountType(line.discount_type) ? { discountType: toLineDiscountType(line.discount_type), discountValue: toDiscountValue(line.discount_value) } : {}),
+      ...(mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) !== undefined
+        ? { warrantyMonths: mapWarrantyMonths((line as { warranty_months?: unknown }).warranty_months) }
+        : {}),
+      ...(mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) !== undefined
+        ? { warrantyDays: mapWarrantyMonths((line as { warranty_days?: unknown }).warranty_days) }
+        : {}),
+      ...(mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) !== undefined
+        ? { warrantyKm: mapWarrantyMonths((line as { warranty_km?: unknown }).warranty_km) }
+        : {}),
+      technicianId,
+      ...(technicianId ? { technicianName: nameById.get(technicianId) ?? "" } : { technicianName: "" }),
+    };
+  });
 }
 
 function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
@@ -1226,6 +1357,7 @@ function toOrder(
   memberNames: Map<string, string> = new Map(),
   materialLines: OrderMaterialLine[] = [],
   customStatuses: Map<string, { name: string; color: string | null }> = new Map(),
+  team: OrderTeamMember[] = [],
 ): Order {
   const employeeId = typeof row.employee_id === "string" ? row.employee_id.trim() : "";
   const legacyAssignedTo = typeof row.assigned_to === "string" ? row.assigned_to.trim() : "";
@@ -1239,7 +1371,7 @@ function toOrder(
   const isPaid = Boolean(row.is_paid);
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
   const client = clientFromRow(row.clients);
-  const services = mapServiceLines(serviceLines);
+  const services = mapServiceLines(serviceLines, employees);
   const materials = mapMaterialLines(materialLines);
   const totalPrice = Number(row.total_price ?? 0);
   // orders.discount_total (crm_ro_v1) is authoritative; without it fall back to what the discounted lines add up to.
@@ -1279,6 +1411,7 @@ function toOrder(
     // Canonical: employees.id via orders.employee_id; legacy assigned_to only when employee_id is empty.
     assignedEmployeeId: employee?.id ?? fallbackAssigneeId,
     assignedEmployeeName: employee?.name || memberNames.get(legacyAssignedTo) || "",
+    team,
     deadline: formatOrderDate(row.deadline),
     totalPrice,
     subtotal: roundMoney(totalPrice + discountTotal),
@@ -1347,20 +1480,38 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     .filter(Boolean);
   const customStatuses = new Map<string, { name: string; color: string | null }>();
 
+  let teamsByOrderId = new Map<string, OrderTeamMember[]>();
+
   if (orderIds.length > 0) {
-    const [{ data: lines, error: linesError }, { data: materials, error: materialsError }] = await Promise.all([
+    const [{ data: lines, error: linesError }, { data: materials, error: materialsError }, teams] = await Promise.all([
       withLineDiscountColumns(() =>
         withOrderServiceKind((columns) =>
           supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
         ),
       ),
       withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true })),
+      loadOrderTeamsByOrderIds(workspaceId, orderIds, employees ?? []),
     ]);
 
-    if (linesError) throw new Error(linesError.message);
+    if (linesError) {
+      if (isMissingOrderServiceTechnicianColumn(linesError)) {
+        markOrderServiceTechnicianUnsupported();
+        const retry = await withLineDiscountColumns(() =>
+          withOrderServiceKind((columns) =>
+            supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
+          ),
+        );
+        if (retry.error) throw new Error(retry.error.message);
+        serviceLines = (retry.data ?? []) as unknown as OrderServiceLine[];
+      } else {
+        throw new Error(linesError.message);
+      }
+    } else {
+      serviceLines = (lines ?? []) as unknown as OrderServiceLine[];
+    }
     if (materialsError) throw new Error(materialsError.message);
-    serviceLines = (lines ?? []) as unknown as OrderServiceLine[];
     materialLines = (materials ?? []) as unknown as OrderMaterialLine[];
+    teamsByOrderId = teams;
   }
 
   if (customStatusIds.length > 0) {
@@ -1378,6 +1529,7 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
       memberNames,
       materialLines.filter((line) => line.order_id === row.id),
       customStatuses,
+      teamsByOrderId.get(String(row.id)) ?? [],
     ),
   );
 }
@@ -1453,7 +1605,16 @@ async function applyOrdersListFilters(
   }
 
   const assignee = employeeId === "all" ? "" : employeeId.trim();
-  if (assignee) query = query.eq("employee_id", assignee);
+  if (assignee) {
+    // Match main responsible OR team member OR line performer (two small lookups, then .or).
+    const { teamOrderIds, lineOrderIds } = await resolveOrderIdsForEmployeeFilter(workspaceId, assignee);
+    const relatedIds = [...new Set([...teamOrderIds, ...lineOrderIds])].filter(Boolean);
+    if (relatedIds.length > 0) {
+      query = query.or(`employee_id.eq.${assignee},id.in.(${relatedIds.join(",")})`);
+    } else {
+      query = query.eq("employee_id", assignee);
+    }
+  }
 
   const term = searchTerm(search);
   if (term) query = query.or(await orderSearchFilter(workspaceId, term));
@@ -2553,6 +2714,7 @@ export async function updateOrder(
     vin = "",
     description,
     assignedEmployeeId,
+    team,
     deadline,
     services,
     materials,
@@ -2728,6 +2890,19 @@ export async function updateOrder(
     summary = { ...(summary ?? {}), ...patch };
   }
 
+  const lineTechnicianIds =
+    services !== undefined
+      ? services.map((service) => service.technicianId)
+      : lines.map((line) => (typeof line.technician_id === "string" ? line.technician_id : null));
+
+  await syncOrderEmployees({
+    workspaceId,
+    orderId,
+    assignedEmployeeId: employeeId,
+    team,
+    lineTechnicianIds,
+  });
+
   const { data: refreshed, error: refreshError } = await supabase.from("orders").select(orderColumns).eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle();
   if (refreshError) throw new Error(refreshError.message);
 
@@ -2743,22 +2918,31 @@ export async function updateOrder(
     workspaceId,
     [...new Set([legacyAssignedTo, createdById].filter(Boolean))],
   );
-  return toOrder({ ...row, ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) }, employees ?? [], lines, memberNames, materialLines.map((line) => ({
-    id: line.id,
-    order_id: orderId,
-    inventory_item_id: line.inventoryItemId ?? null,
-    item_name: line.itemName,
-    price: line.price,
-    quantity: line.quantity,
-    quantity_issued: line.quantityIssued,
-    quantity_returned: line.quantityReturned,
-    supply_source: line.supplySource ?? null,
-    discount_type: line.discountType ?? null,
-    discount_value: line.discountValue ?? null,
-    warranty_months: line.warrantyMonths ?? null,
-    warranty_days: line.warrantyDays ?? null,
-    warranty_km: line.warrantyKm ?? null,
-  })));
+  const teamsByOrderId = await loadOrderTeamsByOrderIds(workspaceId, [orderId], employees ?? []);
+  return toOrder(
+    { ...row, ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) },
+    employees ?? [],
+    lines,
+    memberNames,
+    materialLines.map((line) => ({
+      id: line.id,
+      order_id: orderId,
+      inventory_item_id: line.inventoryItemId ?? null,
+      item_name: line.itemName,
+      price: line.price,
+      quantity: line.quantity,
+      quantity_issued: line.quantityIssued,
+      quantity_returned: line.quantityReturned,
+      supply_source: line.supplySource ?? null,
+      discount_type: line.discountType ?? null,
+      discount_value: line.discountValue ?? null,
+      warranty_months: line.warrantyMonths ?? null,
+      warranty_days: line.warrantyDays ?? null,
+      warranty_km: line.warrantyKm ?? null,
+    })),
+    new Map(),
+    teamsByOrderId.get(orderId) ?? [],
+  );
 }
 
 function serviceLineToMoney(line: OrderServiceLine): MoneyLine {
@@ -2790,6 +2974,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
   const kept: OrderServiceLine[] = [];
   const unsaved: OrderService[] = [];
   const kindChanges: { id: string; kind: OrderServiceKind | null }[] = [];
+  const technicianChanges: { id: string; technicianId: string | null }[] = [];
 
   for (const service of services) {
     const index = service.id ? unclaimed.findIndex((line) => line.id === service.id) : -1;
@@ -2799,6 +2984,13 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       // `kind` undefined = the caller does not manage kinds (keep whatever is stored).
       if (service.kind !== undefined && orderServiceKindSupported && (toOrderServiceKind(line.kind) ?? null) !== (service.kind ?? null)) {
         kindChanges.push({ id: String(line.id), kind: service.kind ?? null });
+      }
+      if (service.technicianId !== undefined && isOrderServiceTechnicianSupported()) {
+        const nextTech = technicianIdOrNull(service.technicianId);
+        const prevTech = typeof line.technician_id === "string" && line.technician_id.trim() ? line.technician_id.trim() : null;
+        if (nextTech !== prevTech) {
+          technicianChanges.push({ id: String(line.id), technicianId: nextTech });
+        }
       }
     } else unsaved.push(service);
   }
@@ -2815,6 +3007,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     warranty_months?: number | null;
     warranty_days?: number | null;
     warranty_km?: number | null;
+    technician_id?: string | null;
   }[] = [];
 
   for (const service of unsaved) {
@@ -2822,7 +3015,15 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
 
     const identical = unclaimed.findIndex((line) => isSameService(line, service) && Number(line.price) === service.price && Number(line.quantity) === service.quantity);
     if (identical >= 0) {
-      kept.push(...unclaimed.splice(identical, 1));
+      const [matched] = unclaimed.splice(identical, 1);
+      kept.push(matched);
+      if (service.technicianId !== undefined && isOrderServiceTechnicianSupported()) {
+        const nextTech = technicianIdOrNull(service.technicianId);
+        const prevTech = typeof matched.technician_id === "string" && matched.technician_id.trim() ? matched.technician_id.trim() : null;
+        if (nextTech !== prevTech) {
+          technicianChanges.push({ id: String(matched.id), technicianId: nextTech });
+        }
+      }
       continue;
     }
     if ([...kept, ...newLines].some((line) => isSameService(line, service))) continue;
@@ -2841,6 +3042,7 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
       ...(service.kind ? { kind: service.kind } : {}),
       ...(stamped && lineHasDiscount(stamped) ? { discount_type: stamped.discountType as LineDiscountType, discount_value: Number(stamped.discountValue) } : {}),
       ...orderServiceWarrantyInsertFields(service),
+      ...orderServiceTechnicianInsertFields(service),
     });
   }
 
@@ -2862,8 +3064,31 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
           .select(columns),
       ),
     );
-    if (insertError) throw new Error(insertError.message);
-    inserted = (insertedLines ?? []) as unknown as OrderServiceLine[];
+    if (insertError) {
+      if (isMissingOrderServiceTechnicianColumn(insertError)) {
+        markOrderServiceTechnicianUnsupported();
+        const { data: retryLines, error: retryError } = await withLineDiscountColumns(() =>
+          withOrderServiceKind((columns, withKind) =>
+            supabase
+              .from("order_services")
+              .insert(
+                newLines.map(({ kind, discount_type, discount_value, technician_id: _technicianId, ...rest }) => ({
+                  ...rest,
+                  ...(withKind && kind ? { kind } : {}),
+                  ...(orderLineDiscountSupported && discount_type ? { discount_type, discount_value } : {}),
+                })),
+              )
+              .select(columns),
+          ),
+        );
+        if (retryError) throw mapOrderTeamDbError(retryError) ?? new Error(retryError.message);
+        inserted = (retryLines ?? []) as unknown as OrderServiceLine[];
+      } else {
+        throw mapOrderTeamDbError(insertError) ?? new Error(insertError.message);
+      }
+    } else {
+      inserted = (insertedLines ?? []) as unknown as OrderServiceLine[];
+    }
   }
 
   if (removedIds.length > 0) {
@@ -2898,6 +3123,24 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     }
     const line = kept.find((item) => item.id === change.id);
     if (line) line.kind = change.kind;
+  }
+
+  for (const change of technicianChanges) {
+    if (!isOrderServiceTechnicianSupported()) break;
+    const { error: techError } = await supabase
+      .from("order_services")
+      .update({ technician_id: change.technicianId })
+      .eq("id", change.id)
+      .eq("order_id", orderId);
+    if (techError) {
+      if (isMissingOrderServiceTechnicianColumn(techError)) {
+        markOrderServiceTechnicianUnsupported();
+        break;
+      }
+      throw mapOrderTeamDbError(techError) ?? new Error(techError.message);
+    }
+    const line = kept.find((item) => item.id === change.id);
+    if (line) line.technician_id = change.technicianId;
   }
 
   // Per-line warranty on kept + newly inserted lines. Skip when the form omitted warranty keys

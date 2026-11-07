@@ -7,6 +7,10 @@ vi.mock("./useUpdateService", () => ({
   default: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+vi.mock("../employees/useGetEmployees", () => ({
+  default: () => ({ employees: [], error: null, isLoading: false }),
+}));
+
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({
     currency: "MDL",

@@ -13,7 +13,7 @@ import type { WorkspaceWarrantyDefaults } from "../orders/warranty";
  */
 export function catalogServiceToOrderLine(
   service: Pick<Service, "id" | "service_name" | "service_price"> &
-    Partial<Pick<Service, "warrantyType" | "warrantyMonths" | "warrantyKm">> & {
+    Partial<Pick<Service, "warrantyType" | "warrantyMonths" | "warrantyKm" | "defaultTechnicianId">> & {
       warranty_type?: unknown;
       warranty_months?: unknown;
       warranty_km?: unknown;
@@ -25,6 +25,10 @@ export function catalogServiceToOrderLine(
 ): OrderService {
   const catalog = catalogWarrantyFromService(service);
   const warranty = resolveOrderLineWarrantyForKind(catalog, workspaceDefaults ?? null, "service", orderUnit);
+  const defaultTechnicianId =
+    typeof service.defaultTechnicianId === "string" && service.defaultTechnicianId.trim()
+      ? service.defaultTechnicianId.trim()
+      : null;
 
   return {
     serviceId: service.id,
@@ -34,6 +38,7 @@ export function catalogServiceToOrderLine(
     warrantyMonths: warranty.warrantyMonths,
     warrantyDays: warranty.warrantyDays,
     warrantyKm: warranty.warrantyKm,
+    ...(defaultTechnicianId ? { technicianId: defaultTechnicianId } : {}),
   };
 }
 

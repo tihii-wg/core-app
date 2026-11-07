@@ -50,6 +50,19 @@ describe("catalogServiceToOrderLine", () => {
   it("treats a missing catalog price as zero on the snapshot", () => {
     expect(catalogServiceToOrderLine({ id: "svc-2", service_name: "Wash", service_price: undefined as unknown as number }).price).toBe(0);
   });
+
+  it("prefills the line performer from the catalog default technician", () => {
+    expect(
+      catalogServiceToOrderLine({
+        id: "svc-1",
+        service_name: "Oil change",
+        service_price: 40,
+        defaultTechnicianId: "tech-ivan",
+      }),
+    ).toMatchObject({
+      technicianId: "tech-ivan",
+    });
+  });
 });
 
 describe("order line totals", () => {

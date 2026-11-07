@@ -159,6 +159,17 @@ describe("template variable registry", () => {
     expect(out).toMatch(/MDL/);
   });
 
+  it("renders #КОМАНДА as comma-separated team names", () => {
+    const ctx = fullContext();
+    ctx.order = orderFixture({
+      team: [
+        { employeeId: "e1", name: "Ivan", role: "lead" },
+        { employeeId: "e2", name: "Petr", role: "helper" },
+      ],
+    });
+    expect(applyTemplateVariables("#КОМАНДА", ctx, { locale: "en", currency: "MDL" })).toBe("Ivan, Petr");
+  });
+
   it("keeps the original four tokens working via applyPrintVariables", () => {
     const out = applyPrintVariables("<p>#ЗАКАЗ-НОМЕР / #КЛИЕНТ-ИМЯ / #СТАТУС / #ВАЛЮТА / #ДРУГОЕ</p>", {
       orderNumber: "ORD-1",

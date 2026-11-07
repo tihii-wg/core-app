@@ -60,7 +60,18 @@ export type FieldRef = {
   token?: string;
 };
 
-export type TableColumnKey = "index" | "name" | "sku" | "qty" | "unit" | "price" | "discount" | "vat" | "sum" | "warranty";
+export type TableColumnKey =
+  | "index"
+  | "name"
+  | "sku"
+  | "qty"
+  | "unit"
+  | "price"
+  | "discount"
+  | "vat"
+  | "sum"
+  | "warranty"
+  | "performer";
 export type TableColumn = { key: TableColumnKey; label: string; enabled: boolean; widthPercent?: number };
 export type TableSource =
   | "services"
@@ -180,7 +191,19 @@ const LEAF_KINDS = new Set([
   "styleHeader",
   "styleFooter",
 ]);
-const TABLE_KEYS = new Set<TableColumnKey>(["index", "name", "sku", "qty", "unit", "price", "discount", "vat", "sum", "warranty"]);
+const TABLE_KEYS = new Set<TableColumnKey>([
+  "index",
+  "name",
+  "sku",
+  "qty",
+  "unit",
+  "price",
+  "discount",
+  "vat",
+  "sum",
+  "warranty",
+  "performer",
+]);
 const TOTAL_KEYS = new Set<TotalsRowKey>(["servicesSum", "materialsSum", "discount", "vat", "total", "paid", "remaining", "totalWords"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -488,6 +511,7 @@ type LineRow = {
   discount: string;
   sum: number;
   warranty: string;
+  performer: string;
 };
 
 function serviceRows(order: Order | null): LineRow[] {
@@ -505,6 +529,7 @@ function serviceRows(order: Order | null): LineRow[] {
           : "",
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
+    performer: line.technicianName?.trim() || "",
   }));
 }
 
@@ -523,6 +548,7 @@ function materialRows(order: Order | null): LineRow[] {
           : "",
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
+    performer: "",
   }));
 }
 
@@ -536,6 +562,7 @@ function invoiceItemRows(items: InvoiceItem[]): LineRow[] {
     discount: "",
     sum: lineTotal(item),
     warranty: "",
+    performer: "",
   }));
 }
 
@@ -597,7 +624,10 @@ function renderTable(block: TableBlock, ctx: PrintContext, env: RenderEnv) {
     const rowBg = zebra && index % 2 === 1 && zebraBg ? `background:${zebraBg}` : "";
     html += `<tr${rowBg ? ` style="${rowBg}"` : ""}>`;
     for (const column of columns) {
-      const align = column.key === "name" || column.key === "sku" || column.key === "warranty" ? "left" : "right";
+      const align =
+        column.key === "name" || column.key === "sku" || column.key === "warranty" || column.key === "performer"
+          ? "left"
+          : "right";
       let value = "";
       switch (column.key) {
         case "index":
@@ -629,6 +659,9 @@ function renderTable(block: TableBlock, ctx: PrintContext, env: RenderEnv) {
           break;
         case "warranty":
           value = escapeHtmlText(row.warranty);
+          break;
+        case "performer":
+          value = escapeHtmlText(row.performer);
           break;
       }
       html += `<td style="${cellBorder};padding:4px 6px;text-align:${align}">${value}</td>`;

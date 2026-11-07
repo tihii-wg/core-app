@@ -28,6 +28,7 @@ export function OrderColumnsMenu({ visibleColumns, onVisibleColumnsChange, devic
     status: t("common.status"),
     createdBy: t("orders.table.createdBy"),
     employee: t("orders.table.assigned"),
+    team: t("orders.table.team"),
     deadline: t("orders.table.deadline"),
     total: t("common.total"),
   };

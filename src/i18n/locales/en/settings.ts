@@ -676,6 +676,7 @@ export default {
       vat: "VAT",
       sum: "Sum",
       warranty: "Warranty",
+      performer: "Performer",
     },
     sources: {
       services: "Services",
@@ -797,6 +798,7 @@ export default {
       },
       staff: {
         assignee: { label: "Assignee" },
+        team: { label: "Team" },
         acceptedBy: { label: "Accepted by", description: "Order creator display name" },
         printedAt: { label: "Print date" },
       },

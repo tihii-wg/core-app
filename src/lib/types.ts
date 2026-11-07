@@ -82,6 +82,20 @@ export type VehicleInput = {
   fuelType?: string | null;
 };
 
+/** Role of a member on `order_employees` (lead = responsible, helper = assistant). */
+export type OrderTeamRole = "lead" | "helper";
+
+/** Form/API input for an order team member (no resolved name). */
+export type OrderTeamMemberInput = {
+  employeeId: string;
+  role: OrderTeamRole;
+};
+
+/** Hydrated order team member for list/detail display. */
+export type OrderTeamMember = OrderTeamMemberInput & {
+  name: string;
+};
+
 export interface Order {
   id: string;
   workspace_id?: string;
@@ -133,6 +147,11 @@ export interface Order {
   /** employees.id from orders.employee_id (legacy assigned_to only when employee_id is empty). */
   assignedEmployeeId: string;
   assignedEmployeeName: string;
+  /**
+   * Order team from `order_employees` (lead/helper). Empty when the table is absent or no rows.
+   * The main responsible employee is also listed here with role `lead` when present.
+   */
+  team?: OrderTeamMember[];
   deadline: string;
   /** Final (net) amount = subtotal - discountTotal; what `orders.total_price` stores. */
   totalPrice: number;
@@ -185,6 +204,8 @@ export interface addNewOrderFormData {
   services: OrderService[];
   materials: OrderMaterial[];
   assignedEmployeeId: string;
+  /** Extra team members (lead/helper). Line technicians and the assignee are merged on save. */
+  team?: OrderTeamMemberInput[];
   deadline: string;
   status: OrderStatus;
   isPaid: boolean;
@@ -213,6 +234,8 @@ export type CreateOrderInput = {
   /** When omitted or empty, the order is created with no material lines. */
   materials?: OrderMaterial[];
   assignedEmployeeId?: string;
+  /** Extra team members (lead/helper). Line technicians and the assignee are merged on save. */
+  team?: OrderTeamMemberInput[];
   deadline?: string;
 };
 
@@ -235,6 +258,7 @@ export type EditOrderFormData = {
   currentMileage?: string;
   description: string;
   assignedEmployeeId: string;
+  team?: OrderTeamMemberInput[];
   deadline: string;
   services: OrderService[];
   materials: OrderMaterial[];
@@ -267,6 +291,8 @@ export interface addNewServiceFormData {
   warrantyType?: CatalogWarrantyType | null;
   warrantyMonths?: number | null;
   warrantyKm?: number | null;
+  /** employees.id — optional default line performer when this catalog service is added to an order. */
+  defaultTechnicianId?: string | null;
 }
 
 export type EditServiceFormData = {
@@ -278,6 +304,7 @@ export type EditServiceFormData = {
   warrantyType?: CatalogWarrantyType | null;
   warrantyMonths?: number | null;
   warrantyKm?: number | null;
+  defaultTechnicianId?: string | null;
 };
 
 export type InventoryStockStatus = "in_stock" | "low_stock" | "out_of_stock";
@@ -358,6 +385,8 @@ export interface Service {
   warrantyType?: CatalogWarrantyType | null;
   warrantyMonths?: number | null;
   warrantyKm?: number | null;
+  /** employees.id — optional default performer prefilled onto new order lines. */
+  defaultTechnicianId?: string | null;
 }
 
 /** List/detail invoice fields aligned with public.invoices. */
@@ -522,6 +551,10 @@ export type OrderService = {
   warrantyDays?: number | null;
   /** Mileage allowance from warranty start. Null/absent = no mileage limit (or column missing). */
   warrantyKm?: number | null;
+  /** employees.id — performer of this work/service line. Null/absent = unassigned (or column missing). */
+  technicianId?: string | null;
+  /** Resolved employee display name for `technicianId`. */
+  technicianName?: string;
 };
 
 /** How an order material line is sourced. Catalog lines link to inventory_items; others are order-only snapshots. */

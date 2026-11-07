@@ -680,6 +680,7 @@ const settings: Messages<typeof en> = {
       vat: "TVA",
       sum: "Sumă",
       warranty: "Garanție",
+      performer: "Executant",
     },
     sources: {
       services: "Servicii",
@@ -801,6 +802,7 @@ const settings: Messages<typeof en> = {
       },
       staff: {
         assignee: { label: "Executant" },
+        team: { label: "Echipă" },
         acceptedBy: { label: "Recepționat de", description: "Numele creatorului comenzii" },
         printedAt: { label: "Data tipăririi" },
       },

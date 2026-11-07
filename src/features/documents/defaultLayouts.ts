@@ -53,6 +53,7 @@ const lineColumns: TableColumn[] = [
   col("vat", "VAT", false, 10),
   col("sum", "Sum", true, 12),
   col("warranty", "Warranty", false, 10),
+  col("performer", "Performer", false, 12),
 ];
 
 const invoiceLineColumns: TableColumn[] = [

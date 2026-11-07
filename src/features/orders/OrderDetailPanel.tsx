@@ -45,8 +45,10 @@ import { isCatalogOrderMaterial, resolveMaterialSupplySource } from "../inventor
 import useGetEmployees from "../employees/useGetEmployees";
 import { isOrderOverdue } from "./orderVisibility";
 import { localDateKey } from "../../pages/dashboardStats";
-import { assignableTechnicians } from "./assignableTechnicians";
+import { assignableTeamOptions, assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
+import OrderTeamSelect from "./OrderTeamSelect";
+import type { OrderTeamMemberInput } from "./orderTeam";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useDeleteOrder } from "./useDeleteOrder";
 import { useUpdateOrderTaxInvoiceNumber } from "./useGetOrders";
@@ -156,6 +158,10 @@ export default function OrderDetailPanel({
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
+  const teamOptions = assignableTeamOptions(employees, selectedOrder?.assignedEmployeeId, [
+    ...(selectedOrder?.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
+    ...(selectedOrder?.services ?? []).map((line) => ({ id: line.technicianId, name: line.technicianName })),
+  ]);
   const { payments, isLoading: paymentsLoading } = useGetPayments();
   const paymentBalance = selectedOrder ? orderPaymentBalance(selectedOrder, payments) : null;
   const deleteOrder = useDeleteOrder();
@@ -229,6 +235,33 @@ export default function OrderDetailPanel({
         vin: selectedOrder.vin,
         description: selectedOrder.description,
         assignedEmployeeId,
+        // Keep helpers (omitting team would reset it to assignee + line performers); the previous assignee is replaced.
+        team: (selectedOrder.team ?? [])
+          .filter((member) => member.employeeId !== selectedOrder.assignedEmployeeId)
+          .map((member) => ({ employeeId: member.employeeId, role: member.role })),
+        deadline: selectedOrder.deadline,
+      });
+      onOrderUpdated(updated);
+    } catch {
+      return;
+    }
+  }
+
+  async function handleTeamChange(team: OrderTeamMemberInput[]) {
+    if (!selectedOrder || isAssigneeUpdating) return;
+    if (closedContentLocked) return;
+
+    try {
+      // `services` is omitted so saved lines stay untouched; the API merges line performers into the team.
+      const updated = await updateOrder({
+        orderId: selectedOrder.id,
+        vehicleId: selectedOrder.vehicleId ?? undefined,
+        device: selectedOrder.device,
+        carNumber: selectedOrder.carNumber,
+        vin: selectedOrder.vin,
+        description: selectedOrder.description,
+        assignedEmployeeId: selectedOrder.assignedEmployeeId,
+        team,
         deadline: selectedOrder.deadline,
       });
       onOrderUpdated(updated);
@@ -428,6 +461,15 @@ export default function OrderDetailPanel({
               />
             </div>
 
+            <OrderTeamSelect
+              id="order-team"
+              label={t("orders.team.title")}
+              value={(selectedOrder.team ?? []).map((member) => ({ employeeId: member.employeeId, role: member.role }))}
+              options={teamOptions}
+              disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
+              onChange={handleTeamChange}
+            />
+
             {hasServiceLines ? (
               <div className="overflow-hidden rounded-lg border border-border">
                 <table className="w-full text-sm">
@@ -452,6 +494,11 @@ export default function OrderDetailPanel({
                                 </StatusBadge>
                               ) : null}
                             </p>
+                            {line.technicianName?.trim() ? (
+                              <p className="text-xs text-muted-foreground">
+                                {t("orders.team.performer")}: {line.technicianName}
+                              </p>
+                            ) : null}
                             <OrderLineWarrantyBadge
                               activated={Boolean(selectedOrder.closedAt)}
                               mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}

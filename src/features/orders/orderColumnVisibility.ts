@@ -5,6 +5,7 @@ export const ORDER_TOGGLEABLE_COLUMNS = [
   "status",
   "createdBy",
   "employee",
+  "team",
   "deadline",
   "total",
 ] as const;

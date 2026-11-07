@@ -35,6 +35,7 @@ import { useCreateInvoice } from "../invoices/useCreateInvoice";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderCard } from "./OrderCard";
+import OrderTeamAvatars from "./OrderTeamAvatars";
 import { OrderColumnsMenu } from "./OrderColumnsMenu";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { OrdersBoard } from "./OrdersBoard";
@@ -296,6 +297,11 @@ export function Orders() {
           {order.assignedEmployeeName || t("orders.detail.unassigned")}
         </span>
       ),
+    },
+    {
+      key: "team",
+      header: t("orders.table.team"),
+      cell: (order) => <OrderTeamAvatars team={order.team ?? []} />,
     },
     {
       key: "deadline",

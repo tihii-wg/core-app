@@ -16,6 +16,10 @@ import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
 import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults, type CatalogWarrantyDefaults } from "../orders/catalogWarranty";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import useUpdateService from "./useUpdateService";
+import useGetEmployees from "../employees/useGetEmployees";
+import { assignableTechnicians } from "../orders/assignableTechnicians";
+
+const NO_DEFAULT_PERFORMER = "__none__";
 
 function warrantyFromService(service: Service): CatalogWarrantyDefaults {
   if (service.warrantyType == null && service.warrantyMonths == null && service.warrantyKm == null) {
@@ -45,6 +49,8 @@ function asCategory(value: string | null | undefined): serviceCategory | "" {
 export default function UpdateServiceForm({ service, setEditModalOpen }: EditServiceFormProps) {
   const { t } = useTranslation();
   const { mutateAsync: updateService } = useUpdateService();
+  const { employees } = useGetEmployees();
+  const technicianOptions = assignableTechnicians(employees, service.defaultTechnicianId);
   const { currency } = useWorkspaceMoney();
   const { workflow } = useIndustryWorkflow();
   const copy = industryServiceCopy(workflow);
@@ -66,6 +72,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
       category: asCategory(service.category) || defaultServiceCategory(workflow),
       price: service.service_price,
       description: service.description ?? "",
+      defaultTechnicianId: service.defaultTechnicianId ?? "",
     },
   });
 
@@ -78,6 +85,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
       category: asCategory(service.category) || defaultServiceCategory(workflow),
       price: service.service_price,
       description: service.description ?? "",
+      defaultTechnicianId: service.defaultTechnicianId ?? "",
     });
     setWarranty(warrantyFromService(service));
     setWarrantyError(null);
@@ -88,6 +96,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
     service.category,
     service.service_price,
     service.description,
+    service.defaultTechnicianId,
     service.warrantyType,
     service.warrantyMonths,
     service.warrantyKm,
@@ -207,6 +216,33 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
         <div className="space-y-1.5">
           <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
           <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-service-default-technician">{t("orders.team.defaultPerformer")}</Label>
+          <Controller
+            name="defaultTechnicianId"
+            control={control}
+            render={({ field }) => (
+              <Select
+                value={field.value || NO_DEFAULT_PERFORMER}
+                onValueChange={(next) => field.onChange(next === NO_DEFAULT_PERFORMER ? "" : next)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="edit-service-default-technician" className="w-full">
+                  <SelectValue placeholder={t("orders.team.notAssigned")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_DEFAULT_PERFORMER}>{t("orders.team.notAssigned")}</SelectItem>
+                  {technicianOptions.map((technician) => (
+                    <SelectItem key={technician.id} value={technician.id}>
+                      {technician.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
         </div>
 
         <CatalogWarrantyFields

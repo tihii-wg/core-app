@@ -16,11 +16,17 @@ import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import ServiceCombobox from "./ServiceCombobox";
 import useCreateNewService from "./useCreateNewService";
 import useGetServices from "./useGetServices";
+import useGetEmployees from "../employees/useGetEmployees";
+import { assignableTechnicians } from "../orders/assignableTechnicians";
+
+const NO_DEFAULT_PERFORMER = "__none__";
 
 export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalProps) {
   const { t } = useTranslation();
   const { mutate } = useCreateNewService();
   const { services } = useGetServices();
+  const { employees } = useGetEmployees();
+  const technicianOptions = assignableTechnicians(employees);
   const { currency } = useWorkspaceMoney();
   const { workflow } = useIndustryWorkflow();
   const copy = industryServiceCopy(workflow);
@@ -42,6 +48,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
       category: defaultServiceCategory(workflow),
       price: undefined,
       description: "",
+      defaultTechnicianId: "",
     },
   });
 
@@ -76,6 +83,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
             category: defaultServiceCategory(workflow),
             price: undefined,
             description: "",
+            defaultTechnicianId: "",
           });
           setWarranty(emptyCatalogWarrantyFormValues());
           setWarrantyError(null);
@@ -169,6 +177,33 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
         <div className="space-y-1.5">
           <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
           <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="new-service-default-technician">{t("orders.team.defaultPerformer")}</Label>
+          <Controller
+            name="defaultTechnicianId"
+            control={control}
+            render={({ field }) => (
+              <Select
+                value={field.value || NO_DEFAULT_PERFORMER}
+                onValueChange={(next) => field.onChange(next === NO_DEFAULT_PERFORMER ? "" : next)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="new-service-default-technician" className="w-full">
+                  <SelectValue placeholder={t("orders.team.notAssigned")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_DEFAULT_PERFORMER}>{t("orders.team.notAssigned")}</SelectItem>
+                  {technicianOptions.map((technician) => (
+                    <SelectItem key={technician.id} value={technician.id}>
+                      {technician.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
         </div>
 
         <CatalogWarrantyFields

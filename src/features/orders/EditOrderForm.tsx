@@ -31,8 +31,11 @@ import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
 import OrderTotalsSummary from "./OrderTotalsSummary";
 import { previewOrderMoney } from "./orderMoneyPreview";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
-import { assignableTechnicians } from "./assignableTechnicians";
+import { assignableTeamOptions, assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
+import OrderTeamSelect from "./OrderTeamSelect";
+import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
+import { mergeOrderTeam } from "./orderTeam";
 import OrderAssetFields from "./OrderAssetFields";
 import { OrderVehicleFields } from "./OrderVehicleFields";
 import {
@@ -93,6 +96,11 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees, order.assignedEmployeeId);
+  // Team chips and line performers may reference employees that are no longer assignable (e.g. inactive) — keep them visible.
+  const teamOptions = assignableTeamOptions(employees, order.assignedEmployeeId, [
+    ...(order.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
+    ...order.services.map((line) => ({ id: line.technicianId, name: line.technicianName })),
+  ]);
 
   const {
     control,
@@ -112,11 +120,21 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       currentMileage: mileageFormValueFromOrder(order),
       description: order.description,
       assignedEmployeeId: order.assignedEmployeeId,
+      team: (order.team ?? []).map((member) => ({ employeeId: member.employeeId, role: member.role })),
       deadline: order.deadline,
       services: order.services,
       materials: order.materials ?? [],
     },
   });
+
+  /** Adds a line performer to the team chips as a helper when not already present. */
+  function addPerformerToTeam(employeeId: string | null | undefined) {
+    const id = employeeId?.trim();
+    if (!id) return;
+    const current = getValues("team") ?? [];
+    if (current.some((member) => member.employeeId === id)) return;
+    setValue("team", mergeOrderTeam({ team: current, lineTechnicianIds: [id] }), { shouldDirty: true });
+  }
   const warrantyDisabled = isSubmitting || (Boolean(order.closedAt) && !allowClosedMutation);
 
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
@@ -230,6 +248,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         ...(mileageSnapshot ?? {}),
         description: data.description,
         assignedEmployeeId: data.assignedEmployeeId,
+        team: data.team ?? [],
         deadline: data.deadline,
         ...(servicesDirty ? { services: data.services ?? [] } : {}),
         ...(materialsDirty ? { materials: data.materials } : {}),
@@ -275,7 +294,9 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           errors={!!errors.services?.root}
           onSelect={(service) => {
             if (hasService(service.id, service.service_name)) return;
-            serviceAppend(catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit));
+            const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
+            serviceAppend(line);
+            addPerformerToTeam(line.technicianId);
             clearErrors("services");
           }}
           onCreate={(serviceName, price) => {
@@ -315,6 +336,16 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                     </Button>
                   </div>
                 </div>
+                <OrderLinePerformerSelect
+                  id={`edit-service-performer-${index}`}
+                  value={watchedServices?.[index]?.technicianId ?? ""}
+                  options={teamOptions}
+                  disabled={isSubmitting}
+                  onChange={(technicianId) => {
+                    setValue(`services.${index}.technicianId`, technicianId || null, { shouldDirty: true });
+                    addPerformerToTeam(technicianId);
+                  }}
+                />
                 <OrderLineWarrantyFields
                   idPrefix={`edit-service-${index}`}
                   months={watchedServices?.[index]?.warrantyMonths}
@@ -375,7 +406,14 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                   ? t("orders.form.noLinkedTechnicians")
                   : null
               }
-              onChange={field.onChange}
+              onChange={(next) => {
+                const previous = field.value ?? "";
+                field.onChange(next);
+                if (previous === next) return;
+                // The assignee is always the team lead: drop the previous assignee chip and lead the team with the new one.
+                const remaining = (getValues("team") ?? []).filter((member) => member.employeeId !== previous);
+                setValue("team", mergeOrderTeam({ team: remaining, assignedEmployeeId: next }), { shouldDirty: true });
+              }}
             />
           )}
         />
@@ -385,6 +423,21 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           <Input id="edit-order-deadline" type="date" {...register("deadline")} disabled={isSubmitting} />
         </div>
       </div>
+
+      <Controller
+        name="team"
+        control={control}
+        render={({ field }) => (
+          <OrderTeamSelect
+            id="edit-order-team"
+            label={t("orders.team.title")}
+            value={field.value ?? []}
+            options={teamOptions}
+            disabled={isSubmitting}
+            onChange={field.onChange}
+          />
+        )}
+      />
 
       <OrderTotalsSummary
         money={orderMoney}
