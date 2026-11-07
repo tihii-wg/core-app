@@ -323,6 +323,12 @@ const settings: Messages<typeof en> = {
     loading: "Загрузка статусов...",
     empty: "Статусов пока нет. Новые пространства получают Новые, В работе, Ждёт запчасть, Закрыт и Отменён.",
     emptyEntity: "Нет статусов для этой сущности.",
+    resetToIndustry: "Сбросить к статусам отрасли",
+    resetToIndustryConfirmTitle: "Сбросить статусы заказов?",
+    resetToIndustryConfirm:
+      "Неиспользуемые статусы заказов будут архивированы, и будут созданы статусы по умолчанию для «{{industry}}». Статусы, которые ещё используются в заказах, сохранятся. Существующие заказы не изменяются автоматически.",
+    resetToIndustrySuccess: "Статусы отрасли применены (создано {{created}}, пропущено {{skipped}}).",
+    resetToIndustrySeedEmpty: "Статусы отрасли созданы.",
     default: "По умолчанию для новых заказов",
     inactive: "В архиве",
     group: "Группа",
@@ -576,6 +582,15 @@ const settings: Messages<typeof en> = {
       materialOilFilter: "Масляный фильтр",
       materialEngineOil: "Моторное масло 5W-40",
       materialGasket: "Прокладка (разовая)",
+      byIndustry: {
+        device: { asset: "iPhone 14 Pro" },
+        site: { asset: "Кв. 12, ул. Примерная 5 — розетка на кухне" },
+        furniture: {
+          asset: "Кухонный гарнитур 3,2 м",
+          notes: "Корпус ЛДСП, фасады МДФ, петли и направляющие Blum. Замер + монтаж. Предоплата 50%.",
+        },
+        other: { asset: "Объект услуги" },
+      },
     },
     noBody: "Нет содержимого",
     edit: "Изменить",

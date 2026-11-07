@@ -1,49 +1,33 @@
 import i18n from "../../i18n";
 import type { OrderStatus, serviceCategory } from "../../lib/types";
 import { isValidOptionalVin, normalizeVin } from "../../lib/vin";
+import {
+  industryProfile,
+  KNOWN_INDUSTRY_SLUGS,
+  SERVICE_CATEGORIES,
+  type IndustryCopyPack,
+  type IndustryOrderFields,
+  type IndustryTerminology,
+  type KnownIndustrySlug,
+  type OrderAssetFieldConfig,
+  type OrderAssetFieldName,
+  type ServiceCategoryValue,
+} from "./industryProfile";
+
+export {
+  KNOWN_INDUSTRY_SLUGS,
+  SERVICE_CATEGORIES,
+  type IndustryCopyPack,
+  type IndustryOrderFields,
+  type IndustryTerminology,
+  type KnownIndustrySlug,
+  type OrderAssetFieldConfig,
+  type OrderAssetFieldName,
+  type ServiceCategoryValue,
+};
 
 /** Stored order.status values (application constants; DB column is unconstrained text). */
 export const ORDER_STATUSES: OrderStatus[] = ["new", "in-progress", "waiting-parts", "completed", "paid", "cancelled", "closed"];
-
-/** Stored services.category values used by the app (includes historical spelling "assesment"). */
-export const SERVICE_CATEGORIES = ["repair", "software", "update", "data", "assesment"] as const;
-
-export type ServiceCategoryValue = (typeof SERVICE_CATEGORIES)[number];
-
-/** Database industry slugs from public.industries (resolve by slug, never by UUID). */
-export const KNOWN_INDUSTRY_SLUGS = [
-  "auto_repair",
-  "phone_electronics_repair",
-  "computer_repair",
-  "appliance_repair",
-  "equipment_repair",
-  "electrical_services",
-  "home_services",
-  "other",
-] as const;
-
-export type KnownIndustrySlug = (typeof KNOWN_INDUSTRY_SLUGS)[number];
-
-export type OrderAssetFieldName = "device" | "carNumber" | "vin";
-
-export type OrderAssetFieldConfig = {
-  visible: boolean;
-  required: boolean;
-  /** When set, non-empty values must match this length (VIN). */
-  exactLength?: number;
-};
-
-export type IndustryOrderFields = Record<OrderAssetFieldName, OrderAssetFieldConfig>;
-
-/** Shared copy packs under orders.byIndustry.<pack>. */
-export type IndustryCopyPack = "auto_repair" | "repair_device" | "field_service" | "default";
-
-export type IndustryTerminology = {
-  client: string;
-  employee: string;
-  service: string;
-  inventory: string;
-};
 
 export type IndustryWorkflow = {
   slug: string;
@@ -54,83 +38,15 @@ export type IndustryWorkflow = {
   serviceCategories: ServiceCategoryValue[];
 };
 
-const allServiceCategories: ServiceCategoryValue[] = [...SERVICE_CATEGORIES];
-const autoServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
-const deviceServiceCategories: ServiceCategoryValue[] = ["repair", "software", "data", "update", "assesment"];
-const fieldServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
-
-/** Automotive fields remain visible for auto_repair but are optional so empty drafts can be saved. */
-const automotiveFields: IndustryOrderFields = {
-  device: { visible: true, required: false },
-  carNumber: { visible: true, required: false },
-  vin: { visible: true, required: false, exactLength: 17 },
-};
-
-const repairDeviceFields: IndustryOrderFields = {
-  device: { visible: true, required: false },
-  carNumber: { visible: false, required: false },
-  vin: { visible: false, required: false },
-};
-
-const fieldServiceFields: IndustryOrderFields = {
-  device: { visible: true, required: false },
-  carNumber: { visible: false, required: false },
-  vin: { visible: false, required: false },
-};
-
-const defaultFields: IndustryOrderFields = {
-  device: { visible: true, required: false },
-  carNumber: { visible: false, required: false },
-  vin: { visible: false, required: false },
-};
-
-const repairTerminology: IndustryTerminology = {
-  client: "client",
-  employee: "technician",
-  service: "service",
-  inventory: "parts",
-};
-
-const fieldTerminology: IndustryTerminology = {
-  client: "customer",
-  employee: "technician",
-  service: "service",
-  inventory: "supplies",
-};
-
-const defaultTerminology: IndustryTerminology = {
-  client: "client",
-  employee: "employee",
-  service: "service",
-  inventory: "inventory",
-};
-
-const workflowsBySlug: Record<KnownIndustrySlug, Omit<IndustryWorkflow, "slug">> = {
-  auto_repair: { copyPack: "auto_repair", orderFields: automotiveFields, terminology: repairTerminology, serviceCategories: autoServiceCategories },
-  phone_electronics_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
-  computer_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
-  appliance_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
-  equipment_repair: { copyPack: "repair_device", orderFields: repairDeviceFields, terminology: repairTerminology, serviceCategories: deviceServiceCategories },
-  electrical_services: { copyPack: "field_service", orderFields: fieldServiceFields, terminology: fieldTerminology, serviceCategories: fieldServiceCategories },
-  home_services: { copyPack: "field_service", orderFields: fieldServiceFields, terminology: fieldTerminology, serviceCategories: fieldServiceCategories },
-  other: { copyPack: "default", orderFields: defaultFields, terminology: defaultTerminology, serviceCategories: allServiceCategories },
-};
-
-function isKnownSlug(slug: string | null | undefined): slug is KnownIndustrySlug {
-  return (KNOWN_INDUSTRY_SLUGS as readonly string[]).includes(slug ?? "");
-}
-
-/** Resolve workflow for a workspace industry slug; unknown/null → safe defaults (no automotive fields). */
+/** Resolve workflow for a workspace industry slug; unknown/null → `other` profile defaults. */
 export function industryWorkflow(slug: string | null | undefined): IndustryWorkflow {
-  if (isKnownSlug(slug)) {
-    return { slug, ...workflowsBySlug[slug] };
-  }
+  const profile = industryProfile(slug);
   return {
-    slug: slug?.trim() || "default",
-    copyPack: "default",
-    orderFields: defaultFields,
-    terminology: defaultTerminology,
-    serviceCategories: allServiceCategories,
+    slug: profile.slug,
+    copyPack: profile.copyPack,
+    orderFields: profile.orderFields,
+    terminology: profile.terminology,
+    serviceCategories: profile.serviceCategories,
   };
 }
 
@@ -230,15 +146,23 @@ export function industryClientTotalCount(workflow: IndustryWorkflow, count: numb
  * Category remains free-text in the DB; only labels/placeholders adapt (parts / supplies / inventory).
  */
 export function industryInventoryCopy(workflow: IndustryWorkflow) {
+  const profile = industryProfile(workflow.slug);
+  const pack = workflow.copyPack;
   const text = (key: string, legacyFallback: string) => {
-    const packKey = `inventory.byIndustry.${workflow.copyPack}.${key}`;
+    const packKey = `inventory.byIndustry.${pack}.${key}`;
     return i18n.t(packKey as "inventory.title", {
       defaultValue: i18n.t(legacyFallback as "inventory.title"),
     });
   };
 
+  const title = profile.navigation.materialsWarehouseLabel
+    ? i18n.t("industries.terms.furniture.parts" as "inventory.title", {
+        defaultValue: text("title", "inventory.title"),
+      })
+    : text("title", "inventory.title");
+
   return {
-    title: text("title", "inventory.title"),
+    title,
     loading: text("loading", "inventory.loading"),
     addItem: text("addItem", "inventory.addItem"),
     searchPlaceholder: text("searchPlaceholder", "inventory.searchPlaceholder"),

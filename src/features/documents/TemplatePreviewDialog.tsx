@@ -38,6 +38,7 @@ export type TemplatePreviewDialogProps = {
   vatRate?: number | null;
   logoUrl?: string | null;
   companyName?: string | null;
+  industrySlug?: string | null;
   onOpenDesigner?: (template: DocumentTemplate) => void;
 };
 
@@ -65,6 +66,7 @@ export function TemplatePreviewDialog({
   vatRate,
   logoUrl,
   companyName,
+  industrySlug,
   onOpenDesigner,
 }: TemplatePreviewDialogProps) {
   const { t } = useTranslation();
@@ -128,6 +130,7 @@ export function TemplatePreviewDialog({
             vatRate,
             logoUrl,
             companyName,
+            industrySlug,
           });
         } else if (isInvoice) {
           ctx = await buildInvoicePrintContext(sourceId, workspaceId);
@@ -162,6 +165,7 @@ export function TemplatePreviewDialog({
     vatRate,
     logoUrl,
     companyName,
+    industrySlug,
     documentStyle,
     t,
   ]);

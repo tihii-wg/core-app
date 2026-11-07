@@ -1,8 +1,9 @@
+import { industryProfile, type IndustryProfile } from "./industryProfile";
 import type { IndustryWorkflow } from "./industryWorkflow";
 
 /**
  * Central industry capability flags.
- * Prefer this over scattering `slug === "auto_repair"` in UI components.
+ * Prefer this over scattering industry slug comparisons in UI components.
  */
 export type IndustryCapabilities = {
   /** Client-owned vehicles table + vehicle picker on orders. */
@@ -13,14 +14,20 @@ export type IndustryCapabilities = {
    * use the client vehicle workflow instead. Detail views may still show stored values.
    */
   automotiveOrderAssets: boolean;
+  /** Inventory / warehouse wording as materials warehouse (furniture). */
+  materialsWarehouseLabel: boolean;
 };
 
-export function industryCapabilities(workflow: IndustryWorkflow): IndustryCapabilities {
-  const automotive = workflow.slug === "auto_repair";
+export function industryCapabilitiesFromProfile(profile: IndustryProfile): IndustryCapabilities {
   return {
-    clientVehicles: automotive,
-    automotiveOrderAssets: automotive,
+    clientVehicles: profile.navigation.clientVehicles,
+    automotiveOrderAssets: profile.assetKind === "vehicle",
+    materialsWarehouseLabel: profile.navigation.materialsWarehouseLabel,
   };
+}
+
+export function industryCapabilities(workflow: IndustryWorkflow): IndustryCapabilities {
+  return industryCapabilitiesFromProfile(industryProfile(workflow.slug));
 }
 
 export function industrySupportsClientVehicles(workflow: IndustryWorkflow) {

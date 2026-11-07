@@ -1,6 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Plus, Shield, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, RotateCcw, Shield, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { EntityStatusBadge } from "../../ui/StatusBadge";
@@ -17,7 +19,11 @@ import {
   DialogTitle,
 } from "../../ui/Dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import { ORDER_STATUSES } from "../industries/industryWorkflow";
+import { industryName } from "../industries/industryName";
+import { seedIndustryOrderStatuses } from "../industries/seedIndustryDefaults";
+import { useIndustryProfile } from "../industries/useIndustryProfile";
 import { useCreateStatusDefinition } from "../statuses/useCreateStatusDefinition";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useGetStatusTransitions } from "../statuses/useGetStatusTransitions";
@@ -29,6 +35,7 @@ import {
   useSetOrderLifecycleSemantic,
   useUpdateStatusDefinition,
 } from "../statuses/useStatusDefinitionMutations";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
@@ -54,6 +61,10 @@ function semanticLabelKey(action: StatusSemanticAction) {
 
 export function StatusesSettings() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const { profile, industrySlug } = useIndustryProfile();
   const [entity, setEntity] = useState<StatusEntity>("order");
   const { data = [], isLoading, error } = useGetStatusDefinitions();
   const { data: transitions } = useGetStatusTransitions();
@@ -101,6 +112,15 @@ export function StatusesSettings() {
   const configurableOrderStatuses = orderStatuses.filter((status) => !isLifecycleOrderStatusDefinition(status));
   const lifecycleOrderStatuses = orderStatuses.filter((status) => isLifecycleOrderStatusDefinition(status));
 
+  const resetIndustryStatuses = useMutation({
+    mutationFn: () => seedIndustryOrderStatuses(workspaceId, profile, { replace: orderStatuses.length > 0 }),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["status_definitions", workspaceId] });
+      toast.success(t("settings.statuses.resetToIndustrySuccess", result));
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) return;
@@ -126,11 +146,41 @@ export function StatusesSettings() {
     reorder.mutate(ordered.map((status) => status.id));
   }
 
+  async function onResetIndustryDefaults() {
+    const industryLabel = industryName({
+      name: industrySlug ?? profile.slug,
+      slug: industrySlug ?? profile.slug,
+    });
+    const ok = await confirm({
+      title: t("settings.statuses.resetToIndustryConfirmTitle"),
+      description: t("settings.statuses.resetToIndustryConfirm", { industry: industryLabel }),
+      confirmLabel: t("settings.statuses.resetToIndustry"),
+      cancelLabel: t("common.cancel"),
+    });
+    if (!ok) return;
+    resetIndustryStatuses.mutate();
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{t("settings.statuses.title")}</CardTitle>
-        <CardDescription>{t("settings.statuses.description")}</CardDescription>
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1.5">
+          <CardTitle>{t("settings.statuses.title")}</CardTitle>
+          <CardDescription>{t("settings.statuses.description")}</CardDescription>
+        </div>
+        {canEdit ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            disabled={resetIndustryStatuses.isPending}
+            onClick={() => void onResetIndustryDefaults()}
+          >
+            <RotateCcw />
+            {t("settings.statuses.resetToIndustry")}
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? <p className="text-sm text-muted-foreground">{t("settings.statuses.loading")}</p> : null}

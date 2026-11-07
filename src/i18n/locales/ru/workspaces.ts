@@ -36,6 +36,7 @@ const workspaces: Messages<typeof en> = {
     equipment_repair: "Ремонт оборудования",
     electrical_services: "Электромонтажные услуги",
     home_services: "Бытовые услуги",
+    furniture_manufacturing: "Изготовление корпусной мебели",
     other: "Другое",
   },
   industryPresets: {

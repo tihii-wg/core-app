@@ -17,4 +17,17 @@ describe("industryName", () => {
   it("falls back to the database name for unknown slugs", () => {
     expect(industryName({ name: "Custom Trade", slug: "custom_trade" })).toBe("Custom Trade");
   });
+
+  it("translates furniture_manufacturing", async () => {
+    await i18n.changeLanguage("en");
+    expect(industryName({ name: "Custom Furniture Manufacturing", slug: "furniture_manufacturing" })).toBe(
+      "Custom Furniture Manufacturing",
+    );
+    await i18n.changeLanguage("ru");
+    expect(industryName({ name: "Custom Furniture Manufacturing", slug: "furniture_manufacturing" })).toContain(
+      "мебели",
+    );
+    await i18n.changeLanguage("en");
+  });
 });
+

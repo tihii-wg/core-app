@@ -17,6 +17,7 @@ type TemplateThumbnailProps = {
   vatRate?: number | null;
   logoUrl?: string | null;
   companyName?: string | null;
+  industrySlug?: string | null;
   className?: string;
 };
 
@@ -31,6 +32,7 @@ export function TemplateThumbnail({
   vatRate,
   logoUrl,
   companyName,
+  industrySlug,
   className,
 }: TemplateThumbnailProps) {
   const { t } = useTranslation();
@@ -58,9 +60,16 @@ export function TemplateThumbnail({
 
   const srcDoc = useMemo(() => {
     if (!visible) return null;
-    const ctx = demoContextForTemplate(template, { locale, currency, vatRate, logoUrl, companyName });
+    const ctx = demoContextForTemplate(template, {
+      locale,
+      currency,
+      vatRate,
+      logoUrl,
+      companyName,
+      industrySlug,
+    });
     return getTemplatePreviewHtml(template, ctx, documentStyle);
-  }, [visible, template, documentStyle, locale, currency, vatRate, logoUrl, companyName]);
+  }, [visible, template, documentStyle, locale, currency, vatRate, logoUrl, companyName, industrySlug]);
 
   const scale = THUMB_W / A4_CSS_WIDTH;
 

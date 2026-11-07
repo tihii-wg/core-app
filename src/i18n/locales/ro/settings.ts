@@ -323,6 +323,12 @@ const settings: Messages<typeof en> = {
     loading: "Se încarcă statusurile...",
     empty: "Nu există statusuri încă. Spațiile noi primesc Nou, În lucru, Așteaptă piese, Închis și Anulat.",
     emptyEntity: "Nu există statusuri pentru această entitate.",
+    resetToIndustry: "Resetează la statusurile industriei",
+    resetToIndustryConfirmTitle: "Resetezi statusurile comenzilor?",
+    resetToIndustryConfirm:
+      "Statusurile nefolosite vor fi arhivate și vor fi create statusurile implicite pentru „{{industry}}”. Statusurile încă folosite de comenzi rămân. Comenzile existente nu se schimbă automat.",
+    resetToIndustrySuccess: "Statusurile industriei au fost aplicate (create {{created}}, omise {{skipped}}).",
+    resetToIndustrySeedEmpty: "Statusurile industriei au fost create.",
     default: "Implicit pentru comenzi noi",
     inactive: "Arhivat",
     group: "Grup",
@@ -575,6 +581,15 @@ const settings: Messages<typeof en> = {
       materialOilFilter: "Filtru de ulei",
       materialEngineOil: "Ulei motor 5W-40",
       materialGasket: "Garnitură (o singură dată)",
+      byIndustry: {
+        device: { asset: "iPhone 14 Pro" },
+        site: { asset: "Ap. 12, str. Exemplu 5 — priză bucătărie" },
+        furniture: {
+          asset: "Set bucătărie 3,2 m",
+          notes: "Corp PAL, fațade MDF, balamale și glisiere Blum. Măsurători + montaj. Avans 50%.",
+        },
+        other: { asset: "Articol serviciu" },
+      },
     },
     noBody: "Fără conținut",
     edit: "Editează",

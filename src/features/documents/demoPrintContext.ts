@@ -22,6 +22,7 @@ import { classifyInvoiceItems } from "../invoices/invoiceItemSections";
 import { computeOrderMoney } from "../orders/orderTotals";
 import type { WarrantySnapshot } from "../orders/warranty";
 import type { MileageUnit } from "../../lib/types";
+import { industryProfile } from "../industries/industryProfile";
 import {
   emptyPrintContext,
   type PrintContext,
@@ -51,6 +52,8 @@ export type DemoPrintContextInput = {
   logoUrl?: string | null;
   /** Prefer the real workspace display name when already loaded. */
   companyName?: string | null;
+  /** Workspace industry slug — shapes demo asset / line items (client-side only). */
+  industrySlug?: string | null;
   /** Fixed "today" for deterministic tests. */
   now?: Date;
 };
@@ -147,7 +150,7 @@ function buildWorkspace(input: DemoPrintContextInput, t: (key: string) => string
     ownerId: "demo-owner",
     industryId: null,
     industryName: null,
-    industrySlug: "auto_service",
+    industrySlug: input.industrySlug?.trim() || "auto_repair",
     avatarPath: null,
     inventoryMarkup: null,
     language: input.locale ?? "ru",
@@ -296,11 +299,26 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
   const paid = 1000;
   const remaining = Math.round((totalPrice - paid) * 100) / 100;
 
+  const profile = industryProfile(input.industrySlug);
   const workspace = buildWorkspace({ ...input, locale, currency }, t);
   const legalEntity = buildLegalEntity(workspace, t);
   const client = buildClient(input.documentType, t);
+  // Always populate vehicle so every print token can resolve; order.device/description follow assetKind.
   const vehicle = buildVehicle(mileageUnit);
-  const deviceLabel = `${vehicle.make} ${vehicle.model} ${vehicle.year}`;
+  const deviceLabel =
+    profile.assetKind === "vehicle"
+      ? `${vehicle.make} ${vehicle.model} ${vehicle.year}`
+      : profile.assetKind === "device"
+        ? t("settings.printTemplates.demo.byIndustry.device.asset")
+        : profile.assetKind === "site"
+          ? t("settings.printTemplates.demo.byIndustry.site.asset")
+          : profile.assetKind === "project"
+            ? t("settings.printTemplates.demo.byIndustry.furniture.asset")
+            : t("settings.printTemplates.demo.byIndustry.other.asset");
+  const description =
+    profile.demoPack === "furniture"
+      ? t("settings.printTemplates.demo.byIndustry.furniture.notes")
+      : t("settings.printTemplates.demo.orderNotes");
 
   // Demo always fills closedAt so print tokens never render empty (even for open WO previews).
   const closedAt = todayIso;
@@ -319,12 +337,12 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     vehicleMileageSnapshot: 125_000,
     vehicleMileageUnitSnapshot: mileageUnit,
     device: deviceLabel,
-    vin: vehicle.vin ?? "",
-    carNumber: vehicle.licensePlate ?? "",
+    vin: profile.assetKind === "device" ? "SN-DEMO-0001" : (vehicle.vin ?? ""),
+    carNumber: profile.assetKind === "vehicle" ? (vehicle.licensePlate ?? "") : "",
     service: services.map((line) => line.serviceName).join(", "),
     services,
     materials,
-    description: t("settings.printTemplates.demo.orderNotes"),
+    description,
     status,
     customStatus: {
       name: t(

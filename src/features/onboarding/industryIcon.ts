@@ -1,4 +1,4 @@
-import { Building2, Car, House, Laptop, Plug, Smartphone, Wrench, Zap, type LucideIcon } from "lucide-react";
+import { Armchair, Building2, Car, House, Laptop, Plug, Smartphone, Wrench, Zap, type LucideIcon } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
   auto_repair: Car,
@@ -8,6 +8,7 @@ const icons: Record<string, LucideIcon> = {
   equipment_repair: Wrench,
   electrical_services: Zap,
   home_services: House,
+  furniture_manufacturing: Armchair,
 };
 
 export function industryIcon(slug: string | null | undefined): LucideIcon {

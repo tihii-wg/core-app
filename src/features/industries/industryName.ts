@@ -1,12 +1,9 @@
 import i18n from "../../i18n";
 import type { Industry } from "../../lib/types";
+import { KNOWN_INDUSTRY_SLUGS, type KnownIndustrySlug } from "./industryProfile";
 
-const translatedSlugs = ["auto_repair", "phone_electronics_repair", "computer_repair", "appliance_repair", "equipment_repair", "electrical_services", "home_services", "other"] as const;
-
-type TranslatedSlug = (typeof translatedSlugs)[number];
-
-function isTranslatedSlug(slug: string | null | undefined): slug is TranslatedSlug {
-  return (translatedSlugs as readonly string[]).includes(slug ?? "");
+function isTranslatedSlug(slug: string | null | undefined): slug is KnownIndustrySlug {
+  return (KNOWN_INDUSTRY_SLUGS as readonly string[]).includes(slug ?? "");
 }
 
 /** Industry names come from the database; known slugs are shown in the UI language, others as stored. */

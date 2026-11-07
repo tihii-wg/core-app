@@ -39,6 +39,7 @@ export function demoContextForTemplate(
     vatRate?: number | null;
     logoUrl?: string | null;
     companyName?: string | null;
+    industrySlug?: string | null;
   },
 ): PrintContext {
   return demoPrintContext({
@@ -48,6 +49,7 @@ export function demoContextForTemplate(
     vatRate: opts.vatRate,
     logoUrl: opts.logoUrl,
     companyName: opts.companyName,
+    industrySlug: opts.industrySlug,
   });
 }
 

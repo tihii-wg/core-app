@@ -45,6 +45,8 @@ import {
   useSetDefaultDocumentTemplate,
 } from "../documents/useDocumentTemplateMutations";
 import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
+import { ensureIndustryDocumentTemplates } from "../industries/seedIndustryDefaults";
+import { useIndustryProfile } from "../industries/useIndustryProfile";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
@@ -150,6 +152,7 @@ export function PrintTemplatesSettings() {
   const confirmUnsaved = useUnsavedChangesConfirm();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
+  const { profile, industrySlug } = useIndustryProfile();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const queryClient = useQueryClient();
   const guardWrite = useGuardSubscriptionWrite();
@@ -182,12 +185,14 @@ export function PrintTemplatesSettings() {
         await ensureDefaultDocumentStyle(workspaceId);
         const hasInvoice = data.some((template) => template.documentType === "invoice");
         if (!hasInvoice) await ensureDefaultInvoiceTemplate(workspaceId);
+        // Additive only — creates missing industry-named templates; never deletes on industry change.
+        await ensureIndustryDocumentTemplates(workspaceId, profile);
         void queryClient.invalidateQueries({ queryKey: ["document-templates", workspaceId] });
       } catch {
         ensuredDefaults.current = false;
       }
     })();
-  }, [canEdit, workspaceId, isLoading, data, queryClient]);
+  }, [canEdit, workspaceId, isLoading, data, queryClient, profile]);
 
   const styleTemplate = useMemo(
     () => data.find((template) => template.documentType === DOCUMENT_STYLE_TYPE && template.isActive) ?? null,
@@ -302,6 +307,7 @@ export function PrintTemplatesSettings() {
                         currency={previewCurrency}
                         vatRate={workspaceVatRate}
                         companyName={previewCompanyName}
+                        industrySlug={industrySlug}
                         className="shrink-0"
                       />
                     ) : null}
@@ -424,6 +430,7 @@ export function PrintTemplatesSettings() {
                           currency={previewCurrency}
                           vatRate={workspaceVatRate}
                           companyName={previewCompanyName}
+                          industrySlug={industrySlug}
                           className="shrink-0"
                         />
                         <div className="min-w-0 flex-1">
@@ -604,6 +611,7 @@ export function PrintTemplatesSettings() {
           currency={previewCurrency}
           vatRate={workspaceVatRate}
           companyName={previewCompanyName}
+          industrySlug={industrySlug}
           onOpenDesigner={(template) => {
             setPreviewTemplateId(null);
             void openEditor(template);

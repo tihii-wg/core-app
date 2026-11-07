@@ -320,6 +320,12 @@ export default {
     loading: "Loading statuses...",
     empty: "No statuses yet. New workspaces receive New, In Progress, Waiting for Parts, Closed, and Cancelled by default.",
     emptyEntity: "No statuses for this entity.",
+    resetToIndustry: "Reset to industry defaults",
+    resetToIndustryConfirmTitle: "Reset order statuses?",
+    resetToIndustryConfirm:
+      "Unused order statuses will be archived and industry defaults for “{{industry}}” will be created. Statuses still used by orders are kept. Existing orders are not changed automatically.",
+    resetToIndustrySuccess: "Industry status defaults applied (created {{created}}, skipped {{skipped}}).",
+    resetToIndustrySeedEmpty: "Industry status defaults created.",
     default: "Default for new orders",
     inactive: "Archived",
     group: "Group",
@@ -571,6 +577,15 @@ export default {
       materialOilFilter: "Oil filter",
       materialEngineOil: "Engine oil 5W-40",
       materialGasket: "One-time gasket",
+      byIndustry: {
+        device: { asset: "iPhone 14 Pro" },
+        site: { asset: "Apt. 12, str. Example 5 — kitchen outlet" },
+        furniture: {
+          asset: "Kitchen set 3.2 m",
+          notes: "ЛДСП corpus, MDF facades, Blum hinges and drawer slides. Measurement + installation. Prepayment 50%.",
+        },
+        other: { asset: "Service item" },
+      },
     },
     noBody: "No body",
     edit: "Edit",

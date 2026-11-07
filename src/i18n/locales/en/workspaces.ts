@@ -33,6 +33,7 @@ export default {
     equipment_repair: "Equipment Repair",
     electrical_services: "Electrical Services",
     home_services: "Home Services",
+    furniture_manufacturing: "Custom Furniture Manufacturing",
     other: "Other",
   },
   industryPresets: {
