@@ -73,12 +73,12 @@ export function VehicleFieldsGrid({
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm" data-testid="vehicle-fields-grid">
       {rows.map((row) => (
-        <div key={row.key} className="min-w-0">
+        <div key={row.key} className={row.mono ? "col-span-2 min-w-0" : "min-w-0"}>
           <dt className="text-xs font-medium text-muted-foreground">{row.label}</dt>
           <dd
             className={
               row.mono
-                ? "mt-1 font-mono text-[13px] font-semibold [overflow-wrap:anywhere] text-foreground"
+                ? "mt-1 font-mono text-lg font-semibold tracking-wider [overflow-wrap:anywhere] text-foreground sm:text-xl"
                 : "mt-1 font-medium [overflow-wrap:anywhere] text-foreground"
             }
           >
