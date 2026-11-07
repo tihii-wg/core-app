@@ -406,13 +406,20 @@ export async function createDocumentTemplate(
   documentType: DocumentTemplateType,
   workspaceId: string | undefined,
   name?: string,
-  options: { isDefault?: boolean } = {},
+  options: { isDefault?: boolean; layout?: CanvasDocumentLayout | DocumentLayout | null } = {},
 ) {
   const resolved = requireWorkspaceId(workspaceId);
-  const layout = defaultCanvasLayoutForType(documentType, i18n.t.bind(i18n));
-  const emptyCtxBody = renderCanvasLayoutToHtmlSync(layout, emptyPrintContext({ locale: "ru" }), {
-    colors: defaultDocumentStyle().colors,
-  });
+  const layout =
+    options.layout && isStoredDocumentLayout(options.layout)
+      ? options.layout
+      : defaultCanvasLayoutForType(documentType, i18n.t.bind(i18n));
+  const emptyCtxBody = isCanvasDocumentLayout(layout)
+    ? renderCanvasLayoutToHtmlSync(layout, emptyPrintContext({ locale: "ru" }), {
+        colors: defaultDocumentStyle().colors,
+      })
+    : renderLayoutToHtml(layout, emptyPrintContext({ locale: "ru" }), {
+        style: documentStyleToRenderStyle(defaultDocumentStyle()),
+      });
   const { data, error } = await supabase
     .from("document_templates")
     .insert({

@@ -446,6 +446,15 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: (ctx) => text(ctx.order?.description),
   },
   {
+    token: "#УСТРОЙСТВО",
+    group: "order",
+    labelKey: "settings.printTemplates.variables.order.device.label",
+    descriptionKey: "settings.printTemplates.variables.order.device.description",
+    kind: "text",
+    resolve: (ctx) => text(ctx.order?.device),
+  },
+
+  {
     token: "#ЗАКАЗ-ПРОБЕГ",
     group: "order",
     labelKey: "settings.printTemplates.variables.order.mileage.label",

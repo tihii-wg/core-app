@@ -8,8 +8,13 @@ import {
   setOrderLifecycleSemantic,
   type StatusDefinition,
 } from "../../services/apiStatusDefinitions";
-import { createDocumentTemplate, getDocumentTemplates } from "../../services/apiDocumentTemplates";
-import { industryProfile, type IndustryProfile } from "./industryProfile";
+import {
+  createDocumentTemplate,
+  getDocumentTemplates,
+  type DocumentTemplate,
+} from "../../services/apiDocumentTemplates";
+import { defaultCanvasLayoutForIndustryDocument } from "./industryDocumentLayouts";
+import { industryProfile, type IndustryDocumentSpec, type IndustryProfile } from "./industryProfile";
 
 export type SeedStatusesResult = {
   created: number;
@@ -17,11 +22,15 @@ export type SeedStatusesResult = {
   deleted: number;
 };
 
+export type MissingIndustryTemplate = {
+  spec: IndustryDocumentSpec;
+  name: string;
+};
+
 /**
  * Seeds order statuses from the industry profile via the existing status API.
  * When `replace` is true, unused non-lifecycle statuses are soft-deleted first.
- * Lifecycle close/cancel rows are kept and get semantic actions assigned on matching seeds.
- * Never called automatically on industry change — only from explicit UI / empty first setup.
+ * Never called automatically — only from an explicit UI action.
  */
 export async function seedIndustryOrderStatuses(
   workspaceId: string | undefined,
@@ -79,7 +88,10 @@ export async function seedIndustryOrderStatuses(
         name,
         color: seed.color,
         statusGroup: seed.statusGroup,
-        systemStatus: seed.systemStatus && seed.systemStatus !== "closed" && seed.systemStatus !== "cancelled" ? seed.systemStatus : null,
+        systemStatus:
+          seed.systemStatus && seed.systemStatus !== "closed" && seed.systemStatus !== "cancelled"
+            ? seed.systemStatus
+            : null,
         sortOrder: sortOrder++,
       },
       workspaceId,
@@ -111,26 +123,40 @@ export async function seedIndustryOrderStatuses(
   return { created, skipped, deleted };
 }
 
+export function listMissingIndustryDocumentTemplates(
+  profile: IndustryProfile,
+  existing: readonly DocumentTemplate[],
+): MissingIndustryTemplate[] {
+  const names = new Set(existing.map((t) => t.name.trim().toLowerCase()));
+  const missing: MissingIndustryTemplate[] = [];
+  for (const spec of profile.documents) {
+    const name = String(i18n.t(spec.nameKey as never, { defaultValue: spec.nameKey }));
+    if (names.has(name.trim().toLowerCase())) continue;
+    missing.push({ spec, name });
+  }
+  return missing;
+}
+
 /**
- * Creates missing print templates listed on the industry profile (by role name).
- * Does not rename or delete existing templates when the industry changes.
+ * Creates missing print templates listed on the industry profile (by role name),
+ * each with a role-specific default layout. Explicit UI action only — never on mount.
  */
 export async function ensureIndustryDocumentTemplates(
   workspaceId: string | undefined,
   profile: IndustryProfile = industryProfile(null),
 ): Promise<number> {
   const existing = await getDocumentTemplates(workspaceId);
-  const names = new Set(existing.map((t) => t.name.trim().toLowerCase()));
+  const missing = listMissingIndustryDocumentTemplates(profile, existing);
   const typesPresent = new Set(existing.map((t) => t.documentType));
   let created = 0;
 
-  for (const spec of profile.documents) {
-    const name = String(i18n.t(spec.nameKey as never, { defaultValue: spec.nameKey }));
-    if (names.has(name.trim().toLowerCase())) continue;
-    // Prefer one default per documentType when the type is still missing entirely.
+  for (const { spec, name } of missing) {
     const makeDefault = !typesPresent.has(spec.documentType);
-    await createDocumentTemplate(spec.documentType, workspaceId, name, { isDefault: makeDefault });
-    names.add(name.trim().toLowerCase());
+    const layout = defaultCanvasLayoutForIndustryDocument(spec, profile, name, i18n.t.bind(i18n));
+    await createDocumentTemplate(spec.documentType, workspaceId, name, {
+      isDefault: makeDefault,
+      layout,
+    });
     typesPresent.add(spec.documentType);
     created += 1;
   }

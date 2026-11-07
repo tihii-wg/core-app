@@ -74,71 +74,129 @@ function dateOnly(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function buildServices(t: (key: string) => string): OrderService[] {
+function svc(
+  partial: Pick<OrderService, "id" | "serviceId" | "serviceName" | "price"> & Partial<OrderService>,
+): OrderService {
+  return {
+    quantity: 1,
+    kind: "service",
+    discountType: null,
+    discountValue: null,
+    technicianId: null,
+    ...partial,
+  };
+}
+
+function mat(
+  partial: Pick<OrderMaterial, "id" | "itemName" | "price"> & Partial<OrderMaterial>,
+): OrderMaterial {
+  return {
+    quantity: 1,
+    supplySource: "catalog",
+    ...partial,
+  };
+}
+
+function buildServices(t: (key: string) => string, demoPack: string): OrderService[] {
+  if (demoPack === "furniture") {
+    return [
+      svc({ id: "demo-svc-1", serviceId: "demo-f-1", serviceName: t("settings.printTemplates.demo.byIndustry.furniture.svcMeasurement"), price: 800, kind: "labor" }),
+      svc({ id: "demo-svc-2", serviceId: "demo-f-2", serviceName: t("settings.printTemplates.demo.byIndustry.furniture.svcDesign"), price: 2500, kind: "service" }),
+      svc({
+        id: "demo-svc-3",
+        serviceId: "demo-f-3",
+        serviceName: t("settings.printTemplates.demo.byIndustry.furniture.svcProduction"),
+        price: 12000,
+        kind: "service",
+        warrantyMonths: 12,
+        technicianId: "demo-emp-1",
+        technicianName: t("settings.printTemplates.demo.employeeLead"),
+      }),
+      svc({ id: "demo-svc-4", serviceId: "demo-f-4", serviceName: t("settings.printTemplates.demo.byIndustry.furniture.svcDelivery"), price: 1500 }),
+      svc({ id: "demo-svc-5", serviceId: "demo-f-5", serviceName: t("settings.printTemplates.demo.byIndustry.furniture.svcInstall"), price: 3500, kind: "labor" }),
+    ];
+  }
+  if (demoPack === "device") {
+    return [
+      svc({ id: "demo-svc-1", serviceId: "demo-d-1", serviceName: t("settings.printTemplates.demo.byIndustry.device.svcDiagnostics"), price: 250, kind: "labor" }),
+      svc({
+        id: "demo-svc-2",
+        serviceId: "demo-d-2",
+        serviceName: t("settings.printTemplates.demo.byIndustry.device.svcScreen"),
+        price: 1800,
+        warrantyMonths: 3,
+        technicianId: "demo-emp-1",
+        technicianName: t("settings.printTemplates.demo.employeeLead"),
+      }),
+    ];
+  }
+  if (demoPack === "site") {
+    return [
+      svc({ id: "demo-svc-1", serviceId: "demo-s-1", serviceName: t("settings.printTemplates.demo.byIndustry.site.svcVisit"), price: 400, kind: "labor" }),
+      svc({
+        id: "demo-svc-2",
+        serviceId: "demo-s-2",
+        serviceName: t("settings.printTemplates.demo.byIndustry.site.svcInstall"),
+        price: 2200,
+        warrantyMonths: 12,
+        technicianId: "demo-emp-1",
+        technicianName: t("settings.printTemplates.demo.employeeLead"),
+      }),
+    ];
+  }
+  if (demoPack === "other") {
+    return [
+      svc({ id: "demo-svc-1", serviceId: "demo-o-1", serviceName: t("settings.printTemplates.demo.byIndustry.other.svcMain"), price: 1000 }),
+      svc({ id: "demo-svc-2", serviceId: "demo-o-2", serviceName: t("settings.printTemplates.demo.byIndustry.other.svcExtra"), price: 500, kind: "labor" }),
+    ];
+  }
   return [
-    {
-      id: "demo-svc-1",
-      serviceId: "demo-catalog-svc-1",
-      serviceName: t("settings.printTemplates.demo.serviceDiagnostics"),
-      price: 500,
-      quantity: 1,
-      kind: "labor",
-      discountType: null,
-      discountValue: null,
-      technicianId: null,
-    },
-    {
+    svc({ id: "demo-svc-1", serviceId: "demo-catalog-svc-1", serviceName: t("settings.printTemplates.demo.serviceDiagnostics"), price: 500, kind: "labor" }),
+    svc({
       id: "demo-svc-2",
       serviceId: "demo-catalog-svc-2",
       serviceName: t("settings.printTemplates.demo.serviceOilChange"),
       price: 800,
-      quantity: 1,
-      kind: "service",
       discountType: "percent",
       discountValue: 10,
       warrantyMonths: 6,
       warrantyKm: 10_000,
       technicianId: "demo-emp-1",
       technicianName: t("settings.printTemplates.demo.employeeLead"),
-    },
-    {
-      id: "demo-svc-3",
-      serviceId: "demo-catalog-svc-3",
-      serviceName: t("settings.printTemplates.demo.serviceBrakes"),
-      price: 1200,
-      quantity: 1,
-      kind: "service",
-      discountType: null,
-      discountValue: null,
-    },
+    }),
+    svc({ id: "demo-svc-3", serviceId: "demo-catalog-svc-3", serviceName: t("settings.printTemplates.demo.serviceBrakes"), price: 1200 }),
   ];
 }
 
-function buildMaterials(t: (key: string) => string): OrderMaterial[] {
+function buildMaterials(t: (key: string) => string, demoPack: string): OrderMaterial[] {
+  if (demoPack === "furniture") {
+    return [
+      mat({ id: "demo-mat-1", inventoryItemId: "demo-inv-1", itemName: `${t("settings.printTemplates.demo.byIndustry.furniture.matLdsp")} (SKU LDSP-16)`, price: 450, quantity: 12 }),
+      mat({ id: "demo-mat-2", inventoryItemId: "demo-inv-2", itemName: `${t("settings.printTemplates.demo.byIndustry.furniture.matMdf")} (SKU MDF-F)`, price: 320, quantity: 8 }),
+      mat({ id: "demo-mat-3", inventoryItemId: "demo-inv-3", itemName: `${t("settings.printTemplates.demo.byIndustry.furniture.matHinges")} (SKU BLUM-H)`, price: 85, quantity: 16 }),
+      mat({ id: "demo-mat-4", inventoryItemId: "demo-inv-4", itemName: `${t("settings.printTemplates.demo.byIndustry.furniture.matSlides")} (SKU BLUM-S)`, price: 120, quantity: 6 }),
+      mat({ id: "demo-mat-5", itemName: `${t("settings.printTemplates.demo.byIndustry.furniture.matCountertop")} (SKU TOP-1)`, price: 2800, supplySource: "one_time" }),
+    ];
+  }
+  if (demoPack === "device") {
+    return [
+      mat({ id: "demo-mat-1", inventoryItemId: "demo-inv-1", itemName: `${t("settings.printTemplates.demo.byIndustry.device.matScreen")} (SKU SCR-14)`, price: 950 }),
+      mat({ id: "demo-mat-2", itemName: `${t("settings.printTemplates.demo.byIndustry.device.matAdhesive")} (SKU ADH-1)`, price: 60, supplySource: "one_time" }),
+    ];
+  }
+  if (demoPack === "site") {
+    return [
+      mat({ id: "demo-mat-1", inventoryItemId: "demo-inv-1", itemName: `${t("settings.printTemplates.demo.byIndustry.site.matCable")} (SKU CAB-2.5)`, price: 18, quantity: 25 }),
+      mat({ id: "demo-mat-2", inventoryItemId: "demo-inv-2", itemName: `${t("settings.printTemplates.demo.byIndustry.site.matOutlet")} (SKU OUT-1)`, price: 45, quantity: 4 }),
+    ];
+  }
+  if (demoPack === "other") {
+    return [mat({ id: "demo-mat-1", inventoryItemId: "demo-inv-1", itemName: `${t("settings.printTemplates.demo.byIndustry.other.matMain")} (SKU GEN-1)`, price: 200 })];
+  }
   return [
-    {
-      id: "demo-mat-1",
-      inventoryItemId: "demo-inv-1",
-      itemName: `${t("settings.printTemplates.demo.materialOilFilter")} (SKU OF-001)`,
-      price: 150,
-      quantity: 1,
-      supplySource: "catalog",
-    },
-    {
-      id: "demo-mat-2",
-      inventoryItemId: "demo-inv-2",
-      itemName: `${t("settings.printTemplates.demo.materialEngineOil")} (SKU EO-5W40)`,
-      price: 80,
-      quantity: 4,
-      supplySource: "catalog",
-    },
-    {
-      id: "demo-mat-3",
-      itemName: `${t("settings.printTemplates.demo.materialGasket")} (SKU OT-GASKET)`,
-      price: 45,
-      quantity: 1,
-      supplySource: "one_time",
-    },
+    mat({ id: "demo-mat-1", inventoryItemId: "demo-inv-1", itemName: `${t("settings.printTemplates.demo.materialOilFilter")} (SKU OF-001)`, price: 150 }),
+    mat({ id: "demo-mat-2", inventoryItemId: "demo-inv-2", itemName: `${t("settings.printTemplates.demo.materialEngineOil")} (SKU EO-5W40)`, price: 80, quantity: 4 }),
+    mat({ id: "demo-mat-3", itemName: `${t("settings.printTemplates.demo.materialGasket")} (SKU OT-GASKET)`, price: 45, supplySource: "one_time" }),
   ];
 }
 
@@ -275,9 +333,12 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
   const now = input.now ?? new Date();
   const todayIso = now.toISOString();
   const t = demoT(locale);
+  const profile = industryProfile(input.industrySlug);
+  const demoPack = profile.demoPack;
+  const isVehicle = profile.assetKind === "vehicle";
 
-  const services = buildServices(t);
-  const materials = buildMaterials(t);
+  const services = buildServices(t, demoPack);
+  const materials = buildMaterials(t, demoPack);
   const money = computeOrderMoney({
     services: services.map((line) => ({
       price: line.price,
@@ -292,21 +353,22 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
       discountValue: line.discountValue,
     })),
   });
-  const headerDiscount = 100;
+  const headerDiscount = demoPack === "furniture" ? 0 : 100;
   const totalPrice = Math.round((money.total - headerDiscount) * 100) / 100;
   const discountTotal = Math.round((money.discountTotal + headerDiscount) * 100) / 100;
   const vat = orderVatBreakdown({ total: totalPrice, vatRate });
-  const paid = 1000;
+  const paid =
+    demoPack === "furniture"
+      ? Math.round(totalPrice * 0.5 * 100) / 100
+      : Math.min(1000, Math.round(totalPrice * 0.4 * 100) / 100);
   const remaining = Math.round((totalPrice - paid) * 100) / 100;
 
-  const profile = industryProfile(input.industrySlug);
   const workspace = buildWorkspace({ ...input, locale, currency }, t);
   const legalEntity = buildLegalEntity(workspace, t);
   const client = buildClient(input.documentType, t);
-  // Always populate vehicle so every print token can resolve; order.device/description follow assetKind.
-  const vehicle = buildVehicle(mileageUnit);
+  const vehicle = isVehicle ? buildVehicle(mileageUnit) : null;
   const deviceLabel =
-    profile.assetKind === "vehicle"
+    profile.assetKind === "vehicle" && vehicle
       ? `${vehicle.make} ${vehicle.model} ${vehicle.year}`
       : profile.assetKind === "device"
         ? t("settings.printTemplates.demo.byIndustry.device.asset")
@@ -316,9 +378,15 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
             ? t("settings.printTemplates.demo.byIndustry.furniture.asset")
             : t("settings.printTemplates.demo.byIndustry.other.asset");
   const description =
-    profile.demoPack === "furniture"
+    demoPack === "furniture"
       ? t("settings.printTemplates.demo.byIndustry.furniture.notes")
-      : t("settings.printTemplates.demo.orderNotes");
+      : demoPack === "device"
+        ? t("settings.printTemplates.demo.byIndustry.device.notes")
+        : demoPack === "site"
+          ? t("settings.printTemplates.demo.byIndustry.site.notes")
+          : demoPack === "other"
+            ? t("settings.printTemplates.demo.byIndustry.other.notes")
+            : t("settings.printTemplates.demo.orderNotes");
 
   // Demo always fills closedAt so print tokens never render empty (even for open WO previews).
   const closedAt = todayIso;
@@ -333,12 +401,12 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     clientEmail: client.email,
     clientPhone: client.phone,
     orderNumber: "ORD-2026-0001",
-    vehicleId: vehicle.id,
-    vehicleMileageSnapshot: 125_000,
-    vehicleMileageUnitSnapshot: mileageUnit,
+    vehicleId: vehicle?.id ?? null,
+    vehicleMileageSnapshot: isVehicle ? 125_000 : null,
+    vehicleMileageUnitSnapshot: isVehicle ? mileageUnit : null,
     device: deviceLabel,
-    vin: profile.assetKind === "device" ? "SN-DEMO-0001" : (vehicle.vin ?? ""),
-    carNumber: profile.assetKind === "vehicle" ? (vehicle.licensePlate ?? "") : "",
+    vin: profile.assetKind === "device" ? "SN-DEMO-0001" : isVehicle ? (vehicle?.vin ?? "") : "",
+    carNumber: isVehicle ? (vehicle?.licensePlate ?? "") : "",
     service: services.map((line) => line.serviceName).join(", "),
     services,
     materials,
@@ -449,22 +517,24 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     isLegacyUnreconciled: false,
   };
 
+  const warrantyService = services.find((line) => line.warrantyMonths) ?? services[0]!;
+  const warrantyMonths = warrantyService.warrantyMonths ?? (isVehicle ? 6 : 12);
   const warrantyRecords: WarrantySnapshot[] = [
     {
       id: "demo-warr-1",
       orderId: order.id,
       itemKind: "service",
-      itemName: services[1]!.serviceName,
-      orderServiceId: services[1]!.id ?? null,
+      itemName: warrantyService.serviceName,
+      orderServiceId: warrantyService.id ?? null,
       orderMaterialId: null,
-      durationMonths: 6,
+      durationMonths: warrantyMonths,
       durationDays: null,
-      mileageLimit: 10_000,
+      mileageLimit: isVehicle ? (warrantyService.warrantyKm ?? 10_000) : null,
       startsAt: todayIso,
-      endsOn: dateOnly(addDaysIso(now, 182)),
-      startMileage: 125_000,
-      expiresAtMileage: 135_000,
-      mileageUnit,
+      endsOn: dateOnly(addDaysIso(now, Math.round(warrantyMonths * 30.44))),
+      startMileage: isVehicle ? 125_000 : null,
+      expiresAtMileage: isVehicle ? 135_000 : null,
+      mileageUnit: isVehicle ? mileageUnit : null,
     },
   ];
 

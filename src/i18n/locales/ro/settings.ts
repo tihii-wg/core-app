@@ -542,6 +542,13 @@ const settings: Messages<typeof en> = {
     toast: { created: "Taxă adăugată", updated: "Taxă actualizată" },
   },
   printTemplates: {
+    industryTemplates: {
+      button: "Adaugă șabloane pentru tipul meu de activitate",
+      confirmTitle: "Adăugați șabloane?",
+      confirm: "Vor fi create șabloanele: {{list}}. Șabloanele existente nu se modifică.",
+      created: "Șabloane create: {{count}}",
+      none: "Toate șabloanele pentru tipul dvs. de activitate există deja",
+    },
     title: "Șabloane de tipărire",
     description: "Constructor vizual pentru foaie de lucru, act și factură. Alegeți blocuri, câmpuri și coloane cu previzualizare live.",
     loading: "Se încarcă șabloanele de tipărire...",

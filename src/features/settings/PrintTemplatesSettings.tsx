@@ -185,14 +185,12 @@ export function PrintTemplatesSettings() {
         await ensureDefaultDocumentStyle(workspaceId);
         const hasInvoice = data.some((template) => template.documentType === "invoice");
         if (!hasInvoice) await ensureDefaultInvoiceTemplate(workspaceId);
-        // Additive only — creates missing industry-named templates; never deletes on industry change.
-        await ensureIndustryDocumentTemplates(workspaceId, profile);
         void queryClient.invalidateQueries({ queryKey: ["document-templates", workspaceId] });
       } catch {
         ensuredDefaults.current = false;
       }
     })();
-  }, [canEdit, workspaceId, isLoading, data, queryClient, profile]);
+  }, [canEdit, workspaceId, isLoading, data, queryClient]);
 
   const styleTemplate = useMemo(
     () => data.find((template) => template.documentType === DOCUMENT_STYLE_TYPE && template.isActive) ?? null,
@@ -264,6 +262,39 @@ export function PrintTemplatesSettings() {
     },
     onError: (err: Error) => toast.error(err.message || t("common.somethingWentWrong")),
   });
+
+  const missingIndustryTemplateNames = useMemo(() => {
+    const existing = new Set(data.map((template) => template.name.trim().toLowerCase()));
+    return profile.documents
+      .map((spec) => String(t(spec.nameKey as never, { defaultValue: spec.nameKey })))
+      .filter((name) => !existing.has(name.trim().toLowerCase()));
+  }, [data, profile, t]);
+
+  const addIndustryTemplates = useMutation({
+    mutationFn: () => ensureIndustryDocumentTemplates(workspaceId, profile),
+    onSuccess: (count) => {
+      void queryClient.invalidateQueries({ queryKey: ["document-templates", workspaceId] });
+      toast.success(t("settings.printTemplates.industryTemplates.created", { count }));
+    },
+    onError: (err: Error) => toast.error(err.message || t("common.somethingWentWrong")),
+  });
+
+  async function handleAddIndustryTemplates() {
+    if (missingIndustryTemplateNames.length === 0) {
+      toast(t("settings.printTemplates.industryTemplates.none"));
+      return;
+    }
+    const ok = await confirm({
+      title: t("settings.printTemplates.industryTemplates.confirmTitle"),
+      description: t("settings.printTemplates.industryTemplates.confirm", {
+        list: missingIndustryTemplateNames.join(", "),
+      }),
+      confirmLabel: t("settings.printTemplates.industryTemplates.button"),
+      cancelLabel: t("common.cancel"),
+    });
+    if (!ok) return;
+    addIndustryTemplates.mutate();
+  }
 
   const applyStyle = useMutation({
     mutationFn: () => {
@@ -398,6 +429,17 @@ export function PrintTemplatesSettings() {
               <Plus />
               {t("settings.printTemplates.create")}
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              loading={addIndustryTemplates.isPending}
+              disabled={addIndustryTemplates.isPending}
+              onClick={() => void handleAddIndustryTemplates()}
+            >
+              <Plus />
+              {t("settings.printTemplates.industryTemplates.button")}
+            </Button>
           </div>
         ) : null}
 
@@ -420,7 +462,7 @@ export function PrintTemplatesSettings() {
                 {templates.map((template) => (
                   <li key={template.id} className="space-y-3 px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
+                      <div className="flex min-w-[min(100%,18rem)] flex-1 items-start gap-3">
                         <TemplateThumbnail
                           template={template}
                           documentStyle={

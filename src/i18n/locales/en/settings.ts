@@ -538,6 +538,13 @@ export default {
     toast: { created: "Tax added", updated: "Tax updated" },
   },
   printTemplates: {
+    industryTemplates: {
+      button: "Add templates for my business type",
+      confirmTitle: "Add templates?",
+      confirm: "These templates will be created: {{list}}. Existing templates will not change.",
+      created: "Templates created: {{count}}",
+      none: "All templates for your business type already exist",
+    },
     title: "Print templates",
     description: "Visual builder for work orders, acts and invoices. Choose blocks, fields and columns with a live preview.",
     loading: "Loading print templates...",
