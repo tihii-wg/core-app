@@ -13,6 +13,7 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoice } from "./useGetInvoices";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
+import { OrderVatBreakdownView } from "../orders/OrderVatBreakdown";
 import { useInvoiceVat } from "./useInvoiceVat";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 import { InvoiceEmailDialog } from "./InvoiceEmailDialog";
@@ -45,7 +46,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
   const { payments, isLoading: paymentsLoading } = useGetPayments();
   const { canWrite } = useWorkspaceSubscription();
   const canRecord = withSubscriptionWriteAccess(Boolean(useActiveWorkspaceRole()), canWrite);
-  const vat = useInvoiceVat(invoice?.id, invoice?.total);
+  const vat = useInvoiceVat(invoice?.id, invoice?.total, invoice?.orderId);
   const paymentBalance = invoice ? invoicePaymentBalance(invoice, payments) : null;
   const erroneous = invoice ? isErroneousInvoiceStatus(invoice.status) : false;
   const canRecordPayments = canRecord && !erroneous;
@@ -59,6 +60,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
       logoUrl: documentData.logoUrl,
       supplier: documentData.supplier,
       formatMoney,
+      vatBreakdown: vat,
       documentTitle: `${invoice.invoiceNumber}.pdf`,
     });
   };
@@ -142,30 +144,24 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                   ))}
                 </tbody>
                 <tfoot className="border-t border-border font-medium">
-                  {vat ? (
-                    <>
-                      <tr className="text-xs font-normal">
-                        <td colSpan={3} className="px-3 pt-2 text-right text-muted-foreground">
-                          {t("invoices.detail.vat.net")}
-                        </td>
-                        <td className="px-3 pt-2 text-right tabular-nums text-muted-foreground">{formatMoney(vat.net)}</td>
-                      </tr>
-                      <tr className="text-xs font-normal">
-                        <td colSpan={3} className="px-3 pb-1 text-right text-muted-foreground">
-                          {vat.kind === "estimated"
-                            ? t("invoices.detail.vat.estimated", { rate: vat.ratePercent })
-                            : t("invoices.detail.vat.recorded")}
-                        </td>
-                        <td className="px-3 pb-1 text-right tabular-nums text-muted-foreground">{formatMoney(vat.vat)}</td>
-                      </tr>
-                    </>
-                  ) : null}
                   <tr>
                     <td colSpan={3} className="px-3 py-2 text-right text-muted-foreground">
                       {t("common.total")}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(invoice.total)}</td>
                   </tr>
+                  {vat ? (
+                    <tr>
+                      <td colSpan={4} className="px-3 pb-2 pt-0">
+                        <OrderVatBreakdownView
+                          breakdown={vat}
+                          formatMoney={formatMoney}
+                          className="ml-auto max-w-[240px] space-y-0.5 text-xs font-normal text-muted-foreground"
+                          testId="invoice-detail-vat"
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
                 </tfoot>
               </table>
             </div>

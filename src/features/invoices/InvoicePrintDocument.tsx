@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { InvoiceDocument, InvoiceItem } from "../../lib/types";
+import type { OrderVatBreakdown } from "../finance/orderVat";
 import { lineTotal, type InvoiceSections } from "./invoiceItemSections";
 import {
   INVOICE_PRINT_INK as INK,
@@ -32,6 +33,8 @@ type InvoicePrintDocumentProps = {
   logoUrl: string | null;
   supplier: InvoiceSupplierInfo;
   formatMoney: (value: number) => string;
+  /** VAT-inclusive breakdown; omitted when no rate / tax_total applies. */
+  vatBreakdown?: OrderVatBreakdown | null;
 };
 
 function statusAccent(status: InvoiceDocument["status"]) {
@@ -113,7 +116,15 @@ function SupplierLine({ label, value }: { label: string; value: string }) {
  * is ever omitted to force the page fit — unusually long invoices
  * flow to a second page with repeated table headers instead.
  */
-export function InvoicePrintDocument({ invoice, sections, companyName, logoUrl, supplier, formatMoney }: InvoicePrintDocumentProps) {
+export function InvoicePrintDocument({
+  invoice,
+  sections,
+  companyName,
+  logoUrl,
+  supplier,
+  formatMoney,
+  vatBreakdown = null,
+}: InvoicePrintDocumentProps) {
   const { t } = useTranslation();
   const accent = statusAccent(invoice.status);
   const amountDue = invoice.status === "paid" ? 0 : sections.grandTotal;
@@ -208,6 +219,22 @@ export function InvoicePrintDocument({ invoice, sections, companyName, logoUrl, 
               <dt style={{ color: MUTED }}>{t("invoices.document.materialsSubtotal")}</dt>
               <dd className="tabular-nums font-medium">{formatMoney(sections.materialsSubtotal)}</dd>
             </div>
+          ) : null}
+          {vatBreakdown ? (
+            <>
+              <div className="flex justify-between py-0.5" data-testid="invoice-print-vat-net">
+                <dt style={{ color: MUTED }}>{t("orders.vat.net")}</dt>
+                <dd className="tabular-nums font-medium">{formatMoney(vatBreakdown.net)}</dd>
+              </div>
+              <div className="flex justify-between py-0.5" data-testid="invoice-print-vat">
+                <dt style={{ color: MUTED }}>{t("orders.vat.vat", { rate: vatBreakdown.rate })}</dt>
+                <dd className="tabular-nums font-medium">{formatMoney(vatBreakdown.vat)}</dd>
+              </div>
+              <div className="flex justify-between py-0.5" data-testid="invoice-print-vat-gross">
+                <dt style={{ color: MUTED }}>{t("orders.vat.gross")}</dt>
+                <dd className="tabular-nums font-medium">{formatMoney(vatBreakdown.gross)}</dd>
+              </div>
+            </>
           ) : null}
           <div className="print-exact mt-1.5 flex items-center justify-between rounded-md px-3 py-2" style={{ background: PRIMARY, color: "#fff" }}>
             <dt className="text-xs font-bold">{invoice.status === "paid" ? t("invoices.document.totalPaid") : t("invoices.document.amountDue")}</dt>

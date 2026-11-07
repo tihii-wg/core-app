@@ -6,7 +6,7 @@ import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import type { WarrantySnapshot } from "../orders/warranty";
 import { snapshotMileageUnit } from "../orders/warranty";
 import type { PaymentBalance } from "../finance/paymentTypes";
-import { vatIncludedAmount } from "../finance/vat";
+import { documentVatBreakdown, type OrderVatBreakdown } from "../finance/orderVat";
 import type { InvoiceSections } from "../invoices/invoiceItemSections";
 import { computeOrderMoney, lineNet } from "../orders/orderTotals";
 import {
@@ -53,6 +53,10 @@ export type PrintContext = {
   printedAt: Date;
   /** Which document is being printed — drives #ДОКУМЕНТ-* tokens. */
   documentKind: PrintDocumentKind | null;
+  /** Current workspace VAT rate (display fallback when order.vatRate is null). */
+  workspaceVatRate: number | null;
+  /** Stored `invoices.tax_total` when present (>0 preferred for invoice VAT). */
+  invoiceTaxTotal: number | null;
 };
 
 export type TemplateVariable = {
@@ -95,8 +99,24 @@ export function emptyPrintContext(partial: Partial<PrintContext> = {}): PrintCon
     warrantyRecords: [],
     printedAt: new Date(0),
     documentKind: null,
+    workspaceVatRate: null,
+    invoiceTaxTotal: null,
     ...partial,
   };
+}
+
+/** Shared VAT-inclusive breakdown for print variables and totals rows. */
+export function printContextVatBreakdown(ctx: PrintContext): OrderVatBreakdown | null {
+  const total = documentTotal(ctx);
+  if (total == null) return null;
+  const isInvoice = ctx.documentKind === "invoice" || (ctx.documentKind == null && ctx.invoice != null);
+  return documentVatBreakdown({
+    total,
+    orderVatRate: ctx.order?.vatRate,
+    workspaceVatRate: ctx.workspaceVatRate,
+    invoiceTaxTotal: ctx.invoiceTaxTotal,
+    preferInvoiceTaxTotal: isInvoice,
+  });
 }
 
 function documentTitleLabel(kind: PrintDocumentKind | null, locale: string): string | null {
@@ -847,15 +867,51 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: (ctx) => documentTotal(ctx),
   },
   {
+    token: "#СТАВКА-НДС",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.vatRate.label",
+    descriptionKey: "settings.printTemplates.variables.money.vatRate.description",
+    kind: "text",
+    resolve: (ctx) => {
+      const vat = printContextVatBreakdown(ctx);
+      return vat ? `${vat.rate}%` : null;
+    },
+  },
+  {
+    token: "#СУММА-БЕЗ-НДС",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.net.label",
+    descriptionKey: "settings.printTemplates.variables.money.net.description",
+    kind: "money",
+    resolve: (ctx) => printContextVatBreakdown(ctx)?.net ?? null,
+  },
+  {
+    token: "#НДС-ПРОПИСЬЮ",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.vatWords.label",
+    descriptionKey: "settings.printTemplates.variables.money.vatWords.description",
+    kind: "text",
+    resolve: (ctx) => {
+      const vat = printContextVatBreakdown(ctx);
+      if (!vat) return null;
+      return amountInWords(vat.vat, normalizeAmountInWordsLocale(ctx.locale));
+    },
+  },
+  {
     token: "#НДС",
     group: "money",
     labelKey: "settings.printTemplates.variables.money.vat.label",
     descriptionKey: "settings.printTemplates.variables.money.vat.description",
     kind: "money",
-    resolve: (ctx) => {
-      const total = documentTotal(ctx);
-      return total == null ? null : vatIncludedAmount(total);
-    },
+    resolve: (ctx) => printContextVatBreakdown(ctx)?.vat ?? null,
+  },
+  {
+    token: "#ИТОГО-С-НДС",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.grossWithVat.label",
+    descriptionKey: "settings.printTemplates.variables.money.grossWithVat.description",
+    kind: "money",
+    resolve: (ctx) => printContextVatBreakdown(ctx)?.gross ?? null,
   },
   {
     token: "#ОПЛАЧЕНО",

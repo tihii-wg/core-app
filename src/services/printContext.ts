@@ -11,7 +11,9 @@ import { getLegalEntities, type LegalEntity } from "./apiLegalEntities";
 import { getOrder } from "./apiOrders";
 import { getPayments } from "./apiPayments";
 import { getVehicle } from "./apiVehicles";
+import { getInvoiceTaxTotal } from "./apiInvoiceTax";
 import { getWarrantyRecordsForOrder } from "./apiWarranty";
+import { getWorkspaceVatRate } from "./apiWorkspaceVat";
 import { getWorkspace, type WorkspaceDetails } from "./apiWorkspaces";
 import { requireWorkspaceId } from "./missingTable";
 
@@ -66,12 +68,13 @@ export async function buildOrderPrintContext(
   const resolved = requireWorkspaceId(workspaceId);
   const order = await getOrder(orderId, resolved);
 
-  const [base, client, vehicle, payments, warrantyRecords] = await Promise.all([
+  const [base, client, vehicle, payments, warrantyRecords, workspaceVatRate] = await Promise.all([
     workspacePrintBase(resolved),
     order.clientId ? soft(getClient(resolved, order.clientId), null) : Promise.resolve(null as Client | null),
     order.vehicleId ? soft(getVehicle(resolved, order.vehicleId), null) : Promise.resolve(null as Vehicle | null),
     soft(getPayments(resolved, { orderId: order.id }), []),
     soft(getWarrantyRecordsForOrder(resolved, order.id), []),
+    soft(getWorkspaceVatRate(resolved), null),
   ]);
 
   const paymentBalance = orderPaymentBalance(order, payments);
@@ -93,6 +96,8 @@ export async function buildOrderPrintContext(
     warrantyRecords,
     printedAt: new Date(),
     documentKind: documentKind === "invoice" ? "work_order" : documentKind,
+    workspaceVatRate,
+    invoiceTaxTotal: null,
   });
 }
 
@@ -104,11 +109,13 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
   const resolved = requireWorkspaceId(workspaceId);
   const invoice = await getInvoice(invoiceId, resolved);
 
-  const [base, client, order, payments] = await Promise.all([
+  const [base, client, order, payments, workspaceVatRate, invoiceTaxTotal] = await Promise.all([
     workspacePrintBase(resolved),
     invoice.clientId ? soft(getClient(resolved, invoice.clientId), null) : Promise.resolve(null as Client | null),
     invoice.orderId ? soft(getOrder(invoice.orderId, resolved), null) : Promise.resolve(null as Order | null),
     soft(getPayments(resolved, { invoiceId: invoice.id }), []),
+    soft(getWorkspaceVatRate(resolved), null),
+    soft(getInvoiceTaxTotal(invoice.id, resolved), null),
   ]);
 
   const vehicle =
@@ -152,6 +159,8 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
     warrantyRecords,
     printedAt: new Date(),
     documentKind: "invoice",
+    workspaceVatRate,
+    invoiceTaxTotal,
   });
 }
 

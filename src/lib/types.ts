@@ -155,6 +155,16 @@ export interface Order {
   deadline: string;
   /** Final (net) amount = subtotal - discountTotal; what `orders.total_price` stores. */
   totalPrice: number;
+  /**
+   * VAT rate percent snapshot (`orders.vat_rate`) at order creation.
+   * Null when unset / column absent / old rows — UI falls back to the workspace rate for display only.
+   */
+  vatRate?: number | null;
+  /**
+   * VAT amount extracted from total_price (`orders.tax_total`), maintained by a DB trigger.
+   * Null/0 when no rate or column absent.
+   */
+  taxTotal?: number | null;
   /** Sum of line gross amounts (price * qty). Falls back to totalPrice + discountTotal when lines are not loaded. */
   subtotal?: number;
   /** `orders.discount_total` (crm_ro_v1); 0 when absent. */

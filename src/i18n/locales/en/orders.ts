@@ -47,6 +47,14 @@ export default {
     notAssigned: "Not assigned",
     defaultPerformer: "Default performer",
   },
+  vat: {
+    net: "Excl. VAT",
+    vat: "VAT {{rate}}%",
+    gross: "Total incl. VAT",
+    included: "incl. VAT",
+    noRate: "VAT rate is not set.",
+    setRate: "Set VAT rate in settings",
+  },
   empty: {
     loadFailed: "Could not load orders",
     noMatchesTitle: "No orders match your filters",

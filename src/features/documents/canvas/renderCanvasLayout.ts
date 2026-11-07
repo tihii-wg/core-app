@@ -2,11 +2,13 @@
 
 import QRCode from "qrcode";
 import type { StyleColorPalette } from "../colorRef";
+import { vatIncludedAmount } from "../../finance/vat";
 import { applyTemplateVariables } from "../printTemplate";
-import { escapeHtmlText, type PrintContext } from "../templateVariables";
+import { escapeHtmlText, printContextVatBreakdown, type PrintContext } from "../templateVariables";
 import { fillToCss, resolveCanvasColor } from "./fill";
 import {
   canvasRowsForSource,
+  canvasTotalsRowVisible,
   canvasTotalsValue,
   estimateTableHeightMm,
   formatCanvasMoney,
@@ -229,9 +231,13 @@ function renderTableHtml(
         case "discount":
           value = escapeHtmlText(row.discount);
           break;
-        case "vat":
-          value = formatCanvasMoney(row.sum * 0.2, ctx, showCents);
+        case "vat": {
+          const vat = printContextVatBreakdown(ctx);
+          value = vat
+            ? formatCanvasMoney(vatIncludedAmount(row.sum, vat.rate), ctx, showCents)
+            : "";
           break;
+        }
         case "sum":
           value = formatCanvasMoney(row.sum, ctx, showCents);
           break;
@@ -263,13 +269,13 @@ function renderTotalsHtml(
   showCents: boolean,
   showTokens: boolean,
 ): string {
-  const rows = el.rows.filter((row) => row.enabled);
+  const rows = el.rows.filter((row) => row.enabled && (showTokens || canvasTotalsRowVisible(row.key, ctx)));
   if (rows.length === 0) return "";
   const textColor = resolveCanvasColor(el.textColor ?? el.style.color, colors) ?? "#111111";
   const bg = resolveCanvasColor(el.background, colors);
   let html = `<table style="width:100%;border-collapse:collapse${bg ? `;background:${bg}` : ""}">`;
   for (const row of rows) {
-    const isGrand = row.key === "total";
+    const isGrand = row.key === "total" || row.key === "grossWithVat";
     const rowBg = isGrand ? resolveCanvasColor(el.grandTotalBackground, colors) : undefined;
     const rowFg = isGrand ? resolveCanvasColor(el.grandTotalTextColor, colors) : textColor;
     const label = showTokens ? escapeHtmlText(row.label) : applyText(row.label, ctx, showCents, false);

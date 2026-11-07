@@ -19,6 +19,7 @@ import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateOrder } from "./useCreateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
@@ -78,6 +79,7 @@ export default function AddNewOrderForm({
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const { formatMoney } = useWorkspaceMoney();
+  const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const { data: workspace } = useGetWorkspace();
   const warrantyDefaults = {
     serviceDurationMonths: workspace?.warrantyServiceMonths ?? null,
@@ -551,6 +553,7 @@ export default function AddNewOrderForm({
           money={orderMoney}
           formatMoney={formatMoney}
           clientDiscountPercents={{ services: orderMoney.servicePercent, products: orderMoney.productPercent }}
+          vatRate={workspaceVatRate}
         />
       </div>
 

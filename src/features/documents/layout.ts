@@ -19,6 +19,7 @@ import { isSafeHexColor } from "./layoutHex";
 import { applyTemplateVariables } from "./printTemplate";
 import {
   escapeHtmlText,
+  printContextVatBreakdown,
   TEMPLATE_VARIABLES,
   type PrintContext,
 } from "./templateVariables";
@@ -84,7 +85,9 @@ export type TotalsRowKey =
   | "servicesSum"
   | "materialsSum"
   | "discount"
+  | "net"
   | "vat"
+  | "grossWithVat"
   | "total"
   | "paid"
   | "remaining"
@@ -204,7 +207,18 @@ const TABLE_KEYS = new Set<TableColumnKey>([
   "warranty",
   "performer",
 ]);
-const TOTAL_KEYS = new Set<TotalsRowKey>(["servicesSum", "materialsSum", "discount", "vat", "total", "paid", "remaining", "totalWords"]);
+const TOTAL_KEYS = new Set<TotalsRowKey>([
+  "servicesSum",
+  "materialsSum",
+  "discount",
+  "net",
+  "vat",
+  "grossWithVat",
+  "total",
+  "paid",
+  "remaining",
+  "totalWords",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -651,9 +665,11 @@ function renderTable(block: TableBlock, ctx: PrintContext, env: RenderEnv) {
         case "discount":
           value = escapeHtmlText(row.discount);
           break;
-        case "vat":
-          value = money(vatIncludedAmount(row.sum), ctx, env.showCents);
+        case "vat": {
+          const vat = printContextVatBreakdown(ctx);
+          value = vat ? money(vatIncludedAmount(row.sum, vat.rate), ctx, env.showCents) : "";
           break;
+        }
         case "sum":
           value = money(row.sum, ctx, env.showCents);
           break;
@@ -697,7 +713,12 @@ function orderDiscount(ctx: PrintContext) {
 }
 
 function renderTotals(block: TotalsBlock, ctx: PrintContext, env: RenderEnv) {
-  const rows = block.rows.filter((row) => row.enabled);
+  const vat = printContextVatBreakdown(ctx);
+  const rows = block.rows.filter((row) => {
+    if (!row.enabled) return false;
+    if ((row.key === "net" || row.key === "vat" || row.key === "grossWithVat") && !vat) return false;
+    return true;
+  });
   if (rows.length === 0) return "";
   const align = block.style?.align === "left" ? "margin-right:auto;margin-left:0" : "margin-left:auto";
   let html = `<table style="width:100%;max-width:320px;${align};border-collapse:collapse">`;
@@ -713,8 +734,14 @@ function renderTotals(block: TotalsBlock, ctx: PrintContext, env: RenderEnv) {
       case "discount":
         value = money(orderDiscount(ctx), ctx, env.showCents);
         break;
+      case "net":
+        value = vat ? money(vat.net, ctx, env.showCents) : "";
+        break;
       case "vat":
-        value = money(vatIncludedAmount(orderTotal(ctx)), ctx, env.showCents);
+        value = vat ? money(vat.vat, ctx, env.showCents) : "";
+        break;
+      case "grossWithVat":
+        value = vat ? money(vat.gross, ctx, env.showCents) : "";
         break;
       case "total":
         value = money(orderTotal(ctx), ctx, env.showCents);

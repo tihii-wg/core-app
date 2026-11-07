@@ -29,6 +29,10 @@ import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industri
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { effectiveOrderVatRate, orderVatBreakdown } from "../finance/orderVat";
+import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
+import { vatIncludedAmount } from "../finance/vat";
+import { OrderVatBreakdownView } from "./OrderVatBreakdown";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageWarehouse, canManageWorkspace } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
@@ -115,6 +119,7 @@ export default function OrderDetailPanel({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
+  const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const { workflow, copy } = useIndustryWorkflow();
   const showClientVehicles = industrySupportsClientVehicles(workflow);
   const workspaceRole = useActiveWorkspaceRole();
@@ -276,6 +281,9 @@ export default function OrderDetailPanel({
   const materialLines = selectedOrder?.materials ?? [];
   const hasServiceLines = serviceLines.length > 0;
   const hasMaterialLines = materialLines.length > 0;
+  const detailVatRate = selectedOrder
+    ? effectiveOrderVatRate(selectedOrder, workspaceVatRate)
+    : null;
   const fallbackService = selectedOrder?.service?.trim() ?? "";
   const description = selectedOrder?.description?.trim() ?? "";
   const clientPhone = selectedOrder?.clientPhone?.trim() ?? "";
@@ -395,6 +403,16 @@ export default function OrderDetailPanel({
                     </div>
                   </dl>
                 ) : null}
+                <OrderVatBreakdownView
+                  className="mt-2 space-y-0.5 text-xs text-muted-foreground"
+                  breakdown={orderVatBreakdown({
+                    total: selectedOrder.totalPrice,
+                    vatRate: effectiveOrderVatRate(selectedOrder, workspaceVatRate),
+                  })}
+                  formatMoney={formatMoney}
+                  showNoRateHint
+                  testId="order-detail-vat"
+                />
                 <div className="mt-2">
                   <PaymentStatusBadge status={paymentBalance?.status ?? selectedOrder.paymentStatus} />
                 </div>
@@ -482,7 +500,11 @@ export default function OrderDetailPanel({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {serviceLines.map((line, index) => (
+                    {serviceLines.map((line, index) => {
+                      const lineGross = line.price * line.quantity;
+                      const lineVat =
+                        detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
+                      return (
                       <tr key={line.id ?? `${line.serviceId}-${index}`}>
                         <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
                           <div className="min-w-0 space-y-0.5">
@@ -512,9 +534,17 @@ export default function OrderDetailPanel({
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(line.price * line.quantity)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                          <div>{formatMoney(lineGross)}</div>
+                          {lineVat != null ? (
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("orders.vat.included")}: {formatMoney(lineVat)}
+                            </div>
+                          ) : null}
+                        </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -545,6 +575,9 @@ export default function OrderDetailPanel({
                               ? t("orders.form.materialSourceOneTime")
                               : t("orders.form.materialSourceCatalog");
                         const status = catalog ? warehouseMaterialStatus(line) : null;
+                        const lineGross = line.price * line.quantity;
+                        const lineVat =
+                          detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
                         return (
                           <tr key={line.id ?? `${line.inventoryItemId ?? "free"}-${index}`}>
                             <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
@@ -581,7 +614,14 @@ export default function OrderDetailPanel({
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(line.price * line.quantity)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                              <div>{formatMoney(lineGross)}</div>
+                              {lineVat != null ? (
+                                <div className="text-[11px] text-muted-foreground">
+                                  {t("orders.vat.included")}: {formatMoney(lineVat)}
+                                </div>
+                              ) : null}
+                            </td>
                           </tr>
                         );
                       })}

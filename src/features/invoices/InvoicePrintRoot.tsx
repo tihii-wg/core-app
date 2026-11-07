@@ -62,6 +62,7 @@ export function InvoicePrintRoot({ job, onDone }: InvoicePrintRootProps) {
         logoUrl={job.logoUrl}
         supplier={job.supplier}
         formatMoney={job.formatMoney}
+        vatBreakdown={job.vatBreakdown}
       />
     </div>,
     document.body,

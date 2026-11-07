@@ -54,6 +54,14 @@ const orders: Messages<typeof en> = {
     notAssigned: "Не назначен",
     defaultPerformer: "Исполнитель по умолчанию",
   },
+  vat: {
+    net: "Без НДС",
+    vat: "НДС {{rate}}%",
+    gross: "Итого с НДС",
+    included: "в т.ч. НДС",
+    noRate: "Ставка НДС не задана.",
+    setRate: "Задать ставку НДС в настройках",
+  },
   empty: {
     loadFailed: "Не удалось загрузить заказы",
     noMatchesTitle: "Нет заказов, соответствующих фильтрам",

@@ -1,13 +1,12 @@
 /** Shared table / totals data for canvas rendering (mirrors layout.ts row logic). */
 
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../../lib/types";
-import { vatIncludedAmount } from "../../finance/vat";
 import type { InvoiceSections } from "../../invoices/invoiceItemSections";
 import { lineTotal } from "../../invoices/invoiceItemSections";
 import { lineNet } from "../../orders/orderTotals";
 import { amountInWords, normalizeAmountInWordsLocale } from "../amountInWords";
 import type { TableSource, TotalsRowKey } from "../layout";
-import { escapeHtmlText, type PrintContext } from "../templateVariables";
+import { escapeHtmlText, printContextVatBreakdown, type PrintContext } from "../templateVariables";
 
 export type CanvasLineRow = {
   name: string;
@@ -120,6 +119,7 @@ function orderDiscount(ctx: PrintContext) {
 }
 
 export function canvasTotalsValue(key: TotalsRowKey, ctx: PrintContext, showCents: boolean): string {
+  const vat = printContextVatBreakdown(ctx);
   switch (key) {
     case "servicesSum":
       return formatCanvasMoney(servicesSum(ctx), ctx, showCents);
@@ -127,8 +127,12 @@ export function canvasTotalsValue(key: TotalsRowKey, ctx: PrintContext, showCent
       return formatCanvasMoney(materialsSum(ctx), ctx, showCents);
     case "discount":
       return formatCanvasMoney(orderDiscount(ctx), ctx, showCents);
+    case "net":
+      return vat ? formatCanvasMoney(vat.net, ctx, showCents) : "";
     case "vat":
-      return formatCanvasMoney(vatIncludedAmount(orderTotal(ctx)), ctx, showCents);
+      return vat ? formatCanvasMoney(vat.vat, ctx, showCents) : "";
+    case "grossWithVat":
+      return vat ? formatCanvasMoney(vat.gross, ctx, showCents) : "";
     case "total":
       return formatCanvasMoney(orderTotal(ctx), ctx, showCents);
     case "paid":
@@ -138,6 +142,14 @@ export function canvasTotalsValue(key: TotalsRowKey, ctx: PrintContext, showCent
     case "totalWords":
       return escapeHtmlText(amountInWords(orderTotal(ctx), normalizeAmountInWordsLocale(ctx.locale)));
   }
+}
+
+/** Whether a totals row should render for the current print context (VAT rows need a rate). */
+export function canvasTotalsRowVisible(key: TotalsRowKey, ctx: PrintContext): boolean {
+  if (key === "net" || key === "vat" || key === "grossWithVat") {
+    return printContextVatBreakdown(ctx) != null;
+  }
+  return true;
 }
 
 /** Estimated table body height in mm (header + rows + optional totals). */

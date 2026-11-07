@@ -12,6 +12,7 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
 import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
+import { useInvoiceVat } from "./useInvoiceVat";
 
 /**
  * Quick-print for one invoice row. Prefers the workspace invoice template (default first).
@@ -102,6 +103,7 @@ export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Inv
 function InvoiceRowPrintJob({ invoice, onDone }: { invoice: InvoiceDocument; onDone: () => void }) {
   const { formatMoney } = useWorkspaceMoney();
   const documentData = useInvoiceDocumentData(invoice);
+  const vatBreakdown = useInvoiceVat(invoice.id, invoice.total, invoice.orderId);
   const [job, setJob] = useState<InvoicePrintJob | null>(null);
 
   useEffect(() => {
@@ -113,9 +115,10 @@ function InvoiceRowPrintJob({ invoice, onDone }: { invoice: InvoiceDocument; onD
       logoUrl: documentData.logoUrl,
       supplier: documentData.supplier,
       formatMoney,
+      vatBreakdown,
       documentTitle: `${invoice.invoiceNumber}.pdf`,
     });
-  }, [documentData, formatMoney, invoice, job]);
+  }, [documentData, formatMoney, invoice, job, vatBreakdown]);
 
   if (!job) return null;
   return <InvoicePrintRoot job={job} onDone={onDone} />;

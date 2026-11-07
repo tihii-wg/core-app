@@ -1476,9 +1476,10 @@ async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]
   return persistOrderMaterialWarranties(orderId, workspaceId, consolidated, mapped);
 }
 
-function toOrder(
+/** Exported for unit tests (VAT column fallback when `vat_rate` / `tax_total` are absent). */
+export function toOrder(
   row: Record<string, unknown>,
-  employees: { id: string; name: string; profile_id: string | null }[],
+  employees: { id: string; name: string; profile_id: string | null }[] = [],
   serviceLines: OrderServiceLine[] = [],
   memberNames: Map<string, string> = new Map(),
   materialLines: OrderMaterialLine[] = [],
@@ -1508,6 +1509,21 @@ function toOrder(
   const headerDiscountType = toLineDiscountType(row.discount_type);
   const fallbackAssigneeId = employeeId || legacyAssignedTo;
   const createdById = typeof row.created_by === "string" ? row.created_by.trim() : "";
+  // VAT columns (20261107130000_order_vat): absent from `*` when the SQL is not applied → treat as null.
+  const vatRateRaw = row.vat_rate;
+  const vatRate =
+    vatRateRaw == null || vatRateRaw === ""
+      ? null
+      : Number.isFinite(Number(vatRateRaw)) && Number(vatRateRaw) > 0
+        ? Number(vatRateRaw)
+        : null;
+  const taxTotalRaw = row.tax_total;
+  const taxTotal =
+    taxTotalRaw == null || taxTotalRaw === ""
+      ? null
+      : Number.isFinite(Number(taxTotalRaw))
+        ? Math.max(0, roundMoney(Number(taxTotalRaw)))
+        : null;
 
   return {
     id: String(row.id),
@@ -1540,6 +1556,8 @@ function toOrder(
     team,
     deadline: formatOrderDate(row.deadline),
     totalPrice,
+    vatRate,
+    taxTotal,
     subtotal: roundMoney(totalPrice + discountTotal),
     discountTotal,
     ...(headerDiscountType ? { discountType: headerDiscountType, discountValue: toDiscountValue(row.discount_value) } : {}),

@@ -191,6 +191,37 @@ describe("template variable registry", () => {
     expect(noCents).toMatch(/170/);
   });
 
+  it("resolves VAT tokens from the order snapshot rate", () => {
+    const ctx = fullContext();
+    ctx.order = orderFixture({ totalPrice: 1200, vatRate: 20, discountTotal: 0 });
+    ctx.workspaceVatRate = 12;
+    const rate = applyTemplateVariables("#СТАВКА-НДС", ctx, { locale: "en", currency: "MDL" });
+    const net = applyTemplateVariables("#СУММА-БЕЗ-НДС", ctx, { locale: "en", currency: "MDL", showCents: true });
+    const vat = applyTemplateVariables("#НДС", ctx, { locale: "en", currency: "MDL", showCents: true });
+    const gross = applyTemplateVariables("#ИТОГО-С-НДС", ctx, { locale: "en", currency: "MDL", showCents: true });
+    expect(rate).toBe("20%");
+    expect(net).toMatch(/1[,.]?000/);
+    expect(vat).toMatch(/200/);
+    expect(gross).toMatch(/1[,.]?200/);
+  });
+
+  it("falls back to the workspace VAT rate when the order has no snapshot", () => {
+    const ctx = fullContext();
+    ctx.order = orderFixture({ totalPrice: 1200, vatRate: null, discountTotal: 0 });
+    ctx.workspaceVatRate = 20;
+    expect(applyTemplateVariables("#СТАВКА-НДС", ctx, { locale: "en", currency: "MDL" })).toBe("20%");
+    expect(applyTemplateVariables("#НДС", ctx, { locale: "en", currency: "MDL", showCents: true })).toMatch(/200/);
+  });
+
+  it("leaves VAT tokens empty when no rate is available", () => {
+    const ctx = fullContext();
+    ctx.order = orderFixture({ totalPrice: 1200, vatRate: null, discountTotal: 0 });
+    ctx.workspaceVatRate = null;
+    expect(applyTemplateVariables("#НДС / #СТАВКА-НДС / #СУММА-БЕЗ-НДС", ctx, { locale: "en", currency: "MDL" })).toBe(
+      " /  / ",
+    );
+  });
+
   it("formats mileage tokens with the vehicle/order unit", () => {
     const miContext = fullContext();
     miContext.order = orderFixture({

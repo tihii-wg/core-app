@@ -52,6 +52,14 @@ const orders: Messages<typeof en> = {
     notAssigned: "Neatribuit",
     defaultPerformer: "Executant implicit",
   },
+  vat: {
+    net: "Fără TVA",
+    vat: "TVA {{rate}}%",
+    gross: "Total cu TVA",
+    included: "incl. TVA",
+    noRate: "Cota de TVA nu este setată.",
+    setRate: "Setați cota de TVA în setări",
+  },
   empty: {
     loadFailed: "Comenzile nu au putut fi încărcate",
     noMatchesTitle: "Nicio comandă nu corespunde filtrelor",

@@ -148,7 +148,18 @@ const COLUMN_KEYS: TableColumnKey[] = [
   "warranty",
   "performer",
 ];
-const TOTAL_KEYS: TotalsRowKey[] = ["servicesSum", "materialsSum", "discount", "vat", "total", "paid", "remaining", "totalWords"];
+const TOTAL_KEYS: TotalsRowKey[] = [
+  "servicesSum",
+  "materialsSum",
+  "discount",
+  "net",
+  "vat",
+  "grossWithVat",
+  "total",
+  "paid",
+  "remaining",
+  "totalWords",
+];
 
 type WidthPreset = { id: string; label: string; widths: number[] };
 const WIDTH_PRESETS: WidthPreset[] = [

@@ -16,6 +16,8 @@ import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { effectiveOrderVatRate } from "../finance/orderVat";
+import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
@@ -76,6 +78,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
+  const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const { data: workspace } = useGetWorkspace();
   const warrantyDefaults = {
     serviceDurationMonths: workspace?.warrantyServiceMonths ?? null,
@@ -467,6 +470,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         money={orderMoney}
         formatMoney={formatMoney}
         clientDiscountPercents={{ services: orderMoney.servicePercent, products: orderMoney.productPercent }}
+        vatRate={effectiveOrderVatRate(order, workspaceVatRate)}
       />
 
       <div className="flex justify-end gap-2">
