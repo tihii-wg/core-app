@@ -30,8 +30,8 @@ describe("orderColumnVisibility", () => {
     expect(readOrderVisibleColumns()).toEqual(DEFAULT_ORDER_VISIBLE_COLUMNS);
   });
 
-  it("maps a legacy payment-only selection onto the combined status column", () => {
+  it("keeps a stored payment column and ensures status stays visible", () => {
     window.localStorage.setItem(ORDER_COLUMN_STORAGE_KEY, JSON.stringify(["payment", "total"]));
-    expect(readOrderVisibleColumns()).toEqual(["status", "total"]);
+    expect(readOrderVisibleColumns()).toEqual(["status", "payment", "total"]);
   });
 });

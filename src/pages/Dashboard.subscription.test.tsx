@@ -12,24 +12,29 @@ const subscriptionState = vi.hoisted(() => ({
   error: null as Error | null,
 }));
 
-vi.mock("../features/workspaces/useWorkspaceSubscription", () => ({
-  useWorkspaceSubscription: () => ({
-    canWrite: subscriptionState.canWrite,
-    status: subscriptionState.status,
-    expiresAt: subscriptionState.expiresAt,
-    startedAt: null,
-    updatedAt: null,
-    isLoading: subscriptionState.isLoading,
-    isEntitlementPending: subscriptionState.isEntitlementPending,
-    isEntitlementResolved: !subscriptionState.isEntitlementPending,
-    isFetching: false,
-    isFetched: true,
-    error: subscriptionState.error,
-    refetch: vi.fn(),
-    workspaceId: "ws-1",
-    subscription: null,
-  }),
-}));
+vi.mock("../features/workspaces/useWorkspaceSubscription", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../features/workspaces/useWorkspaceSubscription")>();
+  return {
+    ...actual,
+    useWorkspaceSubscription: () => ({
+      canWrite: subscriptionState.canWrite,
+      status: subscriptionState.status,
+      expiresAt: subscriptionState.expiresAt,
+      startedAt: null,
+      updatedAt: null,
+      isLoading: subscriptionState.isLoading,
+      isEntitlementPending: subscriptionState.isEntitlementPending,
+      isEntitlementResolved: !subscriptionState.isEntitlementPending,
+      isFetching: false,
+      isFetched: true,
+      error: subscriptionState.error,
+      refetch: vi.fn(),
+      workspaceId: "ws-1",
+      subscription: null,
+    }),
+    useGuardSubscriptionWrite: () => () => subscriptionState.canWrite,
+  };
+});
 
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router-dom")>();
@@ -46,6 +51,19 @@ vi.mock("../lib/appContext", () => ({
 
 vi.mock("../features/profiles/useGetProfile", () => ({
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
+  useGetProfile: () => ({ data: { id: "user-1" }, isLoading: false }),
+}));
+
+vi.mock("../features/workspaces/useGetWorkspace", () => ({
+  useGetWorkspace: () => ({
+    data: { currency: "MDL", ownerId: "user-1", requireTaxInvoiceNumber: false },
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("../features/workspaces/useActiveWorkspaceRole", () => ({
+  useActiveWorkspaceRole: () => "owner",
 }));
 
 vi.mock("../features/orders/useOrderDetails", () => ({
@@ -55,9 +73,41 @@ vi.mock("../features/orders/useOrderDetails", () => ({
     setDetailPanelOpen: vi.fn(),
     openOrder: vi.fn(),
     changeStatus: vi.fn(),
+    syncOrder: vi.fn(),
+    clearOrder: vi.fn(),
     isStatusUpdating: false,
+    requireTaxInvoiceNumber: false,
+    isWorkspaceOwner: true,
     onOrderUpdated: vi.fn(),
+    panelProps: {
+      selectedOrder: null,
+      detailPanelOpen: false,
+      setDetailPanelOpen: vi.fn(),
+    },
   }),
+}));
+
+vi.mock("../features/clients/useOpenClientDetails", () => ({
+  useOpenClientDetails: () => ({
+    selectedClient: null,
+    detailPanelOpen: false,
+    setDetailPanelOpen: vi.fn(),
+    openClient: vi.fn(),
+    onClientUpdated: vi.fn(),
+    onClientDeleted: vi.fn(),
+  }),
+}));
+
+vi.mock("../features/clients/ClientDetailsHost", () => ({ ClientDetailsHost: () => null }));
+vi.mock("../features/orders/EditOrderDialog", () => ({ EditOrderDialog: () => null }));
+vi.mock("../features/invoices/useGetInvoices", () => ({
+  useGetInvoices: () => ({ invoices: [], isLoading: false, error: null, isUnavailable: false }),
+}));
+vi.mock("../features/invoices/useCreateInvoice", () => ({
+  useCreateInvoice: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("../features/finance/usePayments", () => ({
+  useGetPayments: () => ({ payments: [], isLoading: false, error: null }),
 }));
 
 vi.mock("../features/inventory/useGetInventoryItems", () => ({

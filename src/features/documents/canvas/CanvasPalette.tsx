@@ -45,7 +45,17 @@ function elementLabelKey(type: CanvasElementType): string {
   }
 }
 
-function DraggableChip({ id, payload, children }: { id: string; payload: PaletteDragPayload; children: React.ReactNode }) {
+function DraggableChip({
+  id,
+  payload,
+  children,
+  onAdd,
+}: {
+  id: string;
+  payload: PaletteDragPayload;
+  children: React.ReactNode;
+  onAdd?: (payload: PaletteDragPayload) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, data: payload });
   return (
     <button
@@ -58,6 +68,7 @@ function DraggableChip({ id, payload, children }: { id: string; payload: Palette
         isDragging && "opacity-50",
       )}
       style={{ transform: CSS.Translate.toString(transform) }}
+      onClick={() => onAdd?.(payload)}
     >
       {children}
     </button>
@@ -77,7 +88,7 @@ const GROUP_ORDER: VariableGroup[] = [
   "tables",
 ];
 
-export function CanvasPalette() {
+export function CanvasPalette({ onAddElement }: { onAddElement?: (payload: PaletteDragPayload) => void } = {}) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
@@ -106,7 +117,12 @@ export function CanvasPalette() {
         <h3 className="text-sm font-medium">{t("settings.printTemplates.canvas.elements")}</h3>
         <div className="mt-2 grid gap-1.5">
           {ELEMENT_TYPES.filter((type) => !q || String(t(elementLabelKey(type) as never)).toLowerCase().includes(q)).map((type) => (
-            <DraggableChip key={type} id={`palette-el-${type}`} payload={{ kind: "element", elementType: type }}>
+            <DraggableChip
+              key={type}
+              id={`palette-el-${type}`}
+              payload={{ kind: "element", elementType: type }}
+              onAdd={onAddElement}
+            >
               {t(elementLabelKey(type) as never)}
             </DraggableChip>
           ))}
@@ -135,6 +151,7 @@ export function CanvasPalette() {
                       token: variable.token,
                       label: String(t(variable.labelKey as never)),
                     }}
+                    onAdd={onAddElement}
                   >
                     <span className="font-medium">{t(variable.labelKey as never)}</span>
                     <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{variable.token}</span>

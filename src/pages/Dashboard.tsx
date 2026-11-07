@@ -4,11 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { DataTable, type Column } from "../ui/DataTable";
-import type { InventoryItem, Order } from "../lib/types";
+import type { Client, InventoryItem, Order } from "../lib/types";
 import { statCardClassName, statIconVariants } from "../ui/statCardStyles";
 import { Button } from "../ui/Button";
 import { useApp } from "../lib/appContext";
-import { InventoryStatusBadge, OrderStatusBadge, PaymentStatusBadge } from "../ui/StatusBadge";
+import { InventoryStatusBadge } from "../ui/StatusBadge";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
 import { PageHeader } from "./PageHeader";
@@ -29,20 +29,20 @@ import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems
 import { useWorkspaceMoney } from "../features/workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
 import { CreateOrderDialog } from "../features/orders/CreateOrderDialog";
+import { EditOrderDialog } from "../features/orders/EditOrderDialog";
+import { OrdersListView } from "../features/orders/OrdersListView";
 import { AddClientDialog } from "../features/clients/AddClientDialog";
 import { AddInventoryItemDialog } from "../features/inventory/AddInventoryItemDialog";
-import ClientTypeBadge from "../features/clients/ClientTypeBadge";
+import { ClientDetailsHost } from "../features/clients/ClientDetailsHost";
+import { useOpenClientDetails } from "../features/clients/useOpenClientDetails";
 import OrderDetailPanel from "../features/orders/OrderDetailPanel";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
-import { OrderWarrantyIndicator } from "../features/orders/OrderWarrantyIndicator";
-import { useOrdersWarrantyIndicators } from "../features/orders/useOrdersWarrantyIndicators";
 import { isOpenOrder } from "../features/orders/orderVisibility";
 import { EditInventoryItemDialog } from "../features/inventory/EditInventoryItemDialog";
 import { quantityClass } from "../features/inventory/inventoryDisplay";
 import { effectiveStockStatus } from "../features/inventory/stockStatus";
-import { orderPaymentBalance } from "../features/finance/paymentCalculations";
-import { useGetPayments } from "../features/finance/usePayments";
 import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancialCards";
+
 import { useDashboardFinancials } from "../features/dashboard/useDashboardFinancials";
 import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
 import { DashboardQuickActions } from "../features/dashboard/DashboardQuickActions";
@@ -56,6 +56,7 @@ import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow"
 import { SubscriptionReadOnlyNotice } from "../features/workspaces/SubscriptionReadOnlyNotice";
 import { cn } from "../lib/utils";
 import { currentIntlLocale } from "../i18n";
+
 
 type QuickActionDialog = "order" | "client" | "inventory";
 type DashboardListView = "recent" | "active" | "lowStock" | "awaitingPayment";
@@ -104,12 +105,21 @@ export default function Dashboard() {
   const { workspaceId } = useActiveWorkspaceId();
   const [openDialog, setOpenDialog] = useState<QuickActionDialog | null>(null);
   const orderDetails = useOrderDetails();
+  const clientDetails = useOpenClientDetails();
+  const [orderForClient, setOrderForClient] = useState<Client | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [listView, setListView] = useState<DashboardListView>("recent");
   const [previousOrderListView, setPreviousOrderListView] = useState<DashboardOrderListView>("recent");
   const showActiveOrders = listView === "active";
   const showLowStock = listView === "lowStock";
   const showAwaitingPayment = listView === "awaitingPayment";
   const [editInventoryId, setEditInventoryId] = useState<string | null>(null);
+
+  function openClientFromOrder(clientId: string) {
+    orderDetails.panelProps.setDetailPanelOpen(false);
+    void clientDetails.openClient(clientId);
+  }
+
   const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
   const dialogProps = (dialog: QuickActionDialog) => ({
     open: openDialog === dialog,
@@ -143,8 +153,6 @@ export default function Dashboard() {
     enabled: Boolean(workspaceId) && !showActiveOrders,
     staleTime: 15_000,
   });
-  const { payments } = useGetPayments();
-
   const now = new Date();
   const { awaitingPayment } = useDashboardFinancials(now);
   const today = localDateKey(now);
@@ -199,15 +207,20 @@ export default function Dashboard() {
     : showActiveOrders
       ? activeOrders
       : recentOrders;
-  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(listedOrders);
 
-  const paymentStatusByOrder = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof orderPaymentBalance>["status"]>();
-    for (const order of listedOrders) {
-      map.set(order.id, orderPaymentBalance(order, payments).status);
-    }
-    return map;
-  }, [listedOrders, payments]);
+  const toPayColumn = useMemo(
+    (): Column<Order> => ({
+      key: "toPay",
+      header: t("dashboard.lists.toPay"),
+      cell: (order) => (
+        <span className="font-semibold tabular-nums text-warning">
+          {formatMoney(awaitingRemainingByOrderId.get(order.id) ?? 0)}
+        </span>
+      ),
+      className: "text-right whitespace-nowrap",
+    }),
+    [awaitingRemainingByOrderId, formatMoney, t],
+  );
 
   function toggleAwaitingPayment() {
     if (listView === "awaitingPayment") {
@@ -231,76 +244,6 @@ export default function Dashboard() {
     const order = workspaceOrders.find((item) => item.id === event.orderId);
     if (order) orderDetails.openOrder(order);
   };
-
-  const orderColumns: Column<Order>[] = [
-    {
-      key: "orderNumber",
-      header: t("dashboard.columns.order"),
-      cell: (order) => (
-        <div className="min-w-0">
-          <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>
-          <OrderWarrantyIndicator model={warrantyByOrderId.get(order.id)} className="mt-0.5" />
-        </div>
-      ),
-      className: "whitespace-nowrap",
-    },
-    {
-      key: "client",
-      header: shell.clientsSingular,
-      cell: (order) => <span className="block max-w-[10rem] truncate xl:max-w-[14rem]" title={order.clientName}>{order.clientName}</span>,
-    },
-    {
-      key: "clientType",
-      header: t("dashboard.columns.clientType"),
-      cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
-      className: "hidden xl:table-cell",
-    },
-    {
-      key: "device",
-      header: shell.deviceColumn,
-      cell: (order) => <span className="block max-w-[12rem] truncate text-muted-foreground" title={order.device}>{order.device}</span>,
-      className: "hidden 2xl:table-cell",
-    },
-    {
-      key: "status",
-      header: t("common.status"),
-      cell: (order) => (
-        <div className="flex min-w-0 flex-col items-start gap-1">
-          <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
-          {/* Payment column is sm+; mirror ledger status under lifecycle on narrow screens (Orders parity). */}
-          <span className="sm:hidden">
-            <PaymentStatusBadge status={paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
-          </span>
-        </div>
-      ),
-    },
-    {
-      key: "payment",
-      header: t("dashboard.columns.payment"),
-      cell: (order) => <PaymentStatusBadge status={paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />,
-      className: "hidden sm:table-cell",
-    },
-    {
-      key: "total",
-      header: t("common.total"),
-      cell: (order) => <span className="font-medium tabular-nums">{formatMoney(order.totalPrice)}</span>,
-      className: "text-right whitespace-nowrap",
-    },
-    ...(showAwaitingPayment
-      ? [
-          {
-            key: "toPay",
-            header: t("dashboard.lists.toPay"),
-            cell: (order: Order) => (
-              <span className="font-semibold tabular-nums text-warning">
-                {formatMoney(awaitingRemainingByOrderId.get(order.id) ?? 0)}
-              </span>
-            ),
-            className: "text-right whitespace-nowrap",
-          } satisfies Column<Order>,
-        ]
-      : []),
-  ];
 
   const lowStockColumns: Column<InventoryItem>[] = [
     {
@@ -476,10 +419,41 @@ export default function Dashboard() {
 
       <DashboardQuickActions actions={quickActions} />
 
-      <CreateOrderDialog {...dialogProps("order")} />
+      <CreateOrderDialog
+        {...dialogProps("order")}
+        open={openDialog === "order" || Boolean(orderForClient)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOpenDialog(null);
+            setOrderForClient(null);
+          } else {
+            setOpenDialog("order");
+          }
+        }}
+        initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+      />
       <AddClientDialog {...dialogProps("client")} />
       <AddInventoryItemDialog {...dialogProps("inventory")} />
-      <OrderDetailPanel {...orderDetails.panelProps} />
+      <OrderDetailPanel
+        {...orderDetails.panelProps}
+        onDeleted={(orderId) => {
+          orderDetails.clearOrder(orderId);
+          setEditingOrder((current) => (current?.id === orderId ? null : current));
+        }}
+      />
+      <EditOrderDialog order={editingOrder} onClose={() => setEditingOrder(null)} onUpdated={orderDetails.syncOrder} />
+      <ClientDetailsHost
+        selectedClient={clientDetails.selectedClient}
+        detailPanelOpen={clientDetails.detailPanelOpen}
+        setDetailPanelOpen={clientDetails.setDetailPanelOpen}
+        onClientUpdated={clientDetails.onClientUpdated}
+        onClientDeleted={clientDetails.onClientDeleted}
+        onOpenOrder={(order) => {
+          clientDetails.setDetailPanelOpen(false);
+          orderDetails.openOrder(order);
+        }}
+        onCreateOrder={setOrderForClient}
+      />
       <EditInventoryItemDialog itemId={editInventoryId} onClose={() => setEditInventoryId(null)} />
 
       <DashboardDeadlinePanels
@@ -518,12 +492,28 @@ export default function Dashboard() {
               <h2 className="text-[15px] font-semibold text-foreground">{ordersListTitle()}</h2>
               {viewAllLink(`/${locale}/${routeWorkspaceId}/orders`)}
             </div>
-            <DataTable
-              columns={orderColumns}
-              data={listedOrders}
-              keyExtractor={(order) => order.id}
-              onRowClick={orderDetails.openOrder}
+            <OrdersListView
+              orders={listedOrders}
               isLoading={ordersLoading}
+              orderDetails={orderDetails}
+              onEdit={setEditingOrder}
+              onDeleted={(orderId) => {
+                orderDetails.clearOrder(orderId);
+                setEditingOrder((current) => (current?.id === orderId ? null : current));
+              }}
+              onOpenClient={openClientFromOrder}
+              columnVisibilityKey="dashboard"
+              showColumnsMenu
+              extraColumns={showAwaitingPayment ? [toPayColumn] : undefined}
+              cardExtra={
+                showAwaitingPayment
+                  ? (order) => (
+                      <p className="mt-1 px-1 text-xs font-medium tabular-nums text-warning">
+                        {t("dashboard.lists.toPay")}: {formatMoney(awaitingRemainingByOrderId.get(order.id) ?? 0)}
+                      </p>
+                    )
+                  : undefined
+              }
               emptyState={
                 ordersError ? (
                   ordersErrorState

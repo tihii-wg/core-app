@@ -133,10 +133,10 @@ export function WarehousesSettings() {
               return (
                 <li key={warehouse.id} className="flex items-start justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">{warehouse.name}</p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="min-w-0 break-words text-sm font-medium text-foreground">{warehouse.name}</p>
                       {warehouse.isDefault ? (
-                        <span className="text-xs text-muted-foreground">{t("settings.warehouses.default")}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{t("settings.warehouses.default")}</span>
                       ) : null}
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">

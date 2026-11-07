@@ -63,7 +63,7 @@ export function AppTopbar() {
           {currentTitleKey && (
             <>
               <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-subtle-foreground" />
-              <span aria-current="page" className="shrink-0 whitespace-nowrap font-medium text-foreground">
+              <span aria-current="page" className="min-w-0 truncate font-medium text-foreground">
                 {currentTitle || t(currentTitleKey)}
               </span>
             </>

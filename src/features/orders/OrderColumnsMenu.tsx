@@ -26,6 +26,7 @@ export function OrderColumnsMenu({ visibleColumns, onVisibleColumnsChange, devic
     clientType: t("orders.table.clientType"),
     device: deviceColumnLabel,
     status: t("common.status"),
+    payment: t("orders.table.payment"),
     createdBy: t("orders.table.createdBy"),
     employee: t("orders.table.assigned"),
     team: t("orders.table.team"),

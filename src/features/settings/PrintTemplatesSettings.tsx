@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Copy, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -7,6 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../ui/DropdownMenu";
 import { useConfirm, useUnsavedChangesConfirm } from "../../ui/ConfirmProvider";
 import type { DocumentTemplate } from "../../services/apiDocumentTemplates";
 import {
@@ -44,6 +50,84 @@ export function insertTextAtCursor(textarea: Pick<HTMLTextAreaElement, "selectio
   const next = `${value.slice(0, start)}${text}${value.slice(end)}`;
   const caret = start + text.length;
   return { next, caret };
+}
+
+type TemplateOverflowAction = {
+  key: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  icon?: ReactNode;
+  destructive?: boolean;
+};
+
+/**
+ * Primary Edit stays visible; remaining actions wrap on ≥sm and collapse into ⋯ on phones.
+ * Exported class strings are asserted in unit tests (no shrink-0 + flex-wrap).
+ */
+export const TEMPLATE_ACTIONS_DESKTOP_CLASS = "hidden min-w-0 flex-wrap items-center gap-2 sm:flex";
+export const TEMPLATE_ACTIONS_MOBILE_CLASS = "sm:hidden";
+
+function TemplateActionsBar({
+  editLabel,
+  onEdit,
+  actions,
+  moreLabel,
+}: {
+  editLabel: string;
+  onEdit: () => void;
+  actions: TemplateOverflowAction[];
+  moreLabel: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+        <Pencil />
+        {editLabel}
+      </Button>
+      <div className={TEMPLATE_ACTIONS_DESKTOP_CLASS}>
+        {actions.map((action) => (
+          <Button
+            key={action.key}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={action.disabled}
+            onClick={action.onClick}
+          >
+            {action.icon}
+            {action.label}
+          </Button>
+        ))}
+      </div>
+      {actions.length > 0 ? (
+        <div className={TEMPLATE_ACTIONS_MOBILE_CLASS}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm" aria-label={moreLabel}>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-48">
+              {actions.map((action) => (
+                <DropdownMenuItem
+                  key={action.key}
+                  disabled={action.disabled}
+                  className={action.destructive ? "text-destructive focus:text-destructive" : undefined}
+                  onSelect={() => {
+                    if (!action.disabled) action.onClick();
+                  }}
+                >
+                  {action.icon}
+                  {action.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -167,30 +251,28 @@ export function PrintTemplatesSettings() {
             <ul className="divide-y divide-border rounded-lg border border-border">
               <li className="space-y-3 px-4 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">
+                  <div className="min-w-0 flex-1">
+                    <p className="min-w-0 break-words text-sm font-medium text-foreground">
                       {styleTemplate.name}
                       {styleTemplate.isDefault ? (
-                        <span className="ml-2 text-xs font-normal text-primary">
+                        <span className="ml-2 inline text-xs font-normal break-words text-primary">
                           ({t("settings.printTemplates.defaultBadge")})
                         </span>
                       ) : null}
                     </p>
                     <p className="text-xs text-muted-foreground">{t("settings.printTemplates.documentStyleHint")}</p>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {canEdit ? (
-                      <>
-                        <Button type="button" variant="outline" size="sm" onClick={() => openEditor(styleTemplate)}>
-                          <Pencil />
-                          {t("settings.printTemplates.edit")}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={applyStyle.isPending}
-                          onClick={() => {
+                  {canEdit ? (
+                    <TemplateActionsBar
+                      editLabel={t("settings.printTemplates.edit")}
+                      onEdit={() => openEditor(styleTemplate)}
+                      moreLabel={t("common.actions")}
+                      actions={[
+                        {
+                          key: "applyStyle",
+                          label: t("settings.printTemplates.applyStyleToAll"),
+                          disabled: applyStyle.isPending,
+                          onClick: () => {
                             void (async () => {
                               if (
                                 !(await confirm({
@@ -202,13 +284,11 @@ export function PrintTemplatesSettings() {
                               }
                               applyStyle.mutate();
                             })();
-                          }}
-                        >
-                          {t("settings.printTemplates.applyStyleToAll")}
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
+                          },
+                        },
+                      ]}
+                    />
+                  ) : null}
                 </div>
                 {editingStyle && editing?.id === styleTemplate.id ? (
                   <DocumentStyleEditor
@@ -279,10 +359,10 @@ export function PrintTemplatesSettings() {
                 {templates.map((template) => (
                   <li key={template.id} className="space-y-3 px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         {renamingId === template.id ? (
                           <form
-                            className="flex flex-wrap items-center gap-2"
+                            className="flex min-w-0 flex-wrap items-center gap-2"
                             onSubmit={(event) => {
                               event.preventDefault();
                               rename.mutate(
@@ -299,7 +379,7 @@ export function PrintTemplatesSettings() {
                             <Input
                               value={renameDraft}
                               onChange={(event) => setRenameDraft(event.target.value)}
-                              className="h-8 w-56"
+                              className="h-8 w-56 max-w-full"
                               aria-label={t("settings.printTemplates.name")}
                             />
                             <Button type="submit" size="sm" loading={rename.isPending}>
@@ -318,10 +398,10 @@ export function PrintTemplatesSettings() {
                             </Button>
                           </form>
                         ) : (
-                          <p className="text-sm font-medium text-foreground">
+                          <p className="min-w-0 break-words text-sm font-medium text-foreground">
                             {template.name}
                             {template.isDefault ? (
-                              <span className="ml-2 text-xs font-normal text-primary">
+                              <span className="ml-2 inline text-xs font-normal break-words text-primary">
                                 ({t("settings.printTemplates.defaultBadge")})
                               </span>
                             ) : null}
@@ -333,61 +413,51 @@ export function PrintTemplatesSettings() {
                           {template.isActive ? "" : ` · ${t("settings.printTemplates.inactive")}`}
                         </p>
                       </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        {canEdit ? (
-                          <>
-                            <Button type="button" variant="outline" size="sm" onClick={() => openEditor(template)}>
-                              <Pencil />
-                              {t("settings.printTemplates.edit")}
-                            </Button>
-                            {template.layout && isBuilderDocumentType(template.documentType) ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={createFrom.isPending}
-                                onClick={() => createFrom.mutate(template.id)}
-                              >
-                                {t("settings.printTemplates.createFromTemplate")}
-                              </Button>
-                            ) : null}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={duplicate.isPending}
-                              onClick={() => duplicate.mutate(template.id)}
-                            >
-                              <Copy />
-                              {t("settings.printTemplates.duplicate")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
+                      {canEdit ? (
+                        <TemplateActionsBar
+                          editLabel={t("settings.printTemplates.edit")}
+                          onEdit={() => openEditor(template)}
+                          moreLabel={t("common.actions")}
+                          actions={[
+                            ...(template.layout && isBuilderDocumentType(template.documentType)
+                              ? [
+                                  {
+                                    key: "createFrom",
+                                    label: t("settings.printTemplates.createFromTemplate"),
+                                    disabled: createFrom.isPending,
+                                    onClick: () => createFrom.mutate(template.id),
+                                  } satisfies TemplateOverflowAction,
+                                ]
+                              : []),
+                            {
+                              key: "duplicate",
+                              label: t("settings.printTemplates.duplicate"),
+                              icon: <Copy />,
+                              disabled: duplicate.isPending,
+                              onClick: () => duplicate.mutate(template.id),
+                            },
+                            {
+                              key: "rename",
+                              label: t("settings.printTemplates.rename"),
+                              onClick: () => {
                                 setRenamingId(template.id);
                                 setRenameDraft(template.name);
-                              }}
-                            >
-                              {t("settings.printTemplates.rename")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={template.isDefault || setDefault.isPending}
-                              onClick={() => setDefault.mutate(template.id)}
-                            >
-                              <Star />
-                              {t("settings.printTemplates.setDefault")}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={remove.isPending}
-                              onClick={() => {
+                              },
+                            },
+                            {
+                              key: "setDefault",
+                              label: t("settings.printTemplates.setDefault"),
+                              icon: <Star />,
+                              disabled: template.isDefault || setDefault.isPending,
+                              onClick: () => setDefault.mutate(template.id),
+                            },
+                            {
+                              key: "delete",
+                              label: t("common.delete"),
+                              icon: <Trash2 />,
+                              disabled: remove.isPending,
+                              destructive: true,
+                              onClick: () => {
                                 void (async () => {
                                   if (
                                     !(await confirm({
@@ -402,14 +472,11 @@ export function PrintTemplatesSettings() {
                                   if (editingId === template.id) closeEditor();
                                   remove.mutate(template.id);
                                 })();
-                              }}
-                            >
-                              <Trash2 />
-                              {t("common.delete")}
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
+                              },
+                            },
+                          ]}
+                        />
+                      ) : null}
                     </div>
                     {editing && !editingStyle && editing.id === template.id ? (
                       forceSimpleMode || (!templateIsCanvas(template) && template.layout) ? (
