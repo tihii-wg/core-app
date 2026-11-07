@@ -819,6 +819,7 @@ const settings: Messages<typeof en> = {
       copyFailed: "Не удалось скопировать переменную",
       copyExample: "Вставить номер заказа",
       unknownTitle: "Неизвестные переменные в шаблоне",
+      unknownWithElement: "{{token}} в {{element}}",
       previewOrder: "Заказ для предпросмотра",
       previewOrderPlaceholder: "Выберите недавний заказ",
       previewInvoice: "Счёт для предпросмотра",
@@ -892,6 +893,10 @@ const settings: Messages<typeof en> = {
       },
       company: {
         name: { label: "Название компании" },
+        phone: {
+          label: "Телефон компании",
+          description: "Телефон локации по умолчанию (или первой активной локации)",
+        },
         address: { label: "Адрес компании" },
         email: { label: "Email компании" },
         idno: { label: "IDNO / НДС компании" },

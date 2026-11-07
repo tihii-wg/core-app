@@ -125,6 +125,7 @@ describe("PrintTemplatesSettings builder", () => {
       workspace: null,
       legalEntity: null,
       logoUrl: null,
+      companyPhone: null,
       currency: "MDL",
       dateFormat: "DD.MM.YYYY",
       timeZone: "Europe/Chisinau",

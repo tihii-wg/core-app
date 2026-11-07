@@ -48,6 +48,7 @@ import { convertBlocksLayoutToCanvas } from "./convertToCanvas";
 import { isDocumentLayout } from "../layout";
 import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "../demoPrintContext";
 import { isDemoPrintSource } from "../templatePreviewHtml";
+import { findUnknownTokensInCanvasLayout } from "../templateTokenScan";
 import { emptyPrintContext } from "../templateVariables";
 import { resolveColorRef } from "../colorRef";
 import { fillToCss } from "./fill";
@@ -161,6 +162,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const selected = layout.elements.filter((el) => selectedIds.includes(el.id));
   const { widthMm, heightMm } = pageSizeMm(layout.page.size, layout.page.orientation);
   const scale = zoom / 100;
+  const unknownTokenHits = useMemo(() => findUnknownTokensInCanvasLayout(layout), [layout]);
 
   const commit = useCallback((next: CanvasDocumentLayout) => {
     setHistory((prev) => pushHistory(prev, next));
@@ -906,6 +908,25 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 </Button>
               </div>
             </div>
+
+            {unknownTokenHits.length > 0 ? (
+              <div
+                role="status"
+                className="shrink-0 border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100"
+              >
+                <p className="font-medium">{t("settings.printTemplates.variables.unknownTitle")}</p>
+                <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  {unknownTokenHits.map((hit) => (
+                    <li key={`${hit.token}-${hit.location}`}>
+                      {t("settings.printTemplates.variables.unknownWithElement", {
+                        token: hit.token,
+                        element: hit.location,
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <div
               className={cn(

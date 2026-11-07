@@ -73,10 +73,12 @@ import {
   emptyPrintContext,
   TEMPLATE_VARIABLES,
   VARIABLE_GROUPS,
+  visibleTemplateVariables,
   type TemplateVariable,
 } from "./templateVariables";
 import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "./demoPrintContext";
 import { isDemoPrintSource } from "./templatePreviewHtml";
+import { findUnknownTokensInDocumentLayout } from "./templateTokenScan";
 import { useSaveDocumentTemplateLayout } from "./useDocumentTemplateMutations";
 import { useGetDocumentStyle } from "./useGetDocumentStyle";
 
@@ -257,12 +259,14 @@ function createLeafBlock(kind: LeafBlockKind): LeafLayoutBlock {
         kind,
         enabled: true,
         align: "left",
-        fields: TEMPLATE_VARIABLES.filter((v) => v.group === "company").map((v) => ({
-          template: v.token,
-          label: "",
-          enabled: true,
-          hideIfEmpty: true,
-        })),
+        fields: visibleTemplateVariables()
+          .filter((v) => v.group === "company")
+          .map((v) => ({
+            template: v.token,
+            label: "",
+            enabled: true,
+            hideIfEmpty: true,
+          })),
       };
     case "documentTitle":
       return { id, kind, enabled: true, text: "Document" };
@@ -819,7 +823,7 @@ function VariablePicker({
     const query = search.trim().toLowerCase();
     return VARIABLE_GROUPS.map((group) => ({
       group,
-      items: TEMPLATE_VARIABLES.filter((variable) => {
+      items: visibleTemplateVariables().filter((variable) => {
         if (variable.group !== group) return false;
         if (!query) return true;
         return variable.token.toLowerCase().includes(query) || labelOf(variable).toLowerCase().includes(query);
@@ -1088,7 +1092,7 @@ function FieldsEditor({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [addToken, setAddToken] = useState("");
-  const fieldTokens = TEMPLATE_VARIABLES.filter((variable) => variable.kind !== "html");
+  const fieldTokens = visibleTemplateVariables().filter((variable) => variable.kind !== "html");
   const ids = fields.map((_, index) => `${blockId}:field:${index}`);
 
   function updateField(index: number, next: FieldRef) {
@@ -1675,6 +1679,7 @@ export function DocumentTemplateBuilder({
 
   const selected = selectedBlockId ? locateBlock(layout.blocks, selectedBlockId) : null;
   const selectedBlock = selected?.block ?? null;
+  const unknownTokenHits = useMemo(() => findUnknownTokensInDocumentLayout(layout), [layout]);
 
   const selectedSiblings = selected ? getContainerBlocks(layout.blocks, selected.containerId) : null;
 
@@ -2123,6 +2128,24 @@ export function DocumentTemplateBuilder({
         {/* Live preview */}
         <section className="space-y-2" aria-label={t("settings.printTemplates.preview")}>
           <h3 className="text-sm font-semibold">{t("settings.printTemplates.preview")}</h3>
+          {unknownTokenHits.length > 0 ? (
+            <div
+              role="status"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-950 dark:text-amber-100"
+            >
+              <p className="font-medium">{t("settings.printTemplates.variables.unknownTitle")}</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {unknownTokenHits.map((hit) => (
+                  <li key={`${hit.token}-${hit.location}`}>
+                    {t("settings.printTemplates.variables.unknownWithElement", {
+                      token: hit.token,
+                      element: hit.location,
+                    })}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <Select value={previewEntityId} onValueChange={setPreviewEntityId}>
             <SelectTrigger aria-label={t("settings.printTemplates.previewSource")}>
               <SelectValue placeholder={t("settings.printTemplates.demoData")} />

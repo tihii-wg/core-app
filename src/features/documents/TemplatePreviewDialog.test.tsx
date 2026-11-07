@@ -18,6 +18,7 @@ const buildOrderPrintContext = vi.hoisted(() =>
     workspace: null,
     legalEntity: null,
     logoUrl: null,
+    companyPhone: "+373 22 000 000",
     currency: "MDL",
     dateFormat: "DD.MM.YYYY",
     timeZone: "UTC",
@@ -172,6 +173,43 @@ describe("TemplatePreviewDialog", () => {
     const html = printHtmlDocument.mock.calls[0]?.[0] as string;
     expect(html).toContain("ORD-2026-0001");
     expect(sourceStillDemo()).toBe(true);
+  });
+
+  it("applies fit-width zoom when the preview container is narrower than the page", async () => {
+    const OriginalRO = globalThis.ResizeObserver;
+    class MockRO {
+      private readonly cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+      }
+      observe(target: Element) {
+        Object.defineProperty(target, "clientWidth", { configurable: true, value: 343 });
+        this.cb([{ target, contentRect: { width: 343 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = MockRO as unknown as typeof ResizeObserver;
+
+    try {
+      renderWithQuery(
+        <TemplatePreviewDialog
+          open
+          onOpenChange={() => undefined}
+          template={templateFixture({ widthMm: 210 })}
+          locale="en"
+          currency="MDL"
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByTitle(/Preview of Work order/i)).toBeInTheDocument());
+      await waitFor(() => {
+        expect(screen.getByTestId("preview-zoom").textContent).toBe("43%");
+      });
+      expect(screen.getByRole("button", { name: /Fit width|Pe lățime|По ширине/i })).toBeInTheDocument();
+    } finally {
+      globalThis.ResizeObserver = OriginalRO;
+    }
   });
 });
 

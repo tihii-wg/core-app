@@ -15,6 +15,7 @@ import { getInvoiceTaxTotal } from "./apiInvoiceTax";
 import { getWarrantyRecordsForOrder } from "./apiWarranty";
 import { getWorkspaceVatRate } from "./apiWorkspaceVat";
 import { getWorkspace, type WorkspaceDetails } from "./apiWorkspaces";
+import { getLocations, pickPrintCompanyPhone } from "./apiLocations";
 import { requireWorkspaceId } from "./missingTable";
 
 async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
@@ -36,9 +37,10 @@ function pickLegalEntity(entities: LegalEntity[], workspace: WorkspaceDetails | 
 }
 
 async function workspacePrintBase(resolved: string) {
-  const [workspace, legalEntities] = await Promise.all([
+  const [workspace, legalEntities, locations] = await Promise.all([
     soft(getWorkspace(resolved), null),
     soft(getLegalEntities(resolved), [] as LegalEntity[]),
+    soft(getLocations(resolved), []),
   ]);
   const logoUrl =
     workspace?.avatarPath
@@ -49,6 +51,7 @@ async function workspacePrintBase(resolved: string) {
     workspace,
     legalEntity,
     logoUrl,
+    companyPhone: pickPrintCompanyPhone(locations),
     currency: workspace?.currency?.trim() || "",
     dateFormat: workspace?.dateFormat?.trim() || "DD.MM.YYYY",
     timeZone: workspace?.timezone?.trim() || "Europe/Chisinau",
@@ -88,6 +91,7 @@ export async function buildOrderPrintContext(
     workspace: base.workspace,
     legalEntity: base.legalEntity,
     logoUrl: base.logoUrl,
+    companyPhone: base.companyPhone,
     currency: base.currency,
     dateFormat: base.dateFormat,
     timeZone: base.timeZone,
@@ -151,6 +155,7 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
     workspace: base.workspace,
     legalEntity: base.legalEntity,
     logoUrl: base.logoUrl,
+    companyPhone: base.companyPhone,
     currency: base.currency,
     dateFormat: base.dateFormat,
     timeZone: base.timeZone,

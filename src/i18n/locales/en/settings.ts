@@ -814,6 +814,7 @@ export default {
       copyFailed: "Could not copy the variable",
       copyExample: "Insert order number",
       unknownTitle: "Unknown variables in this template",
+      unknownWithElement: "{{token}} in {{element}}",
       previewOrder: "Preview order",
       previewOrderPlaceholder: "Select a recent order",
       previewInvoice: "Preview invoice",
@@ -887,6 +888,10 @@ export default {
       },
       company: {
         name: { label: "Company name" },
+        phone: {
+          label: "Company phone",
+          description: "Phone of the workspace’s default location (or the first active location)",
+        },
         address: { label: "Company address" },
         email: { label: "Company email" },
         idno: { label: "Company IDNO / VAT" },

@@ -818,6 +818,7 @@ const settings: Messages<typeof en> = {
       copyFailed: "Nu s-a putut copia variabila",
       copyExample: "Inserează numărul comenzii",
       unknownTitle: "Variabile necunoscute în șablon",
+      unknownWithElement: "{{token}} în {{element}}",
       previewOrder: "Comandă pentru previzualizare",
       previewOrderPlaceholder: "Selectează o comandă recentă",
       previewInvoice: "Factură pentru previzualizare",
@@ -891,6 +892,10 @@ const settings: Messages<typeof en> = {
       },
       company: {
         name: { label: "Denumire companie" },
+        phone: {
+          label: "Telefon companie",
+          description: "Telefonul locației implicite (sau al primei locații active)",
+        },
         address: { label: "Adresă companie" },
         email: { label: "Email companie" },
         idno: { label: "IDNO / TVA companie" },

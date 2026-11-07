@@ -89,6 +89,7 @@ function fullContext(): PrintContext {
       isDefault: true,
     },
     logoUrl: "https://example.com/logo.webp",
+    companyPhone: "+373 22 000 000",
     currency: "MDL",
     locale: "en",
     paymentBalance: {
@@ -182,6 +183,18 @@ describe("template variable registry", () => {
 
   it("lists unknown tokens", () => {
     expect(findUnknownTemplateTokens("#ЗАКАЗ-НОМЕР #FOO-BAR #КЛИЕНТ-ИМЯ")).toEqual(["#FOO-BAR"]);
+  });
+
+  it("resolves #КОМПАНИЯ-ТЕЛЕФОН and the #СЧЁТ-СРОК alias", () => {
+    const ctx = fullContext();
+    ctx.invoice = { dueDate: "2026-11-17T00:00:00.000Z" } as PrintContext["invoice"];
+    expect(applyTemplateVariables("#КОМПАНИЯ-ТЕЛЕФОН", ctx, { locale: "en", currency: "MDL" })).toBe(
+      "+373 22 000 000",
+    );
+    const due = applyTemplateVariables("#СЧЁТ-СРОК-ОПЛАТЫ", ctx, { locale: "en", currency: "MDL" });
+    const alias = applyTemplateVariables("#СЧЁТ-СРОК", ctx, { locale: "en", currency: "MDL" });
+    expect(due).toBeTruthy();
+    expect(alias).toBe(due);
   });
 
   it("formats money with and without cents", () => {

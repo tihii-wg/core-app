@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { StyleColorPalette } from "../colorRef";
-import { TEMPLATE_VARIABLES } from "../templateVariables";
+import { visibleTemplateVariables } from "../templateVariables";
 import { ColorPicker } from "./ColorPicker";
 import type { CanvasDocumentLayout, CanvasElement, Fill } from "./types";
 import { Input } from "../../../ui/Input";
@@ -162,7 +162,7 @@ export function CanvasPropertiesPanel({
             onChange={(event) => patchAll((el) => (el.type === "text" ? { ...el, content: event.target.value } : el))}
           />
           <div className="flex flex-wrap gap-1">
-            {TEMPLATE_VARIABLES.slice(0, 8).map((variable) => (
+            {visibleTemplateVariables().slice(0, 8).map((variable) => (
               <Button
                 key={variable.token}
                 type="button"

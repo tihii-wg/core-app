@@ -57,6 +57,16 @@ export async function getLocations(workspaceId: string | undefined) {
   return ((data ?? []) as Record<string, unknown>[]).map(toLocation);
 }
 
+/**
+ * Phone for print `#КОМПАНИЯ-ТЕЛЕФОН`: default active location, else first active (non-deleted).
+ */
+export function pickPrintCompanyPhone(locations: readonly LocationRecord[]): string | null {
+  const active = locations.filter((location) => location.isActive);
+  const preferred = active.find((location) => location.isDefault) ?? active[0] ?? null;
+  const phone = preferred?.phone?.trim() ?? "";
+  return phone || null;
+}
+
 export type LocationInput = {
   name: string;
   address?: string | null;

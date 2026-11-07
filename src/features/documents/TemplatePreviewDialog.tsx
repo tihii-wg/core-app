@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
-import { Printer, Pencil } from "lucide-react";
+import { Printer, Pencil, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -26,6 +26,7 @@ import type { DocumentStyle } from "./documentStyle";
 import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "./demoPrintContext";
 import { isDemoPrintSource } from "./templatePreviewHtml";
 import type { PrintContext, PrintDocumentKind } from "./templateVariables";
+import { CANVAS_MM_TO_PX, computeFitWidthZoomPercent, needsFitWidth } from "./canvas/fitWidthZoom";
 
 export type TemplatePreviewDialogProps = {
   open: boolean;
@@ -40,9 +41,18 @@ export type TemplatePreviewDialogProps = {
   onOpenDesigner?: (template: DocumentTemplate) => void;
 };
 
+/** Default A4 portrait width when the template does not store page mm. */
+const DEFAULT_PAGE_WIDTH_MM = 210;
+const PREVIEW_IFRAME_HEIGHT_PX = 1100;
+
 function asDocumentKind(documentType: string): PrintDocumentKind {
   if (documentType === "act" || documentType === "invoice") return documentType;
   return "work_order";
+}
+
+function pageWidthMmForTemplate(template: DocumentTemplate): number {
+  if (template.widthMm != null && template.widthMm > 0) return template.widthMm;
+  return DEFAULT_PAGE_WIDTH_MM;
 }
 
 export function TemplatePreviewDialog({
@@ -63,8 +73,21 @@ export function TemplatePreviewDialog({
   const [html, setHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const zoomLockedByUser = useRef(false);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  /** State mirror so ResizeObserver rebinds after the dialog portal mounts. */
+  const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null);
+
+  const setViewportNode = useCallback((node: HTMLDivElement | null) => {
+    viewportRef.current = node;
+    setViewportEl(node);
+  }, []);
 
   const isInvoice = template?.documentType === "invoice";
+  const pageWidthMm = template ? pageWidthMmForTemplate(template) : DEFAULT_PAGE_WIDTH_MM;
+  const pageCssWidth = pageWidthMm * CANVAS_MM_TO_PX;
+  const scale = zoom / 100;
 
   const recentOrdersQuery = useQuery({
     queryKey: ["print-builder-preview-orders", workspaceId],
@@ -80,7 +103,10 @@ export function TemplatePreviewDialog({
   });
 
   useEffect(() => {
-    if (open) setSourceId(DEMO_PRINT_SOURCE_ID);
+    if (open) {
+      setSourceId(DEMO_PRINT_SOURCE_ID);
+      zoomLockedByUser.current = false;
+    }
   }, [open, template?.id]);
 
   useEffect(() => {
@@ -140,6 +166,47 @@ export function TemplatePreviewDialog({
     t,
   ]);
 
+  useEffect(() => {
+    const viewport = viewportEl;
+    if (!open || !viewport || typeof ResizeObserver === "undefined") return;
+
+    const maybeFit = () => {
+      if (zoomLockedByUser.current) return;
+      const available = viewport.clientWidth;
+      if (!needsFitWidth(available, pageWidthMm)) {
+        setZoom(100);
+        return;
+      }
+      setZoom(computeFitWidthZoomPercent(available, pageWidthMm));
+    };
+
+    maybeFit();
+    const observer = new ResizeObserver(() => maybeFit());
+    observer.observe(viewport);
+    const onOrientation = () => maybeFit();
+    window.addEventListener("orientationchange", onOrientation);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("orientationchange", onOrientation);
+    };
+  }, [open, viewportEl, pageWidthMm, html]);
+
+  function applyFitWidth(availableWidthPx: number) {
+    setZoom(computeFitWidthZoomPercent(availableWidthPx, pageWidthMm));
+  }
+
+  function setZoomFromControl(next: number | ((current: number) => number)) {
+    zoomLockedByUser.current = true;
+    setZoom(next);
+  }
+
+  function fitWidthFromViewport() {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    zoomLockedByUser.current = false;
+    applyFitWidth(viewport.clientWidth);
+  }
+
   const sourceOptions = useMemo(() => {
     if (isInvoice) return recentInvoicesQuery.data ?? [];
     return recentOrdersQuery.data ?? [];
@@ -174,20 +241,64 @@ export function TemplatePreviewDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-label="Zoom out"
+              onClick={() => setZoomFromControl((z) => Math.max(35, z - 10))}
+            >
+              <ZoomOut />
+            </Button>
+            <span className="w-10 text-center text-xs tabular-nums" data-testid="preview-zoom">
+              {zoom}%
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-label="Zoom in"
+              onClick={() => setZoomFromControl((z) => Math.min(200, z + 10))}
+            >
+              <ZoomIn />
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={fitWidthFromViewport}>
+              {t("settings.printTemplates.canvas.fitWidth")}
+            </Button>
+          </div>
         </div>
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-md border border-border bg-muted/30">
+        <div
+          ref={setViewportNode}
+          className="min-h-0 min-w-0 flex-1 overflow-auto rounded-md border border-border bg-muted/30"
+          data-testid="template-preview-viewport"
+        >
           {loading ? (
             <p className="p-4 text-sm text-muted-foreground">{t("common.loading")}</p>
           ) : error ? (
             <p className="p-4 text-sm text-destructive">{error}</p>
           ) : html ? (
-            <iframe
-              title={t("settings.printTemplates.previewTitle", { name: template.name })}
-              sandbox=""
-              srcDoc={html}
-              className="block h-[min(70vh,900px)] w-full min-w-0 border-0 bg-white"
-            />
+            <div
+              className="origin-top-left"
+              style={{
+                width: pageCssWidth * scale,
+                height: PREVIEW_IFRAME_HEIGHT_PX * scale,
+              }}
+            >
+              <iframe
+                title={t("settings.printTemplates.previewTitle", { name: template.name })}
+                sandbox=""
+                srcDoc={html}
+                className="block border-0 bg-white"
+                style={{
+                  width: pageCssWidth,
+                  height: PREVIEW_IFRAME_HEIGHT_PX,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                }}
+              />
+            </div>
           ) : (
             <p className="p-4 text-sm text-muted-foreground">{t("settings.printTemplates.noBody")}</p>
           )}

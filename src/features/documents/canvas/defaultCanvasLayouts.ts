@@ -307,7 +307,7 @@ export function defaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout 
         34,
         92,
         40,
-        "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК\n#КОМПАНИЯ-IBAN\n#КОМПАНИЯ-БАНК",
+        "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК-ОПЛАТЫ\n#КОМПАНИЯ-IBAN\n#КОМПАНИЯ-БАНК",
         L(translate, "details"),
       ),
       tableElement(82, "invoiceLines", invoiceColumns(translate)),

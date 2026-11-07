@@ -43,6 +43,8 @@ export type PrintContext = {
   workspace: WorkspaceDetails | null;
   legalEntity: LegalEntity | null;
   logoUrl: string | null;
+  /** Phone of the workspace default (or first active) location. */
+  companyPhone: string | null;
   currency: string;
   dateFormat: string;
   timeZone: string;
@@ -66,6 +68,8 @@ export type TemplateVariable = {
   descriptionKey?: string;
   kind: TemplateVariableKind;
   resolve: (ctx: PrintContext) => string | number | null;
+  /** Back-compat aliases: resolved like a normal token but omitted from the picker. */
+  hidden?: boolean;
 };
 
 export const VARIABLE_GROUPS: VariableGroup[] = [
@@ -91,6 +95,7 @@ export function emptyPrintContext(partial: Partial<PrintContext> = {}): PrintCon
     workspace: null,
     legalEntity: null,
     logoUrl: null,
+    companyPhone: null,
     currency: "",
     dateFormat: "DD.MM.YYYY",
     timeZone: "Europe/Chisinau",
@@ -185,6 +190,10 @@ function companyBankCode(ctx: PrintContext) {
 
 function companyExtraInfo(ctx: PrintContext) {
   return text(ctx.legalEntity?.additionalInfo) || text(ctx.workspace?.printExtraInfo);
+}
+
+function companyPhone(ctx: PrintContext) {
+  return text(ctx.companyPhone);
 }
 
 function moneyLines(order: Order | null) {
@@ -503,6 +512,15 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: (ctx) => text(ctx.invoice?.dueDate),
   },
   {
+    token: "#СЧЁТ-СРОК",
+    group: "invoice",
+    labelKey: "settings.printTemplates.variables.invoice.dueDate.label",
+    descriptionKey: "settings.printTemplates.variables.invoice.dueDate.description",
+    kind: "date",
+    hidden: true,
+    resolve: (ctx) => text(ctx.invoice?.dueDate),
+  },
+  {
     token: "#ПОКУПАТЕЛЬ-ИМЯ",
     group: "invoice",
     labelKey: "settings.printTemplates.variables.invoice.buyerName.label",
@@ -720,13 +738,21 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: (ctx) => text(ctx.vehicle?.fuelType),
   },
 
-  // Company (workspace / default legal entity). No company phone field in schema → omitted.
+  // Company (workspace / default legal entity / default location phone).
   {
     token: "#КОМПАНИЯ-НАЗВАНИЕ",
     group: "company",
     labelKey: "settings.printTemplates.variables.company.name.label",
     kind: "text",
     resolve: companyName,
+  },
+  {
+    token: "#КОМПАНИЯ-ТЕЛЕФОН",
+    group: "company",
+    labelKey: "settings.printTemplates.variables.company.phone.label",
+    descriptionKey: "settings.printTemplates.variables.company.phone.description",
+    kind: "text",
+    resolve: companyPhone,
   },
   {
     token: "#КОМПАНИЯ-АДРЕС",
@@ -975,7 +1001,7 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
 
 const TOKEN_PATTERN = /#[A-ZА-ЯЁ0-9-]+/giu;
 
-/** Tokens sorted longest-first so `#ИТОГО-ПРОПИСЬЮ` wins over `#ИТОГО`. */
+/** Tokens sorted longest-first so `#ИТОГО-ПРОПИСЬЮ` wins over `#ИТОГО` (and aliases lose to longer canonical tokens). */
 export function templateVariablesByTokenLength(): TemplateVariable[] {
   return [...TEMPLATE_VARIABLES].sort((a, b) => b.token.length - a.token.length);
 }
@@ -984,17 +1010,42 @@ export function knownTemplateTokens(): Set<string> {
   return new Set(TEMPLATE_VARIABLES.map((variable) => variable.token));
 }
 
-/** `#TOKENS` present in HTML that are not in the registry. */
+/** Variables shown in pickers (excludes back-compat aliases). */
+export function visibleTemplateVariables(): TemplateVariable[] {
+  return TEMPLATE_VARIABLES.filter((variable) => !variable.hidden);
+}
+
+/** True for CSS hex colours that match the token pattern (`#fff`, `#111111`). */
+export function isCssHexToken(token: string): boolean {
+  return /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3}([0-9a-fA-F]{2})?)?$/.test(token);
+}
+
+/** `#TOKENS` present in HTML that are not in the registry (ignores CSS hex colours). */
 export function findUnknownTemplateTokens(html: string): string[] {
   const known = knownTemplateTokens();
   const found = new Set<string>();
   for (const match of html.matchAll(TOKEN_PATTERN)) {
     const token = match[0];
+    if (isCssHexToken(token)) continue;
     if (!known.has(token)) found.add(token);
   }
   return [...found];
 }
 
+/**
+ * Template-looking `#TOKENS` still present after rendering (unresolved variables).
+ * Ignores CSS hex colours embedded in style attributes.
+ */
+export function findUnresolvedTemplateTokens(html: string): string[] {
+  const found = new Set<string>();
+  for (const match of html.matchAll(TOKEN_PATTERN)) {
+    const token = match[0];
+    if (isCssHexToken(token)) continue;
+    found.add(token);
+  }
+  return [...found];
+}
+
 export function variablesByGroup(group: VariableGroup) {
-  return TEMPLATE_VARIABLES.filter((variable) => variable.group === group);
+  return visibleTemplateVariables().filter((variable) => variable.group === group);
 }

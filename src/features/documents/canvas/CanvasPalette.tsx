@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { TEMPLATE_VARIABLES, type VariableGroup } from "../templateVariables";
+import { visibleTemplateVariables, type VariableGroup } from "../templateVariables";
 import type { CanvasElementType } from "./types";
 import type { PaletteDragPayload } from "./createElement";
 import { Input } from "../../../ui/Input";
@@ -94,7 +94,7 @@ export function CanvasPalette({ onAddElement }: { onAddElement?: (payload: Palet
   const q = query.trim().toLowerCase();
 
   const variables = useMemo(() => {
-    return TEMPLATE_VARIABLES.filter((variable) => {
+    return visibleTemplateVariables().filter((variable) => {
       if (!q) return true;
       const label = String(t(variable.labelKey as never)).toLowerCase();
       return variable.token.toLowerCase().includes(q) || label.includes(q);

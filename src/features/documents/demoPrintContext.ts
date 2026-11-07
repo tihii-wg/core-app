@@ -459,6 +459,7 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     workspace,
     legalEntity,
     logoUrl: input.logoUrl?.trim() || DEMO_LOGO_DATA_URI,
+    companyPhone: t("settings.printTemplates.demo.companyPhone"),
     currency,
     dateFormat: "DD.MM.YYYY",
     timeZone: "Europe/Chisinau",
