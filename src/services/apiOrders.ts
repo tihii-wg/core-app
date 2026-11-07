@@ -20,6 +20,7 @@ import {
   technicianIdOrNull,
 } from "./apiOrderTeam";
 import { nullIfEmptyText, nullIfEmptyUuid } from "../lib/nullish";
+import { isUuid } from "../lib/uuid";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import { assertVehicleAssignable } from "./apiVehicles";
@@ -1606,20 +1607,84 @@ async function applyOrdersListFilters(
 
   const assignee = employeeId === "all" ? "" : employeeId.trim();
   if (assignee) {
-    // Match main responsible OR team member OR line performer (two small lookups, then .or).
-    const { teamOrderIds, lineOrderIds } = await resolveOrderIdsForEmployeeFilter(workspaceId, assignee);
-    const relatedIds = [...new Set([...teamOrderIds, ...lineOrderIds])].filter(Boolean);
-    if (relatedIds.length > 0) {
-      query = query.or(`employee_id.eq.${assignee},id.in.(${relatedIds.join(",")})`);
-    } else {
-      query = query.eq("employee_id", assignee);
-    }
+    const withEmployee = await applyOrdersEmployeeFilter(query, workspaceId, assignee);
+    if (!withEmployee) return null;
+    query = withEmployee.query;
   }
 
   const term = searchTerm(search);
   if (term) query = query.or(await orderSearchFilter(workspaceId, term));
 
   return { query };
+}
+
+/** Max order ids per `id.in.(...)` clause in the legacy employee-filter fallback. */
+export const EMPLOYEE_FILTER_ID_CHUNK = 200;
+
+/**
+ * PostgREST computed field `orders.team_employee_ids` (manual SQL 20261107110000).
+ * `null` = unknown (try contains); `false` = missing → legacy resolveOrderIds path.
+ */
+let orderTeamEmployeeIdsSupported: boolean | null = null;
+
+/** Test hook: reset cached team_employee_ids computed-field support. */
+export function resetOrderTeamEmployeeIdsSupport() {
+  orderTeamEmployeeIdsSupported = null;
+}
+
+function isMissingTeamEmployeeIdsField(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  if (!/team_employee_ids/i.test(error.message ?? "")) return false;
+  return (
+    error.code === "PGRST100" ||
+    error.code === "PGRST200" ||
+    error.code === "PGRST204" ||
+    error.code === "42883" ||
+    error.code === "42703" ||
+    /column|schema cache|function|does not exist/i.test(error.message ?? "")
+  );
+}
+
+/** Split ids into chunks for PostgREST `.or(id.in.(...))` clauses (URL length / parser limits). */
+export function chunkIdsForInFilter(ids: string[], chunkSize = EMPLOYEE_FILTER_ID_CHUNK): string[][] {
+  const size = Math.max(1, Math.floor(chunkSize));
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += size) {
+    chunks.push(unique.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Prefer `.contains("team_employee_ids", [id])` (responsible + team + line performers).
+ * Falls back to resolveOrderIdsForEmployeeFilter + chunked `.or` when the computed field is absent.
+ * Invalid UUID → null (caller returns empty page; no related-id queries).
+ */
+async function applyOrdersEmployeeFilter(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
+  workspaceId: string,
+  employeeId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<{ query: any } | null> {
+  if (!isUuid(employeeId)) return null;
+
+  if (orderTeamEmployeeIdsSupported !== false) {
+    return { query: query.contains("team_employee_ids", [employeeId]) };
+  }
+
+  const { teamOrderIds, lineOrderIds } = await resolveOrderIdsForEmployeeFilter(workspaceId, employeeId);
+  const relatedIds = [...new Set([...teamOrderIds, ...lineOrderIds])].filter(Boolean);
+  if (relatedIds.length === 0) {
+    return { query: query.eq("employee_id", employeeId) };
+  }
+
+  const parts = [
+    `employee_id.eq.${employeeId}`,
+    ...chunkIdsForInFilter(relatedIds).map((chunk) => `id.in.(${chunk.join(",")})`),
+  ];
+  return { query: query.or(parts.join(",")) };
 }
 
 /** Full workspace order list (dashboard, notifications, search). Prefer getOrdersPage for the Orders table. */
@@ -1668,6 +1733,13 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
 
   const empty = (): OrdersPageResult => ({ orders: [], total: 0, page: 1, pageSize, pageCount: 1 });
 
+  // Invalid employee filter → empty page without hitting PostgREST (do not build cs./.or filters).
+  const rawEmployeeFilter = input.employeeId === "all" || input.employeeId == null ? "" : String(input.employeeId).trim();
+  if (rawEmployeeFilter && !isUuid(rawEmployeeFilter)) return empty();
+
+  const triedComputedEmployeeFilter =
+    orderTeamEmployeeIdsSupported !== false && Boolean(rawEmployeeFilter);
+
   let query = supabase
     .from("orders")
     .select(orderColumns, { count: "exact" })
@@ -1684,7 +1756,18 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
   const to = from + pageSize - 1;
   const { data, error, count } = await query.range(from, to);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Computed field absent: remember and retry once with the legacy id-list filter.
+    if (triedComputedEmployeeFilter && isMissingTeamEmployeeIdsField(error)) {
+      orderTeamEmployeeIdsSupported = false;
+      return getOrdersPage(workspaceId, input);
+    }
+    throw new Error(error.message);
+  }
+
+  if (triedComputedEmployeeFilter && orderTeamEmployeeIdsSupported == null) {
+    orderTeamEmployeeIdsSupported = true;
+  }
 
   const total = typeof count === "number" && count >= 0 ? count : (data ?? []).length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));

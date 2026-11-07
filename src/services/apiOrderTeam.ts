@@ -179,7 +179,7 @@ export async function syncOrderEmployees(params: {
 
 /**
  * Resolve order ids where `employeeId` is on the team or a line performer.
- * Used by the Orders employee filter alongside `orders.employee_id`.
+ * Used only as the legacy employee-filter fallback when `orders.team_employee_ids` is absent.
  * Soft-fails to [] when tables/columns are missing.
  */
 export async function resolveOrderIdsForEmployeeFilter(
