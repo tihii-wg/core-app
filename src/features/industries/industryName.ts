@@ -11,3 +11,13 @@ export function industryName(industry: Pick<Industry, "name" | "slug">) {
   if (!isTranslatedSlug(industry.slug)) return industry.name;
   return i18n.t(`workspaces.industries.${industry.slug}`, { defaultValue: industry.name });
 }
+
+/** Sort industries by translated label; `other` is always last. */
+export function sortIndustriesForSelect<T extends Pick<Industry, "name" | "slug">>(industries: readonly T[]): T[] {
+  return [...industries].sort((a, b) => {
+    const aOther = a.slug === "other";
+    const bOther = b.slug === "other";
+    if (aOther !== bOther) return aOther ? 1 : -1;
+    return industryName(a).localeCompare(industryName(b), i18n.language || undefined, { sensitivity: "base" });
+  });
+}

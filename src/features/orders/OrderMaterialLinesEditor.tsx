@@ -28,6 +28,7 @@ import { defaultIssueWarehouseId, issuableWarehouses, warehouseStockOf } from ".
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 import OrderLinePriceField from "./OrderLinePriceField";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { defaultsForKind, type WorkspaceWarrantyDefaults } from "./warranty";
 
 type MaterialsFormSlice = { materials: OrderMaterial[] };
@@ -95,6 +96,7 @@ export default function OrderMaterialLinesEditor({
   errors,
 }: OrderMaterialLinesEditorProps) {
   const { t } = useTranslation();
+  const { copy } = useIndustryWorkflow();
   const { formatMoney } = useWorkspaceMoney();
   const { data: warehouseRows = [] } = useGetWarehouses();
   const { data: warehouseStock = [] } = useGetWarehouseStock();
@@ -207,13 +209,13 @@ export default function OrderMaterialLinesEditor({
       <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("orders.form.materialSourceAria")}>
         {(
           [
-            ["catalog", "orders.form.materialSourceCatalog"],
-            ["one_time", "orders.form.materialSourceOneTime"],
-            ["customer", "orders.form.materialSourceCustomer"],
+            ["catalog", t("orders.form.materialSourceCatalog")],
+            ["one_time", t("orders.form.materialSourceOneTime")],
+            ["customer", copy.materialSourceCustomer],
           ] as const
         )
           .filter(([mode]) => mode === "catalog" || freeformSupported)
-          .map(([mode, labelKey]) => (
+          .map(([mode, label]) => (
             <Button
               key={mode}
               type="button"
@@ -225,7 +227,7 @@ export default function OrderMaterialLinesEditor({
                 setFreeError("");
               }}
             >
-              {t(labelKey)}
+              {label}
             </Button>
           ))}
       </div>
@@ -265,6 +267,7 @@ export default function OrderMaterialLinesEditor({
             onSelect={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelect}
             onCreateRequest={disabled || warehouses.length === 0 ? undefined : handleCreateRequest}
             onAddOneTimeRequest={disabled || !freeformSupported ? undefined : handleAddOneTimeRequest}
+            searchPlaceholder={copy.materialSearchPlaceholder}
             errors={!!errors?.root}
           />
           <p className="text-xs text-muted-foreground">{t("orders.form.materialsImmediateHint")}</p>
@@ -278,7 +281,7 @@ export default function OrderMaterialLinesEditor({
       ) : (
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-xs text-muted-foreground">
-            {effectiveAddMode === "customer" ? t("orders.form.customerPartHint") : t("orders.form.oneTimePartHint")}
+            {effectiveAddMode === "customer" ? copy.customerPartHint : t("orders.form.oneTimePartHint")}
           </p>
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="space-y-1 sm:col-span-2">
@@ -358,7 +361,7 @@ export default function OrderMaterialLinesEditor({
             const quantityInputId = `order-material-qty-${field.id}`;
             const sourceLabel =
               source === "customer"
-                ? t("orders.form.materialSourceCustomer")
+                ? copy.materialSourceCustomer
                 : source === "one_time"
                   ? t("orders.form.materialSourceOneTime")
                   : t("orders.form.materialSourceCatalog");

@@ -60,4 +60,28 @@ describe("demoPrintContext", () => {
     expect(html).toContain("<table");
     expect(html).not.toMatch(/#[А-ЯA-Z0-9-]+/);
   });
+
+  it("furniture demo has no vehicle data and no mileage in warranty", () => {
+    const ctx = demoPrintContext({
+      documentType: "work_order",
+      locale: "ru",
+      industrySlug: "furniture_manufacturing",
+      now: new Date("2026-11-07T12:00:00.000Z"),
+    });
+    expect(ctx.vehicle).toBeNull();
+    expect(ctx.order?.carNumber).toBe("");
+    expect(ctx.order?.vehicleMileageSnapshot).toBeNull();
+    expect(ctx.order?.device).toMatch(/Кухонный|3/);
+    expect(ctx.order?.services.some((line) => /Замер|Изготовление|Монтаж/.test(line.serviceName))).toBe(true);
+    expect((ctx.order?.materials ?? []).some((line) => /ЛДСП|Blum|МДФ/.test(line.itemName))).toBe(true);
+    const paid = ctx.paymentBalance?.netPaid ?? 0;
+    const total = ctx.paymentBalance?.total ?? 0;
+    expect(total).toBeGreaterThan(0);
+    expect(paid).toBeCloseTo(total * 0.5, 1);
+    for (const record of ctx.warrantyRecords) {
+      expect(record.mileageLimit).toBeNull();
+      expect(record.startMileage).toBeNull();
+      expect(record.expiresAtMileage).toBeNull();
+    }
+  });
 });

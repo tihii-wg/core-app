@@ -333,7 +333,8 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
   const now = input.now ?? new Date();
   const todayIso = now.toISOString();
   const t = demoT(locale);
-  const profile = industryProfile(input.industrySlug);
+  // No slug → auto_repair so legacy previews keep a full vehicle token set.
+  const profile = industryProfile(input.industrySlug?.trim() || "auto_repair");
   const demoPack = profile.demoPack;
   const isVehicle = profile.assetKind === "vehicle";
 

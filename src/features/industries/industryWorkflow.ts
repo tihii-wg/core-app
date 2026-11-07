@@ -3,6 +3,7 @@ import type { OrderStatus, serviceCategory } from "../../lib/types";
 import { isValidOptionalVin, normalizeVin } from "../../lib/vin";
 import {
   industryProfile,
+  industryTermKeyPath,
   KNOWN_INDUSTRY_SLUGS,
   SERVICE_CATEGORIES,
   type IndustryCopyPack,
@@ -156,13 +157,20 @@ export function industryInventoryCopy(workflow: IndustryWorkflow) {
   };
 
   const title = profile.navigation.materialsWarehouseLabel
-    ? i18n.t("industries.terms.furniture.parts" as "inventory.title", {
+    ? i18n.t(industryTermKeyPath(profile, "parts") as "inventory.title", {
         defaultValue: text("title", "inventory.title"),
       })
     : text("title", "inventory.title");
 
+  const navShort = profile.navigation.materialsWarehouseLabel
+    ? i18n.t(industryTermKeyPath(profile, "navInventoryShort") as "inventory.title", {
+        defaultValue: title,
+      })
+    : title;
+
   return {
     title,
+    navShort,
     loading: text("loading", "inventory.loading"),
     addItem: text("addItem", "inventory.addItem"),
     searchPlaceholder: text("searchPlaceholder", "inventory.searchPlaceholder"),
@@ -203,10 +211,24 @@ export function industryOrderStatusLabel(workflow: IndustryWorkflow, status: Ord
 /**
  * Module / shell labels shared by sidebar, topbar, search, and dashboard.
  * Reuses clients/inventory/order pack copy — does not invent a second terminology map.
+ * Pass `{ short: true }` for compact nav labels (e.g. mobile sidebar).
  */
-export function industryModuleLabel(workflow: IndustryWorkflow, module: string): string {
+export function industryModuleLabel(
+  workflow: IndustryWorkflow,
+  module: string,
+  options?: { short?: boolean },
+): string {
+  const profile = industryProfile(workflow.slug);
   if (module === "clients") return industryClientCopy(workflow).title;
-  if (module === "inventory") return industryInventoryCopy(workflow).title;
+  if (module === "inventory") {
+    const inventory = industryInventoryCopy(workflow);
+    return options?.short ? inventory.navShort : inventory.title;
+  }
+  if (module === "warehouses" && profile.navigation.materialsWarehouseLabel) {
+    return i18n.t(industryTermKeyPath(profile, "materialsWarehouse") as "nav.modules.warehouses", {
+      defaultValue: i18n.t("nav.modules.warehouses"),
+    });
+  }
   return i18n.t(`nav.modules.${module}` as "nav.modules.dashboard", {
     defaultValue: module,
   });
@@ -293,6 +315,11 @@ export function industryOrderCopy(workflow: IndustryWorkflow) {
     detailSrDescription: text("detailSrDescription", "orders.detail.srDescription"),
     assignedEmployeeLabel: text("assignedEmployeeLabel", "orders.form.assignedEmployeeLabel"),
     assignedEmployeeRequiredLabel: text("assignedEmployeeRequiredLabel", "orders.form.assignedEmployeeRequiredLabel"),
+    draftHint: text("draftHint", "orders.form.draftHint"),
+    serviceLabel: text("serviceLabel", "orders.form.serviceLabel"),
+    materialSourceCustomer: text("materialSourceCustomer", "orders.form.materialSourceCustomer"),
+    customerPartHint: text("customerPartHint", "orders.form.customerPartHint"),
+    materialSearchPlaceholder: text("materialSearchPlaceholder", "orders.form.materialSearchPlaceholder"),
   };
 }
 

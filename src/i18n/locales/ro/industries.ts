@@ -8,6 +8,8 @@ export default {
       parts: "Piese",
       services: "Servicii",
       asset: "Autovehicul",
+      navInventoryShort: "Piese",
+      materialsWarehouse: "Depozite",
     },
     device: {
       orderSingular: "Comandă de reparație",
@@ -17,6 +19,8 @@ export default {
       parts: "Piese",
       services: "Servicii",
       asset: "Dispozitiv",
+      navInventoryShort: "Piese",
+      materialsWarehouse: "Depozite",
     },
     site: {
       orderSingular: "Solicitare",
@@ -26,6 +30,8 @@ export default {
       parts: "Materiale",
       services: "Lucrări",
       asset: "Obiect / adresă",
+      navInventoryShort: "Materiale",
+      materialsWarehouse: "Depozit materiale",
     },
     furniture: {
       orderSingular: "Comandă",
@@ -35,6 +41,8 @@ export default {
       parts: "Materiale și feronerie",
       services: "Lucrări",
       asset: "Produs / piesă",
+      navInventoryShort: "Materiale",
+      materialsWarehouse: "Depozit materiale",
     },
     other: {
       orderSingular: "Comandă",
@@ -44,7 +52,26 @@ export default {
       parts: "Stoc",
       services: "Servicii",
       asset: "Articol",
+      navInventoryShort: "Stoc",
+      materialsWarehouse: "Depozite",
     },
+  },
+  layout: {
+    device: "Dispozitiv",
+    object: "Obiect",
+    seller: "Executant",
+    buyer: "Client",
+    subject: "Obiectul",
+    product: "Produs",
+    prepayment: "Avans",
+    balance: "Rest",
+    paid: "Achitat",
+    balanceDue: "De plată",
+    terms: "Condiții",
+    contractTerms: "Livrare / montaj conform comenzii. Garanție: 12 luni.",
+    warranty: "Garanție",
+    acceptance: "Recepție",
+    noClaims: "Clientul nu are pretenții privind calitatea sau completitudinea lucrărilor.",
   },
   statuses: {
     auto: {

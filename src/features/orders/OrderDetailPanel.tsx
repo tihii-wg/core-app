@@ -570,7 +570,7 @@ export default function OrderDetailPanel({
                         const source = resolveMaterialSupplySource(line);
                         const sourceLabel =
                           source === "customer"
-                            ? t("orders.form.materialSourceCustomer")
+                            ? copy.materialSourceCustomer
                             : source === "one_time"
                               ? t("orders.form.materialSourceOneTime")
                               : t("orders.form.materialSourceCatalog");

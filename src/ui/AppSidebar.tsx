@@ -81,7 +81,8 @@ export function AppSidebar() {
 
   const renderItem = ({ module, labelKey, icon: Icon, demo }: NavItem) => {
     const active = currentNavItem === module;
-    const label = industryModuleLabel(workflow, module) || t(labelKey);
+    // Inventory uses the short nav label when the industry has a long materials title.
+    const label = industryModuleLabel(workflow, module, { short: true }) || t(labelKey);
     const count = COUNTED_MODULES.has(module) ? counts[module as NavCountModule] : undefined;
     const showCount = !collapsed && typeof count === "number";
     const accessibleLabel =
@@ -107,7 +108,9 @@ export function AppSidebar() {
             aria-hidden="true"
             className={cn("size-4 shrink-0 transition-colors", active ? "text-primary" : "text-subtle-foreground group-hover:text-foreground")}
           />
-          {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+          {!collapsed && (
+            <span className="min-w-0 flex-1 text-left leading-tight break-words whitespace-normal">{label}</span>
+          )}
           {!collapsed && demo && (
             <span aria-hidden="true" className="ml-auto rounded px-1.5 py-px text-[10px] font-medium text-info ring-1 ring-info/25 ring-inset">
               {t("nav.sidebar.demo")}

@@ -19,6 +19,8 @@ import { WarehousesSettings } from "../settings/WarehousesSettings";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { industryModuleLabel } from "../industries/industryWorkflow";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useGetWarehouseStock } from "./useGetWarehouseStock";
 import { useGetWarehouses } from "./useGetWarehouses";
@@ -40,6 +42,8 @@ export function Warehouses() {
   const location = useLocation();
   const manageRef = useRef<HTMLDivElement | null>(null);
   const historyRef = useRef<HTMLDivElement | null>(null);
+  const { workflow } = useIndustryWorkflow();
+  const pageTitle = industryModuleLabel(workflow, "warehouses") || t("warehouses.title");
 
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
@@ -131,7 +135,7 @@ export function Warehouses() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={t("warehouses.title")}
+        title={pageTitle}
         description={
           isLoading
             ? t("warehouses.loading")

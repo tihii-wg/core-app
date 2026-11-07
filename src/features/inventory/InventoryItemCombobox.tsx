@@ -13,9 +13,18 @@ type InventoryItemComboboxProps = {
   onCreateRequest?: (searchQuery: string) => void;
   /** Prefills the one-time / order-only material form when the filtered list is empty. */
   onAddOneTimeRequest?: (searchQuery: string) => void;
+  /** Industry-aware search placeholder; falls back to orders.form.materialSearchPlaceholder. */
+  searchPlaceholder?: string;
 };
 
-export default function InventoryItemCombobox({ items, errors, onSelect, onCreateRequest, onAddOneTimeRequest }: InventoryItemComboboxProps) {
+export default function InventoryItemCombobox({
+  items,
+  errors,
+  onSelect,
+  onCreateRequest,
+  onAddOneTimeRequest,
+  searchPlaceholder,
+}: InventoryItemComboboxProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const [open, setOpen] = useState(false);
@@ -52,7 +61,7 @@ export default function InventoryItemCombobox({ items, errors, onSelect, onCreat
         name="order-material"
         value={query}
         autoComplete="off"
-        placeholder={t("orders.form.materialSearchPlaceholder")}
+        placeholder={searchPlaceholder || t("orders.form.materialSearchPlaceholder")}
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         onFocus={() => setOpen(true)}
         onChange={(event) => {

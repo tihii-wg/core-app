@@ -1,5 +1,5 @@
 import { Controller, useForm } from "react-hook-form";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Building2, Save } from "lucide-react";
@@ -13,7 +13,7 @@ import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { useGetIndustries } from "../industries/useGetIndustries";
-import { industryName } from "../industries/industryName";
+import { industryName, sortIndustriesForSelect } from "../industries/industryName";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspace, useUpdateWorkspaceTaxInvoiceSettings } from "../workspaces/useUpdateWorkspace";
 import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
@@ -46,6 +46,7 @@ function FieldError({ message }: { message?: string }) {
 function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   const { t } = useTranslation();
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
+  const sortedIndustries = useMemo(() => sortIndustriesForSelect(industries), [industries]);
   const { mutateAsync: saveWorkspace, isPending: isSavingWorkspace } = useUpdateWorkspace();
   const {
     register,
@@ -171,14 +172,14 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
                       <SelectValue placeholder={industriesLoading ? t("settings.company.businessTypeLoading") : t("settings.company.businessTypeLabel")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {workspace.industryId && !industries.some((industry) => industry.id === workspace.industryId) ? (
+                      {workspace.industryId && !sortedIndustries.some((industry) => industry.id === workspace.industryId) ? (
                         <SelectItem value={workspace.industryId}>
                           {workspace.industrySlug
                             ? industryName({ name: workspace.industryName ?? "", slug: workspace.industrySlug })
                             : (workspace.industryName ?? workspace.industryId)}
                         </SelectItem>
                       ) : null}
-                      {industries.map((industry) => (
+                      {sortedIndustries.map((industry) => (
                         <SelectItem key={industry.id} value={industry.id}>
                           {industryName(industry)}
                         </SelectItem>

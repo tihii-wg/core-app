@@ -340,7 +340,7 @@ export default function AddNewOrderForm({
               })}
             </p>
           ) : null}
-          <p className="text-xs text-muted-foreground">{t("orders.form.draftHint")}</p>
+          <p className="text-xs text-muted-foreground">{copy.draftHint}</p>
         </div>
 
         {showVehicles && selectedClientId ? (
@@ -365,7 +365,7 @@ export default function AddNewOrderForm({
         />
 
         <div className="space-y-1.5">
-          <Label htmlFor="service">{t("orders.form.serviceLabel")}</Label>
+          <Label htmlFor="service">{copy.serviceLabel}</Label>
 
           <ServiceCombobox
             services={activeServices}

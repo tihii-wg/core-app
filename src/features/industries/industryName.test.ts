@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import i18n from "../../i18n";
-import { industryName } from "./industryName";
+import { industryName, sortIndustriesForSelect } from "./industryName";
 
 describe("industryName", () => {
   it("translates known industry slugs in the active UI language", async () => {
@@ -27,6 +27,17 @@ describe("industryName", () => {
     expect(industryName({ name: "Custom Furniture Manufacturing", slug: "furniture_manufacturing" })).toContain(
       "мебели",
     );
+    await i18n.changeLanguage("en");
+  });
+
+  it("sorts by translated name with other last", async () => {
+    await i18n.changeLanguage("en");
+    const sorted = sortIndustriesForSelect([
+      { id: "1", name: "Other", slug: "other" },
+      { id: "2", name: "Custom Furniture Manufacturing", slug: "furniture_manufacturing" },
+      { id: "3", name: "Auto Repair & Service", slug: "auto_repair" },
+    ]);
+    expect(sorted.map((row) => row.slug)).toEqual(["auto_repair", "furniture_manufacturing", "other"]);
     await i18n.changeLanguage("en");
   });
 });

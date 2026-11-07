@@ -61,7 +61,9 @@ export type IndustryTermKey =
   | "technician"
   | "parts"
   | "services"
-  | "asset";
+  | "asset"
+  | "navInventoryShort"
+  | "materialsWarehouse";
 
 export type IndustryOrderFieldBlocks = {
   /** Client vehicle picker / automotive grid (auto only). */

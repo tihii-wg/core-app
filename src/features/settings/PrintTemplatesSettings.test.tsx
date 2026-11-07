@@ -69,14 +69,40 @@ vi.mock("../../services/printContext", () => ({
   listRecentInvoicesForPrintPreview: async () => [],
 }));
 
+const ensureDefaultInvoiceTemplate = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => null));
+const ensureDefaultDocumentStyle = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => null));
+const ensureIndustryDocumentTemplates = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => 0));
+
 vi.mock("../../services/apiDocumentTemplates", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/apiDocumentTemplates")>();
   return {
     ...actual,
-    ensureDefaultInvoiceTemplate: vi.fn(async () => null),
-    ensureDefaultDocumentStyle: vi.fn(async () => null),
+    ensureDefaultInvoiceTemplate: (...args: unknown[]) => ensureDefaultInvoiceTemplate(...args),
+    ensureDefaultDocumentStyle: (...args: unknown[]) => ensureDefaultDocumentStyle(...args),
   };
 });
+
+vi.mock("../industries/seedIndustryDefaults", () => ({
+  ensureIndustryDocumentTemplates: (...args: unknown[]) => ensureIndustryDocumentTemplates(...args),
+}));
+
+vi.mock("../industries/useIndustryProfile", async () => {
+  const { industryProfile } = await import("../industries/industryProfile");
+  const profile = industryProfile("furniture_manufacturing");
+  return {
+    useIndustryProfile: () => ({
+      profile,
+      industrySlug: "furniture_manufacturing",
+      industryId: null,
+      isLoading: false,
+      error: null,
+    }),
+  };
+});
+
+vi.mock("../workspaces/useGetWorkspace", () => ({
+  useGetWorkspace: () => ({ data: { documentLanguage: "en", language: "en", currency: "MDL", name: "Demo" } }),
+}));
 
 vi.mock("react-hot-toast", () => ({
   default: { success: vi.fn(), error: vi.fn() },
@@ -104,6 +130,9 @@ describe("PrintTemplatesSettings builder", () => {
     createMutate.mockReset();
     deleteMutate.mockReset();
     buildOrderPrintContext.mockReset();
+    ensureDefaultInvoiceTemplate.mockClear();
+    ensureDefaultDocumentStyle.mockClear();
+    ensureIndustryDocumentTemplates.mockClear();
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.setPointerCapture = () => {};
     Element.prototype.releasePointerCapture = () => {};
@@ -134,6 +163,13 @@ describe("PrintTemplatesSettings builder", () => {
       warrantyRecords: [],
       printedAt: new Date("2026-11-06T12:00:00.000Z"),
     });
+  });
+
+  it("does not call ensureIndustryDocumentTemplates on mount", async () => {
+    renderWithQuery(<PrintTemplatesSettings />);
+    await waitFor(() => expect(ensureDefaultDocumentStyle).toHaveBeenCalled());
+    expect(ensureIndustryDocumentTemplates).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Add templates for my business type/i })).toBeInTheDocument();
   });
 
   it("opens the builder, toggles a column, and saves layout", async () => {

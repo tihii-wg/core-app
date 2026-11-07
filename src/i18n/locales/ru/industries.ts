@@ -8,6 +8,8 @@ export default {
       parts: "Запчасти",
       services: "Работы",
       asset: "Автомобиль",
+      navInventoryShort: "Запчасти",
+      materialsWarehouse: "Склады",
     },
     device: {
       orderSingular: "Заказ на ремонт",
@@ -17,6 +19,8 @@ export default {
       parts: "Запчасти",
       services: "Работы",
       asset: "Устройство",
+      navInventoryShort: "Запчасти",
+      materialsWarehouse: "Склады",
     },
     site: {
       orderSingular: "Заявка",
@@ -26,6 +30,8 @@ export default {
       parts: "Материалы",
       services: "Работы",
       asset: "Объект / адрес",
+      navInventoryShort: "Материалы",
+      materialsWarehouse: "Склад материалов",
     },
     furniture: {
       orderSingular: "Заказ",
@@ -35,6 +41,8 @@ export default {
       parts: "Материалы и фурнитура",
       services: "Работы",
       asset: "Объект / изделие",
+      navInventoryShort: "Материалы",
+      materialsWarehouse: "Склад материалов",
     },
     other: {
       orderSingular: "Заказ",
@@ -44,7 +52,26 @@ export default {
       parts: "Склад",
       services: "Услуги",
       asset: "Объект",
+      navInventoryShort: "Склад",
+      materialsWarehouse: "Склады",
     },
+  },
+  layout: {
+    device: "Устройство",
+    object: "Объект",
+    seller: "Исполнитель",
+    buyer: "Заказчик",
+    subject: "Предмет",
+    product: "Изделие",
+    prepayment: "Предоплата",
+    balance: "Остаток",
+    paid: "Оплачено",
+    balanceDue: "К доплате",
+    terms: "Условия",
+    contractTerms: "Доставка и монтаж по заказу. Гарантия: 12 месяцев.",
+    warranty: "Гарантия",
+    acceptance: "Приёмка",
+    noClaims: "Заказчик претензий по качеству и комплектности работ не имеет.",
   },
   statuses: {
     auto: {

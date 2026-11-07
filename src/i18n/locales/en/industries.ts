@@ -8,6 +8,8 @@ export default {
       parts: "Parts",
       services: "Services",
       asset: "Vehicle",
+      navInventoryShort: "Parts",
+      materialsWarehouse: "Warehouses",
     },
     device: {
       orderSingular: "Repair order",
@@ -17,6 +19,8 @@ export default {
       parts: "Parts",
       services: "Services",
       asset: "Device",
+      navInventoryShort: "Parts",
+      materialsWarehouse: "Warehouses",
     },
     site: {
       orderSingular: "Service request",
@@ -26,6 +30,8 @@ export default {
       parts: "Materials",
       services: "Works",
       asset: "Site / address",
+      navInventoryShort: "Materials",
+      materialsWarehouse: "Materials warehouse",
     },
     furniture: {
       orderSingular: "Order",
@@ -35,6 +41,8 @@ export default {
       parts: "Materials & hardware",
       services: "Works",
       asset: "Product / piece",
+      navInventoryShort: "Materials",
+      materialsWarehouse: "Materials warehouse",
     },
     other: {
       orderSingular: "Order",
@@ -44,7 +52,26 @@ export default {
       parts: "Inventory",
       services: "Services",
       asset: "Item",
+      navInventoryShort: "Inventory",
+      materialsWarehouse: "Warehouses",
     },
+  },
+  layout: {
+    device: "Device",
+    object: "Object",
+    seller: "Seller",
+    buyer: "Buyer",
+    subject: "Subject",
+    product: "Product",
+    prepayment: "Prepayment",
+    balance: "Balance",
+    paid: "Paid",
+    balanceDue: "Balance due",
+    terms: "Terms",
+    contractTerms: "Delivery / installation per order. Warranty: 12 months.",
+    warranty: "Warranty",
+    acceptance: "Acceptance",
+    noClaims: "The Customer has no claims regarding the quality or completeness of the works.",
   },
   statuses: {
     auto: {

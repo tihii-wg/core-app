@@ -528,9 +528,12 @@ export function defaultCanvasLayoutForIndustryDocument(
   return baseWorkOrderLike(title, spec.documentType, assetKind, translate);
 }
 
-/** True when a serialized layout includes the vehicle token block (for tests). */
+/** True when a serialized layout includes the vehicle make/mileage block (not device serial reuse). */
 export function layoutIncludesVehicleBlock(layout: CanvasDocumentLayout): boolean {
   return layout.elements.some(
-    (el) => el.type === "text" && typeof el.content === "string" && el.content.includes("#АВТО-VIN"),
+    (el) =>
+      el.type === "text" &&
+      typeof el.content === "string" &&
+      (el.content.includes("#АВТО-МАРКА") || el.content.includes("#АВТО-ПРОБЕГ")),
   );
 }

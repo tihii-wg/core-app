@@ -66,7 +66,7 @@ export function StatusesSettings() {
   const { workspaceId } = useActiveWorkspaceId();
   const { profile, industrySlug } = useIndustryProfile();
   const [entity, setEntity] = useState<StatusEntity>("order");
-  const { data = [], isLoading, error } = useGetStatusDefinitions();
+  const { data = [], isPending: isLoading, error } = useGetStatusDefinitions();
   const { data: transitions } = useGetStatusTransitions();
   const workspaceRole = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
