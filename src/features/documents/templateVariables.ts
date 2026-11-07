@@ -351,11 +351,16 @@ function buildWarrantyList(ctx: PrintContext) {
   return `<ul style="margin:0;padding-left:1.2em">${items}</ul>`;
 }
 
+function isSafeLogoUrl(url: string) {
+  if (/^https?:\/\//i.test(url)) return true;
+  // Demo / local placeholders — image data URIs only (no HTML payloads).
+  return /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml)[;,]/i.test(url);
+}
+
 function logoHtml(ctx: PrintContext) {
   const url = text(ctx.logoUrl);
   if (!url) return "";
-  // Only allow http(s) URLs in generated markup.
-  if (!/^https?:\/\//i.test(url)) return "";
+  if (!isSafeLogoUrl(url)) return "";
   return `<img src="${escapeHtmlText(url)}" alt="" style="max-height:64px;max-width:200px" />`;
 }
 

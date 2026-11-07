@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Copy, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Copy, Eye, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -33,6 +33,8 @@ import {
 import { CanvasDesigner, templateIsCanvas } from "../documents/canvas/CanvasDesigner";
 import { DocumentStyleEditor } from "../documents/DocumentStyleEditor";
 import { DocumentTemplateBuilder } from "../documents/DocumentTemplateBuilder";
+import { TemplatePreviewDialog } from "../documents/TemplatePreviewDialog";
+import { TemplateThumbnail } from "../documents/TemplateThumbnail";
 import type { DocumentTemplateType } from "../documents/layout";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
 import {
@@ -42,8 +44,10 @@ import {
   useRenameDocumentTemplate,
   useSetDefaultDocumentTemplate,
 } from "../documents/useDocumentTemplateMutations";
+import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useCanEditWorkspaceSettings, useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
 const DOCUMENT_TYPES: DocumentTemplateType[] = ["work_order", "act", "invoice"];
@@ -141,10 +145,12 @@ function TemplateActionsBar({
  * shared Document style, plus list CRUD (create, duplicate, rename, soft-delete, set default).
  */
 export function PrintTemplatesSettings() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const confirm = useConfirm();
   const confirmUnsaved = useUnsavedChangesConfirm();
   const { workspaceId } = useActiveWorkspaceId();
+  const { data: workspace } = useGetWorkspace(workspaceId);
+  const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const queryClient = useQueryClient();
   const guardWrite = useGuardSubscriptionWrite();
   const { data = [], isLoading, error } = useGetDocumentTemplates();
@@ -160,7 +166,13 @@ export function PrintTemplatesSettings() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [editorDirty, setEditorDirty] = useState(false);
+  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
   const ensuredDefaults = useRef(false);
+
+  const previewLocale =
+    workspace?.documentLanguage?.trim() || workspace?.language?.trim() || i18n.language || "en";
+  const previewCurrency = workspace?.currency?.trim() || "MDL";
+  const previewCompanyName = workspace?.name?.trim() || null;
 
   useEffect(() => {
     if (!canEdit || !workspaceId || isLoading || ensuredDefaults.current) return;
@@ -211,6 +223,11 @@ export function PrintTemplatesSettings() {
 
   const editing = data.find((template) => template.id === editingId) ?? null;
   const editingStyle = editing?.documentType === DOCUMENT_STYLE_TYPE;
+  const previewTemplate = data.find((template) => template.id === previewTemplateId) ?? null;
+  const defaultWorkOrder =
+    data.find((template) => template.documentType === "work_order" && template.isDefault) ??
+    data.find((template) => template.documentType === "work_order") ??
+    null;
 
   async function openEditor(template: DocumentTemplate, simple = false) {
     if (editingId && editorDirty && !(await confirmUnsaved())) return;
@@ -271,16 +288,34 @@ export function PrintTemplatesSettings() {
             <ul className="divide-y divide-border rounded-lg border border-border">
               <li className="space-y-3 px-4 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="min-w-0 break-words text-sm font-medium text-foreground">
-                      {displayPrintTemplateName(styleTemplate.name, t)}
-                      {styleTemplate.isDefault ? (
-                        <span className="ml-2 inline text-xs font-normal break-words text-primary">
-                          ({t("settings.printTemplates.defaultBadge")})
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{t("settings.printTemplates.documentStyleHint")}</p>
+                  <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
+                    {defaultWorkOrder ? (
+                      <TemplateThumbnail
+                        template={{
+                          ...defaultWorkOrder,
+                          layout: defaultWorkOrder.layout
+                            ? { ...defaultWorkOrder.layout, useStyle: true }
+                            : defaultWorkOrder.layout,
+                        }}
+                        documentStyle={styleTemplate.style}
+                        locale={previewLocale}
+                        currency={previewCurrency}
+                        vatRate={workspaceVatRate}
+                        companyName={previewCompanyName}
+                        className="shrink-0"
+                      />
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <p className="min-w-0 break-words text-sm font-medium text-foreground">
+                        {displayPrintTemplateName(styleTemplate.name, t)}
+                        {styleTemplate.isDefault ? (
+                          <span className="ml-2 inline text-xs font-normal break-words text-primary">
+                            ({t("settings.printTemplates.defaultBadge")})
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{t("settings.printTemplates.documentStyleHint")}</p>
+                    </div>
                   </div>
                   {canEdit ? (
                     <TemplateActionsBar
@@ -379,7 +414,19 @@ export function PrintTemplatesSettings() {
                 {templates.map((template) => (
                   <li key={template.id} className="space-y-3 px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
+                        <TemplateThumbnail
+                          template={template}
+                          documentStyle={
+                            template.layout?.useStyle === true ? styleTemplate?.style ?? null : null
+                          }
+                          locale={previewLocale}
+                          currency={previewCurrency}
+                          vatRate={workspaceVatRate}
+                          companyName={previewCompanyName}
+                          className="shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
                         {renamingId === template.id ? (
                           <form
                             className="flex min-w-0 flex-wrap items-center gap-2"
@@ -432,7 +479,18 @@ export function PrintTemplatesSettings() {
                           {template.layout?.useStyle ? ` · ${t("settings.printTemplates.useCommonStyle")}` : ""}
                           {template.isActive ? "" : ` · ${t("settings.printTemplates.inactive")}`}
                         </p>
+                        </div>
                       </div>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPreviewTemplateId(template.id)}
+                        >
+                          <Eye />
+                          {t("settings.printTemplates.preview")}
+                        </Button>
                       {canEdit ? (
                         <TemplateActionsBar
                           editLabel={t("settings.printTemplates.edit")}
@@ -497,6 +555,7 @@ export function PrintTemplatesSettings() {
                           ]}
                         />
                       ) : null}
+                      </div>
                     </div>
                     {editing && !editingStyle && editing.id === template.id ? (
                       forceSimpleMode || (!templateIsCanvas(template) && template.layout) ? (
@@ -531,6 +590,25 @@ export function PrintTemplatesSettings() {
         })}
 
         <p className="text-xs text-muted-foreground">{t("settings.printTemplates.stubNote")}</p>
+
+        <TemplatePreviewDialog
+          open={previewTemplate != null}
+          onOpenChange={(next) => {
+            if (!next) setPreviewTemplateId(null);
+          }}
+          template={previewTemplate}
+          documentStyle={
+            previewTemplate?.layout?.useStyle === true ? styleTemplate?.style ?? null : null
+          }
+          locale={previewLocale}
+          currency={previewCurrency}
+          vatRate={workspaceVatRate}
+          companyName={previewCompanyName}
+          onOpenDesigner={(template) => {
+            setPreviewTemplateId(null);
+            void openEditor(template);
+          }}
+        />
       </CardContent>
     </Card>
   );

@@ -169,7 +169,7 @@ export async function getDocumentTemplates(workspaceId: string | undefined) {
 export type PrintOrderResult = "printed" | "unavailable";
 
 /** Prints through a hidden same-origin iframe (no popup blocker issues). */
-function printHtmlDocument(html: string) {
+export function printHtmlDocument(html: string) {
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";

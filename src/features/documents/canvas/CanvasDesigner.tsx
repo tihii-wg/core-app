@@ -46,6 +46,8 @@ import { snapBox, snapValue, type Guide } from "./snap";
 import { pageSizeMm, type CanvasDocumentLayout, type CanvasElement } from "./types";
 import { convertBlocksLayoutToCanvas } from "./convertToCanvas";
 import { isDocumentLayout } from "../layout";
+import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "../demoPrintContext";
+import { isDemoPrintSource } from "../templatePreviewHtml";
 import { emptyPrintContext } from "../templateVariables";
 import { resolveColorRef } from "../colorRef";
 import { fillToCss } from "./fill";
@@ -92,7 +94,7 @@ type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const MM_TO_PX = CANVAS_MM_TO_PX;
 
 export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOpenSimpleMode }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isMobile = useIsMobile();
   const isLg = useIsLargeScreen();
   const isTablet = !isMobile && !isLg;
@@ -122,8 +124,17 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const [showGrid] = useState(true);
   const [showData, setShowData] = useState(false);
   const [guides, setGuides] = useState<Guide[]>([]);
-  const [previewEntityId, setPreviewEntityId] = useState("");
+  const [previewEntityId, setPreviewEntityId] = useState(DEMO_PRINT_SOURCE_ID);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewCtx, setPreviewCtx] = useState(() =>
+    demoPrintContext({
+      documentType:
+        template.documentType === "act" || template.documentType === "invoice"
+          ? template.documentType
+          : "work_order",
+      locale: "en",
+    }),
+  );
   const [clipboard, setClipboard] = useState<CanvasElement[]>([]);
   const [sidePanel, setSidePanel] = useState<SidePanel>(isLg ? null : null);
   const [tabletPanel, setTabletPanel] = useState<"palette" | "properties">("palette");
@@ -179,17 +190,16 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   });
 
   useEffect(() => {
-    if (!previewEntityId) {
-      setPreviewHtml(null);
-      return;
-    }
     let cancelled = false;
     void (async () => {
       try {
-        const ctx = isInvoice
-          ? await buildInvoicePrintContext(previewEntityId, workspaceId)
-          : await buildOrderPrintContext(previewEntityId, workspaceId, documentType);
+        const ctx = isDemoPrintSource(previewEntityId)
+          ? demoPrintContext({ documentType, locale: i18n.language || "en" })
+          : isInvoice
+            ? await buildInvoicePrintContext(previewEntityId, workspaceId)
+            : await buildOrderPrintContext(previewEntityId, workspaceId, documentType);
         if (cancelled) return;
+        setPreviewCtx(ctx);
         const body = await import("./renderCanvasLayout").then((m) =>
           m.renderCanvasLayoutToHtml(layout, ctx, {
             showCents: template.showCents,
@@ -199,13 +209,16 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
         const pageCss = canvasPageCss(layout);
         setPreviewHtml(buildPrintDocument(body, name, pageCss));
       } catch {
-        if (!cancelled) setPreviewHtml(null);
+        if (!cancelled) {
+          setPreviewHtml(null);
+          setPreviewCtx(demoPrintContext({ documentType, locale: i18n.language || "en" }));
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [previewEntityId, layout, workspaceId, isInvoice, documentType, template.showCents, themeColors, name]);
+  }, [previewEntityId, layout, workspaceId, isInvoice, documentType, template.showCents, themeColors, name, i18n.language]);
 
   function mmFromClient(clientX: number, clientY: number): { xMm: number; yMm: number } | null {
     const sheet = sheetRef.current;
@@ -479,7 +492,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
   const pageBg = fillToCss(layout.page.background, themeColors);
   const previewShowData = showData
-    ? renderCanvasLayoutToHtmlSync(layout, emptyPrintContext({ documentKind: documentType }), {
+    ? renderCanvasLayoutToHtmlSync(layout, previewCtx ?? emptyPrintContext({ documentKind: documentType }), {
         colors: themeColors,
         showTokens: false,
       })
@@ -870,15 +883,12 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 </div>
               ) : null}
               <div className="ml-auto flex gap-2">
-                <Select
-                  value={previewEntityId || "__none__"}
-                  onValueChange={(value) => setPreviewEntityId(value === "__none__" ? "" : value)}
-                >
-                  <SelectTrigger className="hidden w-40 lg:flex" aria-label={t("settings.printTemplates.preview")}>
-                    <SelectValue placeholder={t("settings.printTemplates.preview")} />
+                <Select value={previewEntityId} onValueChange={setPreviewEntityId}>
+                  <SelectTrigger className="hidden w-48 lg:flex" aria-label={t("settings.printTemplates.previewSource")}>
+                    <SelectValue placeholder={t("settings.printTemplates.demoData")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">—</SelectItem>
+                    <SelectItem value={DEMO_PRINT_SOURCE_ID}>{t("settings.printTemplates.demoData")}</SelectItem>
                     {(isInvoice ? recentInvoicesQuery.data : recentOrdersQuery.data)?.map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {"orderNumber" in item ? item.orderNumber : item.invoiceNumber}

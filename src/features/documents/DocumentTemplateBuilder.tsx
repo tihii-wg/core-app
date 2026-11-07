@@ -75,6 +75,8 @@ import {
   VARIABLE_GROUPS,
   type TemplateVariable,
 } from "./templateVariables";
+import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "./demoPrintContext";
+import { isDemoPrintSource } from "./templatePreviewHtml";
 import { useSaveDocumentTemplateLayout } from "./useDocumentTemplateMutations";
 import { useGetDocumentStyle } from "./useGetDocumentStyle";
 
@@ -1641,7 +1643,7 @@ export function DocumentTemplateBuilder({
   const [layout, setLayout] = useState<DocumentLayout>(initialLayout);
   const [name, setName] = useState(template.name);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(layout.blocks[0]?.id ?? null);
-  const [previewEntityId, setPreviewEntityId] = useState("");
+  const [previewEntityId, setPreviewEntityId] = useState(DEMO_PRINT_SOURCE_ID);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [localSavePending, setLocalSavePending] = useState(false);
   const focusedTargetRef = useRef<VarTargetElement | null>(null);
@@ -1697,17 +1699,15 @@ export function DocumentTemplateBuilder({
   }, [layout.blocks, selected, tx]);
 
   useEffect(() => {
-    if (!previewEntityId) {
-      setPreviewHtml(null);
-      return;
-    }
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const ctx = isInvoice
-            ? await buildInvoicePrintContext(previewEntityId, workspaceId)
-            : await buildOrderPrintContext(previewEntityId, workspaceId, documentType);
+          const ctx = isDemoPrintSource(previewEntityId)
+            ? demoPrintContext({ documentType, locale: "en" })
+            : isInvoice
+              ? await buildInvoicePrintContext(previewEntityId, workspaceId)
+              : await buildOrderPrintContext(previewEntityId, workspaceId, documentType);
           if (cancelled) return;
           const documentStyle = documentStyleQuery.data;
           const body = snapshotBodyHtmlFromLayout(layout, ctx, template.showCents, documentStyle);
@@ -2124,16 +2124,11 @@ export function DocumentTemplateBuilder({
         <section className="space-y-2" aria-label={t("settings.printTemplates.preview")}>
           <h3 className="text-sm font-semibold">{t("settings.printTemplates.preview")}</h3>
           <Select value={previewEntityId} onValueChange={setPreviewEntityId}>
-            <SelectTrigger aria-label={isInvoice ? t("settings.printTemplates.variables.previewInvoice") : t("settings.printTemplates.variables.previewOrder")}>
-              <SelectValue
-                placeholder={
-                  isInvoice
-                    ? t("settings.printTemplates.variables.previewInvoicePlaceholder")
-                    : t("settings.printTemplates.variables.previewOrderPlaceholder")
-                }
-              />
+            <SelectTrigger aria-label={t("settings.printTemplates.previewSource")}>
+              <SelectValue placeholder={t("settings.printTemplates.demoData")} />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={DEMO_PRINT_SOURCE_ID}>{t("settings.printTemplates.demoData")}</SelectItem>
               {isInvoice
                 ? (recentInvoicesQuery.data ?? []).map((invoice) => (
                     <SelectItem key={invoice.id} value={invoice.id}>
