@@ -9,7 +9,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { ArrowLeft, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import toast from "react-hot-toast";
 import type { DocumentTemplate } from "../../../services/apiDocumentTemplates";
 import { buildInvoicePrintContext, buildOrderPrintContext, listRecentInvoicesForPrintPreview, listRecentOrdersForPrintPreview } from "../../../services/printContext";
@@ -20,6 +20,12 @@ import { buildPrintDocument } from "../printTemplate";
 import type { DocumentTemplateType } from "../layout";
 import { Button } from "../../../ui/Button";
 import { Dialog, DialogContent, DialogTitle } from "../../../ui/Dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../ui/DropdownMenu";
 import { Input } from "../../../ui/Input";
 import { Label } from "../../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../ui/Select";
@@ -32,6 +38,7 @@ import { CanvasPalette } from "./CanvasPalette";
 import { CanvasPropertiesPanel } from "./CanvasPropertiesPanel";
 import { createCanvasElementFromPalette, type PaletteDragPayload } from "./createElement";
 import { defaultCanvasLayoutForType } from "./defaultCanvasLayouts";
+import { CANVAS_MM_TO_PX, computeFitWidthZoomPercent, needsFitWidth } from "./fitWidthZoom";
 import { createHistory, pushHistory, redoHistory, undoHistory, type CanvasHistory } from "./history";
 import { isCanvasDocumentLayout, parseCanvasDocumentLayout } from "./guards";
 import { renderCanvasLayoutToHtmlSync, canvasPageCss } from "./renderCanvasLayout";
@@ -82,7 +89,7 @@ function layoutsEqual(a: CanvasDocumentLayout, b: CanvasDocumentLayout): boolean
 
 type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
-const MM_TO_PX = 3.7795275591; // CSS px at 96dpi
+const MM_TO_PX = CANVAS_MM_TO_PX;
 
 export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOpenSimpleMode }: Props) {
   const { t } = useTranslation();
@@ -99,13 +106,13 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
   const initialLayout = useMemo(() => {
     if (template.layout && isCanvasDocumentLayout(template.layout)) {
-      return parseCanvasDocumentLayout(template.layout) ?? defaultCanvasLayoutForType(documentType);
+      return parseCanvasDocumentLayout(template.layout) ?? defaultCanvasLayoutForType(documentType, t);
     }
     if (template.layout && isDocumentLayout(template.layout)) {
       return convertBlocksLayoutToCanvas(template.layout);
     }
-    return defaultCanvasLayoutForType(documentType);
-  }, [template.layout, documentType]);
+    return defaultCanvasLayoutForType(documentType, t);
+  }, [template.layout, documentType, t]);
 
   const [history, setHistory] = useState<CanvasHistory>(() => createHistory(initialLayout));
   const layout = history.present;
@@ -122,9 +129,16 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const [tabletPanel, setTabletPanel] = useState<"palette" | "properties">("palette");
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  const sheetViewportRef = useRef<HTMLDivElement>(null);
+  const sheetViewportRef = useRef<HTMLDivElement | null>(null);
+  /** State mirror of the viewport node so the fit-width effect re-runs once the (portal) dialog content mounts. */
+  const [sheetViewportEl, setSheetViewportEl] = useState<HTMLDivElement | null>(null);
+  const setSheetViewportNode = useCallback((node: HTMLDivElement | null) => {
+    sheetViewportRef.current = node;
+    setSheetViewportEl(node);
+  }, []);
   const dragPayloadRef = useRef<PaletteDragPayload | null>(null);
-  const fitWidthApplied = useRef(false);
+  /** When true, ResizeObserver stops auto-fitting until the user clicks "Fit width". */
+  const zoomLockedByUser = useRef(false);
 
   const baseline = useRef(cloneLayout(initialLayout));
   const dirty = !layoutsEqual(layout, baseline.current) || name !== template.name;
@@ -443,8 +457,24 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   }
 
   function resetDefault() {
-    commit(defaultCanvasLayoutForType(documentType));
+    commit(defaultCanvasLayoutForType(documentType, t));
     setSelectedIds([]);
+  }
+
+  function applyFitWidth(availableWidthPx: number) {
+    setZoom(computeFitWidthZoomPercent(availableWidthPx, widthMm));
+  }
+
+  function setZoomFromControl(next: number | ((current: number) => number)) {
+    zoomLockedByUser.current = true;
+    setZoom(next);
+  }
+
+  function fitWidthFromViewport() {
+    const viewport = sheetViewportRef.current;
+    if (!viewport) return;
+    zoomLockedByUser.current = false;
+    applyFitWidth(viewport.clientWidth);
   }
 
   const pageBg = fillToCss(layout.page.background, themeColors);
@@ -460,14 +490,26 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const handleOffset = handleSize / 2;
 
   useEffect(() => {
-    if (!isMobile || fitWidthApplied.current) return;
-    const viewport = sheetViewportRef.current;
-    if (!viewport) return;
-    const available = Math.max(120, viewport.clientWidth - 16);
-    const fit = Math.floor((available / (widthMm * MM_TO_PX)) * 100);
-    setZoom(Math.max(35, Math.min(100, fit)));
-    fitWidthApplied.current = true;
-  }, [isMobile, widthMm]);
+    const viewport = sheetViewportEl;
+    if (!viewport || typeof ResizeObserver === "undefined") return;
+
+    const maybeFit = () => {
+      if (zoomLockedByUser.current) return;
+      const available = viewport.clientWidth;
+      if (!needsFitWidth(available, widthMm)) return;
+      setZoom(computeFitWidthZoomPercent(available, widthMm));
+    };
+
+    maybeFit();
+    const observer = new ResizeObserver(() => maybeFit());
+    observer.observe(viewport);
+    const onOrientation = () => maybeFit();
+    window.addEventListener("orientationchange", onOrientation);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("orientationchange", onOrientation);
+    };
+  }, [widthMm, sheetViewportEl]);
 
   function sheetPointFromClient(clientX: number, clientY: number): { x: number; y: number } | null {
     const sheet = sheetRef.current;
@@ -784,12 +826,27 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 </Button>
               </div>
               <div className="flex items-center gap-1">
-                <Button type="button" size="sm" variant="outline" aria-label="Zoom out" onClick={() => setZoom((z) => Math.max(35, z - 10))}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label="Zoom out"
+                  onClick={() => setZoomFromControl((z) => Math.max(35, z - 10))}
+                >
                   <ZoomOut />
                 </Button>
                 <span className="w-10 text-center text-xs tabular-nums">{zoom}%</span>
-                <Button type="button" size="sm" variant="outline" aria-label="Zoom in" onClick={() => setZoom((z) => Math.min(200, z + 10))}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label="Zoom in"
+                  onClick={() => setZoomFromControl((z) => Math.min(200, z + 10))}
+                >
                   <ZoomIn />
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={fitWidthFromViewport}>
+                  {t("settings.printTemplates.canvas.fitWidth")}
                 </Button>
               </div>
               {isTablet ? (
@@ -856,7 +913,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 </div>
               ) : null}
 
-              <div ref={sheetViewportRef} className="min-h-0 min-w-0 overflow-auto bg-muted/30 p-2 sm:p-4">
+              <div ref={setSheetViewportNode} className="min-h-0 min-w-0 overflow-auto bg-muted/30 p-2 sm:p-4">
                 {sheetSurface}
                 {previewHtml ? (
                   <iframe title="preview" className="mt-3 hidden h-48 w-full rounded-md border border-border bg-white lg:block" srcDoc={previewHtml} />
@@ -867,16 +924,31 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
             </div>
 
             {isMobile ? (
-              <div className="flex shrink-0 items-center justify-around gap-2 border-t border-border px-2 py-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => setSidePanel("palette")}>
+              <div className="flex shrink-0 items-center gap-2 border-t border-border px-2 py-2">
+                <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" onClick={() => setSidePanel("palette")}>
                   {t("settings.printTemplates.canvas.elements")}
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => setSidePanel("properties")}>
+                <Button type="button" size="sm" variant="outline" className="min-w-0 flex-1" onClick={() => setSidePanel("properties")}>
                   {t("settings.printTemplates.canvas.properties")}
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={bringForward} disabled={!canEdit || !selectedIds.length}>
-                  {t("settings.printTemplates.canvas.bringForward")}
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" size="sm" variant="outline" aria-label={t("common.actions")}>
+                      <MoreHorizontal />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-48">
+                    <DropdownMenuItem disabled={!canEdit || !selectedIds.length} onSelect={() => bringForward()}>
+                      {t("settings.printTemplates.canvas.bringForward")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canEdit || !selectedIds.length} onSelect={() => sendBackward()}>
+                      {t("settings.printTemplates.canvas.sendBackward")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canEdit} onSelect={() => resetDefault()}>
+                      {t("settings.printTemplates.resetDefault")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ) : null}
           </div>

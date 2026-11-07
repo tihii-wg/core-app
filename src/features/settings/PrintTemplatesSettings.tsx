@@ -23,7 +23,13 @@ import {
   ensureDefaultInvoiceTemplate,
   isBuilderDocumentType,
   isDocumentStyleType,
+  renameDocumentTemplate,
 } from "../../services/apiDocumentTemplates";
+import {
+  DOCUMENT_STYLE_NAME_KEY,
+  displayPrintTemplateName,
+  translatedDocumentStyleName,
+} from "../documents/printTemplateName";
 import { CanvasDesigner, templateIsCanvas } from "../documents/canvas/CanvasDesigner";
 import { DocumentStyleEditor } from "../documents/DocumentStyleEditor";
 import { DocumentTemplateBuilder } from "../documents/DocumentTemplateBuilder";
@@ -176,6 +182,20 @@ export function PrintTemplatesSettings() {
     [data],
   );
 
+  const styleNameMigrated = useRef(false);
+  useEffect(() => {
+    if (!canEdit || !workspaceId || !styleTemplate || styleNameMigrated.current) return;
+    if (styleTemplate.name !== DOCUMENT_STYLE_NAME_KEY) return;
+    styleNameMigrated.current = true;
+    void renameDocumentTemplate(styleTemplate.id, translatedDocumentStyleName(t), workspaceId)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ["document-templates", workspaceId] });
+      })
+      .catch(() => {
+        styleNameMigrated.current = false;
+      });
+  }, [canEdit, workspaceId, styleTemplate, t, queryClient]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, DocumentTemplate[]>();
     for (const type of DOCUMENT_TYPES) map.set(type, []);
@@ -253,7 +273,7 @@ export function PrintTemplatesSettings() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="min-w-0 break-words text-sm font-medium text-foreground">
-                      {styleTemplate.name}
+                      {displayPrintTemplateName(styleTemplate.name, t)}
                       {styleTemplate.isDefault ? (
                         <span className="ml-2 inline text-xs font-normal break-words text-primary">
                           ({t("settings.printTemplates.defaultBadge")})
@@ -399,7 +419,7 @@ export function PrintTemplatesSettings() {
                           </form>
                         ) : (
                           <p className="min-w-0 break-words text-sm font-medium text-foreground">
-                            {template.name}
+                            {displayPrintTemplateName(template.name, t)}
                             {template.isDefault ? (
                               <span className="ml-2 inline text-xs font-normal break-words text-primary">
                                 ({t("settings.printTemplates.defaultBadge")})

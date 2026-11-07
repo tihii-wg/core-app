@@ -28,6 +28,7 @@ import {
   type DocumentTemplateType,
 } from "../features/documents/layout";
 import { applyTemplateVariables, buildPrintDocument } from "../features/documents/printTemplate";
+import { translatedDocumentStyleName } from "../features/documents/printTemplateName";
 import { emptyPrintContext, type PrintContext } from "../features/documents/templateVariables";
 import { buildInvoicePrintContext, buildOrderPrintContext } from "./printContext";
 import { isMissingTableError, requireWorkspaceId } from "./missingTable";
@@ -408,7 +409,7 @@ export async function createDocumentTemplate(
   options: { isDefault?: boolean } = {},
 ) {
   const resolved = requireWorkspaceId(workspaceId);
-  const layout = defaultCanvasLayoutForType(documentType);
+  const layout = defaultCanvasLayoutForType(documentType, i18n.t.bind(i18n));
   const emptyCtxBody = renderCanvasLayoutToHtmlSync(layout, emptyPrintContext({ locale: "ru" }), {
     colors: defaultDocumentStyle().colors,
   });
@@ -471,7 +472,7 @@ export async function ensureDefaultDocumentStyle(workspaceId: string | undefined
       .from("document_templates")
       .insert({
         workspace_id: resolved,
-        name: i18n.t("settings.printTemplates.documentStyle"),
+        name: translatedDocumentStyleName(),
         document_type: DOCUMENT_STYLE_TYPE,
         layout: style,
         body_html: "",

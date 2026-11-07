@@ -1,5 +1,7 @@
 /** Default canvas (v3) templates reproducing the original blue invoice/work-order design via theme refs. */
 
+import type { TFunction } from "i18next";
+import i18n from "../../../i18n";
 import { themeRef } from "../colorRef";
 import type { TableColumn, TotalsRow } from "../layout";
 import type { DocumentTemplateType } from "../layout";
@@ -9,6 +11,16 @@ import {
   type CanvasElement,
   type CanvasElementStyle,
 } from "./types";
+
+type Translate = TFunction;
+
+function tDefault(t: Translate | undefined): Translate {
+  return t ?? (i18n.t.bind(i18n) as Translate);
+}
+
+function L(t: Translate, key: string): string {
+  return String(t(`settings.printTemplates.canvas.defaults.${key}` as "settings.printTemplates.canvas.defaults.client"));
+}
 
 function baseStyle(overrides: Partial<CanvasElementStyle> = {}): CanvasElementStyle {
   return {
@@ -28,21 +40,25 @@ function total(key: TotalsRow["key"], label: string, enabled = true): TotalsRow 
   return { key, label, enabled };
 }
 
-const lineColumns = [
-  col("index", "№", true, 6, "center"),
-  col("name", "Name", true, 44, "left"),
-  col("qty", "Qty", true, 10, "right"),
-  col("price", "Price", true, 18, "right"),
-  col("sum", "Sum", true, 22, "right"),
-];
+function lineColumns(t: Translate) {
+  return [
+    col("index", "№", true, 6, "center"),
+    col("name", L(t, "name"), true, 44, "left"),
+    col("qty", L(t, "qty"), true, 10, "right"),
+    col("price", L(t, "price"), true, 18, "right"),
+    col("sum", L(t, "sum"), true, 22, "right"),
+  ];
+}
 
-const invoiceColumns = [
-  col("index", "№", true, 6, "center"),
-  col("name", "Description", true, 46, "left"),
-  col("qty", "Qty", true, 12, "right"),
-  col("price", "Unit price", true, 18, "right"),
-  col("sum", "Total", true, 18, "right"),
-];
+function invoiceColumns(t: Translate) {
+  return [
+    col("index", "№", true, 6, "center"),
+    col("name", L(t, "description"), true, 46, "left"),
+    col("qty", L(t, "qty"), true, 12, "right"),
+    col("price", L(t, "unitPrice"), true, 18, "right"),
+    col("sum", L(t, "sum"), true, 18, "right"),
+  ];
+}
 
 function page(): CanvasDocumentLayout["page"] {
   return { size: "A4", orientation: "portrait", marginsMm: 10 };
@@ -164,7 +180,7 @@ function tableElement(
 type TableCanvasElementSource = import("./types").TableCanvasElement["source"];
 type TableCanvasElementColumns = import("./types").TableCanvasElement["columns"];
 
-function totalsElement(yMm: number): CanvasElement {
+function totalsElement(yMm: number, t: Translate): CanvasElement {
   return {
     id: newCanvasElementId("tot"),
     type: "totals",
@@ -174,10 +190,10 @@ function totalsElement(yMm: number): CanvasElement {
     hMm: 36,
     zIndex: 1,
     rows: [
-      total("servicesSum", "Services"),
-      total("materialsSum", "Materials"),
-      total("discount", "Discount"),
-      total("total", "Total"),
+      total("servicesSum", L(t, "services")),
+      total("materialsSum", L(t, "materials")),
+      total("discount", L(t, "discount")),
+      total("total", L(t, "total")),
     ],
     background: themeRef("tint"),
     textColor: themeRef("text"),
@@ -187,7 +203,7 @@ function totalsElement(yMm: number): CanvasElement {
   };
 }
 
-function signaturesElement(yMm: number): CanvasElement {
+function signaturesElement(yMm: number, t: Translate): CanvasElement {
   return {
     id: newCanvasElementId("sig"),
     type: "signatures",
@@ -196,13 +212,14 @@ function signaturesElement(yMm: number): CanvasElement {
     wMm: 190,
     hMm: 28,
     zIndex: 1,
-    labels: ["Executor", "Client"],
-    dateLabel: "Date",
+    labels: [L(t, "executor"), L(t, "customer")],
+    dateLabel: L(t, "date"),
     style: baseStyle({ fontSizePt: 9, paddingMm: 1 }),
   };
 }
 
-export function defaultCanvasWorkOrderLayout(): CanvasDocumentLayout {
+export function defaultCanvasWorkOrderLayout(t?: Translate): CanvasDocumentLayout {
+  const translate = tDefault(t);
   return {
     version: 3,
     mode: "canvas",
@@ -210,14 +227,14 @@ export function defaultCanvasWorkOrderLayout(): CanvasDocumentLayout {
     page: page(),
     gridMm: 2,
     elements: [
-      ...headerBand("WORK ORDER\n#ЗАКАЗ-НОМЕР"),
+      ...headerBand(`${L(translate, "workOrder")}\n#ЗАКАЗ-НОМЕР`),
       ...tintBox(
         0,
         34,
         92,
         36,
         "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-ТЕЛЕФОН\n#КЛИЕНТ-АДРЕС",
-        "Client",
+        L(translate, "client"),
       ),
       ...tintBox(
         98,
@@ -225,11 +242,11 @@ export function defaultCanvasWorkOrderLayout(): CanvasDocumentLayout {
         92,
         36,
         "#АВТО-МАРКА #АВТО-МОДЕЛЬ\n#АВТО-НОМЕР\nVIN: #АВТО-VIN\n#АВТО-ПРОБЕГ",
-        "Vehicle",
+        L(translate, "vehicle"),
       ),
-      tableElement(78, "allLines", lineColumns),
-      totalsElement(130),
-      signaturesElement(175),
+      tableElement(78, "allLines", lineColumns(translate)),
+      totalsElement(130, translate),
+      signaturesElement(175, translate),
       {
         id: newCanvasElementId("pn"),
         type: "pageNumber",
@@ -239,14 +256,15 @@ export function defaultCanvasWorkOrderLayout(): CanvasDocumentLayout {
         hMm: 8,
         zIndex: 5,
         repeatOnEveryPage: true,
-        format: "Стр. {n} из {m}",
+        format: L(translate, "pageNumberFormat"),
         style: baseStyle({ fontSizePt: 8, color: themeRef("muted"), align: "right", paddingMm: 0 }),
       },
     ],
   };
 }
 
-export function defaultCanvasActLayout(): CanvasDocumentLayout {
+export function defaultCanvasActLayout(t?: Translate): CanvasDocumentLayout {
+  const translate = tDefault(t);
   return {
     version: 3,
     mode: "canvas",
@@ -254,16 +272,24 @@ export function defaultCanvasActLayout(): CanvasDocumentLayout {
     page: page(),
     gridMm: 2,
     elements: [
-      ...headerBand("ACT OF COMPLETED WORKS\n#ЗАКАЗ-НОМЕР"),
-      ...tintBox(0, 34, 190, 28, "#КЛИЕНТ-ИМЯ · #КЛИЕНТ-ТЕЛЕФОН\n#АВТО-МАРКА #АВТО-МОДЕЛЬ · #АВТО-НОМЕР", "Client / Vehicle"),
-      tableElement(70, "services", lineColumns),
-      totalsElement(125),
-      signaturesElement(170),
+      ...headerBand(`${L(translate, "act")}\n#ЗАКАЗ-НОМЕР`),
+      ...tintBox(
+        0,
+        34,
+        190,
+        28,
+        "#КЛИЕНТ-ИМЯ · #КЛИЕНТ-ТЕЛЕФОН\n#АВТО-МАРКА #АВТО-МОДЕЛЬ · #АВТО-НОМЕР",
+        L(translate, "clientVehicle"),
+      ),
+      tableElement(70, "services", lineColumns(translate)),
+      totalsElement(125, translate),
+      signaturesElement(170, translate),
     ],
   };
 }
 
-export function defaultCanvasInvoiceLayout(): CanvasDocumentLayout {
+export function defaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout {
+  const translate = tDefault(t);
   return {
     version: 3,
     mode: "canvas",
@@ -271,17 +297,17 @@ export function defaultCanvasInvoiceLayout(): CanvasDocumentLayout {
     page: page(),
     gridMm: 2,
     elements: [
-      ...headerBand("INVOICE\n#СЧЁТ-НОМЕР"),
-      ...tintBox(0, 34, 92, 40, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO", "Bill to"),
+      ...headerBand(`${L(translate, "invoice")}\n#СЧЁТ-НОМЕР`),
+      ...tintBox(0, 34, 92, 40, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO", L(translate, "billTo")),
       ...tintBox(
         98,
         34,
         92,
         40,
         "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК\n#КОМПАНИЯ-IBAN\n#КОМПАНИЯ-БАНК",
-        "Details",
+        L(translate, "details"),
       ),
-      tableElement(82, "invoiceLines", invoiceColumns),
+      tableElement(82, "invoiceLines", invoiceColumns(translate)),
       {
         id: newCanvasElementId("tot"),
         type: "totals",
@@ -290,20 +316,25 @@ export function defaultCanvasInvoiceLayout(): CanvasDocumentLayout {
         wMm: 80,
         hMm: 40,
         zIndex: 1,
-        rows: [total("servicesSum", "Subtotal"), total("vat", "VAT"), total("total", "Total due"), total("totalWords", "In words")],
+        rows: [
+          total("servicesSum", L(translate, "subtotal")),
+          total("vat", L(translate, "vat")),
+          total("total", L(translate, "totalDue")),
+          total("totalWords", L(translate, "inWords")),
+        ],
         background: themeRef("tint"),
         textColor: themeRef("text"),
         grandTotalBackground: themeRef("primary"),
         grandTotalTextColor: "#ffffff",
         style: baseStyle({ fontSizePt: 10, paddingMm: 2 }),
       },
-      signaturesElement(195),
+      signaturesElement(195, translate),
     ],
   };
 }
 
-export function defaultCanvasLayoutForType(documentType: DocumentTemplateType): CanvasDocumentLayout {
-  if (documentType === "act") return defaultCanvasActLayout();
-  if (documentType === "invoice") return defaultCanvasInvoiceLayout();
-  return defaultCanvasWorkOrderLayout();
+export function defaultCanvasLayoutForType(documentType: DocumentTemplateType, t?: Translate): CanvasDocumentLayout {
+  if (documentType === "act") return defaultCanvasActLayout(t);
+  if (documentType === "invoice") return defaultCanvasInvoiceLayout(t);
+  return defaultCanvasWorkOrderLayout(t);
 }
