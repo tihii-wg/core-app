@@ -6,6 +6,7 @@ import { Button } from "../../ui/Button";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { EmptyState, ErrorState } from "../../ui/EmptyState";
 import { EntityStatusBadge } from "../../ui/StatusBadge";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import type { Stage9ListResult } from "../../services/apiStage9List";
 import { useReportFormatting } from "../reports/reportFormatting";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
@@ -57,6 +58,7 @@ export function Stage9ListPage<T>({
   isMutating = false,
 }: Stage9ListPageProps<T>) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { canWrite } = useWorkspaceSubscription();
   const rows = data?.rows ?? [];
   const writable = canWrite && Boolean(onAdd || onEdit || onDelete);
@@ -92,7 +94,19 @@ export function Stage9ListPage<T>({
                   aria-label={t("stage9.actions.delete")}
                   title={t("stage9.actions.delete")}
                   onClick={() => {
-                    if (window.confirm(t("stage9.actions.deleteConfirm", { name: rowLabel ? rowLabel(row) : "" }))) onDelete(row);
+                    void (async () => {
+                      if (
+                        !(await confirm({
+                          title: t("common.deleteTitle"),
+                          description: t("stage9.actions.deleteConfirm", { name: rowLabel ? rowLabel(row) : "" }),
+                          confirmLabel: t("common.delete"),
+                          tone: "destructive",
+                        }))
+                      ) {
+                        return;
+                      }
+                      onDelete(row);
+                    })();
                   }}
                 >
                   <Trash2 />

@@ -15,7 +15,9 @@ const common: Messages<typeof en> = {
   continue: "Продолжить",
   create: "Создать",
   delete: "Удалить",
+  deleteTitle: "Удалить?",
   deleting: "Удаление...",
+  discardChanges: "Выйти без сохранения",
   edit: "Изменить",
   loading: "Загрузка",
   loadingEllipsis: "Загрузка...",
@@ -32,6 +34,8 @@ const common: Messages<typeof en> = {
   somethingWentWrong: "Что-то пошло не так",
   status: "Статус",
   total: "Итого",
+  unsavedDescription: "Изменения не сохранены. Выйти без сохранения?",
+  unsavedTitle: "Несохранённые изменения",
   update: "Обновить",
   yes: "Да",
   errors: {

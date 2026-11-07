@@ -15,7 +15,9 @@ const common: Messages<typeof en> = {
   continue: "Continuă",
   create: "Creează",
   delete: "Șterge",
+  deleteTitle: "Ștergeți?",
   deleting: "Se șterge...",
+  discardChanges: "Ieșiți fără a salva",
   edit: "Editează",
   loading: "Se încarcă",
   loadingEllipsis: "Se încarcă...",
@@ -32,6 +34,8 @@ const common: Messages<typeof en> = {
   somethingWentWrong: "Ceva nu a mers bine",
   status: "Stare",
   total: "Total",
+  unsavedDescription: "Aveți modificări nesalvate. Ieșiți fără a salva?",
+  unsavedTitle: "Modificări nesalvate",
   update: "Actualizează",
   yes: "Da",
   errors: {

@@ -8,6 +8,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 
+import { ConfirmProvider } from "./ui/ConfirmProvider";
 import { PublicRoute } from "./ui/PublicRoute";
 import ProtectedRoute from "./ui/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
@@ -120,11 +121,13 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppProvider>
-        <AuthSession />
-        <AppRoutes />
-        <Toaster />
-      </AppProvider>
+      <ConfirmProvider>
+        <AppProvider>
+          <AuthSession />
+          <AppRoutes />
+          <Toaster />
+        </AppProvider>
+      </ConfirmProvider>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

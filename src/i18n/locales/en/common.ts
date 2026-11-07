@@ -12,7 +12,9 @@ export default {
   continue: "Continue",
   create: "Create",
   delete: "Delete",
+  deleteTitle: "Delete?",
   deleting: "Deleting...",
+  discardChanges: "Leave without saving",
   edit: "Edit",
   loading: "Loading",
   loadingEllipsis: "Loading...",
@@ -29,6 +31,8 @@ export default {
   somethingWentWrong: "Something went wrong",
   status: "Status",
   total: "Total",
+  unsavedDescription: "You have unsaved changes. Leave without saving?",
+  unsavedTitle: "Unsaved changes",
   update: "Update",
   yes: "Yes",
   errors: {

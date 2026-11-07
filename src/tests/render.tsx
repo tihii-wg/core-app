@@ -2,6 +2,7 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { render, type RenderOptions } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { AppProvider, type AppContextValue } from "../app/AppProvider";
+import { ConfirmProvider } from "../ui/ConfirmProvider";
 
 type RenderWithAppOptions = Omit<RenderOptions, "wrapper"> & {
   withRouter?: boolean;
@@ -55,6 +56,8 @@ function Wrapper({
   if (withAppProvider) {
     tree = <AppProvider {...appProviderProps}>{tree}</AppProvider>;
   }
+
+  tree = <ConfirmProvider>{tree}</ConfirmProvider>;
 
   if (withRouter) {
     tree = <MemoryRouter>{tree}</MemoryRouter>;

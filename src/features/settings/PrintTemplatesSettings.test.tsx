@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../tests/renderQuery";
@@ -9,6 +9,7 @@ import { insertTextAtCursor, PrintTemplatesSettings } from "./PrintTemplatesSett
 const saveMutate = vi.hoisted(() => vi.fn());
 const setDefaultMutate = vi.hoisted(() => vi.fn());
 const createMutate = vi.hoisted(() => vi.fn());
+const deleteMutate = vi.hoisted(() => vi.fn());
 const buildOrderPrintContext = vi.hoisted(() => vi.fn());
 
 const template = {
@@ -39,7 +40,7 @@ vi.mock("../documents/useDocumentTemplateMutations", () => ({
   useCreateDocumentTemplate: () => ({ mutate: createMutate, isPending: false }),
   useDuplicateDocumentTemplate: () => ({ mutate: vi.fn(), isPending: false }),
   useRenameDocumentTemplate: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteDocumentTemplate: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteDocumentTemplate: () => ({ mutate: deleteMutate, isPending: false }),
   useSetDefaultDocumentTemplate: () => ({ mutate: setDefaultMutate, isPending: false }),
   useSaveDocumentTemplateLayout: () => ({ mutate: saveMutate, isPending: false }),
 }));
@@ -101,7 +102,12 @@ describe("PrintTemplatesSettings builder", () => {
     saveMutate.mockReset();
     setDefaultMutate.mockReset();
     createMutate.mockReset();
+    deleteMutate.mockReset();
     buildOrderPrintContext.mockReset();
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.setPointerCapture = () => {};
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.scrollIntoView = () => {};
     buildOrderPrintContext.mockResolvedValue({
       order: {
         id: "o1",
@@ -174,5 +180,44 @@ describe("PrintTemplatesSettings builder", () => {
     await user.click(moveDownButtons[0]!);
     // After move, unsaved banner appears.
     expect(await screen.findByText(/unsaved changes/i)).toBeInTheDocument();
+  });
+
+  it("asks before deleting a template and deletes only after confirm", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<PrintTemplatesSettings />);
+
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Delete this print template/i)).toBeInTheDocument();
+    expect(deleteMutate).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(deleteMutate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /^Delete$/i }));
+    const confirmDialog = await screen.findByRole("dialog");
+    await user.click(within(confirmDialog).getByRole("button", { name: /^Delete$/ }));
+    await waitFor(() => expect(deleteMutate).toHaveBeenCalledWith("t1"));
+  });
+
+  it("asks before discarding unsaved builder changes on cancel", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<PrintTemplatesSettings />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+
+    const moveDownButtons = screen.getAllByRole("button", { name: "Move down" });
+    await user.click(moveDownButtons[0]!);
+    expect(await screen.findByText(/unsaved changes/i)).toBeInTheDocument();
+
+    const builderCancel = screen.getAllByRole("button", { name: "Cancel" }).at(-1)!;
+    await user.click(builderCancel);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /Leave without saving/i })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText("Blocks")).toBeInTheDocument();
   });
 });

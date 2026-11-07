@@ -19,5 +19,19 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        { name: 'confirm', message: 'Use useConfirm()' },
+        { name: 'alert', message: 'Use toast or useConfirm()' },
+        { name: 'prompt', message: 'Use a dialog' },
+      ],
+      'no-restricted-properties': [
+        'error',
+        { object: 'window', property: 'confirm', message: 'Use useConfirm()' },
+        { object: 'window', property: 'alert', message: 'Use toast or useConfirm()' },
+        { object: 'window', property: 'prompt', message: 'Use a dialog' },
+      ],
+    },
   },
 ])

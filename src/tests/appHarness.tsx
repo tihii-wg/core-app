@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { AppRoutes } from "../App";
 import { AuthSession } from "../features/auth/AuthSession";
 import { AppProvider } from "../lib/appContext";
+import { ConfirmProvider } from "../ui/ConfirmProvider";
 import { createTestQueryClient } from "./hookHarness";
 
 /** Browser APIs jsdom lacks that the layout, Radix menus and charts call. */
@@ -46,14 +47,16 @@ export function renderApp(path: string) {
 
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <AppProvider>
-          <AuthSession />
-          <LocationProbe />
-          <AppRoutes />
-          <Toaster />
-        </AppProvider>
-      </MemoryRouter>
+      <ConfirmProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <AppProvider>
+            <AuthSession />
+            <LocationProbe />
+            <AppRoutes />
+            <Toaster />
+          </AppProvider>
+        </MemoryRouter>
+      </ConfirmProvider>
     </QueryClientProvider>,
   );
 

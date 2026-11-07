@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { useConfirm, useUnsavedChangesConfirm } from "../../ui/ConfirmProvider";
 import type { DocumentTemplate } from "../../services/apiDocumentTemplates";
 import {
   applyCommonStyleToAllTemplates,
@@ -50,6 +51,8 @@ export function insertTextAtCursor(textarea: Pick<HTMLTextAreaElement, "selectio
  */
 export function PrintTemplatesSettings() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
+  const confirmUnsaved = useUnsavedChangesConfirm();
   const { workspaceId } = useActiveWorkspaceId();
   const queryClient = useQueryClient();
   const guardWrite = useGuardSubscriptionWrite();
@@ -103,8 +106,8 @@ export function PrintTemplatesSettings() {
   const editing = data.find((template) => template.id === editingId) ?? null;
   const editingStyle = editing?.documentType === DOCUMENT_STYLE_TYPE;
 
-  function openEditor(template: DocumentTemplate) {
-    if (editingId && editorDirty && !window.confirm(t("settings.printTemplates.unsavedConfirm"))) return;
+  async function openEditor(template: DocumentTemplate) {
+    if (editingId && editorDirty && !(await confirmUnsaved())) return;
     setEditingId(template.id);
     setEditorDirty(false);
   }
@@ -184,8 +187,17 @@ export function PrintTemplatesSettings() {
                           size="sm"
                           disabled={applyStyle.isPending}
                           onClick={() => {
-                            if (!window.confirm(t("settings.printTemplates.applyStyleToAllConfirm"))) return;
-                            applyStyle.mutate();
+                            void (async () => {
+                              if (
+                                !(await confirm({
+                                  title: t("settings.printTemplates.applyStyleToAll"),
+                                  description: t("settings.printTemplates.applyStyleToAllConfirm"),
+                                }))
+                              ) {
+                                return;
+                              }
+                              applyStyle.mutate();
+                            })();
                           }}
                         >
                           {t("settings.printTemplates.applyStyleToAll")}
@@ -372,9 +384,20 @@ export function PrintTemplatesSettings() {
                               size="sm"
                               disabled={remove.isPending}
                               onClick={() => {
-                                if (!window.confirm(t("settings.printTemplates.deleteConfirm"))) return;
-                                if (editingId === template.id) closeEditor();
-                                remove.mutate(template.id);
+                                void (async () => {
+                                  if (
+                                    !(await confirm({
+                                      title: t("common.deleteTitle"),
+                                      description: t("settings.printTemplates.deleteConfirm"),
+                                      confirmLabel: t("common.delete"),
+                                      tone: "destructive",
+                                    }))
+                                  ) {
+                                    return;
+                                  }
+                                  if (editingId === template.id) closeEditor();
+                                  remove.mutate(template.id);
+                                })();
                               }}
                             >
                               <Trash2 />

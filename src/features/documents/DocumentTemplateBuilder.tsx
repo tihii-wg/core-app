@@ -38,6 +38,7 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
+import { useUnsavedChangesConfirm } from "../../ui/ConfirmProvider";
 import type { DocumentTemplate } from "../../services/apiDocumentTemplates";
 import { resolvePrintPageCss, snapshotBodyHtmlFromLayout } from "../../services/apiDocumentTemplates";
 import {
@@ -1600,6 +1601,7 @@ export function DocumentTemplateBuilder({
   onSaveLayout,
 }: DocumentTemplateBuilderProps) {
   const { t } = useTranslation();
+  const confirmUnsaved = useUnsavedChangesConfirm();
   const tx = useTx();
   const { workspaceId } = useActiveWorkspaceId();
   const save = useSaveDocumentTemplateLayout();
@@ -1881,8 +1883,10 @@ export function DocumentTemplateBuilder({
           size="sm"
           disabled={savePending}
           onClick={() => {
-            if (dirty && !window.confirm(t("settings.printTemplates.unsavedConfirm"))) return;
-            onClose();
+            void (async () => {
+              if (dirty && !(await confirmUnsaved())) return;
+              onClose();
+            })();
           }}
         >
           {t("common.cancel")}

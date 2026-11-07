@@ -5,6 +5,7 @@ import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import { useGetLocations } from "../locations/useGetLocations";
 import {
   useCreateLocation,
@@ -18,6 +19,7 @@ const emptyForm = { name: "", address: "", phone: "", color: "#2563eb", code: ""
 
 export function LocationsSettings() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { data = [], isLoading, error } = useGetLocations();
   const canEdit = useCanEditWorkspaceSettings(useActiveWorkspaceRole());
   const createLocation = useCreateLocation();
@@ -94,9 +96,19 @@ export function LocationsSettings() {
                         aria-label={t("settings.locations.delete")}
                         title={location.isDefault ? t("settings.locations.cannotDeleteDefault") : t("settings.locations.delete")}
                         onClick={() => {
-                          if (window.confirm(t("settings.locations.deleteConfirm", { name: location.name }))) {
+                          void (async () => {
+                            if (
+                              !(await confirm({
+                                title: t("common.deleteTitle"),
+                                description: t("settings.locations.deleteConfirm", { name: location.name }),
+                                confirmLabel: t("common.delete"),
+                                tone: "destructive",
+                              }))
+                            ) {
+                              return;
+                            }
                             deleteLocation.mutate(location.id);
-                          }
+                          })();
                         }}
                       >
                         <Trash2 />

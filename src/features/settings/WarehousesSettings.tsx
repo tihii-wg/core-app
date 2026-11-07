@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import type { BinLocationRecord, WarehouseRecord, WarehouseType } from "../../services/apiWarehouses";
 import type { WarehouseStockRecord } from "../../services/apiWarehouseStock";
 import { useGetLocations } from "../locations/useGetLocations";
@@ -50,6 +51,7 @@ function formFromWarehouse(warehouse: WarehouseRecord): WarehouseForm {
 
 export function WarehousesSettings() {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { data: warehouses = [], isLoading, error } = useGetWarehouses();
   const { data: bins = [] } = useGetBinLocations();
   const { data: locations = [] } = useGetLocations();
@@ -221,9 +223,19 @@ export function WarehousesSettings() {
                                 : t("settings.warehouses.delete")
                           }
                           onClick={() => {
-                            if (window.confirm(t("settings.warehouses.deleteConfirm", { name: warehouse.name }))) {
+                            void (async () => {
+                              if (
+                                !(await confirm({
+                                  title: t("common.deleteTitle"),
+                                  description: t("settings.warehouses.deleteConfirm", { name: warehouse.name }),
+                                  confirmLabel: t("common.delete"),
+                                  tone: "destructive",
+                                }))
+                              ) {
+                                return;
+                              }
                               softDelete.mutate(warehouse.id);
-                            }
+                            })();
                           }}
                         >
                           <Trash2 />
