@@ -3640,6 +3640,9 @@ export function mapOrderWarrantyDbError(error: {
   if (/order_lifecycle:closed_order_immutable/i.test(blob)) {
     return new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
+  if (/warranty:paused_source_not_closed/i.test(blob)) {
+    return new Error(i18n.t("orders.warranty.errors.pausedSourceNotClosed"));
+  }
   return null;
 }
 

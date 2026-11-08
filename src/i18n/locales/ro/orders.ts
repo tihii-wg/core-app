@@ -817,15 +817,24 @@ const orders: Messages<typeof en> = {
       none: "Fără garanție",
       pending: "Neîncepută",
       active: "Activă",
+      paused: "Suspendată",
       expired_date: "Expirată pe dată",
       expired_mileage: "Expirată pe kilometraj",
       unavailable: "Indisponibilă",
     },
+    pausedSinceClose: "Suspendată · activă de la {{date}} după închiderea comenzii",
+    pauseNotice:
+      "Garanția acestei comenzi este suspendată până la o nouă închidere. După închidere, continuă de la data inițială ({{date}}). Modificarea prețului sau cantității nu schimbă garanția. Garanția reîncepe doar dacă ștergeți un serviciu sau material cu garanție și îl adăugați din nou — atunci termenul și kilometrajul se calculează de la noua închidere.",
+    deleteWarrantyLineConfirm:
+      "Poziția „{{name}}” are garanție de la {{date}}. Dacă o ștergeți și o adăugați din nou, garanția veche este ștearsă, iar una nouă începe de la următoarea închidere a comenzii. Ștergeți?",
+    newWarrantyFromCloseHint: "Garanția nouă va începe de la data închiderii comenzii",
     errors: {
       crossWorkspace: "Nu puteți lega o comandă din alt workspace.",
       crossClient: "Comanda originală trebuie să aparțină aceluiași client.",
       crossVehicle: "Comanda originală trebuie să aparțină aceluiași vehicul.",
       sourceNotClosed: "Comanda originală trebuie să fie închisă formal.",
+      pausedSourceNotClosed:
+        "Garanția este suspendată: comanda originală a fost anulată sau redeschisă. Închideți-o pentru ca garanția să fie din nou valabilă.",
       invalidRecord: "Poziția selectată nu face parte din comanda originală.",
       expiredNeedsConfirmation: "Confirmați acceptarea în afara perioadei de garanție.",
       selectOriginal: "Selectați comanda originală.",

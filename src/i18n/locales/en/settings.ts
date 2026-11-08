@@ -62,6 +62,8 @@ export default {
       warrantyFromCreated: "Order creation date",
       warrantyFromClosed: "Order closure date",
       warrantyHint: "Warranty snapshots are created when an order is closed. This setting is retained for compatibility; activation requires formal close.",
+      warrantyRulesHelp:
+        "Warranty is valid only while the source order is formally closed. If you cancel or reopen the order, warranty is paused and resumes from the same start date and mileage when you close again. Changing price or quantity does not restart warranty. Deleting a warranty-covered line and adding it again creates a new warranty from the next close. Terms (months/days/km) come from the catalog item, not the price.",
       warrantyDefaultsTitle: "Default warranty for new order lines",
       warrantyDefaultsHint: "Applied when adding new services or parts. Leave blank to disable a limit. Individual lines can override these defaults.",
       warrantyServiceMonths: "Services — months",

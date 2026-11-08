@@ -419,4 +419,52 @@ describe("order warranty indicator model", () => {
     expect(model.status).toBe("active");
     expect(model.nearExpiry).toBe(true);
   });
+
+  it("pauses warranty when the source order is not formally closed", () => {
+    const base = {
+      startsAt: "2026-05-01T12:00:00.000Z",
+      endsOn: "2027-05-01",
+      startMileage: 80000,
+      expiresAtMileage: 90000,
+      durationMonths: 12,
+      mileageLimit: 10000,
+    };
+    expect(
+      evaluateWarranty({
+        snapshot: base,
+        nowIso: "2026-08-01T00:00:00.000Z",
+        currentMileage: 82000,
+        sourceOrderClosed: false,
+      }).status,
+    ).toBe("paused");
+    expect(
+      evaluateWarranty({
+        snapshot: base,
+        nowIso: "2026-08-01T00:00:00.000Z",
+        currentMileage: 82000,
+        sourceOrderClosed: true,
+      }).status,
+    ).toBe("active");
+  });
+
+  it("builds a paused indicator without remaining countdown", () => {
+    const model = buildOrderWarrantyIndicator({
+      snapshots: [
+        snapshot({
+          id: "r1",
+          endsOn: "2027-05-01",
+          expiresAtMileage: null,
+          durationMonths: 12,
+          mileageLimit: null,
+        }),
+      ],
+      isWarrantyOrder: false,
+      nowIso: "2026-08-01T00:00:00.000Z",
+      sourceOrderClosed: false,
+    });
+    expect(model.visible).toBe(true);
+    expect(model.status).toBe("paused");
+    expect(model.remaining).toBeNull();
+    expect(model.nearExpiry).toBe(false);
+  });
 });

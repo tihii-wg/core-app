@@ -40,9 +40,17 @@ export type WarrantyStatusCode =
   | "none"
   | "pending"
   | "active"
+  | "paused"
   | "expired_date"
   | "expired_mileage"
   | "unavailable";
+
+/** Formally closed for warranty: status `closed` and `closed_at` set (matches DB helper). */
+export function isWarrantySourceFormallyClosed(
+  order: { status: string; closedAt?: string | null },
+): boolean {
+  return order.status === "closed" && Boolean(order.closedAt?.trim());
+}
 
 export type WarrantyEvaluation = {
   status: WarrantyStatusCode;
@@ -199,6 +207,12 @@ export function evaluateWarranty(params: {
   currentMileage?: number | null;
   /** Unit of `currentMileage` (vehicle). Defaults to the snapshot unit when omitted. */
   currentMileageUnit?: MileageUnit | null;
+  /**
+   * When false, the source order is not formally closed (cancelled / reopened).
+   * Covered warranties are `paused` until the order is closed again.
+   * Omit / true = evaluate date/mileage as usual.
+   */
+  sourceOrderClosed?: boolean;
 }): WarrantyEvaluation {
   const { snapshot } = params;
   const now = params.nowIso ? new Date(params.nowIso) : new Date();
@@ -217,6 +231,15 @@ export function evaluateWarranty(params: {
   }
   if (!hasWarrantyCoverage(snapshot)) {
     return { status: "none", expiresOn: null, expiresAtMileage: null, remainingMileage: null, reason: null };
+  }
+  if (params.sourceOrderClosed === false) {
+    return {
+      status: "paused",
+      expiresOn: snapshot.endsOn,
+      expiresAtMileage: snapshot.expiresAtMileage,
+      remainingMileage: remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit),
+      reason: "paused_source_not_closed",
+    };
   }
   if (now.getTime() < startsAt.getTime()) {
     return {
@@ -372,6 +395,10 @@ export function selectPrimaryWarrantyItem(
     const aExpired = isWarrantyExpired(a.evaluation.status);
     const bExpired = isWarrantyExpired(b.evaluation.status);
     if (aExpired !== bExpired) return aExpired ? -1 : 1;
+    const aPaused = a.evaluation.status === "paused";
+    const bPaused = b.evaluation.status === "paused";
+    // Prefer non-paused when neither is expired so mixed claim sets surface live coverage.
+    if (aPaused !== bPaused) return aPaused ? 1 : -1;
     const aKey = urgencyKey(a.evaluation, nowMs);
     const bKey = urgencyKey(b.evaluation, nowMs);
     if (aKey.dateMs !== bKey.dateMs) return aKey.dateMs - bKey.dateMs;
@@ -391,6 +418,12 @@ export function buildOrderWarrantyIndicator(params: {
   currentMileageUnit?: MileageUnit | null;
   isWarrantyOrder: boolean;
   nowIso?: string;
+  /**
+   * Whether each snapshot's source order is formally closed.
+   * Boolean applies to all snapshots; map is keyed by `snapshot.orderId`.
+   * Missing map entries default to closed (true) so time/mileage evaluation still works.
+   */
+  sourceOrderClosed?: boolean | ReadonlyMap<string, boolean>;
 }): OrderWarrantyIndicatorModel {
   const covered = params.snapshots.filter((snapshot) => hasWarrantyCoverage(snapshot));
   if (covered.length === 0 && !params.isWarrantyOrder) {
@@ -406,6 +439,12 @@ export function buildOrderWarrantyIndicator(params: {
     };
   }
 
+  const resolveSourceClosed = (orderId: string): boolean | undefined => {
+    if (params.sourceOrderClosed === undefined) return undefined;
+    if (typeof params.sourceOrderClosed === "boolean") return params.sourceOrderClosed;
+    return params.sourceOrderClosed.has(orderId) ? Boolean(params.sourceOrderClosed.get(orderId)) : true;
+  };
+
   const evaluated = covered.map((snapshot) => ({
     snapshot,
     evaluation: evaluateWarranty({
@@ -413,13 +452,16 @@ export function buildOrderWarrantyIndicator(params: {
       currentMileage: params.currentMileage,
       currentMileageUnit: params.currentMileageUnit,
       nowIso: params.nowIso,
+      sourceOrderClosed: resolveSourceClosed(snapshot.orderId),
     }),
   }));
   const primary = selectPrimaryWarrantyItem(evaluated, params.nowIso);
   const evaluation = primary?.evaluation ?? null;
   const status = evaluation?.status ?? (params.isWarrantyOrder ? "unavailable" : "none");
   const remaining =
-    evaluation && !isWarrantyExpired(status) ? remainingDurationUntil(evaluation.expiresOn, params.nowIso) : null;
+    evaluation && !isWarrantyExpired(status) && status !== "paused"
+      ? remainingDurationUntil(evaluation.expiresOn, params.nowIso)
+      : null;
   const nearExpiryThreshold =
     convertMileage(WARRANTY_NEAR_EXPIRY_KM, "km", snapshotMileageUnit(primary?.snapshot)) ?? WARRANTY_NEAR_EXPIRY_KM;
   const nearExpiry =

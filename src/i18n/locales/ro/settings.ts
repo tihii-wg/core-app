@@ -65,6 +65,8 @@ const settings: Messages<typeof en> = {
       warrantyFromCreated: "Data creării comenzii",
       warrantyFromClosed: "Data închiderii comenzii",
       warrantyHint: "Instantaneele de garanție se creează la închiderea comenzii. Setarea este păstrată pentru compatibilitate; activarea necesită închiderea formală.",
+      warrantyRulesHelp:
+        "Garanția este valabilă doar cât timp comanda sursă este închisă formal. Dacă anulați sau redeschideți comanda, garanția este suspendată și, la o nouă închidere, continuă de la aceeași dată și kilometraj. Modificarea prețului sau cantității nu repornește garanția. Ștergerea unei poziții cu garanție și adăugarea ei din nou creează o garanție nouă de la următoarea închidere. Termenii (luni/zile/km) vin din catalog, nu din preț.",
       warrantyDefaultsTitle: "Garanție implicită pentru poziții noi",
       warrantyDefaultsHint: "Se aplică la adăugarea de servicii sau piese. Câmp gol = limită dezactivată. Poate fi supraîncărcată pe linie.",
       warrantyServiceMonths: "Servicii — luni",

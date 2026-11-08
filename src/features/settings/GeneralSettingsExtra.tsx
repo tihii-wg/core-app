@@ -109,6 +109,9 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">{t("settings.general.orders.warrantyHint")}</p>
+          <p className="text-xs text-muted-foreground" data-warranty-rules-help>
+            {t("settings.general.orders.warrantyRulesHelp")}
+          </p>
         </div>
 
         <div className="space-y-3">

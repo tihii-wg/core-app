@@ -59,6 +59,9 @@ type OrderMaterialLinesEditorProps = {
     root?: { message?: string };
     [index: number]: { quantity?: { message?: string }; itemName?: { message?: string }; price?: { message?: string } } | undefined;
   };
+  /** Catalog keys for lines that replace a deleted warranty-covered line in this edit session. */
+  restartWarrantyHints?: ReadonlySet<string>;
+  warrantyCatalogKeyForLine?: (line: Pick<OrderMaterial, "inventoryItemId" | "itemName">) => string | null;
 };
 
 function quantityValidationMessage(value: unknown, t: TFunction): true | string {
@@ -86,6 +89,8 @@ export default function OrderMaterialLinesEditor({
   orderMileageUnit = "km",
   isSubmitted = false,
   errors,
+  restartWarrantyHints,
+  warrantyCatalogKeyForLine,
 }: OrderMaterialLinesEditorProps) {
   const { t, i18n } = useTranslation();
   const qtyLocale = i18n.language;
@@ -364,6 +369,8 @@ export default function OrderMaterialLinesEditor({
                 : source === "one_time"
                   ? t("orders.form.materialSourceOneTime")
                   : t("orders.form.materialSourceCatalog");
+            const restartKey = warrantyCatalogKeyForLine?.(line ?? field) ?? null;
+            const showRestartHint = Boolean(restartKey && restartWarrantyHints?.has(restartKey));
 
             return (
               <div key={field.id} className="space-y-2 rounded-md border p-3">
@@ -389,6 +396,11 @@ export default function OrderMaterialLinesEditor({
                       />
                     )}
                     <p className="text-[12px] text-muted-foreground">{sourceLabel}</p>
+                    {showRestartHint ? (
+                      <p className="text-xs text-amber-700 dark:text-amber-400" data-warranty-restart-hint>
+                        {t("orders.warranty.newWarrantyFromCloseHint")}
+                      </p>
+                    ) : null}
                     {catalog ? (
                       <Controller
                         name={`materials.${index}.price`}

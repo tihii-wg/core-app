@@ -122,6 +122,7 @@ describe("getOrdersWarrantyIndicatorMap", () => {
       [
         {
           id: "order-1",
+          status: "closed",
           warrantySourceOrderId: null,
           vehicleId: "veh-1",
           vehicleMileageSnapshot: 80000,
@@ -165,7 +166,16 @@ describe("getOrdersWarrantyIndicatorMap", () => {
 
     const map = await getOrdersWarrantyIndicatorMap(
       "ws-1",
-      [{ id: "order-1", warrantySourceOrderId: null, vehicleId: null, vehicleMileageSnapshot: null, closedAt: null }],
+      [
+        {
+          id: "order-1",
+          status: "closed",
+          warrantySourceOrderId: null,
+          vehicleId: null,
+          vehicleMileageSnapshot: null,
+          closedAt: "2026-05-04T12:00:00.000Z",
+        },
+      ],
       "2026-11-04T12:00:00.000Z",
     );
 
@@ -189,7 +199,14 @@ describe("getOrdersWarrantyIndicatorMap", () => {
 
     await expect(
       getOrdersWarrantyIndicatorMap("ws-1", [
-        { id: "order-1", warrantySourceOrderId: null, vehicleId: null, vehicleMileageSnapshot: null, closedAt: null },
+        {
+          id: "order-1",
+          status: "in-progress",
+          warrantySourceOrderId: null,
+          vehicleId: null,
+          vehicleMileageSnapshot: null,
+          closedAt: null,
+        },
       ]),
     ).rejects.toThrow(/permission denied/i);
   });
@@ -202,7 +219,14 @@ describe("getOrdersWarrantyIndicatorMap", () => {
     });
 
     const map = await getOrdersWarrantyIndicatorMap("ws-1", [
-      { id: "order-plain", warrantySourceOrderId: null, vehicleId: null, vehicleMileageSnapshot: null, closedAt: null },
+      {
+        id: "order-plain",
+        status: "in-progress",
+        warrantySourceOrderId: null,
+        vehicleId: null,
+        vehicleMileageSnapshot: null,
+        closedAt: null,
+      },
     ]);
 
     expect(map["order-plain"]?.visible).toBe(false);
@@ -223,11 +247,61 @@ describe("getOrdersWarrantyIndicatorMap", () => {
 
     const map = await getOrdersWarrantyIndicatorMap(
       "ws-1",
-      [{ id: "order-1", warrantySourceOrderId: null, vehicleId: null, vehicleMileageSnapshot: null, closedAt: null }],
+      [
+        {
+          id: "order-1",
+          status: "closed",
+          warrantySourceOrderId: null,
+          vehicleId: null,
+          vehicleMileageSnapshot: null,
+          closedAt: "2026-05-04T12:00:00.000Z",
+        },
+      ],
       "2026-11-04T12:00:00.000Z",
     );
 
     expect(map["order-1"]?.visible).toBe(true);
     expect(map["order-1"]?.status).toBe("expired_date");
+  });
+
+  it("marks warranties paused when the source order is cancelled or reopened", async () => {
+    from.mockImplementation((table: string) => {
+      if (table === "warranty_records") return thenable({ data: [sampleRecord], error: null });
+      if (table === "vehicles") return thenable({ data: [], error: null });
+      return thenable({ data: [], error: null });
+    });
+
+    const cancelled = await getOrdersWarrantyIndicatorMap(
+      "ws-1",
+      [
+        {
+          id: "order-1",
+          status: "cancelled",
+          warrantySourceOrderId: null,
+          vehicleId: null,
+          vehicleMileageSnapshot: null,
+          closedAt: "2026-05-04T12:00:00.000Z",
+        },
+      ],
+      "2026-11-04T12:00:00.000Z",
+    );
+    expect(cancelled["order-1"]?.status).toBe("paused");
+    expect(cancelled["order-1"]?.remaining).toBeNull();
+
+    const reopened = await getOrdersWarrantyIndicatorMap(
+      "ws-1",
+      [
+        {
+          id: "order-1",
+          status: "in-progress",
+          warrantySourceOrderId: null,
+          vehicleId: null,
+          vehicleMileageSnapshot: null,
+          closedAt: null,
+        },
+      ],
+      "2026-11-04T12:00:00.000Z",
+    );
+    expect(reopened["order-1"]?.status).toBe("paused");
   });
 });

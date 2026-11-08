@@ -7,7 +7,13 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
 type OrderWarrantyInput = Pick<
   Order,
-  "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "vehicleMileageUnitSnapshot" | "closedAt"
+  | "id"
+  | "status"
+  | "warrantySourceOrderId"
+  | "vehicleId"
+  | "vehicleMileageSnapshot"
+  | "vehicleMileageUnitSnapshot"
+  | "closedAt"
 >;
 
 /**
@@ -21,7 +27,7 @@ export function useOrdersWarrantyIndicators(orders: readonly OrderWarrantyInput[
       orders
         .map(
           (order) =>
-            `${order.id}:${order.warrantySourceOrderId ?? ""}:${order.vehicleId ?? ""}:${order.closedAt ?? ""}:${order.vehicleMileageSnapshot ?? ""}:${order.vehicleMileageUnitSnapshot ?? ""}`,
+            `${order.id}:${order.status}:${order.warrantySourceOrderId ?? ""}:${order.vehicleId ?? ""}:${order.closedAt ?? ""}:${order.vehicleMileageSnapshot ?? ""}:${order.vehicleMileageUnitSnapshot ?? ""}`,
         )
         .sort()
         .join("|"),

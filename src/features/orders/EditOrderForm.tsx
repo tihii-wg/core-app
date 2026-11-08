@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -8,7 +8,9 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
-import type { EditOrderFormData, Order } from "../../lib/types";
+import { useConfirm } from "../../ui/ConfirmProvider";
+import type { EditOrderFormData, Order, OrderMaterial, OrderService } from "../../lib/types";
+import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
 import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
 import { catalogServiceToOrderLine } from "../services/orderServiceLine";
@@ -22,8 +24,10 @@ import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 import { canMutateOrderContent } from "./closedOrderPermissions";
-import { defaultsForKind } from "./warranty";
+import { defaultsForKind, isWarrantySourceFormallyClosed, type WarrantySnapshot } from "./warranty";
 import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
+import { formatWarrantyEndsOn } from "./OrderWarrantyIndicator";
+import { OrderWarrantyPauseNotice } from "./OrderWarrantyPauseNotice";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
@@ -78,8 +82,41 @@ function isFieldArrayDirty(value: unknown): boolean {
   return false;
 }
 
+function warrantyCatalogKeyForService(line: Pick<OrderService, "serviceId" | "serviceName">): string | null {
+  const catalogId = line.serviceId?.trim();
+  if (catalogId) return `service:${catalogId}`;
+  const name = line.serviceName?.trim().toLowerCase();
+  return name ? `service-name:${name}` : null;
+}
+
+function warrantyCatalogKeyForMaterial(line: Pick<OrderMaterial, "inventoryItemId" | "itemName">): string | null {
+  const catalogId = line.inventoryItemId?.trim();
+  if (catalogId) return `material:${catalogId}`;
+  const name = line.itemName?.trim().toLowerCase();
+  return name ? `material-name:${name}` : null;
+}
+
+function findServiceWarrantyRecord(
+  records: readonly WarrantySnapshot[],
+  line: Pick<OrderService, "id">,
+): WarrantySnapshot | undefined {
+  const lineId = line.id?.trim();
+  if (!lineId) return undefined;
+  return records.find((row) => row.orderServiceId === lineId);
+}
+
+function findMaterialWarrantyRecord(
+  records: readonly WarrantySnapshot[],
+  line: Pick<OrderMaterial, "id">,
+): WarrantySnapshot | undefined {
+  const lineId = line.id?.trim();
+  if (!lineId) return undefined;
+  return records.find((row) => row.orderMaterialId === lineId);
+}
+
 export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderFormProps) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
@@ -154,8 +191,65 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     setValue("team", mergeOrderTeam({ team: current, lineTechnicianIds: [id] }), { shouldDirty: true });
   }
   const warrantyDisabled = isSubmitting || (Boolean(order.closedAt) && !allowClosedMutation);
+  const sourceClosed = isWarrantySourceFormallyClosed(order);
+  const [restartWarrantyHints, setRestartWarrantyHints] = useState<Set<string>>(() => new Set());
+
+  const warrantyRecordsQuery = useQuery({
+    queryKey: ["warranty-records", workspaceId, order.id],
+    queryFn: () => getWarrantyRecordsForOrder(workspaceId, order.id),
+    enabled: Boolean(workspaceId && !sourceClosed),
+  });
+  const warrantyRecords = warrantyRecordsQuery.data ?? [];
 
   useClearHiddenOrderAssetErrors(workflow, clearErrors);
+
+  async function requestRemoveService(index: number) {
+    const line = getValues(`services.${index}`);
+    if (!line) return;
+    const record = findServiceWarrantyRecord(warrantyRecords, line);
+    if (record) {
+      const dateLabel = formatWarrantyEndsOn(record.startsAt?.slice(0, 10) ?? null) ?? record.startsAt.slice(0, 10);
+      const proceed = await confirm({
+        title: t("orders.form.remove"),
+        description: t("orders.warranty.deleteWarrantyLineConfirm", {
+          name: line.serviceName,
+          date: dateLabel,
+        }),
+        confirmLabel: t("orders.form.remove"),
+        cancelLabel: t("common.cancel"),
+        tone: "destructive",
+        icon: "warning",
+      });
+      if (!proceed) return;
+      const key = warrantyCatalogKeyForService(line);
+      if (key) setRestartWarrantyHints((prev) => new Set(prev).add(key));
+    }
+    serviceRemove(index);
+  }
+
+  async function requestRemoveMaterial(index: number) {
+    const line = getValues(`materials.${index}`);
+    if (!line) return;
+    const record = findMaterialWarrantyRecord(warrantyRecords, line);
+    if (record) {
+      const dateLabel = formatWarrantyEndsOn(record.startsAt?.slice(0, 10) ?? null) ?? record.startsAt.slice(0, 10);
+      const proceed = await confirm({
+        title: t("orders.form.remove"),
+        description: t("orders.warranty.deleteWarrantyLineConfirm", {
+          name: line.itemName,
+          date: dateLabel,
+        }),
+        confirmLabel: t("orders.form.remove"),
+        cancelLabel: t("common.cancel"),
+        tone: "destructive",
+        icon: "warning",
+      });
+      if (!proceed) return;
+      const key = warrantyCatalogKeyForMaterial(line);
+      if (key) setRestartWarrantyHints((prev) => new Set(prev).add(key));
+    }
+    materialRemove(index);
+  }
 
   const {
     fields: serviceFields,
@@ -351,6 +445,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         disabled={isSubmitting}
       />
 
+      <OrderWarrantyPauseNotice order={order} records={warrantyRecords} />
+
       <div className="space-y-1.5">
         <Label htmlFor="service">{t("orders.form.addServiceLabel")}</Label>
         <ServiceCombobox
@@ -382,7 +478,11 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         {errors.services?.root?.message && <p className="text-xs text-destructive">{errors.services.root.message}</p>}
         {serviceFields.length > 0 && (
           <div className="space-y-2">
-            {serviceFields.map((field, index) => (
+            {serviceFields.map((field, index) => {
+              const line = watchedServices?.[index] ?? field;
+              const restartKey = warrantyCatalogKeyForService(line);
+              const showRestartHint = Boolean(restartKey && restartWarrantyHints.has(restartKey));
+              return (
               <div key={field.fieldKey} className="space-y-2 rounded-md border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -395,11 +495,22 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                       disabled={isSubmitting}
                       onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
                     />
-                    <Button type="button" variant="outline" onClick={() => serviceRemove(index)} disabled={isSubmitting} aria-label={t("orders.form.removeService", { name: field.serviceName })}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void requestRemoveService(index)}
+                      disabled={isSubmitting}
+                      aria-label={t("orders.form.removeService", { name: field.serviceName })}
+                    >
                       {t("orders.form.remove")}
                     </Button>
                   </div>
                 </div>
+                {showRestartHint ? (
+                  <p className="text-xs text-amber-700 dark:text-amber-400" data-warranty-restart-hint>
+                    {t("orders.warranty.newWarrantyFromCloseHint")}
+                  </p>
+                ) : null}
                 <Controller
                   name={`services.${index}.price`}
                   control={control}
@@ -448,7 +559,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
                   }}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -457,7 +569,10 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         control={control as never}
         fields={materialFields}
         append={materialAppend}
-        remove={materialRemove}
+        remove={(index) => {
+          if (typeof index === "number") void requestRemoveMaterial(index);
+          else materialRemove(index);
+        }}
         setValue={setValue}
         getValues={getValues}
         trigger={trigger as never}
@@ -468,6 +583,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         orderMileageUnit={orderMileageUnit}
         isSubmitted={isSubmitted}
         errors={errors.materials}
+        restartWarrantyHints={restartWarrantyHints}
+        warrantyCatalogKeyForLine={warrantyCatalogKeyForMaterial}
       />
 
       <div className="space-y-1.5">

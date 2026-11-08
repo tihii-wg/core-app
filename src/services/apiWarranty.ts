@@ -4,6 +4,7 @@ import type { MileageUnit, Order } from "../lib/types";
 import {
   buildOrderWarrantyIndicator,
   evaluateWarranty,
+  isWarrantySourceFormallyClosed,
   normalizeWarrantyDays,
   normalizeWarrantyKm,
   normalizeWarrantyMonths,
@@ -13,6 +14,17 @@ import {
   type WarrantySnapshot,
   type WarrantyStatusCode,
 } from "../features/orders/warranty";
+function mapPausedWarrantyClaimError(error: {
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+}): Error | null {
+  const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  if (/warranty:paused_source_not_closed/i.test(blob)) {
+    return new Error(i18n.t("orders.warranty.errors.pausedSourceNotClosed"));
+  }
+  return null;
+}
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import supabase from "./supabase";
 
@@ -211,7 +223,13 @@ export async function getOrdersWarrantyIndicatorMap(
   workspaceId: string | undefined,
   orders: readonly Pick<
     Order,
-    "id" | "warrantySourceOrderId" | "vehicleId" | "vehicleMileageSnapshot" | "vehicleMileageUnitSnapshot" | "closedAt"
+    | "id"
+    | "status"
+    | "warrantySourceOrderId"
+    | "vehicleId"
+    | "vehicleMileageSnapshot"
+    | "vehicleMileageUnitSnapshot"
+    | "closedAt"
   >[],
   nowIso?: string,
 ): Promise<Record<string, OrderWarrantyIndicatorModel>> {
@@ -308,6 +326,48 @@ export async function getOrdersWarrantyIndicatorMap(
     }
   }
 
+  // Source-order closedness for claim snapshots (records live on the original order).
+  const sourceOrderIds = new Set<string>();
+  for (const snapshots of snapshotsByOrderId.values()) {
+    for (const snapshot of snapshots) {
+      if (snapshot.orderId) sourceOrderIds.add(snapshot.orderId);
+    }
+  }
+  for (const order of orders) {
+    if (!order.warrantySourceOrderId) sourceOrderIds.add(order.id);
+  }
+  const sourceClosedByOrderId = new Map<string, boolean>();
+  for (const order of orders) {
+    if (!order.warrantySourceOrderId) {
+      sourceClosedByOrderId.set(order.id, isWarrantySourceFormallyClosed(order));
+    }
+  }
+  const missingSourceIds = [...sourceOrderIds].filter((id) => !sourceClosedByOrderId.has(id));
+  if (missingSourceIds.length > 0) {
+    const { data: sourceRows, error: sourceError } = await supabase
+      .from("orders")
+      .select("id, status, closed_at")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("id", missingSourceIds);
+    if (sourceError) {
+      if (!(isMissingRelationError(sourceError) || isMissingColumnError(sourceError))) {
+        throw new Error(sourceError.message);
+      }
+    } else {
+      for (const row of (sourceRows ?? []) as Record<string, unknown>[]) {
+        const id = String(row.id ?? "");
+        if (!id) continue;
+        sourceClosedByOrderId.set(
+          id,
+          isWarrantySourceFormallyClosed({
+            status: typeof row.status === "string" ? row.status : "",
+            closedAt: typeof row.closed_at === "string" ? row.closed_at : null,
+          }),
+        );
+      }
+    }
+  }
+
   for (const order of orders) {
     const vehicleId = order.vehicleId?.trim() || "";
     const fromVehicle = vehicleId ? mileageByVehicleId.get(vehicleId) : undefined;
@@ -318,12 +378,16 @@ export async function getOrdersWarrantyIndicatorMap(
         : null);
     const currentMileageUnit =
       fromVehicle?.unit ?? parseMileageUnit(order.vehicleMileageUnitSnapshot) ?? "km";
+    const snapshots = snapshotsByOrderId.get(order.id) ?? [];
     result[order.id] = buildOrderWarrantyIndicator({
-      snapshots: snapshotsByOrderId.get(order.id) ?? [],
+      snapshots,
       currentMileage,
       currentMileageUnit,
       isWarrantyOrder: Boolean(order.warrantySourceOrderId),
       nowIso,
+      sourceOrderClosed: order.warrantySourceOrderId
+        ? sourceClosedByOrderId
+        : isWarrantySourceFormallyClosed(order),
     });
   }
 
@@ -345,8 +409,7 @@ export function filterEligibleWarrantySourceOrders(params: {
     if (order.id === params.excludeOrderId) return false;
     if (order.clientId !== clientId) return false;
     if ((order.vehicleId?.trim() || null) !== vehicleId) return false;
-    if (!(order.closedAt?.trim() || order.status === "closed")) return false;
-    if (order.status === "cancelled") return false;
+    if (!isWarrantySourceFormallyClosed(order)) return false;
     return true;
   });
 }
@@ -356,8 +419,9 @@ export function evaluateSnapshotAgainstVehicle(
   currentMileage: number | null | undefined,
   nowIso?: string,
   currentMileageUnit?: MileageUnit | null,
+  sourceOrderClosed?: boolean,
 ): WarrantyEvaluation {
-  return evaluateWarranty({ snapshot, currentMileage, currentMileageUnit, nowIso });
+  return evaluateWarranty({ snapshot, currentMileage, currentMileageUnit, nowIso, sourceOrderClosed });
 }
 
 /**
@@ -385,8 +449,9 @@ export async function saveWarrantyOrderLink(params: {
   if ((params.warrantyOrder.vehicleId?.trim() || null) !== (params.sourceOrder.vehicleId?.trim() || null)) {
     throw new Error(i18n.t("orders.warranty.errors.crossVehicle"));
   }
-  if (!(params.sourceOrder.closedAt?.trim() || params.sourceOrder.status === "closed")) {
-    throw new Error(i18n.t("orders.warranty.errors.sourceNotClosed"));
+  const sourceClosed = isWarrantySourceFormallyClosed(params.sourceOrder);
+  if (!sourceClosed) {
+    throw new Error(i18n.t("orders.warranty.errors.pausedSourceNotClosed"));
   }
 
   const records = await getWarrantyRecordsForOrder(workspaceId, params.sourceOrder.id);
@@ -395,7 +460,13 @@ export async function saveWarrantyOrderLink(params: {
   for (const claim of params.claims) {
     const snapshot = byId.get(claim.warrantyRecordId);
     if (!snapshot) throw new Error(i18n.t("orders.warranty.errors.invalidRecord"));
-    const evaluation = evaluateSnapshotAgainstVehicle(snapshot, claim.currentMileageAtClaim ?? params.currentMileage);
+    const evaluation = evaluateSnapshotAgainstVehicle(
+      snapshot,
+      claim.currentMileageAtClaim ?? params.currentMileage,
+      undefined,
+      undefined,
+      true,
+    );
     if (
       (evaluation.status === "expired_date" || evaluation.status === "expired_mileage") &&
       !claim.acceptedOutsidePeriod
@@ -437,11 +508,15 @@ export async function saveWarrantyOrderLink(params: {
       onConflict: "warranty_order_id,warranty_record_id",
     });
     if (upsertError) {
+      const mapped = mapPausedWarrantyClaimError(upsertError);
+      if (mapped) throw mapped;
       if (isMissingRelationError(upsertError) || isMissingColumnError(upsertError)) {
         // Pre-hardening schema: fall back to insert-only when unique upsert / is_active unavailable.
         const legacyPayload = payload.map(({ is_active: _active, ...rest }) => rest);
         const { error: insertError } = await supabase.from("warranty_order_claims").insert(legacyPayload);
         if (insertError) {
+          const insertMapped = mapPausedWarrantyClaimError(insertError);
+          if (insertMapped) throw insertMapped;
           if (isMissingRelationError(insertError) || isMissingColumnError(insertError)) {
             throw new Error(i18n.t("orders.warranty.errors.schemaRequired"));
           }

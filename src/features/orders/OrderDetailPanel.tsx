@@ -570,6 +570,13 @@ export default function OrderDetailPanel({
                             ) : null}
                             <OrderLineWarrantyBadge
                               activated={Boolean(selectedOrder.closedAt)}
+                              status={
+                                selectedOrder.closedAt &&
+                                selectedOrder.status !== "closed"
+                                  ? "paused"
+                                  : undefined
+                              }
+                              startsAt={selectedOrder.closedAt}
                               mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
                               limits={{
                                 durationMonths: line.warrantyMonths ?? null,
@@ -634,6 +641,13 @@ export default function OrderDetailPanel({
                                 <p>{line.itemName}</p>
                                 <OrderLineWarrantyBadge
                                   activated={Boolean(selectedOrder.closedAt)}
+                                  status={
+                                    selectedOrder.closedAt &&
+                                    selectedOrder.status !== "closed"
+                                      ? "paused"
+                                      : undefined
+                                  }
+                                  startsAt={selectedOrder.closedAt}
                                   mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
                                   limits={{
                                     durationMonths: line.warrantyMonths ?? null,

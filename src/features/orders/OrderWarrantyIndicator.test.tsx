@@ -174,6 +174,31 @@ describe("OrderWarrantyIndicator", () => {
     expect(el?.getAttribute("data-warranty-status")).toBe("pending");
   });
 
+  it("shows paused status without remaining countdown", () => {
+    const model = buildOrderWarrantyIndicator({
+      snapshots: [
+        snapshot({
+          id: "r1",
+          endsOn: "2027-07-04",
+          expiresAtMileage: null,
+          durationMonths: 8,
+          mileageLimit: null,
+        }),
+      ],
+      isWarrantyOrder: false,
+      nowIso: now,
+      sourceOrderClosed: false,
+    });
+    expect(model.status).toBe("paused");
+    expect(model.remaining).toBeNull();
+    const { container } = renderWithQuery(<OrderWarrantyIndicator model={model} />);
+    const el = container.querySelector("[data-warranty-indicator]");
+    expect(el?.getAttribute("data-warranty-status")).toBe("paused");
+    expect(el?.className).toMatch(/text-amber/);
+    expect(screen.getByText(/Paused · active from 04\.11\.2026 after the order is closed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/remaining/i)).not.toBeInTheDocument();
+  });
+
   it("shows covered item count when multiple items differ", () => {
     const model = buildOrderWarrantyIndicator({
       snapshots: [

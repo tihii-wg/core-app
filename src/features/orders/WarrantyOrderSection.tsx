@@ -14,10 +14,11 @@ import {
   saveWarrantyOrderLink,
   type WarrantyClaimInput,
 } from "../../services/apiWarranty";
-import { isWarrantyExpired, snapshotMileageUnit } from "./warranty";
+import { isWarrantyExpired, isWarrantySourceFormallyClosed, snapshotMileageUnit } from "./warranty";
 import { formatVehicleMileage } from "../vehicles/vehicleMileage";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetOrders } from "./useGetOrders";
+import { formatWarrantyEndsOn } from "./OrderWarrantyIndicator";
 
 type Props = {
   order: Order;
@@ -75,12 +76,30 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
   }, [claimsQuery.data]);
 
   const orderMileageUnit = order.vehicleMileageUnitSnapshot ?? "km";
+  const sourceClosed = sourceOrder ? isWarrantySourceFormallyClosed(sourceOrder) : false;
   const evaluations = useMemo(() => {
     return (recordsQuery.data ?? []).map((snapshot) => ({
       snapshot,
-      evaluation: evaluateSnapshotAgainstVehicle(snapshot, currentMileage, undefined, orderMileageUnit),
+      evaluation: evaluateSnapshotAgainstVehicle(
+        snapshot,
+        currentMileage,
+        undefined,
+        orderMileageUnit,
+        sourceOrder ? sourceClosed : undefined,
+      ),
     }));
-  }, [recordsQuery.data, currentMileage, orderMileageUnit]);
+  }, [recordsQuery.data, currentMileage, orderMileageUnit, sourceOrder, sourceClosed]);
+
+  useEffect(() => {
+    const pausedIds = new Set(
+      evaluations.filter(({ evaluation }) => evaluation.status === "paused").map(({ snapshot }) => snapshot.id),
+    );
+    if (pausedIds.size === 0) return;
+    setSelectedRecordIds((prev) => {
+      const next = prev.filter((id) => !pausedIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [evaluations]);
 
   async function persist(nextEnabled: boolean, nextSourceId: string, nextRecordIds: string[], nextAcceptExpired: boolean) {
     if (!workspaceId) return;
@@ -195,14 +214,22 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
               {evaluations.map(({ snapshot, evaluation }) => {
                 const checked = selectedRecordIds.includes(snapshot.id);
                 const expired = isWarrantyExpired(evaluation.status);
+                const paused = evaluation.status === "paused";
+                const startDateLabel = formatWarrantyEndsOn(snapshot.startsAt?.slice(0, 10) ?? null);
                 return (
-                  <label key={snapshot.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
+                  <label
+                    key={snapshot.id}
+                    className={`flex items-start gap-2 rounded-md border p-2 text-sm ${paused ? "opacity-70" : ""}`}
+                    data-warranty-claim-option
+                    data-warranty-status={evaluation.status}
+                  >
                     <input
                       type="checkbox"
                       className="mt-1"
-                      checked={checked}
-                      disabled={disabled || saving}
+                      checked={checked && !paused}
+                      disabled={disabled || saving || paused}
                       onChange={(event) => {
+                        if (paused) return;
                         setSelectedRecordIds((prev) =>
                           event.target.checked ? [...prev, snapshot.id] : prev.filter((id) => id !== snapshot.id),
                         );
@@ -210,16 +237,33 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
                     />
                     <span className="min-w-0 flex-1 space-y-0.5">
                       <span className="block font-medium">{snapshot.itemName}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {t(`orders.warranty.status.${evaluation.status}`)}
-                        {evaluation.expiresOn ? ` · ${t("orders.warranty.expiresOn")}: ${evaluation.expiresOn}` : ""}
-                        {evaluation.expiresAtMileage != null
-                          ? ` · ${t("orders.warranty.expiresAtMileage")}: ${formatVehicleMileage(evaluation.expiresAtMileage, snapshotMileageUnit(snapshot), t)}`
-                          : ""}
-                        {evaluation.remainingMileage != null
-                          ? ` · ${t("orders.warranty.remainingMileage")}: ${formatVehicleMileage(evaluation.remainingMileage, snapshotMileageUnit(snapshot), t)}`
-                          : ""}
+                      <span
+                        className={`block text-xs ${paused ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+                      >
+                        {paused
+                          ? startDateLabel
+                            ? t("orders.warranty.pausedSinceClose", { date: startDateLabel })
+                            : t("orders.warranty.status.paused")
+                          : [
+                              t(`orders.warranty.status.${evaluation.status}`),
+                              evaluation.expiresOn
+                                ? `${t("orders.warranty.expiresOn")}: ${evaluation.expiresOn}`
+                                : null,
+                              evaluation.expiresAtMileage != null
+                                ? `${t("orders.warranty.expiresAtMileage")}: ${formatVehicleMileage(evaluation.expiresAtMileage, snapshotMileageUnit(snapshot), t)}`
+                                : null,
+                              evaluation.remainingMileage != null
+                                ? `${t("orders.warranty.remainingMileage")}: ${formatVehicleMileage(evaluation.remainingMileage, snapshotMileageUnit(snapshot), t)}`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
                       </span>
+                      {paused ? (
+                        <span className="block text-xs text-amber-700 dark:text-amber-400">
+                          {t("orders.warranty.errors.pausedSourceNotClosed")}
+                        </span>
+                      ) : null}
                       {expired && checked && (
                         <span className="block text-xs text-destructive">{t("orders.warranty.expiredWarning")}</span>
                       )}

@@ -54,11 +54,18 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
       ? formatWarrantyKm(evaluation.expiresAtMileage, language)
       : null;
 
+  const startDateLabel = formatWarrantyEndsOn(model.primary?.startsAt?.slice(0, 10) ?? null);
+  const paused = model.status === "paused";
+
   let primaryText: string = label;
   if (expired) {
     primaryText = model.isWarrantyOrder
       ? `${t("orders.warranty.claimBadge")} · ${t("orders.warranty.indicator.expired")}`
       : t("orders.warranty.indicator.expired");
+  } else if (paused) {
+    primaryText = startDateLabel
+      ? t("orders.warranty.pausedSinceClose", { date: startDateLabel })
+      : t("orders.warranty.status.paused");
   } else if (model.remaining) {
     const remainingText =
       model.remaining.months >= 1
@@ -84,6 +91,8 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
     } else if (dateLabel) {
       secondaryParts.push(dateLabel);
     }
+  } else if (paused) {
+    secondaryParts.push(t("orders.warranty.status.paused"));
   } else {
     if (dateLabel) secondaryParts.push(t("orders.warranty.indicator.untilDate", { date: dateLabel }));
     // Show remaining mileage whenever known (including when both time and mileage limits apply).
@@ -95,8 +104,13 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
     }
   }
 
-  // Under-order-number colors only: active = green, expired/pending/other = neutral gray.
-  const toneClass = model.status === "active" ? "text-success" : "text-muted-foreground";
+  // Under-order-number colors: active = green, paused = amber, expired/pending/other = neutral gray.
+  const toneClass =
+    model.status === "active"
+      ? "text-success"
+      : paused
+        ? "text-amber-700 dark:text-amber-400"
+        : "text-muted-foreground";
 
   return (
     <div

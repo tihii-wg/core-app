@@ -41,6 +41,12 @@ describe("mapOrderWarrantyDbError", () => {
     );
   });
 
+  it("maps warranty:paused_source_not_closed", () => {
+    expect(mapOrderWarrantyDbError({ message: "warranty:paused_source_not_closed" })?.message).toBe(
+      "orders.warranty.errors.pausedSourceNotClosed",
+    );
+  });
+
   it("returns null for unrelated errors", () => {
     expect(mapOrderWarrantyDbError({ message: "permission denied for table order_services" })).toBeNull();
     expect(mapOrderWarrantyDbError({ message: "order_delete:has_warranty_claims" })).toBeNull();

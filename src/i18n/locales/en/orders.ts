@@ -807,15 +807,24 @@ export default {
       none: "No warranty",
       pending: "Not started",
       active: "Active",
+      paused: "Paused",
       expired_date: "Expired by date",
       expired_mileage: "Expired by mileage",
       unavailable: "Unavailable",
     },
+    pausedSinceClose: "Paused · active from {{date}} after the order is closed",
+    pauseNotice:
+      "Warranty on this order is paused until it is closed again. After closing, it continues from the original start date ({{date}}). Changing price or quantity does not change the warranty. Warranty restarts only if you delete a warranty-covered service or material and add it again — then term and mileage count from the new close.",
+    deleteWarrantyLineConfirm:
+      "“{{name}}” has warranty from {{date}}. If you delete it and add it again, the old warranty is removed and a new one starts from the next order close. Delete?",
+    newWarrantyFromCloseHint: "A new warranty will start from the order close date",
     errors: {
       crossWorkspace: "Cannot link an order from another workspace.",
       crossClient: "The original order must belong to the same client.",
       crossVehicle: "The original order must belong to the same vehicle.",
       sourceNotClosed: "The original order must be formally closed before it can be used for warranty.",
+      pausedSourceNotClosed:
+        "Warranty is paused: the original order was cancelled or reopened. Close it so the warranty applies again.",
       invalidRecord: "A selected warranty item is not part of the original order.",
       expiredNeedsConfirmation: "Confirm acceptance outside the warranty period before saving.",
       selectOriginal: "Select an original order.",
