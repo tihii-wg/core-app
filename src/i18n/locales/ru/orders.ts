@@ -303,7 +303,7 @@ const orders: Messages<typeof en> = {
     freeformHistoryLocked:
       "Название, цена и источник заблокированы после выдачи или возврата. Количество можно менять (не ниже выданного).",
     freeformHistoryLockedRemove: "Строки с историей выдачи или возврата нельзя удалить из заказа.",
-    freeformInvalid: "Укажите название, целое количество больше 0 и корректную цену.",
+    freeformInvalid: "Укажите название, количество больше 0 (до 2 знаков после запятой) и корректную цену.",
     oneTimePartPrice: "Цена продажи",
     customerPartPrice: "Сумма (можно 0)",
     addFreeformLine: "Добавить в заказ",
@@ -331,7 +331,7 @@ const orders: Messages<typeof en> = {
     serviceRequired: "Добавьте услугу",
     quantityMin: "Количество должно быть больше 0",
     quantityRequired: "Укажите количество",
-    quantityInteger: "Количество должно быть целым числом",
+    quantityMaxDecimals: "Не больше 2 знаков после запятой",
     assignedEmployeeRequired: "Выберите ответственного",
     installationBeforeMeasurement: "Дата монтажа не может быть раньше даты замера.",
   },

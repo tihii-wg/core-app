@@ -3,6 +3,7 @@
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../lib/types";
 import i18n, { currentLanguage } from "../../i18n";
 import { isAppLanguage } from "../../i18n/languages";
+import { formatQuantity } from "../../lib/quantity";
 import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import { vatIncludedAmount } from "../finance/vat";
 import type { InvoiceSections } from "../invoices/invoiceItemSections";
@@ -662,7 +663,7 @@ function renderTable(block: TableBlock, ctx: PrintContext, env: RenderEnv) {
           value = escapeHtmlText(row.sku);
           break;
         case "qty":
-          value = String(row.qty);
+          value = formatQuantity(Number(row.qty) || 0, ctx.locale);
           break;
         case "unit":
           value = escapeHtmlText(row.unit);

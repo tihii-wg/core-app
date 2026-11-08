@@ -1,4 +1,5 @@
 import type { InventoryItem, MileageUnit, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
+import { parseQuantity, roundQuantity } from "../../lib/quantity";
 import {
   catalogWarrantyFromDbRow,
   resolveOrderLineWarrantyForKind,
@@ -8,20 +9,15 @@ import type { WorkspaceWarrantyDefaults } from "../orders/warranty";
 import { orderLineAmount } from "../services/orderServiceLine";
 
 /**
- * Accepts only positive integers (live order_materials quantity columns are integer).
- * Does not round fractions. Empty / invalid / fractional / non-positive → null.
+ * Positive quantity with at most 2 decimals (matches order_materials / sync RPCs).
+ * Empty / invalid / >2 decimals / non-positive → null.
  */
 export function parseOrderMaterialQuantity(value: unknown): number | null {
-  if (value === "" || value === null || value === undefined) return null;
-  if (typeof value === "string" && value.trim() === "") return null;
-
-  const number = typeof value === "number" ? value : Number(typeof value === "string" ? value.trim() : value);
-  if (!Number.isFinite(number)) return null;
-  if (!Number.isInteger(number) || number <= 0) return null;
-  return number;
+  const parsed = parseQuantity(value);
+  return typeof parsed === "number" ? parsed : null;
 }
 
-/** Positive integer, or 0 when missing/invalid (for consolidate / skip-invalid paths). Never rounds. */
+/** Positive quantity, or 0 when missing/invalid (for consolidate / skip-invalid paths). */
 export function normalizeOrderMaterialQuantity(value: unknown): number {
   return parseOrderMaterialQuantity(value) ?? 0;
 }
@@ -74,7 +70,7 @@ export function catalogItemToOrderMaterial(
 ): OrderMaterial {
   const qty = parseOrderMaterialQuantity(quantity);
   if (qty == null) {
-    throw new Error("Material quantity must be a positive whole number");
+    throw new Error("Material quantity must be a positive number with at most 2 decimals");
   }
   const warehouse = warehouseId?.trim();
   const warranty = resolveOrderLineWarrantyForKind(
@@ -106,7 +102,7 @@ export function freeformOrderMaterial(input: {
   const name = input.itemName.trim();
   if (!name) throw new Error("Material name is required");
   const qty = parseOrderMaterialQuantity(input.quantity ?? 1);
-  if (qty == null) throw new Error("Material quantity must be a positive whole number");
+  if (qty == null) throw new Error("Material quantity must be a positive number with at most 2 decimals");
   const price = Number(input.price);
   if (!Number.isFinite(price) || price < 0) throw new Error("Material price cannot be negative");
   return {
@@ -134,7 +130,7 @@ export function consolidateOrderMaterials(materials: OrderMaterial[]): OrderMate
     if (source === "catalog" && itemId) {
       const existing = catalogByItem.get(itemId);
       if (existing) {
-        existing.quantity = existing.quantity + quantity;
+        existing.quantity = roundQuantity(existing.quantity + quantity);
         continue;
       }
       const warehouse = line.warehouseId?.trim();

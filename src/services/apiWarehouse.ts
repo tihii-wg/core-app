@@ -11,6 +11,9 @@ function requireWorkspaceId(workspaceId: string | undefined) {
 function warehouseError(error: { message?: string; code?: string } | null, fallback: string) {
   const message = error?.message ?? "";
   const code = error?.code ?? "";
+  if (/may have at most 2 decimal places/i.test(message)) {
+    return i18n.t("orders.validation.quantityMaxDecimals");
+  }
   if (message.includes("insufficient_warehouse_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_batch_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_stock")) return i18n.t("orders.errors.insufficientStock");

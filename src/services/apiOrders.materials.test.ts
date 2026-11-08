@@ -487,7 +487,23 @@ describe("order materials (warehouse-first immediate issue)", () => {
     expect(fake.all("order_materials").filter((line) => line.order_id === created.id)).toHaveLength(0);
   });
 
-  it("does not sync fractional material quantities and leaves stock unchanged", async () => {
+  it("syncs material quantities with up to 2 decimals", async () => {
+    const created = await createOrder(
+      {
+        clientId: "client-a1",
+        clientName: "",
+        device: "Oil Car",
+        services: [oilChange],
+        materials: [{ ...brakePads, quantity: 1.5 }],
+      },
+      WS.A,
+    );
+    const lines = fake.all("order_materials").filter((line) => line.order_id === created.id);
+    expect(lines).toHaveLength(1);
+    expect(Number(lines[0]?.quantity)).toBe(1.5);
+  });
+
+  it("does not sync material quantities with more than 2 decimals", async () => {
     const beforeStock = Number(row("inventory_items", "item-a1")?.quantity);
     const beforeSyncCalls = fake.requests.filter((item) => item.table === "sync_order_materials" && item.op === "rpc").length;
     const created = await createOrder(
@@ -496,7 +512,7 @@ describe("order materials (warehouse-first immediate issue)", () => {
         clientName: "",
         device: "Oil Car",
         services: [oilChange],
-        materials: [{ ...brakePads, quantity: 1.5 }],
+        materials: [{ ...brakePads, quantity: 1.234 }],
       },
       WS.A,
     );
@@ -755,8 +771,17 @@ describe("warehouse issue and return", () => {
   it("rejects invalid payloads", async () => {
     const order = await orderWithMaterials(2);
     await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 0 }], "bad-0")).rejects.toThrow();
-    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1.5 }], "bad-frac")).rejects.toThrow();
+    await expect(issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 1.234 }], "bad-frac")).rejects.toThrow();
     await expect(issueOrderMaterials(order, [{ inventoryItemId: "not-a-uuid", quantity: 1 }], "bad-id")).rejects.toThrow();
+  });
+
+  it("issues fractional quantities up to 2 decimals", async () => {
+    const order = await orderWithMaterials(2);
+    await issueOrderMaterials(order, [{ inventoryItemId: "item-a1", quantity: 0.5 }], "issue-half");
+    const refreshed = (await getOrders(WS.A)).find((item) => item.id === order);
+    expect(refreshed?.materials?.[0]).toEqual(
+      expect.objectContaining({ quantity: 2, quantityIssued: 0.5, quantityReturned: 0 }),
+    );
   });
 });
 
@@ -791,8 +816,8 @@ describe("sync_order_materials security and correctness (fake RPC mirror)", () =
     expect((await rpc(id, null)).error?.message).toMatch(/JSON array/i);
     expect((await rpc(id, { inventory_item_id: "item-a1", quantity: 1 })).error?.message).toMatch(/JSON array/i);
     expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 0 }])).error?.message).toMatch(/greater than 0/i);
-    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 1.5 }])).error?.message).toMatch(/whole number/i);
-    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 2147483648 }])).error?.message).toMatch(/too large/i);
+    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 1.234 }])).error?.message).toMatch(/at most 2 decimal/i);
+    expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 1e13 }])).error?.message).toMatch(/too large/i);
     expect((await rpc(id, [{ inventory_item_id: "item-a1", quantity: 1, supply_source: "warehouse" }])).error?.message).toMatch(
       /supply_source/i,
     );

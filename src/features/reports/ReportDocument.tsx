@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { currentIntlLocale } from "../../i18n";
+import { currentIntlLocale, currentLanguage } from "../../i18n";
+import { formatQuantity } from "../../lib/quantity";
 import type { QuickReportModel, ReportColumn, ReportFormat, ReportRow, ReportSection } from "./quickReports";
 
 type Formatters = {
@@ -27,6 +28,7 @@ function formatValue(value: string | number | null | undefined, format: ReportFo
   if (typeof value === "number") {
     if (format === "money") return formatMoney(value);
     if (format === "percent" || format === "share") return formatPercent(value);
+    if (format === "number") return formatQuantity(value, currentLanguage());
     return value.toLocaleString(currentIntlLocale());
   }
   return format === "date" ? formatDate(value) : value;

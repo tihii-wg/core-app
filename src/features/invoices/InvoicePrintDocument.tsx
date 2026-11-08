@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { InvoiceDocument, InvoiceItem } from "../../lib/types";
+import { formatQuantity } from "../../lib/quantity";
 import type { OrderVatBreakdown } from "../finance/orderVat";
 import { lineTotal, type InvoiceSections } from "./invoiceItemSections";
 import {
@@ -52,7 +53,7 @@ function statusAccent(status: InvoiceDocument["status"]) {
 }
 
 function ItemsTable({ title, items, dense, formatMoney }: { title: string; items: InvoiceItem[]; dense: boolean; formatMoney: (value: number) => string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   if (items.length === 0) return null;
   const subtotal = items.reduce((sum, item) => sum + lineTotal(item), 0);
   const cellY = dense ? "py-[3px]" : "py-[5px]";
@@ -79,7 +80,7 @@ function ItemsTable({ title, items, dense, formatMoney }: { title: string; items
             <tr key={item.id} className="break-inside-avoid border-b border-[#eef0f2]" style={index % 2 === 1 ? { background: ZEBRA } : undefined}>
               <td className={`px-2 ${cellY} tabular-nums`} style={{ color: MUTED }}>{index + 1}</td>
               <td className={`px-2 ${cellY} [overflow-wrap:anywhere]`}>{item.serviceName}</td>
-              <td className={`px-2 ${cellY} text-right tabular-nums`}>{item.quantity}</td>
+              <td className={`px-2 ${cellY} text-right tabular-nums`}>{formatQuantity(item.quantity, i18n.language)}</td>
               <td className={`px-2 ${cellY} text-right tabular-nums`}>{formatMoney(item.price)}</td>
               <td className={`px-2 ${cellY} text-right font-medium tabular-nums`}>{formatMoney(lineTotal(item))}</td>
             </tr>

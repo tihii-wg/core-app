@@ -2,12 +2,13 @@ import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import type { Order, OrderMaterial, WarehouseMaterialLineInput } from "../../lib/types";
+import { formatQuantity, parseQuantity } from "../../lib/quantity";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
-import { isCatalogOrderMaterial, parseOrderMaterialQuantity } from "../inventory/orderMaterialLine";
+import { isCatalogOrderMaterial } from "../inventory/orderMaterialLine";
 import { remainingToIssue, remainingToReturn } from "../inventory/warehouseMaterialStatus";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { issueOrderMaterialsFromWarehouse, returnOrderMaterialsToWarehouse } from "../../services/apiWarehouse";
@@ -80,18 +81,14 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       if (!itemId) continue;
       const raw = quantities[itemId] ?? "";
       if (String(raw).trim() === "") continue;
-      const qty = parseOrderMaterialQuantity(raw);
-      if (qty == null) {
-        const asNumber = Number(String(raw).trim());
-        if (Number.isFinite(asNumber) && asNumber > 0 && !Number.isInteger(asNumber)) {
-          toast.error(t("orders.validation.quantityInteger"));
-        } else if (Number.isFinite(asNumber) && asNumber <= 0) {
-          toast.error(t("orders.validation.quantityMin"));
-        } else {
-          toast.error(t("orders.validation.quantityRequired"));
-        }
+      const parsed = parseQuantity(raw);
+      if (typeof parsed !== "number") {
+        if (parsed === "maxDecimals") toast.error(t("orders.validation.quantityMaxDecimals"));
+        else if (parsed === "min") toast.error(t("orders.validation.quantityMin"));
+        else toast.error(t("orders.validation.quantityRequired"));
         return;
       }
+      const qty = parsed;
       const max = mode === "issue" ? remainingToIssue(line) : remainingToReturn(line);
       if (qty > max) {
         toast.error(mode === "issue" ? t("orders.errors.issueExceedsRemaining") : t("orders.errors.returnExceedsOutstanding"));
@@ -279,46 +276,46 @@ function WarehouseLineEditor({
   onChange: (value: string) => void;
   disabled: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const max = mode === "issue" ? remainingToIssue(line) : remainingToReturn(line);
+  const locale = i18n.language;
 
   return (
     <div className="space-y-2 rounded-md border border-border p-3">
       <div className="min-w-0">
         <p className="font-medium [overflow-wrap:anywhere]">{line.itemName}</p>
         <p className="text-[13px] text-muted-foreground tabular-nums">
-          {t("orders.warehouse.requested")}: {line.quantity}
+          {t("orders.warehouse.requested")}: {formatQuantity(line.quantity, locale)}
           {" · "}
-          {t("orders.warehouse.issued")}: {line.quantityIssued ?? 0}
+          {t("orders.warehouse.issued")}: {formatQuantity(line.quantityIssued ?? 0, locale)}
           {" · "}
-          {t("orders.warehouse.returned")}: {line.quantityReturned ?? 0}
+          {t("orders.warehouse.returned")}: {formatQuantity(line.quantityReturned ?? 0, locale)}
         </p>
         {mode === "issue" && stock != null ? (
           <p className="text-[13px] text-muted-foreground tabular-nums">
-            {t("orders.form.availableStock")}: {stock}
+            {t("orders.form.availableStock")}: {formatQuantity(stock, locale)}
           </p>
         ) : null}
         {mode === "issue" && warehouseStock != null ? (
-          <p className="text-[13px] text-muted-foreground tabular-nums">{t("orders.warehouse.warehouseStock", { count: warehouseStock })}</p>
+          <p className="text-[13px] text-muted-foreground tabular-nums">
+            {t("orders.warehouse.warehouseStock", { count: formatQuantity(warehouseStock, locale) })}
+          </p>
         ) : null}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Label htmlFor={`warehouse-qty-${line.inventoryItemId}`} className="shrink-0 text-xs text-muted-foreground">
           {mode === "issue" ? t("orders.warehouse.issueQty") : t("orders.warehouse.returnQty")}
         </Label>
         <Input
           id={`warehouse-qty-${line.inventoryItemId}`}
-          type="number"
-          min={1}
-          max={max}
-          step={1}
-          inputMode="numeric"
+          type="text"
+          inputMode="decimal"
           disabled={disabled}
-          className="h-8 w-24 tabular-nums"
+          className="h-8 min-w-[4.5rem] w-24 max-w-[40vw] tabular-nums"
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
-        <span className="text-xs text-muted-foreground tabular-nums">/ {max}</span>
+        <span className="text-xs text-muted-foreground tabular-nums">/ {formatQuantity(max, locale)}</span>
       </div>
     </div>
   );

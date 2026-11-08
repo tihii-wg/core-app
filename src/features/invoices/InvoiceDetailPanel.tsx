@@ -10,7 +10,9 @@ import type { Invoice, InvoiceStatus } from "../../lib/types";
 import { isErroneousInvoiceStatus } from "../../services/apiInvoices";
 import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { formatQuantity } from "../../lib/quantity";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { lineTotal } from "./invoiceItemSections";
 import { useGetInvoice } from "./useGetInvoices";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
 import { OrderVatBreakdownView } from "../orders/OrderVatBreakdown";
@@ -34,7 +36,7 @@ type InvoiceDetailPanelProps = {
 };
 
 export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusChange }: InvoiceDetailPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { invoice, isLoading, error } = useGetInvoice(invoiceId);
   const { formatMoney } = useWorkspaceMoney();
   const { workflow, copy } = useIndustryWorkflow();
@@ -137,9 +139,11 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                   {invoice.items.map((item) => (
                     <tr key={item.id}>
                       <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">{item.serviceName}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{item.quantity}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                        {formatQuantity(item.quantity, i18n.language)}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(item.price)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(item.price * item.quantity)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-foreground">{formatMoney(lineTotal(item))}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,5 +1,6 @@
 import i18n, { currentLanguage } from "../../i18n";
 import { isAppLanguage } from "../../i18n/languages";
+import { formatQuantity } from "../../lib/quantity";
 import type { Client, InvoiceDocument, Order, OrderMaterial, OrderService, Vehicle } from "../../lib/types";
 import type { LegalEntity } from "../../services/apiLegalEntities";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
@@ -299,10 +300,11 @@ function cell(value: string, align: "left" | "right" = "left") {
 function buildServicesTable(ctx: PrintContext) {
   const services = ctx.order?.services ?? [];
   if (services.length === 0) return "";
+  const locale = ctx.locale;
   let html = tableStart(["№", "Name", "Qty", "Price", "Discount", "Sum"]);
   services.forEach((line, index) => {
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(index + 1))}${cell(escapeHtmlText(line.serviceName))}${cell(String(line.quantity), "right")}${cell(String(line.price), "right")}${cell(escapeHtmlText(formatDiscountLabel(line)), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(index + 1))}${cell(escapeHtmlText(line.serviceName))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(escapeHtmlText(formatDiscountLabel(line)), "right")}${cell(String(sum), "right")}</tr>`;
   });
   return html + tableEnd();
 }
@@ -310,10 +312,11 @@ function buildServicesTable(ctx: PrintContext) {
 function buildMaterialsTable(ctx: PrintContext) {
   const materials = ctx.order?.materials ?? [];
   if (materials.length === 0) return "";
+  const locale = ctx.locale;
   let html = tableStart(["№", "Name", "Article", "Qty", "Price", "Sum"]);
   materials.forEach((line, index) => {
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(index + 1))}${cell(escapeHtmlText(line.itemName))}${cell("")}${cell(String(line.quantity), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(index + 1))}${cell(escapeHtmlText(line.itemName))}${cell("")}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
   });
   return html + tableEnd();
 }
@@ -322,17 +325,18 @@ function buildCombinedTable(ctx: PrintContext) {
   const services = ctx.order?.services ?? [];
   const materials = ctx.order?.materials ?? [];
   if (services.length === 0 && materials.length === 0) return "";
+  const locale = ctx.locale;
   let html = tableStart(["№", "Type", "Name", "Qty", "Price", "Sum"]);
   let n = 0;
   for (const line of services) {
     n += 1;
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(n))}${cell("Service")}${cell(escapeHtmlText(line.serviceName))}${cell(String(line.quantity), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(n))}${cell("Service")}${cell(escapeHtmlText(line.serviceName))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
   }
   for (const line of materials) {
     n += 1;
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(n))}${cell("Material")}${cell(escapeHtmlText(line.itemName))}${cell(String(line.quantity), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(n))}${cell("Material")}${cell(escapeHtmlText(line.itemName))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
   }
   return html + tableEnd();
 }

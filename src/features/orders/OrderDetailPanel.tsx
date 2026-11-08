@@ -46,7 +46,9 @@ import {
   warehouseMaterialStatus,
   warehouseStatusBadgeVariant,
 } from "../inventory/warehouseMaterialStatus";
+import { formatQuantity } from "../../lib/quantity";
 import { isCatalogOrderMaterial, resolveMaterialSupplySource } from "../inventory/orderMaterialLine";
+import { orderLineAmount } from "../services/orderServiceLine";
 import useGetEmployees from "../employees/useGetEmployees";
 import { isOrderOverdue } from "./orderVisibility";
 import { localDateKey } from "../../pages/dashboardStats";
@@ -536,7 +538,7 @@ export default function OrderDetailPanel({
                   </thead>
                   <tbody className="divide-y divide-border">
                     {serviceLines.map((line, index) => {
-                      const lineGross = line.price * line.quantity;
+                      const lineGross = orderLineAmount({ price: line.price, quantity: line.quantity });
                       const lineVat =
                         detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
                       return (
@@ -567,7 +569,9 @@ export default function OrderDetailPanel({
                             />
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                          {formatQuantity(line.quantity, i18n.language)}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-foreground">
                           <div>{formatMoney(lineGross)}</div>
@@ -610,7 +614,7 @@ export default function OrderDetailPanel({
                               ? t("orders.form.materialSourceOneTime")
                               : t("orders.form.materialSourceCatalog");
                         const status = catalog ? warehouseMaterialStatus(line) : null;
-                        const lineGross = line.price * line.quantity;
+                        const lineGross = orderLineAmount({ price: line.price, quantity: line.quantity });
                         const lineVat =
                           detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
                         return (
@@ -635,10 +639,10 @@ export default function OrderDetailPanel({
                                     </StatusBadge>
                                     <p className="text-[11px] text-muted-foreground tabular-nums">
                                       {t("orders.warehouse.fulfillmentSummary", {
-                                        issued: materialIssued(line),
-                                        returned: materialReturned(line),
-                                        remaining: remainingToIssue(line),
-                                        net: netOutsideWarehouse(line),
+                                        issued: formatQuantity(materialIssued(line), i18n.language),
+                                        returned: formatQuantity(materialReturned(line), i18n.language),
+                                        remaining: formatQuantity(remainingToIssue(line), i18n.language),
+                                        net: formatQuantity(netOutsideWarehouse(line), i18n.language),
                                       })}
                                     </p>
                                   </>
@@ -647,7 +651,9 @@ export default function OrderDetailPanel({
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{line.quantity}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                              {formatQuantity(line.quantity, i18n.language)}
+                            </td>
                             <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-foreground">
                               <div>{formatMoney(lineGross)}</div>

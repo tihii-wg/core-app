@@ -72,7 +72,8 @@ export function catalogWarrantyFromService(
 export function orderLineAmount(line: Pick<OrderService, "price" | "quantity">): number {
   const price = Number(line.price) || 0;
   const quantity = Number(line.quantity) || 0;
-  return price * quantity;
+  // Same as DB / orderTotals.lineGross: round(price * quantity, 2).
+  return Math.round(price * quantity * 100) / 100;
 }
 
 export function sumOrderServiceLines(lines: Array<Pick<OrderService, "price" | "quantity">> | undefined): number {

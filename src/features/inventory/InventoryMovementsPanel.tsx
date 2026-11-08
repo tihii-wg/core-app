@@ -5,6 +5,7 @@ import { ErrorState } from "../../ui/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Skeleton } from "../../ui/Skeleton";
 import type { InventoryMovementType } from "../../lib/types";
+import { formatQuantity } from "../../lib/quantity";
 import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
@@ -16,7 +17,7 @@ const itemsSort = { field: "name", ascending: true } as const;
 
 /** Inventory → History: recent stock movements with type / product / warehouse filters. */
 export function InventoryMovementsPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { data: movements = [], isLoading, isError, refetch } = useWorkspaceInventoryMovements(50);
@@ -151,7 +152,10 @@ export function InventoryMovementsPanel() {
                     ) : null}
                   </div>
                   <span className="shrink-0 tabular-nums font-medium text-foreground">
-                    {t("inventory.detail.movementQty", { sign, quantity: movement.quantity })}
+                    {t("inventory.detail.movementQty", {
+                      sign,
+                      quantity: formatQuantity(movement.quantity, i18n.language),
+                    })}
                   </span>
                 </li>
               );

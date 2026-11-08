@@ -17,6 +17,12 @@ type Result = { data: unknown; error: PgError | null };
 
 const fail = (message: string, code = "P0001"): Result => ({ data: null, error: { code, message } });
 
+function isPositiveDecimalQty(value: number): boolean {
+  if (!Number.isFinite(value) || !(value > 0)) return false;
+  const rounded = Math.round(value * 100) / 100;
+  return Math.abs(value - rounded) <= 1e-9;
+}
+
 function orderFor(args: Record<string, unknown>, ctx: PolicyCtx) {
   const order = ctx.fake.all("orders").find((row) => row.id === args.p_order_id);
   if (!order || roleIn(order.workspace_id, ctx) == null) return null;
@@ -125,7 +131,7 @@ export function installIssueFromWarehouseRpc() {
     for (const raw of payload as Record<string, unknown>[]) {
       const itemId = String(raw.inventory_item_id ?? "");
       const quantity = Number(raw.quantity);
-      if (!itemId || !Number.isInteger(quantity) || quantity <= 0) return rollback("Each issue line requires inventory_item_id and quantity > 0");
+      if (!itemId || !isPositiveDecimalQty(quantity)) return rollback("Each issue line requires inventory_item_id and quantity > 0");
       if (seen.has(itemId)) return rollback("Duplicate inventory_item_id in issue lines");
       seen.add(itemId);
 
@@ -230,7 +236,7 @@ export function installReturnToWarehouseRpc() {
     for (const raw of payload as Record<string, unknown>[]) {
       const itemId = String(raw.inventory_item_id ?? "");
       const quantity = Number(raw.quantity);
-      if (!itemId || !Number.isInteger(quantity) || quantity <= 0) return rollback("Each return line requires inventory_item_id and quantity > 0");
+      if (!itemId || !isPositiveDecimalQty(quantity)) return rollback("Each return line requires inventory_item_id and quantity > 0");
       if (seen.has(itemId)) return rollback("Duplicate inventory_item_id in return lines");
       seen.add(itemId);
 
@@ -328,7 +334,10 @@ export function installAddAndIssueOrderCatalogMaterialRpcs() {
     }
     const itemId = String(args.p_inventory_item_id ?? "");
     const quantity = Number(args.p_quantity);
-    if (!itemId || !Number.isInteger(quantity) || quantity <= 0) {
+    if (!itemId || !isPositiveDecimalQty(quantity)) {
+      if (Number.isFinite(quantity) && quantity > 0) {
+        return fail("quantity may have at most 2 decimal places", "22023");
+      }
       return fail("Each issue line requires inventory_item_id and quantity > 0", "22023");
     }
     const key = typeof args.p_idempotency_key === "string" ? args.p_idempotency_key.trim() : "";
@@ -394,7 +403,10 @@ export function installAddAndIssueOrderCatalogMaterialRpcs() {
     }
     const lineId = String(args.p_order_material_id ?? "");
     const quantity = Number(args.p_quantity);
-    if (!lineId || !Number.isInteger(quantity) || quantity <= 0) {
+    if (!lineId || !isPositiveDecimalQty(quantity)) {
+      if (Number.isFinite(quantity) && quantity > 0) {
+        return fail("quantity may have at most 2 decimal places", "22023");
+      }
       return fail("Invalid material quantity", "22023");
     }
     const line = ctx.fake.all("order_materials").find((row) => row.id === lineId && row.order_id === order.id);

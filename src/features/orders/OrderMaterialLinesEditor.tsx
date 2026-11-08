@@ -5,6 +5,7 @@ import type { TFunction } from "i18next";
 import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFieldArrayRemove, UseFormGetValues, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
 import type { InventoryItem, MileageUnit, OrderMaterial, OrderMaterialSupplySource } from "../../lib/types";
+import { formatQuantity, parseQuantity, roundQuantity } from "../../lib/quantity";
 import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
@@ -61,19 +62,10 @@ type OrderMaterialLinesEditorProps = {
 };
 
 function quantityValidationMessage(value: unknown, t: TFunction): true | string {
-  if (value === "" || value === null || value === undefined) {
-    return t("orders.validation.quantityRequired") as string;
-  }
-  const number = typeof value === "number" ? value : Number(typeof value === "string" ? value.trim() : value);
-  if (!Number.isFinite(number)) {
-    return t("orders.validation.quantityRequired") as string;
-  }
-  if (number <= 0) {
-    return t("orders.validation.quantityMin") as string;
-  }
-  if (!Number.isInteger(number)) {
-    return t("orders.validation.quantityInteger") as string;
-  }
+  const parsed = parseQuantity(value);
+  if (parsed === "required") return t("orders.validation.quantityRequired") as string;
+  if (parsed === "min") return t("orders.validation.quantityMin") as string;
+  if (parsed === "maxDecimals") return t("orders.validation.quantityMaxDecimals") as string;
   return true;
 }
 
@@ -95,7 +87,8 @@ export default function OrderMaterialLinesEditor({
   isSubmitted = false,
   errors,
 }: OrderMaterialLinesEditorProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const qtyLocale = i18n.language;
   const { copy } = useIndustryWorkflow();
   const { formatMoney } = useWorkspaceMoney();
   const { data: warehouseRows = [] } = useGetWarehouses();
@@ -127,9 +120,9 @@ export default function OrderMaterialLinesEditor({
   function adjustQuantity(index: number, delta: number) {
     const current = parseOrderMaterialQuantity(getValues(`materials.${index}.quantity`)) ?? 0;
     const issuedFloor = Number(getValues(`materials.${index}.quantityIssued`) ?? 0);
-    const minAllowed = Math.max(1, Number.isFinite(issuedFloor) ? issuedFloor : 0);
-    const next = current + delta;
-    if (next < minAllowed) return;
+    const next = roundQuantity(current + delta);
+    if (!(next > 0)) return;
+    if (Number.isFinite(issuedFloor) && issuedFloor > 0 && next < issuedFloor) return;
     setValue(`materials.${index}.quantity`, next, { shouldDirty: true, shouldValidate: true });
   }
 
@@ -178,12 +171,17 @@ export default function OrderMaterialLinesEditor({
   function addFreeformLine(supplySource: Exclude<OrderMaterialSupplySource, "catalog">) {
     setFreeError("");
     try {
+      const qty = parseQuantity(freeQty);
+      if (typeof qty !== "number") {
+        setFreeError(t("orders.form.freeformInvalid"));
+        return;
+      }
       const warranty = warrantyDefaults ? defaultsForKind(warrantyDefaults, "material") : null;
       append({
         ...freeformOrderMaterial({
           itemName: freeName,
           price: Number(freePrice),
-          quantity: Number(freeQty),
+          quantity: qty,
           supplySource,
         }),
         ...(warranty
@@ -298,10 +296,8 @@ export default function OrderMaterialLinesEditor({
               <Label htmlFor="free-material-qty">{t("orders.form.quantityLabel")}</Label>
               <Input
                 id="free-material-qty"
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
+                type="text"
+                inputMode="decimal"
                 value={freeQty}
                 disabled={disabled}
                 onChange={(event) => setFreeQty(event.target.value)}
@@ -351,9 +347,12 @@ export default function OrderMaterialLinesEditor({
             const outstanding = Math.max(0, issuedQty - returnedQty);
             const hasWarehouseHistory = issuedQty > 0 || returnedQty > 0;
             const freeformIdentityLocked = !catalog && hasWarehouseHistory;
-            const minQuantity = Math.max(1, outstanding > 0 ? outstanding : issuedQty);
+            const minQuantity =
+              outstanding > 0 ? outstanding : issuedQty > 0 ? issuedQty : 0;
             const lineWarehouseId = String(line?.warehouseId ?? field.warehouseId ?? issueWarehouseId ?? "");
             const itemId = String(line?.inventoryItemId ?? field.inventoryItemId ?? "");
+            const catalogItem = itemId ? inventoryItems.find((item) => item.id === itemId) : undefined;
+            const materialUnit = catalogItem?.unit?.trim() || "";
             const warehouseAvailable =
               catalog && lineWarehouseId && itemId ? warehouseStockOf(warehouseStock, lineWarehouseId, itemId) : undefined;
             const warehouseName = warehouses.find((warehouse) => warehouse.id === lineWarehouseId)?.name;
@@ -486,13 +485,17 @@ export default function OrderMaterialLinesEditor({
                         />
                         {warehouseAvailable != null ? (
                           <p className="text-[13px] text-muted-foreground">
-                            {t("orders.warehouse.warehouseStock", { count: warehouseAvailable })}
+                            {t("orders.warehouse.warehouseStock", { count: formatQuantity(warehouseAvailable, qtyLocale) })}
                             {warehouseName ? ` · ${warehouseName}` : ""}
                           </p>
                         ) : null}
                         {hasWarehouseHistory ? (
                           <p className="text-[12px] text-muted-foreground">
-                            {t("orders.form.issuedSummary", { issued: issuedQty, returned: returnedQty, outstanding })}
+                            {t("orders.form.issuedSummary", {
+                              issued: formatQuantity(issuedQty, qtyLocale),
+                              returned: formatQuantity(returnedQty, qtyLocale),
+                              outstanding: formatQuantity(outstanding, qtyLocale),
+                            })}
                           </p>
                         ) : (
                           <p className="text-[12px] text-muted-foreground">{t("orders.form.willDeductOnSave")}</p>
@@ -550,16 +553,19 @@ export default function OrderMaterialLinesEditor({
                         validate: (value) => {
                           const base = quantityValidationMessage(value, t);
                           if (base !== true) return base;
-                          const number = typeof value === "number" ? value : Number(value);
-                          if (number < minQuantity) return t("orders.errors.cannotReduceBelowIssued") as string;
+                          const number = parseOrderMaterialQuantity(value);
+                          if (number == null) return t("orders.validation.quantityRequired") as string;
+                          if (minQuantity > 0 && number < minQuantity) {
+                            return t("orders.errors.cannotReduceBelowIssued") as string;
+                          }
                           if (catalog && lineWarehouseId && itemId && warehouseAvailable != null) {
                             const alreadyIssued = outstanding;
                             const needFromWarehouse = Math.max(0, number - alreadyIssued);
                             if (needFromWarehouse > warehouseAvailable) {
                               return t("orders.errors.insufficientWarehouseStockDetail", {
                                 material: line?.itemName ?? field.itemName,
-                                requested: needFromWarehouse,
-                                available: warehouseAvailable,
+                                requested: formatQuantity(needFromWarehouse, qtyLocale),
+                                available: formatQuantity(warehouseAvailable, qtyLocale),
                                 warehouse: warehouseName ?? "",
                               }) as string;
                             }
@@ -570,21 +576,19 @@ export default function OrderMaterialLinesEditor({
                       render={({ field: quantityField }) => (
                         <Input
                           id={quantityInputId}
-                          type="number"
-                          min={minQuantity}
-                          step={1}
-                          inputMode="numeric"
+                          type="text"
+                          inputMode="decimal"
                           disabled={disabled}
                           aria-label={t("orders.form.quantityForMaterial", { name: line?.itemName ?? field.itemName })}
-                          className={`h-8 w-16 px-1 text-center tabular-nums ${quantityError ? "border-destructive" : ""}`}
+                          className={`h-8 min-w-[4.5rem] w-20 max-w-[30vw] px-1.5 text-center tabular-nums ${quantityError ? "border-destructive" : ""}`}
                           value={quantityField.value === "" || quantityField.value == null ? "" : quantityField.value}
                           onChange={(event) => {
                             const raw = event.target.value;
                             if (raw === "") {
                               quantityField.onChange("");
                             } else {
-                              const asNumber = Number(raw);
-                              quantityField.onChange(Number.isFinite(asNumber) ? asNumber : raw);
+                              const parsed = parseQuantity(raw);
+                              quantityField.onChange(typeof parsed === "number" ? parsed : raw);
                             }
                             if (isSubmitted) void trigger?.(`materials.${index}.quantity`);
                           }}
@@ -595,6 +599,9 @@ export default function OrderMaterialLinesEditor({
                         />
                       )}
                     />
+                    {materialUnit ? (
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{materialUnit}</span>
+                    ) : null}
                     <Button
                       type="button"
                       variant="outline"

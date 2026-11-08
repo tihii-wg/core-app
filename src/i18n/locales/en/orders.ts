@@ -294,7 +294,7 @@ export default {
     freeformHistoryLocked:
       "Name, price, and source are locked after this line has been issued or returned. You can still change quantity (not below issued).",
     freeformHistoryLockedRemove: "Lines with issue or return history cannot be removed from the order.",
-    freeformInvalid: "Enter a name, positive whole quantity, and a valid price.",
+    freeformInvalid: "Enter a name, a positive quantity (up to 2 decimals), and a valid price.",
     oneTimePartPrice: "Sale price",
     customerPartPrice: "Charge (optional, can be 0)",
     addFreeformLine: "Add to order",
@@ -322,7 +322,7 @@ export default {
     serviceRequired: "Service is required",
     quantityMin: "Quantity must be greater than 0",
     quantityRequired: "Enter a quantity",
-    quantityInteger: "Quantity must be a whole number",
+    quantityMaxDecimals: "No more than 2 decimal places",
     assignedEmployeeRequired: "Assigned employee is required",
     installationBeforeMeasurement: "Installation must be on or after the measurement date and time.",
   },

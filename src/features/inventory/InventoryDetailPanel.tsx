@@ -8,6 +8,7 @@ import type { InventoryItem, InventoryMovementType } from "../../lib/types";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { formatQuantity } from "../../lib/quantity";
 import { formatWorkspaceDate, formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
@@ -39,7 +40,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function InventoryDetailPanel({ item, open, isLoading, isError, onOpenChange, onEdit, onDelete, onRetry }: InventoryDetailPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
   const { workspaceId } = useActiveWorkspaceId();
@@ -208,7 +209,10 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
                           {movement.reason ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{movement.reason}</p> : null}
                         </div>
                         <span className="shrink-0 tabular-nums font-medium text-foreground">
-                          {t("inventory.detail.movementQty", { sign, quantity: movement.quantity })}
+                          {t("inventory.detail.movementQty", {
+                            sign,
+                            quantity: formatQuantity(movement.quantity, i18n.language),
+                          })}
                         </span>
                       </li>
                     );

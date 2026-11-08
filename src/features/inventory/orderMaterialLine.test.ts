@@ -5,10 +5,18 @@ import {
   freeformOrderMaterial,
   isCatalogOrderMaterial,
   orderMaterialsMatch,
+  parseOrderMaterialQuantity,
   resolveMaterialSupplySource,
 } from "./orderMaterialLine";
 
 describe("order material freeform / catalog helpers", () => {
+  it("parses decimal quantities up to 2 places", () => {
+    expect(parseOrderMaterialQuantity("2,5")).toBe(2.5);
+    expect(parseOrderMaterialQuantity(2.5)).toBe(2.5);
+    expect(parseOrderMaterialQuantity("2.555")).toBeNull();
+    expect(parseOrderMaterialQuantity(0)).toBeNull();
+  });
+
   it("builds catalog and freeform lines", () => {
     expect(catalogItemToOrderMaterial({ id: "i1", name: "Pad", sellingPrice: 12 }, 2)).toMatchObject({
       inventoryItemId: "i1",
@@ -60,13 +68,13 @@ describe("order material freeform / catalog helpers", () => {
 
   it("consolidates catalog ids but keeps freeform lines separate", () => {
     const result = consolidateOrderMaterials([
-      { inventoryItemId: "i1", itemName: "A", price: 1, quantity: 1, supplySource: "catalog" },
-      { inventoryItemId: "i1", itemName: "A", price: 1, quantity: 2, supplySource: "catalog" },
+      { inventoryItemId: "i1", itemName: "A", price: 1, quantity: 1.25, supplySource: "catalog" },
+      { inventoryItemId: "i1", itemName: "A", price: 1, quantity: 1.25, supplySource: "catalog" },
       { itemName: "One-off", price: 9, quantity: 1, supplySource: "one_time" },
       { itemName: "Cust", price: 0, quantity: 1, supplySource: "customer" },
     ]);
     expect(result).toHaveLength(3);
-    expect(result.find((line) => line.inventoryItemId === "i1")?.quantity).toBe(3);
+    expect(result.find((line) => line.inventoryItemId === "i1")?.quantity).toBe(2.5);
     expect(resolveMaterialSupplySource({ supplySource: "customer" })).toBe("customer");
   });
 

@@ -1,3 +1,5 @@
+import { currentLanguage } from "../../i18n";
+import { formatQuantity } from "../../lib/quantity";
 import type { OrderEvent } from "../../services/apiOrderEvents";
 
 export type OrderEventDescriptionKey =
@@ -68,16 +70,29 @@ function formatAmount(value: number | null) {
   return String(value);
 }
 
-function changePair(event: OrderEvent, field: string): { from: string; to: string } | null {
+function formatQty(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return EMPTY;
+  return formatQuantity(value, currentLanguage());
+}
+
+function changePair(event: OrderEvent, field: string, format: "qty" | "text" = "text"): { from: string; to: string } | null {
   const changes = event.payload.changes;
   if (!changes || typeof changes !== "object" || Array.isArray(changes)) return null;
   const entry = (changes as Record<string, unknown>)[field];
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
   const from = (entry as { from?: unknown }).from;
   const to = (entry as { to?: unknown }).to;
+  const formatValue = (raw: unknown) => {
+    if (raw == null || raw === "") return EMPTY;
+    if (format === "qty") {
+      const n = typeof raw === "number" ? raw : Number(raw);
+      return Number.isFinite(n) ? formatQuantity(n, currentLanguage()) : String(raw);
+    }
+    return String(raw);
+  };
   return {
-    from: from == null || from === "" ? EMPTY : String(from),
-    to: to == null || to === "" ? EMPTY : String(to),
+    from: formatValue(from),
+    to: formatValue(to),
   };
 }
 
@@ -94,18 +109,18 @@ function lineSnapshotParams(event: OrderEvent) {
   const price = payloadNumber(event, "price");
   return {
     item: itemName(event),
-    quantity: formatAmount(quantity),
+    quantity: formatQty(quantity),
     price: formatAmount(price),
   };
 }
 
 function updatedLineParams(event: OrderEvent) {
-  const qty = changePair(event, "quantity");
+  const qty = changePair(event, "quantity", "qty");
   const price = changePair(event, "price");
   const name = changePair(event, "name");
   return {
     item: itemName(event),
-    quantity: qty ? `${qty.from} → ${qty.to}` : formatAmount(payloadNumber(event, "quantity")),
+    quantity: qty ? `${qty.from} → ${qty.to}` : formatQty(payloadNumber(event, "quantity")),
     price: price ? `${price.from} → ${price.to}` : formatAmount(payloadNumber(event, "price")),
     detail: name ? `${name.from} → ${name.to}` : "",
   };

@@ -300,7 +300,7 @@ const orders: Messages<typeof en> = {
     freeformHistoryLocked:
       "Denumirea, prețul și sursa sunt blocate după eliberare sau returnare. Cantitatea poate fi modificată (nu sub cantitatea eliberată).",
     freeformHistoryLockedRemove: "Liniile cu istoric de eliberare sau returnare nu pot fi eliminate din comandă.",
-    freeformInvalid: "Introduceți denumire, cantitate întreagă pozitivă și un preț valid.",
+    freeformInvalid: "Introduceți denumire, cantitate pozitivă (max. 2 zecimale) și un preț valid.",
     oneTimePartPrice: "Preț de vânzare",
     customerPartPrice: "Taxă (poate fi 0)",
     addFreeformLine: "Adaugă pe comandă",
@@ -328,7 +328,7 @@ const orders: Messages<typeof en> = {
     serviceRequired: "Serviciul este obligatoriu",
     quantityMin: "Cantitatea trebuie să fie mai mare decât 0",
     quantityRequired: "Introduceți o cantitate",
-    quantityInteger: "Cantitatea trebuie să fie un număr întreg",
+    quantityMaxDecimals: "Cel mult 2 zecimale",
     assignedEmployeeRequired: "Responsabilul este obligatoriu",
     installationBeforeMeasurement: "Montajul trebuie să fie la sau după data și ora măsurătorii.",
   },

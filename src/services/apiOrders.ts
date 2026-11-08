@@ -107,6 +107,15 @@ export type OrdersPageResult = {
 
 const orderPermissionMessage = () => i18n.t("orders.errors.notFoundOrForbidden");
 
+/** Maps DB quantity precision errors (material sync / issue / return / catalog) to i18n. */
+export function mapQuantityPrecisionDbError(error: { message?: string; code?: string } | null): string | null {
+  const message = error?.message ?? "";
+  if (/may have at most 2 decimal places/i.test(message)) {
+    return i18n.t("orders.validation.quantityMaxDecimals");
+  }
+  return null;
+}
+
 function materialsSyncError(error: { message?: string; code?: string } | null) {
   const message = error?.message ?? "";
   const code = error?.code ?? "";
@@ -124,6 +133,8 @@ function materialsSyncError(error: { message?: string; code?: string } | null) {
   if (/item_name is required for non-catalog/i.test(message)) {
     return i18n.t("orders.errors.freeformNameRequired");
   }
+  const precision = mapQuantityPrecisionDbError(error);
+  if (precision) return precision;
   if (message.includes("outstanding issued") || message.includes("already issued")) {
     return i18n.t("orders.errors.cannotReduceBelowIssued");
   }

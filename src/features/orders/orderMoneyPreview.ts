@@ -31,8 +31,13 @@ export function previewOrderMoney(
     options,
   );
   const money = computeOrderMoney({
-    services: stamped.services.map((line) => ({ price: line.price, qty: Number(line.quantity) || 0, discountType: line.discountType, discountValue: line.discountValue })),
-    // Material quantities are whole numbers only (same parser the material editor and the RPC use).
+    // Line totals use round(price * qty, 2) via computeOrderMoney / lineGross (same as DB).
+    services: stamped.services.map((line) => ({
+      price: line.price,
+      qty: parseOrderMaterialQuantity(line.quantity) ?? 0,
+      discountType: line.discountType,
+      discountValue: line.discountValue,
+    })),
     materials: stamped.materials.map((line) => ({
       price: line.price,
       qty: parseOrderMaterialQuantity(line.quantity) ?? 0,

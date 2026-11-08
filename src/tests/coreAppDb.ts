@@ -237,13 +237,13 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
     if (typeof elem.quantity !== "number" || !Number.isFinite(elem.quantity)) {
       return { data: null, error: error("Invalid material quantity", "22P02") };
     }
-    const quantity = parsePositiveIntQty(elem.quantity);
+    const quantity = parsePositiveDecimalQty(elem.quantity);
     if (quantity == null) {
-      if (!Number.isInteger(elem.quantity)) {
-        return { data: null, error: error("Material quantity must be a whole number", "22023") };
-      }
-      if (elem.quantity > 2147483647) {
+      if (typeof elem.quantity === "number" && Number.isFinite(elem.quantity) && elem.quantity > 1e12) {
         return { data: null, error: error("Material quantity is too large", "22023") };
+      }
+      if (typeof elem.quantity === "number" && Number.isFinite(elem.quantity) && elem.quantity > 0) {
+        return { data: null, error: error("Material quantity may have at most 2 decimal places", "22023") };
       }
       return { data: null, error: error("Material quantity must be greater than 0", "22023") };
     }
@@ -569,12 +569,13 @@ function syncOrderMaterialsRpc(args: Record<string, unknown>, ctx: PolicyCtx): {
   };
 }
 
-function parsePositiveIntQty(value: unknown): number | null {
+function parsePositiveDecimalQty(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
-  if (!Number.isInteger(n)) return null;
-  if (n > 2147483647) return null;
-  return n;
+  const rounded = Math.round(n * 100) / 100;
+  if (Math.abs(n - rounded) > 1e-9) return null;
+  if (n > 1e12) return null;
+  return rounded;
 }
 
 function normalizeWarehouseLines(
@@ -586,7 +587,7 @@ function normalizeWarehouseLines(
   for (const raw of payload) {
     const elem = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
     const itemId = elem ? String(elem.inventory_item_id ?? "").trim() : "";
-    const quantity = elem ? parsePositiveIntQty(elem.quantity) : null;
+    const quantity = elem ? parsePositiveDecimalQty(elem.quantity) : null;
     if (!itemId || quantity == null) {
       return { error: error(`Each ${kind} line requires inventory_item_id and quantity > 0`, "22023") };
     }

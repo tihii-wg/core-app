@@ -2,6 +2,7 @@
 
 import QRCode from "qrcode";
 import type { StyleColorPalette } from "../colorRef";
+import { formatQuantity } from "../../../lib/quantity";
 import { vatIncludedAmount } from "../../finance/vat";
 import { applyTemplateVariables } from "../printTemplate";
 import { escapeHtmlText, printContextVatBreakdown, type PrintContext } from "../templateVariables";
@@ -236,7 +237,7 @@ function renderTableHtml(
           value = escapeHtmlText(row.sku);
           break;
         case "qty":
-          value = String(row.qty);
+          value = formatQuantity(Number(row.qty) || 0, ctx.locale);
           break;
         case "unit":
           value = escapeHtmlText(row.unit);

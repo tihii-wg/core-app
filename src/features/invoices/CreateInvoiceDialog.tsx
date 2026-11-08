@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import type { Order } from "../../lib/types";
+import { formatQuantity } from "../../lib/quantity";
+import { orderLineAmount } from "../services/orderServiceLine";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useCreateInvoice } from "./useCreateInvoice";
 
@@ -16,7 +18,7 @@ type CreateInvoiceDialogProps = {
 };
 
 export function CreateInvoiceDialog({ open, onOpenChange, orders }: CreateInvoiceDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [orderId, setOrderId] = useState("");
   const createInvoice = useCreateInvoice();
   const { formatMoney } = useWorkspaceMoney();
@@ -74,9 +76,9 @@ export function CreateInvoiceDialog({ open, onOpenChange, orders }: CreateInvoic
                     <li key={line.id ?? index} className="flex justify-between gap-4">
                       <span className="truncate">
                         {line.serviceName}
-                        {line.quantity > 1 && ` × ${line.quantity}`}
+                        {line.quantity !== 1 && ` × ${formatQuantity(line.quantity, i18n.language)}`}
                       </span>
-                      <span className="tabular-nums">{formatMoney(line.price * line.quantity)}</span>
+                      <span className="tabular-nums">{formatMoney(orderLineAmount(line))}</span>
                     </li>
                   ))}
                 </ul>
