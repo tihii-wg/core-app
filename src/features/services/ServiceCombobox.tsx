@@ -13,9 +13,23 @@ type ServiceComboboxProps = {
   onCreate?: (serviceName: string, price: number) => void;
   onSelect?: (service: Service) => void;
   allowCreate?: boolean;
+  /**
+   * When false (service create form), the list opens only on click/tap — not on focus
+   * (dialogs autofocus the first field) and not while typing.
+   */
+  openOnFocus?: boolean;
 };
 
-export default function ServiceCombobox({ services, value, onChange, onCreate, onSelect, errors, allowCreate = true }: ServiceComboboxProps) {
+export default function ServiceCombobox({
+  services,
+  value,
+  onChange,
+  onCreate,
+  onSelect,
+  errors,
+  allowCreate = true,
+  openOnFocus = true,
+}: ServiceComboboxProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const [open, setOpen] = useState(false);
@@ -98,10 +112,13 @@ export default function ServiceCombobox({ services, value, onChange, onCreate, o
         autoComplete="off"
         placeholder={t("services.combobox.placeholder")}
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          if (openOnFocus) setOpen(true);
+        }}
+        onClick={() => setOpen(true)}
         onChange={(e) => {
           updateValue(e.target.value);
-          setOpen(true);
+          if (openOnFocus) setOpen(true);
         }}
         onKeyDown={(e) => {
           if (e.key !== "Enter" || !canCreate) return;
