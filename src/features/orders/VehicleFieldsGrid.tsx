@@ -35,10 +35,12 @@ export function VehicleFieldsGrid({
   const { t } = useTranslation();
   const hidden = new Set(hideKeys);
   const useOrderSnapshot = orderMileageSnapshot !== undefined && orderMileageSnapshot !== null;
-  const mileageUnit = useOrderSnapshot ? orderMileageSnapshot.unit : vehicle.mileageUnit;
+  // Order card: the visit snapshot is shown as «Текущий пробег» with its unit inline
+  // (falls back to the vehicle unit for old snapshots saved without a unit).
+  const mileageUnit = useOrderSnapshot ? (orderMileageSnapshot.unit ?? vehicle.mileageUnit) : vehicle.mileageUnit;
   const currentMileage = useOrderSnapshot ? orderMileageSnapshot.value : vehicle.currentMileage;
   const currentMileageLabel = useOrderSnapshot
-    ? t("vehicles.fields.visitMileage")
+    ? t("vehicles.fields.orderCurrentMileage")
     : t("vehicles.fields.currentMileage");
   const rows: { key: string; label: string; value: string; mono?: boolean }[] = [
     { key: "make", label: t("vehicles.fields.make"), value: displayValue(vehicle.make, empty) },
@@ -68,7 +70,7 @@ export function VehicleFieldsGrid({
       value: displayValue(vehicle.engineDisplacement, empty),
     },
     { key: "fuelType", label: t("vehicles.fields.fuelType"), value: fuelLabel(vehicle.fuelType, empty, (key) => t(key as never)) },
-  ].filter((row) => !hidden.has(row.key));
+  ].filter((row) => !hidden.has(row.key) && !(useOrderSnapshot && row.key === "mileageUnit"));
 
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm" data-testid="vehicle-fields-grid">

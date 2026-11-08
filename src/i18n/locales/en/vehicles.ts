@@ -46,6 +46,7 @@ export default {
     licensePlate: "License plate",
     initialMileage: "Initial mileage",
     currentMileage: "Current odometer reading",
+    orderCurrentMileage: "Current mileage",
     visitMileage: "Visit odometer reading",
     mileageUnit: "Mileage unit",
     visitMileageUnit: "Visit mileage unit",

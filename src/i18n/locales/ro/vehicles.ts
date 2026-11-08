@@ -46,6 +46,7 @@ export default {
     licensePlate: "Număr de înmatriculare",
     initialMileage: "Kilometraj inițial",
     currentMileage: "Citire curentă odometru",
+    orderCurrentMileage: "Kilometraj curent",
     visitMileage: "Citire odometru la vizită",
     mileageUnit: "Unitate kilometraj",
     visitMileageUnit: "Unitate kilometraj la vizită",

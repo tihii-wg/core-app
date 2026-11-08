@@ -46,6 +46,7 @@ export default {
     licensePlate: "Госномер",
     initialMileage: "Начальный пробег",
     currentMileage: "Текущие показания одометра",
+    orderCurrentMileage: "Текущий пробег",
     visitMileage: "Показания одометра на визите",
     mileageUnit: "Единица пробега",
     visitMileageUnit: "Единица пробега на визите",
