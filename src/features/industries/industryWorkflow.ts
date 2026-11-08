@@ -55,22 +55,38 @@ function isServiceCategory(value: string | null | undefined): value is ServiceCa
   return (SERVICE_CATEGORIES as readonly string[]).includes(value ?? "");
 }
 
+/** Historical spelling "assesment" is the same category as "diagnostics". */
+export function normalizeServiceCategory(category: string | null | undefined): string {
+  const value = (category ?? "").trim();
+  return value === "assesment" ? "diagnostics" : value;
+}
+
+/** Stored values that mean the same category (used for filtering). */
+export function serviceCategoryStoredValues(category: string): string[] {
+  const value = normalizeServiceCategory(category);
+  return value === "diagnostics" ? ["diagnostics", "assesment"] : [value];
+}
+
 /**
  * Category options for service forms. Always keeps a service's current category selectable
- * after an industry change so existing records stay editable.
+ * (legacy or free text) after an industry change so existing records stay editable.
  */
 export function industryServiceCategoryOptions(workflow: IndustryWorkflow, currentCategory?: string | null): ServiceCategoryValue[] {
   const options = [...workflow.serviceCategories];
-  if (currentCategory && isServiceCategory(currentCategory) && !options.includes(currentCategory)) {
-    options.push(currentCategory);
+  const current = normalizeServiceCategory(currentCategory);
+  if (current && !options.includes(current)) {
+    options.push(current);
   }
   return options;
 }
 
-export function serviceCategoryLabel(category: string | null | undefined) {
-  if (!category?.trim()) return "";
-  if (!isServiceCategory(category)) return category;
-  return i18n.t(`services.categories.${category}`, { defaultValue: category });
+export function serviceCategoryLabel(category: string | null | undefined, industrySlug?: string | null) {
+  const value = normalizeServiceCategory(category);
+  if (!value) return "";
+  if (!isServiceCategory(value)) return value;
+  const base = i18n.t(`services.categories.${value}` as never, { defaultValue: value }) as string;
+  if (!industrySlug) return base;
+  return i18n.t(`services.categoriesByIndustry.${industrySlug}.${value}` as never, { defaultValue: base }) as string;
 }
 
 /** Service UI copy that follows the active industry pack. */
@@ -91,7 +107,7 @@ export function industryServiceCopy(workflow: IndustryWorkflow) {
 }
 
 export function defaultServiceCategory(workflow: IndustryWorkflow): serviceCategory {
-  return workflow.serviceCategories[0] ?? "repair";
+  return workflow.serviceCategories[0] ?? "other";
 }
 
 /**

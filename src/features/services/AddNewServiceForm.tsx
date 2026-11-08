@@ -124,7 +124,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
                   <SelectContent>
                     {categoryOptions.map((category) => (
                       <SelectItem key={category} value={category}>
-                        {serviceCategoryLabel(category)}
+                        {serviceCategoryLabel(category, workflow.slug)}
                       </SelectItem>
                     ))}
                   </SelectContent>

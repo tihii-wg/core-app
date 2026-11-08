@@ -25,7 +25,12 @@ import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
-import { industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
+import {
+  industryServiceCategoryOptions,
+  industryServiceCopy,
+  normalizeServiceCategory,
+  serviceCategoryLabel,
+} from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { cn } from "../../lib/utils";
 
@@ -50,20 +55,31 @@ export function Services() {
   const canManage = withSubscriptionWriteAccess(canManageServices(useActiveWorkspaceRole()), subscriptionAllowsWrite);
   const { workflow } = useIndustryWorkflow();
   const serviceCopy = industryServiceCopy(workflow);
+  // Categories actually used by this workspace's services (legacy codes or another industry's codes)
+  // stay filterable after an industry change.
+  const { services: allServices } = useGetServices("", undefined);
+  const filterCategoryCodes = useMemo(() => {
+    const codes = [...industryServiceCategoryOptions(workflow)];
+    for (const service of allServices ?? []) {
+      const code = normalizeServiceCategory(service.category);
+      if (code && !codes.includes(code)) codes.push(code);
+    }
+    return codes;
+  }, [workflow, allServices]);
   const categoryOptions = [
     { value: "all", label: t("services.filters.allCategories") },
-    ...industryServiceCategoryOptions(workflow).map((category) => ({
+    ...filterCategoryCodes.map((category) => ({
       value: category,
-      label: serviceCategoryLabel(category),
+      label: serviceCategoryLabel(category, workflow.slug),
     })),
   ];
 
   useEffect(() => {
     if (categoryFilter === "all") return;
-    if (!workflow.serviceCategories.includes(categoryFilter as serviceCategory)) {
+    if (!filterCategoryCodes.includes(categoryFilter as serviceCategory)) {
       setCategoryFilter("all");
     }
-  }, [categoryFilter, workflow.slug, workflow.serviceCategories]);
+  }, [categoryFilter, filterCategoryCodes]);
 
   const visibleServices = useMemo(() => {
     if (statusFilter === "all") return services;
@@ -103,7 +119,7 @@ export function Services() {
       header: t("services.columns.category"),
       className: "hidden sm:table-cell",
       cell: (service) =>
-        service.category ? <StatusBadge variant="default">{serviceCategoryLabel(service.category)}</StatusBadge> : <span className="text-subtle-foreground">—</span>,
+        service.category ? <StatusBadge variant="default">{serviceCategoryLabel(service.category, workflow.slug)}</StatusBadge> : <span className="text-subtle-foreground">—</span>,
     },
     {
       key: "price",
@@ -231,7 +247,7 @@ export function Services() {
             <NoSearchResults
               query={
                 searchQuery ||
-                (categoryFilter !== "all" ? serviceCategoryLabel(categoryFilter) : t("services.filters.activeFiltersFallback"))
+                (categoryFilter !== "all" ? serviceCategoryLabel(categoryFilter, workflow.slug) : t("services.filters.activeFiltersFallback"))
               }
             />
           ) : (

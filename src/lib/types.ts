@@ -8,7 +8,8 @@ export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "erroneous";
 
 export type EmployeeRole = "admin" | "manager" | "technician" | "receptionist";
 
-export type serviceCategory = "repair" | "software" | "update" | "data" | "assesment";
+/** services.category code (free text in the DB; known codes are listed per industry in industryProfile). */
+export type serviceCategory = string;
 
 export type EmployeeRoleOption = {
   value: EmployeeRole;

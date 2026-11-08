@@ -8,9 +8,37 @@ import i18n from "../../i18n";
 import type { DocumentTemplateType } from "../documents/layout";
 import type { PaymentStageTemplateItem } from "../finance/paymentStages";
 
-/** Stored services.category values used by the app (includes historical spelling "assesment"). */
-export const SERVICE_CATEGORIES = ["repair", "software", "update", "data", "assesment"] as const;
-export type ServiceCategoryValue = (typeof SERVICE_CATEGORIES)[number];
+/**
+ * Legacy services.category codes (before per-industry categories). Still displayed with
+ * their labels; "assesment" (historical spelling) is an alias of "diagnostics".
+ */
+export const LEGACY_SERVICE_CATEGORIES = ["repair", "software", "update", "data", "assesment"] as const;
+
+/** Every service category code the app knows (current industry lists + legacy). */
+export const SERVICE_CATEGORIES = [
+  // shared
+  "diagnostics", "repair", "maintenance", "installation", "other",
+  // auto
+  "engine", "transmission", "suspension", "brakes", "electrical", "air_conditioning", "gas_equipment", "body", "tires",
+  // phone / electronics
+  "screen", "battery", "charging_port", "board_repair", "firmware", "data_recovery", "liquid_damage",
+  // computers
+  "hardware", "upgrade", "os_software", "cleaning", "network",
+  // appliances / equipment
+  "parts_replacement", "commissioning", "calibration",
+  // electrical services
+  "wiring", "equipment_installation", "lighting", "switchboards", "emergency",
+  // home services
+  "inspection", "plumbing", "furniture_assembly", "minor_repair", "appliance_installation",
+  // furniture manufacturing
+  "measurement", "design", "production", "delivery", "rework",
+  // other
+  "consultation",
+  // legacy
+  "software", "update", "data", "assesment",
+] as const;
+/** services.category is free text in the DB; known codes get translated labels. */
+export type ServiceCategoryValue = string;
 
 /** Database industry slugs from public.industries (resolve by slug, never by UUID). */
 export const KNOWN_INDUSTRY_SLUGS = [
@@ -174,11 +202,18 @@ export type IndustryProfile = {
   demoPack: string;
 };
 
-const allServiceCategories: ServiceCategoryValue[] = [...SERVICE_CATEGORIES];
-const autoServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
-const deviceServiceCategories: ServiceCategoryValue[] = ["repair", "software", "data", "update", "assesment"];
-const fieldServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
-const furnitureServiceCategories: ServiceCategoryValue[] = ["repair", "assesment", "update"];
+/** Ordered category lists per industry ("other" always last). */
+const SERVICE_CATEGORIES_BY_INDUSTRY: Record<KnownIndustrySlug, ServiceCategoryValue[]> = {
+  auto_repair: ["diagnostics", "maintenance", "engine", "transmission", "suspension", "brakes", "electrical", "air_conditioning", "gas_equipment", "body", "tires", "other"],
+  phone_electronics_repair: ["diagnostics", "screen", "battery", "charging_port", "board_repair", "firmware", "data_recovery", "liquid_damage", "other"],
+  computer_repair: ["diagnostics", "hardware", "upgrade", "os_software", "data_recovery", "cleaning", "network", "other"],
+  appliance_repair: ["diagnostics", "repair", "parts_replacement", "installation", "maintenance", "other"],
+  equipment_repair: ["diagnostics", "repair", "maintenance", "commissioning", "calibration", "other"],
+  electrical_services: ["diagnostics", "wiring", "equipment_installation", "lighting", "switchboards", "emergency", "other"],
+  home_services: ["inspection", "plumbing", "electrical", "furniture_assembly", "minor_repair", "appliance_installation", "cleaning", "other"],
+  furniture_manufacturing: ["measurement", "design", "production", "delivery", "installation", "rework", "other"],
+  other: ["diagnostics", "repair", "installation", "maintenance", "consultation", "other"],
+};
 
 const automotiveFields: IndustryOrderFields = {
   device: { visible: true, required: false },
@@ -454,7 +489,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "auto",
     orderFields: automotiveFields,
     orderFieldBlocks: vehicleBlocks,
-    serviceCategories: autoServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.auto_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: autoStatuses,
     warranty: { unit: "months", defaultValue: 6, mileage: true },
@@ -470,7 +505,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "device",
     orderFields: repairDeviceFields,
     orderFieldBlocks: phoneDeviceBlocks,
-    serviceCategories: deviceServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.phone_electronics_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(3),
@@ -486,7 +521,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "device",
     orderFields: repairDeviceFields,
     orderFieldBlocks: deviceBlocks,
-    serviceCategories: deviceServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.computer_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(3),
@@ -502,7 +537,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "device",
     orderFields: repairDeviceFields,
     orderFieldBlocks: deviceBlocks,
-    serviceCategories: deviceServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.appliance_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(6),
@@ -518,7 +553,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "device",
     orderFields: repairDeviceFields,
     orderFieldBlocks: deviceBlocks,
-    serviceCategories: deviceServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.equipment_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(6),
@@ -534,7 +569,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "site",
     orderFields: siteProjectFields,
     orderFieldBlocks: siteBlocks,
-    serviceCategories: fieldServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.electrical_services,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: siteStatuses,
     warranty: { unit: "months", defaultValue: 12, mileage: false },
@@ -550,7 +585,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "site",
     orderFields: siteProjectFields,
     orderFieldBlocks: siteBlocks,
-    serviceCategories: fieldServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.home_services,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: siteStatuses,
     warranty: { unit: "months", defaultValue: 12, mileage: false },
@@ -566,7 +601,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "furniture",
     orderFields: siteProjectFields,
     orderFieldBlocks: projectBlocks,
-    serviceCategories: furnitureServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.furniture_manufacturing,
     suggestedCatalogCategoryKeys: furnitureCatalogKeys,
     defaultStatuses: furnitureStatuses,
     warranty: { unit: "months", defaultValue: 12, mileage: false },
@@ -582,7 +617,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     termsPack: "other",
     orderFields: defaultFields,
     orderFieldBlocks: noneBlocks,
-    serviceCategories: allServiceCategories,
+    serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.other,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: otherStatuses,
     warranty: { unit: "months", defaultValue: 3, mileage: false },

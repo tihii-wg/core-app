@@ -10,7 +10,13 @@ import { Textarea } from "../../ui/Textarea";
 import { Spinner } from "../../ui/Spinner";
 
 import type { EditServiceFormData, Service, serviceCategory } from "../../lib/types";
-import { defaultServiceCategory, industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
+import {
+  defaultServiceCategory,
+  industryServiceCategoryOptions,
+  industryServiceCopy,
+  normalizeServiceCategory,
+  serviceCategoryLabel,
+} from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
 import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults, type CatalogWarrantyDefaults } from "../orders/catalogWarranty";
@@ -42,8 +48,7 @@ type EditServiceFormProps = {
 };
 
 function asCategory(value: string | null | undefined): serviceCategory | "" {
-  if (!value?.trim()) return "";
-  return value as serviceCategory;
+  return normalizeServiceCategory(value);
 }
 
 export default function UpdateServiceForm({ service, setEditModalOpen }: EditServiceFormProps) {
@@ -164,7 +169,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
                   <SelectContent>
                     {categoryOptions.map((category) => (
                       <SelectItem key={category} value={category}>
-                        {serviceCategoryLabel(category)}
+                        {serviceCategoryLabel(category, workflow.slug)}
                       </SelectItem>
                     ))}
                   </SelectContent>

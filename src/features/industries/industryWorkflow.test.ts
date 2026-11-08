@@ -62,19 +62,27 @@ describe("industryWorkflow", () => {
     expect(shouldShowOrderAssetValue(auto.orderFields.device, "", "device")).toBe(true);
   });
 
-  it("exposes industry-relevant service categories from existing schema values", () => {
-    expect(industryWorkflow("auto_repair").serviceCategories).toEqual(["repair", "assesment", "update"]);
-    expect(industryWorkflow("phone_electronics_repair").serviceCategories).toEqual(["repair", "software", "data", "update", "assesment"]);
-    expect(industryWorkflow("home_services").serviceCategories).toEqual(["repair", "assesment", "update"]);
-    expect(industryWorkflow("other").serviceCategories).toContain("software");
-    expect(defaultServiceCategory(industryWorkflow("auto_repair"))).toBe("repair");
+  it("exposes per-industry service categories with other last", () => {
+    expect(industryWorkflow("auto_repair").serviceCategories).toContain("gas_equipment");
+    expect(industryWorkflow("furniture_manufacturing").serviceCategories).toEqual([
+      "measurement", "design", "production", "delivery", "installation", "rework", "other",
+    ]);
+    for (const slug of ["auto_repair", "phone_electronics_repair", "computer_repair", "appliance_repair",
+      "equipment_repair", "electrical_services", "home_services", "furniture_manufacturing", "other"]) {
+      const list = industryWorkflow(slug).serviceCategories;
+      expect(list[list.length - 1]).toBe("other");
+      expect(new Set(list).size).toBe(list.length);
+    }
+    expect(defaultServiceCategory(industryWorkflow("auto_repair"))).toBe("diagnostics");
   });
 
   it("keeps a service's current category selectable after an industry change", () => {
     const auto = industryWorkflow("auto_repair");
     expect(industryServiceCategoryOptions(auto)).not.toContain("software");
-    expect(industryServiceCategoryOptions(auto, "software")).toEqual(["repair", "assesment", "update", "software"]);
-    expect(industryServiceCategoryOptions(auto, "invented")).toEqual(["repair", "assesment", "update"]);
+    expect(industryServiceCategoryOptions(auto, "software")).toContain("software");
+    expect(industryServiceCategoryOptions(auto, "invented")).toContain("invented");
+    // legacy spelling maps to diagnostics, which is already in the list
+    expect(industryServiceCategoryOptions(auto, "assesment").filter((c) => c === "diagnostics")).toHaveLength(1);
   });
 
   it("adapts client labels for field service without inventing schema fields", () => {

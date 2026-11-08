@@ -161,7 +161,10 @@ export async function getServices(workspaceId: string | undefined, search?: stri
   }
 
   if (categoriesFilter) {
-    query = query.eq("category", categoriesFilter);
+    // "diagnostics" also matches the legacy spelling "assesment".
+    query = categoriesFilter === "diagnostics" || categoriesFilter === "assesment"
+      ? query.in("category", ["diagnostics", "assesment"])
+      : query.eq("category", categoriesFilter);
   }
 
   const { data, error } = await query;
