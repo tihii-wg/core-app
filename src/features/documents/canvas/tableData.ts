@@ -1,5 +1,6 @@
 /** Shared table / totals data for canvas rendering (mirrors layout.ts row logic). */
 
+import i18n from "../../../i18n";
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../../lib/types";
 import type { InvoiceSections } from "../../invoices/invoiceItemSections";
 import { lineTotal } from "../../invoices/invoiceItemSections";
@@ -80,12 +81,52 @@ function sectionsOf(ctx: PrintContext): InvoiceSections | null {
   return ctx.invoiceSections;
 }
 
+function orderNumberOf(ctx: PrintContext): string {
+  return ctx.order?.orderNumber?.trim() || ctx.invoice?.orderNumber?.trim() || "";
+}
+
+function paymentLineRow(ctx: PrintContext, kind: "prepayment" | "balance"): CanvasLineRow[] {
+  const number = orderNumberOf(ctx);
+  const amount =
+    kind === "prepayment"
+      ? (ctx.paymentBalance?.netPaid ?? 0)
+      : (ctx.paymentBalance?.remaining ?? 0);
+  const nameKey =
+    kind === "prepayment"
+      ? "settings.printTemplates.canvas.defaults.prepaymentLine"
+      : "settings.printTemplates.canvas.defaults.balanceLine";
+  const name = String(
+    i18n.t(nameKey as "settings.printTemplates.canvas.defaults.prepaymentLine", {
+      number,
+      defaultValue:
+        kind === "prepayment"
+          ? `Prepayment for order No. ${number}`
+          : `Balance payment for order No. ${number}`,
+    }),
+  );
+  return [
+    {
+      name,
+      sku: "",
+      qty: 1,
+      unit: "",
+      price: amount,
+      discount: "",
+      sum: amount,
+      warranty: "",
+      performer: "",
+    },
+  ];
+}
+
 export function canvasRowsForSource(source: TableSource, ctx: PrintContext): CanvasLineRow[] {
   if (source === "services") return serviceRows(ctx.order);
   if (source === "materials") return materialRows(ctx.order);
   if (source === "invoiceLines") return invoiceRows(ctx.invoice);
   if (source === "invoiceWorks") return invoiceItemRows(sectionsOf(ctx)?.works ?? []);
   if (source === "invoiceMaterials") return invoiceItemRows(sectionsOf(ctx)?.materials ?? []);
+  if (source === "prepaymentLine") return paymentLineRow(ctx, "prepayment");
+  if (source === "balanceLine") return paymentLineRow(ctx, "balance");
   return [...serviceRows(ctx.order), ...materialRows(ctx.order)];
 }
 
@@ -141,6 +182,14 @@ export function canvasTotalsValue(key: TotalsRowKey, ctx: PrintContext, showCent
       return formatCanvasMoney(ctx.paymentBalance?.remaining ?? 0, ctx, showCents);
     case "totalWords":
       return escapeHtmlText(amountInWords(orderTotal(ctx), normalizeAmountInWordsLocale(ctx.locale)));
+    case "paidWords":
+      return escapeHtmlText(
+        amountInWords(ctx.paymentBalance?.netPaid ?? 0, normalizeAmountInWordsLocale(ctx.locale)),
+      );
+    case "remainingWords":
+      return escapeHtmlText(
+        amountInWords(ctx.paymentBalance?.remaining ?? 0, normalizeAmountInWordsLocale(ctx.locale)),
+      );
   }
 }
 
@@ -159,4 +208,39 @@ export function estimateTableHeightMm(rowCount: number, showTotalsRow: boolean, 
   const totalsMm = showTotalsRow ? 7 : 0;
   const computed = headerMm + rowCount * rowMm + totalsMm;
   return Math.max(baseHMm, computed);
+}
+
+const TOTALS_ROW_MM = 8;
+const TOTALS_WORDS_ROW_MM = 18;
+const TOTALS_PADDING_MM = 6;
+
+function isWordsTotalsRowKey(key: string): boolean {
+  return key === "totalWords" || key === "paidWords" || key === "remainingWords";
+}
+
+/** Estimated totals box height in mm from enabled rows (padding + per-row height). */
+export function estimateTotalsHeightMm(
+  enabledRowCount: number,
+  baseHMm = 0,
+  rows?: Array<{ enabled: boolean; key?: string }>,
+): number {
+  if (rows && rows.length > 0) {
+    const enabled = rows.filter((row) => row.enabled);
+    if (enabled.length === 0) return Math.max(baseHMm, TOTALS_PADDING_MM);
+    const content = enabled.reduce(
+      (sum, row) => sum + (row.key && isWordsTotalsRowKey(row.key) ? TOTALS_WORDS_ROW_MM : TOTALS_ROW_MM),
+      0,
+    );
+    return Math.max(baseHMm, TOTALS_PADDING_MM + content);
+  }
+  if (enabledRowCount <= 0) return Math.max(baseHMm, TOTALS_PADDING_MM);
+  return Math.max(baseHMm, TOTALS_PADDING_MM + enabledRowCount * TOTALS_ROW_MM);
+}
+
+/** True when a totals element's stored height can fit all of its enabled rows. */
+export function totalsElementHeightFitsRows(el: {
+  hMm: number;
+  rows: Array<{ enabled: boolean; key?: string }>;
+}): boolean {
+  return el.hMm + 0.01 >= estimateTotalsHeightMm(el.rows.length, 0, el.rows);
 }

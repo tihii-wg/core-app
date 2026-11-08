@@ -968,6 +968,39 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: (ctx) => ctx.paymentBalance?.remaining ?? null,
   },
   {
+    token: "#К-ОПЛАТЕ",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.amountDue.label",
+    descriptionKey: "settings.printTemplates.variables.money.amountDue.description",
+    kind: "money",
+    resolve: (ctx) => ctx.paymentBalance?.remaining ?? null,
+  },
+  {
+    token: "#К-ОПЛАТЕ-ПРОПИСЬЮ",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.amountDueWords.label",
+    descriptionKey: "settings.printTemplates.variables.money.amountDueWords.description",
+    kind: "text",
+    resolve: (ctx) => {
+      const amount = ctx.paymentBalance?.remaining;
+      if (amount == null || !Number.isFinite(amount)) return null;
+      return amountInWords(amount, normalizeAmountInWordsLocale(ctx.locale));
+    },
+  },
+  {
+    token: "#ДОЛЯ-ОПЛАТЫ",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.paidShare.label",
+    descriptionKey: "settings.printTemplates.variables.money.paidShare.description",
+    kind: "text",
+    resolve: (ctx) => {
+      const total = ctx.paymentBalance?.total ?? ctx.order?.totalPrice ?? null;
+      const paid = ctx.paymentBalance?.netPaid ?? null;
+      if (total == null || paid == null || !Number.isFinite(total) || total <= 0) return null;
+      return String(Math.round((paid / total) * 100));
+    },
+  },
+  {
     token: "#ВАЛЮТА",
     group: "money",
     labelKey: "settings.printTemplates.variables.money.currency.label",

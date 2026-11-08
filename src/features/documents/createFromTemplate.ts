@@ -12,6 +12,8 @@ const TABLE_SOURCE_MAP: Record<DocumentTemplateType, Partial<Record<TableSource,
     invoiceWorks: "services",
     invoiceMaterials: "materials",
     invoiceLines: "allLines",
+    prepaymentLine: "allLines",
+    balanceLine: "allLines",
   },
   act: {
     invoiceWorks: "allLines",
@@ -19,6 +21,8 @@ const TABLE_SOURCE_MAP: Record<DocumentTemplateType, Partial<Record<TableSource,
     invoiceLines: "allLines",
     services: "allLines",
     materials: "allLines",
+    prepaymentLine: "allLines",
+    balanceLine: "allLines",
   },
 };
 

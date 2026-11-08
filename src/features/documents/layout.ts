@@ -80,7 +80,9 @@ export type TableSource =
   | "allLines"
   | "invoiceLines"
   | "invoiceWorks"
-  | "invoiceMaterials";
+  | "invoiceMaterials"
+  | "prepaymentLine"
+  | "balanceLine";
 export type TotalsRowKey =
   | "servicesSum"
   | "materialsSum"
@@ -91,7 +93,9 @@ export type TotalsRowKey =
   | "total"
   | "paid"
   | "remaining"
-  | "totalWords";
+  | "totalWords"
+  | "paidWords"
+  | "remainingWords";
 export type TotalsRow = { key: TotalsRowKey; label: string; enabled: boolean };
 
 export type LayoutBlockBase = { id: string; kind: string; enabled: boolean; title?: string; style?: BlockStyle };
@@ -218,6 +222,8 @@ const TOTAL_KEYS = new Set<TotalsRowKey>([
   "paid",
   "remaining",
   "totalWords",
+  "paidWords",
+  "remainingWords",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -295,7 +301,9 @@ function parseLeafBlock(value: unknown): LeafLayoutBlock | null {
         value.source === "allLines" ||
         value.source === "invoiceLines" ||
         value.source === "invoiceWorks" ||
-        value.source === "invoiceMaterials"
+        value.source === "invoiceMaterials" ||
+        value.source === "prepaymentLine" ||
+        value.source === "balanceLine"
           ? value.source
           : "services";
       return { ...base, kind: "table", source, columns: value.columns, showTotalsRow: value.showTotalsRow !== false };
@@ -754,6 +762,16 @@ function renderTotals(block: TotalsBlock, ctx: PrintContext, env: RenderEnv) {
         break;
       case "totalWords":
         value = escapeHtmlText(amountInWords(orderTotal(ctx), normalizeAmountInWordsLocale(ctx.locale)));
+        break;
+      case "paidWords":
+        value = escapeHtmlText(
+          amountInWords(ctx.paymentBalance?.netPaid ?? 0, normalizeAmountInWordsLocale(ctx.locale)),
+        );
+        break;
+      case "remainingWords":
+        value = escapeHtmlText(
+          amountInWords(ctx.paymentBalance?.remaining ?? 0, normalizeAmountInWordsLocale(ctx.locale)),
+        );
         break;
     }
     const labelHtml = applyTemplateText(row.label, ctx, env.showCents);

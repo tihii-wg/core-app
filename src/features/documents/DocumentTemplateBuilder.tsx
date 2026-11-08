@@ -128,6 +128,8 @@ const TABLE_SOURCES: TableSource[] = [
   "invoiceLines",
   "invoiceWorks",
   "invoiceMaterials",
+  "prepaymentLine",
+  "balanceLine",
 ];
 
 const SOURCE_FALLBACK_LABEL: Record<TableSource, string> = {
@@ -137,6 +139,8 @@ const SOURCE_FALLBACK_LABEL: Record<TableSource, string> = {
   invoiceLines: "Invoice lines",
   invoiceWorks: "Invoice works",
   invoiceMaterials: "Invoice materials",
+  prepaymentLine: "Prepayment line",
+  balanceLine: "Balance due line",
 };
 
 const COLUMN_KEYS: TableColumnKey[] = [
@@ -163,6 +167,8 @@ const TOTAL_KEYS: TotalsRowKey[] = [
   "paid",
   "remaining",
   "totalWords",
+  "paidWords",
+  "remainingWords",
 ];
 
 type WidthPreset = { id: string; label: string; widths: number[] };

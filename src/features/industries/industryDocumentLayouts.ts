@@ -6,7 +6,8 @@
 import type { TFunction } from "i18next";
 import i18n from "../../i18n";
 import { themeRef } from "../documents/colorRef";
-import type { DocumentTemplateType, TableColumn, TotalsRow } from "../documents/layout";
+import type { DocumentTemplateType, TableColumn, TableSource, TotalsRow } from "../documents/layout";
+import { estimateTotalsHeightMm } from "../documents/canvas/tableData";
 import {
   newCanvasElementId,
   type CanvasDocumentLayout,
@@ -54,6 +55,7 @@ function page(): CanvasDocumentLayout["page"] {
 }
 
 function headerBand(titleLine: string, numberToken: string): CanvasElement[] {
+  const titleContent = numberToken.trim() ? `${titleLine}\n${numberToken}` : titleLine;
   return [
     {
       id: newCanvasElementId("rect"),
@@ -97,7 +99,7 @@ function headerBand(titleLine: string, numberToken: string): CanvasElement[] {
       wMm: 66,
       hMm: 20,
       zIndex: 2,
-      content: `${titleLine}\n${numberToken}`,
+      content: titleContent,
       style: baseStyle({
         fontSizePt: 13,
         bold: true,
@@ -150,7 +152,7 @@ function lineColumns(t: Translate) {
 
 function tableElement(
   yMm: number,
-  source: "allLines" | "services" | "materials" | "invoiceLines",
+  source: TableSource,
   columns: ReturnType<typeof lineColumns>,
 ): CanvasElement {
   return {
@@ -176,26 +178,28 @@ function tableElement(
   };
 }
 
+function defaultTotalsRows(t: Translate): TotalsRow[] {
+  return [
+    total("servicesSum", L(t, "services")),
+    total("materialsSum", L(t, "materials")),
+    total("discount", L(t, "discount")),
+    total("net", L(t, "net")),
+    total("vat", L(t, "vat")),
+    total("total", L(t, "total")),
+  ];
+}
+
 function totalsElement(yMm: number, t: Translate, rows?: TotalsRow[]): CanvasElement {
+  const resolved = rows ?? defaultTotalsRows(t);
   return {
     id: newCanvasElementId("tot"),
     type: "totals",
-    xMm: 110,
+    xMm: 100,
     yMm,
-    wMm: 80,
-    hMm: 40,
+    wMm: 90,
+    hMm: estimateTotalsHeightMm(0, 0, resolved),
     zIndex: 1,
-    rows:
-      rows ??
-      [
-        total("servicesSum", L(t, "services")),
-        total("materialsSum", L(t, "materials")),
-        total("discount", L(t, "discount")),
-        total("net", L(t, "net")),
-        total("vat", L(t, "vat")),
-        total("grossWithVat", L(t, "grossWithVat")),
-        total("total", L(t, "total")),
-      ],
+    rows: resolved,
     background: themeRef("tint"),
     textColor: themeRef("text"),
     grandTotalBackground: themeRef("primary"),
@@ -211,11 +215,49 @@ function signaturesElement(yMm: number, t: Translate): CanvasElement {
     xMm: 0,
     yMm,
     wMm: 190,
-    hMm: 28,
+    hMm: 36,
     zIndex: 1,
     labels: [L(t, "executor"), L(t, "customer")],
-    dateLabel: L(t, "date"),
     style: baseStyle({ fontSizePt: 9, paddingMm: 1 }),
+  };
+}
+
+function layoutLabel(t: Translate, key: string, fallback: string): string {
+  return String(t(`industries.layout.${key}` as never, { defaultValue: fallback }));
+}
+
+function invoicePartyBlocks(t: Translate): CanvasElement[] {
+  return [
+    ...tintBox(
+      0,
+      34,
+      92,
+      48,
+      `${L(t, "invoiceDate")}: #СЧЁТ-ДАТА\n${L(t, "payBy")}: #СЧЁТ-СРОК-ОПЛАТЫ\n#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO`,
+      L(t, "billTo"),
+    ),
+    ...tintBox(
+      98,
+      34,
+      92,
+      48,
+      `#КОМПАНИЯ-НАЗВАНИЕ\n${L(t, "registrationNo")}: #КОМПАНИЯ-РЕГИСТРАЦИЯ\n${L(t, "taxId")}: #КОМПАНИЯ-IDNO\nIBAN: #КОМПАНИЯ-IBAN\n${L(t, "bank")}: #КОМПАНИЯ-БАНК`,
+      L(t, "seller"),
+    ),
+  ];
+}
+
+function tableCaption(yMm: number, text: string): CanvasElement {
+  return {
+    id: newCanvasElementId("cap"),
+    type: "text",
+    xMm: 0,
+    yMm,
+    wMm: 190,
+    hMm: 7,
+    zIndex: 1,
+    content: text,
+    style: baseStyle({ fontSizePt: 10, bold: true, paddingMm: 0 }),
   };
 }
 
@@ -296,6 +338,7 @@ function baseWorkOrderLike(
 }
 
 function furnitureContract(title: string, t: Translate): CanvasDocumentLayout {
+  const contractTitle = `${title} № #ЗАКАЗ-НОМЕР от #ЗАКАЗ-ДАТА`;
   return {
     version: 3,
     mode: "canvas",
@@ -303,34 +346,27 @@ function furnitureContract(title: string, t: Translate): CanvasDocumentLayout {
     page: page(),
     gridMm: 2,
     elements: [
-      ...headerBand(title, "#ЗАКАЗ-НОМЕР"),
-      ...tintBox(0, 34, 92, 36, "#КОМПАНИЯ-НАЗВАНИЕ\n#КОМПАНИЯ-IDNO\n#КОМПАНИЯ-АДРЕС\n#КОМПАНИЯ-ТЕЛЕФОН", String(t("industries.layout.seller" as never, { defaultValue: "Seller" }))),
-      ...tintBox(98, 34, 92, 36, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-IDNO\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-ТЕЛЕФОН", String(t("industries.layout.buyer" as never, { defaultValue: "Buyer" }))),
-      ...tintBox(
-        0,
-        76,
-        190,
-        28,
-        "#ЗАКАЗ-ОПИСАНИЕ",
-        String(t("industries.layout.subject" as never, { defaultValue: "Subject" })),
-      ),
-      totalsElement(112, t, [
+      ...headerBand(contractTitle, ""),
+      {
+        id: newCanvasElementId("city"),
+        type: "text",
+        xMm: 0,
+        yMm: 30,
+        wMm: 190,
+        hMm: 6,
+        zIndex: 1,
+        content: layoutLabel(t, "cityLine", "г. #КОМПАНИЯ-АДРЕС"),
+        style: baseStyle({ fontSizePt: 9, align: "center", paddingMm: 0 }),
+      },
+      ...tintBox(0, 40, 92, 36, "#КОМПАНИЯ-НАЗВАНИЕ\n#КОМПАНИЯ-IDNO\n#КОМПАНИЯ-АДРЕС\n#КОМПАНИЯ-ТЕЛЕФОН", layoutLabel(t, "seller", "Seller")),
+      ...tintBox(98, 40, 92, 36, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-IDNO\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-ТЕЛЕФОН", layoutLabel(t, "buyer", "Buyer")),
+      ...tintBox(0, 82, 190, 28, "#ЗАКАЗ-ОПИСАНИЕ", layoutLabel(t, "subject", "Subject")),
+      totalsElement(118, t, [
         total("total", L(t, "total")),
-        total("paid", String(t("industries.layout.prepayment" as never, { defaultValue: "Prepayment" }))),
-        total("remaining", String(t("industries.layout.balance" as never, { defaultValue: "Balance" }))),
+        total("paid", layoutLabel(t, "prepayment", "Prepayment")),
+        total("remaining", layoutLabel(t, "balance", "Balance")),
       ]),
-      ...tintBox(
-        0,
-        160,
-        190,
-        28,
-        String(
-          t("industries.layout.contractTerms" as never, {
-            defaultValue: "Delivery / installation per order. Warranty: 12 months.",
-          }),
-        ),
-        String(t("industries.layout.terms" as never, { defaultValue: "Terms" })),
-      ),
+      ...tintBox(0, 160, 190, 28, layoutLabel(t, "contractTerms", "Delivery / installation per order. Warranty: 12 months."), layoutLabel(t, "terms", "Terms")),
       signaturesElement(200, t),
     ],
   };
@@ -345,16 +381,19 @@ function furnitureSpecification(title: string, t: Translate): CanvasDocumentLayo
     gridMm: 2,
     elements: [
       ...headerBand(title, "#ЗАКАЗ-НОМЕР"),
-      ...tintBox(0, 34, 190, 24, "#ЗАКАЗ-ОПИСАНИЕ\n#КЛИЕНТ-АДРЕС", String(t("industries.layout.product" as never, { defaultValue: "Product" }))),
-      tableElement(66, "materials", lineColumns(t)),
-      tableElement(116, "services", lineColumns(t)),
-      totalsElement(168, t),
-      signaturesElement(220, t),
+      ...tintBox(0, 34, 190, 24, "#ЗАКАЗ-ОПИСАНИЕ\n#КЛИЕНТ-АДРЕС", layoutLabel(t, "product", "Product")),
+      tableCaption(62, layoutLabel(t, "materialsCaption", "Materials & hardware")),
+      tableElement(70, "materials", lineColumns(t)),
+      tableCaption(122, layoutLabel(t, "worksCaption", "Works")),
+      tableElement(130, "services", lineColumns(t)),
+      totalsElement(182, t),
+      signaturesElement(235, t),
     ],
   };
 }
 
 function furniturePrepaymentInvoice(title: string, t: Translate): CanvasDocumentLayout {
+  const dueLabel = layoutLabel(t, "prepaymentDue", "Amount due (prepayment #ДОЛЯ-ОПЛАТЫ%)");
   return {
     version: 3,
     mode: "canvas",
@@ -363,22 +402,14 @@ function furniturePrepaymentInvoice(title: string, t: Translate): CanvasDocument
     gridMm: 2,
     elements: [
       ...headerBand(title, "#СЧЁТ-НОМЕР"),
-      ...tintBox(0, 34, 92, 36, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO", L(t, "billTo")),
-      ...tintBox(98, 34, 92, 36, "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК-ОПЛАТЫ\n#КОМПАНИЯ-IBAN", L(t, "details")),
-      ...tintBox(
-        0,
-        78,
-        190,
-        24,
-        "#ЗАКАЗ-ОПИСАНИЕ",
-        String(t("industries.layout.subject" as never, { defaultValue: "Subject" })),
-      ),
-      totalsElement(112, t, [
-        total("total", L(t, "total")),
-        total("paid", String(t("industries.layout.prepayment" as never, { defaultValue: "Prepayment due" }))),
-        total("totalWords", L(t, "inWords")),
+      ...invoicePartyBlocks(t),
+      tableElement(90, "prepaymentLine", lineColumns(t)),
+      totalsElement(136, t, [
+        total("total", layoutLabel(t, "contractTotal", "Contract total")),
+        total("paid", dueLabel),
+        total("paidWords", L(t, "inWords")),
       ]),
-      signaturesElement(170, t),
+      signaturesElement(192, t),
     ],
   };
 }
@@ -392,15 +423,15 @@ function furnitureBalanceInvoice(title: string, t: Translate): CanvasDocumentLay
     gridMm: 2,
     elements: [
       ...headerBand(title, "#СЧЁТ-НОМЕР"),
-      ...tintBox(0, 34, 92, 36, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO", L(t, "billTo")),
-      ...tintBox(98, 34, 92, 36, "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК-ОПЛАТЫ\n#КОМПАНИЯ-IBAN", L(t, "details")),
-      totalsElement(82, t, [
+      ...invoicePartyBlocks(t),
+      tableElement(90, "balanceLine", lineColumns(t)),
+      totalsElement(136, t, [
         total("total", L(t, "total")),
-        total("paid", String(t("industries.layout.paid" as never, { defaultValue: "Paid" }))),
-        total("remaining", String(t("industries.layout.balanceDue" as never, { defaultValue: "Balance due" }))),
-        total("totalWords", L(t, "inWords")),
+        total("paid", layoutLabel(t, "paid", "Paid")),
+        total("remaining", layoutLabel(t, "balanceDue", "Amount due")),
+        total("remainingWords", L(t, "inWords")),
       ]),
-      signaturesElement(150, t),
+      signaturesElement(200, t),
     ],
   };
 }
@@ -415,22 +446,11 @@ function furnitureAcceptanceAct(title: string, t: Translate): CanvasDocumentLayo
     elements: [
       ...headerBand(title, "#ЗАКАЗ-НОМЕР"),
       ...tintBox(0, 34, 92, 32, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-ТЕЛЕФОН\n#КЛИЕНТ-АДРЕС", L(t, "client")),
-      ...tintBox(98, 34, 92, 32, "#ЗАКАЗ-ОПИСАНИЕ", String(t("industries.layout.object" as never, { defaultValue: "Object" }))),
+      ...tintBox(98, 34, 92, 32, "#ЗАКАЗ-ОПИСАНИЕ", layoutLabel(t, "object", "Object")),
       tableElement(74, "services", lineColumns(t)),
       totalsElement(126, t),
-      ...tintBox(
-        0,
-        176,
-        190,
-        18,
-        String(
-          t("industries.layout.noClaims" as never, {
-            defaultValue: "The Customer has no claims regarding the quality or completeness of the works.",
-          }),
-        ),
-        String(t("industries.layout.acceptance" as never, { defaultValue: "Acceptance" })),
-      ),
-      signaturesElement(204, t),
+      ...tintBox(0, 185, 190, 18, layoutLabel(t, "noClaims", "The Customer has no claims regarding the quality or completeness of the works."), layoutLabel(t, "acceptance", "Acceptance")),
+      signaturesElement(214, t),
     ],
   };
 }
@@ -510,17 +530,15 @@ export function defaultCanvasLayoutForIndustryDocument(
       gridMm: 2,
       elements: [
         ...headerBand(title, "#СЧЁТ-НОМЕР"),
-        ...tintBox(0, 34, 92, 40, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO", L(translate, "billTo")),
-        ...tintBox(98, 34, 92, 40, "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК-ОПЛАТЫ\n#КОМПАНИЯ-IBAN\n#КОМПАНИЯ-БАНК", L(translate, "details")),
-        tableElement(82, "invoiceLines", lineColumns(translate)),
-        totalsElement(136, translate, [
+        ...invoicePartyBlocks(translate),
+        tableElement(90, "invoiceLines", lineColumns(translate)),
+        totalsElement(150, translate, [
           total("net", L(translate, "net")),
           total("vat", L(translate, "vat")),
-          total("grossWithVat", L(translate, "grossWithVat")),
           total("total", L(translate, "totalDue")),
           total("totalWords", L(translate, "inWords")),
         ]),
-        signaturesElement(195, translate),
+        signaturesElement(205, translate),
       ],
     };
   }

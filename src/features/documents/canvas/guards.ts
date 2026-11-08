@@ -93,6 +93,8 @@ const TABLE_SOURCES = new Set<TableSource>([
   "invoiceLines",
   "invoiceWorks",
   "invoiceMaterials",
+  "prepaymentLine",
+  "balanceLine",
 ]);
 
 const TABLE_KEYS = new Set([
@@ -120,6 +122,8 @@ const TOTALS_KEYS = new Set([
   "paid",
   "remaining",
   "totalWords",
+  "paidWords",
+  "remainingWords",
 ]);
 
 function parseTableColumns(value: unknown): TableCanvasElement["columns"] | null {

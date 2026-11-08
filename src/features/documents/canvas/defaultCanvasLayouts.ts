@@ -5,6 +5,7 @@ import i18n from "../../../i18n";
 import { themeRef } from "../colorRef";
 import type { TableColumn, TotalsRow } from "../layout";
 import type { DocumentTemplateType } from "../layout";
+import { estimateTotalsHeightMm } from "./tableData";
 import {
   newCanvasElementId,
   type CanvasDocumentLayout,
@@ -180,24 +181,28 @@ function tableElement(
 type TableCanvasElementSource = import("./types").TableCanvasElement["source"];
 type TableCanvasElementColumns = import("./types").TableCanvasElement["columns"];
 
-function totalsElement(yMm: number, t: Translate): CanvasElement {
+function defaultTotalsRows(t: Translate): TotalsRow[] {
+  return [
+    total("servicesSum", L(t, "services")),
+    total("materialsSum", L(t, "materials")),
+    total("discount", L(t, "discount")),
+    total("net", L(t, "net")),
+    total("vat", L(t, "vat")),
+    total("total", L(t, "total")),
+  ];
+}
+
+function totalsElement(yMm: number, t: Translate, rows?: TotalsRow[]): CanvasElement {
+  const resolved = rows ?? defaultTotalsRows(t);
   return {
     id: newCanvasElementId("tot"),
     type: "totals",
     xMm: 110,
     yMm,
     wMm: 80,
-    hMm: 36,
+    hMm: estimateTotalsHeightMm(0, 0, resolved),
     zIndex: 1,
-    rows: [
-      total("servicesSum", L(t, "services")),
-      total("materialsSum", L(t, "materials")),
-      total("discount", L(t, "discount")),
-      total("net", L(t, "net")),
-      total("vat", L(t, "vat")),
-      total("grossWithVat", L(t, "grossWithVat")),
-      total("total", L(t, "total")),
-    ],
+    rows: resolved,
     background: themeRef("tint"),
     textColor: themeRef("text"),
     grandTotalBackground: themeRef("primary"),
@@ -213,12 +218,32 @@ function signaturesElement(yMm: number, t: Translate): CanvasElement {
     xMm: 0,
     yMm,
     wMm: 190,
-    hMm: 28,
+    hMm: 36,
     zIndex: 1,
     labels: [L(t, "executor"), L(t, "customer")],
-    dateLabel: L(t, "date"),
     style: baseStyle({ fontSizePt: 9, paddingMm: 1 }),
   };
+}
+
+function invoicePartyBlocks(t: Translate): CanvasElement[] {
+  return [
+    ...tintBox(
+      0,
+      34,
+      92,
+      48,
+      `${L(t, "invoiceDate")}: #СЧЁТ-ДАТА\n${L(t, "payBy")}: #СЧЁТ-СРОК-ОПЛАТЫ\n#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO`,
+      L(t, "billTo"),
+    ),
+    ...tintBox(
+      98,
+      34,
+      92,
+      48,
+      `#КОМПАНИЯ-НАЗВАНИЕ\n${L(t, "registrationNo")}: #КОМПАНИЯ-РЕГИСТРАЦИЯ\n${L(t, "taxId")}: #КОМПАНИЯ-IDNO\nIBAN: #КОМПАНИЯ-IBAN\n${L(t, "bank")}: #КОМПАНИЯ-БАНК`,
+      L(t, "seller"),
+    ),
+  ];
 }
 
 export function defaultCanvasWorkOrderLayout(t?: Translate): CanvasDocumentLayout {
@@ -249,7 +274,7 @@ export function defaultCanvasWorkOrderLayout(t?: Translate): CanvasDocumentLayou
       ),
       tableElement(78, "allLines", lineColumns(translate)),
       totalsElement(130, translate),
-      signaturesElement(175, translate),
+      signaturesElement(185, translate),
       {
         id: newCanvasElementId("pn"),
         type: "pageNumber",
@@ -286,13 +311,20 @@ export function defaultCanvasActLayout(t?: Translate): CanvasDocumentLayout {
       ),
       tableElement(70, "services", lineColumns(translate)),
       totalsElement(125, translate),
-      signaturesElement(170, translate),
+      signaturesElement(180, translate),
     ],
   };
 }
 
 export function defaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout {
   const translate = tDefault(t);
+  const invoiceTotals: TotalsRow[] = [
+    total("servicesSum", L(translate, "subtotal")),
+    total("net", L(translate, "net")),
+    total("vat", L(translate, "vat")),
+    total("total", L(translate, "totalDue")),
+    total("totalWords", L(translate, "inWords")),
+  ];
   return {
     version: 3,
     mode: "canvas",
@@ -301,39 +333,10 @@ export function defaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout 
     gridMm: 2,
     elements: [
       ...headerBand(`${L(translate, "invoice")}\n#СЧЁТ-НОМЕР`),
-      ...tintBox(0, 34, 92, 40, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-IDNO", L(translate, "billTo")),
-      ...tintBox(
-        98,
-        34,
-        92,
-        40,
-        "#СЧЁТ-ДАТА\n#СЧЁТ-СРОК-ОПЛАТЫ\n#КОМПАНИЯ-IBAN\n#КОМПАНИЯ-БАНК",
-        L(translate, "details"),
-      ),
-      tableElement(82, "invoiceLines", invoiceColumns(translate)),
-      {
-        id: newCanvasElementId("tot"),
-        type: "totals",
-        xMm: 110,
-        yMm: 140,
-        wMm: 80,
-        hMm: 40,
-        zIndex: 1,
-        rows: [
-          total("servicesSum", L(translate, "subtotal")),
-          total("net", L(translate, "net")),
-          total("vat", L(translate, "vat")),
-          total("grossWithVat", L(translate, "grossWithVat")),
-          total("total", L(translate, "totalDue")),
-          total("totalWords", L(translate, "inWords")),
-        ],
-        background: themeRef("tint"),
-        textColor: themeRef("text"),
-        grandTotalBackground: themeRef("primary"),
-        grandTotalTextColor: "#ffffff",
-        style: baseStyle({ fontSizePt: 10, paddingMm: 2 }),
-      },
-      signaturesElement(195, translate),
+      ...invoicePartyBlocks(translate),
+      tableElement(90, "invoiceLines", invoiceColumns(translate)),
+      totalsElement(150, translate, invoiceTotals),
+      signaturesElement(205, translate),
     ],
   };
 }

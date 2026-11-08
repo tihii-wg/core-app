@@ -11,6 +11,7 @@ import {
   canvasTotalsRowVisible,
   canvasTotalsValue,
   estimateTableHeightMm,
+  estimateTotalsHeightMm,
   formatCanvasMoney,
   type CanvasLineRow,
 } from "./tableData";
@@ -42,7 +43,18 @@ function overlapsX(a: Placed, b: { xMm: number; wMm: number }): boolean {
   return a.xMm < b.xMm + b.wMm && a.xMm + a.wMm > b.xMm;
 }
 
-/** Shift elements below a grown table when they horizontally overlap it. */
+function shiftOverlappingBelow(placed: Placed[], grown: Placed, extra: number) {
+  if (extra <= 0) return;
+  const originalBottom = grown.yMm + (grown.hMm - extra);
+  for (const other of placed) {
+    if (other === grown) continue;
+    if (other.yMm >= originalBottom - 0.01 && overlapsX(other, grown)) {
+      other.yMm += extra;
+    }
+  }
+}
+
+/** Grow tables/totals to fit content; shift overlapping elements below. */
 export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintContext): Placed[] {
   const placed: Placed[] = elements.map((element) => ({
     element,
@@ -52,23 +64,27 @@ export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintCont
     hMm: element.hMm,
   }));
 
-  const tables = placed
-    .filter((item) => item.element.type === "table")
+  const growable = placed
+    .filter((item) => item.element.type === "table" || item.element.type === "totals")
     .sort((a, b) => a.yMm - b.yMm);
 
-  for (const table of tables) {
-    const el = table.element as TableCanvasElement;
-    const rows = canvasRowsForSource(el.source, ctx);
-    const grown = estimateTableHeightMm(rows.length, el.showTotalsRow, table.hMm);
-    const extra = grown - table.hMm;
-    if (extra <= 0) continue;
-    const originalBottom = table.yMm + table.hMm;
-    table.hMm = grown;
-    for (const other of placed) {
-      if (other === table) continue;
-      if (other.yMm >= originalBottom - 0.01 && overlapsX(other, table)) {
-        other.yMm += extra;
-      }
+  for (const item of growable) {
+    if (item.element.type === "table") {
+      const el = item.element as TableCanvasElement;
+      const rows = canvasRowsForSource(el.source, ctx);
+      const grown = estimateTableHeightMm(rows.length, el.showTotalsRow, item.hMm);
+      const extra = grown - item.hMm;
+      item.hMm = grown;
+      shiftOverlappingBelow(placed, item, extra);
+      continue;
+    }
+    if (item.element.type === "totals") {
+      const el = item.element as TotalsCanvasElement;
+      const visibleRows = el.rows.filter((row) => row.enabled && canvasTotalsRowVisible(row.key, ctx));
+      const grown = estimateTotalsHeightMm(visibleRows.length, item.hMm, visibleRows);
+      const extra = grown - item.hMm;
+      item.hMm = grown;
+      shiftOverlappingBelow(placed, item, extra);
     }
   }
 
@@ -262,6 +278,32 @@ function renderTableHtml(
   return html;
 }
 
+function isWordsTotalsKey(key: TotalsCanvasElement["rows"][number]["key"]): boolean {
+  return key === "totalWords" || key === "paidWords" || key === "remainingWords";
+}
+
+function renderSignaturesHtml(element: Extract<CanvasElement, { type: "signatures" }>): string {
+  const nameLine = escapeHtmlText("/ ФИО /");
+  const stamp = escapeHtmlText("М.П.");
+  const cells = element.labels
+    .map((label, index) => {
+      const isExecutor = index === 0;
+      return `<div style="flex:1;min-width:20mm">
+            <div style="font-size:0.95em;font-weight:600;margin-bottom:2mm">${escapeHtmlText(label)}</div>
+            <div style="border-bottom:1pt solid #333;height:10mm;margin-bottom:1mm"></div>
+            <div style="font-size:0.85em;color:#444">${nameLine}</div>
+            ${isExecutor ? `<div style="font-size:0.85em;margin-top:1mm">${stamp}</div>` : `<div style="font-size:0.85em;margin-top:1mm;visibility:hidden">${stamp}</div>`}
+            ${
+              element.dateLabel
+                ? `<div style="margin-top:3mm;border-bottom:1pt solid #333;height:5mm"></div><div style="font-size:0.85em;color:#666">${escapeHtmlText(element.dateLabel)}</div>`
+                : ""
+            }
+          </div>`;
+    })
+    .join("");
+  return `<div style="display:flex;gap:8mm">${cells}</div>`;
+}
+
 function renderTotalsHtml(
   el: TotalsCanvasElement,
   ctx: PrintContext,
@@ -271,11 +313,13 @@ function renderTotalsHtml(
 ): string {
   const rows = el.rows.filter((row) => row.enabled && (showTokens || canvasTotalsRowVisible(row.key, ctx)));
   if (rows.length === 0) return "";
+  const moneyRows = rows.filter((row) => !isWordsTotalsKey(row.key));
+  const grandKey = moneyRows[moneyRows.length - 1]?.key;
   const textColor = resolveCanvasColor(el.textColor ?? el.style.color, colors) ?? "#111111";
   const bg = resolveCanvasColor(el.background, colors);
   let html = `<table style="width:100%;border-collapse:collapse${bg ? `;background:${bg}` : ""}">`;
   for (const row of rows) {
-    const isGrand = row.key === "total" || row.key === "grossWithVat";
+    const isGrand = grandKey != null && row.key === grandKey;
     const rowBg = isGrand ? resolveCanvasColor(el.grandTotalBackground, colors) : undefined;
     const rowFg = isGrand ? resolveCanvasColor(el.grandTotalTextColor, colors) : textColor;
     const label = showTokens ? escapeHtmlText(row.label) : applyText(row.label, ctx, showCents, false);
@@ -374,19 +418,8 @@ async function renderElementInner(
       }
       return `<div style="height:100%;border-left:${element.thicknessPt}pt solid ${color};width:0;margin:0 auto"></div>`;
     }
-    case "signatures": {
-      const cells = element.labels
-        .map(
-          (label) =>
-            `<div style="flex:1;min-width:20mm"><div style="border-bottom:1pt solid #333;height:8mm;margin-bottom:1mm"></div><div style="font-size:0.9em">${escapeHtmlText(label)}</div>${
-              element.dateLabel
-                ? `<div style="margin-top:3mm;border-bottom:1pt solid #333;height:5mm"></div><div style="font-size:0.85em;color:#666">${escapeHtmlText(element.dateLabel)}</div>`
-                : ""
-            }</div>`,
-        )
-        .join("");
-      return `<div style="display:flex;gap:6mm">${cells}</div>`;
-    }
+    case "signatures":
+      return renderSignaturesHtml(element);
     case "qr": {
       if (showTokens) return `<div style="font-size:8pt;color:#666">QR</div>`;
       const content = resolveQrContent(element, ctx);
@@ -452,6 +485,8 @@ async function renderPlaced(
     `print-color-adjust:exact`,
     styleCss,
   ];
+  // Totals grow with row count; keep visible so long "in words" lines are never clipped.
+  if (item.element.type === "totals") parts.push("overflow:visible");
   return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}">${inner}</div>`;
 }
 
@@ -558,7 +593,7 @@ export function renderCanvasLayoutToHtmlSync(
               format.replace(/\{n\}/g, String(pageIndex + 1)).replace(/\{m\}/g, String(pages.length)),
             );
           } else if (item.element.type === "signatures") {
-            inner = item.element.labels.map((l) => escapeHtmlText(l)).join(" · ");
+            inner = renderSignaturesHtml(item.element);
           } else if (item.element.type === "qr") {
             inner = "QR";
           } else if (item.element.type === "line") {
@@ -573,7 +608,8 @@ export function renderCanvasLayoutToHtmlSync(
             const fill = fillToCss(item.element.fill ?? item.element.style.background, colors);
             return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${fill ? `background:${fill};` : ""}-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
           }
-          return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${styleFontCss(item.element.style, colors)};-webkit-print-color-adjust:exact;print-color-adjust:exact">${inner}</div>`;
+          const overflow = item.element.type === "totals" ? "overflow:visible;" : "";
+          return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${styleFontCss(item.element.style, colors)};${overflow}-webkit-print-color-adjust:exact;print-color-adjust:exact">${inner}</div>`;
         })
         .join("");
       const bgStyle = pageBg ? `background:${pageBg};` : "";
