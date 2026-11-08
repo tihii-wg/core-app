@@ -55,8 +55,20 @@ const EXTENSION_MIME: Record<string, string> = {
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
-export const ORDER_ATTACHMENT_ACCEPT =
-  "image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,application/pdf,.pdf,text/plain,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
+const ORDER_ATTACHMENT_ACCEPT_BASE =
+  "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,application/pdf,.pdf,text/plain,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx";
+
+/** iPhone/iPad: when HEIC is not listed in `accept`, iOS converts picked photos to JPEG itself. */
+function isAppleMobile() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && (navigator.maxTouchPoints ?? 0) > 1);
+}
+
+/** Desktop keeps HEIC selectable (converted to JPEG in the browser before upload). */
+export const ORDER_ATTACHMENT_ACCEPT = isAppleMobile()
+  ? ORDER_ATTACHMENT_ACCEPT_BASE
+  : `${ORDER_ATTACHMENT_ACCEPT_BASE},image/heic,image/heif,.heic,.heif`;
 
 export function orderAttachmentsQueryKey(workspaceId: string | undefined, orderId: string | undefined) {
   return ["order-attachments", workspaceId, orderId] as const;
