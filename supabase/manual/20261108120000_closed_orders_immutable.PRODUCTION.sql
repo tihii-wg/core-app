@@ -66,7 +66,6 @@ $preflight$;
 -- 0) Cleanup of the withdrawn auto-reopen draft (no-op when it was never applied)
 drop trigger if exists crm_orders_reopen_underpaid_au on public.orders;
 drop function if exists public.crm_orders_reopen_underpaid();
-drop function if exists public.crm_order_net_paid(uuid, uuid);
 
 -- 2) Cancel / delete closed orders: owner right no longer goes through "manage closed"
 create or replace function public.crm_has_closed_order_permission(
