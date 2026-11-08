@@ -7,7 +7,8 @@
 --   20261104080000_warehouse_inventory_ledger_complete
 -- =============================================================================
 -- What changes:
---   1) order_services.quantity: integer -> numeric(12,2) (existing values kept as-is).
+--   1) order_services.quantity: integer -> numeric(12,2) (existing values kept as-is);
+--      order_materials.quantity (+ quantity_issued / quantity_returned) too, where still integer.
 --   2) sync_order_materials, issue_order_materials_from_warehouse,
 --      return_order_materials_to_warehouse: accept quantities with up to 2 decimals
 --      (previously rejected anything that was not a whole number).
@@ -15,7 +16,7 @@
 --      p_quantity integer -> numeric (old integer overloads are dropped and replaced).
 -- Function bodies are copied from the prerequisite scripts; ONLY the quantity types,
 -- the whole-number checks and the int casts of quantities are changed.
--- order_materials.quantity, inventory quantities, batches and movements are already numeric.
+-- Inventory quantities, batches and movements are already numeric.
 -- No data is modified. Idempotency: re-running after success fails preflight on purpose
 -- (functions no longer contain the whole-number checks) — that means it is already applied.
 -- Transactional.
@@ -39,19 +40,20 @@ begin
   select format_type(a.atttypid, a.atttypmod) into v_type
   from pg_attribute a
   where a.attrelid = 'public.order_materials'::regclass and a.attname = 'quantity' and not a.attisdropped;
-  if v_type not like 'numeric%' then
-    raise exception 'decimal_quantities preflight: order_materials.quantity is % (expected numeric)', v_type;
+  if v_type is null or (v_type <> 'integer' and v_type not like 'numeric%') then
+    raise exception 'decimal_quantities preflight: order_materials.quantity is % (expected integer or numeric)', v_type;
   end if;
 
-  -- Views / rules depending on order_services.quantity would block ALTER TYPE.
+  -- Views / rules depending on the quantity columns would block ALTER TYPE.
   select string_agg(distinct c.relname, ', ') into v_deps
   from pg_depend d
   join pg_rewrite r on r.oid = d.objid
   join pg_class c on c.oid = r.ev_class
   join pg_attribute a on a.attrelid = d.refobjid and a.attnum = d.refobjsubid
-  where d.refobjid = 'public.order_services'::regclass and a.attname = 'quantity';
+  where d.refobjid in ('public.order_services'::regclass, 'public.order_materials'::regclass)
+    and a.attname in ('quantity', 'quantity_issued', 'quantity_returned');
   if v_deps is not null then
-    raise exception 'decimal_quantities preflight: views depend on order_services.quantity: %', v_deps;
+    raise exception 'decimal_quantities preflight: views depend on order quantity columns: %', v_deps;
   end if;
 
   select p.prosrc into v_src from pg_proc p
@@ -94,6 +96,26 @@ $preflight$;
 -- 1) order_services.quantity -> numeric(12,2)
 alter table public.order_services
   alter column quantity type numeric(12,2) using quantity::numeric(12,2);
+
+-- 1b) order_materials quantity columns -> numeric(12,2) where they are still integer
+do $mat_types$
+declare
+  r record;
+begin
+  for r in
+    select a.attname, format_type(a.atttypid, a.atttypmod) as t
+    from pg_attribute a
+    where a.attrelid = 'public.order_materials'::regclass
+      and a.attname in ('quantity', 'quantity_issued', 'quantity_returned')
+      and not a.attisdropped
+  loop
+    if r.t = 'integer' then
+      execute format('alter table public.order_materials alter column %I type numeric(12,2) using %I::numeric(12,2)',
+                     r.attname, r.attname);
+    end if;
+  end loop;
+end;
+$mat_types$;
 
 do $svc_chk$
 begin
@@ -1809,6 +1831,14 @@ begin
   where a.attrelid = 'public.order_services'::regclass and a.attname = 'quantity' and not a.attisdropped;
   if v_type is distinct from 'numeric(12,2)' then
     raise exception 'decimal_quantities postflight: order_services.quantity is %', v_type;
+  end if;
+
+  if exists (select 1 from pg_attribute a
+             where a.attrelid = 'public.order_materials'::regclass
+               and a.attname in ('quantity', 'quantity_issued', 'quantity_returned')
+               and not a.attisdropped
+               and format_type(a.atttypid, a.atttypmod) = 'integer') then
+    raise exception 'decimal_quantities postflight: an order_materials quantity column is still integer';
   end if;
 
   if to_regprocedure('public.add_and_issue_order_catalog_material(uuid, uuid, uuid, numeric, numeric, text)') is null

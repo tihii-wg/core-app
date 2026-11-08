@@ -51,3 +51,10 @@ describe("order_decimal_quantities SQL", () => {
     expect(sql).not.toMatch(/delete from public\.order_(services|materials)\b/i);
   });
 });
+
+describe("order_decimal_quantities SQL — order_materials", () => {
+  it("converts integer order_materials quantity columns to numeric(12,2)", () => {
+    expect(sql).toMatch(/'quantity', 'quantity_issued', 'quantity_returned'/);
+    expect(sql).toMatch(/alter table public\.order_materials alter column %I type numeric\(12,2\)/);
+  });
+});
