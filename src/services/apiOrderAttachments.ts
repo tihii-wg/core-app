@@ -1,5 +1,7 @@
 import {
   buildOrderAttachmentStoragePath,
+  isImageMimeType,
+  ORDER_ATTACHMENT_PHOTO_MAX_BYTES,
   ORDER_ATTACHMENT_SIGNED_URL_SECONDS,
   ORDER_ATTACHMENTS_BUCKET,
   resolveAttachmentMimeType,
@@ -14,6 +16,7 @@ const attachmentErrors = {
   orderRequired: () => i18n.t("orders.attachments.errors.orderRequired"),
   empty: () => i18n.t("orders.attachments.errors.empty"),
   tooLarge: () => i18n.t("orders.attachments.errors.tooLarge"),
+  photoTooLarge: () => i18n.t("orders.attachments.errors.photoTooLarge"),
   unsupportedType: () => i18n.t("orders.attachments.errors.unsupportedType"),
   loadFailed: () => i18n.t("orders.attachments.errors.loadFailed"),
   uploadFailed: () => i18n.t("orders.attachments.errors.uploadFailed"),
@@ -122,7 +125,14 @@ export async function uploadOrderAttachment(
   if (userError) throw new Error(errorMessage(userError, i18n.t("auth.errors.sessionExpired")));
   if (!user) throw new Error(i18n.t("auth.errors.sessionExpired"));
 
-  const mimeType = resolveAttachmentMimeType(file);
+  let mimeType = resolveAttachmentMimeType(file);
+  if (isImageMimeType(mimeType)) {
+    const { compressImageToMaxBytes } = await import("../lib/compressImage");
+    const result = await compressImageToMaxBytes(file, mimeType, ORDER_ATTACHMENT_PHOTO_MAX_BYTES);
+    if (result.file.size > ORDER_ATTACHMENT_PHOTO_MAX_BYTES) throw new Error(attachmentErrors.photoTooLarge());
+    file = result.file;
+    mimeType = resolveAttachmentMimeType(file);
+  }
   const fileName = sanitizeAttachmentFileName(file.name);
   const storagePath = buildOrderAttachmentStoragePath(targetWorkspaceId, targetOrderId, fileName);
 

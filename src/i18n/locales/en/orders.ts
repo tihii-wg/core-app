@@ -333,7 +333,7 @@ export default {
     addFiles: "Add files",
     uploading: "Uploading...",
     empty: "No attachments yet",
-    emptyHint: "Add photos from the camera or attach documents up to 20 MB.",
+    emptyHint: "Add photos from the camera (compressed to 5 MB) or documents up to 20 MB.",
     viewOnlyHint: "View only — uploads require an active workspace membership.",
     preview: "Preview {{name}}",
     open: "Open {{name}}",
@@ -350,7 +350,8 @@ export default {
     errors: {
       orderRequired: "Order is required",
       empty: "Choose a file that is not empty",
-      tooLarge: "File must be 20 MB or smaller",
+      tooLarge: "Documents must be 20 MB or smaller, photos 60 MB before compression",
+      photoTooLarge: "Could not compress the photo to 5 MB. Save it as JPEG and try again.",
       unsupportedType: "This file type is not supported",
       loadFailed: "Could not load attachments",
       uploadFailed: "Could not upload the attachment",

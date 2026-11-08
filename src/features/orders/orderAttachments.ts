@@ -3,6 +3,10 @@ import { workspaceRoles } from "../workspaces/workspaceRoles";
 
 export const ORDER_ATTACHMENTS_BUCKET = "order-attachments";
 export const ORDER_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+/** Photos are compressed in the browser to at most this size before upload. */
+export const ORDER_ATTACHMENT_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+/** Largest original photo we accept for compression (phone RAW-like JPEG/HEIC). */
+export const ORDER_ATTACHMENT_PHOTO_SOURCE_MAX_BYTES = 60 * 1024 * 1024;
 /** Short-lived signed URL TTL for private bucket previews/downloads. */
 export const ORDER_ATTACHMENT_SIGNED_URL_SECONDS = 60 * 15;
 
@@ -105,9 +109,11 @@ export type AttachmentValidationError = "tooLarge" | "empty" | "unsupportedType"
 /** Client-side UX validation only — not a security boundary. */
 export function validateOrderAttachmentFile(file: Pick<File, "name" | "type" | "size">): AttachmentValidationError | null {
   if (!file || file.size <= 0) return "empty";
-  if (file.size > ORDER_ATTACHMENT_MAX_BYTES) return "tooLarge";
   const mime = resolveAttachmentMimeType(file);
   if (!ALLOWED_MIME_TYPES.has(mime)) return "unsupportedType";
+  // Photos are compressed to ORDER_ATTACHMENT_PHOTO_MAX_BYTES before upload.
+  const limit = isImageMimeType(mime) ? ORDER_ATTACHMENT_PHOTO_SOURCE_MAX_BYTES : ORDER_ATTACHMENT_MAX_BYTES;
+  if (file.size > limit) return "tooLarge";
   return null;
 }
 

@@ -339,7 +339,7 @@ const orders: Messages<typeof en> = {
     addFiles: "Adaugă fișiere",
     uploading: "Se încarcă...",
     empty: "Niciun atașament încă",
-    emptyHint: "Adăugați poze din cameră sau documente de până la 20 MB.",
+    emptyHint: "Adăugați poze din cameră (comprimate la 5 MB) sau documente de până la 20 MB.",
     viewOnlyHint: "Doar vizualizare — încărcările necesită un membru activ al workspace-ului.",
     preview: "Previzualizare {{name}}",
     open: "Deschide {{name}}",
@@ -356,7 +356,8 @@ const orders: Messages<typeof en> = {
     errors: {
       orderRequired: "Comanda este obligatorie",
       empty: "Alegeți un fișier care nu este gol",
-      tooLarge: "Fișierul trebuie să aibă cel mult 20 MB",
+      tooLarge: "Documentul trebuie să aibă cel mult 20 MB, poza — 60 MB înainte de comprimare",
+      photoTooLarge: "Poza nu a putut fi comprimată la 5 MB. Salvați-o ca JPEG și încercați din nou.",
       unsupportedType: "Acest tip de fișier nu este acceptat",
       loadFailed: "Atașamentele nu au putut fi încărcate",
       uploadFailed: "Atașamentul nu a putut fi încărcat",
