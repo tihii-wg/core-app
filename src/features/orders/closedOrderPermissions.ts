@@ -24,20 +24,23 @@ export function ownerMayManageClosedOrders(opts: {
 }
 
 /**
- * True when the order is open, or the caller may manage this closed/cancelled order.
+ * True when the order is open; or cancelled and the caller is the workspace owner;
+ * or formally closed and the owner manage-closed setting is on (owner_id + flag).
  *
- * Cancelled orders (including closed-then-cancelled with preserved `closed_at`):
- * workspace `owner_id` may edit contents without `owner_can_manage_closed_orders`.
- * That setting remains required for ordinary closed (`status === "closed"`) orders.
+ * Raising a closed order's total above net paid reopens it server-side
+ * (`crm_orders_reopen_underpaid`); the edit UI confirms before that save.
  */
 export function canMutateOrderContent(opts: {
   order: Pick<Order, "closedAt" | "status">;
   isOwnerByOwnerId: boolean;
-  ownerCanManageClosedOrders: boolean;
+  ownerCanManageClosedOrders?: boolean;
 }): boolean {
   if (!isOrderFormallyClosed(opts.order)) return true;
   if (opts.order.status === "cancelled" && opts.isOwnerByOwnerId) return true;
-  return ownerMayManageClosedOrders(opts);
+  return ownerMayManageClosedOrders({
+    isOwnerByOwnerId: opts.isOwnerByOwnerId,
+    ownerCanManageClosedOrders: Boolean(opts.ownerCanManageClosedOrders),
+  });
 }
 
 export function canCancelClosedOrder(

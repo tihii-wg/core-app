@@ -40,7 +40,7 @@ export function useClosedOrderActionPermissions() {
   const { data: grants, isLoading, isError } = useClosedOrderPermissionGrants();
   const safeGrants = grants ?? emptyClosedOrderGrants();
   const ownerCanManageClosedOrders = workspace?.ownerCanManageClosedOrders === true;
-  const canManageClosedContent = ownerMayManageClosedOrders({
+  const ownerMayManageClosed = ownerMayManageClosedOrders({
     isOwnerByOwnerId,
     ownerCanManageClosedOrders,
   });
@@ -51,9 +51,10 @@ export function useClosedOrderActionPermissions() {
     isError,
     isOwnerByOwnerId,
     ownerCanManageClosedOrders,
-    canManageClosedContent,
-    canCancelClosed: canManageClosedContent || canCancelClosedOrder(role, safeGrants),
-    canDeleteClosed: canManageClosedContent || canDeleteClosedOrder(role, safeGrants),
+    /** Owner + setting: edit closed content (DB may auto-reopen when total > net paid). */
+    canManageClosedContent: ownerMayManageClosed,
+    canCancelClosed: ownerMayManageClosed || canCancelClosedOrder(role, safeGrants),
+    canDeleteClosed: ownerMayManageClosed || canDeleteClosedOrder(role, safeGrants),
   };
 }
 

@@ -183,10 +183,10 @@ const settings: Messages<typeof en> = {
     description: "Decideți ce roluri pot anula sau șterge comenzile după închiderea formală. Aceste două permisiuni sunt independente.",
     ownerAlways:
       "Permisiunile de anulare/ștergere pentru Admin, Manager și Membru sunt independente de setarea proprietarului pentru gestionarea comenzilor închise. Proprietarul are nevoie ca acea setare să fie activă pentru a anula sau șterge comenzile închise.",
-    manageTitle: "Gestionarea comenzilor închise de către proprietar",
-    manageLabel: "Permite proprietarului să gestioneze comenzile închise",
+    manageTitle: "Anularea și ștergerea comenzilor închise de către proprietar",
+    manageLabel: "Permite proprietarului să anuleze și să șteargă comenzile închise",
     manageDescription:
-      "Când este activat, proprietarul spațiului de lucru poate edita, schimba statusul, anula și șterge comenzile închise. Adminii, managerii și membrii nu primesc niciodată această excepție.",
+      "Nimeni nu poate modifica o comandă închisă, inclusiv proprietarul. Pentru a o corecta, anulați-o mai întâi: proprietarul poate edita sau redeschide o comandă anulată. Această setare îi permite proprietarului să anuleze și să șteargă comenzile închise.",
     manageToast: {
       saving: "Se salvează setarea proprietarului...",
       saved: "Setarea proprietarului a fost salvată",
