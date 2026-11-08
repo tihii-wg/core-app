@@ -1639,10 +1639,6 @@ async function orderSearchFilter(workspaceId: string, term: string) {
 }
 
 async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknown>[]): Promise<Order[]> {
-  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
-
-  if (employeesError) throw new Error(employeesError.message);
-
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
   // Legacy assigned_to auth user ids only — used when employee_id is missing and no employee row matches.
   const legacyAuthIds = rows
@@ -1650,12 +1646,21 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     .map((row) => (typeof row.assigned_to === "string" ? row.assigned_to.trim() : ""))
     .filter(Boolean);
   const createdByIds = rows.map((row) => (typeof row.created_by === "string" ? row.created_by.trim() : "")).filter(Boolean);
-  const memberNames = await assigneeDisplayNames(workspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]);
-  let serviceLines: OrderServiceLine[] = [];
-  let materialLines: OrderMaterialLine[] = [];
   const customStatusIds = rows
     .map((row) => (typeof row.custom_status_id === "string" ? row.custom_status_id.trim() : ""))
     .filter(Boolean);
+
+  // Independent lookups run in parallel (previously sequential round trips).
+  const [{ data: employees, error: employeesError }, memberNames, statusDefinitions] = await Promise.all([
+    supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId),
+    assigneeDisplayNames(workspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]),
+    customStatusIds.length > 0 ? getStatusDefinitionsByIds(workspaceId, customStatusIds) : Promise.resolve(null),
+  ]);
+
+  if (employeesError) throw new Error(employeesError.message);
+
+  let serviceLines: OrderServiceLine[] = [];
+  let materialLines: OrderMaterialLine[] = [];
   const customStatuses = new Map<string, { name: string; color: string | null }>();
 
   let teamsByOrderId = new Map<string, OrderTeamMember[]>();
@@ -1692,9 +1697,8 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     teamsByOrderId = teams;
   }
 
-  if (customStatusIds.length > 0) {
-    const statuses = await getStatusDefinitionsByIds(workspaceId, customStatusIds);
-    for (const [id, status] of statuses) {
+  if (statusDefinitions) {
+    for (const [id, status] of statusDefinitions) {
       customStatuses.set(id, { name: status.name, color: status.color });
     }
   }
@@ -2023,8 +2027,16 @@ function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<R
 }
 
 export async function getOrder(orderId: string, workspaceId: string | undefined) {
-  const orders = await getOrders(workspaceId);
-  const order = orders.find((item) => item.id === orderId);
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  // Load only this order (previously fetched and hydrated every order in the workspace).
+  const { data, error } = await supabase
+    .from("orders")
+    .select(orderColumns)
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("id", orderId)
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const [order] = await hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
   if (!order) throw new Error(orderPermissionMessage());
   return order;
 }

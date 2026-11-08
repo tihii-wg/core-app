@@ -96,9 +96,13 @@ export function CloseOrderDialog({
 
     void (async () => {
       try {
-        await queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
-        await queryClient.refetchQueries({ queryKey: paymentsQueryKey(workspaceId), exact: true });
-        const loaded = await getOrder(seedOrderId, workspaceId);
+        // Only the fresh order + payments gate the dialog; list/dashboard caches refresh in the
+        // background (awaiting them made the dialog wait for every orders query on the page).
+        const [loaded] = await Promise.all([
+          getOrder(seedOrderId, workspaceId),
+          queryClient.refetchQueries({ queryKey: paymentsQueryKey(workspaceId), exact: true }),
+        ]);
+        void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
         if (cancelled) return;
         setFreshOrder(loaded);
         onOrderRefreshedRef.current?.(loaded);
