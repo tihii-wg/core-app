@@ -698,11 +698,23 @@ export default {
     zeroTotalHint: "This order has a zero total and can be closed without a payment row.",
     legacyPaidHint: "Legacy paid flags are not enough. Record a ledger payment that settles the balance, then close.",
     postCloseOutstanding: "Outstanding after refund: {{amount}}. The order stays closed.",
+    unsavedBeforeCloseTitle: "Unsaved changes",
+    unsavedBeforeCloseDescription: "There are unsaved changes. Save and continue?",
+    saveAndContinue: "Save and continue",
+    loadingFreshTotals: "Loading current total…",
+    reopenUnderpaidTitle: "Order will reopen",
+    reopenUnderpaidDescription:
+      "The order total will exceed the amount paid by {{amount}}. The order will reopen (status In progress); payments stay recorded. Continue?",
+    reopenUnderpaidConfirm: "Continue",
+    overpaidAfterEditTitle: "Paid more than the new total",
+    overpaidAfterEditDescription:
+      "Paid amount exceeds the order total by {{amount}} — issue a refund if needed.",
     toast: {
       closed: "Order closed",
       alreadyClosed: "Order was already closed",
       cancelled: "Order cancelled",
       alreadyCancelled: "Order was already cancelled",
+      reopenedUnderpaid: "Order reopened: remaining to pay {{amount}}",
     },
     errors: {
       rpcRequired: "Apply the order lifecycle SQL on MAIN before closing or cancelling orders.",
@@ -714,6 +726,7 @@ export default {
       useCloseAction: "Use Close order. Status changes cannot close an order.",
       useCancelAction: "Use Cancel order. Status changes cannot cancel an order.",
       orderAlreadyClosed: "This order is formally closed. Status cannot be changed here.",
+      closedOrderImmutable: "A closed order cannot be changed. To fix it, cancel the order first.",
       orderAlreadyCancelled: "This order is cancelled. Status cannot be changed here.",
       invalidReopenStatus: "Choose an open workflow status to reopen this cancelled order.",
       cancelNotPersisted: "Cancellation did not persist. The order was not marked cancelled. Nothing was changed in the UI.",

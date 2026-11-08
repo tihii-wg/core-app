@@ -53,6 +53,8 @@ import {
   canOfferDeleteClosedOrderAction,
 } from "./closedOrderPermissions";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
+import { useConfirm } from "../../ui/ConfirmProvider";
+import { prepareOrderForCloseOrPayment } from "./requestCloseOrder";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -97,6 +99,7 @@ export function OrderActionsMenu({
   triggerClassName,
 }: OrderActionsMenuProps) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
   // Paid unlock uses membership owner role; closed-order cancel/delete uses owner_id.
@@ -126,16 +129,22 @@ export function OrderActionsMenu({
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
   const closedOrderPerms = useClosedOrderActionPermissions();
-  const canManageClosedContent = closedOrderPerms.canManageClosedContent;
   const canMutateContent = canMutateOrderContent({
     order,
     isOwnerByOwnerId,
     ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
   });
   // Same gate as PaymentHistorySection + closed-content lock (no recording on locked closed orders).
-  const canRecordPayment = withSubscriptionWriteAccess(Boolean(workspaceRole), canWrite) && canMutateContent;
-  const statusLockedForMenu =
-    order.status === "cancelled" ? !isOwnerByOwnerId : formallyClosed && !canManageClosedContent;
+  const canRecordPayment =
+    withSubscriptionWriteAccess(Boolean(workspaceRole), canWrite) && canMutateContent;
+
+  async function requestClose() {
+    const prepared = await prepareOrderForCloseOrPayment({ order, confirm, t });
+    if (!prepared) return;
+    if (prepared !== order) onOrderUpdated?.(prepared);
+    setCloseOpen(true);
+  }
+  const statusLockedForMenu = order.status === "cancelled" ? !isOwnerByOwnerId : formallyClosed;
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
   const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
@@ -223,7 +232,7 @@ export function OrderActionsMenu({
             <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
               {order.status === "cancelled"
                 ? t("orders.lifecycle.errors.orderAlreadyCancelled")
-                : t("orders.lifecycle.errors.orderAlreadyClosed")}
+                : t("orders.lifecycle.errors.closedOrderImmutable")}
             </p>
           ) : (
             statusOptions.map((option) => {
@@ -244,7 +253,6 @@ export function OrderActionsMenu({
                   onSelect={() => {
                     if (locked) return;
                     const move = resolveUnifiedStatusSelection(order, option, {
-                      allowManageClosed: canManageClosedContent,
                       allowReopenCancelled: isOwnerByOwnerId,
                     });
                     if (!move) return;
@@ -286,7 +294,12 @@ export function OrderActionsMenu({
           {showOpenLifecycleActions ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setCloseOpen(true)}>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  void requestClose();
+                }}
+              >
                 <Lock />
                 {t("orders.lifecycle.closeAction")}
               </DropdownMenuItem>
@@ -430,6 +443,7 @@ export function OrderActionsMenu({
         payments={payments}
         formatMoney={formatMoney}
         canRecordPayment={canRecordPayment}
+        onOrderRefreshed={(fresh) => onOrderUpdated?.(fresh)}
         onClosed={(result) => {
           onOrderUpdated?.({
             ...order,

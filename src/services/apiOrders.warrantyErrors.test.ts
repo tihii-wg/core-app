@@ -35,6 +35,12 @@ describe("mapOrderWarrantyDbError", () => {
     ).toBe("orders.warranty.errors.hasClaims");
   });
 
+  it("maps order_lifecycle:closed_order_immutable", () => {
+    expect(mapOrderWarrantyDbError({ message: "order_lifecycle:closed_order_immutable" })?.message).toBe(
+      "orders.lifecycle.errors.closedOrderImmutable",
+    );
+  });
+
   it("returns null for unrelated errors", () => {
     expect(mapOrderWarrantyDbError({ message: "permission denied for table order_services" })).toBeNull();
     expect(mapOrderWarrantyDbError({ message: "order_delete:has_warranty_claims" })).toBeNull();

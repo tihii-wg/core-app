@@ -84,17 +84,24 @@ vi.mock("../profiles/useGetProfile", () => ({
   useGetProfile: () => ({ data: { id: "user-1" }, isLoading: false }),
 }));
 
+const ownerIdState = vi.hoisted(() => ({ isOwner: true }));
+const closedOrderPermState = vi.hoisted(() => ({
+  ownerCanManageClosedOrders: false,
+  canCancelClosed: true,
+  canDeleteClosed: true,
+}));
+
 vi.mock("./useClosedOrderPermissions", () => ({
   useClosedOrderActionPermissions: () => ({
     role: "owner",
     grants: { cancelClosed: [], deleteClosed: [] },
     isLoading: false,
     isError: false,
-    canCancelClosed: true,
-    canDeleteClosed: true,
+    canCancelClosed: closedOrderPermState.canCancelClosed,
+    canDeleteClosed: closedOrderPermState.canDeleteClosed,
     canManageClosedContent: false,
-    isOwnerByOwnerId: true,
-    ownerCanManageClosedOrders: false,
+    isOwnerByOwnerId: ownerIdState.isOwner,
+    ownerCanManageClosedOrders: closedOrderPermState.ownerCanManageClosedOrders,
   }),
   useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
 }));
@@ -114,8 +121,6 @@ const roleState = vi.hoisted(() => ({ role: "owner" as string }));
 vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
   useActiveWorkspaceRole: () => roleState.role,
 }));
-
-const ownerIdState = vi.hoisted(() => ({ isOwner: true }));
 
 vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
   useIsWorkspaceOwnerId: () => ownerIdState.isOwner,
@@ -278,6 +283,9 @@ beforeEach(() => {
   industryState.slug = "auto_repair";
   roleState.role = "owner";
   ownerIdState.isOwner = true;
+  closedOrderPermState.ownerCanManageClosedOrders = false;
+  closedOrderPermState.canCancelClosed = true;
+  closedOrderPermState.canDeleteClosed = true;
   updateOrderHooks.isPending = false;
   updateOrderHooks.mutateAsync.mockReset();
   taxInvoiceHooks.isPending = false;
@@ -865,6 +873,35 @@ describe("OrderDetailPanel closed-order banner", () => {
     });
     expect(await screen.findByText("Order closed")).toBeInTheDocument();
     expect(screen.getByText(`Closed at ${closedAt}`)).toBeInTheDocument();
+    expect(screen.getByTestId("closed-order-immutable-hint")).toHaveTextContent(
+      "A closed order cannot be changed. To fix it, cancel the order first.",
+    );
+  });
+
+  it("hides edit controls for the owner even when cancel/delete setting is on", async () => {
+    closedOrderPermState.ownerCanManageClosedOrders = true;
+    closedOrderPermState.canCancelClosed = true;
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "closed", closedAt },
+    });
+    expect(await screen.findByText("Order closed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit$/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Edit$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Update Status/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId("closed-order-immutable-hint")).toBeInTheDocument();
+  });
+
+  it("hides edit controls for members on closed orders", async () => {
+    ownerIdState.isOwner = false;
+    roleState.role = "member";
+    closedOrderPermState.ownerCanManageClosedOrders = true;
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "closed", closedAt },
+    });
+    expect(await screen.findByText("Order closed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit$/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Edit$/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("closed-order-immutable-hint")).toBeInTheDocument();
   });
 
   it("hides the stale closure banner after cancel while closed_at remains", async () => {

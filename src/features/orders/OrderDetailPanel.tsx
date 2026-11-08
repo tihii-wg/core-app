@@ -91,6 +91,8 @@ import {
   canOfferDeleteClosedOrderAction,
 } from "./closedOrderPermissions";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
+import { useConfirm } from "../../ui/ConfirmProvider";
+import { prepareOrderForCloseOrPayment } from "./requestCloseOrder";
 
 type OrderDetailPanelProps = {
   selectedOrder: Order | null;
@@ -116,6 +118,7 @@ export default function OrderDetailPanel({
   onDeleted,
 }: OrderDetailPanelProps) {
   const { t, i18n } = useTranslation();
+  const confirm = useConfirm();
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -147,7 +150,6 @@ export default function OrderDetailPanel({
   // Paid unlock uses membership owner role. Lifecycle status is never editable via the ordinary selector.
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
-  const canManageClosedContent = closedOrderPerms.canManageClosedContent;
   const canMutateContent =
     selectedOrder != null &&
     canMutateOrderContent({
@@ -156,13 +158,10 @@ export default function OrderDetailPanel({
       ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
     });
   const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
-  // Cancelled: owner_id may reopen via status change (clears closed_at). Ordinary closed
-  // still requires owner_can_manage_closed_orders. Non-owners stay locked on both.
+  // Cancelled: owner_id may reopen via status change (clears closed_at). Closed is always locked.
   const lifecycleStatusLocked =
     selectedOrder != null &&
-    (selectedOrder.status === "cancelled"
-      ? !isOwnerByOwnerId
-      : isOrderFormallyClosed(selectedOrder) && !canManageClosedContent);
+    (selectedOrder.status === "cancelled" ? !isOwnerByOwnerId : isOrderFormallyClosed(selectedOrder));
   const closedContentLocked = selectedOrder != null && !canMutateContent;
   const paidStatusBlocked =
     selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
@@ -226,6 +225,17 @@ export default function OrderDetailPanel({
       setIsEditing(false);
       setConfirmDeleteOpen(false);
     }
+  }
+
+  async function requestClose() {
+    if (!selectedOrder || isStatusUpdating || isUnifiedStatusUpdating) return;
+    const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
+    if (!prepared) return;
+    if (prepared !== selectedOrder) {
+      onOrderUpdated(prepared);
+      setIsEditing(false);
+    }
+    setCloseOpen(true);
   }
 
   async function handleAssigneeChange(assignedEmployeeId: string) {
@@ -690,6 +700,15 @@ export default function OrderDetailPanel({
               payments={payments}
               isLoading={paymentsLoading}
               canRecord={canEditOrder && !closedContentLocked}
+              onBeforeRecord={async () => {
+                const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
+                if (!prepared) return false;
+                if (prepared !== selectedOrder) {
+                  onOrderUpdated(prepared);
+                  setIsEditing(false);
+                }
+                return true;
+              }}
             />
 
             <OrderAttachmentsSection
@@ -716,7 +735,7 @@ export default function OrderDetailPanel({
                   <span className="text-xs text-muted-foreground">
                     {selectedOrder.status === "cancelled"
                       ? t("orders.lifecycle.errors.orderAlreadyCancelled")
-                      : t("orders.lifecycle.errors.orderAlreadyClosed")}
+                      : t("orders.lifecycle.errors.closedOrderImmutable")}
                   </span>
                 </div>
               ) : (
@@ -727,7 +746,6 @@ export default function OrderDetailPanel({
                   const option = statusOptions.find((item) => item.id === value);
                   if (!option) return;
                   const move = resolveUnifiedStatusSelection(selectedOrder, option, {
-                    allowManageClosed: canManageClosedContent,
                     allowReopenCancelled: isOwnerByOwnerId,
                   });
                   if (!move) return;
@@ -813,6 +831,13 @@ export default function OrderDetailPanel({
                 <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-closed-order-banner>
                   <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>
                   <p className="text-xs text-muted-foreground">{t("orders.lifecycle.closedAt", { date: selectedOrder.closedAt })}</p>
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-closed-order-immutable-hint
+                    data-testid="closed-order-immutable-hint"
+                  >
+                    {t("orders.lifecycle.errors.closedOrderImmutable")}
+                  </p>
                   {paymentBalance && paymentBalance.remaining > 0.005 ? (
                     <p className="text-sm text-destructive">
                       {t("orders.lifecycle.postCloseOutstanding", { amount: formatMoney(paymentBalance.remaining) })}
@@ -822,7 +847,7 @@ export default function OrderDetailPanel({
               ) : null}
               {showOpenLifecycleActions ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCloseOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void requestClose()} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
                     <Lock className="size-3.5" />
                     {t("orders.lifecycle.closeAction")}
                   </Button>
@@ -946,6 +971,7 @@ export default function OrderDetailPanel({
         payments={payments}
         formatMoney={formatMoney}
         canRecordPayment={canEditOrder && !closedContentLocked}
+        onOrderRefreshed={onOrderUpdated}
         onClosed={(result) => {
           if (!selectedOrder) return;
           onOrderUpdated({

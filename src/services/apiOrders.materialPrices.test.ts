@@ -62,7 +62,7 @@ describe("mapOrderMaterialPriceDbError", () => {
       "orders.errors.materialPriceInvalid",
     );
     expect(mapOrderMaterialPriceDbError({ message: "order_lifecycle:closed_order_immutable" })?.message).toBe(
-      "orders.lifecycle.errors.orderAlreadyClosed",
+      "orders.lifecycle.errors.closedOrderImmutable",
     );
     expect(mapOrderMaterialPriceDbError({ message: "other" })).toBeNull();
   });

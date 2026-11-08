@@ -51,8 +51,8 @@ export function useClosedOrderActionPermissions() {
     isError,
     isOwnerByOwnerId,
     ownerCanManageClosedOrders,
-    /** Owner + setting: edit closed content (DB may auto-reopen when total > net paid). */
-    canManageClosedContent: ownerMayManageClosed,
+    /** Always false — closed content is immutable until cancelled. */
+    canManageClosedContent: false as const,
     canCancelClosed: ownerMayManageClosed || canCancelClosedOrder(role, safeGrants),
     canDeleteClosed: ownerMayManageClosed || canDeleteClosedOrder(role, safeGrants),
   };

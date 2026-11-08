@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -60,6 +60,7 @@ import OrderServiceKindSelect from "./OrderServiceKindSelect";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 import OrderLinePriceField from "./OrderLinePriceField";
 import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
+import { registerOrderUnsavedEdits } from "./orderUnsavedEdits";
 
 type EditOrderFormProps = {
   order: Order;
@@ -125,7 +126,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     getValues,
     clearErrors,
     trigger,
-    formState: { errors, isSubmitting, isSubmitted, dirtyFields },
+    formState: { errors, isSubmitting, isSubmitted, dirtyFields, isDirty },
   } = useForm<EditOrderFormData>({
     defaultValues: {
       vehicleId: order.vehicleId ?? "",
@@ -212,77 +213,107 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
   }
 
+  const saveOrder = async (data: EditOrderFormData): Promise<Order | null> => {
+    const selectedVehicleId = data.vehicleId?.trim() || "";
+    let selectedVehicle = selectedVehicleId
+      ? clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+      : undefined;
+    if (showVehicles && selectedVehicleId) {
+      try {
+        if (!selectedVehicle) throw new Error(t("vehicles.errors.invalidSelection"));
+        guardWrite();
+        // Mileage write first — failed vehicle update must not report the order as saved.
+        await persistOrderVehicleMileage({
+          workspaceId,
+          clientId: selectedVehicle.clientId,
+          vehicle: selectedVehicle,
+          formMileage: data.currentMileage,
+          queryClient,
+        });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+        throw error;
+      }
+    }
+
+    // Only rewrite the historical snapshot when the visit-mileage field was explicitly edited.
+    const mileageSnapshot =
+      dirtyFields.currentMileage && selectedVehicle
+        ? buildOrderMileageSnapshot(data.currentMileage, selectedVehicle)
+        : null;
+
+    // Only sync service/material lines when the corresponding field arrays were edited.
+    // Omitting them leaves persisted lines untouched (no unnecessary DELETE/RPC work).
+    const servicesDirty = isFieldArrayDirty(dirtyFields.services);
+    const materialsDirty = isFieldArrayDirty(dirtyFields.materials);
+
+    const industryFields = orderIndustryFieldsToApi(data);
+    if (isInstallationBeforeMeasurement(industryFields.measurementAt, industryFields.installationAt)) {
+      toast.error(t("orders.validation.installationBeforeMeasurement"));
+      return null;
+    }
+
+    // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
+    return updateOrder({
+      orderId: order.id,
+      vehicleId: data.vehicleId || "",
+      device: showVehicles
+        ? (data.device ?? "")
+        : workflow.orderFields.device.visible
+          ? data.device
+          : order.device || data.device,
+      carNumber: showVehicles
+        ? (data.carNumber ?? "")
+        : workflow.orderFields.carNumber.visible
+          ? data.carNumber
+          : order.carNumber,
+      vin: showVehicles ? (data.vin ?? "") : workflow.orderFields.vin.visible ? data.vin : order.vin,
+      ...industryFields,
+      ...(mileageSnapshot ?? {}),
+      description: data.description,
+      assignedEmployeeId: data.assignedEmployeeId,
+      team: data.team ?? [],
+      deadline: data.deadline,
+      ...(servicesDirty ? { services: data.services ?? [] } : {}),
+      ...(materialsDirty ? { materials: data.materials } : {}),
+    });
+  };
+
   const onSubmit = async (data: EditOrderFormData) => {
     try {
-      const selectedVehicleId = data.vehicleId?.trim() || "";
-      let selectedVehicle = selectedVehicleId
-        ? clientVehicles.find((vehicle) => vehicle.id === selectedVehicleId)
-        : undefined;
-      if (showVehicles && selectedVehicleId) {
-        try {
-          if (!selectedVehicle) throw new Error(t("vehicles.errors.invalidSelection"));
-          guardWrite();
-          // Mileage write first — failed vehicle update must not report the order as saved.
-          await persistOrderVehicleMileage({
-            workspaceId,
-            clientId: selectedVehicle.clientId,
-            vehicle: selectedVehicle,
-            formMileage: data.currentMileage,
-            queryClient,
-          });
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
-          throw error;
-        }
-      }
-
-      // Only rewrite the historical snapshot when the visit-mileage field was explicitly edited.
-      const mileageSnapshot =
-        dirtyFields.currentMileage && selectedVehicle
-          ? buildOrderMileageSnapshot(data.currentMileage, selectedVehicle)
-          : null;
-
-      // Only sync service/material lines when the corresponding field arrays were edited.
-      // Omitting them leaves persisted lines untouched (no unnecessary DELETE/RPC work).
-      const servicesDirty = isFieldArrayDirty(dirtyFields.services);
-      const materialsDirty = isFieldArrayDirty(dirtyFields.materials);
-
-      const industryFields = orderIndustryFieldsToApi(data);
-      if (isInstallationBeforeMeasurement(industryFields.measurementAt, industryFields.installationAt)) {
-        toast.error(t("orders.validation.installationBeforeMeasurement"));
-        return;
-      }
-
-      // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
-      const updatedOrder = await updateOrder({
-        orderId: order.id,
-        vehicleId: data.vehicleId || "",
-        device: showVehicles
-          ? (data.device ?? "")
-          : workflow.orderFields.device.visible
-            ? data.device
-            : order.device || data.device,
-        carNumber: showVehicles
-          ? (data.carNumber ?? "")
-          : workflow.orderFields.carNumber.visible
-            ? data.carNumber
-            : order.carNumber,
-        vin: showVehicles ? (data.vin ?? "") : workflow.orderFields.vin.visible ? data.vin : order.vin,
-        ...industryFields,
-        ...(mileageSnapshot ?? {}),
-        description: data.description,
-        assignedEmployeeId: data.assignedEmployeeId,
-        team: data.team ?? [],
-        deadline: data.deadline,
-        ...(servicesDirty ? { services: data.services ?? [] } : {}),
-        ...(materialsDirty ? { materials: data.materials } : {}),
-      });
+      const updatedOrder = await saveOrder(data);
+      if (!updatedOrder) return;
       onUpdated(updatedOrder);
     } catch {
       // useUpdateOrder already toasts API failures.
       return;
     }
   };
+
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+  const saveViaSessionRef = useRef<() => Promise<Order | null>>(async () => null);
+  // Used by close/payment entry points: persist without navigating away (caller updates local state).
+  saveViaSessionRef.current = () =>
+    new Promise<Order | null>((resolve) => {
+      void handleSubmit(
+        async (data) => {
+          try {
+            resolve(await saveOrder(data));
+          } catch {
+            resolve(null);
+          }
+        },
+        () => resolve(null),
+      )();
+    });
+
+  useEffect(() => {
+    return registerOrderUnsavedEdits(order.id, {
+      isDirty: () => isDirtyRef.current,
+      save: () => saveViaSessionRef.current(),
+    });
+  }, [order.id]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

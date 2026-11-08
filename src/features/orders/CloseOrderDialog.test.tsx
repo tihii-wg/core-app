@@ -13,6 +13,7 @@ const closeMutateAsync = vi.hoisted(() => vi.fn());
 const recordMutate = vi.hoisted(() => vi.fn());
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
+const getOrderMock = vi.hoisted(() => vi.fn());
 const queryClientRef = vi.hoisted(() => ({ current: null as QueryClient | null }));
 
 vi.mock("./useCloseOrder", () => ({
@@ -22,6 +23,14 @@ vi.mock("./useCloseOrder", () => ({
     isPending: false,
   }),
 }));
+
+vi.mock("../../services/apiOrders", async () => {
+  const actual = await vi.importActual<typeof import("../../services/apiOrders")>("../../services/apiOrders");
+  return {
+    ...actual,
+    getOrder: (...args: unknown[]) => getOrderMock(...args),
+  };
+});
 
 vi.mock("../finance/usePayments", async () => {
   const actual = await vi.importActual<typeof import("../finance/usePayments")>("../finance/usePayments");
@@ -101,12 +110,17 @@ function renderDialog(ui: ReactElement, seedPayments: LedgerPayment[] = []) {
   queryClientRef.current = client;
   client.setQueryData(paymentsQueryKey("ws-1"), seedPayments);
   vi.spyOn(client, "refetchQueries").mockImplementation(async () => undefined);
+  vi.spyOn(client, "invalidateQueries").mockImplementation(async () => undefined);
 
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   }
 
   return { ...render(ui, { wrapper: Wrapper }), client };
+}
+
+async function waitForFreshTotals() {
+  expect(await screen.findByText(/Order total/i)).toBeInTheDocument();
 }
 
 describe("CloseOrderDialog payment-to-close", () => {
@@ -123,6 +137,8 @@ describe("CloseOrderDialog payment-to-close", () => {
     onOpenChange.mockReset();
     onClosed.mockReset();
     queryClientRef.current = null;
+    getOrderMock.mockReset();
+    getOrderMock.mockResolvedValue({ ...baseOrder });
 
     closeMutateAsync.mockResolvedValue({
       status: "closed",
@@ -140,6 +156,27 @@ describe("CloseOrderDialog payment-to-close", () => {
     });
   });
 
+  it("refetches the order on open and never shows a stale cached total", async () => {
+    getOrderMock.mockImplementation(async () => ({ ...baseOrder, totalPrice: 25000 }));
+    renderDialog(
+      <CloseOrderDialog
+        order={{ ...baseOrder, totalPrice: 18000 }}
+        open
+        onOpenChange={onOpenChange}
+        payments={[]}
+        formatMoney={formatMoney}
+        canRecordPayment
+        onClosed={onClosed}
+      />,
+    );
+
+    await waitFor(() => expect(getOrderMock).toHaveBeenCalledWith("order-1", "ws-1"));
+    const amount = (await screen.findByLabelText(/Amount/i)) as HTMLInputElement;
+    expect(amount.value).toBe("25000");
+    expect(screen.getAllByText("MDL 25000.00").length).toBeGreaterThan(0);
+    expect(screen.queryByText("MDL 18000.00")).not.toBeInTheDocument();
+  });
+
   it("shows the payment form with remaining prefilled when unpaid and canRecordPayment", async () => {
     renderDialog(
       <CloseOrderDialog
@@ -153,6 +190,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     expect(await screen.findByText(/To close this order, record a payment/i)).toBeInTheDocument();
     const amount = screen.getByLabelText(/Amount/i) as HTMLInputElement;
     expect(amount.value).toBe("100");
@@ -174,6 +212,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     await user.click(screen.getByRole("button", { name: /Record payment/i }));
 
     await waitFor(() => {
@@ -199,6 +238,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     await user.click(screen.getByRole("checkbox", { name: /Close order after payment/i }));
     await user.click(screen.getByRole("button", { name: /Record payment/i }));
 
@@ -224,6 +264,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     const amount = screen.getByLabelText(/Amount/i);
     await user.clear(amount);
     await user.type(amount, "40");
@@ -255,6 +296,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     expect(await screen.findByText(/Cannot close while MDL 100\.00 remains outstanding/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Amount/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Close order$/i })).toBeDisabled();
@@ -276,6 +318,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       [settled],
     );
 
+    await waitForFreshTotals();
     expect(screen.queryByLabelText(/Amount/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/record a payment/i)).not.toBeInTheDocument();
     const closeBtn = screen.getByRole("button", { name: /^Close order$/i });
@@ -310,6 +353,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     // Settled-looking filtered cache must not be used for close decisions.
     client.setQueryData(paymentsQueryKey("ws-1", { orderId: "order-1" }), [makePayment(100, { id: "filtered-full" })]);
 
@@ -339,6 +383,7 @@ describe("CloseOrderDialog payment-to-close", () => {
       />,
     );
 
+    await waitForFreshTotals();
     vi.spyOn(client, "refetchQueries").mockRejectedValue(new Error("payments offline"));
 
     await user.click(screen.getByRole("button", { name: /Record payment/i }));

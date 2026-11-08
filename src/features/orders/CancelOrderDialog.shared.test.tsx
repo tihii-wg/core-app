@@ -45,17 +45,27 @@ vi.mock("../documents/useGetDocumentTemplates", () => ({
 vi.mock("../documents/usePrintOrderDocument", () => ({
   usePrintOrderDocument: () => ({ mutate: vi.fn(), isPending: false }),
 }));
-vi.mock("./closedOrderActionPermissions", () => ({
+vi.mock("./useClosedOrderPermissions", () => ({
   useClosedOrderActionPermissions: () => ({
-    canManageClosedContent: true,
+    canManageClosedContent: false,
+    canCancelClosed: true,
+    canDeleteClosed: true,
     role: "owner",
-    grants: {},
+    grants: { cancelClosed: [], deleteClosed: [] },
     ownerCanManageClosedOrders: true,
+    isOwnerByOwnerId: true,
+    isLoading: false,
+    isError: false,
   }),
-  canOfferCancelOrderAction: () => true,
-  canOfferDeleteClosedOrderAction: () => true,
-  canMutateOrderContent: () => true,
 }));
+vi.mock("./closedOrderPermissions", async () => {
+  const actual = await vi.importActual<typeof import("./closedOrderPermissions")>("./closedOrderPermissions");
+  return {
+    ...actual,
+    canOfferCancelOrderAction: () => true,
+    canOfferDeleteClosedOrderAction: () => true,
+  };
+});
 vi.mock("../industries/useIndustryWorkflow", async () => {
   const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
   return {

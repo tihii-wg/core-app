@@ -50,7 +50,7 @@ describe("reopen cancelled order lifecycle (client gates)", () => {
     >;
 
     expect(resolveUnifiedStatusSelection(cancelled, progress)).toBeNull();
-    expect(resolveUnifiedStatusSelection(cancelled, progress, { allowManageClosed: true })).toBeNull();
+    expect(resolveUnifiedStatusSelection(cancelled, progress)).toBeNull();
     expect(resolveUnifiedStatusSelection(cancelled, progress, { allowReopenCancelled: true })).toEqual({
       status: "in-progress",
       customStatusId: "d-progress",

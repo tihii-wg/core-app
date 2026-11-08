@@ -19,8 +19,13 @@ export function useUpdateOrder() {
     onMutate: () => {
       toast.loading(i18n.t("orders.toast.updating"), { id: "update-order" });
     },
-    onSuccess: () => {
+    onSuccess: (_order, variables) => {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["orders", workspaceId, "awaitingPayment"] });
+      queryClient.invalidateQueries({ queryKey: ["orders-page", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["order", variables.orderId] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });

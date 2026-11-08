@@ -173,6 +173,13 @@ describe("material warranty lifecycle (card → line → indicators)", () => {
         ownerCanManageClosedOrders: true,
       }),
     ).toBe(false);
+    expect(
+      canMutateOrderContent({
+        order: closed,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: true,
+      }),
+    ).toBe(false);
 
     renderWithQuery(
       <OrderLineWarrantyBadge

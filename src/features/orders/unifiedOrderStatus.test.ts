@@ -190,22 +190,14 @@ describe("unifiedOrderStatus", () => {
     ).toBeNull();
   });
 
-  it("allows closed-order status selection when owner manage-closed override is on", () => {
+  it("never allows closed-order status selection via the unified selector", () => {
     const options = unifiedStatusOptions(defaults, label);
     const waiting = options.find((option) => option.id === "d-waiting")!;
     expect(
       resolveUnifiedStatusSelection(
         order({ status: "closed", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: "d-new" }),
         waiting,
-        { allowManageClosed: true },
-      ),
-    ).toEqual({ status: "waiting-parts", customStatusId: "d-waiting" });
-    // manage-closed alone must not reopen cancelled — that needs allowReopenCancelled.
-    expect(
-      resolveUnifiedStatusSelection(
-        order({ status: "cancelled", closedAt: null, customStatusId: null }),
-        waiting,
-        { allowManageClosed: true },
+        { allowReopenCancelled: true },
       ),
     ).toBeNull();
   });
@@ -231,7 +223,7 @@ describe("unifiedOrderStatus", () => {
       resolveUnifiedStatusSelection(
         order({ status: "cancelled", closedAt: "2026-11-01T00:00:00.000Z", customStatusId: null }),
         waiting,
-        { allowReopenCancelled: false, allowManageClosed: true },
+        { allowReopenCancelled: false },
       ),
     ).toBeNull();
   });

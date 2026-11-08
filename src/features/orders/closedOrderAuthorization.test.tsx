@@ -10,15 +10,15 @@ import {
 import { OrderLineWarrantyBadge } from "./OrderLineWarrantyBadge";
 
 /**
- * Mandatory closed-order override rule:
- * editing requires workspaces.owner_id = auth.uid() AND owner_can_manage_closed_orders = true.
+ * Closed orders are immutable for everyone until cancelled.
+ * owner_can_manage_closed_orders only unlocks cancel/delete for the real owner_id.
  * Membership role "owner" alone is never sufficient. View access (warranty display) stays open.
  */
 describe("closed-order owner override authorization", () => {
   const closed = { status: "closed" as const, closedAt: "2026-11-01T00:00:00.000Z" };
   const emptyGrants = { cancelClosed: [] as const, deleteClosed: [] as const };
 
-  it("actual owner + setting ON: editing allowed", () => {
+  it("actual owner + setting ON: content immutable; cancel/delete allowed", () => {
     expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: true })).toBe(true);
     expect(
       canMutateOrderContent({
@@ -26,7 +26,7 @@ describe("closed-order owner override authorization", () => {
         isOwnerByOwnerId: true,
         ownerCanManageClosedOrders: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canOfferCancelOrderAction({
         order: closed,
@@ -48,7 +48,7 @@ describe("closed-order owner override authorization", () => {
     ).toBe(true);
   });
 
-  it("actual owner + setting OFF: editing denied", () => {
+  it("actual owner + setting OFF: content, cancel, and delete denied", () => {
     expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: false })).toBe(false);
     expect(
       canMutateOrderContent({
@@ -78,7 +78,7 @@ describe("closed-order owner override authorization", () => {
     ).toBe(false);
   });
 
-  it("admin + setting ON: editing denied", () => {
+  it("admin + setting ON: content and cancel denied without role grants", () => {
     expect(
       canMutateOrderContent({
         order: closed,
@@ -98,7 +98,7 @@ describe("closed-order owner override authorization", () => {
     ).toBe(false);
   });
 
-  it("manager + setting ON: editing denied", () => {
+  it("manager + setting ON: content and cancel denied without role grants", () => {
     expect(
       canMutateOrderContent({
         order: closed,
@@ -118,7 +118,7 @@ describe("closed-order owner override authorization", () => {
     ).toBe(false);
   });
 
-  it("member + setting ON: editing denied", () => {
+  it("member + setting ON: content and cancel denied without role grants", () => {
     expect(
       canMutateOrderContent({
         order: closed,
@@ -138,7 +138,7 @@ describe("closed-order owner override authorization", () => {
     ).toBe(false);
   });
 
-  it("membership role owner without owner_id never receives the override", () => {
+  it("membership role owner without owner_id never receives cancel/delete override", () => {
     // Role string "owner" without authoritative owner_id match must stay read-only.
     expect(
       canMutateOrderContent({

@@ -48,7 +48,7 @@ describe("ClosedOrderPermissionsSettings", () => {
     ownerIdState.isOwner = true;
     renderWithQuery(<ClosedOrderPermissionsSettings workspace={workspace} />);
     expect(screen.getByText("Closed Order Permissions")).toBeInTheDocument();
-    expect(screen.getByText("Allow owner to manage closed orders")).toBeInTheDocument();
+    expect(screen.getByText("Allow the owner to cancel and delete closed orders")).toBeInTheDocument();
     expect(screen.getByText("Cancel closed orders")).toBeInTheDocument();
     expect(screen.getByText("Delete closed orders")).toBeInTheDocument();
     expect(screen.getByText(/cancel\/delete grants are independent/i)).toBeInTheDocument();

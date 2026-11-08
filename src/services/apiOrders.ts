@@ -982,7 +982,7 @@ export function mapOrderMaterialPriceDbError(error: {
     return new Error(i18n.t("orders.errors.materialPriceInvalid"));
   }
   if (/order_lifecycle:closed_order_immutable/i.test(blob)) {
-    return new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+    return new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
   return null;
 }
@@ -2179,7 +2179,7 @@ export async function ownerMayManageClosedOrdersOnServer(workspaceId: string) {
 /**
  * Defense-in-depth for order-linked mutations. Open orders pass through.
  * Cancelled orders: workspace owner_id may mutate (independent of manage-closed setting).
- * Ordinary closed orders require owner_id + owner_can_manage_closed_orders.
+ * Ordinary closed orders are immutable for everyone — cancel first.
  */
 export async function assertClosedOrderMutableOnServer(orderId: string, workspaceId: string) {
   const { data, error } = await supabase
@@ -2198,13 +2198,10 @@ export async function assertClosedOrderMutableOnServer(orderId: string, workspac
 
   if (status === "cancelled") {
     if (await isWorkspaceOwnerIdOnServer(workspaceId)) return;
-    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+    throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
 
-  const mayManage = await ownerMayManageClosedOrdersOnServer(workspaceId);
-  if (!mayManage) {
-    throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
-  }
+  throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
 }
 
 export type SetLifecycleRegularCustomStatusResult = {
@@ -2800,12 +2797,8 @@ export async function updateOrderStatus(
 
   const isClosedRow = Boolean(closedAt) || currentStatus === "closed";
   if (isClosedRow) {
-    // Owner + owner_can_manage_closed_orders may change status on closed rows.
-    // Non-owners and owners with the setting off stay blocked.
-    const gate = await getWorkspaceOwnerGate(targetWorkspaceId);
-    if (!gate.mayManageClosed) {
-      throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
-    }
+    // Closed rows are immutable until cancelled (cancel uses a dedicated RPC).
+    throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
 
   let ownerMayChangePaid = false;
@@ -3083,13 +3076,9 @@ export async function updateOrder(
   const isClosedRow = Boolean(existingClosedAt) || existingStatus === "closed";
   if (isClosedRow) {
     // Cancelled (incl. closed-then-cancelled): owner_id may edit lines/warranty.
-    // Ordinary closed rows still require owner_can_manage_closed_orders.
-    const mayMutate =
-      existingStatus === "cancelled"
-        ? await isWorkspaceOwnerIdOnServer(workspaceId)
-        : await ownerMayManageClosedOrdersOnServer(workspaceId);
-    if (!mayMutate) {
-      throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyClosed"));
+    // Ordinary closed rows are immutable for everyone.
+    if (existingStatus !== "cancelled" || !(await isWorkspaceOwnerIdOnServer(workspaceId))) {
+      throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
     }
   }
 
@@ -3647,6 +3636,9 @@ export function mapOrderWarrantyDbError(error: {
   }
   if (/warranty_records:has_claims/i.test(blob)) {
     return new Error(i18n.t("orders.warranty.errors.hasClaims"));
+  }
+  if (/order_lifecycle:closed_order_immutable/i.test(blob)) {
+    return new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
   return null;
 }

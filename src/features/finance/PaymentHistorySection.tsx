@@ -31,6 +31,8 @@ type PaymentHistorySectionProps = {
   payments: LedgerPayment[];
   isLoading?: boolean;
   canRecord?: boolean;
+  /** When set, runs before opening the record-payment dialog (e.g. save dirty order edits). */
+  onBeforeRecord?: () => Promise<boolean>;
 };
 
 function kindBadgeVariant(kind: LedgerPayment["kind"]): "success" | "warning" | "danger" {
@@ -39,7 +41,15 @@ function kindBadgeVariant(kind: LedgerPayment["kind"]): "success" | "warning" | 
   return "success";
 }
 
-export function PaymentHistorySection({ target, order, invoice, payments, isLoading, canRecord: canRecordProp }: PaymentHistorySectionProps) {
+export function PaymentHistorySection({
+  target,
+  order,
+  invoice,
+  payments,
+  isLoading,
+  canRecord: canRecordProp,
+  onBeforeRecord,
+}: PaymentHistorySectionProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const { formatDate } = useReportFormatting();
@@ -51,6 +61,7 @@ export function PaymentHistorySection({ target, order, invoice, payments, isLoad
   const [refundOriginal, setRefundOriginal] = useState<LedgerPayment | null>(null);
   const [voidOriginal, setVoidOriginal] = useState<LedgerPayment | null>(null);
   const [cleanupOriginal, setCleanupOriginal] = useState<LedgerPayment | null>(null);
+  const [openingRecord, setOpeningRecord] = useState(false);
 
   const linked = useMemo(() => {
     if (target === "order" && order) return paymentsForOrder(payments, order.id);
@@ -86,7 +97,24 @@ export function PaymentHistorySection({ target, order, invoice, payments, isLoad
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">{t("finance.payments.history")}</h3>
         {canOpenPayment && (
-          <Button type="button" size="sm" onClick={() => setPaymentOpen(true)} disabled={isLoading}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={isLoading || openingRecord}
+            onClick={() => {
+              void (async () => {
+                if (onBeforeRecord) {
+                  setOpeningRecord(true);
+                  try {
+                    if (!(await onBeforeRecord())) return;
+                  } finally {
+                    setOpeningRecord(false);
+                  }
+                }
+                setPaymentOpen(true);
+              })();
+            }}
+          >
             <Plus className="size-4" />
             {t("finance.payments.record")}
           </Button>

@@ -706,11 +706,23 @@ const orders: Messages<typeof en> = {
     zeroTotalHint: "Сумма заказа равна нулю — закрытие без платежа допустимо.",
     legacyPaidHint: "Флаги «оплачен» недостаточны. Запишите платёж в реестр, затем закройте.",
     postCloseOutstanding: "Остаток после возврата: {{amount}}. Заказ остаётся закрытым.",
+    unsavedBeforeCloseTitle: "Несохранённые изменения",
+    unsavedBeforeCloseDescription: "Есть несохранённые изменения. Сохранить и продолжить?",
+    saveAndContinue: "Сохранить и закрыть",
+    loadingFreshTotals: "Загрузка актуальной суммы…",
+    reopenUnderpaidTitle: "Заказ будет открыт заново",
+    reopenUnderpaidDescription:
+      "Сумма заказа станет больше оплаченного на {{amount}}. Заказ будет открыт заново (статус «В работе»), оплата сохранится. Продолжить?",
+    reopenUnderpaidConfirm: "Продолжить",
+    overpaidAfterEditTitle: "Оплачено больше суммы заказа",
+    overpaidAfterEditDescription:
+      "Оплачено больше суммы заказа на {{amount}} — оформите возврат при необходимости.",
     toast: {
       closed: "Заказ закрыт",
       alreadyClosed: "Заказ уже был закрыт",
       cancelled: "Заказ отменён",
       alreadyCancelled: "Заказ уже был отменён",
+      reopenedUnderpaid: "Заказ открыт заново: остаток к оплате {{amount}}",
     },
     errors: {
       rpcRequired: "Сначала примените SQL жизненного цикла заказов на MAIN.",
@@ -722,6 +734,7 @@ const orders: Messages<typeof en> = {
       useCloseAction: "Используйте «Закрыть заказ». Смена статуса не закрывает заказ.",
       useCancelAction: "Используйте «Отменить заказ». Обычная смена статуса недоступна.",
       orderAlreadyClosed: "Заказ формально закрыт. Статус здесь менять нельзя.",
+      closedOrderImmutable: "Закрытый заказ нельзя изменить. Чтобы исправить, отмените заказ.",
       orderAlreadyCancelled: "Заказ отменён. Статус здесь менять нельзя.",
       invalidReopenStatus: "Чтобы возобновить отменённый заказ, выберите обычный рабочий статус.",
       cancelNotPersisted: "Отмена не сохранилась. Заказ не отмечен как отменённый. Интерфейс не менялся.",

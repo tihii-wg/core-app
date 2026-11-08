@@ -166,7 +166,7 @@ describe("closed order UI permission helpers", () => {
     }
   });
 
-  it("owner manage-closed setting unlocks content only for owner_id + enabled", () => {
+  it("closed orders are immutable even for owner_id with manage-closed setting", () => {
     const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
     expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: false })).toBe(false);
     expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: true })).toBe(true);
@@ -185,7 +185,7 @@ describe("closed order UI permission helpers", () => {
         isOwnerByOwnerId: true,
         ownerCanManageClosedOrders: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canMutateOrderContent({
         order: closed,
@@ -243,15 +243,34 @@ describe("closed order UI permission helpers", () => {
     ).toBe(false);
   });
 
-  it("ordinary closed orders still require owner_can_manage_closed_orders", () => {
+  it("owner manage-closed setting only unlocks cancel/delete of closed orders", () => {
     const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    const empty = { cancelClosed: [], deleteClosed: [] };
     expect(
       canMutateOrderContent({
         order: closed,
         isOwnerByOwnerId: true,
-        ownerCanManageClosedOrders: false,
+        ownerCanManageClosedOrders: true,
       }),
     ).toBe(false);
-    expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: false })).toBe(false);
+    expect(
+      canOfferCancelOrderAction({
+        order: closed,
+        canWrite: true,
+        workspaceRole: "owner",
+        grants: empty,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: true,
+      }),
+    ).toBe(true);
+    expect(
+      canOfferDeleteClosedOrderAction({
+        order: { status: "cancelled", closedAt: closed.closedAt },
+        workspaceRole: "owner",
+        grants: empty,
+        isOwnerByOwnerId: true,
+        ownerCanManageClosedOrders: true,
+      }),
+    ).toBe(true);
   });
 });

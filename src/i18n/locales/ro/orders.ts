@@ -703,11 +703,23 @@ const orders: Messages<typeof en> = {
     zeroTotalHint: "Totalul este zero — închiderea fără plată este permisă.",
     legacyPaidHint: "Steagurile vechi «plătit» nu sunt suficiente. Înregistrați o plată în registru, apoi închideți.",
     postCloseOutstanding: "Rest după rambursare: {{amount}}. Comanda rămâne închisă.",
+    unsavedBeforeCloseTitle: "Modificări nesalvate",
+    unsavedBeforeCloseDescription: "Există modificări nesalvate. Salvați și continuați?",
+    saveAndContinue: "Salvați și continuați",
+    loadingFreshTotals: "Se încarcă totalul actual…",
+    reopenUnderpaidTitle: "Comanda va fi redeschisă",
+    reopenUnderpaidDescription:
+      "Totalul comenzii va depăși suma plătită cu {{amount}}. Comanda va fi redeschisă (status În lucru); plățile rămân. Continuați?",
+    reopenUnderpaidConfirm: "Continuați",
+    overpaidAfterEditTitle: "Plătit mai mult decât noul total",
+    overpaidAfterEditDescription:
+      "Suma plătită depășește totalul comenzii cu {{amount}} — emiteți o rambursare dacă e nevoie.",
     toast: {
       closed: "Comanda a fost închisă",
       alreadyClosed: "Comanda era deja închisă",
       cancelled: "Comanda a fost anulată",
       alreadyCancelled: "Comanda era deja anulată",
+      reopenedUnderpaid: "Comandă redeschisă: rest de plată {{amount}}",
     },
     errors: {
       rpcRequired: "Aplicați SQL-ul de ciclu de viață pe MAIN înainte de închidere/anulare.",
@@ -719,6 +731,7 @@ const orders: Messages<typeof en> = {
       useCloseAction: "Folosiți «Închide comanda». Schimbarea statusului nu închide comanda.",
       useCancelAction: "Folosiți «Anulează comanda». Schimbarea obișnuită de status nu este permisă.",
       orderAlreadyClosed: "Comanda este închisă formal. Statusul nu poate fi schimbat aici.",
+      closedOrderImmutable: "Comanda închisă nu poate fi modificată. Pentru a o corecta, anulați comanda.",
       orderAlreadyCancelled: "Comanda este anulată. Statusul nu poate fi schimbat aici.",
       invalidReopenStatus: "Alegeți un status activ pentru a redeschide comanda anulată.",
       cancelNotPersisted: "Anularea nu a fost salvată. Comanda nu a fost marcată ca anulată. Interfața nu s-a schimbat.",

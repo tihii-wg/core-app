@@ -74,37 +74,31 @@ describe("updateOrderStatus closed-order gate", () => {
     getUser.mockReset();
   });
 
-  it("rejects closed-order status changes when owner manage setting is off", async () => {
+  it("rejects closed-order status changes for the owner", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
-    // First from(): load existing order; second: owner manage check
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { id: "order-1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z", custom_status_id: null },
-          error: null,
-        }),
-      )
-      .mockReturnValueOnce(chain({ data: { owner_can_manage_closed_orders: false }, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { id: "order-1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z", custom_status_id: null },
+        error: null,
+      }),
+    );
 
     await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(
-      /orders\.lifecycle\.errors\.orderAlreadyClosed/,
+      /orders\.lifecycle\.errors\.closedOrderImmutable/,
     );
   });
 
-  it("rejects closed-order status changes for non-owners even when setting appears enabled", async () => {
+  it("rejects closed-order status changes for non-owners", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "admin-1" } }, error: null });
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { id: "order-1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z", custom_status_id: null },
-          error: null,
-        }),
-      )
-      // Non-owner query against owner_id returns null
-      .mockReturnValueOnce(chain({ data: null, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { id: "order-1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z", custom_status_id: null },
+        error: null,
+      }),
+    );
 
     await expect(updateOrderStatus("order-1", "in-progress", "ws-1")).rejects.toThrow(
-      /orders\.lifecycle\.errors\.orderAlreadyClosed/,
+      /orders\.lifecycle\.errors\.closedOrderImmutable/,
     );
   });
 });
@@ -115,33 +109,31 @@ describe("assertClosedOrderMutableOnServer authorization matrix", () => {
     getUser.mockReset();
   });
 
-  it("allows actual owner when setting is ON", async () => {
+  it("denies actual owner even when setting is ON", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
-          error: null,
-        }),
-      )
-      .mockReturnValueOnce(chain({ data: { owner_can_manage_closed_orders: true }, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
+        error: null,
+      }),
+    );
 
-    await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).resolves.toBeUndefined();
+    await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).rejects.toThrow(
+      /orders\.lifecycle\.errors\.closedOrderImmutable/,
+    );
   });
 
   it("denies actual owner when setting is OFF", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
-          error: null,
-        }),
-      )
-      .mockReturnValueOnce(chain({ data: { owner_can_manage_closed_orders: false }, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
+        error: null,
+      }),
+    );
 
     await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).rejects.toThrow(
-      /orders\.lifecycle\.errors\.orderAlreadyClosed/,
+      /orders\.lifecycle\.errors\.closedOrderImmutable/,
     );
   });
 
@@ -151,18 +143,15 @@ describe("assertClosedOrderMutableOnServer authorization matrix", () => {
     ["member", "member-1"],
   ] as const)("denies %s even when setting is ON", async (_role, userId) => {
     getUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
-          error: null,
-        }),
-      )
-      // owner_id filter returns no row for non-owners
-      .mockReturnValueOnce(chain({ data: null, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
+        error: null,
+      }),
+    );
 
     await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).rejects.toThrow(
-      /orders\.lifecycle\.errors\.orderAlreadyClosed/,
+      /orders\.lifecycle\.errors\.closedOrderImmutable/,
     );
   });
 
@@ -206,7 +195,7 @@ describe("assertClosedOrderMutableOnServer authorization matrix", () => {
       .mockReturnValueOnce(chain({ data: null, error: null }));
 
     await expect(assertClosedOrderMutableOnServer("order-1", "ws-1")).rejects.toThrow(
-      /orders\.lifecycle\.errors\.orderAlreadyClosed/,
+      /orders\.lifecycle\.errors\.closedOrderImmutable/,
     );
   });
 });
@@ -217,16 +206,14 @@ describe("updateOrder closed-order gate", () => {
     getUser.mockReset();
   });
 
-  it("rejects closed-order field edits when owner manage setting is off", async () => {
+  it("rejects closed-order field edits for the owner even when setting is on", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { client_id: "c1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
-          error: null,
-        }),
-      )
-      .mockReturnValueOnce(chain({ data: { owner_can_manage_closed_orders: false }, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { client_id: "c1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
+        error: null,
+      }),
+    );
 
     await expect(
       updateOrder(
@@ -241,19 +228,17 @@ describe("updateOrder closed-order gate", () => {
         },
         "ws-1",
       ),
-    ).rejects.toThrow(/orders\.lifecycle\.errors\.orderAlreadyClosed/);
+    ).rejects.toThrow(/orders\.lifecycle\.errors\.closedOrderImmutable/);
   });
 
-  it("rejects closed-order field edits for admin even when setting is on", async () => {
+  it("rejects closed-order field edits for admin", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "admin-1" } }, error: null });
-    from
-      .mockReturnValueOnce(
-        chain({
-          data: { client_id: "c1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
-          error: null,
-        }),
-      )
-      .mockReturnValueOnce(chain({ data: null, error: null }));
+    from.mockReturnValueOnce(
+      chain({
+        data: { client_id: "c1", status: "closed", closed_at: "2026-11-01T00:00:00.000Z" },
+        error: null,
+      }),
+    );
 
     await expect(
       updateOrder(
@@ -268,10 +253,10 @@ describe("updateOrder closed-order gate", () => {
         },
         "ws-1",
       ),
-    ).rejects.toThrow(/orders\.lifecycle\.errors\.orderAlreadyClosed/);
+    ).rejects.toThrow(/orders\.lifecycle\.errors\.closedOrderImmutable/);
   });
 
-  it("does not apply the manage-closed rejection to cancelled orders for owner_id", async () => {
+  it("does not apply the closed-immutable rejection to cancelled orders for owner_id", async () => {
     getUser.mockResolvedValue({ data: { user: { id: "owner-1" } }, error: null });
     from
       .mockReturnValueOnce(
@@ -296,6 +281,6 @@ describe("updateOrder closed-order gate", () => {
         },
         "ws-1",
       ),
-    ).rejects.not.toThrow(/orders\.lifecycle\.errors\.orderAlreadyClosed/);
+    ).rejects.not.toThrow(/orders\.lifecycle\.errors\.closedOrderImmutable/);
   });
 });
