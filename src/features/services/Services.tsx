@@ -40,7 +40,7 @@ export function Services() {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -232,7 +232,7 @@ export function Services() {
         onClearFilters={() => {
           setSearchQuery("");
           setCategoryFilter("all");
-          setStatusFilter("active");
+          setStatusFilter("all");
         }}
       />
 
