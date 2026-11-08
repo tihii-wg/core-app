@@ -26,10 +26,12 @@ import { defaultsForKind } from "./warranty";
 import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
+import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
+import { useGetClient } from "../clients/useGetClient";
 import OrderTotalsSummary from "./OrderTotalsSummary";
 import { previewOrderMoney } from "./orderMoneyPreview";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
@@ -39,6 +41,13 @@ import OrderTeamSelect from "./OrderTeamSelect";
 import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
 import { mergeOrderTeam } from "./orderTeam";
 import OrderAssetFields from "./OrderAssetFields";
+import OrderIndustryFields from "./OrderIndustryFields";
+import {
+  emptyOrderIndustryFormFields,
+  isInstallationBeforeMeasurement,
+  orderIndustryFieldsToApi,
+  orderIndustryFormFieldsFromOrder,
+} from "./industryOrderFieldHelpers";
 import { OrderVehicleFields } from "./OrderVehicleFields";
 import {
   buildOrderMileageSnapshot,
@@ -86,8 +95,9 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     partsDurationMonths: workspace?.warrantyPartsMonths ?? null,
     partsMileageLimit: workspace?.warrantyPartsKm ?? null,
   };
-  const { workflow, copy } = useIndustryWorkflow();
+  const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
+  const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const closedOrderPerms = useClosedOrderActionPermissions();
   const allowClosedMutation = canMutateOrderContent({
@@ -96,6 +106,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
   });
   const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? order.clientId || null : null);
+  const { client: orderClient } = useGetClient(industryBlocks.siteAddress ? order.clientId || null : null);
   const activeServices = services?.filter((service) => service.status === "active");
   const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
@@ -121,6 +132,8 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       device: order.device,
       carNumber: order.carNumber,
       vin: order.vin,
+      ...emptyOrderIndustryFormFields(),
+      ...orderIndustryFormFieldsFromOrder(order),
       currentMileage: mileageFormValueFromOrder(order),
       description: order.description,
       assignedEmployeeId: order.assignedEmployeeId,
@@ -234,6 +247,12 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
       const servicesDirty = isFieldArrayDirty(dirtyFields.services);
       const materialsDirty = isFieldArrayDirty(dirtyFields.materials);
 
+      const industryFields = orderIndustryFieldsToApi(data);
+      if (isInstallationBeforeMeasurement(industryFields.measurementAt, industryFields.installationAt)) {
+        toast.error(t("orders.validation.installationBeforeMeasurement"));
+        return;
+      }
+
       // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
       const updatedOrder = await updateOrder({
         orderId: order.id,
@@ -249,6 +268,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
             ? data.carNumber
             : order.carNumber,
         vin: showVehicles ? (data.vin ?? "") : workflow.orderFields.vin.visible ? data.vin : order.vin,
+        ...industryFields,
         ...(mileageSnapshot ?? {}),
         description: data.description,
         assignedEmployeeId: data.assignedEmployeeId,
@@ -288,6 +308,16 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         disabled={isSubmitting}
         preserveHiddenValues
         hideVisibleFields={hideDuplicateVehicleAssetFields}
+      />
+
+      <OrderIndustryFields
+        register={register}
+        setValue={setValue}
+        errors={errors}
+        blocks={industryBlocks}
+        clientAddress={orderClient?.address}
+        idPrefix="edit-order-"
+        disabled={isSubmitting}
       />
 
       <div className="space-y-1.5">

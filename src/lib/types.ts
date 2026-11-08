@@ -124,6 +124,24 @@ export interface Order {
   device: string;
   vin: string;
   carNumber: string;
+  /** Device serial (`orders.device_serial`); empty when unset. */
+  deviceSerial?: string;
+  /** Device IMEI (`orders.device_imei`); phones only in the UI. */
+  deviceImei?: string;
+  /** Condition on intake (`orders.device_condition`). */
+  deviceCondition?: string;
+  /** Completeness on intake (`orders.device_completeness`). */
+  deviceCompleteness?: string;
+  /** Unlock code / pattern (`orders.device_passcode`) — never printed. */
+  devicePasscode?: string;
+  /** Object / site address (`orders.site_address`). */
+  siteAddress?: string;
+  /** Product dimensions text (`orders.product_dimensions`). */
+  productDimensions?: string;
+  /** Measurement appointment (`orders.measurement_at`), ISO timestamptz or null. */
+  measurementAt?: string | null;
+  /** Installation appointment (`orders.installation_at`), ISO timestamptz or null. */
+  installationAt?: string | null;
   service: string;
   services: OrderService[];
   /** Absent on legacy fixtures; treat as []. */
@@ -208,6 +226,21 @@ export interface addNewOrderFormData {
   device: string;
   vin: string;
   carNumber: string;
+  deviceSerial: string;
+  deviceImei: string;
+  deviceCondition: string;
+  deviceCompleteness: string;
+  devicePasscode: string;
+  siteAddress: string;
+  productDimensions: string;
+  /** Local date part YYYY-MM-DD for measurement_at. */
+  measurementDate: string;
+  /** Local time part HH:mm for measurement_at. */
+  measurementTime: string;
+  /** Local date part YYYY-MM-DD for installation_at. */
+  installationDate: string;
+  /** Local time part HH:mm for installation_at. */
+  installationTime: string;
   /** Visit mileage for the linked vehicle; persisted to vehicles.current_mileage, not orders. */
   currentMileage: string;
   description: string;
@@ -234,6 +267,16 @@ export type CreateOrderInput = {
   device?: string;
   vin?: string;
   carNumber?: string;
+  deviceSerial?: string | null;
+  deviceImei?: string | null;
+  deviceCondition?: string | null;
+  deviceCompleteness?: string | null;
+  devicePasscode?: string | null;
+  siteAddress?: string | null;
+  productDimensions?: string | null;
+  /** ISO timestamptz or null; empty form → null. */
+  measurementAt?: string | null;
+  installationAt?: string | null;
   /** Historical visit mileage for this order; omit when the visit field was left empty. */
   vehicleMileageSnapshot?: number | null;
   /** Unit captured with the visit mileage; null = unknown. */
@@ -261,6 +304,17 @@ export type EditOrderFormData = {
   device: string;
   carNumber: string;
   vin: string;
+  deviceSerial: string;
+  deviceImei: string;
+  deviceCondition: string;
+  deviceCompleteness: string;
+  devicePasscode: string;
+  siteAddress: string;
+  productDimensions: string;
+  measurementDate: string;
+  measurementTime: string;
+  installationDate: string;
+  installationTime: string;
   /**
    * Visit mileage form field. Also updates vehicles.current_mileage when changed.
    * Order historical snapshot is written only when this field is dirty on save.
@@ -274,8 +328,34 @@ export type EditOrderFormData = {
   materials: OrderMaterial[];
 };
 
-export type UpdateOrderDetails = Omit<EditOrderFormData, "services" | "materials"> & {
+type OrderIndustryTextField =
+  | "deviceSerial"
+  | "deviceImei"
+  | "deviceCondition"
+  | "deviceCompleteness"
+  | "devicePasscode"
+  | "siteAddress"
+  | "productDimensions";
+
+export type UpdateOrderDetails = Omit<
+  EditOrderFormData,
+  | "services"
+  | "materials"
+  | "measurementDate"
+  | "measurementTime"
+  | "installationDate"
+  | "installationTime"
+  | OrderIndustryTextField
+> & {
   orderId: string;
+  /** Industry fields: omit all of them to leave the DB columns untouched (assignee/team-only updates). */
+  deviceSerial?: string | null;
+  deviceImei?: string | null;
+  deviceCondition?: string | null;
+  deviceCompleteness?: string | null;
+  devicePasscode?: string | null;
+  siteAddress?: string | null;
+  productDimensions?: string | null;
   /** The order's complete final service list; omit to leave the saved lines untouched. Empty array clears lines when supported. */
   services?: OrderService[];
   /** The order's complete final material list; omit to leave saved materials untouched. Empty array removes all materials and restores stock. */
@@ -286,6 +366,9 @@ export type UpdateOrderDetails = Omit<EditOrderFormData, "services" | "materials
    */
   vehicleMileageSnapshot?: number | null;
   vehicleMileageUnitSnapshot?: MileageUnit | null;
+  /** ISO timestamptz or null; form date/time parts are combined before save. */
+  measurementAt?: string | null;
+  installationAt?: string | null;
 };
 /** Catalog default warranty mode stored on services / inventory_items. */
 export type CatalogWarrantyType = "none" | "duration" | "mileage" | "both";

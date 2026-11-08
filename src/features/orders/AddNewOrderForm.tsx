@@ -23,12 +23,19 @@ import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
+import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { clientVehiclesQueryKey, useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
+import OrderIndustryFields from "./OrderIndustryFields";
+import {
+  emptyOrderIndustryFormFields,
+  isInstallationBeforeMeasurement,
+  orderIndustryFieldsToApi,
+} from "./industryOrderFieldHelpers";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderTeamSelect from "./OrderTeamSelect";
 import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
@@ -87,8 +94,9 @@ export default function AddNewOrderForm({
     partsDurationMonths: workspace?.warrantyPartsMonths ?? null,
     partsMileageLimit: workspace?.warrantyPartsKm ?? null,
   };
-  const { workflow, copy } = useIndustryWorkflow();
+  const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
+  const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const submitLockRef = useRef(false);
 
@@ -113,6 +121,7 @@ export default function AddNewOrderForm({
       device: "",
       vin: "",
       carNumber: "",
+      ...emptyOrderIndustryFormFields(),
       currentMileage: "",
       services: [],
       materials: [],
@@ -256,6 +265,12 @@ export default function AddNewOrderForm({
             )
           : undefined;
       const mileageSnapshot = buildOrderMileageSnapshot(data.currentMileage, selectedVehicleForSnapshot);
+      const industryFields = orderIndustryFieldsToApi(data);
+      if (isInstallationBeforeMeasurement(industryFields.measurementAt, industryFields.installationAt)) {
+        toast.error(t("orders.validation.installationBeforeMeasurement"));
+        submitLockRef.current = false;
+        return;
+      }
 
       await createOrder({
         clientId: data.clientId || undefined,
@@ -269,6 +284,7 @@ export default function AddNewOrderForm({
           : workflow.orderFields.carNumber.visible
             ? data.carNumber
             : "",
+        ...industryFields,
         ...(mileageSnapshot ?? {}),
         description: data.description,
         services: data.services ?? [],
@@ -362,6 +378,15 @@ export default function AddNewOrderForm({
           copy={copy}
           preserveHiddenValues
           hideVisibleFields={hideDuplicateVehicleAssetFields}
+        />
+
+        <OrderIndustryFields
+          register={register}
+          setValue={setValue}
+          errors={errors}
+          blocks={industryBlocks}
+          clientAddress={selectedClient?.address}
+          disabled={isSubmitting}
         />
 
         <div className="space-y-1.5">

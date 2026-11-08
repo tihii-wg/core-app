@@ -66,8 +66,32 @@ describe("industryProfile registry", () => {
     expect(workflow.orderFields.device.visible).toBe(true);
   });
 
-  it("shows serial-like VIN field for device industries", () => {
-    expect(industryProfile("phone_electronics_repair").orderFields.vin.visible).toBe(true);
-    expect(industryProfile("phone_electronics_repair").orderFieldBlocks.deviceFields).toBe(true);
+  it("exposes device serial / intake fields and IMEI only for phones", () => {
+    const phone = industryProfile("phone_electronics_repair");
+    expect(phone.orderFields.vin.visible).toBe(false);
+    expect(phone.orderFieldBlocks.deviceFields).toBe(true);
+    expect(phone.orderFieldBlocks.deviceSerial).toBe(true);
+    expect(phone.orderFieldBlocks.deviceImei).toBe(true);
+    expect(phone.orderFieldBlocks.deviceCondition).toBe(true);
+    expect(phone.orderFieldBlocks.devicePasscode).toBe(true);
+
+    const computer = industryProfile("computer_repair");
+    expect(computer.orderFieldBlocks.deviceSerial).toBe(true);
+    expect(computer.orderFieldBlocks.deviceImei).toBe(false);
+
+    const site = industryProfile("electrical_services");
+    expect(site.orderFieldBlocks.siteAddress).toBe(true);
+    expect(site.orderFieldBlocks.deviceSerial).toBe(false);
+    expect(site.orderFieldBlocks.measurementAt).toBe(false);
+
+    const furniture = industryProfile("furniture_manufacturing");
+    expect(furniture.orderFieldBlocks.siteAddress).toBe(true);
+    expect(furniture.orderFieldBlocks.productDimensions).toBe(true);
+    expect(furniture.orderFieldBlocks.measurementAt).toBe(true);
+    expect(furniture.orderFieldBlocks.installationAt).toBe(true);
+
+    const auto = industryProfile("auto_repair");
+    expect(auto.orderFieldBlocks.deviceSerial).toBe(false);
+    expect(auto.orderFieldBlocks.siteAddress).toBe(false);
   });
 });

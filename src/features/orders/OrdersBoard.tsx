@@ -16,6 +16,9 @@ import { isPaidStatusChangeForbidden, isTaxInvoiceBlocked } from "./taxInvoice";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
+import { industryProfile } from "../industries/industryProfile";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { orderAssetSecondaryLine } from "./industryOrderFieldHelpers";
 
 type OrdersBoardProps = {
   /** Debounced search text (same box as the table). */
@@ -228,6 +231,9 @@ function BoardCard({
   onDragEnd,
 }: BoardCardProps) {
   const { t } = useTranslation();
+  const { profile, industrySlug } = useIndustryWorkflow();
+  const blocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
+  const secondary = orderAssetSecondaryLine(order, blocks);
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.target !== event.currentTarget) return;
@@ -267,6 +273,11 @@ function BoardCard({
       {order.device ? (
         <p className="truncate text-xs text-muted-foreground" title={order.device}>
           {order.device}
+        </p>
+      ) : null}
+      {secondary ? (
+        <p className="truncate text-[11px] tabular-nums text-muted-foreground" title={secondary}>
+          {secondary}
         </p>
       ) : null}
       <div className="mt-2 flex min-w-0 items-center justify-between gap-2">

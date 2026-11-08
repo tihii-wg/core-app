@@ -7,6 +7,9 @@ import { OrderClientName } from "./OrderClientName";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import OrderTeamAvatars from "./OrderTeamAvatars";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
+import { industryProfile } from "../industries/industryProfile";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { orderAssetSecondaryLine } from "./industryOrderFieldHelpers";
 
 type OrderCardProps = {
   order: Order;
@@ -55,7 +58,9 @@ export function OrderCard({
   onDeleted,
 }: OrderCardProps) {
   const { t } = useTranslation();
-  const registration = order.carNumber?.trim() || order.vin?.trim() || "";
+  const { profile, industrySlug } = useIndustryWorkflow();
+  const blocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
+  const secondary = orderAssetSecondaryLine(order, blocks);
   const resolvedPaymentStatus = paymentStatus ?? order.paymentStatus;
 
   return (
@@ -93,16 +98,16 @@ export function OrderCard({
         />
       </div>
 
-      {(order.device || registration) && (
+      {(order.device || secondary) && (
         <div className="mt-1.5 min-w-0 text-sm text-muted-foreground">
           {order.device ? (
             <p className="truncate" title={order.device}>
               {order.device}
             </p>
           ) : null}
-          {registration ? (
-            <p className="truncate text-xs tabular-nums" title={registration}>
-              {registration}
+          {secondary ? (
+            <p className="truncate text-xs tabular-nums" title={secondary}>
+              {secondary}
             </p>
           ) : null}
         </div>

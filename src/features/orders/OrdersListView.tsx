@@ -4,6 +4,7 @@ import type { Order } from "../../lib/types";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { Skeleton } from "../../ui/Skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
+import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetInvoices } from "../invoices/useGetInvoices";
@@ -83,7 +84,8 @@ export function OrdersListView({
 }: OrdersListViewProps) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
-  const { copy } = useIndustryWorkflow();
+  const { copy, profile, industrySlug } = useIndustryWorkflow();
+  const orderFieldBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const { formatMoney } = useWorkspaceMoney();
   const today = localDateKey(new Date());
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
@@ -143,6 +145,7 @@ export function OrdersListView({
     const base = buildOrderColumns({
       t,
       deviceServiceColumn: copy.deviceServiceColumn,
+      orderFieldBlocks,
       formatMoney,
       today,
       warrantyByOrderId,
@@ -169,6 +172,7 @@ export function OrdersListView({
   }, [
     t,
     copy.deviceServiceColumn,
+    orderFieldBlocks,
     formatMoney,
     today,
     warrantyByOrderId,

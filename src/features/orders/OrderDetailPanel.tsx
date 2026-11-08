@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, CircleX, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { Calendar, CircleX, Eye, EyeOff, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -25,6 +25,7 @@ import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
+import { industryProfile } from "../industries/industryProfile";
 import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
@@ -112,7 +113,7 @@ export default function OrderDetailPanel({
   invoiceNumber,
   onDeleted,
 }: OrderDetailPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -120,7 +121,8 @@ export default function OrderDetailPanel({
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
-  const { workflow, copy } = useIndustryWorkflow();
+  const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
+  const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const showClientVehicles = industrySupportsClientVehicles(workflow);
   const workspaceRole = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
@@ -452,6 +454,39 @@ export default function OrderDetailPanel({
               ) : null}
               {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin, "vin") ? (
                 <DetailItem label={copy.vinDetail} value={selectedOrder.vin} mono />
+              ) : null}
+              {industryBlocks.deviceSerial && selectedOrder.deviceSerial?.trim() ? (
+                <DetailItem label={t("orders.industryFields.deviceSerial")} value={selectedOrder.deviceSerial} mono />
+              ) : null}
+              {industryBlocks.deviceImei && selectedOrder.deviceImei?.trim() ? (
+                <DetailItem label={t("orders.industryFields.deviceImei")} value={selectedOrder.deviceImei} mono />
+              ) : null}
+              {industryBlocks.deviceCondition && selectedOrder.deviceCondition?.trim() ? (
+                <DetailItem label={t("orders.industryFields.deviceCondition")} value={selectedOrder.deviceCondition} />
+              ) : null}
+              {industryBlocks.deviceCompleteness && selectedOrder.deviceCompleteness?.trim() ? (
+                <DetailItem label={t("orders.industryFields.deviceCompleteness")} value={selectedOrder.deviceCompleteness} />
+              ) : null}
+              {industryBlocks.devicePasscode && selectedOrder.devicePasscode?.trim() ? (
+                <PasscodeDetailItem label={t("orders.industryFields.devicePasscode")} value={selectedOrder.devicePasscode} />
+              ) : null}
+              {industryBlocks.siteAddress && selectedOrder.siteAddress?.trim() ? (
+                <DetailItem label={t("orders.industryFields.siteAddress")} value={selectedOrder.siteAddress} />
+              ) : null}
+              {industryBlocks.productDimensions && selectedOrder.productDimensions?.trim() ? (
+                <DetailItem label={t("orders.industryFields.productDimensions")} value={selectedOrder.productDimensions} />
+              ) : null}
+              {industryBlocks.measurementAt && selectedOrder.measurementAt ? (
+                <DetailItem
+                  label={t("orders.industryFields.measurementAt")}
+                  value={formatIndustryDateTime(selectedOrder.measurementAt, i18n.language)}
+                />
+              ) : null}
+              {industryBlocks.installationAt && selectedOrder.installationAt ? (
+                <DetailItem
+                  label={t("orders.industryFields.installationAt")}
+                  value={formatIndustryDateTime(selectedOrder.installationAt, i18n.language)}
+                />
               ) : null}
             </dl>
 
@@ -1001,6 +1036,18 @@ function OrderDetailWarrantyUnderNumber({ order }: { order: Order }) {
   return <OrderWarrantyIndicator model={byOrderId.get(order.id)} className="mt-1 font-normal" />;
 }
 
+function formatIndustryDateTime(iso: string, locale: string) {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale || "en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
 function DetailItem({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   if (value == null || value === "") return null;
   return (
@@ -1008,6 +1055,29 @@ function DetailItem({ label, value, mono }: { label: string; value: React.ReactN
       <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className={mono ? "mt-1 font-mono text-[13px] [overflow-wrap:anywhere] text-foreground" : "mt-1 font-medium [overflow-wrap:anywhere] text-foreground"}>
         {value}
+      </dd>
+    </div>
+  );
+}
+
+function PasscodeDetailItem({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation();
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 flex items-center gap-2 font-medium text-foreground">
+        <span className="min-w-0 font-mono text-[13px] [overflow-wrap:anywhere]">{visible ? value : "••••••••"}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={visible ? t("orders.industryFields.hidePasscode") : t("orders.industryFields.showPasscode")}
+          aria-pressed={visible}
+          onClick={() => setVisible((current) => !current)}
+        >
+          {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+        </Button>
       </dd>
     </div>
   );

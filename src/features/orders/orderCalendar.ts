@@ -1,4 +1,5 @@
 import type { Order } from "../../lib/types";
+import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
 import { localDateKey, startOfWeek } from "../../pages/dashboardStats";
 
 /** Calendar granularity of the Orders calendar view. */
@@ -24,6 +25,16 @@ export function writeOrderCalendarScale(scale: OrderCalendarScale) {
 
 /** Which order field placed the order on the calendar. */
 export type OrderCalendarBasis = "deadline" | "createdAt";
+
+/** Calendar event kinds — deadline/createdAt plus project measurement/installation. */
+export type OrderCalendarEventKind = OrderCalendarBasis | "measurement" | "installation";
+
+export type OrderCalendarEvent<T extends Pick<Order, "orderNumber"> = Order> = {
+  id: string;
+  order: T;
+  dateKey: string;
+  kind: OrderCalendarEventKind;
+};
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -75,6 +86,110 @@ export function bucketOrdersByDate<T extends Pick<Order, "deadline" | "createdAt
   return { byDate, undated };
 }
 
+type OrderCalendarEventSource = Pick<
+  Order,
+  "id" | "orderNumber" | "deadline" | "createdAt" | "measurementAt" | "installationAt"
+>;
+
+/**
+ * Expands orders into calendar events. Project industries also get measurement /
+ * installation appointments as separate events (in addition to the deadline).
+ */
+export function expandOrderCalendarEvents<T extends OrderCalendarEventSource>(
+  orders: readonly T[],
+  blocks: Pick<IndustryOrderFieldBlocks, "measurementAt" | "installationAt">,
+): OrderCalendarEvent<T>[] {
+  const events: OrderCalendarEvent<T>[] = [];
+  const showMeasurement = blocks.measurementAt;
+  const showInstallation = blocks.installationAt;
+
+  for (const order of orders) {
+    const placement = orderCalendarPlacement(order);
+    if (placement) {
+      events.push({
+        id: `${order.id}:${placement.basis}`,
+        order,
+        dateKey: placement.dateKey,
+        kind: placement.basis,
+      });
+    }
+
+    if (showMeasurement) {
+      const measureKey = dateKeyOf(order.measurementAt);
+      if (measureKey) {
+        events.push({
+          id: `${order.id}:measurement`,
+          order,
+          dateKey: measureKey,
+          kind: "measurement",
+        });
+      }
+    }
+
+    if (showInstallation) {
+      const installKey = dateKeyOf(order.installationAt);
+      if (installKey) {
+        events.push({
+          id: `${order.id}:installation`,
+          order,
+          dateKey: installKey,
+          kind: "installation",
+        });
+      }
+    }
+  }
+
+  return events;
+}
+
+export type OrderCalendarEventBuckets<T extends Pick<Order, "orderNumber"> = Order> = {
+  byDate: Map<string, OrderCalendarEvent<T>[]>;
+  undated: OrderCalendarEvent<T>[];
+};
+
+/** Groups expanded calendar events by day. Undated = orders with no deadline/createdAt and no project dates. */
+export function bucketOrderCalendarEvents<T extends OrderCalendarEventSource>(
+  orders: readonly T[],
+  blocks: Pick<IndustryOrderFieldBlocks, "measurementAt" | "installationAt">,
+): OrderCalendarEventBuckets<T> {
+  const events = expandOrderCalendarEvents(orders, blocks);
+  const byDate = new Map<string, OrderCalendarEvent<T>[]>();
+  const ordersWithEvents = new Set(events.map((event) => event.order.id));
+  const undated: OrderCalendarEvent<T>[] = [];
+
+  for (const event of events) {
+    const bucket = byDate.get(event.dateKey);
+    if (bucket) bucket.push(event);
+    else byDate.set(event.dateKey, [event]);
+  }
+
+  const kindRank: Record<OrderCalendarEventKind, number> = {
+    measurement: 0,
+    installation: 1,
+    deadline: 2,
+    createdAt: 3,
+  };
+  const bySort = (a: OrderCalendarEvent<T>, b: OrderCalendarEvent<T>) => {
+    const numberCmp = a.order.orderNumber.localeCompare(b.order.orderNumber, undefined, { numeric: true });
+    if (numberCmp !== 0) return numberCmp;
+    return kindRank[a.kind] - kindRank[b.kind];
+  };
+  for (const bucket of byDate.values()) bucket.sort(bySort);
+
+  for (const order of orders) {
+    if (ordersWithEvents.has(order.id)) continue;
+    undated.push({
+      id: `${order.id}:undated`,
+      order,
+      dateKey: "",
+      kind: "deadline",
+    });
+  }
+  undated.sort((a, b) => a.order.orderNumber.localeCompare(b.order.orderNumber, undefined, { numeric: true }));
+
+  return { byDate, undated };
+}
+
 /** First day of the month containing `anchor` (local time, midnight). */
 export function startOfMonth(anchor: Date) {
   return new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -123,6 +238,18 @@ export function isInAnchorMonth(dateKey: string, anchor: Date) {
 /** Orders that fall inside the rendered range, as a flat count (used for the empty-state hint). */
 export function countOrdersInRange<T extends Pick<Order, "deadline" | "createdAt" | "orderNumber">>(
   buckets: OrderCalendarBuckets<T>,
+  range: { from: string; to: string },
+) {
+  let total = 0;
+  for (const [key, list] of buckets.byDate) {
+    if (key >= range.from && key <= range.to) total += list.length;
+  }
+  return total;
+}
+
+/** Calendar events that fall inside the rendered range (deadline + project appointments). */
+export function countCalendarEventsInRange<T extends Pick<Order, "orderNumber">>(
+  buckets: OrderCalendarEventBuckets<T>,
   range: { from: string; to: string },
 ) {
   let total = 0;

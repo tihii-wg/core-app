@@ -277,13 +277,14 @@ export function assetBlockContent(assetKind: IndustryAssetKind): { titleKey: str
   if (assetKind === "device") {
     return {
       titleKey: "device",
-      content: "#УСТРОЙСТВО\n#АВТО-VIN",
+      content:
+        "#УСТРОЙСТВО\n#УСТРОЙСТВО-СЕРИЙНЫЙ\n#УСТРОЙСТВО-IMEI\n#УСТРОЙСТВО-СОСТОЯНИЕ\n#УСТРОЙСТВО-КОМПЛЕКТНОСТЬ",
     };
   }
   if (assetKind === "site" || assetKind === "project") {
     return {
       titleKey: "object",
-      content: "#КЛИЕНТ-АДРЕС\n#ЗАКАЗ-ОПИСАНИЕ",
+      content: "#ОБЪЕКТ-АДРЕС\n#ЗАКАЗ-ОПИСАНИЕ",
     };
   }
   return null;
@@ -360,7 +361,14 @@ function furnitureContract(title: string, t: Translate): CanvasDocumentLayout {
       },
       ...tintBox(0, 40, 92, 36, "#КОМПАНИЯ-НАЗВАНИЕ\n#КОМПАНИЯ-IDNO\n#КОМПАНИЯ-АДРЕС\n#КОМПАНИЯ-ТЕЛЕФОН", layoutLabel(t, "seller", "Seller")),
       ...tintBox(98, 40, 92, 36, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-IDNO\n#КЛИЕНТ-АДРЕС\n#КЛИЕНТ-ТЕЛЕФОН", layoutLabel(t, "buyer", "Buyer")),
-      ...tintBox(0, 82, 190, 28, "#ЗАКАЗ-ОПИСАНИЕ", layoutLabel(t, "subject", "Subject")),
+      ...tintBox(
+        0,
+        82,
+        190,
+        28,
+        "#ЗАКАЗ-ОПИСАНИЕ\n#ОБЪЕКТ-АДРЕС\n#ИЗДЕЛИЕ-РАЗМЕРЫ\n#ДАТА-МОНТАЖА",
+        layoutLabel(t, "subject", "Subject"),
+      ),
       totalsElement(118, t, [
         total("total", L(t, "total")),
         total("paid", layoutLabel(t, "prepayment", "Prepayment")),
@@ -381,7 +389,14 @@ function furnitureSpecification(title: string, t: Translate): CanvasDocumentLayo
     gridMm: 2,
     elements: [
       ...headerBand(title, "#ЗАКАЗ-НОМЕР"),
-      ...tintBox(0, 34, 190, 24, "#ЗАКАЗ-ОПИСАНИЕ\n#КЛИЕНТ-АДРЕС", layoutLabel(t, "product", "Product")),
+      ...tintBox(
+        0,
+        34,
+        190,
+        24,
+        "#ЗАКАЗ-ОПИСАНИЕ\n#ОБЪЕКТ-АДРЕС\n#ИЗДЕЛИЕ-РАЗМЕРЫ\n#ДАТА-МОНТАЖА",
+        layoutLabel(t, "product", "Product"),
+      ),
       tableCaption(62, layoutLabel(t, "materialsCaption", "Materials & hardware")),
       tableElement(70, "materials", lineColumns(t)),
       tableCaption(122, layoutLabel(t, "worksCaption", "Works")),
@@ -446,7 +461,14 @@ function furnitureAcceptanceAct(title: string, t: Translate): CanvasDocumentLayo
     elements: [
       ...headerBand(title, "#ЗАКАЗ-НОМЕР"),
       ...tintBox(0, 34, 92, 32, "#КЛИЕНТ-ИМЯ\n#КЛИЕНТ-ТЕЛЕФОН\n#КЛИЕНТ-АДРЕС", L(t, "client")),
-      ...tintBox(98, 34, 92, 32, "#ЗАКАЗ-ОПИСАНИЕ", layoutLabel(t, "object", "Object")),
+      ...tintBox(
+        98,
+        34,
+        92,
+        32,
+        "#ЗАКАЗ-ОПИСАНИЕ\n#ОБЪЕКТ-АДРЕС\n#ИЗДЕЛИЕ-РАЗМЕРЫ\n#ДАТА-МОНТАЖА",
+        layoutLabel(t, "object", "Object"),
+      ),
       tableCaption(70, layoutLabel(t, "worksCaption", "Works")),
       tableElement(78, "services", lineColumns(t)),
       tableCaption(124, layoutLabel(t, "materialsCaption", "Materials & hardware")),

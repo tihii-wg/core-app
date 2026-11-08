@@ -406,8 +406,20 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     vehicleMileageSnapshot: isVehicle ? 125_000 : null,
     vehicleMileageUnitSnapshot: isVehicle ? mileageUnit : null,
     device: deviceLabel,
-    vin: profile.assetKind === "device" ? "SN-DEMO-0001" : isVehicle ? (vehicle?.vin ?? "") : "",
+    vin: isVehicle ? (vehicle?.vin ?? "") : "",
     carNumber: isVehicle ? (vehicle?.licensePlate ?? "") : "",
+    // Always fill industry tokens so template previews never show empty placeholders.
+    // Values stay pack-realistic; vehicle/other packs still get non-empty demo strings.
+    deviceSerial: demoPack === "device" ? "SN-A1782-BX91" : "SN-DEMO-0001",
+    deviceImei: demoPack === "device" ? "356938035643809" : "000000000000000",
+    deviceCondition: t("settings.printTemplates.demo.byIndustry.device.condition"),
+    deviceCompleteness: t("settings.printTemplates.demo.byIndustry.device.completeness"),
+    // Passcode is never printed; only device demos keep a value for UI coverage.
+    devicePasscode: demoPack === "device" ? "demo-passcode-never-print" : "",
+    siteAddress: t("settings.printTemplates.demo.byIndustry.site.objectAddress"),
+    productDimensions: demoPack === "furniture" ? "2400×720×600" : "1200×600×450",
+    measurementAt: addDaysIso(now, demoPack === "furniture" ? -3 : -1),
+    installationAt: addDaysIso(now, demoPack === "furniture" ? 5 : 3),
     service: services.map((line) => line.serviceName).join(", "),
     services,
     materials,

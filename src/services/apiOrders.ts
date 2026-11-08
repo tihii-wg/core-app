@@ -364,6 +364,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   const normalizedVin = assertValidOptionalVin(input.vin, "orders.validation.vinLength");
   const device = nullIfEmptyText(input.device);
   const carNumber = nullIfEmptyText(input.carNumber)?.toUpperCase() ?? null;
+  const industryPatch = orderIndustryColumnPatch(input);
   const mileageSnapshotPatch = orderMileageSnapshotFields({
     vehicleMileageSnapshot: input.vehicleMileageSnapshot,
     vehicleMileageUnitSnapshot: input.vehicleMileageUnitSnapshot,
@@ -400,6 +401,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
         vin: normalizedVin,
         service_id: resolvedServices[0]?.id ?? null,
         service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
+        ...industryPatch,
         ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
       } as Record<string, unknown>)
       .select()
@@ -414,7 +416,9 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() => insertOrderRow(false)));
   }
 
-  if (orderError) throw new Error(orderError.message);
+  if (orderError) {
+    throw mapOrderIndustryFieldsDbError(orderError) ?? new Error(orderError.message);
+  }
 
   let order: Record<string, unknown>;
   try {
@@ -1538,6 +1542,15 @@ export function toOrder(
     device: typeof row.device === "string" ? row.device : "",
     vin: readVin(row),
     carNumber: typeof row.car_number === "string" ? row.car_number : "",
+    deviceSerial: readOrderOptionalText(row, "device_serial"),
+    deviceImei: readOrderOptionalText(row, "device_imei"),
+    deviceCondition: readOrderOptionalText(row, "device_condition"),
+    deviceCompleteness: readOrderOptionalText(row, "device_completeness"),
+    devicePasscode: readOrderOptionalText(row, "device_passcode"),
+    siteAddress: readOrderOptionalText(row, "site_address"),
+    productDimensions: readOrderOptionalText(row, "product_dimensions"),
+    measurementAt: readOrderTimestamp(row, "measurement_at"),
+    installationAt: readOrderTimestamp(row, "installation_at"),
     service: typeof row.service === "string" ? row.service : services.map((service) => service.serviceName).join(", "),
     services,
     materials,
@@ -1598,7 +1611,17 @@ async function assigneeDisplayNames(workspaceId: string, assignedUserIds: string
 }
 
 async function orderSearchFilter(workspaceId: string, term: string) {
-  const filters = ["number", "device", "car_number", "vin", "service", "description"].map((column) => `${column}.ilike.%${term}%`);
+  const filters = [
+    "number",
+    "device",
+    "car_number",
+    "vin",
+    "device_serial",
+    "device_imei",
+    "site_address",
+    "service",
+    "description",
+  ].map((column) => `${column}.ilike.%${term}%`);
   const matchingClients = await getClients(term, workspaceId);
   if (matchingClients.length > 0) filters.push(`client_id.in.(${matchingClients.map((client) => client.id).join(",")})`);
   return filters.join(",");
@@ -2931,6 +2954,70 @@ export function readVin(row: Record<string, unknown>) {
   return "";
 }
 
+function readOrderOptionalText(row: Record<string, unknown>, column: string): string {
+  const value = row[column];
+  return typeof value === "string" ? value : "";
+}
+
+/** Full ISO timestamptz when present; null when absent / empty (unlike formatOrderDate which truncates). */
+function readOrderTimestamp(row: Record<string, unknown>, column: string): string | null {
+  const value = row[column];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+/** Map industry-field DB check failures to localized copy (never surface raw constraint names). */
+export function mapOrderIndustryFieldsDbError(error: {
+  code?: string;
+  message?: string;
+  details?: string | null;
+  hint?: string | null;
+}): Error | null {
+  const blob = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`;
+  if (/orders_install_after_measure/i.test(blob)) {
+    return new Error(i18n.t("orders.validation.installationBeforeMeasurement"));
+  }
+  return null;
+}
+
+function orderIndustryColumnPatch(input: {
+  deviceSerial?: string | null;
+  deviceImei?: string | null;
+  deviceCondition?: string | null;
+  deviceCompleteness?: string | null;
+  devicePasscode?: string | null;
+  siteAddress?: string | null;
+  productDimensions?: string | null;
+  measurementAt?: string | null;
+  installationAt?: string | null;
+}): Record<string, unknown> {
+  // Assignee/team-only updates omit these keys — leave DB columns untouched.
+  const anyProvided =
+    input.deviceSerial !== undefined ||
+    input.deviceImei !== undefined ||
+    input.deviceCondition !== undefined ||
+    input.deviceCompleteness !== undefined ||
+    input.devicePasscode !== undefined ||
+    input.siteAddress !== undefined ||
+    input.productDimensions !== undefined ||
+    input.measurementAt !== undefined ||
+    input.installationAt !== undefined;
+  if (!anyProvided) return {};
+
+  return {
+    device_serial: nullIfEmptyText(input.deviceSerial ?? null),
+    device_imei: nullIfEmptyText(input.deviceImei ?? null),
+    device_condition: nullIfEmptyText(input.deviceCondition ?? null),
+    device_completeness: nullIfEmptyText(input.deviceCompleteness ?? null),
+    device_passcode: nullIfEmptyText(input.devicePasscode ?? null),
+    site_address: nullIfEmptyText(input.siteAddress ?? null),
+    product_dimensions: nullIfEmptyText(input.productDimensions ?? null),
+    measurement_at: input.measurementAt?.trim() ? input.measurementAt.trim() : null,
+    installation_at: input.installationAt?.trim() ? input.installationAt.trim() : null,
+  };
+}
+
 export async function updateOrder(
   {
     orderId,
@@ -2946,6 +3033,15 @@ export async function updateOrder(
     materials,
     vehicleMileageSnapshot,
     vehicleMileageUnitSnapshot,
+    deviceSerial,
+    deviceImei,
+    deviceCondition,
+    deviceCompleteness,
+    devicePasscode,
+    siteAddress,
+    productDimensions,
+    measurementAt,
+    installationAt,
   }: UpdateOrderDetails,
   targetWorkspaceId: string | undefined,
 ) {
@@ -2997,6 +3093,17 @@ export async function updateOrder(
     vehicleMileageSnapshot,
     vehicleMileageUnitSnapshot,
   });
+  const industryPatch = orderIndustryColumnPatch({
+    deviceSerial,
+    deviceImei,
+    deviceCondition,
+    deviceCompleteness,
+    devicePasscode,
+    siteAddress,
+    productDimensions,
+    measurementAt,
+    installationAt,
+  });
 
   const updateOrderRow = (includeMileageSnapshot: boolean) =>
     supabase
@@ -3009,6 +3116,7 @@ export async function updateOrder(
         employee_id: employeeId,
         deadline: deadline ? `${deadline}T00:00:00.000Z` : null,
         vin: normalizedVin,
+        ...industryPatch,
         ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
       } as Record<string, unknown>)
       .eq("id", orderId)
@@ -3026,7 +3134,7 @@ export async function updateOrder(
     }
   }
 
-  if (error) throw new Error(error.message);
+  if (error) throw mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
   if (!data) throw new Error(orderPermissionMessage());
 
   // Saved lines keep their stored discounts (matched by id); only NEW lines receive the client's discount.

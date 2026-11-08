@@ -627,7 +627,15 @@ describe("AddNewOrderForm client validation", () => {
     );
 
     await user.type(screen.getByLabelText(/Job \/ location/i), "Kitchen");
-    await addCustomService(user, "Install sink", "100");
+    await user.type(screen.getByLabelText(/^Works$/), "Install sink");
+    const addButton = await screen.findByRole("button", { name: "Add" });
+    const createRow = addButton.closest("div");
+    const priceInput = createRow
+      ? within(createRow as HTMLElement).getByLabelText(/^Price$/)
+      : screen.getAllByLabelText(/^Price$/).at(-1)!;
+    await user.clear(priceInput);
+    await user.type(priceInput, "100");
+    await user.click(addButton);
     const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });
     await user.click(assignee);
     await user.click(await screen.findByRole("option", { name: "Ada" }));

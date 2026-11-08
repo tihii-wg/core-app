@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -8,17 +9,20 @@ import { cn } from "../../lib/utils";
 import type { Order } from "../../lib/types";
 import { useGetOrders } from "./useGetOrders";
 import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
+import { industryProfile } from "../industries/industryProfile";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import {
-  bucketOrdersByDate,
+  bucketOrderCalendarEvents,
   calendarRange,
   calendarWeeks,
-  countOrdersInRange,
+  countCalendarEventsInRange,
   dateFromKey,
   isInAnchorMonth,
-  orderCalendarPlacement,
   readOrderCalendarScale,
   shiftCalendarAnchor,
   writeOrderCalendarScale,
+  type OrderCalendarEvent,
+  type OrderCalendarEventKind,
   type OrderCalendarScale,
 } from "./orderCalendar";
 
@@ -41,6 +45,8 @@ const MONTH_CELL_LIMIT = 3;
  */
 export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, formatMoney, onOpenOrder }: OrdersCalendarProps) {
   const { t, i18n } = useTranslation();
+  const { profile, industrySlug } = useIndustryWorkflow();
+  const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const { orders, isLoading, error, refetch } = useGetOrders(search);
   const [scale, setScale] = useState<OrderCalendarScale>(() => readOrderCalendarScale());
   const [anchor, setAnchor] = useState(() => dateFromKey(today) ?? new Date());
@@ -56,10 +62,13 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
     [orders, employeeFilter, deadlineFilter, today],
   );
 
-  const buckets = useMemo(() => bucketOrdersByDate(visibleOrders), [visibleOrders]);
+  const buckets = useMemo(
+    () => bucketOrderCalendarEvents(visibleOrders, industryBlocks),
+    [visibleOrders, industryBlocks],
+  );
   const weeks = useMemo(() => calendarWeeks(anchor, scale), [anchor, scale]);
   const range = useMemo(() => calendarRange(anchor, scale), [anchor, scale]);
-  const inRangeCount = countOrdersInRange(buckets, range);
+  const inRangeCount = countCalendarEventsInRange(buckets, range);
 
   const locale = i18n.language || "en";
   const titleFormat = useMemo(
@@ -171,13 +180,13 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
           {weeks.map((week) => (
             <div key={week[0]} className="grid grid-cols-7 border-b border-border last:border-b-0" role="row">
               {week.map((dateKey) => {
-                const dayOrders = buckets.byDate.get(dateKey) ?? [];
+                const dayEvents = buckets.byDate.get(dateKey) ?? [];
                 const date = dateFromKey(dateKey);
                 const isToday = dateKey === today;
                 const dimmed = scale === "month" && !isInAnchorMonth(dateKey, anchor);
                 const expanded = scale === "week" || expandedDays.has(dateKey);
-                const shown = expanded ? dayOrders : dayOrders.slice(0, MONTH_CELL_LIMIT);
-                const hidden = dayOrders.length - shown.length;
+                const shown = expanded ? dayEvents : dayEvents.slice(0, MONTH_CELL_LIMIT);
+                const hidden = dayEvents.length - shown.length;
 
                 return (
                   <div
@@ -200,14 +209,13 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
                       >
                         {date?.getDate()}
                       </span>
-                      {dayOrders.length > 0 ? <span className="text-[11px] tabular-nums text-subtle-foreground">{dayOrders.length}</span> : null}
+                      {dayEvents.length > 0 ? <span className="text-[11px] tabular-nums text-subtle-foreground">{dayEvents.length}</span> : null}
                     </div>
-                    {shown.map((order) => (
+                    {shown.map((event) => (
                       <CalendarOrder
-                        key={order.id}
-                        order={order}
-                        overdue={isOrderOverdue(order, today)}
-                        byCreation={orderCalendarPlacement(order)?.basis === "createdAt"}
+                        key={event.id}
+                        event={event}
+                        overdue={event.kind === "deadline" && isOrderOverdue(event.order, today)}
                         formatMoney={formatMoney}
                         showDetails={scale === "week"}
                         onOpen={onOpenOrder}
@@ -221,7 +229,7 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
                       >
                         {t("orders.calendar.more", { n: hidden })}
                       </button>
-                    ) : scale === "month" && expanded && dayOrders.length > MONTH_CELL_LIMIT ? (
+                    ) : scale === "month" && expanded && dayEvents.length > MONTH_CELL_LIMIT ? (
                       <button
                         type="button"
                         onClick={() => toggleDay(dateKey)}
@@ -246,12 +254,11 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
             {t("orders.calendar.undated")} ({buckets.undated.length})
           </h3>
           <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-            {buckets.undated.map((order) => (
+            {buckets.undated.map((event) => (
               <CalendarOrder
-                key={order.id}
-                order={order}
+                key={event.id}
+                event={event}
                 overdue={false}
-                byCreation={false}
                 formatMoney={formatMoney}
                 showDetails
                 onOpen={onOpenOrder}
@@ -265,34 +272,49 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
 }
 
 type CalendarOrderProps = {
-  order: Order;
+  event: OrderCalendarEvent<Order>;
   overdue: boolean;
-  /** Listed by created_at because the order has no deadline. */
-  byCreation: boolean;
   formatMoney: (amount: number) => string;
   showDetails: boolean;
   onOpen: (order: Order) => void;
 };
 
-function CalendarOrder({ order, overdue, byCreation, formatMoney, showDetails, onOpen }: CalendarOrderProps) {
+function calendarEventKindLabel(kind: OrderCalendarEventKind, t: TFunction): string | null {
+  if (kind === "measurement") return t("orders.calendar.measurementMarker");
+  if (kind === "installation") return t("orders.calendar.installationMarker");
+  if (kind === "createdAt") return t("orders.calendar.createdMarker");
+  return null;
+}
+
+function CalendarOrder({ event, overdue, formatMoney, showDetails, onOpen }: CalendarOrderProps) {
   const { t } = useTranslation();
-  const label = t("orders.board.openOrder", { number: order.orderNumber });
+  const order = event.order;
+  const kindLabel = calendarEventKindLabel(event.kind, t);
+  const label = kindLabel
+    ? `${kindLabel} · ${order.orderNumber} · ${order.clientName || ""}`.trim()
+    : t("orders.board.openOrder", { number: order.orderNumber });
+  const byCreation = event.kind === "createdAt";
+  const isAppointment = event.kind === "measurement" || event.kind === "installation";
 
   return (
     <button
       type="button"
       aria-label={label}
-      title={[order.orderNumber, order.clientName, order.device].filter(Boolean).join(" · ")}
+      title={[kindLabel, order.orderNumber, order.clientName, order.device].filter(Boolean).join(" · ")}
       onClick={() => onOpen(order)}
       className={cn(
         "block w-full min-w-0 cursor-pointer rounded-md border px-1.5 py-1 text-left text-xs outline-none transition-colors hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/35",
         overdue ? "border-destructive/40 bg-destructive/5" : "border-border bg-background",
         byCreation && "border-dashed",
+        isAppointment && "border-primary/30 bg-primary/5",
       )}
     >
+      {kindLabel && isAppointment ? (
+        <span className="block truncate text-[10px] font-medium uppercase tracking-wide text-primary">{kindLabel}</span>
+      ) : null}
       <span className="flex items-center justify-between gap-1">
         <span className="truncate font-semibold tabular-nums text-primary">{order.orderNumber || "—"}</span>
-        {showDetails ? <span className="shrink-0 tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span> : null}
+        {showDetails && !isAppointment ? <span className="shrink-0 tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span> : null}
       </span>
       <span className="block truncate text-muted-foreground">{order.clientName || "—"}</span>
       {showDetails && order.device ? <span className="block truncate text-muted-foreground">{order.device}</span> : null}

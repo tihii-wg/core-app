@@ -12,12 +12,16 @@ import OrderTeamAvatars from "./OrderTeamAvatars";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { isOrderOverdue } from "./orderVisibility";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
+import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
+import { orderAssetSecondaryLine } from "./industryOrderFieldHelpers";
 
 type PaymentBalanceStatus = ReturnType<typeof orderPaymentBalance>["status"];
 
 export type BuildOrderColumnsArgs = {
   t: TFunction;
   deviceServiceColumn: string;
+  /** Industry field blocks — drives the secondary asset line (plate / serial / site). */
+  orderFieldBlocks?: IndustryOrderFieldBlocks;
   formatMoney: (value: number) => string;
   today: string;
   warrantyByOrderId: Map<string, OrderWarrantyIndicatorModel | null | undefined>;
@@ -78,18 +82,26 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "device",
       header: args.deviceServiceColumn,
-      cell: (order) => (
-        <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
-          <div className="truncate" title={order.device}>
-            {order.device}
-          </div>
-          {order.service ? (
-            <div className="truncate text-xs text-muted-foreground" title={order.service}>
-              {order.service}
+      cell: (order) => {
+        const secondary = args.orderFieldBlocks ? orderAssetSecondaryLine(order, args.orderFieldBlocks) : "";
+        return (
+          <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
+            <div className="truncate" title={order.device}>
+              {order.device}
             </div>
-          ) : null}
-        </div>
-      ),
+            {secondary ? (
+              <div className="truncate text-xs tabular-nums text-muted-foreground" title={secondary}>
+                {secondary}
+              </div>
+            ) : null}
+            {order.service ? (
+              <div className="truncate text-xs text-muted-foreground" title={order.service}>
+                {order.service}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       key: "status",

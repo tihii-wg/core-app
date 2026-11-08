@@ -39,7 +39,15 @@ function ResultContent({ result }: { result: SearchResult }) {
     const { order } = result;
     title = <span className="font-medium text-primary">{order.orderNumber}</span>;
     badge = <OrderStatusBadge status={order.status} customStatus={order.customStatus} />;
-    subtitle = details([order.clientName, order.device, order.carNumber, order.vin]);
+    subtitle = details([
+      order.clientName,
+      order.device,
+      order.carNumber,
+      order.vin,
+      order.deviceSerial,
+      order.deviceImei,
+      order.siteAddress,
+    ]);
   } else if (result.type === "client") {
     const { client } = result;
     title = <span className="font-medium text-foreground">{client.name}</span>;

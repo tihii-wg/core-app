@@ -74,6 +74,24 @@ export type IndustryOrderFieldBlocks = {
   addressField: boolean;
   /** Treat description/notes as product type + dimensions (furniture). */
   descriptionAsProductNotes: boolean;
+  /** Dedicated `orders.device_serial` (device industries). */
+  deviceSerial: boolean;
+  /** Dedicated `orders.device_imei` — phones only. */
+  deviceImei: boolean;
+  /** Intake condition (`orders.device_condition`). */
+  deviceCondition: boolean;
+  /** Intake completeness (`orders.device_completeness`). */
+  deviceCompleteness: boolean;
+  /** Unlock code / pattern (`orders.device_passcode`) — never printed. */
+  devicePasscode: boolean;
+  /** Object / site address (`orders.site_address`). */
+  siteAddress: boolean;
+  /** Product dimensions (`orders.product_dimensions`). */
+  productDimensions: boolean;
+  /** Measurement appointment (`orders.measurement_at`). */
+  measurementAt: boolean;
+  /** Installation appointment (`orders.installation_at`). */
+  installationAt: boolean;
 };
 
 export type IndustryWarrantyProfile = {
@@ -153,11 +171,11 @@ const automotiveFields: IndustryOrderFields = {
   vin: { visible: true, required: false, exactLength: 17 },
 };
 
-/** Device industries: model + serial-like field (VIN column reused as serial). */
+/** Device industries: model name; serial/IMEI live in dedicated columns via orderFieldBlocks. */
 const repairDeviceFields: IndustryOrderFields = {
   device: { visible: true, required: false },
   carNumber: { visible: false, required: false },
-  vin: { visible: true, required: false },
+  vin: { visible: false, required: false },
 };
 
 const siteProjectFields: IndustryOrderFields = {
@@ -200,18 +218,51 @@ const defaultTerminology: IndustryTerminology = {
   inventory: "inventory",
 };
 
+const noIndustryExtras = {
+  deviceSerial: false,
+  deviceImei: false,
+  deviceCondition: false,
+  deviceCompleteness: false,
+  devicePasscode: false,
+  siteAddress: false,
+  productDimensions: false,
+  measurementAt: false,
+  installationAt: false,
+} as const;
+
 const vehicleBlocks: IndustryOrderFieldBlocks = {
   vehicleGrid: true,
   deviceFields: false,
   addressField: false,
   descriptionAsProductNotes: false,
+  ...noIndustryExtras,
 };
 
-const deviceBlocks: IndustryOrderFieldBlocks = {
+const deviceBlocksBase = {
   vehicleGrid: false,
   deviceFields: true,
   addressField: false,
   descriptionAsProductNotes: false,
+  deviceSerial: true,
+  deviceCondition: true,
+  deviceCompleteness: true,
+  devicePasscode: true,
+  siteAddress: false,
+  productDimensions: false,
+  measurementAt: false,
+  installationAt: false,
+} as const;
+
+/** Non-phone device industries: serial + intake fields, no IMEI. */
+const deviceBlocks: IndustryOrderFieldBlocks = {
+  ...deviceBlocksBase,
+  deviceImei: false,
+};
+
+/** Phone / electronics: same as device plus IMEI. */
+const phoneDeviceBlocks: IndustryOrderFieldBlocks = {
+  ...deviceBlocksBase,
+  deviceImei: true,
 };
 
 const siteBlocks: IndustryOrderFieldBlocks = {
@@ -219,6 +270,8 @@ const siteBlocks: IndustryOrderFieldBlocks = {
   deviceFields: false,
   addressField: true,
   descriptionAsProductNotes: false,
+  ...noIndustryExtras,
+  siteAddress: true,
 };
 
 const projectBlocks: IndustryOrderFieldBlocks = {
@@ -226,6 +279,11 @@ const projectBlocks: IndustryOrderFieldBlocks = {
   deviceFields: false,
   addressField: true,
   descriptionAsProductNotes: true,
+  ...noIndustryExtras,
+  siteAddress: true,
+  productDimensions: true,
+  measurementAt: true,
+  installationAt: true,
 };
 
 const noneBlocks: IndustryOrderFieldBlocks = {
@@ -233,6 +291,7 @@ const noneBlocks: IndustryOrderFieldBlocks = {
   deviceFields: false,
   addressField: false,
   descriptionAsProductNotes: false,
+  ...noIndustryExtras,
 };
 
 function status(
@@ -373,7 +432,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     terminology: repairTerminology,
     termsPack: "device",
     orderFields: repairDeviceFields,
-    orderFieldBlocks: deviceBlocks,
+    orderFieldBlocks: phoneDeviceBlocks,
     serviceCategories: deviceServiceCategories,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,
