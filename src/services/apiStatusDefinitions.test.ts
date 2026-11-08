@@ -115,6 +115,7 @@ describe("pickCustomStatusForSystemStatus", () => {
       isActive: true,
       showOverdueBadge: false,
       addsToBackorders: false,
+      minPaidPercent: null,
       ...partial,
     };
   }
@@ -168,6 +169,7 @@ describe("lifecycle status definition protection", () => {
       isActive: true,
       showOverdueBadge: false,
       addsToBackorders: false,
+      minPaidPercent: null,
       ...partial,
     };
   }

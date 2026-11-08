@@ -72,11 +72,15 @@ import OrderWarehouseActions from "./OrderWarehouseActions";
 import OrderAttachmentsSection from "./OrderAttachmentsSection";
 import OrderFeedSection from "./OrderFeedSection";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
+import { PaymentFormDialog } from "../finance/PaymentFormDialog";
+import { OrderPaymentStagesSection } from "../finance/OrderPaymentStagesSection";
+import { assertMinPaidOrExplain, orderNetPaidForMinPaid, recordableOrderBalance } from "./minPaidStatusGuard";
+import { showMinPaidBlockedToast } from "./showMinPaidBlockedToast";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
-import { CancelOrderDialog } from "./CancelOrderDialog";
+import { OrderCancelChainDialog } from "./OrderCancelChainDialog";
 import { CloseOrderDialog } from "./CloseOrderDialog";
 import { isOrderCurrentlyClosed, isOrderFormallyClosed } from "./orderLifecycle";
 import {
@@ -123,6 +127,7 @@ export default function OrderDetailPanel({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const { formatMoney } = useWorkspaceMoney();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
@@ -340,7 +345,7 @@ export default function OrderDetailPanel({
         </SheetHeader>
 
         {selectedOrder && isEditing && (
-          <div className="px-5 py-5">
+          <div className="space-y-5 px-5 py-5">
             <EditOrderForm
               key={selectedOrder.id}
               order={selectedOrder}
@@ -350,6 +355,11 @@ export default function OrderDetailPanel({
                 setIsEditing(false);
                 setDetailPanelOpen(false);
               }}
+            />
+            <OrderPaymentStagesSection
+              order={selectedOrder}
+              payments={payments}
+              canEdit={canEditOrder && !closedContentLocked}
             />
           </div>
         )}
@@ -725,6 +735,21 @@ export default function OrderDetailPanel({
               }}
             />
 
+            <OrderPaymentStagesSection
+              order={selectedOrder}
+              payments={payments}
+              canEdit={canEditOrder && !closedContentLocked}
+              onBeforeRecord={async () => {
+                const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
+                if (!prepared) return false;
+                if (prepared !== selectedOrder) {
+                  onOrderUpdated(prepared);
+                  setIsEditing(false);
+                }
+                return true;
+              }}
+            />
+
             <OrderAttachmentsSection
               orderId={selectedOrder.id}
               enabled={detailPanelOpen}
@@ -764,6 +789,36 @@ export default function OrderDetailPanel({
                   });
                   if (!move) return;
                   if (move.status === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
+
+                  const minPaidBlock = assertMinPaidOrExplain({
+                    order: selectedOrder,
+                    // Ledger still loading → rely on the DB guard rather than blocking on an empty list.
+                    targetDefinition: paymentsLoading ? null : option.definition,
+                    netPaid: orderNetPaidForMinPaid(selectedOrder, payments),
+                    formatMoney,
+                    t,
+                  });
+                  if (minPaidBlock) {
+                    showMinPaidBlockedToast({
+                      block: minPaidBlock,
+                      recordPaymentLabel: t("orders.minPaid.recordPayment"),
+                      onRecordPayment:
+                        canEditOrder && !closedContentLocked
+                          ? () => {
+                              void (async () => {
+                                const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
+                                if (!prepared) return;
+                                if (prepared !== selectedOrder) {
+                                  onOrderUpdated(prepared);
+                                  setIsEditing(false);
+                                }
+                                setRecordPaymentOpen(true);
+                              })();
+                            }
+                          : undefined,
+                    });
+                    return;
+                  }
 
                   if (option.kind === "definition" || move.customStatusId !== null || selectedOrder.customStatusId) {
                     moveOnBoard(
@@ -998,21 +1053,23 @@ export default function OrderDetailPanel({
         }}
       />
 
-      <CancelOrderDialog
+      <OrderCancelChainDialog
         order={selectedOrder}
         open={cancelOpen}
         onOpenChange={setCancelOpen}
-        onCancelled={(result) => {
-          if (!selectedOrder) return;
-          onOrderUpdated({
-            ...selectedOrder,
-            status: "cancelled",
-            customStatusId: result.customStatusId,
-            customStatus: result.customStatus,
-            closedAt: result.closed_at ?? selectedOrder.closedAt,
-          });
-        }}
+        onOrderUpdated={onOrderUpdated}
+        onDeleted={onDeleted}
       />
+
+      {recordPaymentOpen && selectedOrder ? (
+        <PaymentFormDialog
+          open
+          onOpenChange={setRecordPaymentOpen}
+          target="order"
+          orderId={selectedOrder.id}
+          balance={recordableOrderBalance(selectedOrder, payments)}
+        />
+      ) : null}
     </Sheet>
   );
 }

@@ -67,6 +67,7 @@ import {
   resolveCustomStatusForSystemStatus,
 } from "./apiStatusDefinitions";
 import { findDefaultOrderStatus, parseLifecycleRpcError } from "../features/orders/orderLifecycle";
+import { mapMinPaidStatusError } from "../features/orders/minPaidStatusGuard";
 import { orderHasOutstandingBalance, orderPaymentBalance } from "../features/finance/paymentCalculations";
 import { getPayments } from "./apiPayments";
 import { recordActivity } from "./apiActivityLog";
@@ -2613,6 +2614,8 @@ export async function reopenCancelledOrder(
     if (isMissingRpcError(error, "reopen_cancelled_order")) {
       throw new MissingRpcError("reopen_cancelled_order", i18n.t("orders.lifecycle.errors.rpcRequired"));
     }
+    const minPaidMessage = await mapOrderStatusDbErrorMessage(error.message, targetWorkspaceId);
+    if (minPaidMessage !== error.message) throw new Error(minPaidMessage);
     throw new Error(mapReopenCancelledOrderError(error.message));
   }
 
@@ -2690,6 +2693,23 @@ function queueStatusActivity(
     const message = error instanceof Error ? error.message : String(error);
     console.warn("[updateOrderStatus] activity_log insert failed:", message);
   });
+}
+
+/**
+ * Maps the DB min-paid guard error (`order_status:min_paid_required ...`) to the localized
+ * «status requires N% …» message; any other message is returned unchanged.
+ */
+async function mapOrderStatusDbErrorMessage(message: string, workspaceId: string): Promise<string> {
+  if (!/min_paid_required/i.test(message)) return message;
+  let currency: string | null = null;
+  try {
+    const { data } = await supabase.from("workspaces").select("currency").eq("id", workspaceId).maybeSingle();
+    const value = (data as { currency?: unknown } | null)?.currency;
+    currency = typeof value === "string" ? value : null;
+  } catch {
+    currency = null;
+  }
+  return mapMinPaidStatusError(message, { currency }) ?? message;
 }
 
 export async function updateOrderStatus(
@@ -2907,14 +2927,14 @@ export async function updateOrderStatus(
       let legacyQuery = supabase.from("orders").update(legacyPayload).eq("id", orderId).eq("workspace_id", targetWorkspaceId);
       if (!ownerMayChangePaid && status !== "paid") legacyQuery = legacyQuery.neq("status", "paid");
       const legacy = await legacyQuery.select("id");
-      if (legacy.error) throw new Error(legacy.error.message);
+      if (legacy.error) throw new Error(await mapOrderStatusDbErrorMessage(legacy.error.message, targetWorkspaceId));
       if (!legacy.data || legacy.data.length === 0) throw new Error(orderPermissionMessage());
       if (options?.recordActivity !== false) {
         queueStatusActivity(targetWorkspaceId, orderId, { from: currentStatus || null, to: status });
       }
       return { status, customStatusId: null, customStatus: null };
     }
-    throw new Error(error.message);
+    throw new Error(await mapOrderStatusDbErrorMessage(error.message, targetWorkspaceId));
   }
   if (!data || data.length === 0) {
     const { data: again, error: againError } = await supabase

@@ -68,7 +68,8 @@ export default {
     paid: "Paid",
     balanceDue: "Amount due",
     contractTotal: "Contract total",
-    prepaymentDue: "Amount due (prepayment #ДОЛЯ-ОПЛАТЫ%)",
+    prepaymentDue: "Amount due (#ЭТАП-ТЕКУЩИЙ-СУММА)",
+    paymentSchedule: "Payment schedule",
     materialsCaption: "Materials & hardware",
     worksCaption: "Works",
     cityLine: "City: #КОМПАНИЯ-АДРЕС",
@@ -152,6 +153,20 @@ export default {
       workOrder: "Work order",
       act: "Act of completed works",
       invoice: "Invoice",
+    },
+  },
+  paymentStages: {
+    furniture: {
+      prepayment: "Prepayment 50%",
+      afterMeasurement: "After measurement/approval 30%",
+      remainder: "Remainder",
+    },
+    field: {
+      advance: "Advance 50%",
+      remainder: "Remainder",
+    },
+    default: {
+      fullPayment: "Full payment",
     },
   },
   catalog: {

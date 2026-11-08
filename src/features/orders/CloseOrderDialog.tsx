@@ -18,7 +18,9 @@ import { getOrder, type CloseOrderResult } from "../../services/apiOrders";
 import type { LedgerPayment, PaymentBalance } from "../finance/paymentTypes";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { OrderPaymentForm } from "../finance/PaymentFormDialog";
+import { allocatePaid, currentPaymentStage } from "../finance/paymentStages";
 import { paymentsQueryKey } from "../finance/usePayments";
+import { useOrderPaymentStages } from "../finance/useOrderPaymentStages";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { isOrderFormallyClosed } from "./orderLifecycle";
 import { useCloseOrder } from "./useCloseOrder";
@@ -64,6 +66,7 @@ export function CloseOrderDialog({
   const closeOrder = useCloseOrder();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
+  const { stages: paymentStages } = useOrderPaymentStages(order?.id);
   const [closeAfterPayment, setCloseAfterPayment] = useState(true);
   const [paymentsOverride, setPaymentsOverride] = useState<LedgerPayment[] | null>(null);
   const [freshOrder, setFreshOrder] = useState<Order | null>(null);
@@ -151,6 +154,25 @@ export function CloseOrderDialog({
   }, [currentOrder, effectivePayments, invoiceId]);
 
   const recordable = balance ? recordableBalance(balance) : null;
+
+  const currentStage = useMemo(() => {
+    if (!currentOrder || !balance || paymentStages.length === 0) return null;
+    const allocated = allocatePaid(
+      paymentStages.map((stage) => ({
+        id: stage.id,
+        position: stage.position,
+        name: stage.name,
+        mode: stage.mode,
+        percent: stage.percent,
+        amount: stage.amount,
+        dueDate: stage.dueDate,
+        invoiceId: stage.invoiceId,
+      })),
+      currentOrder.totalPrice,
+      balance.netPaid,
+    );
+    return currentPaymentStage(allocated);
+  }, [currentOrder, balance, paymentStages]);
 
   if (!order) return null;
 
@@ -283,7 +305,19 @@ export function CloseOrderDialog({
               key={`${displayOrder.id}:${recordableRemaining}:${displayOrder.totalPrice}`}
               orderId={displayOrder.id}
               invoiceId={invoiceId}
-              balance={recordable}
+              balance={
+                currentStage && currentStage.remaining > 0.005
+                  ? { ...recordable, remaining: currentStage.remaining }
+                  : recordable
+              }
+              currentStageLabel={
+                currentStage
+                  ? t("finance.paymentStages.currentlyPaying", {
+                      name: currentStage.name,
+                      amount: formatMoney(currentStage.remaining),
+                    })
+                  : null
+              }
               showCancelButton={false}
               onDone={() => undefined}
               onRecorded={handlePaymentRecorded}

@@ -17,6 +17,10 @@ import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
 import { industryProfile } from "../industries/industryProfile";
+import { PaymentFormDialog } from "../finance/PaymentFormDialog";
+import type { LedgerPayment } from "../finance/paymentTypes";
+import { assertMinPaidOrExplain, orderNetPaidForMinPaid, recordableOrderBalance } from "./minPaidStatusGuard";
+import { showMinPaidBlockedToast } from "./showMinPaidBlockedToast";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { orderAssetSecondaryLine } from "./industryOrderFieldHelpers";
 
@@ -30,6 +34,8 @@ type OrdersBoardProps = {
   requireTaxInvoiceNumber: boolean;
   formatMoney: (amount: number) => string;
   onOpenOrder: (order: Order) => void;
+  /** Ledger payments for the min-paid pre-check before a drop; when omitted only the DB guard applies. */
+  payments?: LedgerPayment[];
 };
 
 /**
@@ -45,6 +51,7 @@ export function OrdersBoard({
   requireTaxInvoiceNumber,
   formatMoney,
   onOpenOrder,
+  payments,
 }: OrdersBoardProps) {
   const { t } = useTranslation();
   const { canWrite } = useWorkspaceSubscription();
@@ -53,6 +60,7 @@ export function OrdersBoard({
   const move = useMoveOrderOnBoard();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
+  const [recordPaymentOrder, setRecordPaymentOrder] = useState<Order | null>(null);
 
   const visibleOrders = useMemo(
     () =>
@@ -91,6 +99,27 @@ export function OrdersBoard({
       toast.error(t("orders.taxInvoice.required"), { id: "tax-invoice-required" });
       onOpenOrder(order);
       return;
+    }
+
+    // Min-paid pre-check (skipped when the ledger is not loaded; the DB guard still enforces it).
+    if (payments) {
+      const minPaidBlock = assertMinPaidOrExplain({
+        order,
+        targetDefinition: target.customStatusId
+          ? definitions.find((definition) => definition.id === target.customStatusId)
+          : null,
+        netPaid: orderNetPaidForMinPaid(order, payments),
+        formatMoney,
+        t,
+      });
+      if (minPaidBlock) {
+        showMinPaidBlockedToast({
+          block: minPaidBlock,
+          recordPaymentLabel: t("orders.minPaid.recordPayment"),
+          onRecordPayment: () => setRecordPaymentOrder(order),
+        });
+        return;
+      }
     }
 
     move.mutate({ orderId: order.id, status: target.status, customStatusId: target.customStatusId, currentStatus: order.status });
@@ -201,6 +230,15 @@ export function OrdersBoard({
           );
         })}
       </div>
+      {recordPaymentOrder && payments ? (
+        <PaymentFormDialog
+          open
+          onOpenChange={(open) => !open && setRecordPaymentOrder(null)}
+          target="order"
+          orderId={recordPaymentOrder.id}
+          balance={recordableOrderBalance(recordPaymentOrder, payments)}
+        />
+      ) : null}
     </div>
   );
 }

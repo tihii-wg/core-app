@@ -25,6 +25,7 @@ import { industryName } from "../industries/industryName";
 import { seedIndustryOrderStatuses } from "../industries/seedIndustryDefaults";
 import { useIndustryProfile } from "../industries/useIndustryProfile";
 import { useCreateStatusDefinition } from "../statuses/useCreateStatusDefinition";
+import { minPaidPercentToInput, parseMinPaidPercentInput } from "../statuses/minPaidPercentInput";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useGetStatusTransitions } from "../statuses/useGetStatusTransitions";
 import {
@@ -89,10 +90,12 @@ export function StatusesSettings() {
     statusGroup: "new" as StatusGroup,
     systemStatus: "",
     sortOrder: "0",
+    minPaidPercent: "",
   });
   const [editing, setEditing] = useState<StatusDefinition | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("#2563eb");
+  const [editMinPaid, setEditMinPaid] = useState("");
   const [replaceFrom, setReplaceFrom] = useState<StatusDefinition | null>(null);
   const [replaceToId, setReplaceToId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<StatusDefinition | null>(null);
@@ -124,6 +127,11 @@ export function StatusesSettings() {
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) return;
+    const minPaid = parseMinPaidPercentInput(form.minPaidPercent);
+    if (!minPaid.ok) {
+      toast.error(t("settings.statuses.errors.minPaidInvalid"));
+      return;
+    }
     createStatus.mutate(
       {
         entity: "order",
@@ -132,10 +140,38 @@ export function StatusesSettings() {
         statusGroup: form.statusGroup,
         systemStatus: form.systemStatus || null,
         sortOrder: Number(form.sortOrder) || 0,
+        minPaidPercent: minPaid.value,
       },
-      { onSuccess: () => setForm((prev) => ({ ...prev, name: "", systemStatus: "" })) },
+      {
+        onSuccess: (created) => {
+          setForm((prev) => ({ ...prev, name: "", systemStatus: "", minPaidPercent: "" }));
+          // The API drops the requirement when the min_paid_percent column is not applied yet.
+          if (minPaid.value != null && created.minPaidPercent == null) {
+            toast.error(t("settings.statuses.minPaidSchemaRequired"));
+          }
+        },
+      },
     );
   };
+
+  function onSaveEdit() {
+    if (!editing) return;
+    const minPaid = parseMinPaidPercentInput(editMinPaid);
+    if (!minPaid.ok) {
+      toast.error(t("settings.statuses.errors.minPaidInvalid"));
+      return;
+    }
+    updateStatus.mutate(
+      {
+        id: editing.id,
+        name: editName,
+        color: editColor,
+        // Only touch min_paid_percent when it changed, so unrelated edits work before the migration.
+        ...(minPaid.value !== (editing.minPaidPercent ?? null) ? { minPaidPercent: minPaid.value } : {}),
+      },
+      { onSuccess: () => setEditing(null) },
+    );
+  }
 
   function moveStatus(list: StatusDefinition[], index: number, direction: -1 | 1) {
     const next = index + direction;
@@ -230,6 +266,9 @@ export function StatusesSettings() {
                               defaultValue: status.statusGroup,
                             })}
                             {status.color ? ` · ${status.color}` : ""}
+                            {item === "order" && status.minPaidPercent != null
+                              ? ` · ${t("settings.statuses.minPaidBadge", { percent: status.minPaidPercent })}`
+                              : ""}
                           </p>
                           {transitions && transitions.get(status.id)?.size ? (
                             <p className="text-xs text-muted-foreground">
@@ -271,6 +310,7 @@ export function StatusesSettings() {
                                 setEditing(status);
                                 setEditName(status.name);
                                 setEditColor(status.color || "#2563eb");
+                                setEditMinPaid(minPaidPercentToInput(status.minPaidPercent));
                               }}
                             >
                               {t("common.edit")}
@@ -424,6 +464,20 @@ export function StatusesSettings() {
                 onChange={(event) => setForm({ ...form, sortOrder: event.target.value })}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="status-min-paid">{t("settings.statuses.minPaidPercent")}</Label>
+              <Input
+                id="status-min-paid"
+                type="number"
+                min={0}
+                max={100}
+                step="any"
+                inputMode="decimal"
+                value={form.minPaidPercent}
+                onChange={(event) => setForm({ ...form, minPaidPercent: event.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">{t("settings.statuses.minPaidPercentHint")}</p>
+            </div>
             <div className="sm:col-span-2">
               <Button type="submit" disabled={createStatus.isPending || !form.name.trim()}>
                 <Plus />
@@ -454,6 +508,23 @@ export function StatusesSettings() {
                   onChange={(event) => setEditColor(event.target.value)}
                 />
               </div>
+              {editing?.entity === "order" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-status-min-paid">{t("settings.statuses.minPaidPercent")}</Label>
+                  <Input
+                    id="edit-status-min-paid"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="any"
+                    inputMode="decimal"
+                    className="w-32"
+                    value={editMinPaid}
+                    onChange={(event) => setEditMinPaid(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("settings.statuses.minPaidPercentHint")}</p>
+                </div>
+              ) : null}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditing(null)}>
@@ -462,13 +533,7 @@ export function StatusesSettings() {
               <Button
                 type="button"
                 disabled={!editName.trim() || updateStatus.isPending}
-                onClick={() => {
-                  if (!editing) return;
-                  updateStatus.mutate(
-                    { id: editing.id, name: editName, color: editColor },
-                    { onSuccess: () => setEditing(null) },
-                  );
-                }}
+                onClick={onSaveEdit}
               >
                 {t("common.save")}
               </Button>

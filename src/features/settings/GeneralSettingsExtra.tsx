@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Building, CreditCard, FileText, Save, Shield, Trash2, Users } from "lucide-react";
+import { Building, CreditCard, FileText, RotateCcw, Save, Shield, Trash2, Users } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Input } from "../../ui/Input";
@@ -17,7 +17,12 @@ import {
   useUpdateWorkspaceContactSettings,
   useUpdateWorkspaceInvoiceSettings,
   useUpdateWorkspaceOrderSettings,
+  useUpdateWorkspacePaymentStageTemplate,
 } from "../workspaces/useUpdateWorkspace";
+import { useIndustryProfile } from "../industries/useIndustryProfile";
+import { industryPaymentStageTemplate } from "../industries/industryProfile";
+import { PaymentStageTemplateEditor, validatePaymentStageTemplate } from "../finance/PaymentStageTemplateEditor";
+import type { PaymentStageTemplateItem } from "../finance/paymentStages";
 import { getWorkspaceInvoiceNextNumber, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import {
   isValidInvoiceNumberTemplate,
@@ -210,6 +215,109 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
             <Button type="button" onClick={() => void onSave()} disabled={isPending}>
               <Save />
               {isPending ? t("common.saving") : t("settings.general.orders.save")}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t("settings.company.ownerOnly")}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PaymentStagesSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
+  const { t } = useTranslation();
+  const canEdit = useCanEditWorkspaceSettings(workspace.role);
+  const { profile } = useIndustryProfile();
+  const { mutateAsync: save, isPending } = useUpdateWorkspacePaymentStageTemplate();
+  const industryTemplate = useMemo(
+    () => industryPaymentStageTemplate(profile, (key, options) => String(t(key as never, options as never))),
+    [profile, t],
+  );
+  const savedTemplate = workspace.paymentStageTemplate;
+  const baseline = savedTemplate ?? industryTemplate;
+  const baselineKey = JSON.stringify(baseline);
+  const [items, setItems] = useState<PaymentStageTemplateItem[]>(baseline);
+
+  // Re-sync when the saved template (or the industry default, e.g. after a language change) changes.
+  const [syncedKey, setSyncedKey] = useState(baselineKey);
+  if (syncedKey !== baselineKey) {
+    setSyncedKey(baselineKey);
+    setItems(JSON.parse(baselineKey) as PaymentStageTemplateItem[]);
+  }
+
+  const issue = validatePaymentStageTemplate(items);
+  const dirty = JSON.stringify(items) !== baselineKey;
+  const busy = isPending;
+
+  async function onSave() {
+    if (issue) {
+      toast.error(t(`settings.general.orders.paymentStages.errors.${issue}`));
+      return;
+    }
+    toast.loading(t("settings.general.orders.paymentStages.toast.saving"), { id: "payment-stages-settings" });
+    try {
+      await save({
+        workspaceId: workspace.id,
+        template: items.map((item) => ({ ...item, name: item.name.trim() })),
+      });
+      toast.success(t("settings.general.orders.paymentStages.toast.saved"), { id: "payment-stages-settings" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("settings.general.orders.paymentStages.toast.failed"), {
+        id: "payment-stages-settings",
+      });
+    }
+  }
+
+  async function onReset() {
+    toast.loading(t("settings.general.orders.paymentStages.toast.saving"), { id: "payment-stages-settings" });
+    try {
+      // null → orders fall back to the industry template (names resolved from the workspace industry).
+      await save({ workspaceId: workspace.id, template: null });
+      setItems(industryTemplate);
+      toast.success(t("settings.general.orders.paymentStages.toast.reset"), { id: "payment-stages-settings" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("settings.general.orders.paymentStages.toast.failed"), {
+        id: "payment-stages-settings",
+      });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="size-4 text-muted-foreground" aria-hidden="true" />
+          {t("settings.general.orders.paymentStages.title")}
+        </CardTitle>
+        <CardDescription>{t("settings.general.orders.paymentStages.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          {savedTemplate
+            ? t("settings.general.orders.paymentStages.sourceCustom")
+            : t("settings.general.orders.paymentStages.sourceIndustry")}
+        </p>
+        <PaymentStageTemplateEditor value={items} onChange={setItems} disabled={!canEdit || busy} idPrefix="workspace-payment-stage" />
+        {issue && dirty ? (
+          <p className="text-xs text-destructive" role="alert">
+            {t(`settings.general.orders.paymentStages.errors.${issue}`)}
+          </p>
+        ) : null}
+        {canEdit ? (
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-5">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || (!savedTemplate && !dirty)}
+              onClick={() => void onReset()}
+            >
+              <RotateCcw />
+              {t("settings.general.orders.paymentStages.reset")}
+            </Button>
+            <Button type="button" onClick={() => void onSave()} disabled={busy || !dirty || issue != null}>
+              <Save />
+              {busy ? t("common.saving") : t("settings.general.orders.paymentStages.save")}
             </Button>
           </div>
         ) : (
@@ -664,6 +772,7 @@ export function GeneralSettingsExtra() {
   return (
     <>
       <OrdersSettingsCard workspace={workspace} />
+      <PaymentStagesSettingsCard workspace={workspace} />
       <ClosedOrderPermissionsSettings workspace={workspace} />
       <ContactsSettingsCard workspace={workspace} />
       <InvoicesSettingsCard workspace={workspace} />

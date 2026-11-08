@@ -4,7 +4,9 @@
  */
 
 import type { StatusGroup, StatusSemanticAction } from "../../services/apiStatusDefinitions";
+import i18n from "../../i18n";
 import type { DocumentTemplateType } from "../documents/layout";
+import type { PaymentStageTemplateItem } from "../finance/paymentStages";
 
 /** Stored services.category values used by the app (includes historical spelling "assesment"). */
 export const SERVICE_CATEGORIES = ["repair", "software", "update", "data", "assesment"] as const;
@@ -129,6 +131,17 @@ export type IndustryStatusSeed = {
   semanticAction: StatusSemanticAction;
   isDefault?: boolean;
   color: string;
+  /** Minimum paid percent (0–100) of the order total required to enter this status. */
+  minPaidPercent?: number;
+};
+
+/** Default payment stage seed; `nameKey` is resolved via i18n into PaymentStageTemplateItem.name. */
+export type PaymentStageTemplateSeed = {
+  nameKey: string;
+  mode: "percent" | "amount" | "remainder";
+  percent?: number;
+  amount?: number;
+  dueDays?: number;
 };
 
 export type IndustryNavigationProfile = {
@@ -154,6 +167,8 @@ export type IndustryProfile = {
   defaultStatuses: readonly IndustryStatusSeed[];
   warranty: IndustryWarrantyProfile;
   documents: readonly IndustryDocumentSpec[];
+  /** Default payment stages applied to new orders (unless the workspace overrides them). */
+  paymentStageTemplate: readonly PaymentStageTemplateSeed[];
   navigation: IndustryNavigationProfile;
   /** Demo print pack under settings.printTemplates.demo.byIndustry.<pack> */
   demoPack: string;
@@ -302,6 +317,7 @@ function status(
     semanticAction?: StatusSemanticAction;
     isDefault?: boolean;
     color?: string;
+    minPaidPercent?: number;
   } = {},
 ): IndustryStatusSeed {
   return {
@@ -311,6 +327,7 @@ function status(
     semanticAction: opts.semanticAction ?? "normal",
     isDefault: opts.isDefault,
     color: opts.color ?? "#2563eb",
+    ...(opts.minPaidPercent != null ? { minPaidPercent: opts.minPaidPercent } : {}),
   };
 }
 
@@ -349,7 +366,11 @@ const furnitureStatuses: IndustryStatusSeed[] = [
   status("industries.statuses.furniture.designQuote", "pending", { color: "#ca8a04" }),
   status("industries.statuses.furniture.approved", "in_progress", { color: "#4f46e5" }),
   status("industries.statuses.furniture.prepayment", "paid", { color: "#059669" }),
-  status("industries.statuses.furniture.inProduction", "in_progress", { systemStatus: "in-progress", color: "#7c3aed" }),
+  status("industries.statuses.furniture.inProduction", "in_progress", {
+    systemStatus: "in-progress",
+    color: "#7c3aed",
+    minPaidPercent: 50,
+  }),
   status("industries.statuses.furniture.readyForDelivery", "delivery", { color: "#0d9488" }),
   status("industries.statuses.furniture.deliveryInstall", "delivery", { color: "#0284c7" }),
   status("industries.statuses.furniture.handedOver", "closed", { semanticAction: "close", color: "#334155" }),
@@ -396,6 +417,21 @@ const otherDocuments: IndustryDocumentSpec[] = [
   { role: "invoice", documentType: "invoice", nameKey: "industries.documents.other.invoice" },
 ];
 
+const defaultPaymentStages: readonly PaymentStageTemplateSeed[] = [
+  { nameKey: "industries.paymentStages.default.fullPayment", mode: "remainder" },
+];
+
+const fieldPaymentStages: readonly PaymentStageTemplateSeed[] = [
+  { nameKey: "industries.paymentStages.field.advance", mode: "percent", percent: 50 },
+  { nameKey: "industries.paymentStages.field.remainder", mode: "remainder" },
+];
+
+const furniturePaymentStages: readonly PaymentStageTemplateSeed[] = [
+  { nameKey: "industries.paymentStages.furniture.prepayment", mode: "percent", percent: 50, dueDays: 0 },
+  { nameKey: "industries.paymentStages.furniture.afterMeasurement", mode: "percent", percent: 30 },
+  { nameKey: "industries.paymentStages.furniture.remainder", mode: "remainder" },
+];
+
 const furnitureCatalogKeys = [
   "industries.catalog.furniture.measurement",
   "industries.catalog.furniture.design",
@@ -423,6 +459,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: autoStatuses,
     warranty: { unit: "months", defaultValue: 6, mileage: true },
     documents: autoDocuments,
+    paymentStageTemplate: defaultPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: true },
     demoPack: "vehicle",
   },
@@ -438,6 +475,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(3),
     documents: deviceDocuments,
+    paymentStageTemplate: defaultPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "device",
   },
@@ -453,6 +491,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(3),
     documents: deviceDocuments,
+    paymentStageTemplate: defaultPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "device",
   },
@@ -468,6 +507,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(6),
     documents: deviceDocuments,
+    paymentStageTemplate: defaultPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "device",
   },
@@ -483,6 +523,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: deviceStatuses,
     warranty: deviceWarranty(6),
     documents: deviceDocuments,
+    paymentStageTemplate: fieldPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "device",
   },
@@ -498,6 +539,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: siteStatuses,
     warranty: { unit: "months", defaultValue: 12, mileage: false },
     documents: siteDocuments,
+    paymentStageTemplate: fieldPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "site",
   },
@@ -513,6 +555,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: siteStatuses,
     warranty: { unit: "months", defaultValue: 12, mileage: false },
     documents: siteDocuments,
+    paymentStageTemplate: fieldPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "site",
   },
@@ -528,6 +571,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: furnitureStatuses,
     warranty: { unit: "months", defaultValue: 12, mileage: false },
     documents: furnitureDocuments,
+    paymentStageTemplate: furniturePaymentStages,
     navigation: { materialsWarehouseLabel: true, clientVehicles: false },
     demoPack: "furniture",
   },
@@ -543,6 +587,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     defaultStatuses: otherStatuses,
     warranty: { unit: "months", defaultValue: 3, mileage: false },
     documents: otherDocuments,
+    paymentStageTemplate: defaultPaymentStages,
     navigation: { materialsWarehouseLabel: false, clientVehicles: false },
     demoPack: "other",
   },
@@ -569,11 +614,31 @@ export function industryOpenStatusSeeds(profile: IndustryProfile): IndustryStatu
   return profile.defaultStatuses.filter((seed) => seed.semanticAction !== "cancel");
 }
 
+type PaymentStageTranslate = (key: string, options?: { defaultValue?: string }) => string;
+
+/**
+ * Resolves the profile's payment stage seeds into template items with translated names.
+ * `t` defaults to the app i18n instance.
+ */
+export function industryPaymentStageTemplate(
+  profile: IndustryProfile,
+  t: PaymentStageTranslate = (key, options) => String(i18n.t(key as never, options as never)),
+): PaymentStageTemplateItem[] {
+  return profile.paymentStageTemplate.map((seed) => ({
+    name: String(t(seed.nameKey, { defaultValue: seed.nameKey })),
+    mode: seed.mode,
+    percent: seed.mode === "percent" ? (seed.percent ?? 0) : null,
+    amount: seed.mode === "amount" ? (seed.amount ?? 0) : null,
+    dueDays: seed.dueDays ?? null,
+  }));
+}
+
 export function assertIndustryProfilesComplete(): void {
   for (const slug of KNOWN_INDUSTRY_SLUGS) {
     const profile = industryProfile(slug);
     if (profile.slug !== slug) throw new Error(`Profile slug mismatch for ${slug}`);
     if (!profile.defaultStatuses.length) throw new Error(`No statuses for ${slug}`);
     if (!profile.documents.length) throw new Error(`No documents for ${slug}`);
+    if (!profile.paymentStageTemplate.length) throw new Error(`No payment stages for ${slug}`);
   }
 }

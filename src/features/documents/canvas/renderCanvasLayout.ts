@@ -323,7 +323,10 @@ function renderTotalsHtml(
     const isGrand = grandKey != null && row.key === grandKey;
     const rowBg = isGrand ? resolveCanvasColor(el.grandTotalBackground, colors) : undefined;
     const rowFg = isGrand ? resolveCanvasColor(el.grandTotalTextColor, colors) : textColor;
-    const label = showTokens ? escapeHtmlText(row.label) : applyText(row.label, ctx, showCents, false);
+    // Drop "()" left behind when a token inside parentheses (e.g. current stage amount) resolves empty.
+    const label = showTokens
+      ? escapeHtmlText(row.label)
+      : applyText(row.label, ctx, showCents, false).replace(/\s*\(\s*\)/g, "");
     const value = showTokens ? `«${row.key}»` : canvasTotalsValue(row.key, ctx, showCents);
     html += `<tr style="${rowBg ? `background:${rowBg};` : ""}${rowFg ? `color:${rowFg};` : ""}${isGrand ? "font-weight:700;" : ""}">`;
     html += `<td style="padding:1.5mm;text-align:right">${label}</td>`;

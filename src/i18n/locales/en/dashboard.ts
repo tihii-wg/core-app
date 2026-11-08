@@ -62,6 +62,13 @@ export default {
     moreCount_one: "+{{count}} more",
     moreCount_other: "+{{count}} more",
   },
+  paymentStages: {
+    title: "Upcoming scheduled payments",
+    emptyTitle: "No scheduled payments due",
+    emptyHint: "Payment stages due within the next 7 days, and overdue ones, will show up here.",
+    overdue: "Overdue",
+    errorTitle: "Couldn't load payment stages",
+  },
   columns: {
     order: "Order",
     client: "Client",

@@ -374,8 +374,9 @@ function furnitureContract(title: string, t: Translate): CanvasDocumentLayout {
         total("paid", layoutLabel(t, "prepayment", "Prepayment")),
         total("remaining", layoutLabel(t, "balance", "Balance")),
       ]),
-      ...tintBox(0, 160, 190, 28, layoutLabel(t, "contractTerms", "Delivery / installation per order. Warranty: 12 months."), layoutLabel(t, "terms", "Terms")),
-      signaturesElement(200, t),
+      ...tintBox(0, 152, 190, 40, "#ГРАФИК-ОПЛАТ", layoutLabel(t, "paymentSchedule", "Payment schedule")),
+      ...tintBox(0, 196, 190, 24, layoutLabel(t, "contractTerms", "Delivery / installation per order. Warranty: 12 months."), layoutLabel(t, "terms", "Terms")),
+      signaturesElement(226, t),
     ],
   };
 }
@@ -408,7 +409,7 @@ function furnitureSpecification(title: string, t: Translate): CanvasDocumentLayo
 }
 
 function furniturePrepaymentInvoice(title: string, t: Translate): CanvasDocumentLayout {
-  const dueLabel = layoutLabel(t, "prepaymentDue", "Amount due (prepayment #ДОЛЯ-ОПЛАТЫ%)");
+  const dueLabel = layoutLabel(t, "prepaymentDue", "Amount due (#ЭТАП-ТЕКУЩИЙ-СУММА)");
   return {
     version: 3,
     mode: "canvas",

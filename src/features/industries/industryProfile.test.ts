@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { industryCapabilitiesFromProfile } from "./industryCapabilities";
 import {
   industryOpenStatusSeeds,
+  industryPaymentStageTemplate,
   industryProfile,
   KNOWN_INDUSTRY_SLUGS,
 } from "./industryProfile";
@@ -50,6 +51,43 @@ describe("industryProfile registry", () => {
     expect(furniture.documents).toHaveLength(5);
     expect(furniture.suggestedCatalogCategoryKeys).toHaveLength(7);
     expect(furniture.warranty).toEqual({ unit: "months", defaultValue: 12, mileage: false });
+  });
+
+  it("defines payment stage defaults per industry", () => {
+    for (const slug of KNOWN_INDUSTRY_SLUGS) {
+      const stages = industryProfile(slug).paymentStageTemplate;
+      expect(stages.length).toBeGreaterThan(0);
+      expect(stages.filter((s) => s.mode === "remainder")).toHaveLength(1);
+      expect(stages[stages.length - 1]!.mode).toBe("remainder");
+    }
+    expect(industryProfile("furniture_manufacturing").paymentStageTemplate).toEqual([
+      { nameKey: "industries.paymentStages.furniture.prepayment", mode: "percent", percent: 50, dueDays: 0 },
+      { nameKey: "industries.paymentStages.furniture.afterMeasurement", mode: "percent", percent: 30 },
+      { nameKey: "industries.paymentStages.furniture.remainder", mode: "remainder" },
+    ]);
+    for (const slug of ["electrical_services", "home_services", "equipment_repair"] as const) {
+      expect(industryProfile(slug).paymentStageTemplate.map((s) => s.nameKey)).toEqual([
+        "industries.paymentStages.field.advance",
+        "industries.paymentStages.field.remainder",
+      ]);
+    }
+    expect(industryProfile("auto_repair").paymentStageTemplate).toEqual([
+      { nameKey: "industries.paymentStages.default.fullPayment", mode: "remainder" },
+    ]);
+  });
+
+  it("resolves payment stage names through the translate function", () => {
+    const items = industryPaymentStageTemplate(industryProfile("furniture_manufacturing"), (key) => `t:${key}`);
+    expect(items).toEqual([
+      { name: "t:industries.paymentStages.furniture.prepayment", mode: "percent", percent: 50, amount: null, dueDays: 0 },
+      { name: "t:industries.paymentStages.furniture.afterMeasurement", mode: "percent", percent: 30, amount: null, dueDays: null },
+      { name: "t:industries.paymentStages.furniture.remainder", mode: "remainder", percent: null, amount: null, dueDays: null },
+    ]);
+  });
+
+  it("gates furniture inProduction on 50% paid", () => {
+    const seeds = industryProfile("furniture_manufacturing").defaultStatuses.filter((s) => s.minPaidPercent != null);
+    expect(seeds.map((s) => [s.nameKey, s.minPaidPercent])).toEqual([["industries.statuses.furniture.inProduction", 50]]);
   });
 
   it("keeps client vehicles only for auto_repair via capabilities", () => {

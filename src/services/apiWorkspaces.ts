@@ -8,6 +8,7 @@ import {
 } from "../features/workspaces/workspaceSubscription";
 import { resolveIndustryId } from "./apiIndustries";
 import supabase from "./supabase";
+import type { PaymentStageTemplateItem } from "../features/finance/paymentStages";
 import {
   contactSettingsDefaults,
   invoiceSettingsDefaults,
@@ -99,6 +100,7 @@ const generalSettingsColumns = [
   "online_payments_enabled",
   "require_tax_invoice_number",
   "owner_can_manage_closed_orders",
+  "payment_stage_template",
 ] as const;
 
 function mentionsPreferenceColumn(message?: string) {
@@ -264,6 +266,8 @@ export type WorkspaceDetails = {
   requireTaxInvoiceNumber: boolean;
   /** Owner-only: when true, workspaces.owner_id may edit/manage closed orders. Default false. */
   ownerCanManageClosedOrders: boolean;
+  /** Workspace-level default payment stages (workspaces.payment_stage_template jsonb); null = use industry default. */
+  paymentStageTemplate: PaymentStageTemplateItem[] | null;
   subscriptionStatus: WorkspaceSubscriptionStatus | null;
   subscriptionStartedAt: string | null;
   subscriptionExpiresAt: string | null;
@@ -277,6 +281,41 @@ function firstRecord(value: unknown) {
 
 function readText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Tolerant parse of workspaces.payment_stage_template; invalid/empty → null. */
+export function parsePaymentStageTemplate(value: unknown): PaymentStageTemplateItem[] | null {
+  let raw = value;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(raw)) return null;
+  const items: PaymentStageTemplateItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const row = entry as Record<string, unknown>;
+    const name = typeof row.name === "string" ? row.name.trim() : "";
+    const mode = row.mode;
+    if (!name || (mode !== "percent" && mode !== "amount" && mode !== "remainder")) continue;
+    items.push({
+      name,
+      mode,
+      percent: mode === "percent" ? readFiniteNumber(row.percent) ?? 0 : null,
+      amount: mode === "amount" ? readFiniteNumber(row.amount) ?? 0 : null,
+      dueDays: readFiniteNumber(row.dueDays ?? row.due_days),
+    });
+  }
+  return items.length > 0 ? items : null;
 }
 
 function readInventoryMarkup(value: unknown) {
@@ -349,6 +388,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     onlinePaymentsEnabled: readBool(record.online_payments_enabled, false),
     requireTaxInvoiceNumber: readBool(record.require_tax_invoice_number, false),
     ownerCanManageClosedOrders: readBool(record.owner_can_manage_closed_orders, false),
+    paymentStageTemplate: parsePaymentStageTemplate(record.payment_stage_template),
     subscriptionStatus: normalizeSubscriptionStatus(record.subscription_status),
     subscriptionStartedAt: readTimestamp(record.subscription_started_at),
     subscriptionExpiresAt: readTimestamp(record.subscription_expires_at),
@@ -710,6 +750,38 @@ export async function updateWorkspaceTaxInvoiceSettings(workspaceId: string, req
   return updateWorkspaceColumns(workspaceId, {
     require_tax_invoice_number: Boolean(requireTaxInvoiceNumber),
   });
+}
+
+/** Persist the workspace default payment-stage template; pass null to fall back to the industry default. */
+export async function updateWorkspacePaymentStageTemplate(
+  workspaceId: string,
+  template: PaymentStageTemplateItem[] | null,
+) {
+  const normalized =
+    template && template.length > 0
+      ? template.map((item) => ({
+          name: item.name.trim(),
+          mode: item.mode,
+          percent: item.mode === "percent" ? Number(item.percent ?? 0) : null,
+          amount: item.mode === "amount" ? Number(item.amount ?? 0) : null,
+          dueDays: item.dueDays ?? null,
+        }))
+      : null;
+  if (normalized?.some((item) => !item.name)) {
+    throw new Error(i18n.t("finance.paymentStages.errors.nameRequired", { defaultValue: "Stage name is required" }));
+  }
+  try {
+    return await updateWorkspaceColumns(workspaceId, { payment_stage_template: normalized });
+  } catch (error) {
+    if (error instanceof Error && /payment_stage_template/i.test(error.message)) {
+      throw new Error(
+        i18n.t("finance.paymentStages.errors.schemaRequired", {
+          defaultValue: "Payment stages are not available yet. Apply the database migration first.",
+        }),
+      );
+    }
+    throw error;
+  }
 }
 
 /**

@@ -25,6 +25,7 @@ function definition(partial: Partial<StatusDefinition> & Pick<StatusDefinition, 
     isActive: true,
     showOverdueBadge: false,
     addsToBackorders: false,
+    minPaidPercent: null,
     ...partial,
   };
 }

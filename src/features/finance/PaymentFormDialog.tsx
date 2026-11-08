@@ -31,6 +31,8 @@ type PaymentFormDialogProps = {
   orderId?: string | null;
   invoiceId?: string | null;
   balance: PaymentBalance;
+  /** Optional «Сейчас оплачивается: …» line above the form. */
+  currentStageLabel?: string | null;
 };
 
 export type OrderPaymentFormProps = {
@@ -43,6 +45,8 @@ export type OrderPaymentFormProps = {
   onRecorded?: (amount: number) => void | Promise<void>;
   /** When false, hides the form Cancel button (parent dialog owns dismiss). Default true. */
   showCancelButton?: boolean;
+  /** Optional «Сейчас оплачивается: …» line above the form. */
+  currentStageLabel?: string | null;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -56,7 +60,15 @@ function defaultPaidAt() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
-export function PaymentFormDialog({ open, onOpenChange, target, orderId, invoiceId, balance }: PaymentFormDialogProps) {
+export function PaymentFormDialog({
+  open,
+  onOpenChange,
+  target,
+  orderId,
+  invoiceId,
+  balance,
+  currentStageLabel,
+}: PaymentFormDialogProps) {
   const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,6 +87,7 @@ export function PaymentFormDialog({ open, onOpenChange, target, orderId, invoice
             orderId={orderId}
             invoiceId={invoiceId}
             balance={balance}
+            currentStageLabel={currentStageLabel}
             onDone={() => onOpenChange(false)}
           />
         )}
@@ -91,6 +104,7 @@ export function OrderPaymentForm({
   onDone,
   onRecorded,
   showCancelButton = true,
+  currentStageLabel,
 }: OrderPaymentFormProps) {
   const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
@@ -145,6 +159,11 @@ export function OrderPaymentForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="space-y-4 py-2">
+        {currentStageLabel ? (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground" role="status">
+            {currentStageLabel}
+          </p>
+        ) : null}
         <div className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">{t("finance.payments.amountDue")}</p>

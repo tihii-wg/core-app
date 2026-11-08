@@ -370,6 +370,11 @@ const orders: Messages<typeof en> = {
       viewOnly: "Încărcările și ștergerile necesită un abonament activ",
     },
   },
+  minPaid: {
+    required: "Pentru statusul „{{status}}” este necesară o plată de cel puțin {{percent}}% ({{required}}). Achitat: {{paid}}.",
+    recordPayment: "Înregistrează plata",
+    title: "Plată necesară",
+  },
   taxInvoice: {
     label: "Numărul facturii fiscale",
     placeholder: "Introduceți numărul facturii fiscale",
@@ -756,6 +761,29 @@ const orders: Messages<typeof en> = {
     },
     deleteRemovesAll:
       "Odată cu comanda se șterg plățile anulate și garanțiile; materialele eliberate revin în stoc.",
+  },
+  cancelChain: {
+    doNotCancel: "Nu anula",
+    notNow: "Nu acum",
+    annulTitle: "Factura {{index}} din {{total}}",
+    annulDescription:
+      "Anulați factura №{{number}} de {{amount}}? Va fi marcată ca eronată. Plățile aferente au fost deja anulate la anularea comenzii.",
+    annulConfirm: "Anulează factura",
+    deleteInvoiceTitle: "Factura {{index}} din {{total}}",
+    deleteInvoiceDescription: "Ștergeți factura №{{number}}? Această acțiune nu poate fi anulată.",
+    deleteInvoiceConfirm: "Șterge factura",
+    blockedTitle: "Nu se poate continua",
+    blocked: {
+      noInvoicePermission:
+        "Nu aveți dreptul să anulați sau să ștergeți facturile. Comanda este deja anulată — facturile pot fi prelucrate mai târziu.",
+      subscriptionReadOnly: "Abonamentul este doar pentru citire — ștergerea comenzii nu este disponibilă.",
+    },
+    toast: {
+      cancelledOnly: "Comanda a fost anulată.",
+      cancelledInvoicesCleared: "Comanda a fost anulată. Facturile au fost prelucrate — comanda poate fi ștearsă mai târziu.",
+      cancelledWithInvoicesLeft:
+        "Comanda a fost anulată. Factura №{{numbers}} a rămas — o puteți anula și șterge mai târziu.",
+    },
   },
   warranty: {
     badge: "Garanție",

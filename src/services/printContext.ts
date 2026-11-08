@@ -3,6 +3,7 @@ import type { DocumentTemplateType } from "../features/documents/layout";
 import type { PrintContext } from "../features/documents/templateVariables";
 import { emptyPrintContext } from "../features/documents/templateVariables";
 import { invoicePaymentBalance, orderPaymentBalance } from "../features/finance/paymentCalculations";
+import { allocatePaid, type AllocatedPaymentStage } from "../features/finance/paymentStages";
 import { classifyInvoiceItems, type InvoiceOrderLines } from "../features/invoices/invoiceItemSections";
 import { getWorkspaceLogoUrl } from "../features/workspaces/workspaceAvatar";
 import { getClient } from "./apiClients";
@@ -10,6 +11,7 @@ import { getInvoice, getInvoices } from "./apiInvoices";
 import { getLegalEntities, type LegalEntity } from "./apiLegalEntities";
 import { getOrder } from "./apiOrders";
 import { getPayments } from "./apiPayments";
+import { getOrderPaymentStages } from "./apiPaymentStages";
 import { getVehicle } from "./apiVehicles";
 import { getInvoiceTaxTotal } from "./apiInvoiceTax";
 import { getWarrantyRecordsForOrder } from "./apiWarranty";
@@ -24,6 +26,18 @@ async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
   } catch {
     return fallback;
   }
+}
+
+/** Loads order stages (soft: missing table / errors → null) and allocates the net paid amount across them. */
+async function loadAllocatedStages(
+  orderId: string,
+  workspaceId: string,
+  orderTotal: number,
+  netPaid: number,
+): Promise<AllocatedPaymentStage[] | null> {
+  const stages = await soft(getOrderPaymentStages(orderId, workspaceId), []);
+  if (stages.length === 0) return null;
+  return allocatePaid(stages, orderTotal, netPaid);
 }
 
 function pickLegalEntity(entities: LegalEntity[], workspace: WorkspaceDetails | null): LegalEntity | null {
@@ -81,6 +95,7 @@ export async function buildOrderPrintContext(
   ]);
 
   const paymentBalance = orderPaymentBalance(order, payments);
+  const paymentStages = await loadAllocatedStages(order.id, resolved, order.totalPrice, paymentBalance.netPaid);
 
   return emptyPrintContext({
     order,
@@ -97,6 +112,7 @@ export async function buildOrderPrintContext(
     timeZone: base.timeZone,
     locale: base.locale,
     paymentBalance,
+    paymentStages,
     warrantyRecords,
     printedAt: new Date(),
     documentKind: documentKind === "invoice" ? "work_order" : documentKind,
@@ -129,6 +145,13 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
   const warrantyRecords =
     order != null ? await soft(getWarrantyRecordsForOrder(resolved, order.id), []) : [];
   const paymentBalance = invoicePaymentBalance(invoice, payments);
+  let paymentStages: AllocatedPaymentStage[] | null = null;
+  if (order) {
+    // Order-level net paid (order + invoice-linked ledger rows), not the invoice-only balance.
+    const orderPayments = await soft(getPayments(resolved, { orderId: order.id }), []);
+    const orderBalance = orderPaymentBalance(order, [...orderPayments, ...payments], invoice.id);
+    paymentStages = await loadAllocatedStages(order.id, resolved, order.totalPrice, orderBalance.netPaid);
+  }
   const orderLines: InvoiceOrderLines | null = order
     ? {
         services: (order.services ?? []).map((line) => ({
@@ -161,6 +184,7 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
     timeZone: base.timeZone,
     locale: base.locale,
     paymentBalance,
+    paymentStages,
     warrantyRecords,
     printedAt: new Date(),
     documentKind: "invoice",

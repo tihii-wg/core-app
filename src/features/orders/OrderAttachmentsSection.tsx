@@ -219,7 +219,11 @@ export default function OrderAttachmentsSection({
             </Button>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">{t("settings.subscription.readOnlyTitle")}</p>
+          <p className="text-xs text-muted-foreground">
+            {canMutateOverride === false
+              ? t("orders.lifecycle.errors.closedOrderImmutable")
+              : t("settings.subscription.readOnlyTitle")}
+          </p>
         )}
       </div>
 

@@ -67,6 +67,7 @@ const workspace: WorkspaceDetails = {
   onlinePaymentsEnabled: false,
   requireTaxInvoiceNumber: false,
   ownerCanManageClosedOrders: false,
+  paymentStageTemplate: null,
   subscriptionStatus: "active",
   subscriptionStartedAt: null,
   subscriptionExpiresAt: null,

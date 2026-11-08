@@ -70,4 +70,22 @@ describe("defaultCanvasLayoutForIndustryDocument", () => {
       true,
     );
   });
+
+  it("furniture contract embeds the payment schedule; prepayment label uses the current stage", () => {
+    const profile = industryProfile("furniture_manufacturing");
+    const contract = profile.documents.find((doc) => doc.role === "contract")!;
+    const prepay = profile.documents.find((doc) => doc.role === "prepayment_invoice")!;
+    const contractLayout = defaultCanvasLayoutForIndustryDocument(contract, profile, "Договор", i18n.t.bind(i18n));
+    const prepayLayout = defaultCanvasLayoutForIndustryDocument(prepay, profile, "Счёт на предоплату", i18n.t.bind(i18n));
+
+    expect(
+      contractLayout.elements.some(
+        (el) => el.type === "text" && typeof el.content === "string" && el.content.includes("#ГРАФИК-ОПЛАТ"),
+      ),
+    ).toBe(true);
+    const prepayTotals = prepayLayout.elements.find((el) => el.type === "totals");
+    const dueRow = prepayTotals?.type === "totals" ? prepayTotals.rows.find((row) => row.key === "paid") : undefined;
+    expect(dueRow?.label).toContain("#ЭТАП-ТЕКУЩИЙ-СУММА");
+    expect(dueRow?.label).not.toContain("#ДОЛЯ-ОПЛАТЫ");
+  });
 });

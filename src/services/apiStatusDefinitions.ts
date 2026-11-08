@@ -28,14 +28,36 @@ export type StatusDefinition = {
   isActive: boolean;
   showOverdueBadge: boolean;
   addsToBackorders: boolean;
+  /** Minimum paid share of the order total (0–100) required to enter this status; null = no requirement. */
+  minPaidPercent: number | null;
 };
 
-const statusColumns =
+const statusColumnsNoMinPaid =
   "id, workspace_id, entity, name, color, status_group, system_status, code, semantic_action, sort_order, is_default, is_active, show_overdue_badge, adds_to_backorders, deleted_at";
+
+const statusColumns = `${statusColumnsNoMinPaid}, min_paid_percent`;
 
 /** Fallback select when code/semantic_action columns are not applied yet. */
 const statusColumnsLegacy =
   "id, workspace_id, entity, name, color, status_group, system_status, sort_order, is_default, is_active, show_overdue_badge, adds_to_backorders, deleted_at";
+
+type ColumnFallbackResult = { error: { code?: string; message?: string } | null };
+
+/**
+ * Runs a status_definitions query with progressively smaller column lists:
+ * full → without min_paid_percent → legacy (no code/semantic_action).
+ */
+async function withStatusColumns<T extends ColumnFallbackResult>(run: (columns: string) => PromiseLike<T>): Promise<T> {
+  const first = await run(statusColumns);
+  if (!first.error) return first;
+  if (isMissingMinPaidColumn(first.error)) {
+    const second = await run(statusColumnsNoMinPaid);
+    if (!second.error || !isMissingLifecycleColumn(second.error)) return second;
+    return run(statusColumnsLegacy);
+  }
+  if (isMissingLifecycleColumn(first.error)) return run(statusColumnsLegacy);
+  return first;
+}
 
 function requireWorkspaceId(workspaceId: string | undefined) {
   const id = workspaceId?.trim() ?? "";
@@ -54,6 +76,26 @@ function isMissingLifecycleColumn(error: { code?: string; message?: string } | n
     return /semantic_action|code/i.test(error.message ?? "");
   }
   return /semantic_action|code/i.test(error.message ?? "") && /schema cache|does not exist/i.test(error.message ?? "");
+}
+
+function isMissingMinPaidColumn(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  if (!/min_paid_percent/i.test(error.message ?? "")) return false;
+  return error.code === "PGRST204" || error.code === "42703" || /schema cache|does not exist/i.test(error.message ?? "");
+}
+
+function toMinPaidPercent(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Normalizes a min-paid input to a 0–100 number, or null (clears the requirement). */
+function normalizeMinPaidPercent(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(100, Math.round(n * 100) / 100);
 }
 
 function toSemanticAction(value: unknown): StatusSemanticAction {
@@ -76,32 +118,22 @@ export function toStatusDefinition(row: Record<string, unknown>): StatusDefiniti
     isActive: row.is_active !== false,
     showOverdueBadge: Boolean(row.show_overdue_badge),
     addsToBackorders: Boolean(row.adds_to_backorders),
+    minPaidPercent: toMinPaidPercent(row.min_paid_percent),
   };
 }
 
 async function selectDefinitions(workspaceId: string, entity?: StatusEntity) {
-  let query = supabase
-    .from("status_definitions")
-    .select(statusColumns)
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
-  if (entity) query = query.eq("entity", entity);
-  const first = await query;
-  if (!first.error) return first;
-  if (isMissingLifecycleColumn(first.error)) {
-    let legacy = supabase
+  return withStatusColumns((columns) => {
+    let query = supabase
       .from("status_definitions")
-      .select(statusColumnsLegacy)
+      .select(columns)
       .eq("workspace_id", workspaceId)
       .is("deleted_at", null)
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true });
-    if (entity) legacy = legacy.eq("entity", entity);
-    return legacy;
-  }
-  return first;
+    if (entity) query = query.eq("entity", entity);
+    return query;
+  });
 }
 
 export async function getStatusDefinitions(workspaceId: string | undefined, entity?: StatusEntity) {
@@ -111,7 +143,7 @@ export async function getStatusDefinitions(workspaceId: string | undefined, enti
     if (isMissingStatusTable(error)) return [] as StatusDefinition[];
     throw new Error(error.message);
   }
-  return ((data ?? []) as Record<string, unknown>[]).map(toStatusDefinition);
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(toStatusDefinition);
 }
 
 /**
@@ -208,25 +240,15 @@ export async function getStatusDefinitionsByIds(workspaceId: string | undefined,
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
   if (unique.length === 0) return new Map<string, StatusDefinition>();
 
-  const { data, error } = await supabase
-    .from("status_definitions")
-    .select(statusColumns)
-    .eq("workspace_id", resolved)
-    .in("id", unique)
-    .is("deleted_at", null);
-
-  let rows: Record<string, unknown>[] | null = (data as Record<string, unknown>[] | null) ?? null;
-  let err = error;
-  if (err && isMissingLifecycleColumn(err)) {
-    const legacy = await supabase
+  const { data, error: err } = await withStatusColumns((columns) =>
+    supabase
       .from("status_definitions")
-      .select(statusColumnsLegacy)
+      .select(columns)
       .eq("workspace_id", resolved)
       .in("id", unique)
-      .is("deleted_at", null);
-    rows = (legacy.data as Record<string, unknown>[] | null) ?? null;
-    err = legacy.error;
-  }
+      .is("deleted_at", null),
+  );
+  const rows = (data as unknown as Record<string, unknown>[] | null) ?? null;
 
   if (err) {
     if (isMissingStatusTable(err)) return new Map<string, StatusDefinition>();
@@ -261,6 +283,8 @@ export type CreateStatusDefinitionInput = {
   statusGroup: StatusGroup;
   systemStatus?: string | null;
   sortOrder?: number;
+  /** Minimum paid percent (0–100) of the order total required to enter this status; empty/0 = none. */
+  minPaidPercent?: number | null;
 };
 
 export type UpdateStatusDefinitionInput = {
@@ -270,6 +294,8 @@ export type UpdateStatusDefinitionInput = {
   statusGroup?: StatusGroup;
   sortOrder?: number;
   isActive?: boolean;
+  /** Set or clear (null / 0) the minimum paid percent requirement. */
+  minPaidPercent?: number | null;
 };
 
 /** Creates a status definition (defaults to the `order` entity). Always semantic normal. */
@@ -308,8 +334,13 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
     sort_order: Number.isFinite(input.sortOrder) ? Math.trunc(input.sortOrder as number) : 0,
     semantic_action: "normal",
   };
+  const minPaidPercent = normalizeMinPaidPercent(input.minPaidPercent);
+  if (minPaidPercent != null) payload.min_paid_percent = minPaidPercent;
 
-  let { data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumns).single();
+  const insertOnce = () =>
+    withStatusColumns((columns) => supabase.from("status_definitions").insert(payload).select(columns).single());
+
+  let { data, error } = await insertOnce();
 
   // Concurrent create may race on a preferred canonical code — retry once with UUID fallback.
   // Preserve the same status UUID. Do not mask name-uniqueness violations.
@@ -317,13 +348,20 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
     taken.add(String(payload.code));
     code = nextAvailableCode(fallbackCodeFromStatusId(provisionalId), taken);
     payload.code = code;
-    ({ data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumns).single());
+    ({ data, error } = await insertOnce());
+  }
+
+  // min_paid_percent column not applied yet — create the status without the requirement.
+  if (error && isMissingMinPaidColumn(error) && "min_paid_percent" in payload) {
+    delete payload.min_paid_percent;
+    ({ data, error } = await insertOnce());
   }
 
   if (error && isMissingLifecycleColumn(error)) {
     delete payload.semantic_action;
     delete payload.code;
     delete payload.id;
+    delete payload.min_paid_percent;
     ({ data, error } = await supabase.from("status_definitions").insert(payload).select(statusColumnsLegacy).single());
   }
 
@@ -332,7 +370,7 @@ export async function createStatusDefinition(input: CreateStatusDefinitionInput,
     if (error.code === "23505") throw new Error(i18n.t("settings.statuses.errors.duplicate"));
     throw new Error(error.message);
   }
-  return toStatusDefinition(data as Record<string, unknown>);
+  return toStatusDefinition(data as unknown as Record<string, unknown>);
 }
 
 export async function updateStatusDefinition(input: UpdateStatusDefinitionInput, workspaceId: string | undefined) {
@@ -340,30 +378,21 @@ export async function updateStatusDefinition(input: UpdateStatusDefinitionInput,
 
   let existing: StatusDefinition | null = null;
   {
-    const { data: existingRow, error: existingError } = await supabase
-      .from("status_definitions")
-      .select(statusColumns)
-      .eq("id", input.id)
-      .eq("workspace_id", resolved)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (existingError && isMissingLifecycleColumn(existingError)) {
-      const legacy = await supabase
+    const { data: existingRow, error: existingError } = await withStatusColumns((columns) =>
+      supabase
         .from("status_definitions")
-        .select(statusColumnsLegacy)
+        .select(columns)
         .eq("id", input.id)
         .eq("workspace_id", resolved)
         .is("deleted_at", null)
-        .maybeSingle();
-      if (legacy.error) throw new Error(legacy.error.message);
-      if (!legacy.data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
-      existing = toStatusDefinition(legacy.data as Record<string, unknown>);
-    } else if (existingError) {
+        .maybeSingle(),
+    );
+    if (existingError) {
       throw new Error(existingError.message);
     } else if (!existingRow) {
       throw new Error(i18n.t("settings.statuses.errors.notFound"));
     } else {
-      existing = toStatusDefinition(existingRow as Record<string, unknown>);
+      existing = toStatusDefinition(existingRow as unknown as Record<string, unknown>);
     }
   }
   if (existing.entity === "order" && isLifecycleOrderStatusDefinition(existing)) {
@@ -383,38 +412,32 @@ export async function updateStatusDefinition(input: UpdateStatusDefinitionInput,
     patch.is_active = input.isActive;
     if (!input.isActive) patch.is_default = false;
   }
+  if (input.minPaidPercent !== undefined) patch.min_paid_percent = normalizeMinPaidPercent(input.minPaidPercent);
 
-  const { data, error } = await supabase
-    .from("status_definitions")
-    .update(patch)
-    .eq("id", input.id)
-    .eq("workspace_id", resolved)
-    .is("deleted_at", null)
-    .select(statusColumns)
-    .maybeSingle();
+  const { data, error } = await withStatusColumns((columns) =>
+    supabase
+      .from("status_definitions")
+      .update(patch)
+      .eq("id", input.id)
+      .eq("workspace_id", resolved)
+      .is("deleted_at", null)
+      .select(columns)
+      .maybeSingle(),
+  );
 
   if (error) {
-    if (isMissingLifecycleColumn(error)) {
-      const legacy = await supabase
-        .from("status_definitions")
-        .update(patch)
-        .eq("id", input.id)
-        .eq("workspace_id", resolved)
-        .is("deleted_at", null)
-        .select(statusColumnsLegacy)
-        .maybeSingle();
-      if (legacy.error) {
-        if (legacy.error.code === "23505") throw new Error(i18n.t("settings.statuses.errors.duplicate"));
-        throw new Error(legacy.error.message);
-      }
-      if (!legacy.data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
-      return toStatusDefinition(legacy.data as Record<string, unknown>);
+    if (isMissingMinPaidColumn(error)) {
+      throw new Error(
+        i18n.t("settings.statuses.errors.minPaidSchemaRequired", {
+          defaultValue: "Minimum paid percent is not available yet. Apply the database migration first.",
+        }),
+      );
     }
     if (error.code === "23505") throw new Error(i18n.t("settings.statuses.errors.duplicate"));
     throw new Error(error.message);
   }
   if (!data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
-  return toStatusDefinition(data as Record<string, unknown>);
+  return toStatusDefinition(data as unknown as Record<string, unknown>);
 }
 
 /** Sets exactly one default order status for the workspace. */
@@ -448,30 +471,18 @@ export async function setDefaultStatusDefinition(statusId: string, workspaceId: 
     .eq("is_default", true);
   if (clearError) throw new Error(clearError.message);
 
-  const { data, error } = await supabase
-    .from("status_definitions")
-    .update({ is_default: true, updated_at: new Date().toISOString() })
-    .eq("id", statusId)
-    .eq("workspace_id", resolved)
-    .select(statusColumns)
-    .maybeSingle();
-  if (error) {
-    if (isMissingLifecycleColumn(error)) {
-      const legacy = await supabase
-        .from("status_definitions")
-        .update({ is_default: true, updated_at: new Date().toISOString() })
-        .eq("id", statusId)
-        .eq("workspace_id", resolved)
-        .select(statusColumnsLegacy)
-        .maybeSingle();
-      if (legacy.error) throw new Error(legacy.error.message);
-      if (!legacy.data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
-      return toStatusDefinition(legacy.data as Record<string, unknown>);
-    }
-    throw new Error(error.message);
-  }
+  const { data, error } = await withStatusColumns((columns) =>
+    supabase
+      .from("status_definitions")
+      .update({ is_default: true, updated_at: new Date().toISOString() })
+      .eq("id", statusId)
+      .eq("workspace_id", resolved)
+      .select(columns)
+      .maybeSingle(),
+  );
+  if (error) throw new Error(error.message);
   if (!data) throw new Error(i18n.t("settings.statuses.errors.notFound"));
-  return toStatusDefinition(data as Record<string, unknown>);
+  return toStatusDefinition(data as unknown as Record<string, unknown>);
 }
 
 /** Reorders statuses by writing sequential sort_order values. */

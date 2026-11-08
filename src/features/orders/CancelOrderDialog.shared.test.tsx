@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { Order } from "../../lib/types";
 import { renderWithQuery } from "../../tests/renderQuery";
 
-const cancelDialogSpy = vi.hoisted(() => vi.fn());
+const chainDialogSpy = vi.hoisted(() => vi.fn());
 
-vi.mock("./CancelOrderDialog", () => ({
-  CancelOrderDialog: (props: { open: boolean; order: Order | null }) => {
-    cancelDialogSpy(props);
-    return props.open ? <div data-testid="shared-cancel-dialog">CancelOrderDialog</div> : null;
+vi.mock("./OrderCancelChainDialog", () => ({
+  OrderCancelChainDialog: (props: { open: boolean; order: Order | null }) => {
+    chainDialogSpy(props);
+    return props.open ? <div data-testid="shared-cancel-chain-dialog">OrderCancelChainDialog</div> : null;
   },
 }));
 
@@ -126,9 +126,9 @@ const order: Order = {
   updatedAt: "",
 };
 
-describe("shared CancelOrderDialog wiring", () => {
-  it("OrderActionsMenu mounts CancelOrderDialog", () => {
-    cancelDialogSpy.mockClear();
+describe("shared OrderCancelChainDialog wiring", () => {
+  it("OrderActionsMenu mounts OrderCancelChainDialog", () => {
+    chainDialogSpy.mockClear();
     renderWithQuery(
       <OrderActionsMenu
         order={order}
@@ -139,12 +139,12 @@ describe("shared CancelOrderDialog wiring", () => {
         requireTaxInvoiceNumber={false}
       />,
     );
-    expect(cancelDialogSpy).toHaveBeenCalled();
-    expect(cancelDialogSpy.mock.calls.some((call) => call[0]?.order?.id === "order-1")).toBe(true);
+    expect(chainDialogSpy).toHaveBeenCalled();
+    expect(chainDialogSpy.mock.calls.some((call) => call[0]?.order?.id === "order-1")).toBe(true);
   });
 
-  it("OrderDetailPanel mounts CancelOrderDialog", () => {
-    cancelDialogSpy.mockClear();
+  it("OrderDetailPanel mounts OrderCancelChainDialog", () => {
+    chainDialogSpy.mockClear();
     renderWithQuery(
       <OrderDetailPanel
         selectedOrder={order}
@@ -154,7 +154,7 @@ describe("shared CancelOrderDialog wiring", () => {
         onStatusChange={vi.fn()}
       />,
     );
-    expect(cancelDialogSpy).toHaveBeenCalled();
-    expect(cancelDialogSpy.mock.calls.some((call) => call[0]?.order?.id === "order-1")).toBe(true);
+    expect(chainDialogSpy).toHaveBeenCalled();
+    expect(chainDialogSpy.mock.calls.some((call) => call[0]?.order?.id === "order-1")).toBe(true);
   });
 });

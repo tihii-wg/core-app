@@ -25,6 +25,7 @@ const definition = (partial: Partial<StatusDefinition> & Pick<StatusDefinition, 
   isActive: partial.isActive ?? true,
   showOverdueBadge: partial.showOverdueBadge ?? false,
   addsToBackorders: partial.addsToBackorders ?? false,
+  minPaidPercent: partial.minPaidPercent ?? null,
 });
 
 const order = (

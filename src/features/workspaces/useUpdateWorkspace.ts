@@ -7,10 +7,12 @@ import {
   updateWorkspaceDetails,
   updateWorkspaceInvoiceSettings,
   updateWorkspaceOrderSettings,
+  updateWorkspacePaymentStageTemplate,
   updateWorkspacePreferences,
   updateWorkspaceTaxInvoiceSettings,
   type WorkspacePreferencesInput,
 } from "../../services/apiWorkspaces";
+import type { PaymentStageTemplateItem } from "../finance/paymentStages";
 import { useGuardSubscriptionWrite } from "./useWorkspaceSubscription";
 
 type UpdateWorkspaceInput = {
@@ -73,6 +75,21 @@ export function useUpdateWorkspaceTaxInvoiceSettings() {
     mutationFn: ({ workspaceId, requireTaxInvoiceNumber }: { workspaceId: string; requireTaxInvoiceNumber: boolean }) => {
       guardWrite();
       return updateWorkspaceTaxInvoiceSettings(workspaceId, requireTaxInvoiceNumber);
+    },
+    onSuccess(workspace) {
+      invalidateWorkspace(queryClient, workspace.id, workspace);
+    },
+  });
+}
+
+/** Saves (or clears with `template: null`) the workspace default payment-stage template. */
+export function useUpdateWorkspacePaymentStageTemplate() {
+  const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
+  return useMutation({
+    mutationFn: ({ workspaceId, template }: { workspaceId: string; template: PaymentStageTemplateItem[] | null }) => {
+      guardWrite();
+      return updateWorkspacePaymentStageTemplate(workspaceId, template);
     },
     onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);

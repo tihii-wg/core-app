@@ -35,9 +35,12 @@ import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useDeleteOrder } from "./useDeleteOrder";
 import { isOrderFormallyClosed } from "./orderLifecycle";
-import { CancelOrderDialog } from "./CancelOrderDialog";
+import { OrderCancelChainDialog } from "./OrderCancelChainDialog";
 import { CloseOrderDialog } from "./CloseOrderDialog";
 import { useGetPayments } from "../finance/usePayments";
+import { PaymentFormDialog } from "../finance/PaymentFormDialog";
+import { assertMinPaidOrExplain, orderNetPaidForMinPaid, recordableOrderBalance } from "./minPaidStatusGuard";
+import { showMinPaidBlockedToast } from "./showMinPaidBlockedToast";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
@@ -125,7 +128,8 @@ export function OrderActionsMenu({
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [copyingPublicLink, setCopyingPublicLink] = useState(false);
-  const { payments } = useGetPayments();
+  const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+  const { payments, isLoading: paymentsLoading } = useGetPayments();
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
   const closedOrderPerms = useClosedOrderActionPermissions();
@@ -256,6 +260,22 @@ export function OrderActionsMenu({
                       allowReopenCancelled: isOwnerByOwnerId,
                     });
                     if (!move) return;
+                    const minPaidBlock = assertMinPaidOrExplain({
+                      order,
+                      // Ledger still loading → rely on the DB guard rather than blocking on an empty list.
+                      targetDefinition: paymentsLoading ? null : option.definition,
+                      netPaid: orderNetPaidForMinPaid(order, payments),
+                      formatMoney,
+                      t,
+                    });
+                    if (minPaidBlock) {
+                      showMinPaidBlockedToast({
+                        block: minPaidBlock,
+                        recordPaymentLabel: t("orders.minPaid.recordPayment"),
+                        onRecordPayment: canRecordPayment ? () => setRecordPaymentOpen(true) : undefined,
+                      });
+                      return;
+                    }
                     if (option.kind === "definition" || move.customStatusId !== null || order.customStatusId) {
                       moveOnBoard({
                         orderId: order.id,
@@ -436,6 +456,18 @@ export function OrderActionsMenu({
         </DialogContent>
       </Dialog>
 
+      {recordPaymentOpen ? (
+        <span onClick={stop} className="contents">
+          <PaymentFormDialog
+            open
+            onOpenChange={setRecordPaymentOpen}
+            target="order"
+            orderId={order.id}
+            balance={recordableOrderBalance(order, payments)}
+          />
+        </span>
+      ) : null}
+
       <CloseOrderDialog
         order={order}
         open={closeOpen}
@@ -455,19 +487,12 @@ export function OrderActionsMenu({
         }}
       />
 
-      <CancelOrderDialog
+      <OrderCancelChainDialog
         order={order}
         open={cancelOpen}
         onOpenChange={setCancelOpen}
-        onCancelled={(result) => {
-          onOrderUpdated?.({
-            ...order,
-            status: "cancelled",
-            customStatusId: result.customStatusId,
-            customStatus: result.customStatus,
-            closedAt: result.closed_at ?? order.closedAt,
-          });
-        }}
+        onOrderUpdated={onOrderUpdated}
+        onDeleted={onDeleted}
       />
     </>
   );

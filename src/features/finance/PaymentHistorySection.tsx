@@ -15,12 +15,14 @@ import {
   paymentsForInvoice,
   paymentsForOrder,
 } from "./paymentCalculations";
+import { allocatePaid, currentPaymentStage } from "./paymentStages";
 import type { LedgerPayment, PaymentBalance } from "./paymentTypes";
 import { DeleteFullyVoidedPaymentDialog } from "./DeleteFullyVoidedPaymentDialog";
 import { PaymentActionsMenu } from "./PaymentActionsMenu";
 import { PaymentFormDialog } from "./PaymentFormDialog";
 import { PaymentVoidDialog } from "./PaymentVoidDialog";
 import { RefundFormDialog } from "./RefundFormDialog";
+import { useOrderPaymentStages } from "./useOrderPaymentStages";
 import type { Invoice, Order } from "../../lib/types";
 import { useReportFormatting } from "../reports/reportFormatting";
 
@@ -56,6 +58,7 @@ export function PaymentHistorySection({
   const { canWrite } = useWorkspaceSubscription();
   const role = useActiveWorkspaceRole();
   const canRecord = canRecordProp ?? withSubscriptionWriteAccess(Boolean(role), canWrite);
+  const { stages: paymentStages } = useOrderPaymentStages(target === "order" ? order?.id : undefined);
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [refundOriginal, setRefundOriginal] = useState<LedgerPayment | null>(null);
@@ -91,6 +94,30 @@ export function PaymentHistorySection({
   const orderId = target === "order" ? order?.id : invoice?.orderId ?? null;
   const invoiceId = target === "invoice" ? invoice?.id : null;
   const canOpenPayment = canRecord && recordableBalance.remaining > 0;
+
+  const currentStage = useMemo(() => {
+    if (target !== "order" || !order || paymentStages.length === 0) return null;
+    const allocated = allocatePaid(
+      paymentStages.map((stage) => ({
+        id: stage.id,
+        position: stage.position,
+        name: stage.name,
+        mode: stage.mode,
+        percent: stage.percent,
+        amount: stage.amount,
+        dueDate: stage.dueDate,
+        invoiceId: stage.invoiceId,
+      })),
+      order.totalPrice,
+      balance.netPaid,
+    );
+    return currentPaymentStage(allocated);
+  }, [target, order, paymentStages, balance.netPaid]);
+
+  const dialogBalance: PaymentBalance =
+    currentStage && currentStage.remaining > 0.005
+      ? { ...recordableBalance, remaining: currentStage.remaining }
+      : recordableBalance;
 
   return (
     <div className="space-y-3 border-t border-border pt-5">
@@ -199,7 +226,15 @@ export function PaymentHistorySection({
         target={target}
         orderId={orderId}
         invoiceId={invoiceId}
-        balance={recordableBalance}
+        balance={dialogBalance}
+        currentStageLabel={
+          currentStage
+            ? t("finance.paymentStages.currentlyPaying", {
+                name: currentStage.name,
+                amount: formatMoney(currentStage.remaining),
+              })
+            : null
+        }
       />
       <RefundFormDialog open={refundOriginal != null} onOpenChange={(open) => !open && setRefundOriginal(null)} original={refundOriginal} allPayments={payments} />
       <PaymentVoidDialog

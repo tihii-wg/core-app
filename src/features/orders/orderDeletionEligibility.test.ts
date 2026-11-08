@@ -29,6 +29,7 @@ const definition = (partial: Partial<StatusDefinition> & Pick<StatusDefinition, 
   isActive: true,
   showOverdueBadge: false,
   addsToBackorders: false,
+  minPaidPercent: null,
 });
 
 const payment = (partial: Partial<LedgerPayment> & Pick<LedgerPayment, "id" | "kind" | "amount">): LedgerPayment => ({

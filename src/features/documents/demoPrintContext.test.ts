@@ -84,4 +84,29 @@ describe("demoPrintContext", () => {
       expect(record.expiresAtMileage).toBeNull();
     }
   });
+
+  it("resolves payment-stage tokens from the furniture demo schedule (50/30/20 of 33140)", () => {
+    const ctx = demoPrintContext({
+      documentType: "invoice",
+      locale: "ru",
+      currency: "MDL",
+      industrySlug: "furniture_manufacturing",
+      now: new Date("2026-11-07T12:00:00.000Z"),
+    });
+    expect(ctx.paymentBalance?.total).toBe(33140);
+    const stages = ctx.paymentStages ?? [];
+    expect(stages.map((stage) => stage.due)).toEqual([16570, 9942, 6628]);
+    expect(stages.map((stage) => stage.paid)).toEqual([16570, 0, 0]);
+
+    const opts = { locale: "ru", currency: "MDL", showCents: false } as const;
+    const schedule = applyTemplateVariables("#ГРАФИК-ОПЛАТ", ctx, opts);
+    expect(schedule).toContain("<table");
+    for (const amount of ["16\u00a0570", "9\u00a0942", "6\u00a0628"]) {
+      expect(schedule.replace(/[\u202f\s]/g, "\u00a0")).toContain(amount);
+    }
+    expect(applyTemplateVariables("#ЭТАП-ТЕКУЩИЙ", ctx, opts)).toBe("Изготовление");
+    expect(applyTemplateVariables("#ЭТАП-ТЕКУЩИЙ-СУММА", ctx, opts).replace(/[\u202f\s]/g, "")).toBe("MDL9942");
+    // Longer token must not be eaten by its prefix.
+    expect(applyTemplateVariables("#ЭТАП-ТЕКУЩИЙ-СУММА / #ЭТАП-ТЕКУЩИЙ", ctx, opts)).not.toContain("#");
+  });
 });

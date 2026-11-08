@@ -68,7 +68,8 @@ export default {
     paid: "Achitat",
     balanceDue: "De plată",
     contractTotal: "Total pe contract",
-    prepaymentDue: "De plată (avans #ДОЛЯ-ОПЛАТЫ%)",
+    prepaymentDue: "De plată (#ЭТАП-ТЕКУЩИЙ-СУММА)",
+    paymentSchedule: "Grafic de plăți",
     materialsCaption: "Materiale și feronerie",
     worksCaption: "Lucrări",
     cityLine: "or. #КОМПАНИЯ-АДРЕС",
@@ -152,6 +153,20 @@ export default {
       workOrder: "Comandă",
       act: "Act de lucrări",
       invoice: "Factură",
+    },
+  },
+  paymentStages: {
+    furniture: {
+      prepayment: "Avans 50%",
+      afterMeasurement: "După măsurători/aprobare 30%",
+      remainder: "Sold",
+    },
+    field: {
+      advance: "Avans 50%",
+      remainder: "Sold",
+    },
+    default: {
+      fullPayment: "Plată integrală",
     },
   },
   catalog: {

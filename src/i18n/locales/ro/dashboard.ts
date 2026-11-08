@@ -68,6 +68,13 @@ const dashboard: Messages<typeof en> = {
     moreCount_few: "+ încă {{count}}",
     moreCount_other: "+ încă {{count}}",
   },
+  paymentStages: {
+    title: "Plăți apropiate conform graficului",
+    emptyTitle: "Nu există plăți programate în curând",
+    emptyHint: "Etapele de plată cu termen în următoarele 7 zile și cele restante vor apărea aici.",
+    overdue: "Restant",
+    errorTitle: "Nu s-au putut încărca etapele de plată",
+  },
   columns: {
     order: "Comandă",
     client: "Client",

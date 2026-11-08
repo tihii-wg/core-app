@@ -46,6 +46,7 @@ import { DashboardFinancialCards } from "../features/dashboard/DashboardFinancia
 import { useDashboardFinancials } from "../features/dashboard/useDashboardFinancials";
 import { DashboardDeadlinePanels } from "../features/dashboard/DashboardDeadlinePanels";
 import { DashboardQuickActions } from "../features/dashboard/DashboardQuickActions";
+import { DashboardPaymentStagesCard } from "../features/dashboard/DashboardPaymentStagesCard";
 import {
   RECENT_ORDERS_LIMIT,
   selectOrdersByActivityIds,
@@ -461,6 +462,13 @@ export default function Dashboard() {
         today={today}
         isLoading={ordersLoading}
         isError={ordersError}
+        onOpenOrder={orderDetails.openOrder}
+      />
+
+      <DashboardPaymentStagesCard
+        orders={workspaceOrders}
+        now={now}
+        isOrdersLoading={ordersLoading}
         onOpenOrder={orderDetails.openOrder}
       />
 

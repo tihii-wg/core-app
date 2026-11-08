@@ -68,7 +68,8 @@ export default {
     paid: "Оплачено",
     balanceDue: "К оплате",
     contractTotal: "Итого по договору",
-    prepaymentDue: "К оплате (предоплата #ДОЛЯ-ОПЛАТЫ%)",
+    prepaymentDue: "К оплате (#ЭТАП-ТЕКУЩИЙ-СУММА)",
+    paymentSchedule: "График оплаты",
     materialsCaption: "Материалы и фурнитура",
     worksCaption: "Работы",
     cityLine: "г. #КОМПАНИЯ-АДРЕС",
@@ -152,6 +153,20 @@ export default {
       workOrder: "Заказ",
       act: "Акт выполненных работ",
       invoice: "Счёт",
+    },
+  },
+  paymentStages: {
+    furniture: {
+      prepayment: "Предоплата 50%",
+      afterMeasurement: "После замера/согласования 30%",
+      remainder: "Остаток",
+    },
+    field: {
+      advance: "Аванс 50%",
+      remainder: "Остаток",
+    },
+    default: {
+      fullPayment: "Полная оплата",
     },
   },
   catalog: {

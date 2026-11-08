@@ -41,6 +41,7 @@ function definition(partial: Partial<StatusDefinition> & { id: string; name: str
     isActive: true,
     showOverdueBadge: false,
     addsToBackorders: false,
+    minPaidPercent: null,
     ...partial,
   };
 }

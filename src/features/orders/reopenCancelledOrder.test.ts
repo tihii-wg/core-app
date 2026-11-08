@@ -28,6 +28,7 @@ describe("reopen cancelled order lifecycle (client gates)", () => {
       isActive: true,
       showOverdueBadge: false,
       addsToBackorders: false,
+      minPaidPercent: null,
     },
   ];
 

@@ -71,6 +71,13 @@ const dashboard: Messages<typeof en> = {
     moreCount_many: "+ ещё {{count}}",
     moreCount_other: "+ ещё {{count}}",
   },
+  paymentStages: {
+    title: "Ближайшие оплаты по графику",
+    emptyTitle: "Нет оплат по графику в ближайшее время",
+    emptyHint: "Здесь появятся этапы оплаты со сроком в ближайшие 7 дней и просроченные.",
+    overdue: "Просрочено",
+    errorTitle: "Не удалось загрузить этапы оплаты",
+  },
   columns: {
     order: "Заказ",
     client: "Клиент",

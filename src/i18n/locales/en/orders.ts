@@ -364,6 +364,11 @@ export default {
       viewOnly: "Uploads and deletions require an active subscription",
     },
   },
+  minPaid: {
+    required: "Status “{{status}}” requires a payment of at least {{percent}}% ({{required}}). Paid: {{paid}}.",
+    recordPayment: "Record payment",
+    title: "Payment required",
+  },
   taxInvoice: {
     label: "Tax invoice number",
     placeholder: "Enter tax invoice number",
@@ -751,6 +756,29 @@ export default {
     },
     deleteRemovesAll:
       "Voided payments and warranties are removed with the order; issued materials return to stock.",
+  },
+  cancelChain: {
+    doNotCancel: "Don't cancel",
+    notNow: "Not now",
+    annulTitle: "Invoice {{index}} of {{total}}",
+    annulDescription:
+      "Annul invoice №{{number}} for {{amount}}? It will be marked as erroneous. Payments on it were already voided when the order was cancelled.",
+    annulConfirm: "Annul invoice",
+    deleteInvoiceTitle: "Invoice {{index}} of {{total}}",
+    deleteInvoiceDescription: "Delete invoice №{{number}}? This cannot be undone.",
+    deleteInvoiceConfirm: "Delete invoice",
+    blockedTitle: "Cannot continue",
+    blocked: {
+      noInvoicePermission:
+        "You don't have permission to annul or delete invoices. The order is already cancelled — invoices can be handled later.",
+      subscriptionReadOnly: "Subscription is read-only — order deletion is unavailable.",
+    },
+    toast: {
+      cancelledOnly: "Order cancelled.",
+      cancelledInvoicesCleared: "Order cancelled. Invoices were cleared — you can delete the order later.",
+      cancelledWithInvoicesLeft:
+        "Order cancelled. Invoice №{{numbers}} remains — you can annul and delete it later.",
+    },
   },
   warranty: {
     badge: "Warranty",

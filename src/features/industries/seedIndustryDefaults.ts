@@ -6,6 +6,7 @@ import {
   isLifecycleOrderStatusDefinition,
   setDefaultStatusDefinition,
   setOrderLifecycleSemantic,
+  updateStatusDefinition,
   type StatusDefinition,
 } from "../../services/apiStatusDefinitions";
 import {
@@ -68,6 +69,13 @@ export async function seedIndustryOrderStatuses(
       skipped += 1;
       if (seed.semanticAction === "close" || seed.semanticAction === "cancel") {
         lifecycleTargets.push({ id: existingMatch.id, action: seed.semanticAction });
+      } else if (seed.minPaidPercent != null && existingMatch.minPaidPercent == null) {
+        // Fill in the industry's min-paid gate on an existing status only when none is configured.
+        try {
+          await updateStatusDefinition({ id: existingMatch.id, minPaidPercent: seed.minPaidPercent }, workspaceId);
+        } catch {
+          // Column/migration unavailable or status protected — leave as is.
+        }
       }
       if (seed.isDefault) defaultId = existingMatch.id;
       continue;
@@ -93,6 +101,7 @@ export async function seedIndustryOrderStatuses(
             ? seed.systemStatus
             : null,
         sortOrder: sortOrder++,
+        minPaidPercent: seed.minPaidPercent ?? null,
       },
       workspaceId,
     );

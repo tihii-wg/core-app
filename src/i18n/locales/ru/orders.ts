@@ -373,6 +373,11 @@ const orders: Messages<typeof en> = {
       viewOnly: "Загрузка и удаление требуют активной подписки",
     },
   },
+  minPaid: {
+    required: "Для статуса «{{status}}» нужна оплата не меньше {{percent}}% ({{required}}). Оплачено {{paid}}.",
+    recordPayment: "Записать оплату",
+    title: "Нужна оплата",
+  },
   taxInvoice: {
     label: "Номер налоговой накладной",
     placeholder: "Введите номер налоговой накладной",
@@ -759,6 +764,28 @@ const orders: Messages<typeof en> = {
     },
     deleteRemovesAll:
       "Вместе с заказом будут удалены аннулированные платежи и гарантии, выданные материалы вернутся на склад.",
+  },
+  cancelChain: {
+    doNotCancel: "Не отменять",
+    notNow: "Не сейчас",
+    annulTitle: "Счёт {{index}} из {{total}}",
+    annulDescription:
+      "Аннулировать счёт №{{number}} на {{amount}}? Он будет помечен как ошибочный. Оплаты по нему уже аннулированы при отмене заказа.",
+    annulConfirm: "Аннулировать счёт",
+    deleteInvoiceTitle: "Счёт {{index}} из {{total}}",
+    deleteInvoiceDescription: "Удалить счёт №{{number}}? Это действие нельзя отменить.",
+    deleteInvoiceConfirm: "Удалить счёт",
+    blockedTitle: "Нельзя продолжить",
+    blocked: {
+      noInvoicePermission: "Недостаточно прав, чтобы аннулировать или удалить счета. Заказ уже отменён — счета можно обработать позже.",
+      subscriptionReadOnly: "Подписка только для чтения — удаление заказа недоступно.",
+    },
+    toast: {
+      cancelledOnly: "Заказ отменён.",
+      cancelledInvoicesCleared: "Заказ отменён. Счета обработаны — заказ можно удалить позже.",
+      cancelledWithInvoicesLeft:
+        "Заказ отменён. Счёт №{{numbers}} остался — его можно аннулировать и удалить позже.",
+    },
   },
   warranty: {
     badge: "Гарантия",

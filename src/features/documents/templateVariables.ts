@@ -7,6 +7,8 @@ import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import type { WarrantySnapshot } from "../orders/warranty";
 import { snapshotMileageUnit } from "../orders/warranty";
 import type { PaymentBalance } from "../finance/paymentTypes";
+import { currentPaymentStage, type AllocatedPaymentStage } from "../finance/paymentStages";
+import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import { documentVatBreakdown, type OrderVatBreakdown } from "../finance/orderVat";
 import type { InvoiceSections } from "../invoices/invoiceItemSections";
 import { computeOrderMoney, lineNet } from "../orders/orderTotals";
@@ -52,6 +54,11 @@ export type PrintContext = {
   /** Document / UI language for amount-in-words and labels. */
   locale: string;
   paymentBalance: PaymentBalance | null;
+  /**
+   * Order payment stages already allocated against the order's net paid amount.
+   * Null / empty when the order has no schedule (or the stages table is unavailable).
+   */
+  paymentStages?: AllocatedPaymentStage[] | null;
   warrantyRecords: WarrantySnapshot[];
   printedAt: Date;
   /** Which document is being printed — drives #ДОКУМЕНТ-* tokens. */
@@ -102,6 +109,7 @@ export function emptyPrintContext(partial: Partial<PrintContext> = {}): PrintCon
     timeZone: "Europe/Chisinau",
     locale: "en",
     paymentBalance: null,
+    paymentStages: null,
     warrantyRecords: [],
     printedAt: new Date(0),
     documentKind: null,
@@ -362,6 +370,39 @@ function buildWarrantyList(ctx: PrintContext) {
     })
     .join("");
   return `<ul style="margin:0;padding-left:1.2em">${items}</ul>`;
+}
+
+function formatScheduleAmount(value: number, locale: string) {
+  return value.toLocaleString(locale || "en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** HTML table: stage, due date, amount, paid, remaining. Empty string when the order has no stages. */
+export function buildPaymentScheduleTable(ctx: PrintContext) {
+  const stages = ctx.paymentStages ?? [];
+  if (stages.length === 0) return "";
+  const t = printMileageT(ctx.locale);
+  const base = "settings.printTemplates.variables.money.paymentSchedule.columns";
+  const label = (key: string) => String(t(`${base}.${key}` as never));
+  const currency = ctx.currency.trim();
+  const withCurrency = (value: string) => (currency ? `${value}, ${currency}` : value);
+  let html = tableStart([
+    label("stage"),
+    label("dueDate"),
+    withCurrency(label("amount")),
+    withCurrency(label("paid")),
+    withCurrency(label("remaining")),
+  ]);
+  for (const stage of stages) {
+    const dueDate = stage.dueDate ? formatWorkspaceDate(stage.dueDate, ctx.dateFormat, ctx.timeZone) : "—";
+    html += `<tr>${cell(escapeHtmlText(stage.name))}${cell(escapeHtmlText(dueDate))}${cell(formatScheduleAmount(stage.due, ctx.locale), "right")}${cell(formatScheduleAmount(stage.paid, ctx.locale), "right")}${cell(formatScheduleAmount(stage.remaining, ctx.locale), "right")}</tr>`;
+  }
+  return html + tableEnd();
+}
+
+function currentStageOf(ctx: PrintContext): AllocatedPaymentStage | null {
+  const stages = ctx.paymentStages;
+  if (!stages || stages.length === 0) return null;
+  return currentPaymentStage(stages);
 }
 
 function isSafeLogoUrl(url: string) {
@@ -1067,6 +1108,30 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
       if (total == null || paid == null || !Number.isFinite(total) || total <= 0) return null;
       return String(Math.round((paid / total) * 100));
     },
+  },
+  {
+    token: "#ГРАФИК-ОПЛАТ",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.paymentSchedule.label",
+    descriptionKey: "settings.printTemplates.variables.money.paymentSchedule.description",
+    kind: "html",
+    resolve: buildPaymentScheduleTable,
+  },
+  {
+    token: "#ЭТАП-ТЕКУЩИЙ-СУММА",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.currentStageAmount.label",
+    descriptionKey: "settings.printTemplates.variables.money.currentStageAmount.description",
+    kind: "money",
+    resolve: (ctx) => currentStageOf(ctx)?.remaining ?? null,
+  },
+  {
+    token: "#ЭТАП-ТЕКУЩИЙ",
+    group: "money",
+    labelKey: "settings.printTemplates.variables.money.currentStage.label",
+    descriptionKey: "settings.printTemplates.variables.money.currentStage.description",
+    kind: "text",
+    resolve: (ctx) => text(currentStageOf(ctx)?.name),
   },
   {
     token: "#ВАЛЮТА",

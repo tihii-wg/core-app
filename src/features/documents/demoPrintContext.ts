@@ -18,6 +18,7 @@ import type { LegalEntity } from "../../services/apiLegalEntities";
 import type { WorkspaceDetails } from "../../services/apiWorkspaces";
 import { orderVatBreakdown } from "../finance/orderVat";
 import type { PaymentBalance } from "../finance/paymentTypes";
+import { allocatePaid, type PaymentStageInput } from "../finance/paymentStages";
 import { classifyInvoiceItems } from "../invoices/invoiceItemSections";
 import { computeOrderMoney } from "../orders/orderTotals";
 import type { WarrantySnapshot } from "../orders/warranty";
@@ -248,6 +249,7 @@ function buildWorkspace(input: DemoPrintContextInput, t: (key: string) => string
     onlinePaymentsEnabled: false,
     requireTaxInvoiceNumber: false,
     ownerCanManageClosedOrders: false,
+    paymentStageTemplate: null,
     subscriptionStatus: "active",
     subscriptionStartedAt: null,
     subscriptionExpiresAt: null,
@@ -530,6 +532,20 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     isLegacyUnreconciled: false,
   };
 
+  // Demo schedule: furniture 50/30/20 (prepayment paid in full), other packs 50/50.
+  const stageInputs: PaymentStageInput[] =
+    demoPack === "furniture"
+      ? [
+          { position: 0, name: t("settings.printTemplates.demo.paymentStages.prepayment"), mode: "percent", percent: 50, dueDate: dateOnly(addDaysIso(now, -3)) },
+          { position: 1, name: t("settings.printTemplates.demo.paymentStages.production"), mode: "percent", percent: 30, dueDate: dateOnly(addDaysIso(now, 3)) },
+          { position: 2, name: t("settings.printTemplates.demo.paymentStages.final"), mode: "remainder", dueDate: dateOnly(addDaysIso(now, 10)) },
+        ]
+      : [
+          { position: 0, name: t("settings.printTemplates.demo.paymentStages.prepayment"), mode: "percent", percent: 50, dueDate: dateOnly(addDaysIso(now, -1)) },
+          { position: 1, name: t("settings.printTemplates.demo.paymentStages.final"), mode: "remainder", dueDate: dateOnly(addDaysIso(now, 7)) },
+        ];
+  const paymentStages = allocatePaid(stageInputs, totalPrice, paid, { today: now });
+
   const warrantyService = services.find((line) => line.warrantyMonths) ?? services[0]!;
   const warrantyMonths = warrantyService.warrantyMonths ?? (isVehicle ? 6 : 12);
   const warrantyRecords: WarrantySnapshot[] = [
@@ -566,6 +582,7 @@ export function demoPrintContext(input: DemoPrintContextInput): PrintContext {
     timeZone: "Europe/Chisinau",
     locale,
     paymentBalance,
+    paymentStages,
     warrantyRecords,
     printedAt: now,
     documentKind: input.documentType,
