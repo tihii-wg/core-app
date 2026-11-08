@@ -38,6 +38,8 @@ export default function ServiceCombobox({
   const [priceError, setPriceError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
+  // Set when focus itself opened the list, so the click that caused the focus does not close it again.
+  const openedByFocusAtRef = useRef(0);
   const inputValue = value ?? uncontrolledValue;
 
   function updateValue(next: string) {
@@ -113,9 +115,20 @@ export default function ServiceCombobox({
         placeholder={t("services.combobox.placeholder")}
         className={`w-full rounded-md border px-3 py-2 ${errors ? "border-destructive" : ""}`}
         onFocus={() => {
-          if (openOnFocus) setOpen(true);
+          if (openOnFocus && !open) {
+            openedByFocusAtRef.current = Date.now();
+            setOpen(true);
+          }
         }}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // Click toggles the list; the first click that also focused the field keeps it open.
+          if (Date.now() - openedByFocusAtRef.current < 400) {
+            openedByFocusAtRef.current = 0;
+            return;
+          }
+          if (open) closeMenu();
+          else setOpen(true);
+        }}
         onChange={(e) => {
           updateValue(e.target.value);
           if (openOnFocus) setOpen(true);
