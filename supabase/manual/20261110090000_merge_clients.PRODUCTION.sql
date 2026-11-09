@@ -48,9 +48,8 @@ begin
   if to_regclass('public.activity_log') is null then
     v_problems := v_problems || 'activity_log missing; ';
   end if;
-  if to_regprocedure('public.is_workspace_member(uuid)') is null
-     and to_regprocedure('public.crm_is_workspace_member(uuid)') is null then
-    v_problems := v_problems || 'is_workspace_member / crm_is_workspace_member missing; ';
+  if to_regprocedure('public.is_workspace_member(uuid)') is null then
+    v_problems := v_problems || 'is_workspace_member(uuid) missing; ';
   end if;
 
   select count(*) into v_fk_count
@@ -201,11 +200,7 @@ stable
 security definer
 set search_path = pg_catalog, public
 as $fn$
-  select case
-    when to_regprocedure('public.crm_is_workspace_member(uuid)') is not null
-      then coalesce(public.crm_is_workspace_member(p_workspace_id), false)
-    else coalesce(public.is_workspace_member(p_workspace_id), false)
-  end;
+  select coalesce(public.is_workspace_member(p_workspace_id), false);
 $fn$;
 
 revoke all on function public.crm_can_merge_clients(uuid) from public, anon;
