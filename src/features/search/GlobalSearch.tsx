@@ -301,6 +301,7 @@ export default function GlobalSearch() {
             setClientPanelOpen(false);
           }}
           getClientOrders={(clientId) => clientOrderSummaries(clientOrders, clientId)}
+          workspaceOrders={clientOrders}
           onOpenOrder={(orderId) => {
             const order = clientOrders.find((item) => item.id === orderId);
             if (order) orderDetails.openOrder(order);

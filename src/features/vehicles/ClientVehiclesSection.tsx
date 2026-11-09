@@ -13,6 +13,7 @@ import {
 } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
 import { vehicleDisplayLabel } from "../../services/apiVehicles";
+import { highlightMatch } from "../clients/clientSearch";
 import { formatVehicleMileage } from "./vehicleMileage";
 import { useGetClientVehicles } from "./useGetClientVehicles";
 import { useArchiveVehicle, useCreateVehicle, useUpdateVehicle } from "./useVehicleMutations";
@@ -23,11 +24,24 @@ type ClientVehiclesSectionProps = {
   clientId: string;
   /** Reuse the parent Client Details → Order Details flow when present. */
   onOpenOrder?: (orderId: string) => void;
+  /** When set, only these vehicle ids are shown (client-card search). */
+  visibleVehicleIds?: string[];
+  /** Lowercased query for match highlighting. */
+  highlightQuery?: string;
 };
 
-export function ClientVehiclesSection({ clientId, onOpenOrder }: ClientVehiclesSectionProps) {
+export function ClientVehiclesSection({
+  clientId,
+  onOpenOrder,
+  visibleVehicleIds,
+  highlightQuery = "",
+}: ClientVehiclesSectionProps) {
   const { t } = useTranslation();
-  const { vehicles, isLoading, isError } = useGetClientVehicles(clientId);
+  const { vehicles: allVehicles, isLoading, isError } = useGetClientVehicles(clientId);
+  const vehicles =
+    visibleVehicleIds == null
+      ? allVehicles
+      : allVehicles.filter((vehicle) => visibleVehicleIds.includes(vehicle.id));
   const createVehicle = useCreateVehicle(clientId);
   const updateVehicle = useUpdateVehicle(clientId);
   const archiveVehicle = useArchiveVehicle(clientId);
@@ -108,21 +122,47 @@ export function ClientVehiclesSection({ clientId, onOpenOrder }: ClientVehiclesS
                 className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
               >
                 <p className="text-sm font-medium text-primary [overflow-wrap:anywhere] hover:underline">
-                  {vehicleDisplayLabel(vehicle)}
+                  {highlightQuery ? (
+                    <span dangerouslySetInnerHTML={{ __html: highlightMatch(vehicleDisplayLabel(vehicle), highlightQuery) }} />
+                  ) : (
+                    vehicleDisplayLabel(vehicle)
+                  )}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  {[
-                    vehicle.make ? `${t("vehicles.fields.make")}: ${vehicle.make}` : null,
-                    vehicle.model ? `${t("vehicles.fields.model")}: ${vehicle.model}` : null,
-                    vehicle.year != null ? `${t("vehicles.fields.year")}: ${vehicle.year}` : null,
-                    vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
-                    vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
-                    vehicle.currentMileage != null
-                      ? `${t("vehicles.fields.currentMileage")}: ${formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t)}`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {highlightQuery ? (
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: highlightMatch(
+                          [
+                            vehicle.make ? `${t("vehicles.fields.make")}: ${vehicle.make}` : null,
+                            vehicle.model ? `${t("vehicles.fields.model")}: ${vehicle.model}` : null,
+                            vehicle.year != null ? `${t("vehicles.fields.year")}: ${vehicle.year}` : null,
+                            vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
+                            vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
+                            vehicle.currentMileage != null
+                              ? `${t("vehicles.fields.currentMileage")}: ${formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t)}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · "),
+                          highlightQuery,
+                        ),
+                      }}
+                    />
+                  ) : (
+                    [
+                      vehicle.make ? `${t("vehicles.fields.make")}: ${vehicle.make}` : null,
+                      vehicle.model ? `${t("vehicles.fields.model")}: ${vehicle.model}` : null,
+                      vehicle.year != null ? `${t("vehicles.fields.year")}: ${vehicle.year}` : null,
+                      vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
+                      vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
+                      vehicle.currentMileage != null
+                        ? `${t("vehicles.fields.currentMileage")}: ${formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  )}
                 </p>
               </button>
               <div className="flex shrink-0 gap-1">

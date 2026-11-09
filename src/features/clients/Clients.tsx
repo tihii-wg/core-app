@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Plus, Phone, Pencil, Trash2 } from "lucide-react";
+import { Merge, Plus, Phone, Pencil, Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 
 import { PageHeader } from "../../pages/PageHeader";
@@ -13,6 +13,7 @@ import ClientTypeBadge from "./ClientTypeBadge";
 import { AddClientDialog } from "./AddClientDialog";
 import EditClientForm from "./EditClientForm";
 import { DeleteClientDialog } from "./DeleteClientDialog";
+import { MergeClientsDialog } from "./MergeClientsDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -51,6 +52,7 @@ export function Clients() {
   const orderDetails = useOrderDetails();
 
   const [addClientOpen, setAddClientOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -58,6 +60,15 @@ export function Clients() {
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
 
   const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
+
+  const orderCountByClientId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const order of orders) {
+      if (!order.clientId) continue;
+      map.set(order.clientId, (map.get(order.clientId) ?? 0) + 1);
+    }
+    return map;
+  }, [orders]);
 
   useEffect(() => {
     const clientId = searchParams.get("client")?.trim();
@@ -187,10 +198,16 @@ export function Clients() {
         description={isPending ? clientCopy.loading : industryClientTotalCount(workflow, clients.length)}
         actions={
           canMutateClients ? (
-            <Button onClick={() => setAddClientOpen(true)}>
-              <Plus />
-              {clientCopy.addClient}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => setMergeOpen(true)}>
+                <Merge />
+                {t("clients.merge.button")}
+              </Button>
+              <Button onClick={() => setAddClientOpen(true)}>
+                <Plus />
+                {clientCopy.addClient}
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -312,6 +329,7 @@ export function Clients() {
         setDetailPanelOpen={setDetailPanelOpen}
         detailPanelOpen={detailPanelOpen}
         getClientOrders={getClientOrders}
+        workspaceOrders={orders}
         onClientUpdated={setSelectedClient}
         onClientDeleted={(clientId) => {
           setSelectedClient((current) => (current?.id === clientId ? null : current));
@@ -330,6 +348,17 @@ export function Clients() {
           setSelectedClient((current) => (current?.id === clientId ? null : current));
           setEditingClient((current) => (current?.id === clientId ? null : current));
           setDetailPanelOpen(false);
+        }}
+      />
+
+      <MergeClientsDialog
+        open={mergeOpen}
+        onClose={() => setMergeOpen(false)}
+        clients={clients}
+        orderCountByClientId={orderCountByClientId}
+        onMerged={(client) => {
+          setSelectedClient(client);
+          setDetailPanelOpen(true);
         }}
       />
 

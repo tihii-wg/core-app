@@ -33,6 +33,7 @@ export function ClientDetailsHost({
       onClientUpdated={onClientUpdated}
       onClientDeleted={onClientDeleted}
       getClientOrders={(clientId) => clientOrderSummaries(orders, clientId)}
+      workspaceOrders={orders}
       ordersLoading={isLoading}
       ordersError={Boolean(error)}
       onOpenOrder={

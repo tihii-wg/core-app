@@ -8,8 +8,28 @@ import { clientOrderSummaries } from "./clientOrders";
 import OrderDetailPanel from "../orders/OrderDetailPanel";
 import { useOrderDetails } from "../orders/useOrderDetails";
 
-vi.mock("../finance/usePayments", () => ({
-  useGetPayments: () => ({ payments: [], isLoading: false }),
+vi.mock("../finance/usePayments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../finance/usePayments")>();
+  return {
+    ...actual,
+    useGetPayments: () => ({ payments: [], isLoading: false }),
+    useRecordPaymentVoid: () => ({ mutate: vi.fn(), isPending: false }),
+  };
+});
+
+vi.mock("../vehicles/useGetClientVehicles", () => ({
+  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false, isFetched: true }),
+  clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+vi.mock("../vehicles/useVehicleMutations", () => ({
+  useCreateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("./ClientExtrasSection", () => ({
+  ClientExtrasSection: () => null,
 }));
 
 vi.mock("../industries/useIndustryWorkflow", async () => {
