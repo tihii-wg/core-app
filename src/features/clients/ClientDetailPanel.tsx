@@ -290,7 +290,19 @@ export default function ClientDetailPanel({
                 placeholder={t("clients.cardSearch.placeholder")}
                 aria-label={t("clients.cardSearch.placeholder")}
                 className="w-full min-w-0"
+                type="search"
               />
+
+              {searchActive && !searchEmpty ? (
+                <p className="text-xs text-muted-foreground" data-testid="client-card-search-count">
+                  {showVehicles
+                    ? t("clients.cardSearch.foundWithVehicles", {
+                        orders: filteredOrders.length,
+                        vehicles: visibleVehicleIds?.length ?? 0,
+                      })
+                    : t("clients.cardSearch.found", { orders: filteredOrders.length })}
+                </p>
+              ) : null}
 
               {searchEmpty ? (
                 <div className="rounded-md border border-dashed border-border px-4 py-6 text-center">

@@ -58,7 +58,9 @@ const clients: Messages<typeof en> = {
     },
   },
   cardSearch: {
-    placeholder: "Поиск по заказам, машинам, номерам…",
+    placeholder: "Поиск по заказам, машинам, номерам, услугам, платежам…",
+    foundWithVehicles: "Найдено — заказов: {{orders}}, машин: {{vehicles}}",
+    found: "Найдено заказов: {{orders}}",
     empty: "Ничего не найдено",
     reset: "Сбросить поиск",
   },

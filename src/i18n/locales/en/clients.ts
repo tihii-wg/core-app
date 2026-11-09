@@ -53,7 +53,9 @@ export default {
     },
   },
   cardSearch: {
-    placeholder: "Search orders, vehicles, plates…",
+    placeholder: "Search orders, vehicles, plates, services, payments…",
+    foundWithVehicles: "Found — orders: {{orders}}, vehicles: {{vehicles}}",
+    found: "Orders found: {{orders}}",
     empty: "Nothing found",
     reset: "Clear search",
   },

@@ -146,6 +146,10 @@ function orderMatches(
 
   if (includesPlate(order.carNumber ?? "", raw) || includesPlate(order.vin ?? "", raw)) return true;
 
+  // Vehicle linked to the order (make/model/plate/VIN from the client's garage).
+  const linked = order.vehicleId ? options.vehicles.find((vehicle) => vehicle.id === order.vehicleId) : undefined;
+  if (linked && vehicleMatches(linked, needle, raw)) return true;
+
   if (blocks?.deviceSerial) haystacks.push(order.deviceSerial ?? "");
   if (blocks?.deviceImei) haystacks.push(order.deviceImei ?? "");
   if (blocks?.siteAddress) haystacks.push(order.siteAddress ?? "");
@@ -190,11 +194,49 @@ export function filterClientCardSearch(options: ClientSearchOptions): ClientSear
     };
   }
 
+  const vehiclesById = new Map(options.vehicles.map((vehicle) => [vehicle.id, vehicle]));
+  const matchedVehicleIds = new Set(
+    options.vehicles.filter((vehicle) => vehicleMatches(vehicle, needle, raw)).map((v) => v.id),
+  );
+
+  const orderIds = options.orders
+    .filter((order) => {
+      // A matched vehicle brings all of its orders (even when the order has no plate snapshot).
+      if (order.vehicleId && matchedVehicleIds.has(order.vehicleId)) return true;
+      if (orderMatches(order, needle, raw, options)) return true;
+      if (orderPaymentsMatch(order, needle, options.payments ?? [])) return true;
+      return false;
+    })
+    .map((o) => o.id);
+
+  // A matched order also reveals the vehicle it was done on.
+  for (const order of options.orders) {
+    if (order.vehicleId && vehiclesById.has(order.vehicleId) && orderIds.includes(order.id)) {
+      matchedVehicleIds.add(order.vehicleId);
+    }
+  }
+
   return {
-    orderIds: options.orders.filter((order) => orderMatches(order, needle, raw, options)).map((o) => o.id),
-    vehicleIds: options.vehicles.filter((vehicle) => vehicleMatches(vehicle, needle, raw)).map((v) => v.id),
+    orderIds,
+    vehicleIds: options.vehicles.filter((v) => matchedVehicleIds.has(v.id)).map((v) => v.id),
     normalizedQuery: needle,
   };
+}
+
+/** Payments linked to the order: amount (as typed: 1500 / 1500.5 / 1 500), date dd.mm.yyyy, note. */
+function orderPaymentsMatch(order: ClientSearchableOrder, needle: string, payments: LedgerPayment[]): boolean {
+  const compactNeedle = needle.replace(/[\s\u00a0]/g, "").replace(",", ".");
+  for (const row of payments) {
+    if (row.orderId !== order.id) continue;
+    const amount = Number(row.amount);
+    if (Number.isFinite(amount) && /^\d+(\.\d+)?$/.test(compactNeedle)) {
+      const asText = String(amount);
+      if (asText === compactNeedle || asText.startsWith(compactNeedle) || amount.toFixed(2) === compactNeedle) return true;
+    }
+    if (includesFold(formatDdMmYyyy(row.paidAt ?? ""), needle) || includesFold(row.paidAt ?? "", needle)) return true;
+    if (row.note && includesFold(row.note, needle)) return true;
+  }
+  return false;
 }
 
 /** Wrap case-insensitive matches in <mark> spans for display (returns HTML-safe text with mark tags). */

@@ -57,7 +57,9 @@ const clients: Messages<typeof en> = {
     },
   },
   cardSearch: {
-    placeholder: "Caută comenzi, vehicule, numere…",
+    placeholder: "Căutare în comenzi, vehicule, numere, servicii, plăți…",
+    foundWithVehicles: "Găsite — comenzi: {{orders}}, vehicule: {{vehicles}}",
+    found: "Comenzi găsite: {{orders}}",
     empty: "Nimic găsit",
     reset: "Resetează căutarea",
   },

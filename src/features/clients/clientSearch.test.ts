@@ -154,3 +154,41 @@ describe("highlightMatch", () => {
     expect(highlightMatch("Oil <change>", "oil")).toBe("<mark>Oil</mark> &lt;change&gt;");
   });
 });
+
+describe("filterClientCardSearch — vehicle links and payments", () => {
+  const golf = { id: "veh-1", make: "Volkswagen", model: "Golf", year: 2015, licensePlate: "ABC 123", vin: "WVWZZZ1KZ6W000001" };
+  const audi = { id: "veh-2", make: "Audi", model: "A4", year: 2010, licensePlate: "XYZ 999", vin: "" };
+
+  it("a matched vehicle brings its orders even without a plate snapshot", () => {
+    const result = filterClientCardSearch({
+      query: "golf",
+      orders: [order({ id: "o1", orderNumber: "ORD-1", vehicleId: "veh-1" }), order({ id: "o2", orderNumber: "ORD-2", vehicleId: "veh-2" })],
+      vehicles: [golf, audi],
+    });
+    expect(result.orderIds).toEqual(["o1"]);
+    expect(result.vehicleIds).toEqual(["veh-1"]);
+  });
+
+  it("a matched order reveals the vehicle it was done on", () => {
+    const result = filterClientCardSearch({
+      query: "ORD-2",
+      orders: [order({ id: "o2", orderNumber: "ORD-2", vehicleId: "veh-2" })],
+      vehicles: [golf, audi],
+    });
+    expect(result.vehicleIds).toEqual(["veh-2"]);
+  });
+
+  it("finds an order by payment amount, date and note", () => {
+    const pay = {
+      id: "p1", workspaceId: "ws", orderId: "o1", invoiceId: null, relatedPaymentId: null,
+      kind: "payment" as const, amount: 1500, currencyCode: "MDL", paymentMethod: "cash" as const,
+      paidAt: "2026-11-03T10:00:00Z", note: "аванс за кухню", createdBy: null, createdAt: "2026-11-03T10:00:00Z",
+    };
+    const base = { orders: [order({ id: "o1", orderNumber: "ORD-1" })], vehicles: [], payments: [pay] };
+    expect(filterClientCardSearch({ ...base, query: "1500" }).orderIds).toEqual(["o1"]);
+    expect(filterClientCardSearch({ ...base, query: "1 500" }).orderIds).toEqual(["o1"]);
+    expect(filterClientCardSearch({ ...base, query: "03.11.2026" }).orderIds).toEqual(["o1"]);
+    expect(filterClientCardSearch({ ...base, query: "аванс" }).orderIds).toEqual(["o1"]);
+    expect(filterClientCardSearch({ ...base, query: "9999" }).orderIds).toEqual([]);
+  });
+});
