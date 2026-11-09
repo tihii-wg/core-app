@@ -633,15 +633,6 @@ export default function OrderDetailPanel({
                 errorMessage={assigneeErrorMessage}
                 emptyHint={assigneeEmptyHint}
                 onChange={handleAssigneeChange}
-                labelAction={
-                  showFieldEdit ? (
-                    <OrderFieldEditButton
-                      field="assignedEmployee"
-                      label={copy.assignedEmployeeLabel}
-                      onEdit={startFieldEdit}
-                    />
-                  ) : undefined
-                }
               />
             </div>
 
@@ -652,11 +643,6 @@ export default function OrderDetailPanel({
               options={teamOptions}
               disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
               onChange={handleTeamChange}
-              labelAction={
-                showFieldEdit ? (
-                  <OrderFieldEditButton field="team" label={t("orders.team.title")} onEdit={startFieldEdit} />
-                ) : undefined
-              }
             />
 
             {hasServiceLines ? (
