@@ -117,6 +117,7 @@ export default {
     installationTime: "Installation time",
   },
   feed: {
+    panelTitle: "Order history",
     commentsTitle: "Comments",
     historyTitle: "History",
     unavailable: "Not available yet",
@@ -444,6 +445,11 @@ export default {
     editTitle: "Edit order",
     editField: "Edit: {{field}}",
     srDescription: "View and edit this order's VIN, services, device, assignment, and deadline.",
+    tabs: {
+      order: "Order",
+      history: "History",
+      historyWithCount: "History ({{count}})",
+    },
     client: "Client",
     clientType: "Client Type",
     subtotal: "Subtotal",

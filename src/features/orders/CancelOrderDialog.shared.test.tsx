@@ -34,7 +34,8 @@ vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
   useIsWorkspaceOwnerId: () => true,
 }));
 vi.mock("../workspaces/useWorkspaceSubscription", () => ({
-  useWorkspaceSubscription: () => ({ canWrite: true }),
+  useWorkspaceSubscription: () => ({ canWrite: true, isEntitlementPending: false }),
+  useGuardSubscriptionWrite: () => vi.fn(),
 }));
 vi.mock("../statuses/useGetStatusDefinitions", () => ({
   useGetStatusDefinitions: () => ({ data: [] }),
@@ -87,6 +88,7 @@ vi.mock("./useUpdateOrder", () => ({
 }));
 vi.mock("./useGetOrders", () => ({
   useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateOrderStatus: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("./useOrdersWarrantyIndicators", () => ({
   useOrdersWarrantyIndicators: () => ({ byOrderId: new Map(), isLoading: false }),
@@ -96,6 +98,12 @@ vi.mock("./WarrantyOrderSection", () => ({ default: () => null }));
 vi.mock("./OrderWarehouseActions", () => ({ default: () => null }));
 vi.mock("./OrderAttachmentsSection", () => ({ default: () => null }));
 vi.mock("./OrderFeedSection", () => ({ default: () => null }));
+vi.mock("./useOrderFeed", () => ({
+  useGetOrderComments: () => ({ comments: [], isUnavailable: false, isLoading: false, isError: false }),
+  useGetOrderEvents: () => ({ events: [], isUnavailable: false, isLoading: false, isError: false }),
+  useCreateOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 vi.mock("../finance/PaymentHistorySection", () => ({ PaymentHistorySection: () => null }));
 vi.mock("../workspaces/useGetWorkspace", () => ({
   useGetWorkspace: () => ({ data: { currency: "MDL", requireTaxInvoiceNumber: false } }),

@@ -66,7 +66,16 @@ vi.mock("./OrderWarrantyCoverageSection", () => ({
 }));
 
 vi.mock("./OrderFeedSection", () => ({
-  default: () => <div data-testid="order-feed-stub" />,
+  default: ({ layout }: { layout?: string }) => (
+    <div data-testid="order-feed-stub" data-feed-layout={layout ?? "panel"} />
+  ),
+}));
+
+vi.mock("./useOrderFeed", () => ({
+  useGetOrderComments: () => ({ comments: [{ id: "c1" }, { id: "c2" }], isUnavailable: false, isLoading: false, isError: false }),
+  useGetOrderEvents: () => ({ events: [{ id: "e1" }], isUnavailable: false, isLoading: false, isError: false }),
+  useCreateOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../workspaces/useGetWorkspace", () => ({
@@ -996,5 +1005,69 @@ describe("OrderDetailPanel closed-order banner", () => {
     });
     expect(await screen.findByText("Order closed")).toBeInTheDocument();
     expect(screen.getByText(`Closed at ${nextClosedAt}`)).toBeInTheDocument();
+  });
+});
+
+function stubViewport(minWidth1024: boolean) {
+  window.matchMedia = ((query: string) => {
+    const wantsDesktop = /min-width:\s*1024px/.test(query);
+    return {
+      matches: wantsDesktop ? minWidth1024 : !minWidth1024 && /max-width/.test(query),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    };
+  }) as unknown as typeof window.matchMedia;
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: minWidth1024 ? 1280 : 390,
+  });
+}
+
+describe("OrderDetailPanel feed layout", () => {
+  beforeEach(() => {
+    industryState.slug = "auto_repair";
+    roleState.role = "owner";
+    ownerIdState.isOwner = true;
+  });
+
+  it("keeps the feed in the right column on desktop widths", async () => {
+    stubViewport(true);
+    renderPanel();
+
+    const layout = await screen.findByTestId("order-detail-main");
+    expect(layout.closest("[data-order-detail-layout]")).toHaveAttribute("data-order-detail-layout", "desktop");
+    expect(screen.queryByTestId("order-detail-mobile-tabs")).not.toBeInTheDocument();
+
+    const feedColumn = screen.getByTestId("order-detail-feed-column");
+    expect(feedColumn).toContainElement(screen.getByTestId("order-feed-stub"));
+    expect(feedColumn).not.toHaveClass("hidden");
+    expect(screen.getByTestId("order-detail-main")).not.toHaveClass("hidden");
+  });
+
+  it("puts the feed behind the History tab on mobile widths", async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderPanel();
+
+    expect(await screen.findByTestId("order-detail-mobile-tabs")).toBeInTheDocument();
+    expect(screen.getByTestId("order-detail-main").closest("[data-order-detail-layout]")).toHaveAttribute(
+      "data-order-detail-layout",
+      "mobile",
+    );
+    expect(screen.getByTestId("order-detail-main")).not.toHaveClass("hidden");
+    expect(screen.getByTestId("order-detail-feed-column")).toHaveClass("hidden");
+    expect(screen.getByRole("tab", { name: /History \(3\)/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /History \(3\)/i }));
+
+    expect(screen.getByTestId("order-detail-main")).toHaveClass("hidden");
+    const feedColumn = screen.getByTestId("order-detail-feed-column");
+    expect(feedColumn).not.toHaveClass("hidden");
+    expect(feedColumn).toContainElement(screen.getByTestId("order-feed-stub"));
   });
 });

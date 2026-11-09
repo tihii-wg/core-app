@@ -123,6 +123,7 @@ const orders: Messages<typeof en> = {
     installationTime: "Ora montajului",
   },
   feed: {
+    panelTitle: "Istoricul comenzii",
     commentsTitle: "Comentarii",
     historyTitle: "Istoric",
     unavailable: "Indisponibil încă",
@@ -451,6 +452,11 @@ const orders: Messages<typeof en> = {
     editTitle: "Editează comanda",
     editField: "Editează: {{field}}",
     srDescription: "Vizualizați și editați VIN-ul, serviciile, automobilul, responsabilul și termenul acestei comenzi.",
+    tabs: {
+      order: "Comandă",
+      history: "Istoric",
+      historyWithCount: "Istoric ({{count}})",
+    },
     client: "Client",
     clientType: "Tip client",
     subtotal: "Subtotal",

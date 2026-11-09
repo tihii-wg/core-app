@@ -25,6 +25,7 @@ vi.mock("./useUpdateOrder", () => ({
 vi.mock("./useGetOrders", () => ({
   useGetOrders: () => ({ orders: [], isLoading: false, error: null }),
   useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateOrderStatus: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../workspaces/useGetWorkspace", () => ({
@@ -113,6 +114,13 @@ vi.mock("./OrderAttachmentsSection", () => ({
 
 vi.mock("./OrderFeedSection", () => ({
   default: () => <div data-testid="order-feed-stub" />,
+}));
+
+vi.mock("./useOrderFeed", () => ({
+  useGetOrderComments: () => ({ comments: [], isUnavailable: false, isLoading: false, isError: false }),
+  useGetOrderEvents: () => ({ events: [], isUnavailable: false, isLoading: false, isError: false }),
+  useCreateOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../finance/usePayments", () => ({

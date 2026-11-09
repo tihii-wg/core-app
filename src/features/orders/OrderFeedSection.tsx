@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
 import { Textarea } from "../../ui/Textarea";
+import { cn } from "../../lib/utils";
 import { ORDER_COMMENT_MAX_LENGTH } from "../../services/apiOrderComments";
 import { industryOrderStatusLabel, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -35,6 +36,12 @@ type OrderFeedSectionProps = {
   enabled: boolean;
   /** False when the subscription is read-only or the user cannot edit orders. */
   canComment: boolean;
+  /**
+   * `panel` — full-height sidebar/chat column (sticky title, pinned composer).
+   * `stacked` — legacy inline block (kept for tests / fallbacks).
+   */
+  layout?: "panel" | "stacked";
+  className?: string;
 };
 
 function eventText(t: TFunction, description: OrderEventDescription) {
@@ -51,7 +58,13 @@ function formatStamp(value: string, locale: string) {
 }
 
 /** Order detail: comments (add/delete) and the activity event timeline. Degrades to notices when tables/RPC are missing. */
-export default function OrderFeedSection({ orderId, enabled, canComment }: OrderFeedSectionProps) {
+export default function OrderFeedSection({
+  orderId,
+  enabled,
+  canComment,
+  layout = "panel",
+  className,
+}: OrderFeedSectionProps) {
   const { t, i18n } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const locale = i18n.language || "en";
@@ -70,110 +83,137 @@ export default function OrderFeedSection({ orderId, enabled, canComment }: Order
     createComment.mutate(draft, { onSuccess: () => setDraft("") });
   }
 
+  const commentForm = canComment ? (
+    <form onSubmit={handleSubmit} className="space-y-2" aria-label={t("orders.feed.addComment")}>
+      <Textarea
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder={t("orders.feed.commentPlaceholder")}
+        aria-label={t("orders.feed.commentLabel")}
+        maxLength={ORDER_COMMENT_MAX_LENGTH}
+        rows={2}
+        disabled={createComment.isPending}
+      />
+      <div className="flex justify-end">
+        <Button type="submit" size="sm" disabled={!draft.trim() || createComment.isPending}>
+          {createComment.isPending ? t("common.saving") : t("orders.feed.addComment")}
+        </Button>
+      </div>
+    </form>
+  ) : null;
+
+  const commentsBody =
+    comments.isUnavailable || comments.isError ? (
+      <Notice title={t("orders.feed.unavailable")} hint={t("orders.feed.unavailableHint")} />
+    ) : comments.isLoading ? (
+      <Skeleton className="h-14 w-full" />
+    ) : comments.comments.length === 0 ? (
+      <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-[13px] text-muted-foreground">
+        {t("orders.feed.noComments")}
+      </p>
+    ) : (
+      <ul className="space-y-2">
+        {comments.comments.map((comment) => (
+          <li key={comment.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{comment.authorName ?? t("orders.feed.unknownAuthor")}</span>
+                {" · "}
+                <time dateTime={comment.createdAt} className="tabular-nums">
+                  {formatStamp(comment.createdAt, locale)}
+                </time>
+              </p>
+              {canComment ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="-my-1 -mr-1.5 shrink-0"
+                  aria-label={t("orders.feed.deleteComment")}
+                  disabled={deleteComment.isPending}
+                  onClick={() => deleteComment.mutate(comment.id)}
+                >
+                  <Trash2 />
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{comment.body}</p>
+          </li>
+        ))}
+      </ul>
+    );
+
+  const eventsBody =
+    events.isUnavailable || events.isError ? (
+      <Notice title={t("orders.feed.unavailable")} hint={t("orders.feed.eventsUnavailableHint")} />
+    ) : events.isLoading ? (
+      <Skeleton className="h-14 w-full" />
+    ) : events.events.length === 0 ? (
+      <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-[13px] text-muted-foreground">
+        {t("orders.feed.noEvents")}
+      </p>
+    ) : (
+      <ol className="space-y-3 border-l border-border pl-4">
+        {events.events.map((event) => {
+          const description = describeOrderEvent(event, statusLabel);
+          const category = orderEventCategory(event);
+          return (
+            <li key={event.id} className="relative min-w-0" data-event-category={category} data-event-type={event.eventType}>
+              <span
+                aria-hidden="true"
+                className={`absolute top-1.5 -left-[1.3125rem] size-2 rounded-full ${categoryDotClass[category]}`}
+              />
+              <p className="text-sm [overflow-wrap:anywhere] text-foreground">{eventText(t, description)}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {event.actorName ?? t("orders.feed.unknownAuthor")}
+                {" · "}
+                <time dateTime={event.createdAt} className="tabular-nums">
+                  {formatStamp(event.createdAt, locale)}
+                </time>
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    );
+
+  if (layout === "panel") {
+    return (
+      <div className={cn("flex h-full min-h-0 flex-col", className)} data-testid="order-feed" data-feed-layout="panel">
+        <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-muted/20 px-4 py-3">
+          <h3 className="text-sm font-semibold text-foreground">{t("orders.feed.panelTitle")}</h3>
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-3">
+          <section aria-label={t("orders.feed.commentsTitle")} className="space-y-3">
+            <h4 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+              {t("orders.feed.commentsTitle")}
+            </h4>
+            {commentsBody}
+          </section>
+          <section aria-label={t("orders.feed.historyTitle")} className="space-y-3">
+            <h4 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+              {t("orders.feed.historyTitle")}
+            </h4>
+            {eventsBody}
+          </section>
+        </div>
+        {commentForm ? (
+          <div className="shrink-0 border-t border-border bg-background px-4 py-3">{commentForm}</div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5 border-t border-border pt-5" data-testid="order-feed">
+    <div className={cn("space-y-5 border-t border-border pt-5", className)} data-testid="order-feed" data-feed-layout="stacked">
       <section aria-label={t("orders.feed.commentsTitle")} className="space-y-3">
         <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("orders.feed.commentsTitle")}</h3>
-
-        {comments.isUnavailable || comments.isError ? (
-          <Notice title={t("orders.feed.unavailable")} hint={t("orders.feed.unavailableHint")} />
-        ) : (
-          <>
-            {canComment ? (
-              <form onSubmit={handleSubmit} className="space-y-2" aria-label={t("orders.feed.addComment")}>
-                <Textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder={t("orders.feed.commentPlaceholder")}
-                  aria-label={t("orders.feed.commentLabel")}
-                  maxLength={ORDER_COMMENT_MAX_LENGTH}
-                  rows={2}
-                  disabled={createComment.isPending}
-                />
-                <div className="flex justify-end">
-                  <Button type="submit" size="sm" disabled={!draft.trim() || createComment.isPending}>
-                    {createComment.isPending ? t("common.saving") : t("orders.feed.addComment")}
-                  </Button>
-                </div>
-              </form>
-            ) : null}
-
-            {comments.isLoading ? (
-              <Skeleton className="h-14 w-full" />
-            ) : comments.comments.length === 0 ? (
-              <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-[13px] text-muted-foreground">
-                {t("orders.feed.noComments")}
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {comments.comments.map((comment) => (
-                  <li key={comment.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 text-xs text-muted-foreground">
-                        <span className="font-medium text-foreground">{comment.authorName ?? t("orders.feed.unknownAuthor")}</span>
-                        {" · "}
-                        <time dateTime={comment.createdAt} className="tabular-nums">
-                          {formatStamp(comment.createdAt, locale)}
-                        </time>
-                      </p>
-                      {canComment ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="-my-1 -mr-1.5 shrink-0"
-                          aria-label={t("orders.feed.deleteComment")}
-                          disabled={deleteComment.isPending}
-                          onClick={() => deleteComment.mutate(comment.id)}
-                        >
-                          <Trash2 />
-                        </Button>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{comment.body}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
+        {commentForm}
+        {commentsBody}
       </section>
-
       <section aria-label={t("orders.feed.historyTitle")} className="space-y-3">
         <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("orders.feed.historyTitle")}</h3>
-
-        {events.isUnavailable || events.isError ? (
-          <Notice title={t("orders.feed.unavailable")} hint={t("orders.feed.eventsUnavailableHint")} />
-        ) : events.isLoading ? (
-          <Skeleton className="h-14 w-full" />
-        ) : events.events.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-[13px] text-muted-foreground">
-            {t("orders.feed.noEvents")}
-          </p>
-        ) : (
-          <ol className="space-y-3 border-l border-border pl-4">
-            {events.events.map((event) => {
-              const description = describeOrderEvent(event, statusLabel);
-              const category = orderEventCategory(event);
-              return (
-                <li key={event.id} className="relative min-w-0" data-event-category={category} data-event-type={event.eventType}>
-                  <span
-                    aria-hidden="true"
-                    className={`absolute top-1.5 -left-[1.3125rem] size-2 rounded-full ${categoryDotClass[category]}`}
-                  />
-                  <p className="text-sm [overflow-wrap:anywhere] text-foreground">{eventText(t, description)}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {event.actorName ?? t("orders.feed.unknownAuthor")}
-                    {" · "}
-                    <time dateTime={event.createdAt} className="tabular-nums">
-                      {formatStamp(event.createdAt, locale)}
-                    </time>
-                  </p>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        {eventsBody}
       </section>
     </div>
   );

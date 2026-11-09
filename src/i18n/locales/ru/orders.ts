@@ -126,6 +126,7 @@ const orders: Messages<typeof en> = {
     installationTime: "Время монтажа",
   },
   feed: {
+    panelTitle: "История заказа",
     commentsTitle: "Комментарии",
     historyTitle: "История",
     unavailable: "Пока недоступно",
@@ -455,6 +456,11 @@ const orders: Messages<typeof en> = {
     editTitle: "Редактировать заказ",
     editField: "Изменить: {{field}}",
     srDescription: "Просмотр и редактирование VIN, услуг, автомобиля, ответственного и срока этого заказа.",
+    tabs: {
+      order: "Заказ",
+      history: "История",
+      historyWithCount: "История ({{count}})",
+    },
     client: "Клиент",
     clientType: "Тип клиента",
     subtotal: "Сумма без скидки",

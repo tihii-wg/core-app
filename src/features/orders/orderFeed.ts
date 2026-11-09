@@ -1,4 +1,4 @@
-import { currentLanguage } from "../../i18n";
+import i18n, { currentLanguage } from "../../i18n";
 import { formatQuantity } from "../../lib/quantity";
 import type { OrderEvent } from "../../services/apiOrderEvents";
 
@@ -128,7 +128,10 @@ function updatedLineParams(event: OrderEvent) {
 
 function methodLabel(method: string | null) {
   if (!method) return EMPTY;
-  return method.replace(/_/g, "-");
+  // Translated name ("Наличные") instead of the stored code ("cash").
+  const key = `finance.paymentMethods.short.${method}`;
+  const translated = i18n.t(key);
+  return translated && translated !== key ? translated : method.replace(/_/g, "-");
 }
 
 function fieldChangeSummary(event: OrderEvent): string {

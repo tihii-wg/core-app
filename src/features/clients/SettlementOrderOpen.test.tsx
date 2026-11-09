@@ -53,6 +53,17 @@ vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
 }));
 
+vi.mock("../orders/OrderFeedSection", () => ({
+  default: () => <div data-testid="order-feed-stub" />,
+}));
+
+vi.mock("../orders/useOrderFeed", () => ({
+  useGetOrderComments: () => ({ comments: [], isUnavailable: false, isLoading: false, isError: false }),
+  useGetOrderEvents: () => ({ events: [], isUnavailable: false, isLoading: false, isError: false }),
+  useCreateOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteOrderComment: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 vi.mock("./useUpdateClient", () => ({
   useUpdateClient: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));

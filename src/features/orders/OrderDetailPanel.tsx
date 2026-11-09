@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { Calendar, CircleX, Eye, EyeOff, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
 import { displayCustomFieldValue } from "../../services/apiCustomFields";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { cn } from "../../lib/utils";
 import { customEditFieldKey } from "./orderFieldRegistry";
 import { fieldConfigMap, useOrderCustomFieldValues, useOrderFieldConfig } from "./useOrderFieldConfig";
 import { Button } from "../../ui/Button";
@@ -18,6 +20,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
+import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
@@ -77,6 +80,7 @@ import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import OrderWarehouseActions from "./OrderWarehouseActions";
 import OrderAttachmentsSection from "./OrderAttachmentsSection";
 import OrderFeedSection from "./OrderFeedSection";
+import { useGetOrderComments, useGetOrderEvents } from "./useOrderFeed";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
 import { PaymentFormDialog } from "../finance/PaymentFormDialog";
 import { OrderPaymentStagesSection } from "../finance/OrderPaymentStagesSection";
@@ -130,6 +134,8 @@ export default function OrderDetailPanel({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
+  const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
+  const [mobileDetailTab, setMobileDetailTab] = useState<"order" | "history">("order");
   const { formatMoney } = useWorkspaceMoney();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
@@ -348,10 +354,35 @@ export default function OrderDetailPanel({
   const assigneeErrorMessage =
     employeesError instanceof Error ? employeesError.message : employeesError ? t("orders.form.techniciansLoadFailed") : null;
 
+  const feedEnabled = Boolean(detailPanelOpen && selectedOrder?.id);
+  const feedComments = useGetOrderComments(selectedOrder?.id, feedEnabled);
+  const feedEvents = useGetOrderEvents(selectedOrder?.id, feedEnabled);
+  const feedCountReady =
+    feedEnabled &&
+    !feedComments.isLoading &&
+    !feedEvents.isLoading &&
+    !feedComments.isError &&
+    !feedEvents.isError &&
+    !feedComments.isUnavailable &&
+    !feedEvents.isUnavailable;
+  const feedItemCount = feedCountReady ? feedComments.comments.length + feedEvents.events.length : null;
+
+  const showOrderColumn = isDesktopFeedLayout || mobileDetailTab === "order";
+  const showFeedColumn = isDesktopFeedLayout || mobileDetailTab === "history";
+
+  const orderFeedSection = selectedOrder ? (
+    <OrderFeedSection
+      orderId={selectedOrder.id}
+      enabled={detailPanelOpen}
+      canComment={canEditOrder && !closedContentLocked}
+      layout="panel"
+    />
+  ) : null;
+
   return (
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
-        <SheetHeader className="pr-24">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]">
+        <SheetHeader className="shrink-0 pr-24">
           <SheetTitle className="min-w-0">
             <span className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
               {selectedOrder?.orderNumber}
@@ -381,29 +412,58 @@ export default function OrderDetailPanel({
           <SheetDescription className="sr-only">{copy.detailSrDescription}</SheetDescription>
         </SheetHeader>
 
-        {selectedOrder && isEditing && (
-          <div className="space-y-5 px-5 py-5">
-            <EditOrderForm
-              key={`${selectedOrder.id}:${editFocusField ?? "top"}`}
-              order={selectedOrder}
-              initialFocusField={editFocusField ?? undefined}
-              onCancel={stopEditing}
-              onUpdated={(order) => {
-                onOrderUpdated(order);
-                stopEditing();
-                setDetailPanelOpen(false);
-              }}
-            />
-            <OrderPaymentStagesSection
-              order={selectedOrder}
-              payments={payments}
-              canEdit={canEditOrder && !closedContentLocked}
-            />
+        {selectedOrder && !isDesktopFeedLayout ? (
+          <div className="shrink-0 border-b border-border px-5 py-2" data-testid="order-detail-mobile-tabs">
+            <Tabs
+              value={mobileDetailTab}
+              onValueChange={(value) => setMobileDetailTab(value === "history" ? "history" : "order")}
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="order">{t("orders.detail.tabs.order")}</TabsTrigger>
+                <TabsTrigger value="history">
+                  {feedItemCount != null
+                    ? t("orders.detail.tabs.historyWithCount", { count: feedItemCount })
+                    : t("orders.detail.tabs.history")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-        )}
+        ) : null}
 
-        {selectedOrder && !isEditing && (
-          <div className="space-y-5 px-5 py-5">
+        {selectedOrder ? (
+          <div
+            className={cn("flex min-h-0 flex-1", isDesktopFeedLayout ? "flex-row" : "flex-col")}
+            data-order-detail-layout={isDesktopFeedLayout ? "desktop" : "mobile"}
+          >
+            <div
+              className={cn(
+                "min-h-0 min-w-0",
+                isDesktopFeedLayout ? "flex-1 overflow-y-auto" : showOrderColumn ? "flex-1 overflow-y-auto" : "hidden",
+              )}
+              data-testid="order-detail-main"
+              aria-hidden={!showOrderColumn}
+            >
+              {isEditing ? (
+                <div className="space-y-5 px-5 py-5">
+                  <EditOrderForm
+                    key={`${selectedOrder.id}:${editFocusField ?? "top"}`}
+                    order={selectedOrder}
+                    initialFocusField={editFocusField ?? undefined}
+                    onCancel={stopEditing}
+                    onUpdated={(order) => {
+                      onOrderUpdated(order);
+                      stopEditing();
+                      setDetailPanelOpen(false);
+                    }}
+                  />
+                  <OrderPaymentStagesSection
+                    order={selectedOrder}
+                    payments={payments}
+                    canEdit={canEditOrder && !closedContentLocked}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-5 px-5 py-5">
             {selectedOrder.warrantySourceOrderId ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-warranty-claim-banner>
                 <p className="text-sm font-semibold text-foreground">{t("orders.warranty.claimTitle")}</p>
@@ -980,12 +1040,6 @@ export default function OrderDetailPanel({
               canMutateOverride={closedContentLocked ? false : undefined}
             />
 
-            <OrderFeedSection
-              orderId={selectedOrder.id}
-              enabled={detailPanelOpen}
-              canComment={canEditOrder && !closedContentLocked}
-            />
-
             <div className="border-t border-border pt-5">
               <Label htmlFor="order-status" className="mb-2 block">
                 {lifecycleStatusLocked || paidStatusLocked
@@ -1115,8 +1169,26 @@ export default function OrderDetailPanel({
                 ) : null}
               </div>
             ) : null}
+                </div>
+              )}
+            </div>
+
+            <div
+              className={cn(
+                "min-h-0 min-w-0",
+                isDesktopFeedLayout
+                  ? "flex w-[min(100%,380px)] shrink-0 flex-col border-l border-border bg-muted/20"
+                  : showFeedColumn
+                    ? "flex min-h-0 flex-1 flex-col bg-muted/20"
+                    : "hidden",
+              )}
+              data-testid="order-detail-feed-column"
+              aria-hidden={!showFeedColumn}
+            >
+              {orderFeedSection}
+            </div>
           </div>
-        )}
+        ) : null}
       </SheetContent>
 
       {selectedOrder ? (
