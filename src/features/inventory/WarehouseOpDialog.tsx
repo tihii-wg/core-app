@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Plus, Trash2 } from "lucide-react";
@@ -8,6 +8,7 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import type { InventoryItem } from "../../lib/types";
 import type { WarehouseRecord } from "../../services/apiWarehouses";
 import type { WarehouseStockRecord } from "../../services/apiWarehouseStock";
@@ -18,6 +19,10 @@ import {
   useCreateStockTransfer,
   useCreateSupplierReturn,
   useCreateWriteOff,
+  useCreateAndPostReceiptOp,
+  useCreateAndPostSupplierReturnOp,
+  useCreateAndPostTransfer,
+  useCreateAndPostWriteOff,
 } from "./useWarehouseOps";
 import {
   assignCreatedItemToOpLines,
@@ -112,8 +117,23 @@ function OpForm({
   const createTransfer = useCreateStockTransfer();
   const createWriteOff = useCreateWriteOff();
   const createSupplierReturn = useCreateSupplierReturn();
+  const postReceiptNow = useCreateAndPostReceiptOp();
+  const postTransferNow = useCreateAndPostTransfer();
+  const postWriteOffNow = useCreateAndPostWriteOff();
+  const postSupplierReturnNow = useCreateAndPostSupplierReturnOp();
+  const confirm = useConfirm();
+  /** Which submit button was pressed: save a draft, or create and post immediately. */
+  const submitModeRef = useRef<"draft" | "post">("draft");
+  const [pendingMode, setPendingMode] = useState<"draft" | "post">("draft");
   const isPending =
-    createReceipt.isPending || createTransfer.isPending || createWriteOff.isPending || createSupplierReturn.isPending;
+    createReceipt.isPending ||
+    createTransfer.isPending ||
+    createWriteOff.isPending ||
+    createSupplierReturn.isPending ||
+    postReceiptNow.isPending ||
+    postTransferNow.isPending ||
+    postWriteOffNow.isPending ||
+    postSupplierReturnNow.isPending;
 
   const activeWarehouses = useMemo(() => warehouses.filter((warehouse) => warehouse.isActive), [warehouses]);
   // Items created during this draft stay selectable until the parent inventory query catches up.
@@ -198,7 +218,7 @@ function OpForm({
     if (id === toWarehouseId) setToWarehouseId("");
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (isPending) return;
 
@@ -218,6 +238,43 @@ function OpForm({
 
     setError(null);
     const options = { onSuccess: onDone };
+    const postNow = submitModeRef.current === "post";
+    // Enter in a field submits with the last mode — fall back to the safe draft next time.
+    submitModeRef.current = "draft";
+    setPendingMode(postNow ? "post" : "draft");
+    if (postNow) {
+      // Posting can't be undone — same confirmation as «Провести» in Warehouse → Operations.
+      const ok = await confirm({
+        title: t("inventory.ops.postDialog.title"),
+        description: t(`inventory.ops.${kind}.postDescription`),
+        confirmLabel: t(`inventory.ops.${kind}.postNow`),
+        tone: kind === "receipt" || kind === "transfer" ? "default" : "destructive",
+        icon: "warning",
+      });
+      if (!ok) return;
+      if (kind === "receipt") {
+        postReceiptNow.mutate(
+          { warehouseId, comment, supplierName: supplierName.trim() || null, lines: parsedLines },
+          options,
+        );
+      } else if (kind === "transfer") {
+        postTransferNow.mutate({ fromWarehouseId: warehouseId, toWarehouseId, comment, lines: parsedLines }, options);
+      } else if (kind === "writeOff") {
+        postWriteOffNow.mutate({ warehouseId, reason, comment, lines: parsedLines }, options);
+      } else {
+        postSupplierReturnNow.mutate(
+          {
+            warehouseId,
+            supplierName: supplierName.trim() || null,
+            reason: reason.trim(),
+            comment,
+            lines: parsedLines,
+          },
+          options,
+        );
+      }
+      return;
+    }
     if (kind === "receipt") {
       createReceipt.mutate(
         {
@@ -461,13 +518,30 @@ function OpForm({
             </p>
           ) : null}
         </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onDone} disabled={isPending}>
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onDone} disabled={isPending}>
             {t("common.cancel")}
           </Button>
-          <Button type="submit" disabled={isPending || activeItems.length === 0}>
-            {isPending ? <Spinner className="size-4" /> : null}
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={isPending || activeItems.length === 0}
+            onClick={() => {
+              submitModeRef.current = "draft";
+            }}
+          >
+            {isPending && pendingMode === "draft" ? <Spinner className="size-4" /> : null}
             {t("inventory.ops.saveDraft")}
+          </Button>
+          <Button
+            type="submit"
+            disabled={isPending || activeItems.length === 0}
+            onClick={() => {
+              submitModeRef.current = "post";
+            }}
+          >
+            {isPending && pendingMode === "post" ? <Spinner className="size-4" /> : null}
+            {t(`inventory.ops.${kind}.postNow`)}
           </Button>
         </div>
       </form>

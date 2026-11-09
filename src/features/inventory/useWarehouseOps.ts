@@ -223,3 +223,66 @@ export const usePostGoodsReceipt = () => usePostOp("receipt", postGoodsReceipt);
 export const usePostStockTransfer = () => usePostOp("transfer", postStockTransfer);
 export const usePostWriteOff = () => usePostOp("writeOff", postWriteOff);
 export const usePostSupplierReturn = () => usePostOp("supplierReturn", postSupplierReturn);
+
+/**
+ * Create a document and post it right away (stock changes immediately).
+ * If posting fails the draft stays in Warehouse → Operations so it can be fixed and posted
+ * (supplier returns roll their draft back, see createAndPostSupplierReturn).
+ */
+function useCreateAndPostOp<TInput>(
+  kind: WarehouseOpKind,
+  run: (input: TInput, workspaceId: string | undefined) => Promise<unknown>,
+) {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+
+  return useMutation({
+    mutationFn: (input: TInput) => {
+      guardWrite();
+      return run(input, workspaceId);
+    },
+    onSuccess: async () => {
+      await invalidateAfterStockChange(queryClient, workspaceId, kind);
+      toast.success(i18n.t(`inventory.ops.${kind}.postedNow`));
+    },
+    onError: async (error: Error) => {
+      // A draft may have been created before the post failed — refresh the list.
+      await queryClient.invalidateQueries({ queryKey: [OPS_KEY, kind, workspaceId] });
+      toast.error(error.message || i18n.t("inventory.ops.errors.postFailed"));
+    },
+  });
+}
+
+async function createThenPost<TInput>(
+  create: (input: TInput, workspaceId: string | undefined) => Promise<string>,
+  post: (id: string) => Promise<void>,
+  input: TInput,
+  workspaceId: string | undefined,
+) {
+  const id = await create(input, workspaceId);
+  try {
+    await post(id);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(i18n.t("inventory.ops.errors.draftKeptPostFailed", { reason }));
+  }
+  return id;
+}
+
+export const useCreateAndPostReceiptOp = () =>
+  useCreateAndPostOp<CreateGoodsReceiptInput>("receipt", (input, ws) =>
+    createThenPost(createGoodsReceipt, postGoodsReceipt, input, ws),
+  );
+export const useCreateAndPostTransfer = () =>
+  useCreateAndPostOp<CreateStockTransferInput>("transfer", (input, ws) =>
+    createThenPost(createStockTransfer, postStockTransfer, input, ws),
+  );
+export const useCreateAndPostWriteOff = () =>
+  useCreateAndPostOp<CreateWriteOffInput>("writeOff", (input, ws) =>
+    createThenPost(createWriteOff, postWriteOff, input, ws),
+  );
+export const useCreateAndPostSupplierReturnOp = () =>
+  useCreateAndPostOp<CreateSupplierReturnInput>("supplierReturn", (input, ws) =>
+    createAndPostSupplierReturn(input, ws),
+  );
