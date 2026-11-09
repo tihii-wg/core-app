@@ -7,6 +7,10 @@ import ClientDetailPanel from "./ClientDetailPanel";
 import ClientSettlementDialog from "./ClientSettlementDialog";
 import type { ClientOrderSummary } from "./clientOrders";
 
+vi.mock("../finance/usePayments", () => ({
+  useGetPayments: () => ({ payments: [], isLoading: false }),
+}));
+
 vi.mock("../vehicles/useGetClientVehicles", () => ({
   useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false, isFetched: true }),
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],

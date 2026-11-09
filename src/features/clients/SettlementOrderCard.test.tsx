@@ -22,6 +22,7 @@ const longRow: ClientSettlementRow = {
   paid: 0,
   remaining: 1250,
   isPaid: false,
+  paymentStatus: "unpaid",
   status: "completed",
   device: "Mercedes-Benz Sprinter 316 CDI Extra Long",
   carNumber: "B123XYZ",

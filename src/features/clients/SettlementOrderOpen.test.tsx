@@ -8,6 +8,10 @@ import { clientOrderSummaries } from "./clientOrders";
 import OrderDetailPanel from "../orders/OrderDetailPanel";
 import { useOrderDetails } from "../orders/useOrderDetails";
 
+vi.mock("../finance/usePayments", () => ({
+  useGetPayments: () => ({ payments: [], isLoading: false }),
+}));
+
 vi.mock("../industries/useIndustryWorkflow", async () => {
   const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
   return {

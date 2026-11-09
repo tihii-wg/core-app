@@ -8,6 +8,10 @@ import type { ClientOrderSummary } from "./clientOrders";
 
 const mutateAsync = vi.hoisted(() => vi.fn());
 
+vi.mock("../finance/usePayments", () => ({
+  useGetPayments: () => ({ payments: [], isLoading: false }),
+}));
+
 vi.mock("./useUpdateClient", () => ({
   useUpdateClient: () => ({
     mutateAsync,

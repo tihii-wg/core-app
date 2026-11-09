@@ -5,6 +5,7 @@ import { PaymentStatusBadge } from "../../ui/StatusBadge";
 import { Skeleton } from "../../ui/Skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
 import type { ClientOrderSummary } from "./clientOrders";
+import { useGetPayments } from "../finance/usePayments";
 import { computeClientSettlement, settlementBalanceTone } from "./clientSettlement";
 import { SettlementOrderCard } from "./SettlementOrderCard";
 
@@ -40,7 +41,12 @@ export default function ClientSettlementDialog({
 }: ClientSettlementDialogProps) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
-  const settlement = useMemo(() => computeClientSettlement(orders, clientBalance), [orders, clientBalance]);
+  // Paid amounts come from the payments ledger (not the legacy orders.is_paid flag).
+  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const settlement = useMemo(
+    () => computeClientSettlement(orders, clientBalance, payments),
+    [orders, clientBalance, payments],
+  );
   const tone = settlementBalanceTone(settlement.finalBalance);
   const signedFinalBalance = settlement.finalBalance > 0 ? `+${formatMoney(settlement.finalBalance)}` : formatMoney(settlement.finalBalance);
 
@@ -57,7 +63,7 @@ export default function ClientSettlementDialog({
           <DialogDescription>{t("clients.settlement.description", { name: clientName })}</DialogDescription>
         </DialogHeader>
 
-        {ordersLoading ? (
+        {ordersLoading || paymentsLoading ? (
           <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-y-auto" aria-busy="true">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-12 w-full" />
@@ -170,7 +176,7 @@ export default function ClientSettlementDialog({
                           <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.paid)}</td>
                           <td className="px-3 py-2 text-right tabular-nums">{formatMoney(row.remaining)}</td>
                           <td className="px-3 py-2">
-                            <PaymentStatusBadge status={row.isPaid ? "paid" : "unpaid"} />
+                            <PaymentStatusBadge status={row.paymentStatus} />
                           </td>
                         </tr>
                       ))}

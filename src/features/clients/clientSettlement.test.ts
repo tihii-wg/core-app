@@ -3,6 +3,7 @@ import type { ClientOrderSummary } from "./clientOrders";
 import { clientOrderSummaries } from "./clientOrders";
 import { computeClientSettlement, settlementBalanceTone } from "./clientSettlement";
 import type { Order } from "../../lib/types";
+import type { LedgerPayment } from "../finance/paymentTypes";
 
 function summary(partial: Partial<ClientOrderSummary>): ClientOrderSummary {
   return {
@@ -162,5 +163,38 @@ describe("settlement input filtering (client + workspace scope)", () => {
     );
     expect(summaries.map((entry) => entry.id).sort()).toEqual(["mine", "mine-2"]);
     expect(summaries.every((entry) => entry.isPaid === true)).toBe(true);
+  });
+});
+
+describe("computeClientSettlement — payments ledger", () => {
+  function ledger(orderId: string, amount: number, kind: LedgerPayment["kind"] = "payment"): LedgerPayment {
+    return {
+      id: `p-${orderId}-${amount}-${kind}`,
+      workspaceId: "ws",
+      orderId,
+      invoiceId: null,
+      relatedPaymentId: null,
+      kind,
+      amount,
+      currencyCode: "MDL",
+      paymentMethod: "cash",
+      paidAt: "2026-11-01",
+      note: "",
+      createdBy: null,
+      createdAt: "2026-11-01T10:00:00Z",
+    };
+  }
+
+  it("treats an order paid via the ledger as settled even when is_paid is false", () => {
+    const result = computeClientSettlement([summary({ id: "a", totalPrice: 25, isPaid: false })], 0, [ledger("a", 25)]);
+    expect(result.rows).toHaveLength(0);
+    expect(result.settledOrdersCount).toBe(1);
+    expect(result.finalBalance).toBe(0);
+  });
+
+  it("shows a partially paid order with the ledger amount", () => {
+    const result = computeClientSettlement([summary({ id: "a", totalPrice: 100 })], 0, [ledger("a", 40)]);
+    expect(result.rows[0]).toMatchObject({ paid: 40, remaining: 60, paymentStatus: "partial", isPaid: false });
+    expect(result.finalBalance).toBe(-60);
   });
 });

@@ -1,4 +1,6 @@
-import type { OrderStatus } from "../../lib/types";
+import type { OrderStatus, PaymentStatus } from "../../lib/types";
+import { orderPaymentBalance } from "../finance/paymentCalculations";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import type { ClientOrderSummary } from "./clientOrders";
 
 /**
@@ -8,12 +10,11 @@ import type { ClientOrderSummary } from "./clientOrders";
  * - Order total: `orders.total_price` (Order.totalPrice) — the only
  *   order amount in the schema. Invoice totals are copies of it
  *   (one invoice per order), so invoices are never added on top.
- * - Paid: the app records payment per order as the boolean
- *   `orders.is_paid` (see reportStats: revenue counts totalPrice of
- *   paid orders, outstanding counts unpaid ones). There is NO
- *   payments table and no per-order paid amount, so partial payment
- *   of a single order cannot be represented: paid is either the full
- *   order total or 0. This module never fabricates amounts.
+ * - Paid: taken from the payments ledger (`payments` rows linked to the
+ *   order: payments minus refunds/voids) via `orderPaymentBalance`, the
+ *   same calculation the order card and dashboard use. Partial payments
+ *   are supported. Only orders with no ledger rows fall back to the
+ *   legacy boolean `orders.is_paid` (paid = full total or 0).
  * - Billable scope follows reportStats: cancelled orders are
  *   excluded from money totals.
  * - Only orders with a remaining amount due are listed. Fully paid
@@ -48,6 +49,8 @@ export type ClientSettlementRow = {
   paid: number;
   remaining: number;
   isPaid: boolean;
+  /** Ledger-derived payment status (unpaid / partial / paid). */
+  paymentStatus: PaymentStatus;
   /** Display-only fields for mobile cards; unused in money totals. */
   status: OrderStatus;
   customStatus?: { name: string; color: string | null } | null;
@@ -85,7 +88,11 @@ export function settlementBalanceTone(balance: number): "debt" | "credit" | "set
   return "settled";
 }
 
-export function computeClientSettlement(orders: ClientOrderSummary[], storedBalance = 0): ClientSettlement {
+export function computeClientSettlement(
+  orders: ClientOrderSummary[],
+  storedBalance = 0,
+  payments: LedgerPayment[] = [],
+): ClientSettlement {
   const rows: ClientSettlementRow[] = [];
   let excludedCancelledCount = 0;
   let settledOrdersCount = 0;
@@ -96,8 +103,12 @@ export function computeClientSettlement(orders: ClientOrderSummary[], storedBala
       continue;
     }
     const total = roundMoney(order.totalPrice || 0);
-    const paid = order.isPaid ? total : 0;
-    const remaining = roundMoney(total - paid);
+    const balance = orderPaymentBalance(
+      { id: order.id, totalPrice: total, isPaid: order.isPaid, status: order.status },
+      payments,
+    );
+    const paid = balance.hasLedger ? roundMoney(Math.min(balance.netPaid, total)) : balance.status === "paid" ? total : 0;
+    const remaining = roundMoney(Math.max(0, total - paid));
     if (remaining <= 0) {
       settledOrdersCount += 1;
       continue;
@@ -109,7 +120,8 @@ export function computeClientSettlement(orders: ClientOrderSummary[], storedBala
       total,
       paid,
       remaining,
-      isPaid: Boolean(order.isPaid),
+      isPaid: remaining <= 0,
+      paymentStatus: paid <= 0 ? "unpaid" : remaining > 0 ? "partial" : "paid",
       status: order.status,
       ...(order.customStatus ? { customStatus: order.customStatus } : {}),
       device: order.device ?? "",
