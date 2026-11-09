@@ -245,6 +245,11 @@ const orders: Messages<typeof en> = {
     title: "Редактирование заказа {{number}}",
     description: "Измените VIN, услуги, автомобиль, ответственного и срок выбранного заказа.",
   },
+  catalogLink: {
+    openService: "Открыть услугу в справочнике",
+    openMaterial: "Открыть товар на складе",
+    serviceMissing: "Эта услуга удалена из справочника.",
+  },
   totalBreakdown: {
     title: "Из чего складывается сумма",
     works: "Работы",

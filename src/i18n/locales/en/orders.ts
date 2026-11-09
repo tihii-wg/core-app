@@ -236,6 +236,11 @@ export default {
     title: "Edit Order {{number}}",
     description: "Update the selected order's VIN, services, device, assignment, and deadline.",
   },
+  catalogLink: {
+    openService: "Open the service in the catalog",
+    openMaterial: "Open the item in inventory",
+    serviceMissing: "This service was removed from the catalog.",
+  },
   totalBreakdown: {
     title: "Total breakdown",
     works: "Labour",

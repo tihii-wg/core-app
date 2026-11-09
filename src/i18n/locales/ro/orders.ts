@@ -242,6 +242,11 @@ const orders: Messages<typeof en> = {
     title: "Editează comanda {{number}}",
     description: "Actualizați VIN-ul, serviciile, automobilul, responsabilul și termenul comenzii selectate.",
   },
+  catalogLink: {
+    openService: "Deschide serviciul în catalog",
+    openMaterial: "Deschide articolul din stoc",
+    serviceMissing: "Acest serviciu a fost eliminat din catalog.",
+  },
   totalBreakdown: {
     title: "Din ce constă suma",
     works: "Manoperă",

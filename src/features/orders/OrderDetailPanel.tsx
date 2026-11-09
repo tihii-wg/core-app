@@ -41,7 +41,8 @@ import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { vatIncludedAmount } from "../finance/vat";
 import { OrderVatBreakdownView } from "./OrderVatBreakdown";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
-import { canManageWarehouse } from "../workspaces/workspaceRoles";
+import { canManageServices, canManageWarehouse } from "../workspaces/workspaceRoles";
+import { OrderCatalogLinkDialogs } from "./OrderCatalogLinkDialogs";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import {
@@ -139,6 +140,10 @@ export default function OrderDetailPanel({
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
   const closedOrderPerms = useClosedOrderActionPermissions();
   const canWarehouse = withSubscriptionWriteAccess(canManageWarehouse(workspaceRole), subscriptionAllowsWrite);
+  const canOpenServiceForm = withSubscriptionWriteAccess(canManageServices(workspaceRole), subscriptionAllowsWrite);
+  /** Catalog windows opened by tapping a service / material name in the order card. */
+  const [catalogServiceId, setCatalogServiceId] = useState<string | null>(null);
+  const [catalogInventoryId, setCatalogInventoryId] = useState<string | null>(null);
   const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
@@ -720,7 +725,18 @@ export default function OrderDetailPanel({
                         <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
                           <div className="min-w-0 space-y-0.5">
                             <p>
-                              {line.serviceName}
+                              {canOpenServiceForm && line.serviceId ? (
+                                <button
+                                  type="button"
+                                  className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none [overflow-wrap:anywhere]"
+                                  onClick={() => setCatalogServiceId(line.serviceId)}
+                                  title={t("orders.catalogLink.openService")}
+                                >
+                                  {line.serviceName}
+                                </button>
+                              ) : (
+                                line.serviceName
+                              )}
                               {line.kind ? (
                                 <StatusBadge variant="muted" className="ml-2 align-middle">
                                   {t(`orders.form.lineKind.${line.kind}`)}
@@ -819,7 +835,20 @@ export default function OrderDetailPanel({
                           <tr key={line.id ?? `${line.inventoryItemId ?? "free"}-${index}`}>
                             <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
                               <div className="space-y-1">
-                                <p>{line.itemName}</p>
+                                <p>
+                                  {catalog && line.inventoryItemId ? (
+                                    <button
+                                      type="button"
+                                      className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none [overflow-wrap:anywhere]"
+                                      onClick={() => setCatalogInventoryId(line.inventoryItemId ?? null)}
+                                      title={t("orders.catalogLink.openMaterial")}
+                                    >
+                                      {line.itemName}
+                                    </button>
+                                  ) : (
+                                    line.itemName
+                                  )}
+                                </p>
                                 <OrderLineWarrantyBadge
                                   activated={Boolean(selectedOrder.closedAt)}
                                   status={
@@ -1189,6 +1218,12 @@ export default function OrderDetailPanel({
           onOrderUpdated={onOrderUpdated}
         />
       ) : null}
+      <OrderCatalogLinkDialogs
+        serviceId={catalogServiceId}
+        inventoryItemId={catalogInventoryId}
+        onCloseService={() => setCatalogServiceId(null)}
+        onCloseInventory={() => setCatalogInventoryId(null)}
+      />
     </Sheet>
   );
 }
