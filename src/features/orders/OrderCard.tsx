@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
@@ -120,7 +121,9 @@ export function OrderCard({
           {order.team && order.team.length > 0 ? <OrderTeamAvatars team={order.team} /> : null}
         </div>
         <span className={cn("shrink-0 text-right")}>
-          <span className="block font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
+          <OrderTotalBreakdownPopover order={order} formatMoney={formatMoney} className="block">
+            <span className="block font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
+          </OrderTotalBreakdownPopover>
           <span className="block text-[11px] tabular-nums text-muted-foreground">{order.createdAt || "—"}</span>
         </span>
       </div>

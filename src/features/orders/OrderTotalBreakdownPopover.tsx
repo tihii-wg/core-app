@@ -10,8 +10,10 @@ const HOVER_GRACE_MS = 700;
 type Props = {
   order: Pick<Order, "services" | "materials" | "totalPrice">;
   formatMoney: (value: number) => string;
-  worksLabel: string;
-  materialsLabel: string;
+  worksLabel?: string;
+  materialsLabel?: string;
+  /** Extra classes for the trigger (e.g. text alignment inside list cells). */
+  className?: string;
   children: ReactNode;
 };
 
@@ -19,8 +21,17 @@ type Props = {
  * Hover (desktop) / tap (touch) breakdown of the order total:
  * works vs materials, and works per performer when there is more than one.
  */
-export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, materialsLabel, children }: Props) {
+export function OrderTotalBreakdownPopover({
+  order,
+  formatMoney,
+  worksLabel: worksLabelProp,
+  materialsLabel: materialsLabelProp,
+  className,
+  children,
+}: Props) {
   const { t } = useTranslation();
+  const worksLabel = worksLabelProp ?? t("orders.totalBreakdown.works");
+  const materialsLabel = materialsLabelProp ?? t("orders.detail.materials");
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -35,8 +46,10 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
       if (target && (triggerRef.current?.contains(target) || contentRef.current?.contains(target))) return;
       setOpen(false);
     }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    // Capture phase: price triggers in list rows stop propagation (so the tap doesn't
+    // open the order), which would otherwise hide the tap from this listener.
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [open]);
   const breakdown = orderTotalBreakdown(order, t("orders.totalBreakdown.unassigned"));
   const hasLines = (order.services?.length ?? 0) + (order.materials?.length ?? 0) > 0;
@@ -62,7 +75,7 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
       <TooltipPrimitive.Trigger asChild>
         <button
           type="button"
-          className="cursor-pointer rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none"
+          className={`cursor-pointer rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none ${className ?? ""}`}
           aria-label={t("orders.totalBreakdown.ariaLabel")}
           ref={triggerRef}
           // Not a tab stop: the card auto-focuses its first focusable element on open,
@@ -80,9 +93,12 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
             if (event.pointerType === "mouse") scheduleClose();
           }}
           onFocus={(event) => event.preventDefault()}
+          // Inside list rows / board cards: don't let the tap open the order or start a drag.
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             // Touch / keyboard: tap toggles (hover does not exist on phones).
             event.preventDefault();
+            event.stopPropagation();
             cancelClose();
             setOpen((value) => !value);
           }}
@@ -101,6 +117,7 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
         onPointerEnter={cancelClose}
         onPointerLeave={scheduleClose}
         data-testid="order-total-breakdown"
+        onClick={(event) => event.stopPropagation()}
       >
         <p className="mb-2 text-xs font-medium text-muted-foreground">{t("orders.totalBreakdown.title")}</p>
         <dl className="space-y-1.5">

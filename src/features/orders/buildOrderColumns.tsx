@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { ReactNode } from "react";
 import type { Order, OrderStatus } from "../../lib/types";
 import type { Column } from "../../ui/DataTable";
@@ -183,7 +184,11 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "total",
       header: args.columnLabels?.total ?? args.t("common.total"),
-      cell: (order) => <span className="font-medium tabular-nums">{args.formatMoney(order.totalPrice)}</span>,
+      cell: (order) => (
+        <OrderTotalBreakdownPopover order={order} formatMoney={args.formatMoney}>
+          <span className="font-medium tabular-nums">{args.formatMoney(order.totalPrice)}</span>
+        </OrderTotalBreakdownPopover>
+      ),
       className: "text-right whitespace-nowrap",
     },
     {

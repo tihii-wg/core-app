@@ -1,4 +1,5 @@
 import { useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { ErrorState } from "../../ui/EmptyState";
@@ -309,7 +310,9 @@ function BoardCard({
           <span className="text-sm font-semibold text-primary tabular-nums">{order.orderNumber || "—"}</span>
           <OrderWarrantyIndicator model={warrantyIndicator} className="mt-0.5" />
         </div>
-        <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
+        <OrderTotalBreakdownPopover order={order} formatMoney={formatMoney} className="shrink-0">
+          <span className="text-sm font-semibold tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span>
+        </OrderTotalBreakdownPopover>
       </div>
       <p className="mt-1 truncate text-sm font-medium text-foreground" title={order.clientName}>
         {order.clientName || "—"}
