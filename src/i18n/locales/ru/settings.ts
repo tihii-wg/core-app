@@ -379,7 +379,8 @@ const settings: Messages<typeof en> = {
     archivedHint: "Мягко удалённые пользовательские поля. Значения остаются в старых заказах, но скрыты в формах и карточке.",
     builtinBadge: "Встроенное",
     customBadge: "Своё",
-    optionsHint: "По одному варианту на строку: value|Подпись",
+    optionsHint: "Варианты списка — по одному на строку",
+    optionsPlaceholder: "Белый\nДуб сонома\nАнтрацит",
     groups: {
       clientOrder: "Клиент и заказ",
       transport: "Транспорт",

@@ -379,7 +379,8 @@ const settings: Messages<typeof en> = {
     archivedHint: "Câmpuri personalizate șterse logic. Valorile rămân pe comenzile vechi, dar sunt ascunse în formulare și detaliu.",
     builtinBadge: "Integrat",
     customBadge: "Personalizat",
-    optionsHint: "O opțiune pe linie: value|Etichetă",
+    optionsHint: "Opțiuni listă — câte una pe linie",
+    optionsPlaceholder: "Alb\nStejar Sonoma\nAntracit",
     groups: {
       clientOrder: "Client și comandă",
       transport: "Transport",

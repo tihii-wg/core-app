@@ -24,7 +24,18 @@ import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import type { OrderFieldConfigItem } from "../orders/orderFieldConfig";
 import type { OrderFieldGroup, OrderFieldType } from "../orders/orderFieldRegistry";
-import { orderFieldGroupLabel, slugifyOrderFieldKey } from "../orders/orderFieldRegistry";
+import { BUILTIN_ORDER_FIELD_KEYS, orderFieldGroupLabel, slugifyOrderFieldKey } from "../orders/orderFieldRegistry";
+
+/** Avoid collisions with built-in keys, active and archived custom fields (unique index on field_key). */
+function uniqueCustomFieldKey(base: string, taken: string[]): string {
+  const used = new Set([...taken, ...BUILTIN_ORDER_FIELD_KEYS]);
+  if (!used.has(base)) return base;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${base}_${n}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return `${base}_${Date.now().toString(36)}`;
+}
 import {
   useCreateCustomOrderField,
   useOrderFieldConfig,
@@ -163,7 +174,7 @@ export function OrderFieldsSettings() {
         : [];
     const maxSort = sorted.reduce((max, row) => Math.max(max, row.sortOrder), 400);
     await createCustom.mutateAsync({
-      fieldKey: slugifyOrderFieldKey(label),
+      fieldKey: uniqueCustomFieldKey(slugifyOrderFieldKey(label), [...fields, ...archivedCustomFields].map((row) => row.key)),
       label,
       fieldType: newType,
       options,
@@ -440,7 +451,7 @@ export function OrderFieldsSettings() {
                   className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                   value={newOptionsText}
                   onChange={(event) => setNewOptionsText(event.target.value)}
-                  placeholder={"red|Red\nblue|Blue"}
+                  placeholder={t("settings.orderFields.optionsPlaceholder")}
                 />
               </div>
             ) : null}

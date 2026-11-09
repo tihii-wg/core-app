@@ -517,14 +517,27 @@ export function orderFieldGroupLabel(group: OrderFieldGroup, profile: IndustryPr
   return i18n.t("settings.orderFields.groups.custom");
 }
 
-/** Slug from a custom field label (unique per workspace when combined with uniqueness check). */
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
+  к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+  х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+
+/**
+ * ASCII slug from a custom field label: "Цвет фасада" → "cvet_fasada", "Culoare față" → "culoare_fata".
+ * Keys must stay ASCII — print templates resolve `{{order.custom.<key>}}` with [a-zA-Z0-9_].
+ * Uniqueness per workspace is ensured by the caller.
+ */
 export function slugifyOrderFieldKey(label: string): string {
-  const base = label
-    .trim()
-    .toLowerCase()
+  // Transliterate first (NFKD would split "й" into "и" + breve), then NFKD + lowercase
+  // again so "№" → "no" and Romanian diacritics are dropped.
+  const base = Array.from(label.trim().toLowerCase())
+    .map((ch) => CYRILLIC_TO_LATIN[ch] ?? ch)
+    .join("")
     .normalize("NFKD")
+    .toLowerCase()
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9а-яё]+/gi, "_")
+    .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 48);
   return base || `field_${Date.now().toString(36)}`;

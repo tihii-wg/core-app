@@ -309,6 +309,13 @@ const deviceBlocks: IndustryOrderFieldBlocks = {
   deviceImei: false,
 };
 
+/** Appliances / equipment: serial + intake fields; no IMEI and no screen passcode. */
+const applianceBlocks: IndustryOrderFieldBlocks = {
+  ...deviceBlocksBase,
+  deviceImei: false,
+  devicePasscode: false,
+};
+
 /** Phone / electronics: same as device plus IMEI. */
 const phoneDeviceBlocks: IndustryOrderFieldBlocks = {
   ...deviceBlocksBase,
@@ -536,7 +543,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     terminology: repairTerminology,
     termsPack: "device",
     orderFields: repairDeviceFields,
-    orderFieldBlocks: deviceBlocks,
+    orderFieldBlocks: applianceBlocks,
     serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.appliance_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,
@@ -552,7 +559,7 @@ const profilesBySlug: Record<KnownIndustrySlug, Omit<IndustryProfile, "slug">> =
     terminology: repairTerminology,
     termsPack: "device",
     orderFields: repairDeviceFields,
-    orderFieldBlocks: deviceBlocks,
+    orderFieldBlocks: applianceBlocks,
     serviceCategories: SERVICE_CATEGORIES_BY_INDUSTRY.equipment_repair,
     suggestedCatalogCategoryKeys: [],
     defaultStatuses: deviceStatuses,

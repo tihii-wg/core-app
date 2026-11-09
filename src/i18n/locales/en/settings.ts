@@ -376,7 +376,8 @@ export default {
     archivedHint: "Soft-deleted custom fields. Values remain on old orders but are hidden in forms and detail.",
     builtinBadge: "Built-in",
     customBadge: "Custom",
-    optionsHint: "One option per line: value|Label",
+    optionsHint: "List options — one per line",
+    optionsPlaceholder: "White\nSonoma oak\nAnthracite",
     groups: {
       clientOrder: "Client & order",
       transport: "Vehicle",
