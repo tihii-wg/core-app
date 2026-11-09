@@ -31,6 +31,7 @@ import { Estimates } from "./features/estimates/Estimates";
 import { Tasks } from "./features/tasks/Tasks";
 import { Bookings } from "./features/bookings/Bookings";
 import { PublicOrderPage } from "./features/public/PublicOrderPage";
+import { PrivacyPolicyPage } from "./features/legal/PrivacyPolicyPage";
 import { AppLayout } from "./ui/AppLayout";
 import Dashboardredirect from "./ui/DashboardRedirect";
 import { BusinessSetupPage } from "./features/onboarding/BusinessSetupPage";
@@ -70,6 +71,8 @@ export function AppRoutes() {
 
       {/* Public read-only order status by public_links token (no sign-in; the token is the only credential). */}
       <Route path="/:locale/public/:token" element={<PublicOrderPage />} />
+      <Route path="/privacy" element={<Navigate to="/ru/privacy" replace />} />
+      <Route path="/:locale/privacy" element={<PrivacyPolicyPage />} />
 
       {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
