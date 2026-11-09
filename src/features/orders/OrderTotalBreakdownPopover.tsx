@@ -56,7 +56,7 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
       <TooltipPrimitive.Trigger asChild>
         <button
           type="button"
-          className="cursor-help rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+          className="cursor-pointer rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
           aria-label={t("orders.totalBreakdown.ariaLabel")}
           ref={triggerRef}
           onClick={(event) => {
