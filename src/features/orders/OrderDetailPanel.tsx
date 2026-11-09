@@ -388,7 +388,7 @@ export default function OrderDetailPanel({
             />
 
             <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0 flex-1 space-y-2">
                 <div>
                   <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.client")}</h3>
                   <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{selectedOrder.clientName}</p>
@@ -412,7 +412,7 @@ export default function OrderDetailPanel({
                   </div>
                 ) : null}
               </div>
-              <div className="shrink-0 text-right">
+              <div className="min-w-0 max-w-[55%] shrink-0 text-right [overflow-wrap:anywhere]">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(selectedOrder.totalPrice)}</p>
                 {(selectedOrder.discountTotal ?? 0) > 0 ? (
