@@ -473,6 +473,7 @@ export default {
   errors: {
     notFoundOrForbidden: "Order was not found or you do not have permission to change it.",
     paidStatusLocked: "Only the workspace owner can change the status of a Paid order.",
+    statusChangeUnavailable: "This status change is not available for the order.",
     clientNotCreated: "Client was not created",
     serviceNotCreated: "Service was not created",
     employeeNotFound: "Selected employee was not found in this workspace",

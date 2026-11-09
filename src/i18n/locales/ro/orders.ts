@@ -478,6 +478,7 @@ const orders: Messages<typeof en> = {
   errors: {
     notFoundOrForbidden: "Comanda nu a fost găsită sau nu aveți permisiunea de a o modifica.",
     paidStatusLocked: "Doar proprietarul spațiului de lucru poate schimba statusul unei comenzi Plătite.",
+    statusChangeUnavailable: "Această schimbare de status nu este disponibilă pentru comandă.",
     clientNotCreated: "Clientul nu a fost creat",
     serviceNotCreated: "Serviciul nu a fost creat",
     employeeNotFound: "Angajatul selectat nu a fost găsit în acest spațiu de lucru",

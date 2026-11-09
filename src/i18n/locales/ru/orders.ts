@@ -481,6 +481,7 @@ const orders: Messages<typeof en> = {
   errors: {
     notFoundOrForbidden: "Заказ не найден или у вас нет прав на его изменение.",
     paidStatusLocked: "Изменить статус оплаченного заказа может только владелец рабочего пространства.",
+    statusChangeUnavailable: "Это изменение статуса недоступно для заказа.",
     clientNotCreated: "Не удалось создать клиента",
     serviceNotCreated: "Не удалось создать услугу",
     employeeNotFound: "Выбранный сотрудник не найден в этом рабочем пространстве",

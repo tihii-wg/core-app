@@ -462,8 +462,10 @@ export function OrderActionsMenu({
             open
             onOpenChange={setRecordPaymentOpen}
             target="order"
+            order={order}
             orderId={order.id}
             balance={recordableOrderBalance(order, payments)}
+            onOrderUpdated={onOrderUpdated}
           />
         </span>
       ) : null}

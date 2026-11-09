@@ -31,7 +31,7 @@ import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industrySupportsClientVehicles, industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
-import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
+import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -40,7 +40,7 @@ import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { vatIncludedAmount } from "../finance/vat";
 import { OrderVatBreakdownView } from "./OrderVatBreakdown";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
-import { canManageWarehouse, canManageWorkspace } from "../workspaces/workspaceRoles";
+import { canManageWarehouse } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import {
@@ -67,8 +67,6 @@ import { useUpdateOrderTaxInvoiceNumber } from "./useGetOrders";
 import {
   hasTaxInvoiceNumber,
   isLegalEntityCustomer,
-  isOrderPaidLocked,
-  isPaidStatusOptionBlocked,
 } from "./taxInvoice";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
@@ -79,20 +77,14 @@ import OrderFeedSection from "./OrderFeedSection";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
 import { PaymentFormDialog } from "../finance/PaymentFormDialog";
 import { OrderPaymentStagesSection } from "../finance/OrderPaymentStagesSection";
-import { assertMinPaidOrExplain, orderNetPaidForMinPaid, recordableOrderBalance } from "./minPaidStatusGuard";
-import { showMinPaidBlockedToast } from "./showMinPaidBlockedToast";
+import { recordableOrderBalance } from "./minPaidStatusGuard";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
-import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { OrderCancelChainDialog } from "./OrderCancelChainDialog";
 import { CloseOrderDialog } from "./CloseOrderDialog";
 import { isOrderCurrentlyClosed, isOrderFormallyClosed } from "./orderLifecycle";
-import {
-  resolveCurrentUnifiedStatus,
-  resolveUnifiedStatusSelection,
-  unifiedStatusOptions,
-} from "./unifiedOrderStatus";
+import { useOrderStatusChange } from "./useOrderStatusChange";
 import { activePaymentsBlockingOrderDelete, orderHasCancelSemantic } from "./orderDeletionEligibility";
 import {
   canMutateOrderContent,
@@ -148,19 +140,10 @@ export default function OrderDetailPanel({
   const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
-  const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
-    industryOrderStatusLabel(workflow, status),
-  );
-  const currentUnifiedStatus = selectedOrder
-    ? resolveCurrentUnifiedStatus(selectedOrder, statusOptions)
-    : null;
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
-  // Paid unlock uses membership owner role. Lifecycle status is never editable via the ordinary selector.
-  const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const canMutateContent =
     selectedOrder != null &&
@@ -169,20 +152,27 @@ export default function OrderDetailPanel({
       isOwnerByOwnerId,
       ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
     });
-  const paidStatusLocked = selectedOrder != null && isOrderPaidLocked(selectedOrder, isWorkspaceOwner);
-  // Cancelled: owner_id may reopen via status change (clears closed_at). Closed is always locked.
-  const lifecycleStatusLocked =
-    selectedOrder != null &&
-    (selectedOrder.status === "cancelled" ? !isOwnerByOwnerId : isOrderFormallyClosed(selectedOrder));
   const closedContentLocked = selectedOrder != null && !canMutateContent;
-  const paidStatusBlocked =
-    selectedOrder != null && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired) && selectedOrder.status !== "paid";
   const technicianOptions = assignableTechnicians(employees, selectedOrder?.assignedEmployeeId);
   const teamOptions = assignableTeamOptions(employees, selectedOrder?.assignedEmployeeId, [
     ...(selectedOrder?.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
     ...(selectedOrder?.services ?? []).map((line) => ({ id: line.technicianId, name: line.technicianName })),
   ]);
   const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const {
+    options: statusOptions,
+    current: currentUnifiedStatus,
+    changeTo: changeOrderStatus,
+    isPending: isUnifiedStatusUpdating,
+    paidStatusLocked,
+    lifecycleStatusLocked,
+    paidStatusBlocked,
+  } = useOrderStatusChange(selectedOrder, {
+    payments,
+    paymentsLoading,
+    onOrderUpdated,
+    onLegacyStatusChange: onStatusChange,
+  });
   const paymentBalance = selectedOrder ? orderPaymentBalance(selectedOrder, payments) : null;
   const deleteOrder = useDeleteOrder();
   const hasInvoice = Boolean(invoiceNumber);
@@ -911,6 +901,7 @@ export default function OrderDetailPanel({
               order={selectedOrder}
               payments={payments}
               canEdit={canEditOrder && !closedContentLocked}
+              onOrderUpdated={onOrderUpdated}
               onBeforeRecord={async () => {
                 const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
                 if (!prepared) return false;
@@ -953,77 +944,8 @@ export default function OrderDetailPanel({
               <Select
                 value={currentUnifiedStatus?.id ?? statusOptions[0]?.id ?? ""}
                 onValueChange={(value) => {
-                  if (isOrderPaidLocked(selectedOrder, isWorkspaceOwner)) return;
-                  const option = statusOptions.find((item) => item.id === value);
-                  if (!option) return;
-                  const move = resolveUnifiedStatusSelection(selectedOrder, option, {
-                    allowReopenCancelled: isOwnerByOwnerId,
-                  });
-                  if (!move) return;
-                  if (move.status === "paid" && isPaidStatusOptionBlocked(selectedOrder, taxInvoiceRequired)) return;
-
-                  const minPaidBlock = assertMinPaidOrExplain({
-                    order: selectedOrder,
-                    // Ledger still loading → rely on the DB guard rather than blocking on an empty list.
-                    targetDefinition: paymentsLoading ? null : option.definition,
-                    netPaid: orderNetPaidForMinPaid(selectedOrder, payments),
-                    formatMoney,
-                    t,
-                  });
-                  if (minPaidBlock) {
-                    showMinPaidBlockedToast({
-                      block: minPaidBlock,
-                      recordPaymentLabel: t("orders.minPaid.recordPayment"),
-                      onRecordPayment:
-                        canEditOrder && !closedContentLocked
-                          ? () => {
-                              void (async () => {
-                                const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
-                                if (!prepared) return;
-                                if (prepared !== selectedOrder) {
-                                  onOrderUpdated(prepared);
-                                  stopEditing();
-                                }
-                                setRecordPaymentOpen(true);
-                              })();
-                            }
-                          : undefined,
-                    });
-                    return;
-                  }
-
-                  if (option.kind === "definition" || move.customStatusId !== null || selectedOrder.customStatusId) {
-                    moveOnBoard(
-                      {
-                        orderId: selectedOrder.id,
-                        status: move.status,
-                        customStatusId: move.customStatusId,
-                        currentStatus: selectedOrder.status,
-                      },
-                      {
-                        onSuccess: (result) => {
-                          onOrderUpdated({
-                            ...selectedOrder,
-                            status: result.status,
-                            customStatusId: result.customStatusId,
-                            customStatus:
-                              result.customStatus ??
-                              (option.kind === "definition" ? { name: option.name, color: option.color } : null),
-                            closedAt:
-                              "closedAt" in result ? (result.closedAt ?? null) : selectedOrder.closedAt,
-                            ...(result.status === "paid"
-                              ? { isPaid: true, paymentStatus: "paid" as const }
-                              : selectedOrder.status === "paid" && result.status !== "closed" && result.status !== "cancelled"
-                                ? { isPaid: false, paymentStatus: "unpaid" as const }
-                                : {}),
-                          });
-                        },
-                      },
-                    );
-                    return;
-                  }
-
-                  onStatusChange(move.status);
+                  if (!value || value === currentUnifiedStatus?.id) return;
+                  void changeOrderStatus(value);
                 }}
                 disabled={
                   !canEditOrder ||
@@ -1037,34 +959,25 @@ export default function OrderDetailPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {statusOptions.map((option) => {
-                    const blocksPaid = option.systemStatus === "paid" && paidStatusBlocked;
-                    return (
-                      <SelectItem
-                        key={option.id}
-                        value={option.id}
-                        disabled={paidStatusLocked || blocksPaid}
-                        title={
-                          paidStatusLocked
-                            ? t("orders.errors.paidStatusLocked")
-                            : blocksPaid
-                              ? t("orders.taxInvoice.requiredHint")
-                              : undefined
-                        }
-                      >
-                        <span className="inline-flex min-w-0 items-center gap-2">
-                          {option.color ? (
-                            <span
-                              aria-hidden
-                              className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
-                              style={{ backgroundColor: option.color }}
-                            />
-                          ) : null}
-                          <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
+                  {statusOptions.map((option) => (
+                    <SelectItem
+                      key={option.id}
+                      value={option.id}
+                      disabled={option.disabled}
+                      title={option.disabledReason ?? undefined}
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        {option.color ? (
+                          <span
+                            aria-hidden
+                            className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
+                            style={{ backgroundColor: option.color }}
+                          />
+                        ) : null}
+                        <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               )}
@@ -1238,8 +1151,10 @@ export default function OrderDetailPanel({
           open
           onOpenChange={setRecordPaymentOpen}
           target="order"
+          order={selectedOrder}
           orderId={selectedOrder.id}
           balance={recordableOrderBalance(selectedOrder, payments)}
+          onOrderUpdated={onOrderUpdated}
         />
       ) : null}
     </Sheet>

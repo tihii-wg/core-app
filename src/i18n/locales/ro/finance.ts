@@ -136,6 +136,13 @@ const finance: Messages<typeof en> = {
       targetOrder: "comandă",
       targetInvoice: "factură",
     },
+    afterPayment: {
+      title: "Plata a fost înregistrată ✓",
+      subtitle: "Ce status să setăm pentru comandă?",
+      currentBadge: "acum",
+      keepCurrent: "Lasă ca atare ({{status}})",
+      statusChanged: "Status schimbat: {{status}}",
+    },
     toast: {
       recording: "Se înregistrează plata...",
       recorded: "Plata a fost înregistrată",

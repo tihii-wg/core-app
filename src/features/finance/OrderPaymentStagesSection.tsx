@@ -37,10 +37,11 @@ import {
 } from "./useOrderPaymentStages";
 
 type OrderPaymentStagesSectionProps = {
-  order: Pick<Order, "id" | "totalPrice" | "isPaid" | "status" | "orderNumber" | "createdAt">;
+  order: Order;
   payments: LedgerPayment[];
   canEdit: boolean;
   onBeforeRecord?: () => Promise<boolean>;
+  onOrderUpdated?: (order: Order) => void;
 };
 
 function stageToInput(stage: OrderPaymentStage): PaymentStageInput {
@@ -84,6 +85,7 @@ export function OrderPaymentStagesSection({
   payments,
   canEdit,
   onBeforeRecord,
+  onOrderUpdated,
 }: OrderPaymentStagesSectionProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
@@ -524,8 +526,10 @@ export function OrderPaymentStagesSection({
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
         target="order"
+        order={order}
         orderId={order.id}
         balance={recordableBalance}
+        onOrderUpdated={onOrderUpdated}
         currentStageLabel={
           current
             ? t("finance.paymentStages.currentlyPaying", {

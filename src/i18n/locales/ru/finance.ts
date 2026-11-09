@@ -136,6 +136,13 @@ const finance: Messages<typeof en> = {
       targetOrder: "этого заказа",
       targetInvoice: "этого счёта",
     },
+    afterPayment: {
+      title: "Платёж записан ✓",
+      subtitle: "Какой статус поставить заказу?",
+      currentBadge: "сейчас",
+      keepCurrent: "Оставить как есть ({{status}})",
+      statusChanged: "Статус изменён: {{status}}",
+    },
     toast: {
       recording: "Сохранение платежа...",
       recorded: "Платёж записан",

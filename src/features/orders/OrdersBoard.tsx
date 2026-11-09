@@ -240,6 +240,7 @@ export function OrdersBoard({
           open
           onOpenChange={(open) => !open && setRecordPaymentOrder(null)}
           target="order"
+          order={recordPaymentOrder}
           orderId={recordPaymentOrder.id}
           balance={recordableOrderBalance(recordPaymentOrder, payments)}
         />

@@ -184,7 +184,17 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
       else if (raw == null) defaults[field.key] = "";
       else defaults[field.key] = typeof raw === "number" || typeof raw === "boolean" ? raw : String(raw);
     }
-    setCustomFieldState(defaults);
+    setCustomFieldState((prev) => {
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(defaults);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((key) => Object.prototype.hasOwnProperty.call(prev, key) && prev[key] === defaults[key])
+      ) {
+        return prev;
+      }
+      return defaults;
+    });
   }, [orderFieldConfig, customValues]);
 
   const {

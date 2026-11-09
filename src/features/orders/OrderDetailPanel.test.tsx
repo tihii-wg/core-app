@@ -43,7 +43,13 @@ vi.mock("./useGetOrders", () => ({
     mutateAsync: taxInvoiceHooks.mutateAsync,
     isPending: taxInvoiceHooks.isPending,
   }),
+  useUpdateOrderStatus: () => ({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }));
+
 
 vi.mock("./useCloseOrder", () => ({
   useCloseOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -200,10 +206,24 @@ const industryState = vi.hoisted(() => ({ slug: "auto_repair" as string }));
 
 vi.mock("../industries/useIndustryWorkflow", async () => {
   const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  const cache = new Map<string, ReturnType<typeof industryWorkflow>>();
   return {
     useIndustryWorkflow: () => {
-      const workflow = industryWorkflow(industryState.slug);
-      return { workflow, copy: industryOrderCopy(workflow), industrySlug: industryState.slug, industryId: null, isLoading: false, error: null };
+      const slug = industryState.slug;
+      let workflow = cache.get(slug);
+      if (!workflow) {
+        workflow = industryWorkflow(slug);
+        cache.set(slug, workflow);
+      }
+      return {
+        workflow,
+        copy: industryOrderCopy(workflow),
+        profile: undefined,
+        industrySlug: slug,
+        industryId: null,
+        isLoading: false,
+        error: null,
+      };
     },
   };
 });

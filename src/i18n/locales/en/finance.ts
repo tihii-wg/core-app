@@ -133,6 +133,13 @@ export default {
       targetOrder: "order",
       targetInvoice: "invoice",
     },
+    afterPayment: {
+      title: "Payment recorded ✓",
+      subtitle: "What status should this order have?",
+      currentBadge: "current",
+      keepCurrent: "Leave as is ({{status}})",
+      statusChanged: "Status changed: {{status}}",
+    },
     toast: {
       recording: "Recording payment...",
       recorded: "Payment recorded",
