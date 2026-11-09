@@ -425,6 +425,7 @@ export default {
   },
   detail: {
     editTitle: "Edit order",
+    editField: "Edit: {{field}}",
     srDescription: "View and edit this order's VIN, services, device, assignment, and deadline.",
     client: "Client",
     clientType: "Client Type",

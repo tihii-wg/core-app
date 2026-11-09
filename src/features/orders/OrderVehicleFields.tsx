@@ -192,7 +192,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   const mileageUnitAbbr = selectedVehicle ? mileageUnitAbbreviation(selectedVehicle.mileageUnit, t) : "";
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-edit-field="vehicle">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor="order-vehicle">{t("vehicles.selectLabel")}</Label>
         <Button type="button" size="sm" variant="ghost" disabled={disabled || createVehicle.isPending} onClick={() => setCreateOpen(true)}>
@@ -241,7 +241,7 @@ export function OrderVehicleFields<T extends FieldValues>({
             <p className="text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
           </div>
 
-          <div className="space-y-1.5 border-t border-border pt-3">
+          <div className="space-y-1.5 border-t border-border pt-3" data-edit-field="mileage">
             <Label htmlFor="order-vehicle-current-mileage">
               {t("vehicles.fields.currentMileage")}
               {mileageUnitAbbr ? (

@@ -48,7 +48,7 @@ export default function OrderAssetFields<T extends AssetFields>({
   return (
     <>
       {showDevice ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="device">
           <Label htmlFor={deviceId}>{copy.deviceLabel}</Label>
           <Input
             id={deviceId}
@@ -64,7 +64,7 @@ export default function OrderAssetFields<T extends AssetFields>({
       ) : null}
 
       {showCarNumber ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="carNumber">
           <Label htmlFor={carNumberId}>{copy.carNumberLabel}</Label>
           <Input
             id={carNumberId}
@@ -88,7 +88,7 @@ export default function OrderAssetFields<T extends AssetFields>({
       ) : null}
 
       {showVin ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="vin">
           <Label htmlFor={vinId}>{copy.vinLabel}</Label>
           <Input
             id={vinId}

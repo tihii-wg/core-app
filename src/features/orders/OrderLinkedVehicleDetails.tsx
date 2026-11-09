@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { MileageUnit, Order } from "../../lib/types";
 import { Skeleton } from "../../ui/Skeleton";
@@ -17,6 +17,10 @@ type OrderLinkedVehicleDetailsProps = {
   vehicleMileageUnitSnapshot?: MileageUnit | null;
   /** Switch the host Order Details panel to a related order (avoids nesting another Order Details sheet). */
   onOpenRelatedOrder: (order: Order) => void;
+  /** Pencil on the section header (opens edit form focused on vehicle). */
+  sectionEditAction?: ReactNode;
+  /** Pencil on the visit-mileage row. */
+  mileageEditAction?: ReactNode;
 };
 
 /** Read-only vehicle fields from `vehicles` via `orders.vehicle_id`. Never mutates the vehicle. */
@@ -25,6 +29,8 @@ export function OrderLinkedVehicleDetails({
   vehicleMileageSnapshot = null,
   vehicleMileageUnitSnapshot = null,
   onOpenRelatedOrder,
+  sectionEditAction,
+  mileageEditAction,
 }: OrderLinkedVehicleDetailsProps) {
   const { t } = useTranslation();
   const empty = t("common.noValue");
@@ -37,7 +43,10 @@ export function OrderLinkedVehicleDetails({
 
   return (
     <section className="space-y-3" data-testid="order-linked-vehicle">
-      <h3 className="text-sm font-medium text-foreground">{t("vehicles.orderDetailsTitle")}</h3>
+      <div className="flex min-w-0 items-center justify-between gap-1">
+        <h3 className="min-w-0 text-sm font-medium text-foreground">{t("vehicles.orderDetailsTitle")}</h3>
+        {sectionEditAction}
+      </div>
 
       {isLoading ? (
         <div className="space-y-2">
@@ -61,6 +70,7 @@ export function OrderLinkedVehicleDetails({
               value: vehicleMileageSnapshot,
               unit: vehicleMileageUnitSnapshot,
             }}
+            rowActions={mileageEditAction ? { currentMileage: mileageEditAction } : undefined}
           />
           <button
             type="button"

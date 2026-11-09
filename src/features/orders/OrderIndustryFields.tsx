@@ -53,14 +53,14 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="order-industry-fields">
       {blocks.deviceSerial ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="deviceSerial">
           <Label htmlFor={serialId}>{t("orders.industryFields.deviceSerial")}</Label>
           <Input id={serialId} {...register("deviceSerial" as never)} disabled={disabled} autoComplete="off" />
         </div>
       ) : null}
 
       {blocks.deviceImei ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="deviceImei">
           <Label htmlFor={imeiId}>{t("orders.industryFields.deviceImei")}</Label>
           <Input
             id={imeiId}
@@ -73,21 +73,21 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
       ) : null}
 
       {blocks.deviceCondition ? (
-        <div className="space-y-1.5 sm:col-span-2">
+        <div className="space-y-1.5 sm:col-span-2" data-edit-field="deviceCondition">
           <Label htmlFor={conditionId}>{t("orders.industryFields.deviceCondition")}</Label>
           <Textarea id={conditionId} {...register("deviceCondition" as never)} rows={2} disabled={disabled} />
         </div>
       ) : null}
 
       {blocks.deviceCompleteness ? (
-        <div className="space-y-1.5 sm:col-span-2">
+        <div className="space-y-1.5 sm:col-span-2" data-edit-field="deviceCompleteness">
           <Label htmlFor={completenessId}>{t("orders.industryFields.deviceCompleteness")}</Label>
           <Textarea id={completenessId} {...register("deviceCompleteness" as never)} rows={2} disabled={disabled} />
         </div>
       ) : null}
 
       {blocks.devicePasscode ? (
-        <div className="space-y-1.5 sm:col-span-2">
+        <div className="space-y-1.5 sm:col-span-2" data-edit-field="devicePasscode">
           <Label htmlFor={passcodeId}>{t("orders.industryFields.devicePasscode")}</Label>
           <div className="flex gap-2">
             <Input
@@ -114,7 +114,7 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
       ) : null}
 
       {blocks.siteAddress ? (
-        <div className="space-y-1.5 sm:col-span-2">
+        <div className="space-y-1.5 sm:col-span-2" data-edit-field="siteAddress">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Label htmlFor={siteId}>{t("orders.industryFields.siteAddress")}</Label>
             <Button
@@ -136,7 +136,7 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
       ) : null}
 
       {blocks.productDimensions ? (
-        <div className="space-y-1.5 sm:col-span-2">
+        <div className="space-y-1.5 sm:col-span-2" data-edit-field="productDimensions">
           <Label htmlFor={dimensionsId}>{t("orders.industryFields.productDimensions")}</Label>
           <Input
             id={dimensionsId}
@@ -148,7 +148,7 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
       ) : null}
 
       {blocks.measurementAt ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="measurementAt">
           <Label htmlFor={measureDateId}>{t("orders.industryFields.measurementAt")}</Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
@@ -171,7 +171,7 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
       ) : null}
 
       {blocks.installationAt ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="installationAt">
           <Label htmlFor={installDateId}>{t("orders.industryFields.installationAt")}</Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input

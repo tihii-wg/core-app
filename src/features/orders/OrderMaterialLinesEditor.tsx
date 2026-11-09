@@ -206,7 +206,7 @@ export default function OrderMaterialLinesEditor({
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" data-edit-field="materials">
       <Label htmlFor="order-material">{t("orders.form.materialsSection")}</Label>
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("orders.form.materialSourceAria")}>

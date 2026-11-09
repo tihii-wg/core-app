@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -13,9 +14,19 @@ type OrderTeamSelectProps = {
   options: AssignableTechnician[];
   disabled?: boolean;
   onChange: (next: OrderTeamMemberInput[]) => void;
+  /** Optional control rendered on the label row (e.g. detail-panel field pencil). */
+  labelAction?: ReactNode;
 };
 
-export default function OrderTeamSelect({ id, label, value, options, disabled = false, onChange }: OrderTeamSelectProps) {
+export default function OrderTeamSelect({
+  id,
+  label,
+  value,
+  options,
+  disabled = false,
+  onChange,
+  labelAction,
+}: OrderTeamSelectProps) {
   const { t } = useTranslation();
 
   const nameById = new Map(options.map((option) => [option.id, option.name]));
@@ -40,8 +51,13 @@ export default function OrderTeamSelect({ id, label, value, options, disabled = 
   };
 
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="space-y-1.5" data-edit-field="team">
+      <div className="flex min-w-0 items-center justify-between gap-1">
+        <Label htmlFor={id} className="min-w-0">
+          {label}
+        </Label>
+        {labelAction}
+      </div>
       {value.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5">
           {value.map((member) => {

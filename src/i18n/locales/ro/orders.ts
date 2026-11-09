@@ -431,6 +431,7 @@ const orders: Messages<typeof en> = {
   },
   detail: {
     editTitle: "Editează comanda",
+    editField: "Editează: {{field}}",
     srDescription: "Vizualizați și editați VIN-ul, serviciile, automobilul, responsabilul și termenul acestei comenzi.",
     client: "Client",
     clientType: "Tip client",

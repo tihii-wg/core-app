@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { MileageUnit, Vehicle } from "../../lib/types";
 import { formatVehicleMileage, mileageUnitLabel } from "../vehicles/vehicleMileage";
@@ -26,11 +27,14 @@ export function VehicleFieldsGrid({
   hideKeys = [],
   /** When set (order details), visit mileage uses the historical snapshot — not the vehicle's live reading/unit. */
   orderMileageSnapshot,
+  /** Optional controls rendered on the label row for specific keys (e.g. mileage pencil). */
+  rowActions,
 }: {
   vehicle: Vehicle;
   empty: string;
   hideKeys?: string[];
   orderMileageSnapshot?: OrderMileageSnapshotDisplay | null;
+  rowActions?: Partial<Record<string, ReactNode>>;
 }) {
   const { t } = useTranslation();
   const hidden = new Set(hideKeys);
@@ -76,7 +80,10 @@ export function VehicleFieldsGrid({
     <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm" data-testid="vehicle-fields-grid">
       {rows.map((row) => (
         <div key={row.key} className="min-w-0">
-          <dt className="text-xs font-medium text-muted-foreground">{row.label}</dt>
+          <dt className="flex min-w-0 items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
+            <span className="min-w-0">{row.label}</span>
+            {rowActions?.[row.key]}
+          </dt>
           <dd
             className={
               row.mono

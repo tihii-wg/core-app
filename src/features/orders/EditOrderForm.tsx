@@ -65,11 +65,14 @@ import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 import OrderLinePriceField from "./OrderLinePriceField";
 import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 import { registerOrderUnsavedEdits } from "./orderUnsavedEdits";
+import { focusOrderEditField, type OrderEditField } from "./orderEditFields";
 
 type EditOrderFormProps = {
   order: Order;
   onCancel: () => void;
   onUpdated: (order: Order) => void;
+  /** When set, scroll/focus the matching `[data-edit-field]` after mount. */
+  initialFocusField?: OrderEditField;
 };
 
 /** react-hook-form marks field-array dirtiness as nested objects/arrays — treat any nested true as dirty. */
@@ -114,13 +117,14 @@ function findMaterialWarrantyRecord(
   return records.find((row) => row.orderMaterialId === lineId);
 }
 
-export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderFormProps) {
+export default function EditOrderForm({ order, onCancel, onUpdated, initialFocusField }: EditOrderFormProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { mutateAsync: updateOrder } = useUpdateOrder();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
+  const formRef = useRef<HTMLFormElement>(null);
   const { services } = useGetServices();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
@@ -409,8 +413,24 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
     });
   }, [order.id]);
 
+  useEffect(() => {
+    if (!initialFocusField) return;
+    let cancelled = false;
+    // Double rAF: wait until the sheet content (and nested field blocks) are painted.
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled || !formRef.current) return;
+        focusOrderEditField(formRef.current, initialFocusField);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(outer);
+    };
+  }, [initialFocusField]);
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       {showVehicles && order.clientId ? (
         <OrderVehicleFields
           control={control}
@@ -447,7 +467,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
 
       <OrderWarrantyPauseNotice order={order} records={warrantyRecords} />
 
-      <div className="space-y-1.5">
+      <div className="space-y-1.5" data-edit-field="services">
         <Label htmlFor="service">{t("orders.form.addServiceLabel")}</Label>
         <ServiceCombobox
           services={activeServices}
@@ -587,7 +607,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
         warrantyCatalogKeyForLine={warrantyCatalogKeyForMaterial}
       />
 
-      <div className="space-y-1.5">
+      <div className="space-y-1.5" data-edit-field="description">
         <Label htmlFor="edit-order-description">{t("orders.form.descriptionLabel")}</Label>
         <Textarea id="edit-order-description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} disabled={isSubmitting} />
       </div>
@@ -623,7 +643,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated }: EditOrderF
           )}
         />
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-edit-field="deadline">
           <Label htmlFor="edit-order-deadline">{copy.deadlineLabel}</Label>
           <Input id="edit-order-deadline" type="date" {...register("deadline")} disabled={isSubmitting} />
         </div>

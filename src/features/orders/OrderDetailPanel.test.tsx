@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -327,6 +327,34 @@ describe("OrderDetailPanel", () => {
     expect(descriptionWarnings).toHaveLength(0);
 
     warn.mockRestore();
+  });
+
+  it("shows field pencils on an open order and focuses the description field from its pencil", async () => {
+    const user = userEvent.setup();
+    Element.prototype.scrollIntoView = vi.fn();
+
+    renderPanel();
+
+    expect(await screen.findByRole("button", { name: "Edit: Description" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit: Services" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit: Description" }));
+
+    const description = await screen.findByLabelText(/Description/i);
+    await waitFor(() => {
+      expect(description).toHaveFocus();
+    });
+  });
+
+  it("hides field pencils on a closed order", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "closed", closedAt: "2026-11-05T14:59:54.258807+00:00" },
+    });
+
+    expect(await screen.findByText("Order closed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 
   it("saves order edits and closes the details window without clearing stored vehicle assets", async () => {

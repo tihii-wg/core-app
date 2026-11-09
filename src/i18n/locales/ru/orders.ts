@@ -434,6 +434,7 @@ const orders: Messages<typeof en> = {
   },
   detail: {
     editTitle: "Редактировать заказ",
+    editField: "Изменить: {{field}}",
     srDescription: "Просмотр и редактирование VIN, услуг, автомобиля, ответственного и срока этого заказа.",
     client: "Клиент",
     clientType: "Тип клиента",
