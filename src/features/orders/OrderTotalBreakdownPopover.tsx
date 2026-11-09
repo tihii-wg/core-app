@@ -4,6 +4,9 @@ import { useTranslation } from "react-i18next";
 import type { Order } from "../../lib/types";
 import { orderTotalBreakdown } from "./orderTotalBreakdown";
 
+/** Ignore hover right after the card opens (slide-in under a resting cursor). */
+const HOVER_GRACE_MS = 700;
+
 type Props = {
   order: Pick<Order, "services" | "materials" | "totalPrice">;
   formatMoney: (value: number) => string;
@@ -21,6 +24,7 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<number | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const mountedAt = useRef(Date.now());
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   // Tap outside closes it (tooltips have no outside-click dismissal on touch screens).
@@ -52,13 +56,30 @@ export function OrderTotalBreakdownPopover({ order, formatMoney, worksLabel, mat
 
   return (
     <TooltipPrimitive.Provider delayDuration={150}>
-    <TooltipPrimitive.Root open={open} onOpenChange={(next) => (next ? setOpen(true) : scheduleClose())}>
+    {/* Opening is driven only by mouse hover / tap below. Radix would also open on
+        focus — the card focuses its first control when it opens, which popped this up. */}
+    <TooltipPrimitive.Root open={open} onOpenChange={(next) => (next ? undefined : scheduleClose())}>
       <TooltipPrimitive.Trigger asChild>
         <button
           type="button"
-          className="cursor-pointer rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+          className="cursor-pointer rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none"
           aria-label={t("orders.totalBreakdown.ariaLabel")}
           ref={triggerRef}
+          // Not a tab stop: the card auto-focuses its first focusable element on open,
+          // which drew a focus box around the total. Hover / tap still open it.
+          tabIndex={-1}
+          // Open on mouse movement over the total, but not while the card is still sliding
+          // in: a resting cursor ends up over the total and the browser reports a hover.
+          onPointerMove={(event) => {
+            if (event.pointerType !== "mouse") return;
+            if (Date.now() - mountedAt.current < HOVER_GRACE_MS) return;
+            cancelClose();
+            if (!open) setOpen(true);
+          }}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") scheduleClose();
+          }}
+          onFocus={(event) => event.preventDefault()}
           onClick={(event) => {
             // Touch / keyboard: tap toggles (hover does not exist on phones).
             event.preventDefault();
