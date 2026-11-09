@@ -7,6 +7,11 @@ import { allocatePaid, type AllocatedPaymentStage } from "../features/finance/pa
 import { classifyInvoiceItems, type InvoiceOrderLines } from "../features/invoices/invoiceItemSections";
 import { getWorkspaceLogoUrl } from "../features/workspaces/workspaceAvatar";
 import { getClient } from "./apiClients";
+import {
+  displayCustomFieldValue,
+  getCustomFieldValuesForEntity,
+  getOrderFieldDefinitions,
+} from "./apiCustomFields";
 import { getInvoice, getInvoices } from "./apiInvoices";
 import { getLegalEntities, type LegalEntity } from "./apiLegalEntities";
 import { getOrder } from "./apiOrders";
@@ -85,17 +90,33 @@ export async function buildOrderPrintContext(
   const resolved = requireWorkspaceId(workspaceId);
   const order = await getOrder(orderId, resolved);
 
-  const [base, client, vehicle, payments, warrantyRecords, workspaceVatRate] = await Promise.all([
+  const [base, client, vehicle, payments, warrantyRecords, workspaceVatRate, definitions, customValues] = await Promise.all([
     workspacePrintBase(resolved),
     order.clientId ? soft(getClient(resolved, order.clientId), null) : Promise.resolve(null as Client | null),
     order.vehicleId ? soft(getVehicle(resolved, order.vehicleId), null) : Promise.resolve(null as Vehicle | null),
     soft(getPayments(resolved, { orderId: order.id }), []),
     soft(getWarrantyRecordsForOrder(resolved, order.id), []),
     soft(getWorkspaceVatRate(resolved), null),
+    soft(getOrderFieldDefinitions(resolved), []),
+    soft(getCustomFieldValuesForEntity(resolved, order.id), []),
   ]);
 
   const paymentBalance = orderPaymentBalance(order, payments);
   const paymentStages = await loadAllocatedStages(order.id, resolved, order.totalPrice, paymentBalance.netPaid);
+
+  const customFieldValues: Record<string, string> = {};
+  const orderFieldLabels: Record<string, string> = {};
+  for (const def of definitions) {
+    if (def.deletedAt) continue;
+    if (def.isSystem) {
+      if (def.label?.trim()) orderFieldLabels[def.fieldKey] = def.label.trim();
+      continue;
+    }
+    if (!def.isActive) continue;
+    const row = customValues.find((value) => value.definitionId === def.id);
+    customFieldValues[def.fieldKey] = displayCustomFieldValue(def.fieldType, row?.value, def.options);
+    if (def.label?.trim()) orderFieldLabels[def.fieldKey] = def.label.trim();
+  }
 
   return emptyPrintContext({
     order,
@@ -118,6 +139,8 @@ export async function buildOrderPrintContext(
     documentKind: documentKind === "invoice" ? "work_order" : documentKind,
     workspaceVatRate,
     invoiceTaxTotal: null,
+    customFieldValues,
+    orderFieldLabels,
   });
 }
 

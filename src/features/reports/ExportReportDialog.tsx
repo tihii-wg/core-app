@@ -21,6 +21,7 @@ import { getActivityLog } from "../../services/apiActivityLog";
 import { PERMISSION_KEYS } from "../roles/permissions";
 import { useMyPermissions } from "../roles/useMyPermissions";
 import { activityLogSection } from "./csvExport";
+import { loadOrdersListFieldOptions } from "./orderFieldExport";
 
 /** Max activity rows included when the activity log is added to an export. */
 const ACTIVITY_EXPORT_LIMIT = 1000;
@@ -149,7 +150,22 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       const generatedAt = new Date();
       const exportPeriod = reportPeriod(range, generatedAt);
       const today = localDateKey(generatedAt);
-      const baseModel = comprehensiveReport({ orders, clients, employees, items, payments }, ordered, exportPeriod, today, industrySlug);
+      const ordersListOptions = needs.orders
+        ? await loadOrdersListFieldOptions(
+            workspaceId,
+            orders.map((order) => order.id),
+            industrySlug,
+          )
+        : {};
+      if (!isOpen.current) return;
+      const baseModel = comprehensiveReport(
+        { orders, clients, employees, items, payments },
+        ordered,
+        exportPeriod,
+        today,
+        industrySlug,
+        ordersListOptions,
+      );
       let model = baseModel;
       if (withActivity) {
         const log = await getActivityLog(workspaceId, ACTIVITY_EXPORT_LIMIT);

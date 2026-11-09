@@ -8,6 +8,7 @@ import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
 import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
 import { hasVisibleIndustryOrderFields, type OrderIndustryFormFields } from "./industryOrderFieldHelpers";
+import type { OrderFieldConfigItem } from "./orderFieldConfig";
 
 type OrderIndustryFieldsProps<T extends OrderIndustryFormFields> = {
   register: UseFormRegister<T>;
@@ -18,11 +19,27 @@ type OrderIndustryFieldsProps<T extends OrderIndustryFormFields> = {
   clientAddress?: string | null;
   idPrefix?: string;
   disabled?: boolean;
+  /** Workspace order-field config (label / visible / required overrides). */
+  fieldConfig?: Map<string, OrderFieldConfigItem>;
 };
+
+function cfgVisible(fieldConfig: Map<string, OrderFieldConfigItem> | undefined, key: string, industryDefault: boolean) {
+  if (!industryDefault) return false;
+  const cfg = fieldConfig?.get(key);
+  return cfg ? cfg.visible : true;
+}
+
+function cfgLabel(fieldConfig: Map<string, OrderFieldConfigItem> | undefined, key: string, fallback: string) {
+  return fieldConfig?.get(key)?.label ?? fallback;
+}
+
+function cfgRequired(fieldConfig: Map<string, OrderFieldConfigItem> | undefined, key: string) {
+  return Boolean(fieldConfig?.get(key)?.required);
+}
 
 /**
  * Compact industry-specific intake block shown under the object / device fields.
- * Visibility comes entirely from `orderFieldBlocks` (no slug checks).
+ * Visibility comes from `orderFieldBlocks` plus workspace field config overrides.
  */
 export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
   register,
@@ -32,11 +49,48 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
   clientAddress,
   idPrefix = "",
   disabled = false,
+  fieldConfig,
 }: OrderIndustryFieldsProps<T>) {
   const { t } = useTranslation();
   const [showPasscode, setShowPasscode] = useState(false);
 
-  if (!hasVisibleIndustryOrderFields(blocks)) return null;
+  const showSerial = cfgVisible(fieldConfig, "deviceSerial", blocks.deviceSerial);
+  const showImei = cfgVisible(fieldConfig, "deviceImei", blocks.deviceImei);
+  const showCondition = cfgVisible(fieldConfig, "deviceCondition", blocks.deviceCondition);
+  const showCompleteness = cfgVisible(fieldConfig, "deviceCompleteness", blocks.deviceCompleteness);
+  const showPasscodeField = cfgVisible(fieldConfig, "devicePasscode", blocks.devicePasscode);
+  const showSite = cfgVisible(fieldConfig, "siteAddress", blocks.siteAddress);
+  const showDimensions = cfgVisible(fieldConfig, "productDimensions", blocks.productDimensions);
+  const showMeasurement = cfgVisible(fieldConfig, "measurementAt", blocks.measurementAt);
+  const showInstallation = cfgVisible(fieldConfig, "installationAt", blocks.installationAt);
+
+  if (
+    !showSerial &&
+    !showImei &&
+    !showCondition &&
+    !showCompleteness &&
+    !showPasscodeField &&
+    !showSite &&
+    !showDimensions &&
+    !showMeasurement &&
+    !showInstallation &&
+    !hasVisibleIndustryOrderFields(blocks)
+  ) {
+    return null;
+  }
+  if (
+    !showSerial &&
+    !showImei &&
+    !showCondition &&
+    !showCompleteness &&
+    !showPasscodeField &&
+    !showSite &&
+    !showDimensions &&
+    !showMeasurement &&
+    !showInstallation
+  ) {
+    return null;
+  }
 
   const serialId = `${idPrefix}deviceSerial`;
   const imeiId = `${idPrefix}deviceImei`;
@@ -52,19 +106,30 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="order-industry-fields">
-      {blocks.deviceSerial ? (
+      {showSerial ? (
         <div className="space-y-1.5" data-edit-field="deviceSerial">
-          <Label htmlFor={serialId}>{t("orders.industryFields.deviceSerial")}</Label>
-          <Input id={serialId} {...register("deviceSerial" as never)} disabled={disabled} autoComplete="off" />
+          <Label htmlFor={serialId}>
+            {cfgLabel(fieldConfig, "deviceSerial", t("orders.industryFields.deviceSerial"))}
+            {cfgRequired(fieldConfig, "deviceSerial") ? <span className="text-destructive"> *</span> : null}
+          </Label>
+          <Input
+            id={serialId}
+            {...register("deviceSerial" as never, cfgRequired(fieldConfig, "deviceSerial") ? { required: t("settings.orderFields.validation.required") } : undefined)}
+            disabled={disabled}
+            autoComplete="off"
+          />
         </div>
       ) : null}
 
-      {blocks.deviceImei ? (
+      {showImei ? (
         <div className="space-y-1.5" data-edit-field="deviceImei">
-          <Label htmlFor={imeiId}>{t("orders.industryFields.deviceImei")}</Label>
+          <Label htmlFor={imeiId}>
+            {cfgLabel(fieldConfig, "deviceImei", t("orders.industryFields.deviceImei"))}
+            {cfgRequired(fieldConfig, "deviceImei") ? <span className="text-destructive"> *</span> : null}
+          </Label>
           <Input
             id={imeiId}
-            {...register("deviceImei" as never)}
+            {...register("deviceImei" as never, cfgRequired(fieldConfig, "deviceImei") ? { required: t("settings.orderFields.validation.required") } : undefined)}
             disabled={disabled}
             autoComplete="off"
             inputMode="numeric"
@@ -72,28 +137,47 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
         </div>
       ) : null}
 
-      {blocks.deviceCondition ? (
+      {showCondition ? (
         <div className="space-y-1.5 sm:col-span-2" data-edit-field="deviceCondition">
-          <Label htmlFor={conditionId}>{t("orders.industryFields.deviceCondition")}</Label>
-          <Textarea id={conditionId} {...register("deviceCondition" as never)} rows={2} disabled={disabled} />
+          <Label htmlFor={conditionId}>
+            {cfgLabel(fieldConfig, "deviceCondition", t("orders.industryFields.deviceCondition"))}
+            {cfgRequired(fieldConfig, "deviceCondition") ? <span className="text-destructive"> *</span> : null}
+          </Label>
+          <Textarea
+            id={conditionId}
+            {...register("deviceCondition" as never, cfgRequired(fieldConfig, "deviceCondition") ? { required: t("settings.orderFields.validation.required") } : undefined)}
+            rows={2}
+            disabled={disabled}
+          />
         </div>
       ) : null}
 
-      {blocks.deviceCompleteness ? (
+      {showCompleteness ? (
         <div className="space-y-1.5 sm:col-span-2" data-edit-field="deviceCompleteness">
-          <Label htmlFor={completenessId}>{t("orders.industryFields.deviceCompleteness")}</Label>
-          <Textarea id={completenessId} {...register("deviceCompleteness" as never)} rows={2} disabled={disabled} />
+          <Label htmlFor={completenessId}>
+            {cfgLabel(fieldConfig, "deviceCompleteness", t("orders.industryFields.deviceCompleteness"))}
+            {cfgRequired(fieldConfig, "deviceCompleteness") ? <span className="text-destructive"> *</span> : null}
+          </Label>
+          <Textarea
+            id={completenessId}
+            {...register("deviceCompleteness" as never, cfgRequired(fieldConfig, "deviceCompleteness") ? { required: t("settings.orderFields.validation.required") } : undefined)}
+            rows={2}
+            disabled={disabled}
+          />
         </div>
       ) : null}
 
-      {blocks.devicePasscode ? (
+      {showPasscodeField ? (
         <div className="space-y-1.5 sm:col-span-2" data-edit-field="devicePasscode">
-          <Label htmlFor={passcodeId}>{t("orders.industryFields.devicePasscode")}</Label>
+          <Label htmlFor={passcodeId}>
+            {cfgLabel(fieldConfig, "devicePasscode", t("orders.industryFields.devicePasscode"))}
+            {cfgRequired(fieldConfig, "devicePasscode") ? <span className="text-destructive"> *</span> : null}
+          </Label>
           <div className="flex gap-2">
             <Input
               id={passcodeId}
               type={showPasscode ? "text" : "password"}
-              {...register("devicePasscode" as never)}
+              {...register("devicePasscode" as never, cfgRequired(fieldConfig, "devicePasscode") ? { required: t("settings.orderFields.validation.required") } : undefined)}
               disabled={disabled}
               autoComplete="off"
               className="min-w-0 flex-1"
@@ -113,10 +197,13 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
         </div>
       ) : null}
 
-      {blocks.siteAddress ? (
+      {showSite ? (
         <div className="space-y-1.5 sm:col-span-2" data-edit-field="siteAddress">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label htmlFor={siteId}>{t("orders.industryFields.siteAddress")}</Label>
+            <Label htmlFor={siteId}>
+              {cfgLabel(fieldConfig, "siteAddress", t("orders.industryFields.siteAddress"))}
+              {cfgRequired(fieldConfig, "siteAddress") ? <span className="text-destructive"> *</span> : null}
+            </Label>
             <Button
               type="button"
               variant="ghost"
@@ -131,25 +218,36 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
               {t("orders.industryFields.useClientAddress")}
             </Button>
           </div>
-          <Textarea id={siteId} {...register("siteAddress" as never)} rows={2} disabled={disabled} />
+          <Textarea
+            id={siteId}
+            {...register("siteAddress" as never, cfgRequired(fieldConfig, "siteAddress") ? { required: t("settings.orderFields.validation.required") } : undefined)}
+            rows={2}
+            disabled={disabled}
+          />
         </div>
       ) : null}
 
-      {blocks.productDimensions ? (
+      {showDimensions ? (
         <div className="space-y-1.5 sm:col-span-2" data-edit-field="productDimensions">
-          <Label htmlFor={dimensionsId}>{t("orders.industryFields.productDimensions")}</Label>
+          <Label htmlFor={dimensionsId}>
+            {cfgLabel(fieldConfig, "productDimensions", t("orders.industryFields.productDimensions"))}
+            {cfgRequired(fieldConfig, "productDimensions") ? <span className="text-destructive"> *</span> : null}
+          </Label>
           <Input
             id={dimensionsId}
-            {...register("productDimensions" as never)}
+            {...register("productDimensions" as never, cfgRequired(fieldConfig, "productDimensions") ? { required: t("settings.orderFields.validation.required") } : undefined)}
             placeholder={t("orders.industryFields.productDimensionsPlaceholder")}
             disabled={disabled}
           />
         </div>
       ) : null}
 
-      {blocks.measurementAt ? (
+      {showMeasurement ? (
         <div className="space-y-1.5" data-edit-field="measurementAt">
-          <Label htmlFor={measureDateId}>{t("orders.industryFields.measurementAt")}</Label>
+          <Label htmlFor={measureDateId}>
+            {cfgLabel(fieldConfig, "measurementAt", t("orders.industryFields.measurementAt"))}
+            {cfgRequired(fieldConfig, "measurementAt") ? <span className="text-destructive"> *</span> : null}
+          </Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               id={measureDateId}
@@ -170,9 +268,12 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
         </div>
       ) : null}
 
-      {blocks.installationAt ? (
+      {showInstallation ? (
         <div className="space-y-1.5" data-edit-field="installationAt">
-          <Label htmlFor={installDateId}>{t("orders.industryFields.installationAt")}</Label>
+          <Label htmlFor={installDateId}>
+            {cfgLabel(fieldConfig, "installationAt", t("orders.industryFields.installationAt"))}
+            {cfgRequired(fieldConfig, "installationAt") ? <span className="text-destructive"> *</span> : null}
+          </Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               id={installDateId}

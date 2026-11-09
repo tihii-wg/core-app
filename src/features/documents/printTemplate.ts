@@ -111,6 +111,15 @@ export function applyTemplateVariables(html: string, ctx: PrintContext, options:
     }
     result = result.split(variable.token).join(replacement);
   }
+
+  // Custom order fields: {{order.custom.<field_key>}}
+  const custom = ctxWithLocale.customFieldValues ?? {};
+  result = result.replace(/\{\{\s*order\.custom\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => custom[key] ?? "");
+
+  // Field captions (built-in overrides + custom labels): {{order.label.<field_key>}}
+  const labels = ctxWithLocale.orderFieldLabels ?? {};
+  result = result.replace(/\{\{\s*order\.label\.([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => labels[key] ?? "");
+
   return result;
 }
 

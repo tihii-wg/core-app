@@ -22,6 +22,15 @@ export type BuildOrderColumnsArgs = {
   deviceServiceColumn: string;
   /** Industry field blocks — drives the secondary asset line (plate / serial / site). */
   orderFieldBlocks?: IndustryOrderFieldBlocks;
+  /** Overridden column headers from order field config (optional). */
+  columnLabels?: Partial<{
+    client: string;
+    status: string;
+    employee: string;
+    team: string;
+    deadline: string;
+    total: string;
+  }>;
   formatMoney: (value: number) => string;
   today: string;
   warrantyByOrderId: Map<string, OrderWarrantyIndicatorModel | null | undefined>;
@@ -59,7 +68,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "client",
-      header: args.t("orders.table.client"),
+      header: args.columnLabels?.client ?? args.t("orders.table.client"),
       cell: (order) => {
         const phone = order.clientPhone?.trim() || "—";
         return (
@@ -105,7 +114,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "status",
-      header: args.t("common.status"),
+      header: args.columnLabels?.status ?? args.t("common.status"),
       cell: (order) => (
         <div className="flex min-w-0 flex-col items-start gap-1">
           <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
@@ -141,7 +150,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "employee",
-      header: args.t("orders.table.assigned"),
+      header: args.columnLabels?.employee ?? args.t("orders.table.assigned"),
       cell: (order) => (
         <span
           className="block max-w-[10rem] truncate text-muted-foreground"
@@ -153,12 +162,12 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "team",
-      header: args.t("orders.table.team"),
+      header: args.columnLabels?.team ?? args.t("orders.table.team"),
       cell: (order) => <OrderTeamAvatars team={order.team ?? []} />,
     },
     {
       key: "deadline",
-      header: args.t("orders.table.deadline"),
+      header: args.columnLabels?.deadline ?? args.t("orders.table.deadline"),
       cell: (order) => (
         <span
           className={cn(
@@ -173,7 +182,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "total",
-      header: args.t("common.total"),
+      header: args.columnLabels?.total ?? args.t("common.total"),
       cell: (order) => <span className="font-medium tabular-nums">{args.formatMoney(order.totalPrice)}</span>,
       className: "text-right whitespace-nowrap",
     },

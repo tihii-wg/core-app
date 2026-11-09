@@ -47,6 +47,13 @@ import { mergeOrderTeam } from "./orderTeam";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderIndustryFields from "./OrderIndustryFields";
 import {
+  OrderCustomFields,
+  collectCustomFieldPayload,
+  validateRequiredCustomFields,
+  type OrderCustomFieldValues,
+} from "./OrderCustomFields";
+import { fieldConfigMap, useOrderCustomFieldValues, useOrderFieldConfig, useSaveOrderCustomFieldValues } from "./useOrderFieldConfig";
+import {
   emptyOrderIndustryFormFields,
   isInstallationBeforeMeasurement,
   orderIndustryFieldsToApi,
@@ -140,6 +147,10 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
+  const { fields: orderFieldConfig } = useOrderFieldConfig();
+  const orderFieldMap = useMemo(() => fieldConfigMap(orderFieldConfig), [orderFieldConfig]);
+  const { data: customValues = [] } = useOrderCustomFieldValues(order.id);
+  const saveCustomValues = useSaveOrderCustomFieldValues();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const closedOrderPerms = useClosedOrderActionPermissions();
   const allowClosedMutation = canMutateOrderContent({
@@ -158,6 +169,22 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
     ...(order.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
     ...order.services.map((line) => ({ id: line.technicianId, name: line.technicianName })),
   ]);
+
+  const [customFieldState, setCustomFieldState] = useState<OrderCustomFieldValues>({});
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const defaults: OrderCustomFieldValues = {};
+    for (const field of orderFieldConfig) {
+      if (!field.isCustom || !field.definitionId) continue;
+      const row = customValues.find((value) => value.definitionId === field.definitionId);
+      const raw = row?.value;
+      if (field.type === "checkbox") defaults[field.key] = raw === true || raw === "true";
+      else if (raw == null) defaults[field.key] = "";
+      else defaults[field.key] = typeof raw === "number" || typeof raw === "boolean" ? raw : String(raw);
+    }
+    setCustomFieldState(defaults);
+  }, [orderFieldConfig, customValues]);
 
   const {
     control,
@@ -352,7 +379,17 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
     }
 
     // Vehicle industries: keep form snapshots (seeded from the order; refreshed only when the user changes vehicle).
-    return updateOrder({
+    const requiredErrors = validateRequiredCustomFields(
+      orderFieldConfig,
+      customFieldState,
+      t("settings.orderFields.validation.required"),
+    );
+    if (Object.keys(requiredErrors).length > 0) {
+      setCustomErrors(requiredErrors);
+      return null;
+    }
+
+    const updated = await updateOrder({
       orderId: order.id,
       vehicleId: data.vehicleId || "",
       device: showVehicles
@@ -375,7 +412,19 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
       ...(servicesDirty ? { services: data.services ?? [] } : {}),
       ...(materialsDirty ? { materials: data.materials } : {}),
     });
+
+    const customPayload = collectCustomFieldPayload(orderFieldConfig, customFieldState);
+    if (customPayload.length > 0) {
+      await saveCustomValues.mutateAsync({ orderId: order.id, values: customPayload });
+    }
+    return updated;
   };
+
+  const descriptionCfg = orderFieldMap.get("description");
+  const assignedCfg = orderFieldMap.get("assignedEmployee");
+  const teamCfg = orderFieldMap.get("team");
+  const deadlineCfg = orderFieldMap.get("deadline");
+  const materialsCfg = orderFieldMap.get("materials");
 
   const onSubmit = async (data: EditOrderFormData) => {
     try {
@@ -453,6 +502,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
         disabled={isSubmitting}
         preserveHiddenValues
         hideVisibleFields={hideDuplicateVehicleAssetFields}
+        fieldConfig={orderFieldMap}
       />
 
       <OrderIndustryFields
@@ -463,6 +513,24 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
         clientAddress={orderClient?.address}
         idPrefix="edit-order-"
         disabled={isSubmitting}
+        fieldConfig={orderFieldMap}
+      />
+
+      <OrderCustomFields
+        fields={orderFieldConfig}
+        values={customFieldState}
+        errors={customErrors}
+        idPrefix="edit-order-"
+        disabled={isSubmitting}
+        onChange={(key, value) => {
+          setCustomFieldState((prev) => ({ ...prev, [key]: value }));
+          setCustomErrors((prev) => {
+            if (!prev[key]) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        }}
       />
 
       <OrderWarrantyPauseNotice order={order} records={warrantyRecords} />
@@ -585,84 +653,112 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
         )}
       </div>
 
-      <OrderMaterialLinesEditor
-        control={control as never}
-        fields={materialFields}
-        append={materialAppend}
-        remove={(index) => {
-          if (typeof index === "number") void requestRemoveMaterial(index);
-          else materialRemove(index);
-        }}
-        setValue={setValue}
-        getValues={getValues}
-        trigger={trigger as never}
-        inventoryItems={activeInventory}
-        disabled={isSubmitting}
-        warrantyDisabled={warrantyDisabled}
-        warrantyDefaults={warrantyDefaults}
-        orderMileageUnit={orderMileageUnit}
-        isSubmitted={isSubmitted}
-        errors={errors.materials}
-        restartWarrantyHints={restartWarrantyHints}
-        warrantyCatalogKeyForLine={warrantyCatalogKeyForMaterial}
-      />
+      {materialsCfg?.visible !== false ? (
+        <OrderMaterialLinesEditor
+          control={control as never}
+          fields={materialFields}
+          append={materialAppend}
+          remove={(index) => {
+            if (typeof index === "number") void requestRemoveMaterial(index);
+            else materialRemove(index);
+          }}
+          setValue={setValue}
+          getValues={getValues}
+          trigger={trigger as never}
+          inventoryItems={activeInventory}
+          disabled={isSubmitting}
+          warrantyDisabled={warrantyDisabled}
+          warrantyDefaults={warrantyDefaults}
+          orderMileageUnit={orderMileageUnit}
+          isSubmitted={isSubmitted}
+          errors={errors.materials}
+          restartWarrantyHints={restartWarrantyHints}
+          warrantyCatalogKeyForLine={warrantyCatalogKeyForMaterial}
+        />
+      ) : null}
 
-      <div className="space-y-1.5" data-edit-field="description">
-        <Label htmlFor="edit-order-description">{t("orders.form.descriptionLabel")}</Label>
-        <Textarea id="edit-order-description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} disabled={isSubmitting} />
-      </div>
+      {descriptionCfg?.visible !== false ? (
+        <div className="space-y-1.5" data-edit-field="description">
+          <Label htmlFor="edit-order-description">
+            {descriptionCfg?.label ?? t("orders.form.descriptionLabel")}
+            {descriptionCfg?.required ? <span className="text-destructive"> *</span> : null}
+          </Label>
+          <Textarea
+            id="edit-order-description"
+            {...register("description", descriptionCfg?.required ? { required: t("settings.orderFields.validation.required") } : undefined)}
+            placeholder={copy.descriptionPlaceholder}
+            rows={3}
+            disabled={isSubmitting}
+          />
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {assignedCfg?.visible !== false ? (
+          <Controller
+            name="assignedEmployeeId"
+            control={control}
+            rules={assignedCfg?.required ? { required: t("settings.orderFields.validation.required") } : undefined}
+            render={({ field }) => (
+              <OrderAssigneeSelect
+                id="edit-order-employee"
+                label={assignedCfg?.label ?? copy.assignedEmployeeLabel}
+                value={field.value ?? ""}
+                options={technicianOptions}
+                disabled={isSubmitting}
+                errorMessage={
+                  techniciansError instanceof Error ? techniciansError.message : techniciansError ? t("orders.form.techniciansLoadFailed") : null
+                }
+                emptyHint={
+                  !techniciansError && !employeesLoading && employees && technicianOptions.length === 0
+                    ? t("orders.form.noLinkedTechnicians")
+                    : null
+                }
+                onChange={(next) => {
+                  const previous = field.value ?? "";
+                  field.onChange(next);
+                  if (previous === next) return;
+                  // The assignee is always the team lead: drop the previous assignee chip and lead the team with the new one.
+                  const remaining = (getValues("team") ?? []).filter((member) => member.employeeId !== previous);
+                  setValue("team", mergeOrderTeam({ team: remaining, assignedEmployeeId: next }), { shouldDirty: true });
+                }}
+              />
+            )}
+          />
+        ) : null}
+
+        {deadlineCfg?.visible !== false ? (
+          <div className="space-y-1.5" data-edit-field="deadline">
+            <Label htmlFor="edit-order-deadline">
+              {deadlineCfg?.label ?? copy.deadlineLabel}
+              {deadlineCfg?.required ? <span className="text-destructive"> *</span> : null}
+            </Label>
+            <Input
+              id="edit-order-deadline"
+              type="date"
+              {...register("deadline", deadlineCfg?.required ? { required: t("settings.orderFields.validation.required") } : undefined)}
+              disabled={isSubmitting}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {teamCfg?.visible !== false ? (
         <Controller
-          name="assignedEmployeeId"
+          name="team"
           control={control}
           render={({ field }) => (
-            <OrderAssigneeSelect
-              id="edit-order-employee"
-              label={copy.assignedEmployeeLabel}
-              value={field.value ?? ""}
-              options={technicianOptions}
+            <OrderTeamSelect
+              id="edit-order-team"
+              label={teamCfg?.label ?? t("orders.team.title")}
+              value={field.value ?? []}
+              options={teamOptions}
               disabled={isSubmitting}
-              errorMessage={
-                techniciansError instanceof Error ? techniciansError.message : techniciansError ? t("orders.form.techniciansLoadFailed") : null
-              }
-              emptyHint={
-                !techniciansError && !employeesLoading && employees && technicianOptions.length === 0
-                  ? t("orders.form.noLinkedTechnicians")
-                  : null
-              }
-              onChange={(next) => {
-                const previous = field.value ?? "";
-                field.onChange(next);
-                if (previous === next) return;
-                // The assignee is always the team lead: drop the previous assignee chip and lead the team with the new one.
-                const remaining = (getValues("team") ?? []).filter((member) => member.employeeId !== previous);
-                setValue("team", mergeOrderTeam({ team: remaining, assignedEmployeeId: next }), { shouldDirty: true });
-              }}
+              onChange={field.onChange}
             />
           )}
         />
-
-        <div className="space-y-1.5" data-edit-field="deadline">
-          <Label htmlFor="edit-order-deadline">{copy.deadlineLabel}</Label>
-          <Input id="edit-order-deadline" type="date" {...register("deadline")} disabled={isSubmitting} />
-        </div>
-      </div>
-
-      <Controller
-        name="team"
-        control={control}
-        render={({ field }) => (
-          <OrderTeamSelect
-            id="edit-order-team"
-            label={t("orders.team.title")}
-            value={field.value ?? []}
-            options={teamOptions}
-            disabled={isSubmitting}
-            onChange={field.onChange}
-          />
-        )}
-      />
+      ) : null}
 
       <OrderTotalsSummary
         money={orderMoney}

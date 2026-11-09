@@ -67,6 +67,10 @@ export type PrintContext = {
   workspaceVatRate: number | null;
   /** Stored `invoices.tax_total` when present (>0 preferred for invoice VAT). */
   invoiceTaxTotal: number | null;
+  /** Custom order field display values keyed by field_key (`{{order.custom.<key>}}`). */
+  customFieldValues?: Record<string, string> | null;
+  /** Built-in + custom field captions keyed by field_key (`{{order.label.<key>}}`). */
+  orderFieldLabels?: Record<string, string> | null;
 };
 
 export type TemplateVariable = {
@@ -95,6 +99,8 @@ export const VARIABLE_GROUPS: VariableGroup[] = [
 
 export function emptyPrintContext(partial: Partial<PrintContext> = {}): PrintContext {
   return {
+    customFieldValues: null,
+    orderFieldLabels: null,
     order: null,
     invoice: null,
     invoiceSections: null,

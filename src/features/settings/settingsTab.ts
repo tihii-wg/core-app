@@ -7,6 +7,7 @@ export const settingsTabs = [
   "team",
   "appearance",
   "statuses",
+  "orderFields",
   "locations",
   "warehouses",
   "roles",

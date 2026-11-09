@@ -1622,6 +1622,41 @@ async function assigneeDisplayNames(workspaceId: string, assignedUserIds: string
   return names;
 }
 
+/** Order ids whose active custom field values contain `term` (case-insensitive). Soft-fails empty. */
+async function orderIdsMatchingCustomFieldSearch(workspaceId: string, term: string): Promise<string[]> {
+  const needle = term.trim().toLowerCase();
+  if (!needle) return [];
+
+  const { data: defs, error: defsError } = await supabase
+    .from("custom_field_definitions")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("entity", "order")
+    .eq("is_system", false)
+    .eq("is_active", true)
+    .is("deleted_at", null);
+  if (defsError || !defs?.length) return [];
+
+  const definitionIds = defs.map((row) => String(row.id)).filter(Boolean);
+  if (definitionIds.length === 0) return [];
+
+  const { data: values, error: valuesError } = await supabase
+    .from("custom_field_values")
+    .select("entity_id, value")
+    .eq("workspace_id", workspaceId)
+    .in("definition_id", definitionIds);
+  if (valuesError || !values?.length) return [];
+
+  const matched = new Set<string>();
+  for (const row of values) {
+    const entityId = typeof row.entity_id === "string" ? row.entity_id : "";
+    if (!entityId) continue;
+    const text = row.value == null ? "" : typeof row.value === "string" ? row.value : JSON.stringify(row.value);
+    if (text.toLowerCase().includes(needle)) matched.add(entityId);
+  }
+  return [...matched];
+}
+
 async function orderSearchFilter(workspaceId: string, term: string) {
   const filters = [
     "number",
@@ -1636,6 +1671,16 @@ async function orderSearchFilter(workspaceId: string, term: string) {
   ].map((column) => `${column}.ilike.%${term}%`);
   const matchingClients = await getClients(term, workspaceId);
   if (matchingClients.length > 0) filters.push(`client_id.in.(${matchingClients.map((client) => client.id).join(",")})`);
+  try {
+    const customOrderIds = await orderIdsMatchingCustomFieldSearch(workspaceId, term);
+    if (customOrderIds.length > 0) {
+      for (const chunk of chunkIdsForInFilter(customOrderIds)) {
+        filters.push(`id.in.(${chunk.join(",")})`);
+      }
+    }
+  } catch {
+    // Custom-field search is best-effort; column/client filters still apply.
+  }
   return filters.join(",");
 }
 

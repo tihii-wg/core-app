@@ -29,6 +29,8 @@ import { clientOrderHistoryLine, type ClientOrderSummary } from "./clientOrders"
 import { filterClientCardSearch, highlightMatch, type ClientSearchableOrder } from "./clientSearch";
 import { useGetPayments } from "../finance/usePayments";
 import { useDebounce } from "../../hooks/useDebounce";
+import { displayCustomFieldValue } from "../../services/apiCustomFields";
+import { useOrderCustomFieldValuesForOrders, useOrderFieldConfig } from "../orders/useOrderFieldConfig";
 
 type ClientDetailPanelProps = {
   selectedClient: Client | null;
@@ -157,6 +159,22 @@ export default function ClientDetailPanel({
     return labels;
   }, [workflow]);
 
+  const { fields: orderFieldConfig } = useOrderFieldConfig();
+  const searchableOrderIds = useMemo(() => searchableOrders.map((order) => order.id), [searchableOrders]);
+  const { data: customValuesBatch = [] } = useOrderCustomFieldValuesForOrders(searchableOrderIds);
+  const customFieldTextsByOrderId = useMemo(() => {
+    const defs = orderFieldConfig.filter((field) => field.isCustom && field.visible && field.definitionId);
+    const byOrder: Record<string, string[]> = {};
+    for (const row of customValuesBatch) {
+      const def = defs.find((field) => field.definitionId === row.definitionId);
+      if (!def) continue;
+      const text = displayCustomFieldValue(def.type, row.value, def.options);
+      if (!text) continue;
+      (byOrder[row.entityId] ??= []).push(text);
+    }
+    return byOrder;
+  }, [customValuesBatch, orderFieldConfig]);
+
   const searchResult = useMemo(
     () =>
       filterClientCardSearch({
@@ -178,8 +196,9 @@ export default function ClientDetailPanel({
           paid: t("status.payment.paid"),
         },
         industryBlocks,
+        customFieldTextsByOrderId,
       }),
-    [debouncedCardSearch, searchableOrders, vehicles, payments, statusLabels, t, industryBlocks],
+    [debouncedCardSearch, searchableOrders, vehicles, payments, statusLabels, t, industryBlocks, customFieldTextsByOrderId],
   );
 
   const filteredOrders = useMemo(() => {

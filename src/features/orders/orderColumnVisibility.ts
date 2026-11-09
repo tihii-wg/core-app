@@ -11,7 +11,10 @@ export const ORDER_TOGGLEABLE_COLUMNS = [
   "total",
 ] as const;
 
-export type OrderToggleableColumn = (typeof ORDER_TOGGLEABLE_COLUMNS)[number];
+export type OrderBuiltinToggleableColumn = (typeof ORDER_TOGGLEABLE_COLUMNS)[number];
+
+/** Built-in toggleable columns, or `custom:<field_key>` for workspace custom fields. */
+export type OrderToggleableColumn = OrderBuiltinToggleableColumn | `custom:${string}`;
 
 export const ORDER_COLUMN_STORAGE_KEY = "coreapp.orders.visibleColumns";
 export const DASHBOARD_ORDER_COLUMN_STORAGE_KEY = "coreapp.dashboard.orders.visibleColumns";
@@ -36,7 +39,34 @@ export const DEFAULT_DASHBOARD_ORDER_VISIBLE_COLUMNS: OrderToggleableColumn[] = 
   ...DEFAULT_ORDER_VISIBLE_COLUMNS.slice(4),
 ];
 
+/** Map list column key → order field registry key (for visibility / labels). */
+export const ORDER_COLUMN_FIELD_KEY: Partial<Record<OrderBuiltinToggleableColumn, string>> = {
+  client: "client",
+  device: "device",
+  status: "status",
+  employee: "assignedEmployee",
+  team: "team",
+  deadline: "deadline",
+  total: "total",
+};
+
+export function customColumnKey(fieldKey: string): `custom:${string}` {
+  return `custom:${fieldKey}`;
+}
+
+export function parseCustomColumnKey(column: string): string | null {
+  if (!column.startsWith("custom:")) return null;
+  const key = column.slice("custom:".length).trim();
+  return key || null;
+}
+
 export function isOrderToggleableColumn(value: unknown): value is OrderToggleableColumn {
+  if (typeof value !== "string") return false;
+  if ((ORDER_TOGGLEABLE_COLUMNS as readonly string[]).includes(value)) return true;
+  return Boolean(parseCustomColumnKey(value));
+}
+
+export function isOrderBuiltinToggleableColumn(value: unknown): value is OrderBuiltinToggleableColumn {
   return typeof value === "string" && (ORDER_TOGGLEABLE_COLUMNS as readonly string[]).includes(value);
 }
 
@@ -54,7 +84,9 @@ export function readOrderVisibleColumns(
     if (parsed.includes("payment") && !valid.includes("status")) {
       valid.push("status");
     }
-    const ordered = ORDER_TOGGLEABLE_COLUMNS.filter((key) => valid.includes(key));
+    const builtins = ORDER_TOGGLEABLE_COLUMNS.filter((key) => valid.includes(key));
+    const customs = valid.filter((key) => parseCustomColumnKey(key));
+    const ordered = [...builtins, ...customs];
     return ordered.length > 0 ? ordered : [...defaults];
   } catch {
     return [...defaults];
@@ -65,7 +97,10 @@ export function writeOrderVisibleColumns(
   columns: Iterable<OrderToggleableColumn>,
   storageKey: string = ORDER_COLUMN_STORAGE_KEY,
 ) {
-  const unique = ORDER_TOGGLEABLE_COLUMNS.filter((key) => [...columns].includes(key));
+  const list = [...columns];
+  const builtins = ORDER_TOGGLEABLE_COLUMNS.filter((key) => list.includes(key));
+  const customs = list.filter((key) => parseCustomColumnKey(key));
+  const unique = [...builtins, ...customs];
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(unique));
   } catch {

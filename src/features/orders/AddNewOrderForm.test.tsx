@@ -110,11 +110,32 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
 
 vi.mock("../industries/useIndustryWorkflow", async () => {
   const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  const { industryProfile } = await import("../industries/industryProfile");
   return {
     useIndustryWorkflow: () => {
       const workflow = industryWorkflow(employeesState.industrySlug);
-      return { workflow, copy: industryOrderCopy(workflow), industrySlug: employeesState.industrySlug, industryId: null, isLoading: false, error: null };
+      const profile = industryProfile(employeesState.industrySlug);
+      return {
+        workflow,
+        profile,
+        copy: industryOrderCopy(workflow),
+        industrySlug: employeesState.industrySlug,
+        industryId: null,
+        isLoading: false,
+        error: null,
+      };
     },
+  };
+});
+
+vi.mock("../../services/apiCustomFields", async () => {
+  const actual = await vi.importActual<typeof import("../../services/apiCustomFields")>("../../services/apiCustomFields");
+  return {
+    ...actual,
+    getOrderFieldDefinitions: vi.fn(async () => []),
+    getCustomFieldValuesForEntity: vi.fn(async () => []),
+    getCustomFieldValuesForEntities: vi.fn(async () => []),
+    upsertCustomFieldValues: vi.fn(async () => undefined),
   };
 });
 

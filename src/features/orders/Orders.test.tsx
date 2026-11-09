@@ -187,11 +187,30 @@ vi.mock("./useMoveOrderOnBoard", () => ({
 
 vi.mock("../industries/useIndustryWorkflow", async () => {
   const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  const { industryProfile } = await import("../industries/industryProfile");
   return {
     useIndustryWorkflow: () => {
       const workflow = industryWorkflow("auto_repair");
-      return { workflow, copy: industryOrderCopy(workflow), industrySlug: "auto_repair", industryId: null, isLoading: false, error: null };
+      return {
+        workflow,
+        profile: industryProfile("auto_repair"),
+        copy: industryOrderCopy(workflow),
+        industrySlug: "auto_repair",
+        industryId: null,
+        isLoading: false,
+        error: null,
+      };
     },
+  };
+});
+
+vi.mock("../../services/apiCustomFields", async () => {
+  const actual = await vi.importActual<typeof import("../../services/apiCustomFields")>("../../services/apiCustomFields");
+  return {
+    ...actual,
+    getOrderFieldDefinitions: vi.fn(async () => []),
+    getCustomFieldValuesForEntity: vi.fn(async () => []),
+    getCustomFieldValuesForEntities: vi.fn(async () => []),
   };
 });
 

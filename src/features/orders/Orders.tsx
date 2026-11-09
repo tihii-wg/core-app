@@ -39,6 +39,7 @@ import {
   writeOrderVisibleColumns,
   type OrderToggleableColumn,
 } from "./orderColumnVisibility";
+import { useOrderFieldConfig } from "./useOrderFieldConfig";
 import { localDateKey } from "../../pages/dashboardStats";
 import { cn } from "../../lib/utils";
 import { type DeadlineFilter } from "./orderVisibility";
@@ -55,6 +56,9 @@ import { hasConfigurableOrderStatuses, unifiedStatusFilterOptions } from "./unif
 export function Orders() {
   const { t } = useTranslation();
   const { workflow, copy } = useIndustryWorkflow();
+  const { fields: orderFieldConfig } = useOrderFieldConfig();
+  const deviceColumnLabel =
+    orderFieldConfig.find((field) => field.key === "device")?.label ?? copy.deviceServiceColumn;
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
   const clientDetails = useOpenClientDetails();
@@ -361,7 +365,8 @@ export function Orders() {
             <OrderColumnsMenu
               visibleColumns={visibleColumns}
               onVisibleColumnsChange={handleVisibleColumnsChange}
-              deviceColumnLabel={copy.deviceServiceColumn}
+              deviceColumnLabel={deviceColumnLabel}
+              fieldConfig={orderFieldConfig}
             />
           )}
         </div>

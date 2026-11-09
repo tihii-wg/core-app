@@ -26,7 +26,7 @@ export const ORDER_EDIT_FIELDS = [
   "deadline",
 ] as const;
 
-export type OrderEditField = (typeof ORDER_EDIT_FIELDS)[number];
+export type OrderEditField = (typeof ORDER_EDIT_FIELDS)[number] | `custom:${string}`;
 
 const FOCUSABLE =
   'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -37,8 +37,9 @@ const HIGHLIGHT_MS = 1500;
  * Scroll to `[data-edit-field]` and focus the first focusable control inside it.
  * Does not click/open Radix selects or date pickers — focus only.
  */
-export function focusOrderEditField(root: ParentNode, field: OrderEditField) {
-  const target = root.querySelector<HTMLElement>(`[data-edit-field="${field}"]`);
+export function focusOrderEditField(root: ParentNode, field: OrderEditField | string) {
+  const safe = field.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const target = root.querySelector<HTMLElement>(`[data-edit-field="${safe}"]`);
   if (!target) return;
 
   target.scrollIntoView({ block: "center", behavior: "smooth" });

@@ -21,12 +21,19 @@ import {
   DEFAULT_DASHBOARD_ORDER_VISIBLE_COLUMNS,
   DEFAULT_ORDER_VISIBLE_COLUMNS,
   DASHBOARD_ORDER_COLUMN_STORAGE_KEY,
+  ORDER_COLUMN_FIELD_KEY,
   ORDER_COLUMN_STORAGE_KEY,
+  customColumnKey,
+  isOrderBuiltinToggleableColumn,
+  parseCustomColumnKey,
   readOrderVisibleColumns,
   writeOrderVisibleColumns,
+  type OrderBuiltinToggleableColumn,
   type OrderToggleableColumn,
 } from "./orderColumnVisibility";
 import type { useOrderDetails } from "./useOrderDetails";
+import { useOrderCustomFieldValuesForOrders, useOrderFieldConfig } from "./useOrderFieldConfig";
+import { displayCustomFieldValue } from "../../services/apiCustomFields";
 
 
 type OrderDetailsApi = ReturnType<typeof useOrderDetails>;
@@ -141,11 +148,63 @@ export function OrdersListView({
     onOpenClient?.(clientId);
   }
 
+  const { fields: orderFieldConfig } = useOrderFieldConfig();
+  const orderIds = useMemo(() => orders.map((order) => order.id), [orders]);
+  const { data: customValuesBatch = [] } = useOrderCustomFieldValuesForOrders(orderIds);
+  const customValuesByOrder = useMemo(() => {
+    const map = new Map<string, typeof customValuesBatch>();
+    for (const row of customValuesBatch) {
+      const list = map.get(row.entityId) ?? [];
+      list.push(row);
+      map.set(row.entityId, list);
+    }
+    return map;
+  }, [customValuesBatch]);
+
+  const fieldByKey = useMemo(() => new Map(orderFieldConfig.map((field) => [field.key, field])), [orderFieldConfig]);
+  const deviceColumnLabel = fieldByKey.get("device")?.label ?? copy.deviceServiceColumn;
+  const columnLabels = {
+    client: fieldByKey.get("client")?.label,
+    status: fieldByKey.get("status")?.label,
+    employee: fieldByKey.get("assignedEmployee")?.label,
+    team: fieldByKey.get("team")?.label,
+    deadline: fieldByKey.get("deadline")?.label,
+    total: fieldByKey.get("total")?.label,
+  };
+
+  const hiddenBuiltinColumns = useMemo(() => {
+    const hidden = new Set<string>();
+    for (const [columnKey, fieldKey] of Object.entries(ORDER_COLUMN_FIELD_KEY)) {
+      const cfg = fieldByKey.get(fieldKey);
+      if (cfg && !cfg.visible) hidden.add(columnKey);
+    }
+    return hidden;
+  }, [fieldByKey]);
+
+  const customColumnDefs = useMemo(() => {
+    return orderFieldConfig
+      .filter((field) => field.isCustom && field.visible)
+      .map((field) => {
+        const key = customColumnKey(field.key);
+        return {
+          key,
+          header: field.label,
+          cell: (order: Order) => {
+            const rows = customValuesByOrder.get(order.id) ?? [];
+            const row = rows.find((value) => value.definitionId === field.definitionId);
+            const text = displayCustomFieldValue(field.type, row?.value, field.options);
+            return <span className="block max-w-[10rem] truncate">{text || "—"}</span>;
+          },
+        } satisfies Column<Order>;
+      });
+  }, [orderFieldConfig, customValuesByOrder]);
+
   const allColumns = useMemo(() => {
-    const base = buildOrderColumns({
+    let base = buildOrderColumns({
       t,
-      deviceServiceColumn: copy.deviceServiceColumn,
+      deviceServiceColumn: deviceColumnLabel,
       orderFieldBlocks,
+      columnLabels,
       formatMoney,
       today,
       warrantyByOrderId,
@@ -165,13 +224,18 @@ export function OrdersListView({
       onDeleted: handleDeleted,
       includePaymentColumn: true,
     });
-    if (extraColumns.length === 0) return base;
+    base = base.filter((column) => !hiddenBuiltinColumns.has(column.key));
+    const injected = [...customColumnDefs, ...extraColumns];
+    if (injected.length === 0) return base;
     const actionsIndex = base.findIndex((column) => column.key === "actions");
-    if (actionsIndex < 0) return [...base, ...extraColumns];
-    return [...base.slice(0, actionsIndex), ...extraColumns, ...base.slice(actionsIndex)];
+    if (actionsIndex < 0) return [...base, ...injected];
+    return [...base.slice(0, actionsIndex), ...injected, ...base.slice(actionsIndex)];
   }, [
     t,
-    copy.deviceServiceColumn,
+    deviceColumnLabel,
+    columnLabels,
+    hiddenBuiltinColumns,
+    customColumnDefs,
     orderFieldBlocks,
     formatMoney,
     today,
@@ -186,13 +250,16 @@ export function OrdersListView({
     setEditingOrder,
   ]);
 
-  const columns = allColumns.filter(
-    (column) =>
-      column.key === "orderNumber" ||
-      column.key === "actions" ||
-      extraColumns.some((extra) => extra.key === column.key) ||
-      visibleColumns.has(column.key as OrderToggleableColumn),
-  );
+  const columns = allColumns.filter((column) => {
+    if (column.key === "orderNumber" || column.key === "actions") return true;
+    if (extraColumns.some((extra) => extra.key === column.key)) return true;
+    if (parseCustomColumnKey(column.key)) return visibleColumns.has(column.key as OrderToggleableColumn);
+    if (isOrderBuiltinToggleableColumn(column.key)) {
+      if (hiddenBuiltinColumns.has(column.key)) return false;
+      return visibleColumns.has(column.key as OrderBuiltinToggleableColumn);
+    }
+    return false;
+  });
 
   function handleVisibleColumnsChange(next: Set<OrderToggleableColumn>) {
     if (onVisibleColumnsChange) {
@@ -210,7 +277,8 @@ export function OrdersListView({
           <OrderColumnsMenu
             visibleColumns={visibleColumns}
             onVisibleColumnsChange={handleVisibleColumnsChange}
-            deviceColumnLabel={copy.deviceServiceColumn}
+            deviceColumnLabel={deviceColumnLabel}
+            fieldConfig={orderFieldConfig}
           />
         </div>
       ) : null}

@@ -31,6 +31,8 @@ import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscriptio
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderIndustryFields from "./OrderIndustryFields";
+import { OrderCustomFields, collectCustomFieldPayload, validateRequiredCustomFields, type OrderCustomFieldValues } from "./OrderCustomFields";
+import { fieldConfigMap, useOrderFieldConfig, useSaveOrderCustomFieldValues } from "./useOrderFieldConfig";
 import {
   emptyOrderIndustryFormFields,
   isInstallationBeforeMeasurement,
@@ -99,6 +101,11 @@ export default function AddNewOrderForm({
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const submitLockRef = useRef(false);
+  const { fields: orderFieldConfig } = useOrderFieldConfig();
+  const orderFieldMap = useMemo(() => fieldConfigMap(orderFieldConfig), [orderFieldConfig]);
+  const saveCustomValues = useSaveOrderCustomFieldValues();
+  const [customValues, setCustomValues] = useState<OrderCustomFieldValues>({});
+  const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
 
   const activeServices = services?.filter((service) => service.status === "active");
   const activeInventory = inventoryItems.filter((item) => item.isActive);
@@ -131,6 +138,14 @@ export default function AddNewOrderForm({
       deadline: "",
     },
   });
+
+  const descriptionCfg = orderFieldMap.get("description");
+  const assignedCfg = orderFieldMap.get("assignedEmployee");
+  const teamCfg = orderFieldMap.get("team");
+  const deadlineCfg = orderFieldMap.get("deadline");
+  const materialsCfg = orderFieldMap.get("materials");
+  const clientCfg = orderFieldMap.get("client");
+  const servicesCfg = orderFieldMap.get("services");
 
   /** Adds a line performer to the team chips as a helper when not already present. */
   function addPerformerToTeam(employeeId: string | null | undefined) {
@@ -272,7 +287,18 @@ export default function AddNewOrderForm({
         return;
       }
 
-      await createOrder({
+      const requiredErrors = validateRequiredCustomFields(
+        orderFieldConfig,
+        customValues,
+        t("settings.orderFields.validation.required"),
+      );
+      if (Object.keys(requiredErrors).length > 0) {
+        setCustomErrors(requiredErrors);
+        submitLockRef.current = false;
+        return;
+      }
+
+      const created = await createOrder({
         clientId: data.clientId || undefined,
         clientName: data.clientId ? clientName.trim() : "",
         vehicleId: data.vehicleId || null,
@@ -293,6 +319,17 @@ export default function AddNewOrderForm({
         team: data.team ?? [],
         deadline: data.deadline,
       });
+
+      const customPayload = collectCustomFieldPayload(orderFieldConfig, customValues);
+      const createdOrderId = typeof created?.id === "string" ? created.id : "";
+      if (customPayload.length > 0 && createdOrderId) {
+        try {
+          await saveCustomValues.mutateAsync({ orderId: createdOrderId, values: customPayload });
+        } catch {
+          submitLockRef.current = false;
+          return;
+        }
+      }
     } catch {
       // useCreateOrder already toasts API failures.
       submitLockRef.current = false;
@@ -306,7 +343,7 @@ export default function AddNewOrderForm({
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
         <div className="space-y-1.5">
-          <Label htmlFor="client">{t("orders.form.clientLabel")}</Label>
+          <Label htmlFor="client">{clientCfg?.label ?? t("orders.form.clientLabel")}</Label>
           <Controller
             name="clientId"
             control={control}
@@ -378,6 +415,7 @@ export default function AddNewOrderForm({
           copy={copy}
           preserveHiddenValues
           hideVisibleFields={hideDuplicateVehicleAssetFields}
+          fieldConfig={orderFieldMap}
         />
 
         <OrderIndustryFields
@@ -387,10 +425,27 @@ export default function AddNewOrderForm({
           blocks={industryBlocks}
           clientAddress={selectedClient?.address}
           disabled={isSubmitting}
+          fieldConfig={orderFieldMap}
+        />
+
+        <OrderCustomFields
+          fields={orderFieldConfig}
+          values={customValues}
+          errors={customErrors}
+          disabled={isSubmitting}
+          onChange={(key, value) => {
+            setCustomValues((prev) => ({ ...prev, [key]: value }));
+            setCustomErrors((prev) => {
+              if (!prev[key]) return prev;
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            });
+          }}
         />
 
         <div className="space-y-1.5">
-          <Label htmlFor="service">{copy.serviceLabel}</Label>
+          <Label htmlFor="service">{servicesCfg?.label ?? copy.serviceLabel}</Label>
 
           <ServiceCombobox
             services={activeServices}
@@ -506,73 +561,99 @@ export default function AddNewOrderForm({
           )}
         </div>
 
-        <OrderMaterialLinesEditor
-          control={control as never}
-          fields={materialFields}
-          append={materialAppend}
-          remove={materialRemove}
-          setValue={setValue}
-          getValues={getValues}
-          trigger={trigger as never}
-          inventoryItems={activeInventory}
-          disabled={isSubmitting}
-          warrantyDefaults={warrantyDefaults}
-          orderMileageUnit={orderMileageUnit}
-          isSubmitted={isSubmitted}
-          errors={errors.materials}
-        />
+        {materialsCfg?.visible !== false ? (
+          <OrderMaterialLinesEditor
+            control={control as never}
+            fields={materialFields}
+            append={materialAppend}
+            remove={materialRemove}
+            setValue={setValue}
+            getValues={getValues}
+            trigger={trigger as never}
+            inventoryItems={activeInventory}
+            disabled={isSubmitting}
+            warrantyDefaults={warrantyDefaults}
+            orderMileageUnit={orderMileageUnit}
+            isSubmitted={isSubmitted}
+            errors={errors.materials}
+          />
+        ) : null}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="description">{t("orders.form.descriptionLabel")}</Label>
-          <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
-        </div>
+        {descriptionCfg?.visible !== false ? (
+          <div className="space-y-1.5" data-edit-field="description">
+            <Label htmlFor="description">
+              {descriptionCfg?.label ?? t("orders.form.descriptionLabel")}
+              {descriptionCfg?.required ? <span className="text-destructive"> *</span> : null}
+            </Label>
+            <Textarea
+              id="description"
+              {...register("description", descriptionCfg?.required ? { required: t("settings.orderFields.validation.required") } : undefined)}
+              placeholder={copy.descriptionPlaceholder}
+              rows={3}
+            />
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {assignedCfg?.visible !== false ? (
+            <Controller
+              name="assignedEmployeeId"
+              control={control}
+              rules={assignedCfg?.required ? { required: t("settings.orderFields.validation.required") } : undefined}
+              render={({ field }) => (
+                <OrderAssigneeSelect
+                  id="assignedEmployeeId"
+                  label={assignedCfg?.label ?? copy.assignedEmployeeLabel}
+                  value={field.value ?? ""}
+                  options={technicianOptions}
+                  disabled={isSubmitting}
+                  errorMessage={
+                    techniciansError instanceof Error ? techniciansError.message : techniciansError ? t("orders.form.techniciansLoadFailed") : null
+                  }
+                  emptyHint={
+                    !techniciansError && !employeesLoading && employees && technicianOptions.length === 0
+                      ? t("orders.form.noLinkedTechnicians")
+                      : null
+                  }
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          ) : null}
+
+          {deadlineCfg?.visible !== false ? (
+            <div className="space-y-1.5" data-edit-field="deadline">
+              <Label htmlFor="deadline">
+                {deadlineCfg?.label ?? copy.deadlineLabel}
+                {deadlineCfg?.required ? <span className="text-destructive"> *</span> : null}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="deadline"
+                  type="date"
+                  {...register("deadline", deadlineCfg?.required ? { required: t("settings.orderFields.validation.required") } : undefined)}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {teamCfg?.visible !== false ? (
           <Controller
-            name="assignedEmployeeId"
+            name="team"
             control={control}
             render={({ field }) => (
-              <OrderAssigneeSelect
-                id="assignedEmployeeId"
-                label={copy.assignedEmployeeLabel}
-                value={field.value ?? ""}
+              <OrderTeamSelect
+                id="order-team"
+                label={teamCfg?.label ?? t("orders.team.title")}
+                value={field.value ?? []}
                 options={technicianOptions}
                 disabled={isSubmitting}
-                errorMessage={
-                  techniciansError instanceof Error ? techniciansError.message : techniciansError ? t("orders.form.techniciansLoadFailed") : null
-                }
-                emptyHint={
-                  !techniciansError && !employeesLoading && employees && technicianOptions.length === 0
-                    ? t("orders.form.noLinkedTechnicians")
-                    : null
-                }
                 onChange={field.onChange}
               />
             )}
           />
-
-          <div className="space-y-1.5">
-            <Label htmlFor="deadline">{copy.deadlineLabel}</Label>
-            <div className="relative">
-              <Input id="deadline" type="date" {...register("deadline")} />
-            </div>
-          </div>
-        </div>
-
-        <Controller
-          name="team"
-          control={control}
-          render={({ field }) => (
-            <OrderTeamSelect
-              id="order-team"
-              label={t("orders.team.title")}
-              value={field.value ?? []}
-              options={technicianOptions}
-              disabled={isSubmitting}
-              onChange={field.onChange}
-            />
-          )}
-        />
+        ) : null}
 
         <OrderTotalsSummary
           money={orderMoney}

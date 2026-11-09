@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { Calendar, CircleX, Eye, EyeOff, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { displayCustomFieldValue } from "../../services/apiCustomFields";
+import { customEditFieldKey } from "./orderFieldRegistry";
+import { fieldConfigMap, useOrderCustomFieldValues, useOrderFieldConfig } from "./useOrderFieldConfig";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -247,6 +250,15 @@ export default function OrderDetailPanel({
   }
 
   const showFieldEdit = Boolean(selectedOrder && !isEditing && canEditOrder && !closedContentLocked);
+  const { fields: orderFieldConfig } = useOrderFieldConfig();
+  const orderFieldMap = useMemo(() => fieldConfigMap(orderFieldConfig), [orderFieldConfig]);
+  const { data: customFieldValues = [] } = useOrderCustomFieldValues(selectedOrder?.id);
+  const fieldLabel = (key: string, fallback: string) => orderFieldMap.get(key)?.label ?? fallback;
+  const fieldVisible = (key: string, industryDefault = true) => {
+    if (!industryDefault) return false;
+    const cfg = orderFieldMap.get(key);
+    return cfg ? cfg.visible : true;
+  };
 
   async function requestClose() {
     if (!selectedOrder || isStatusUpdating || isUnifiedStatusUpdating) return;
@@ -493,105 +505,124 @@ export default function OrderDetailPanel({
                 </div>
               ) : null}
 
-              {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.device, selectedOrder.device, "device") ? (
+              {!showClientVehicles &&
+              fieldVisible("device", shouldShowOrderAssetValue(workflow.orderFields.device, selectedOrder.device, "device")) ? (
                 <DetailItem
-                  label={copy.deviceDetail}
+                  label={fieldLabel("device", copy.deviceDetail)}
                   value={selectedOrder.device}
                   editField={showFieldEdit ? "device" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.carNumber, selectedOrder.carNumber, "carNumber") ? (
+              {!showClientVehicles &&
+              fieldVisible("carNumber", shouldShowOrderAssetValue(workflow.orderFields.carNumber, selectedOrder.carNumber, "carNumber")) ? (
                 <DetailItem
-                  label={copy.carNumberDetail}
+                  label={fieldLabel("carNumber", copy.carNumberDetail)}
                   value={selectedOrder.carNumber}
                   editField={showFieldEdit ? "carNumber" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {!showClientVehicles && shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin, "vin") ? (
+              {!showClientVehicles &&
+              fieldVisible("vin", shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin, "vin")) ? (
                 <DetailItem
-                  label={copy.vinDetail}
+                  label={fieldLabel("vin", copy.vinDetail)}
                   value={selectedOrder.vin}
                   mono
                   editField={showFieldEdit ? "vin" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.deviceSerial && selectedOrder.deviceSerial?.trim() ? (
+              {fieldVisible("deviceSerial", industryBlocks.deviceSerial) && selectedOrder.deviceSerial?.trim() ? (
                 <DetailItem
-                  label={t("orders.industryFields.deviceSerial")}
+                  label={fieldLabel("deviceSerial", t("orders.industryFields.deviceSerial"))}
                   value={selectedOrder.deviceSerial}
                   mono
                   editField={showFieldEdit ? "deviceSerial" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.deviceImei && selectedOrder.deviceImei?.trim() ? (
+              {fieldVisible("deviceImei", industryBlocks.deviceImei) && selectedOrder.deviceImei?.trim() ? (
                 <DetailItem
-                  label={t("orders.industryFields.deviceImei")}
+                  label={fieldLabel("deviceImei", t("orders.industryFields.deviceImei"))}
                   value={selectedOrder.deviceImei}
                   mono
                   editField={showFieldEdit ? "deviceImei" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.deviceCondition && selectedOrder.deviceCondition?.trim() ? (
+              {fieldVisible("deviceCondition", industryBlocks.deviceCondition) && selectedOrder.deviceCondition?.trim() ? (
                 <DetailItem
-                  label={t("orders.industryFields.deviceCondition")}
+                  label={fieldLabel("deviceCondition", t("orders.industryFields.deviceCondition"))}
                   value={selectedOrder.deviceCondition}
                   editField={showFieldEdit ? "deviceCondition" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.deviceCompleteness && selectedOrder.deviceCompleteness?.trim() ? (
+              {fieldVisible("deviceCompleteness", industryBlocks.deviceCompleteness) && selectedOrder.deviceCompleteness?.trim() ? (
                 <DetailItem
-                  label={t("orders.industryFields.deviceCompleteness")}
+                  label={fieldLabel("deviceCompleteness", t("orders.industryFields.deviceCompleteness"))}
                   value={selectedOrder.deviceCompleteness}
                   editField={showFieldEdit ? "deviceCompleteness" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.devicePasscode && selectedOrder.devicePasscode?.trim() ? (
+              {fieldVisible("devicePasscode", industryBlocks.devicePasscode) && selectedOrder.devicePasscode?.trim() ? (
                 <PasscodeDetailItem
-                  label={t("orders.industryFields.devicePasscode")}
+                  label={fieldLabel("devicePasscode", t("orders.industryFields.devicePasscode"))}
                   value={selectedOrder.devicePasscode}
                   editField={showFieldEdit ? "devicePasscode" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.siteAddress && selectedOrder.siteAddress?.trim() ? (
+              {fieldVisible("siteAddress", industryBlocks.siteAddress) && selectedOrder.siteAddress?.trim() ? (
                 <DetailItem
-                  label={t("orders.industryFields.siteAddress")}
+                  label={fieldLabel("siteAddress", t("orders.industryFields.siteAddress"))}
                   value={selectedOrder.siteAddress}
                   editField={showFieldEdit ? "siteAddress" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.productDimensions && selectedOrder.productDimensions?.trim() ? (
+              {fieldVisible("productDimensions", industryBlocks.productDimensions) && selectedOrder.productDimensions?.trim() ? (
                 <DetailItem
-                  label={t("orders.industryFields.productDimensions")}
+                  label={fieldLabel("productDimensions", t("orders.industryFields.productDimensions"))}
                   value={selectedOrder.productDimensions}
                   editField={showFieldEdit ? "productDimensions" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.measurementAt && selectedOrder.measurementAt ? (
+              {fieldVisible("measurementAt", industryBlocks.measurementAt) && selectedOrder.measurementAt ? (
                 <DetailItem
-                  label={t("orders.industryFields.measurementAt")}
+                  label={fieldLabel("measurementAt", t("orders.industryFields.measurementAt"))}
                   value={formatIndustryDateTime(selectedOrder.measurementAt, i18n.language)}
                   editField={showFieldEdit ? "measurementAt" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
-              {industryBlocks.installationAt && selectedOrder.installationAt ? (
+              {fieldVisible("installationAt", industryBlocks.installationAt) && selectedOrder.installationAt ? (
                 <DetailItem
-                  label={t("orders.industryFields.installationAt")}
+                  label={fieldLabel("installationAt", t("orders.industryFields.installationAt"))}
                   value={formatIndustryDateTime(selectedOrder.installationAt, i18n.language)}
                   editField={showFieldEdit ? "installationAt" : undefined}
                   onEdit={showFieldEdit ? startFieldEdit : undefined}
                 />
               ) : null}
+              {orderFieldConfig
+                .filter((field) => field.isCustom && field.visible)
+                .map((field) => {
+                  const row = customFieldValues.find((value) => value.definitionId === field.definitionId);
+                  const text = displayCustomFieldValue(field.type, row?.value, field.options);
+                  if (!text && field.type !== "checkbox") return null;
+                  return (
+                    <DetailItem
+                      key={field.key}
+                      label={field.label}
+                      value={field.type === "checkbox" ? (row?.value === true || row?.value === "true" ? "✓" : "—") : text}
+                      editField={showFieldEdit ? customEditFieldKey(field.key) : undefined}
+                      onEdit={showFieldEdit ? startFieldEdit : undefined}
+                    />
+                  );
+                })}
             </dl>
 
             {showClientVehicles ? (

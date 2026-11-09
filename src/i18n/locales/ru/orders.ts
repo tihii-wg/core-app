@@ -23,6 +23,7 @@ const orders: Messages<typeof en> = {
   columns: {
     button: "Колонки",
     menuLabel: "Показать колонки",
+    customFields: "Доп. поля",
   },
   filters: {
     employee: "Сотрудник",

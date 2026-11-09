@@ -16,6 +16,7 @@ export default {
   columns: {
     button: "Columns",
     menuLabel: "Show columns",
+    customFields: "Custom fields",
   },
   filters: {
     employee: "Employee",

@@ -16,6 +16,7 @@ import {
   servicesSoldSection,
   summaryKpis,
   topClientsSection,
+  type OrdersListSectionOptions,
   type QuickReportModel,
   type ReportSection,
 } from "./quickReports";
@@ -110,6 +111,7 @@ export function comprehensiveReport(
   period: ReportPeriod,
   today: string,
   industrySlug?: string | null,
+  ordersListOptions: OrdersListSectionOptions = {},
 ): QuickReportModel {
   const include = new Set(selected);
   const sections: ReportSection[] = [];
@@ -125,7 +127,10 @@ export function comprehensiveReport(
     );
   }
   if (include.has("orders")) {
-    sections.push(ordersByStatusSection(data.orders, period, industrySlug), ordersListSection(data.orders, period, industrySlug, payments));
+    sections.push(
+      ordersByStatusSection(data.orders, period, industrySlug),
+      ordersListSection(data.orders, period, industrySlug, payments, ordersListOptions),
+    );
   }
   if (include.has("services")) sections.push(servicesSoldSection(data.orders, period));
   if (include.has("clients")) {

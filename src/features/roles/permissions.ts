@@ -4,6 +4,7 @@ export const ALL_PERMISSIONS = "*";
 export const PERMISSION_KEYS = {
   settingsRoles: "settings.roles",
   settingsStatuses: "settings.statuses",
+  settingsForms: "settings.forms",
   reportsActivityLog: "reports.activity_log",
 } as const;
 

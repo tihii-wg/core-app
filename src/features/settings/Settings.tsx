@@ -13,6 +13,7 @@ import {
   Save,
   FileSpreadsheet,
   Tags,
+  FormInput,
   MapPin,
   KeyRound,
   Warehouse,
@@ -56,6 +57,7 @@ import { TeamSettings } from "./TeamSettings";
 import { SubscriptionStatusCard } from "./SubscriptionStatusCard";
 import { ImportDataDemo } from "./ImportDataDemo";
 import { StatusesSettings } from "./StatusesSettings";
+import { OrderFieldsSettings } from "./OrderFieldsSettings";
 import { LocationsSettings } from "./LocationsSettings";
 import { RolesSettings } from "./RolesSettings";
 import { PrintTemplatesSettings } from "./PrintTemplatesSettings";
@@ -133,6 +135,10 @@ export function SettingsModule() {
           <TabsTrigger value="statuses">
             <Tags />
             {t("settings.tabs.statuses")}
+          </TabsTrigger>
+          <TabsTrigger value="orderFields">
+            <FormInput />
+            {t("settings.tabs.orderFields")}
           </TabsTrigger>
           <TabsTrigger value="locations">
             <MapPin />
@@ -329,6 +335,10 @@ export function SettingsModule() {
 
         <TabsContent value="statuses" className="mt-5 space-y-5">
           <StatusesSettings />
+        </TabsContent>
+
+        <TabsContent value="orderFields" className="mt-5 space-y-5">
+          <OrderFieldsSettings />
         </TabsContent>
 
         <TabsContent value="locations" className="mt-5 space-y-5">

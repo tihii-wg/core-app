@@ -211,13 +211,28 @@ export function topClientsSection(orders: Order[], period: ReportPeriod, limit =
   };
 }
 
+export type OrdersListCustomColumn = {
+  key: string;
+  header: string;
+  valuesByOrderId: Record<string, string>;
+};
+
+export type OrdersListSectionOptions = {
+  /** Overridden headers for built-in columns (client / status / total). */
+  columnLabels?: Partial<{ client: string; status: string; total: string }>;
+  /** Visible custom order fields to append as columns. */
+  customColumns?: OrdersListCustomColumn[];
+};
+
 export function ordersListSection(
   orders: Order[],
   period: ReportPeriod,
   industrySlug?: string | null,
   payments: LedgerPayment[] = [],
+  options: OrdersListSectionOptions = {},
 ): ReportSection {
   const periodOrders = ordersIn(orders, period.start, period.end).sort(newestFirst);
+  const customColumns = options.customColumns ?? [];
 
   return {
     kind: "table",
@@ -225,19 +240,26 @@ export function ordersListSection(
     columns: [
       { key: "number", header: i18n.t("reports.columns.order") },
       { key: "date", header: i18n.t("reports.columns.date"), format: "date" },
-      { key: "client", header: i18n.t("reports.columns.client") },
-      { key: "status", header: i18n.t("reports.columns.status") },
+      { key: "client", header: options.columnLabels?.client ?? i18n.t("reports.columns.client") },
+      { key: "status", header: options.columnLabels?.status ?? i18n.t("reports.columns.status") },
       { key: "payment", header: i18n.t("reports.columns.payment") },
-      { key: "total", header: i18n.t("reports.columns.total"), format: "money" },
+      { key: "total", header: options.columnLabels?.total ?? i18n.t("reports.columns.total"), format: "money" },
+      ...customColumns.map((column) => ({ key: column.key, header: column.header })),
     ],
-    rows: periodOrders.map((order) => ({
-      number: order.orderNumber,
-      date: order.createdAt,
-      client: order.clientName,
-      status: statusLabel(order.status, industrySlug),
-      payment: paymentLabel(order, payments),
-      total: order.totalPrice,
-    })),
+    rows: periodOrders.map((order) => {
+      const row: Record<string, string | number | null> = {
+        number: order.orderNumber,
+        date: order.createdAt,
+        client: order.clientName,
+        status: statusLabel(order.status, industrySlug),
+        payment: paymentLabel(order, payments),
+        total: order.totalPrice,
+      };
+      for (const column of customColumns) {
+        row[column.key] = column.valuesByOrderId[order.id] ?? "";
+      }
+      return row;
+    }),
     totals: periodOrders.length ? { number: totalLabel(), total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
   };
 }
@@ -276,6 +298,7 @@ export function salesReport(
   period: ReportPeriod,
   industrySlug?: string | null,
   payments: LedgerPayment[] = [],
+  ordersListOptions: OrdersListSectionOptions = {},
 ): QuickReportModel {
   const billable = ordersIn(orders, period.start, period.end).filter(isBillable);
   const current = periodTotals(orders, clientCreatedDates, period.start, period.end, payments);
@@ -308,7 +331,7 @@ export function salesReport(
       ordersByStatusSection(orders, period, industrySlug),
       servicesSoldSection(orders, period),
       topClientsSection(orders, period, 10, payments),
-      ordersListSection(orders, period, industrySlug, payments),
+      ordersListSection(orders, period, industrySlug, payments, ordersListOptions),
     ],
   };
 }

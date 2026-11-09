@@ -31,6 +31,7 @@ describe("settings tabs", () => {
 
   it("opens stage-1 settings tabs", () => {
     expect(settingsTabFromSearch("statuses")).toBe("statuses");
+    expect(settingsTabFromSearch("orderFields")).toBe("orderFields");
     expect(settingsTabFromSearch("locations")).toBe("locations");
     expect(settingsTabFromSearch("roles")).toBe("roles");
   });

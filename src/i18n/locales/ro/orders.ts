@@ -21,6 +21,7 @@ const orders: Messages<typeof en> = {
   columns: {
     button: "Coloane",
     menuLabel: "Afișează coloanele",
+    customFields: "Câmpuri personalizate",
   },
   filters: {
     employee: "Angajat",

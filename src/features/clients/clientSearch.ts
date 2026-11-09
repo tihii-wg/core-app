@@ -99,6 +99,8 @@ export type ClientSearchOptions = {
   /** Payment labels: unpaid / partial / paid (already translated). */
   paymentLabels?: { unpaid: string; partial: string; paid: string };
   industryBlocks?: IndustryOrderFieldBlocks;
+  /** Custom field display strings keyed by order id (already formatted). */
+  customFieldTextsByOrderId?: Record<string, string[]>;
 };
 
 export type ClientSearchResult = {
@@ -166,6 +168,10 @@ function orderMatches(
   const paymentLabel = paymentStatusLabel(order, options.payments ?? [], payLabels);
   // Exact / prefix match so "оплачен" does not hit "не оплачен".
   if (paymentStatusMatches(paymentLabel, needle)) return true;
+
+  for (const text of options.customFieldTextsByOrderId?.[order.id] ?? []) {
+    haystacks.push(text);
+  }
 
   return haystacks.some((part) => includesFold(part, needle));
 }
