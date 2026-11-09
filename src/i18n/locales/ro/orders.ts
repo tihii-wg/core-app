@@ -243,6 +243,7 @@ const orders: Messages<typeof en> = {
     description: "Actualizați VIN-ul, serviciile, automobilul, responsabilul și termenul comenzii selectate.",
   },
   form: {
+    priceBelowPurchase: "Prețul este sub prețul de achiziție ({{purchase}}) — vânzare în pierdere",
     clientDiscountServices: "Reducere client la servicii: {{percent}}%",
     clientDiscountProducts: "la materiale: {{percent}}%",
     subtotal: "Subtotal",

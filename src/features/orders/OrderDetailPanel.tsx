@@ -53,6 +53,7 @@ import {
 } from "../inventory/warehouseMaterialStatus";
 import { formatQuantity } from "../../lib/quantity";
 import { isCatalogOrderMaterial, resolveMaterialSupplySource } from "../inventory/orderMaterialLine";
+import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { orderLineAmount } from "../services/orderServiceLine";
 import useGetEmployees from "../employees/useGetEmployees";
 import { isOrderOverdue } from "./orderVisibility";
@@ -317,6 +318,14 @@ export default function OrderDetailPanel({
   const overdue = selectedOrder ? isOrderOverdue(selectedOrder, today) : false;
   const serviceLines = selectedOrder?.services ?? [];
   const materialLines = selectedOrder?.materials ?? [];
+  const { items: inventoryItemsForCost } = useGetInventoryItems("", "all", { field: "name", ascending: true });
+  const purchasePriceById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of inventoryItemsForCost) {
+      if (item.purchasePrice != null && item.purchasePrice > 0) map.set(item.id, item.purchasePrice);
+    }
+    return map;
+  }, [inventoryItemsForCost]);
   const hasServiceLines = serviceLines.length > 0;
   const hasMaterialLines = materialLines.length > 0;
   const detailVatRate = selectedOrder
@@ -841,7 +850,18 @@ export default function OrderDetailPanel({
                             <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                               {formatQuantity(line.quantity, i18n.language)}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                              <div>{formatMoney(line.price)}</div>
+                              {(() => {
+                                const purchase = line.inventoryItemId ? purchasePriceById.get(line.inventoryItemId) : undefined;
+                                if (!catalog || purchase == null || !(Number(line.price) < purchase)) return null;
+                                return (
+                                  <div role="alert" className="mt-0.5 text-[11px] font-medium text-destructive" data-testid="material-price-below-cost">
+                                    {t("orders.form.priceBelowPurchase", { purchase: formatMoney(purchase) })}
+                                  </div>
+                                );
+                              })()}
+                            </td>
                             <td className="px-3 py-2 text-right tabular-nums text-foreground">
                               <div>{formatMoney(lineGross)}</div>
                               {lineVat != null ? (

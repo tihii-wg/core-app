@@ -467,6 +467,19 @@ export default function OrderMaterialLinesEditor({
                     {freeformIdentityLocked ? (
                       <p className="text-[12px] text-muted-foreground">{t("orders.form.freeformHistoryLocked")}</p>
                     ) : null}
+                    {(() => {
+                      // Warn when the entered sale price is below the catalog purchase price.
+                      const purchase = catalogItem?.purchasePrice;
+                      const raw = line?.price ?? field.price;
+                      const price = typeof raw === "number" ? raw : raw === "" || raw == null ? NaN : Number(raw);
+                      if (!catalog || purchase == null || !(purchase > 0) || !Number.isFinite(price)) return null;
+                      if (price >= purchase) return null;
+                      return (
+                        <p role="alert" className="text-xs font-medium text-destructive" data-testid="material-price-below-cost">
+                          {t("orders.form.priceBelowPurchase", { purchase: formatMoney(purchase) })}
+                        </p>
+                      );
+                    })()}
                     {catalog ? (
                       <div className="space-y-1">
                         <Controller

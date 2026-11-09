@@ -237,6 +237,7 @@ export default {
     description: "Update the selected order's VIN, services, device, assignment, and deadline.",
   },
   form: {
+    priceBelowPurchase: "Price is below the purchase price ({{purchase}}) — selling at a loss",
     clientDiscountServices: "Client discount on services: {{percent}}%",
     clientDiscountProducts: "on materials: {{percent}}%",
     subtotal: "Subtotal",

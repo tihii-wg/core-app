@@ -246,6 +246,7 @@ const orders: Messages<typeof en> = {
     description: "Измените VIN, услуги, автомобиль, ответственного и срок выбранного заказа.",
   },
   form: {
+    priceBelowPurchase: "Цена ниже закупочной ({{purchase}}) — продажа в убыток",
     clientDiscountServices: "Скидка клиента на услуги: {{percent}}%",
     clientDiscountProducts: "на материалы: {{percent}}%",
     subtotal: "Сумма без скидки",
