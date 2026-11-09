@@ -136,6 +136,7 @@ export function ReportsModule() {
         generated: formatDateTime(generated),
       },
       industrySlug,
+      payments,
     );
     downloadCsv(`orders-summary_${period.start}_${period.end}.csv`, csv);
     toast.success(t("reports.toast.exported"), { id: "export-orders-summary" });
@@ -143,7 +144,7 @@ export function ReportsModule() {
   const operations = operationsStats(orders, period, today);
   const series = revenueSeriesWithLedger(orders, period, payments, currency);
   const services = serviceDistribution(orders, period);
-  const employeeResults = employeePerformance(orders, employees, period);
+  const employeeResults = employeePerformance(orders, employees, period, payments);
   const workload = employeeWorkload(orders, employees, period, today);
   const stockLevels = lowestStockLevels(inventoryItems);
 

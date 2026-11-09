@@ -217,6 +217,20 @@ export function orderPaymentBalance(
   return computePaymentBalance(order.totalPrice, linked, legacyPaid);
 }
 
+/**
+ * Collected amount for reporting: min(netPaid, total) when ledger rows exist;
+ * otherwise the full total when the legacy paid flag says paid.
+ */
+export function orderCollectedAmount(
+  order: Pick<Order, "id" | "totalPrice" | "isPaid" | "status">,
+  payments: LedgerPayment[],
+  invoiceIdForOrder?: string | null,
+): number {
+  const balance = orderPaymentBalance(order, payments, invoiceIdForOrder);
+  if (balance.hasLedger) return roundMoney(Math.min(balance.netPaid, balance.total));
+  return balance.status === "paid" ? balance.total : 0;
+}
+
 /** True when a non-cancelled order still has ledger remaining due (unpaid or partial). */
 export function orderHasOutstandingBalance(
   order: Pick<Order, "id" | "totalPrice" | "isPaid" | "status">,

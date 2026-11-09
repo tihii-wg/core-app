@@ -1,5 +1,7 @@
 import i18n from "../../i18n";
 import type { Employee, InventoryItem, Order, OrderStatus } from "../../lib/types";
+import { orderCollectedAmount, orderPaymentBalance } from "../finance/paymentCalculations";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import { industryOrderStatusLabel, industryWorkflow, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { employeeNameByAssigneeId, orderAssignedToEmployee } from "../orders/orderAssignee";
 import { ordersIn, percentChange, periodTotals, revenueSeries, serviceDistribution, type ReportPeriod, type ReportRange } from "./reportStats";
@@ -116,11 +118,23 @@ function newestFirst(a: Order, b: Order) {
 }
 
 const isBillable = (order: Order) => order.status !== "cancelled";
-const isOutstanding = (order: Order) => isBillable(order) && !order.isPaid;
+const isOutstanding = (order: Order, payments: LedgerPayment[]) =>
+  isBillable(order) && orderPaymentBalance(order, payments).remaining > 0.005;
 
-function seriesRows(orders: Order[], period: ReportPeriod) {
+function paymentLabel(order: Order, payments: LedgerPayment[]) {
+  const status = orderPaymentBalance(order, payments).status;
+  return i18n.t(`status.payment.${status}`);
+}
+
+function seriesRows(orders: Order[], period: ReportPeriod, payments: LedgerPayment[] = []) {
   if (ordersIn(orders, period.start, period.end).length === 0) return [];
-  return revenueSeries(orders, period).map((point) => ({ period: point.label, orders: point.orders, billed: point.billed, collected: point.revenue, outstanding: point.outstanding }));
+  return revenueSeries(orders, period, payments).map((point) => ({
+    period: point.label,
+    orders: point.orders,
+    billed: point.billed,
+    collected: point.revenue,
+    outstanding: point.outstanding,
+  }));
 }
 
 function stockValue(item: InventoryItem, price: number | null) {
@@ -167,15 +181,17 @@ export function servicesSoldSection(orders: Order[], period: ReportPeriod): Repo
   };
 }
 
-export function topClientsSection(orders: Order[], period: ReportPeriod, limit = 10): ReportSection {
+/** Paid/outstanding by order createdAt via orderPaymentBalance (partials split both ways). */
+export function topClientsSection(orders: Order[], period: ReportPeriod, limit = 10, payments: LedgerPayment[] = []): ReportSection {
   const clients = new Map<string, { client: string; orders: number; value: number; paid: number; outstanding: number }>();
   for (const order of ordersIn(orders, period.start, period.end).filter(isBillable)) {
     const key = order.clientId || order.clientName;
     const row = clients.get(key) ?? { client: order.clientName || "—", orders: 0, value: 0, paid: 0, outstanding: 0 };
+    const balance = orderPaymentBalance(order, payments);
     row.orders += 1;
     row.value += order.totalPrice;
-    if (order.isPaid) row.paid += order.totalPrice;
-    else row.outstanding += order.totalPrice;
+    row.paid += orderCollectedAmount(order, payments);
+    if (!balance.isLegacyUnreconciled && balance.remaining > 0) row.outstanding += balance.remaining;
     clients.set(key, row);
   }
   const limited = Number.isFinite(limit);
@@ -195,7 +211,12 @@ export function topClientsSection(orders: Order[], period: ReportPeriod, limit =
   };
 }
 
-export function ordersListSection(orders: Order[], period: ReportPeriod, industrySlug?: string | null): ReportSection {
+export function ordersListSection(
+  orders: Order[],
+  period: ReportPeriod,
+  industrySlug?: string | null,
+  payments: LedgerPayment[] = [],
+): ReportSection {
   const periodOrders = ordersIn(orders, period.start, period.end).sort(newestFirst);
 
   return {
@@ -214,35 +235,53 @@ export function ordersListSection(orders: Order[], period: ReportPeriod, industr
       date: order.createdAt,
       client: order.clientName,
       status: statusLabel(order.status, industrySlug),
-      payment: order.isPaid ? i18n.t("status.payment.paid") : i18n.t("status.payment.unpaid"),
+      payment: paymentLabel(order, payments),
       total: order.totalPrice,
     })),
     totals: periodOrders.length ? { number: totalLabel(), total: sum(periodOrders, (order) => order.totalPrice) } : undefined,
   };
 }
 
-export function summaryKpis(orders: Order[], clientCreatedDates: string[], period: ReportPeriod): ReportKpi[] {
+/** KPI revenue/outstanding use order createdAt + ledger balance (not cash-by-paidAt). */
+export function summaryKpis(
+  orders: Order[],
+  clientCreatedDates: string[],
+  period: ReportPeriod,
+  payments: LedgerPayment[] = [],
+): ReportKpi[] {
   const periodOrders = ordersIn(orders, period.start, period.end);
-  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
-  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
-  const outstandingOrders = periodOrders.filter(isOutstanding);
+  const current = periodTotals(orders, clientCreatedDates, period.start, period.end, payments);
+  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd, payments);
+  const outstandingOrders = periodOrders.filter((order) => isOutstanding(order, payments));
 
   return [
     { label: i18n.t("reports.kpis.revenueCollected"), value: current.revenue, format: "money", hint: changeHint(current.revenue, previous.revenue) },
     { label: i18n.t("reports.kpis.orders"), value: current.orders, format: "number", hint: changeHint(current.orders, previous.orders) },
     { label: i18n.t("reports.kpis.totalOrderValue"), value: sum(periodOrders.filter(isBillable), (order) => order.totalPrice), format: "money", hint: i18n.t("reports.hints.excludesCancelled") },
-    { label: i18n.t("reports.kpis.outstanding"), value: sum(outstandingOrders, (order) => order.totalPrice), format: "money", hint: i18n.t("reports.hints.unpaidOrders", { count: outstandingOrders.length }) },
+    {
+      label: i18n.t("reports.kpis.outstanding"),
+      value: sum(outstandingOrders, (order) => orderPaymentBalance(order, payments).remaining),
+      format: "money",
+      hint: i18n.t("reports.hints.unpaidOrders", { count: outstandingOrders.length }),
+    },
     { label: i18n.t("reports.kpis.averageOrderValue"), value: current.avgOrderValue, format: "money", hint: changeHint(current.avgOrderValue, previous.avgOrderValue) },
     { label: i18n.t("reports.kpis.newClients"), value: current.newClients, format: "number", hint: changeHint(current.newClients, previous.newClients) },
   ];
 }
 
-export function salesReport(orders: Order[], clientCreatedDates: string[], period: ReportPeriod, industrySlug?: string | null): QuickReportModel {
+/** Sales report: collected revenue attributed by order createdAt via the payments ledger. */
+export function salesReport(
+  orders: Order[],
+  clientCreatedDates: string[],
+  period: ReportPeriod,
+  industrySlug?: string | null,
+  payments: LedgerPayment[] = [],
+): QuickReportModel {
   const billable = ordersIn(orders, period.start, period.end).filter(isBillable);
-  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
-  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
+  const current = periodTotals(orders, clientCreatedDates, period.start, period.end, payments);
+  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd, payments);
   const billed = sum(billable, (order) => order.totalPrice);
-  const series = seriesRows(orders, period);
+  const series = seriesRows(orders, period, payments);
 
   return {
     kpis: [
@@ -268,8 +307,8 @@ export function salesReport(orders: Order[], clientCreatedDates: string[], perio
       },
       ordersByStatusSection(orders, period, industrySlug),
       servicesSoldSection(orders, period),
-      topClientsSection(orders, period),
-      ordersListSection(orders, period, industrySlug),
+      topClientsSection(orders, period, 10, payments),
+      ordersListSection(orders, period, industrySlug, payments),
     ],
   };
 }
@@ -360,7 +399,15 @@ export function inventoryReport(items: InventoryItem[]): QuickReportModel {
   };
 }
 
-export function employeeReport(orders: Order[], employees: Employee[], period: ReportPeriod, today: string, industrySlug?: string | null): QuickReportModel {
+/** Employee revenue = ledger collected on completed orders (order createdAt period). */
+export function employeeReport(
+  orders: Order[],
+  employees: Employee[],
+  period: ReportPeriod,
+  today: string,
+  industrySlug?: string | null,
+  payments: LedgerPayment[] = [],
+): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
   const isOverdue = (order: Order) => !closedStatuses.has(order.status) && Boolean(order.deadline) && order.deadline < today;
   const employeeNames = employeeNameByAssigneeId(employees);
@@ -379,10 +426,7 @@ export function employeeReport(orders: Order[], employees: Employee[], period: R
         open: assigned.filter((order) => !closedStatuses.has(order.status)).length,
         overdue: assigned.filter(isOverdue).length,
         rate: share(completed.length, billable.length),
-        revenue: sum(
-          completed.filter((order) => order.isPaid),
-          (order) => order.totalPrice,
-        ),
+        revenue: sum(completed, (order) => orderCollectedAmount(order, payments)),
       };
     })
     .sort((a, b) => b.completed - a.completed || b.assigned - a.assigned || a.name.localeCompare(b.name));
@@ -449,12 +493,16 @@ export function employeeReport(orders: Order[], employees: Employee[], period: R
   };
 }
 
-export function revenueByPeriodSection(orders: Order[], period: ReportPeriod): ReportSection {
+/** Revenue/outstanding by order createdAt via ledger (partials contribute both sides). */
+export function revenueByPeriodSection(orders: Order[], period: ReportPeriod, payments: LedgerPayment[] = []): ReportSection {
   const periodOrders = ordersIn(orders, period.start, period.end);
-  const current = periodTotals(orders, [], period.start, period.end);
+  const current = periodTotals(orders, [], period.start, period.end, payments);
   const billed = sum(periodOrders.filter(isBillable), (order) => order.totalPrice);
-  const outstanding = sum(periodOrders.filter(isOutstanding), (order) => order.totalPrice);
-  const series = seriesRows(orders, period);
+  const outstanding = sum(
+    periodOrders.filter((order) => isOutstanding(order, payments)),
+    (order) => orderPaymentBalance(order, payments).remaining,
+  );
+  const series = seriesRows(orders, period, payments);
 
   return {
     kind: "table",
@@ -471,8 +519,15 @@ export function revenueByPeriodSection(orders: Order[], period: ReportPeriod): R
   };
 }
 
-export function outstandingOrdersSection(orders: Order[], period: ReportPeriod, industrySlug?: string | null): ReportSection {
-  const outstandingOrders = ordersIn(orders, period.start, period.end).filter(isOutstanding).sort(newestFirst);
+export function outstandingOrdersSection(
+  orders: Order[],
+  period: ReportPeriod,
+  industrySlug?: string | null,
+  payments: LedgerPayment[] = [],
+): ReportSection {
+  const outstandingOrders = ordersIn(orders, period.start, period.end)
+    .filter((order) => isOutstanding(order, payments))
+    .sort(newestFirst);
 
   return {
     kind: "table",
@@ -490,9 +545,11 @@ export function outstandingOrdersSection(orders: Order[], period: ReportPeriod, 
       date: order.createdAt,
       client: order.clientName,
       status: statusLabel(order.status, industrySlug),
-      total: order.totalPrice,
+      total: orderPaymentBalance(order, payments).remaining,
     })),
-    totals: outstandingOrders.length ? { number: totalLabel(), total: sum(outstandingOrders, (order) => order.totalPrice) } : undefined,
+    totals: outstandingOrders.length
+      ? { number: totalLabel(), total: sum(outstandingOrders, (order) => orderPaymentBalance(order, payments).remaining) }
+      : undefined,
   };
 }
 
@@ -504,13 +561,20 @@ export function invoicesUnavailable(): ReportSection {
   return { kind: "unavailable", title: i18n.t("reports.sections.invoices.title"), description: i18n.t("reports.sections.invoices.description") };
 }
 
-export function financialReport(orders: Order[], items: InventoryItem[], period: ReportPeriod, industrySlug?: string | null): QuickReportModel {
+/** Financial report: collected/outstanding by order createdAt via the payments ledger. */
+export function financialReport(
+  orders: Order[],
+  items: InventoryItem[],
+  period: ReportPeriod,
+  industrySlug?: string | null,
+  payments: LedgerPayment[] = [],
+): QuickReportModel {
   const periodOrders = ordersIn(orders, period.start, period.end);
-  const current = periodTotals(orders, [], period.start, period.end);
-  const previous = periodTotals(orders, [], period.previousStart, period.previousEnd);
+  const current = periodTotals(orders, [], period.start, period.end, payments);
+  const previous = periodTotals(orders, [], period.previousStart, period.previousEnd, payments);
   const billed = sum(periodOrders.filter(isBillable), (order) => order.totalPrice);
-  const outstandingOrders = periodOrders.filter(isOutstanding);
-  const outstanding = sum(outstandingOrders, (order) => order.totalPrice);
+  const outstandingOrders = periodOrders.filter((order) => isOutstanding(order, payments));
+  const outstanding = sum(outstandingOrders, (order) => orderPaymentBalance(order, payments).remaining);
   const services = serviceDistribution(orders, period, Number.POSITIVE_INFINITY).sort((a, b) => b.revenue - a.revenue || a.name.localeCompare(b.name));
   const servicesRevenue = sum(services, (service) => service.revenue);
   const inventoryCost = sum(
@@ -528,7 +592,7 @@ export function financialReport(orders: Order[], items: InventoryItem[], period:
       { label: i18n.t("reports.kpis.inventoryValueAtCost"), value: inventoryCost, format: "money", hint: i18n.t("reports.hints.currentStock") },
     ],
     sections: [
-      revenueByPeriodSection(orders, period),
+      revenueByPeriodSection(orders, period, payments),
       {
         kind: "table",
         title: i18n.t("reports.sections.revenueByService.title"),
@@ -541,7 +605,7 @@ export function financialReport(orders: Order[], items: InventoryItem[], period:
         ],
         rows: services.map((service) => ({ service: service.name, count: service.count, revenue: service.revenue, share: share(service.revenue, servicesRevenue) })),
       },
-      outstandingOrdersSection(orders, period, industrySlug),
+      outstandingOrdersSection(orders, period, industrySlug, payments),
       expensesUnavailable(),
       invoicesUnavailable(),
     ],

@@ -155,13 +155,14 @@ export default function Dashboard() {
     staleTime: 15_000,
   });
   const now = new Date();
-  const { awaitingPayment } = useDashboardFinancials(now);
+  const { awaitingPayment, payments } = useDashboardFinancials(now);
   const today = localDateKey(now);
   const taskOverview = taskOverviewCounts(workspaceOrders, today);
   const week = thisWeekStats(
     workspaceOrders,
     workspaceClients.map((client) => ({ createdAt: clientCreatedAt(client) })),
     now,
+    payments,
   );
   const weekPeak = Math.max(...week.days.map((day) => day.count), 0);
   const taskTotal = taskOverview.total;

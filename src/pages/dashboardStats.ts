@@ -1,4 +1,11 @@
 import i18n, { currentIntlLocale } from "../i18n";
+import { financeDateKey } from "../features/finance/financeStats";
+import {
+  isValidLedgerPayment,
+  netCollected,
+  orderPaymentBalance,
+} from "../features/finance/paymentCalculations";
+import type { LedgerPayment } from "../features/finance/paymentTypes";
 
 export type WeekDayStat = {
   date: string;
@@ -20,8 +27,10 @@ type OverviewOrder = {
 };
 
 type WeekOrder = {
+  id?: string;
   createdAt: string;
   isPaid: boolean;
+  status: string;
   totalPrice: number;
 };
 
@@ -72,7 +81,16 @@ export function taskOverviewCounts(orders: OverviewOrder[], today: string): Task
   };
 }
 
-export function thisWeekStats(orders: WeekOrder[], clients: WeekClient[], now: Date) {
+/**
+ * Week order counts stay by order createdAt.
+ * Revenue is cash collected this week by payments.paidAt (ledger net), not order.isPaid.
+ */
+export function thisWeekStats(
+  orders: WeekOrder[],
+  clients: WeekClient[],
+  now: Date,
+  payments: LedgerPayment[] = [],
+) {
   const dates = weekDateKeys(now);
   const daysInWeek = new Set(dates);
   const weekOrders = orders.filter((order) => daysInWeek.has(order.createdAt));
@@ -83,7 +101,12 @@ export function thisWeekStats(orders: WeekOrder[], clients: WeekClient[], now: D
     count: weekOrders.filter((order) => order.createdAt === date).length,
   }));
   const newClients = clients.filter((client) => daysInWeek.has(calendarDateKey(client.createdAt))).length;
-  const revenue = weekOrders.filter((order) => order.isPaid).reduce((sum, order) => sum + order.totalPrice, 0);
+  const weekPayments = payments.filter((row) => {
+    if (!isValidLedgerPayment(row)) return false;
+    const paidDay = financeDateKey(row.paidAt);
+    return paidDay !== "" && daysInWeek.has(paidDay);
+  });
+  const revenue = netCollected(weekPayments);
 
   return {
     days,
@@ -95,46 +118,69 @@ export function thisWeekStats(orders: WeekOrder[], clients: WeekClient[], now: D
 }
 
 type MoneyOrder = {
+  id?: string;
   createdAt: string;
   isPaid: boolean;
   status: string;
   totalPrice: number;
 };
 
-function paidOrdersOn<T extends MoneyOrder>(orders: T[], dateKey: string) {
-  return orders.filter((order) => order.isPaid && order.createdAt === dateKey);
-}
-
-/** Revenue uses the same rule as Reports: paid orders, dated by the order's creation day. */
-export function todayRevenueStats(orders: MoneyOrder[], now: Date) {
+/**
+ * Cash collected today vs yesterday by payments.paidAt (ledger net).
+ * `paidOrders` = distinct orders with a payment row dated that day.
+ */
+export function todayRevenueStats(orders: MoneyOrder[], now: Date, payments: LedgerPayment[] = []) {
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const todayOrders = paidOrdersOn(orders, localDateKey(now));
-  const revenue = todayOrders.reduce((sum, order) => sum + order.totalPrice, 0);
-  const previous = paidOrdersOn(orders, localDateKey(yesterday)).reduce((sum, order) => sum + order.totalPrice, 0);
+  const todayKey = localDateKey(now);
+  const yesterdayKey = localDateKey(yesterday);
+
+  const receiptsOn = (dateKey: string) =>
+    netCollected(
+      payments.filter((row) => isValidLedgerPayment(row) && financeDateKey(row.paidAt) === dateKey),
+    );
+
+  const revenue = receiptsOn(todayKey);
+  const previous = receiptsOn(yesterdayKey);
+  const paidOrderIds = new Set(
+    payments
+      .filter((row) => row.kind === "payment" && isValidLedgerPayment(row) && financeDateKey(row.paidAt) === todayKey)
+      .map((row) => row.orderId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  // Keep orders in the signature so callers stay compatible; unused for cash math.
+  void orders;
 
   return {
     revenue,
-    paidOrders: todayOrders.length,
+    paidOrders: paidOrderIds.size,
     // Without revenue yesterday there is no meaningful baseline for a percentage.
     changeVsYesterday: previous > 0 ? ((revenue - previous) / previous) * 100 : null,
   };
 }
 
 /**
- * Outstanding / awaiting payment.
- * When `hasOutstanding` is provided (ledger-aware), prefer it over legacy `isPaid`.
- * Otherwise fall back to unpaid flags for historical callers/tests.
+ * Outstanding / awaiting payment from the ledger remaining (orderPaymentBalance).
+ * Cancelled and closed orders stay excluded. Partial payments contribute only their remainder.
  */
-export function outstandingPaymentStats(
-  orders: MoneyOrder[],
-  options?: { hasOutstanding?: (order: MoneyOrder) => boolean },
-) {
+export function outstandingPaymentStats(orders: MoneyOrder[], payments: LedgerPayment[] = []) {
+  const balanceOf = (order: MoneyOrder) =>
+    orderPaymentBalance(
+      {
+        id: order.id ?? "",
+        totalPrice: order.totalPrice,
+        isPaid: order.isPaid,
+        status: order.status as import("../lib/types").OrderStatus,
+      },
+      payments,
+    );
   const unpaid = orders.filter((order) => {
     if (order.status === "cancelled" || order.status === "closed") return false;
-    if (options?.hasOutstanding) return options.hasOutstanding(order);
-    return !order.isPaid;
+    return balanceOf(order).remaining > 0.005;
   });
-  return { amount: unpaid.reduce((sum, order) => sum + order.totalPrice, 0), orders: unpaid.length };
+  return {
+    amount: unpaid.reduce((sum, order) => sum + balanceOf(order).remaining, 0),
+    orders: unpaid.length,
+  };
 }
 
 type ActivityOrder = {

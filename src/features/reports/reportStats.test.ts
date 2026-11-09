@@ -76,7 +76,7 @@ describe("reportPeriod", () => {
 });
 
 describe("summaryStats", () => {
-  it("counts paid revenue, orders, new clients and the average order value per period", () => {
+  it("counts collected revenue via ledger (or legacy isPaid fallback), orders, new clients and AOV", () => {
     const orders = [
       order({ id: "1", totalPrice: 100, isPaid: true, createdAt: "2026-10-01" }),
       order({ id: "2", totalPrice: 50, createdAt: "2026-09-30" }),
@@ -89,6 +89,37 @@ describe("summaryStats", () => {
     expect(summaryStats(orders, clients, reportPeriod("last7", now))).toEqual({
       current: { revenue: 100, orders: 3, newClients: 1, avgOrderValue: 75 },
       previous: { revenue: 40, orders: 1, newClients: 1, avgOrderValue: 40 },
+    });
+  });
+
+  it("counts an order paid only via the ledger as revenue even when is_paid is false", () => {
+    const orders = [order({ id: "1", totalPrice: 100, isPaid: false, createdAt: "2026-10-01" })];
+    const payments = [ledgerPayment({ id: "p1", amount: 100, orderId: "1", paidAt: "2026-10-01T10:00:00.000Z" })];
+    expect(summaryStats(orders, [], reportPeriod("last7", now), payments).current.revenue).toBe(100);
+  });
+
+  it("counts only the paid portion of a partial payment toward revenue", () => {
+    const orders = [order({ id: "1", totalPrice: 100, isPaid: false, createdAt: "2026-10-01" })];
+    const payments = [ledgerPayment({ id: "p1", amount: 40, orderId: "1" })];
+    const stats = summaryStats(orders, [], reportPeriod("last7", now), payments);
+    expect(stats.current.revenue).toBe(40);
+    expect(revenueSeries(orders, reportPeriod("last7", now), payments).find((p) => p.key === "2026-10-01")).toMatchObject({
+      revenue: 40,
+      outstanding: 60,
+      billed: 100,
+    });
+  });
+
+  it("treats a fully refunded order as unpaid again", () => {
+    const orders = [order({ id: "1", totalPrice: 100, isPaid: false, createdAt: "2026-10-01" })];
+    const payments = [
+      ledgerPayment({ id: "p1", amount: 100, orderId: "1" }),
+      ledgerPayment({ id: "r1", kind: "refund", amount: 100, orderId: "1", relatedPaymentId: "p1" }),
+    ];
+    expect(summaryStats(orders, [], reportPeriod("last7", now), payments).current.revenue).toBe(0);
+    expect(revenueSeries(orders, reportPeriod("last7", now), payments).find((p) => p.key === "2026-10-01")).toMatchObject({
+      revenue: 0,
+      outstanding: 100,
     });
   });
 

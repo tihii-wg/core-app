@@ -23,6 +23,8 @@ export type DashboardFinancials = {
   unpaidOrders: number;
   hasOrders: boolean;
   awaitingPayment: AwaitingPaymentSelection<Order>;
+  /** Ledger rows already loaded for cards — reuse for week cash stats. */
+  payments: Awaited<ReturnType<typeof getPayments>>;
   isLoading: boolean;
   isError: boolean;
 };
@@ -85,6 +87,7 @@ export function useDashboardFinancials(now: Date): DashboardFinancials {
     unpaidOrders: outstanding.unpaidCount,
     hasOrders: orders.length > 0,
     awaitingPayment,
+    payments,
     isLoading: ordersLoading || invoicesLoading || paymentsLoading,
     isError: ordersError || invoicesError || (paymentsError && !paymentsUnavailable),
   };

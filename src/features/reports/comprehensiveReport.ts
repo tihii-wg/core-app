@@ -1,6 +1,8 @@
 import i18n, { currentIntlLocale } from "../../i18n";
 import type { Client, Employee, InventoryItem, Order } from "../../lib/types";
 import { calendarDateKey, clientCreatedAt } from "../../pages/dashboardStats";
+import { orderCollectedAmount, orderPaymentBalance } from "../finance/paymentCalculations";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import { ordersIn, serviceDistribution, type ReportPeriod } from "./reportStats";
 import {
   employeeReport,
@@ -20,7 +22,13 @@ import {
 
 export type ExportSectionKey = "summary" | "revenue" | "orders" | "services" | "clients" | "employees" | "inventory";
 
-export type ExportData = { orders: Order[]; clients: Client[]; employees: Employee[]; items: InventoryItem[] };
+export type ExportData = {
+  orders: Order[];
+  clients: Client[];
+  employees: Employee[];
+  items: InventoryItem[];
+  payments?: LedgerPayment[];
+};
 
 type DataNeeds = { orders: boolean; clients: boolean; employees: boolean; inventory: boolean };
 
@@ -96,22 +104,46 @@ function newClientsSection(clients: Client[], period: ReportPeriod): ReportSecti
   };
 }
 
-export function comprehensiveReport(data: ExportData, selected: ExportSectionKey[], period: ReportPeriod, today: string, industrySlug?: string | null): QuickReportModel {
+export function comprehensiveReport(
+  data: ExportData,
+  selected: ExportSectionKey[],
+  period: ReportPeriod,
+  today: string,
+  industrySlug?: string | null,
+): QuickReportModel {
   const include = new Set(selected);
   const sections: ReportSection[] = [];
   const currentStockNote = i18n.t("reports.sections.currentStockNote");
+  const payments = data.payments ?? [];
 
-  if (include.has("revenue")) sections.push(revenueByPeriodSection(data.orders, period), outstandingOrdersSection(data.orders, period, industrySlug), expensesUnavailable(), invoicesUnavailable());
-  if (include.has("orders")) sections.push(ordersByStatusSection(data.orders, period, industrySlug), ordersListSection(data.orders, period, industrySlug));
+  if (include.has("revenue")) {
+    sections.push(
+      revenueByPeriodSection(data.orders, period, payments),
+      outstandingOrdersSection(data.orders, period, industrySlug, payments),
+      expensesUnavailable(),
+      invoicesUnavailable(),
+    );
+  }
+  if (include.has("orders")) {
+    sections.push(ordersByStatusSection(data.orders, period, industrySlug), ordersListSection(data.orders, period, industrySlug, payments));
+  }
   if (include.has("services")) sections.push(servicesSoldSection(data.orders, period));
-  if (include.has("clients")) sections.push(newClientsSection(data.clients, period), topClientsSection(data.orders, period, Number.POSITIVE_INFINITY));
-  if (include.has("employees")) sections.push(...employeeReport(data.orders, data.employees, period, today, industrySlug).sections);
+  if (include.has("clients")) {
+    sections.push(newClientsSection(data.clients, period), topClientsSection(data.orders, period, Number.POSITIVE_INFINITY, payments));
+  }
+  if (include.has("employees")) {
+    sections.push(...employeeReport(data.orders, data.employees, period, today, industrySlug, payments).sections);
+  }
   if (include.has("inventory")) {
-    sections.push(...inventoryReport(data.items).sections.map((section) => (section.kind === "table" ? { ...section, description: [section.description, currentStockNote].filter(Boolean).join(" ") } : section)));
+    sections.push(
+      ...inventoryReport(data.items).sections.map((section) =>
+        section.kind === "table" ? { ...section, description: [section.description, currentStockNote].filter(Boolean).join(" ") } : section,
+      ),
+    );
   }
 
   return {
-    kpis: include.has("summary") ? summaryKpis(data.orders, data.clients.map(clientCreatedAt), period) : [],
+    kpis: include.has("summary") ? summaryKpis(data.orders, data.clients.map(clientCreatedAt), period, payments) : [],
     sections,
   };
 }
@@ -120,12 +152,18 @@ function countText(count: number) {
   return count.toLocaleString(currentIntlLocale());
 }
 
-export function exportPreview(data: ExportData, period: ReportPeriod, formatMoney: (value: number) => string): Record<ExportSectionKey, string> {
+/** Preview collected/unpaid counts use ledger remaining (order createdAt period). */
+export function exportPreview(
+  data: ExportData,
+  period: ReportPeriod,
+  formatMoney: (value: number) => string,
+): Record<ExportSectionKey, string> {
+  const payments = data.payments ?? [];
   const periodOrders = ordersIn(data.orders, period.start, period.end);
   const billable = periodOrders.filter((order) => order.status !== "cancelled");
-  const collected = periodOrders.filter((order) => order.isPaid).reduce((total, order) => total + order.totalPrice, 0);
+  const collected = billable.reduce((total, order) => total + orderCollectedAmount(order, payments), 0);
   const billed = billable.reduce((total, order) => total + order.totalPrice, 0);
-  const unpaid = billable.filter((order) => !order.isPaid).length;
+  const unpaid = billable.filter((order) => orderPaymentBalance(order, payments).remaining > 0.005).length;
   const clientsWithOrders = new Set(billable.map((order) => order.clientId || order.clientName)).size;
   const activeItems = data.items.filter((item) => item.isActive);
   const attention = activeItems.filter((item) => item.stockStatus !== "in_stock").length;
@@ -137,7 +175,11 @@ export function exportPreview(data: ExportData, period: ReportPeriod, formatMone
     revenue: i18n.t("reports.preview.revenue", { count: unpaid, countText: countText(unpaid), amount: formatMoney(billed) }),
     orders: i18n.t("reports.preview.orders", { count: periodOrders.length, countText: countText(periodOrders.length) }),
     services: i18n.t("reports.preview.services", { count: services, countText: countText(services) }),
-    clients: i18n.t("reports.preview.clients", { count: clientsWithOrders, countText: countText(clientsWithOrders), newCount: countText(newClients(data.clients, period).length) }),
+    clients: i18n.t("reports.preview.clients", {
+      count: clientsWithOrders,
+      countText: countText(clientsWithOrders),
+      newCount: countText(newClients(data.clients, period).length),
+    }),
     employees: i18n.t("reports.preview.employees", { count: data.employees.length, countText: countText(data.employees.length) }),
     inventory: i18n.t("reports.preview.inventory", {
       activeItems: i18n.t("reports.preview.activeItems", { count: activeItems.length, countText: countText(activeItems.length) }),

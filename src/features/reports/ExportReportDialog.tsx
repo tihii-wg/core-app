@@ -10,6 +10,7 @@ import { useGetOrders } from "../orders/useGetOrders";
 import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { useGetPayments } from "../finance/usePayments";
 import { reportPeriod, type ReportRange } from "./reportStats";
 import { reportCsv, type ReportSection } from "./quickReports";
 import { comprehensiveReport, comprehensiveReportDescription, comprehensiveReportTitle, exportNeeds, exportPreview, exportSectionDescription, exportSectionKeys, exportSectionLabel, usesPeriod, type ExportSectionKey } from "./comprehensiveReport";
@@ -95,13 +96,27 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
   const clientsQuery = useGetClients("");
   const employeesQuery = useGetEmployees();
   const inventoryQuery = useGetInventoryItems("", "all", inventorySort);
+  const paymentsQuery = useGetPayments();
 
   const allSelected = selected.length === exportSectionKeys.length;
   const ordered = exportSectionKeys.filter((key) => selected.includes(key));
   const period = reportPeriod(range, new Date());
   const periodLabel = usesPeriod(ordered) || ordered.length === 0 ? `${formatDate(period.start)} – ${formatDate(period.end)}` : t("reports.asOf", { date: formatDate(period.end) });
-  const previewLoading = !workspaceId || ordersQuery.isLoading || clientsQuery.isLoading || employeesQuery.isLoading || inventoryQuery.isLoading;
-  const preview = previewLoading ? null : exportPreview({ orders: ordersQuery.orders, clients: clientsQuery.clients ?? [], employees: employeesQuery.employees ?? [], items: inventoryQuery.items }, period, formatMoney);
+  const previewLoading =
+    !workspaceId ||
+    ordersQuery.isLoading ||
+    clientsQuery.isLoading ||
+    employeesQuery.isLoading ||
+    inventoryQuery.isLoading ||
+    paymentsQuery.isLoading;
+  const exportData = {
+    orders: ordersQuery.orders,
+    clients: clientsQuery.clients ?? [],
+    employees: employeesQuery.employees ?? [],
+    items: inventoryQuery.items,
+    payments: paymentsQuery.payments ?? [],
+  };
+  const preview = previewLoading ? null : exportPreview(exportData, period, formatMoney);
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = selected.length > 0 && !allSelected;
@@ -121,11 +136,12 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
     setError(null);
     try {
       const needs = exportNeeds(ordered);
-      const [orders, clients, employees, items] = await Promise.all([
+      const [orders, clients, employees, items, payments] = await Promise.all([
         needs.orders ? ordersQuery.refetch({ throwOnError: true }).then((result) => result.data ?? []) : [],
         needs.clients ? clientsQuery.refetch({ throwOnError: true }).then((result) => result.data ?? []) : [],
         needs.employees ? employeesQuery.refetch({ throwOnError: true }).then((result) => result.data ?? []) : [],
         needs.inventory ? inventoryQuery.refetch({ throwOnError: true }).then((result) => result.data ?? []) : [],
+        needs.orders ? paymentsQuery.refetch({ throwOnError: true }).then((result) => result.data ?? []) : [],
       ]);
       // Closed while the data was loading: the export was cancelled.
       if (!isOpen.current) return;
@@ -133,7 +149,7 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
       const generatedAt = new Date();
       const exportPeriod = reportPeriod(range, generatedAt);
       const today = localDateKey(generatedAt);
-      const baseModel = comprehensiveReport({ orders, clients, employees, items }, ordered, exportPeriod, today, industrySlug);
+      const baseModel = comprehensiveReport({ orders, clients, employees, items, payments }, ordered, exportPeriod, today, industrySlug);
       let model = baseModel;
       if (withActivity) {
         const log = await getActivityLog(workspaceId, ACTIVITY_EXPORT_LIMIT);

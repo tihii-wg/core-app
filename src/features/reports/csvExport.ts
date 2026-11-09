@@ -1,6 +1,7 @@
 import i18n from "../../i18n";
 import type { ActivityLogEntry } from "../../services/apiActivityLog";
 import type { Order } from "../../lib/types";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import { ordersByStatusSection, reportCsv, summaryKpis, type ReportSection } from "./quickReports";
 import type { ReportPeriod } from "./reportStats";
 
@@ -77,9 +78,10 @@ export function ordersSummaryCsv(
   period: ReportPeriod,
   meta: { title: string; workspace: string; period: string; generated: string },
   industrySlug?: string | null,
+  payments: LedgerPayment[] = [],
 ) {
   return reportCsv(meta, {
-    kpis: summaryKpis(orders, clientCreatedDates, period),
+    kpis: summaryKpis(orders, clientCreatedDates, period, payments),
     sections: [ordersByStatusSection(orders, period, industrySlug)],
   });
 }

@@ -15,6 +15,7 @@ import {
   invoiceOrderLockDecision,
   ledgerCurrencyGate,
   normalizeCurrencyCode,
+  orderCollectedAmount,
   orderHasOutstandingBalance,
   orderPaymentBalance,
   paymentsAffectingInvoice,
@@ -111,6 +112,22 @@ describe("partial and full payments", () => {
     expect(orderPaymentBalance(o, [payment({ id: "p1", kind: "payment", amount: 40, orderId: "o1" }), payment({ id: "p2", kind: "payment", amount: 60, orderId: "o1" })]).status).toBe(
       "paid",
     );
+  });
+
+  it("orderCollectedAmount uses ledger net even when is_paid is false", () => {
+    const o = order({ id: "o1", totalPrice: 100, isPaid: false });
+    expect(orderCollectedAmount(o, [payment({ id: "p1", kind: "payment", amount: 100, orderId: "o1" })])).toBe(100);
+    expect(orderCollectedAmount(o, [payment({ id: "p1", kind: "payment", amount: 40, orderId: "o1" })])).toBe(40);
+  });
+
+  it("orderCollectedAmount returns 0 after a full refund", () => {
+    const o = order({ id: "o1", totalPrice: 100, isPaid: false });
+    const rows = [
+      payment({ id: "p1", kind: "payment", amount: 100, orderId: "o1" }),
+      payment({ id: "r1", kind: "refund", amount: 100, orderId: "o1", relatedPaymentId: "p1" }),
+    ];
+    expect(orderCollectedAmount(o, rows)).toBe(0);
+    expect(orderPaymentBalance(o, rows).status).toBe("unpaid");
   });
 
   it("orderHasOutstandingBalance keeps unpaid and partial, excludes paid and cancelled", () => {

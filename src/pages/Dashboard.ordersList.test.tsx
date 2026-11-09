@@ -56,6 +56,7 @@ vi.mock("../features/dashboard/useDashboardFinancials", () => ({
       standaloneInvoiceCount: financialState.standaloneInvoiceCount,
       totalCount: financialState.awaitingOrders.length + financialState.standaloneInvoiceCount,
     },
+    payments: [],
     isLoading: financialState.isLoading,
     isError: financialState.isError,
   }),

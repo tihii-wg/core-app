@@ -12,6 +12,7 @@ import { useGetOrders } from "../orders/useGetOrders";
 import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { useGetPayments } from "../finance/usePayments";
 import { reportPeriod } from "./reportStats";
 import { employeeReport, financialReport, inventoryReport, isQuickReportType, quickReportDescription, quickReportTitle, quickReports, reportCsv, salesReport, toReportRange, type QuickReportModel, type QuickReportType } from "./quickReports";
 import { ReportDocument } from "./ReportDocument";
@@ -56,6 +57,8 @@ export function QuickReportPage() {
   const clientsQuery = useGetClients("", "all", { enabled: definition.needs.clients });
   const employeesQuery = useGetEmployees();
   const inventoryQuery = useGetInventoryItems("", "all", inventorySort, { enabled: definition.needs.inventory });
+  const needsPayments = definition.needs.orders;
+  const paymentsQuery = useGetPayments();
 
   const today = localDateKey(generatedAt);
   const period = reportPeriod(range, generatedAt);
@@ -67,16 +70,18 @@ export function QuickReportPage() {
     definition.needs.clients && clientsQuery,
     definition.needs.employees && employeesQuery,
     definition.needs.inventory && inventoryQuery,
+    needsPayments && paymentsQuery,
   ].filter((query) => query !== false);
   const isLoading = !workspaceId || needed.some((query) => query.isLoading);
   const isError = needed.some((query) => ("isError" in query ? query.isError : Boolean(query.error)));
+  const payments = paymentsQuery.payments ?? [];
 
   let model: QuickReportModel | null = null;
   if (!isLoading && !isError) {
-    if (type === "sales") model = salesReport(ordersQuery.orders, (clientsQuery.clients ?? []).map(clientCreatedAt), period, industrySlug);
+    if (type === "sales") model = salesReport(ordersQuery.orders, (clientsQuery.clients ?? []).map(clientCreatedAt), period, industrySlug, payments);
     else if (type === "inventory") model = inventoryReport(inventoryQuery.items);
-    else if (type === "employees") model = employeeReport(ordersQuery.orders, employeesQuery.employees ?? [], period, today, industrySlug);
-    else model = financialReport(ordersQuery.orders, inventoryQuery.items, period, industrySlug);
+    else if (type === "employees") model = employeeReport(ordersQuery.orders, employeesQuery.employees ?? [], period, today, industrySlug, payments);
+    else model = financialReport(ordersQuery.orders, inventoryQuery.items, period, industrySlug, payments);
   }
 
   const documentTitle = `${title} – ${workspaceName} – ${periodLabel}`;

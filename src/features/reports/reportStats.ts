@@ -4,6 +4,7 @@ import { calendarDateKey, localDateKey, startOfWeek } from "../../pages/dashboar
 import { financeDateKey } from "../finance/financeStats";
 import {
   netCollected,
+  orderCollectedAmount,
   orderPaymentBalance,
   paymentsForCurrency,
   paymentsInPeriod,
@@ -114,13 +115,24 @@ export function reportPeriod(range: ReportRange, now: Date): ReportPeriod {
   };
 }
 
-/** Operational order totals for a period. Revenue here is legacy order.isPaid — prefer ledgerPeriodRevenue for confirmed cash. */
-export function periodTotals(orders: Order[], clientCreatedDates: string[], start: string, end: string): PeriodTotals {
+/**
+ * Operational order totals for a period (orders dated by createdAt).
+ * `revenue` here is collected per order via the payments ledger (orderPaymentBalance),
+ * attributed to the order's createdAt — not cash-by-paidAt.
+ * Prefer `ledgerPeriodRevenue` / `summaryStatsWithLedger` for confirmed cash by payment date.
+ */
+export function periodTotals(
+  orders: Order[],
+  clientCreatedDates: string[],
+  start: string,
+  end: string,
+  payments: LedgerPayment[] = [],
+): PeriodTotals {
   const periodOrders = ordersIn(orders, start, end);
   const billable = periodOrders.filter((order) => order.status !== "cancelled");
 
   return {
-    revenue: sumTotals(periodOrders.filter((order) => order.isPaid)),
+    revenue: billable.reduce((sum, order) => sum + orderCollectedAmount(order, payments), 0),
     orders: periodOrders.length,
     newClients: clientCreatedDates.filter((createdAt) => inRange(calendarDateKey(createdAt), start, end)).length,
     avgOrderValue: billable.length > 0 ? sumTotals(billable) / billable.length : 0,
@@ -132,14 +144,19 @@ export function ledgerPeriodRevenue(payments: LedgerPayment[], period: Pick<Repo
   return netCollected(paymentsInPeriod(paymentsForCurrency(payments, currencyCode), period));
 }
 
-export function summaryStats(orders: Order[], clientCreatedDates: string[], period: ReportPeriod) {
+export function summaryStats(
+  orders: Order[],
+  clientCreatedDates: string[],
+  period: ReportPeriod,
+  payments: LedgerPayment[] = [],
+) {
   return {
-    current: periodTotals(orders, clientCreatedDates, period.start, period.end),
-    previous: periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd),
+    current: periodTotals(orders, clientCreatedDates, period.start, period.end, payments),
+    previous: periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd, payments),
   };
 }
 
-/** Same as summaryStats but replaces revenue with ledger-confirmed net receipts. */
+/** Same as summaryStats but replaces revenue with ledger-confirmed net receipts by paidAt. */
 export function summaryStatsWithLedger(
   orders: Order[],
   clientCreatedDates: string[],
@@ -147,8 +164,8 @@ export function summaryStatsWithLedger(
   payments: LedgerPayment[],
   currencyCode: string,
 ) {
-  const current = periodTotals(orders, clientCreatedDates, period.start, period.end);
-  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd);
+  const current = periodTotals(orders, clientCreatedDates, period.start, period.end, payments);
+  const previous = periodTotals(orders, clientCreatedDates, period.previousStart, period.previousEnd, payments);
   return {
     current: { ...current, revenue: ledgerPeriodRevenue(payments, period, currencyCode) },
     previous: {
@@ -174,7 +191,12 @@ function bucketLabel(key: string, granularity: ReportGranularity) {
   return fromDateKey(key).toLocaleDateString(currentIntlLocale(), { month: "short", day: "numeric" });
 }
 
-export function revenueSeries(orders: Order[], period: ReportPeriod): SeriesPoint[] {
+/**
+ * Series bucketed by order createdAt.
+ * Collected/outstanding come from orderPaymentBalance (partials contribute both sides).
+ * For cash-by-paidAt use revenueSeriesWithLedger.
+ */
+export function revenueSeries(orders: Order[], period: ReportPeriod, payments: LedgerPayment[] = []): SeriesPoint[] {
   const points = new Map<string, SeriesPoint>();
 
   for (let day = fromDateKey(period.start); localDateKey(day) <= period.end; day = addDays(day, 1)) {
@@ -186,10 +208,11 @@ export function revenueSeries(orders: Order[], period: ReportPeriod): SeriesPoin
     const point = points.get(bucketKey(order.createdAt, period.granularity));
     if (!point) continue;
     point.orders += 1;
-    if (order.isPaid) point.revenue += order.totalPrice;
     if (order.status === "cancelled") continue;
     point.billed += order.totalPrice;
-    if (!order.isPaid) point.outstanding += order.totalPrice;
+    const balance = orderPaymentBalance(order, payments);
+    point.revenue += orderCollectedAmount(order, payments);
+    if (!balance.isLegacyUnreconciled && balance.remaining > 0) point.outstanding += balance.remaining;
   }
 
   return [...points.values()];
@@ -270,13 +293,25 @@ export function serviceDistribution(orders: Order[], period: ReportPeriod, maxSl
   return slices.map((slice) => ({ ...slice, percent: Math.round((slice.count / totalCount) * 100) }));
 }
 
-export function employeePerformance(orders: Order[], employees: Employee[], period: ReportPeriod): EmployeeResult[] {
+/** Employee completed-order revenue uses ledger collected amounts (order createdAt period). */
+export function employeePerformance(
+  orders: Order[],
+  employees: Employee[],
+  period: ReportPeriod,
+  payments: LedgerPayment[] = [],
+): EmployeeResult[] {
   const periodOrders = ordersIn(orders, period.start, period.end);
 
   return employees
     .map((employee) => {
-      const completed = periodOrders.filter((order) => orderAssignedToEmployee(order.assignedEmployeeId, employee) && completedStatuses.has(order.status));
-      return { name: employee.name, completed: completed.length, revenue: sumTotals(completed.filter((order) => order.isPaid)) };
+      const completed = periodOrders.filter(
+        (order) => orderAssignedToEmployee(order.assignedEmployeeId, employee) && completedStatuses.has(order.status),
+      );
+      return {
+        name: employee.name,
+        completed: completed.length,
+        revenue: completed.reduce((sum, order) => sum + orderCollectedAmount(order, payments), 0),
+      };
     })
     .filter((result) => result.completed > 0)
     .sort((a, b) => b.completed - a.completed || a.name.localeCompare(b.name));

@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { Employee, InventoryItem, Order } from "../../lib/types";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import { reportPeriod } from "./reportStats";
 import { employeeReport, financialReport, inventoryReport, isQuickReportType, reportCsv, salesReport, toReportRange, type QuickReportModel, type ReportSection } from "./quickReports";
+
+function ledgerPayment(partial: Partial<LedgerPayment> & Pick<LedgerPayment, "id" | "amount">): LedgerPayment {
+  return {
+    workspaceId: "ws-a",
+    orderId: null,
+    invoiceId: null,
+    relatedPaymentId: null,
+    kind: "payment",
+    currencyCode: "MDL",
+    paymentMethod: "cash",
+    paidAt: "2026-10-01T12:00:00.000Z",
+    note: "",
+    createdBy: null,
+    createdAt: "2026-10-01T12:00:00.000Z",
+    ...partial,
+  };
+}
 
 const now = new Date(2026, 9, 2, 10, 0, 0);
 const period = reportPeriod("last7", now);
@@ -186,6 +204,40 @@ describe("financialReport", () => {
     expect(table(model, "Outstanding orders").rows.map((row) => row.number)).toEqual(["ORD-2"]);
     expect(table(model, "Revenue by period").totals).toMatchObject({ billed: 400, collected: 100, outstanding: 300 });
     expect(model.sections.filter((section) => section.kind === "unavailable").map((section) => section.title)).toEqual(["Expenses and profit", "Invoices"]);
+  });
+
+  it("uses the ledger for collected/outstanding and shows partial payment labels", () => {
+    const orders = [
+      order({ id: "o1", orderNumber: "ORD-1", totalPrice: 100, isPaid: false, status: "completed", services: [line("Oil change", 100)] }),
+      order({ id: "o2", orderNumber: "ORD-2", totalPrice: 80, isPaid: false, status: "in-progress" }),
+    ];
+    const payments = [
+      ledgerPayment({ id: "p1", amount: 100, orderId: "o1" }),
+      ledgerPayment({ id: "p2", amount: 30, orderId: "o2" }),
+    ];
+    const model = financialReport(orders, [], period, null, payments);
+    expect(kpi(model, "Revenue collected")?.value).toBe(130);
+    expect(kpi(model, "Outstanding")).toMatchObject({ value: 50, hint: "1 unpaid orders" });
+    expect(table(model, "Outstanding orders").rows).toEqual([
+      expect.objectContaining({ number: "ORD-2", total: 50 }),
+    ]);
+
+    const sales = salesReport(orders, [], period, null, payments);
+    expect(table(sales, "Orders").rows.map((row) => [row.number, row.payment])).toEqual([
+      ["ORD-2", "Partially Paid"],
+      ["ORD-1", "Paid"],
+    ]);
+  });
+
+  it("treats a refunded ledger payment as unpaid again", () => {
+    const orders = [order({ id: "o1", totalPrice: 100, isPaid: false, status: "completed" })];
+    const payments = [
+      ledgerPayment({ id: "p1", amount: 100, orderId: "o1" }),
+      ledgerPayment({ id: "r1", kind: "refund", amount: 100, orderId: "o1", relatedPaymentId: "p1" }),
+    ];
+    const model = financialReport(orders, [], period, null, payments);
+    expect(kpi(model, "Revenue collected")?.value).toBe(0);
+    expect(kpi(model, "Outstanding")?.value).toBe(100);
   });
 });
 
