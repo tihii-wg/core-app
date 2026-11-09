@@ -254,6 +254,7 @@ function buildWorkspace(input: DemoPrintContextInput, t: (key: string) => string
     subscriptionStartedAt: null,
     subscriptionExpiresAt: null,
     subscriptionUpdatedAt: null,
+    attachmentStorage: "app",
   };
 }
 

@@ -1,25 +1,28 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Camera, Download, Eye, FileText, ImageIcon, Paperclip, Trash2, Upload } from "lucide-react";
+import { Camera, Download, Eye, ExternalLink, FileText, ImageIcon, Paperclip, Trash2, Upload } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
 import { currentIntlLocale } from "../../i18n";
 import {
   formatAttachmentBytes,
+  isDriveAttachment,
+  isNasAttachment,
   isImageMimeType,
   ORDER_ATTACHMENT_ACCEPT,
   validateOrderAttachmentFile,
   type OrderAttachment,
 } from "./orderAttachments";
-import { createOrderAttachmentSignedUrl } from "../../services/apiOrderAttachments";
+import { resolveOrderAttachmentUrl } from "../../services/apiOrderAttachments";
 import {
   useCanMutateOrderAttachments,
   useDeleteOrderAttachment,
-  useOrderAttachmentSignedUrl,
+  useOrderAttachmentUrl,
   useOrderAttachments,
   useUploadOrderAttachment,
 } from "./useOrderAttachments";
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import toast from "react-hot-toast";
 
 type OrderAttachmentsSectionProps = {
@@ -37,20 +40,67 @@ function formatUploadedAt(value: string) {
   return date.toLocaleString(currentIntlLocale(), { dateStyle: "medium", timeStyle: "short" });
 }
 
+function GoogleDriveGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden>
+      <path fill="#4285F4" d="M8.5 3.5 3 13h5.2l5.5-9.5z" />
+      <path fill="#34A853" d="m15.5 3.5-5.5 9.5H21z" />
+      <path fill="#FBBC04" d="M3 13.5 8.5 23h11L14 13.5z" />
+    </svg>
+  );
+}
+
+function NasGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="4" width="18" height="8" rx="1.5" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" />
+      <circle cx="7" cy="8" r="1" fill="currentColor" stroke="none" />
+      <circle cx="7" cy="17" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function ProviderBadge({ attachment }: { attachment: OrderAttachment }) {
+  const { t } = useTranslation();
+  if (isDriveAttachment(attachment)) {
+    return (
+      <span className="ml-1.5 inline-flex align-middle text-muted-foreground" title={t("orders.attachments.storedOnDrive")}>
+        <GoogleDriveGlyph className="size-3.5" />
+      </span>
+    );
+  }
+  if (isNasAttachment(attachment)) {
+    return (
+      <span className="ml-1.5 inline-flex align-middle text-muted-foreground" title={t("orders.attachments.storedOnNas")}>
+        <NasGlyph className="size-3.5" />
+      </span>
+    );
+  }
+  return null;
+}
+
 function AttachmentThumb({ attachment, onOpen }: { attachment: OrderAttachment; onOpen: () => void }) {
   const { t } = useTranslation();
   const isImage = isImageMimeType(attachment.mimeType);
-  const { data: url, isLoading, isError } = useOrderAttachmentSignedUrl(attachment.storagePath, { enabled: isImage });
+  const drive = isDriveAttachment(attachment);
+  const nas = isNasAttachment(attachment);
+  const { data: url, isLoading, isError } = useOrderAttachmentUrl(attachment, {
+    enabled: isImage,
+    variant: "thumb",
+  });
 
   if (!isImage) {
     return (
       <button
         type="button"
         onClick={onOpen}
-        className="flex size-16 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground transition-colors hover:bg-muted"
+        className="relative flex size-16 shrink-0 items-center justify-center rounded-md border border-border bg-muted/50 text-muted-foreground transition-colors hover:bg-muted"
         aria-label={t("orders.attachments.open", { name: attachment.fileName })}
       >
         <FileText className="size-6" aria-hidden />
+        {drive ? <GoogleDriveGlyph className="absolute bottom-0.5 right-0.5 size-3.5 drop-shadow-sm" /> : null}
+        {nas ? <NasGlyph className="absolute bottom-0.5 right-0.5 size-3.5 drop-shadow-sm" /> : null}
       </button>
     );
   }
@@ -70,6 +120,8 @@ function AttachmentThumb({ attachment, onOpen }: { attachment: OrderAttachment; 
           <ImageIcon className="size-6" aria-hidden />
         </span>
       ) : null}
+      {drive ? <GoogleDriveGlyph className="absolute bottom-0.5 right-0.5 size-3.5 drop-shadow-sm" /> : null}
+      {nas ? <NasGlyph className="absolute bottom-0.5 right-0.5 size-3.5 text-foreground drop-shadow-sm" /> : null}
     </button>
   );
 }
@@ -84,8 +136,9 @@ function AttachmentPreviewDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const { data: url, isLoading, isError, refetch } = useOrderAttachmentSignedUrl(attachment?.storagePath, {
+  const { data: url, isLoading, isError, refetch } = useOrderAttachmentUrl(attachment, {
     enabled: open && Boolean(attachment),
+    variant: "full",
   });
   const isImage = attachment ? isImageMimeType(attachment.mimeType) : false;
 
@@ -114,7 +167,7 @@ function AttachmentPreviewDialog({
               <FileText className="mx-auto size-10 text-muted-foreground" aria-hidden />
               <p className="mt-3 text-sm font-medium [overflow-wrap:anywhere] text-foreground">{attachment?.fileName}</p>
               <Button type="button" variant="outline" className="mt-4" asChild>
-                <a href={url} target="_blank" rel="noreferrer">
+                <a href={url} target="_blank" rel="noreferrer" download={attachment?.fileName}>
                   <Download className="size-4" />
                   {t("orders.attachments.download")}
                 </a>
@@ -135,6 +188,7 @@ export default function OrderAttachmentsSection({
   const { t } = useTranslation();
   const canMutateRole = useCanMutateOrderAttachments();
   const canMutate = canMutateOverride === false ? false : canMutateRole;
+  const isOwner = useIsWorkspaceOwnerId();
   const { attachments, isLoading, error, refetch } = useOrderAttachments(orderId, { enabled });
   const upload = useUploadOrderAttachment(orderId);
   const remove = useDeleteOrderAttachment(orderId);
@@ -143,6 +197,8 @@ export default function OrderAttachmentsSection({
   const [preview, setPreview] = useState<OrderAttachment | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OrderAttachment | null>(null);
   const busy = upload.isPending || remove.isPending;
+
+  const driveFolderId = attachments.find((a) => a.driveFolderId)?.driveFolderId ?? null;
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || busy || !canMutate) return;
@@ -176,11 +232,17 @@ export default function OrderAttachmentsSection({
   }
 
   async function openExternal(attachment: OrderAttachment) {
+    let url: string | null = null;
     try {
-      const url = await createOrderAttachmentSignedUrl(attachment.storagePath);
+      url = await resolveOrderAttachmentUrl(attachment, "full");
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("orders.attachments.errors.signedUrlFailed"));
+    } finally {
+      if (url?.startsWith("blob:")) {
+        // Give the new tab a moment to start loading before revoking.
+        window.setTimeout(() => URL.revokeObjectURL(url!), 60_000);
+      }
     }
   }
 
@@ -192,6 +254,17 @@ export default function OrderAttachmentsSection({
             {t("orders.attachments.title")}
           </h3>
           <p className="mt-0.5 text-xs text-subtle-foreground">{t("orders.attachments.subtitle")}</p>
+          {isOwner && driveFolderId ? (
+            <a
+              href={`https://drive.google.com/drive/folders/${encodeURIComponent(driveFolderId)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <ExternalLink className="size-3" aria-hidden />
+              {t("orders.attachments.openDriveFolder")}
+            </a>
+          ) : null}
         </div>
         {canMutate ? (
           <div className="flex flex-wrap gap-2">
@@ -275,6 +348,7 @@ export default function OrderAttachmentsSection({
               <div className="min-w-0 flex-1">
                 <p className="break-all text-sm font-medium text-foreground" title={attachment.fileName}>
                   {attachment.fileName}
+                  <ProviderBadge attachment={attachment} />
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                   {attachment.mimeType || "—"} · {formatAttachmentBytes(attachment.fileSize, currentIntlLocale())}

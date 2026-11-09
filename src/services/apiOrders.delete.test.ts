@@ -228,7 +228,13 @@ describe("deleteOrder", () => {
     from.mockImplementation((table: string) => {
       if (table === "invoices") return invoiceQuery({ data: [], error: null });
       if (table === "order_attachments") {
-        return attachmentsQuery({ data: [{ storage_path: "ws-1/order-1/a.jpg" }], error: null });
+        return attachmentsQuery({
+          data: [
+            { storage_path: "ws-1/order-1/a.jpg" },
+            { storage_path: null }, // Drive row — skip Storage remove
+          ],
+          error: null,
+        });
       }
       if (table === "order_attachment_cleanup") return cleanupDeleteQuery();
       throw new Error(`unexpected table ${table}`);
@@ -256,6 +262,7 @@ describe("deleteOrder", () => {
       p_order_id: "order-1",
     });
     expect(storageRemove).toHaveBeenCalledWith(["ws-1/order-1/a.jpg"]);
+    expect(storageRemove).not.toHaveBeenCalledWith([null]);
   });
 
   it("does not report success when Storage cleanup fails after DB delete", async () => {

@@ -10,17 +10,38 @@ export const ORDER_ATTACHMENT_PHOTO_SOURCE_MAX_BYTES = 60 * 1024 * 1024;
 /** Short-lived signed URL TTL for private bucket previews/downloads. */
 export const ORDER_ATTACHMENT_SIGNED_URL_SECONDS = 60 * 15;
 
+export type OrderAttachmentStorageProvider = "app" | "google_drive" | "nas";
+
 export type OrderAttachment = {
   id: string;
   workspaceId: string;
   orderId: string;
   uploadedBy: string | null;
   fileName: string;
-  storagePath: string;
+  /** Null for Google Drive / NAS rows. */
+  storagePath: string | null;
+  storageProvider: OrderAttachmentStorageProvider;
+  driveFileId: string | null;
+  driveFolderId: string | null;
+  nasPath: string | null;
   mimeType: string;
   fileSize: number;
   createdAt: string;
 };
+
+export function isDriveAttachment(attachment: Pick<OrderAttachment, "storageProvider" | "driveFileId">) {
+  return attachment.storageProvider === "google_drive" && Boolean(attachment.driveFileId);
+}
+
+export function isNasAttachment(attachment: Pick<OrderAttachment, "storageProvider" | "nasPath">) {
+  return attachment.storageProvider === "nas" && Boolean(attachment.nasPath);
+}
+
+export function isRemoteAttachment(
+  attachment: Pick<OrderAttachment, "storageProvider" | "driveFileId" | "nasPath">,
+) {
+  return isDriveAttachment(attachment) || isNasAttachment(attachment);
+}
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -153,8 +174,9 @@ export function canMutateOrderAttachments(
 
 export function formatAttachmentBytes(bytes: number, locale?: string) {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB"];
+  const ru = (locale ?? "").toLowerCase().startsWith("ru");
+  if (bytes < 1024) return `${bytes} ${ru ? "Б" : "B"}`;
+  const units = ru ? ["КБ", "МБ", "ГБ"] : ["KB", "MB", "GB"];
   let value = bytes / 1024;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {

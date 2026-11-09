@@ -3886,6 +3886,14 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
     );
   }
 
+  // Drive rows have null storage_path (skipped above); trash the order folder best-effort.
+  try {
+    const { trashOrderDriveFolder } = await import("./apiOrderAttachments");
+    await trashOrderDriveFolder(targetWorkspaceId, id);
+  } catch (error) {
+    console.warn("[deleteOrder] trashOrderDriveFolder", error);
+  }
+
   return {
     id: payload?.order_id ?? id,
     paymentsDeleted: typeof payload?.payments_deleted === "number" ? payload.payments_deleted : 0,

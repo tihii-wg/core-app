@@ -9,3 +9,15 @@ verify_jwt = false
 
 [functions.backup-github-connect]
 verify_jwt = false
+
+[functions.google-drive-photos-oauth]
+verify_jwt = false
+
+[functions.order-attachment-drive]
+verify_jwt = false
+
+[functions.order-attachment-remote]
+verify_jwt = false
+
+[functions.nas-storage]
+verify_jwt = false

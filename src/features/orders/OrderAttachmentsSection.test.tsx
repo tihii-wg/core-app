@@ -39,10 +39,21 @@ vi.mock("./useOrderAttachments", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
+  useOrderAttachmentUrl: () => ({
+    data: "https://storage.test/signed",
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("../../services/apiOrderAttachments", () => ({
   createOrderAttachmentSignedUrl: vi.fn(async () => "https://storage.test/signed"),
+  resolveOrderAttachmentUrl: vi.fn(async () => "https://storage.test/signed"),
+}));
+
+vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
+  useIsWorkspaceOwnerId: () => true,
 }));
 
 const sample: OrderAttachment = {
@@ -52,6 +63,10 @@ const sample: OrderAttachment = {
   uploadedBy: "user-1",
   fileName: "bumper-damage.jpg",
   storagePath: "ws-1/order-1/uuid-bumper-damage.jpg",
+  storageProvider: "app",
+  driveFileId: null,
+  driveFolderId: null,
+  nasPath: null,
   mimeType: "image/jpeg",
   fileSize: 2048,
   createdAt: "2026-10-01T12:00:00.000Z",
@@ -117,5 +132,36 @@ describe("OrderAttachmentsSection", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     expect(attachmentsState.mutateDelete).toHaveBeenCalledWith("att-1");
+  });
+
+  it("shows Drive badge and open-folder link for Drive rows", () => {
+    attachmentsState.list = [
+      {
+        ...sample,
+        storagePath: null,
+        storageProvider: "google_drive",
+        driveFileId: "file-1",
+        driveFolderId: "folder-1",
+      },
+    ];
+    renderWithQuery(<OrderAttachmentsSection orderId="order-1" />);
+    expect(screen.getByTitle(/On Google Drive/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open order folder on Google Drive/i })).toHaveAttribute(
+      "href",
+      "https://drive.google.com/drive/folders/folder-1",
+    );
+  });
+
+  it("shows NAS badge for NAS rows", () => {
+    attachmentsState.list = [
+      {
+        ...sample,
+        storagePath: null,
+        storageProvider: "nas",
+        nasPath: "/CoreApp/ORD-1/bumper-damage.jpg",
+      },
+    ];
+    renderWithQuery(<OrderAttachmentsSection orderId="order-1" />);
+    expect(screen.getByTitle(/On NAS/i)).toBeInTheDocument();
   });
 });

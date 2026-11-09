@@ -21,6 +21,7 @@ import {
   DatabaseZap,
   Blocks,
   HardDriveDownload,
+  HardDrive,
 } from "lucide-react";
 import {
   Card,
@@ -60,6 +61,7 @@ import { RolesSettings } from "./RolesSettings";
 import { PrintTemplatesSettings } from "./PrintTemplatesSettings";
 import { TaxesSettings } from "./TaxesSettings";
 import { BackupsSettings } from "./backups/BackupsSettings";
+import { StorageSettings } from "./storage/StorageSettings";
 import { NotificationRulesSettings } from "./NotificationRulesSettings";
 import { WarehousesSettings } from "./WarehousesSettings";
 import { ComingModulesSettings } from "./ComingModulesSettings";
@@ -155,6 +157,10 @@ export function SettingsModule() {
           <TabsTrigger value="backups">
             <HardDriveDownload />
             {t("settings.tabs.backups")}
+          </TabsTrigger>
+          <TabsTrigger value="storage">
+            <HardDrive />
+            {t("settings.tabs.storage")}
           </TabsTrigger>
           <TabsTrigger value="import">
             <FileSpreadsheet />
@@ -347,6 +353,10 @@ export function SettingsModule() {
 
         <TabsContent value="backups" className="mt-5 space-y-5">
           <BackupsSettings />
+        </TabsContent>
+
+        <TabsContent value="storage" className="mt-5 space-y-5">
+          <StorageSettings />
         </TabsContent>
 
         <TabsContent value="import" className="mt-5 space-y-5">

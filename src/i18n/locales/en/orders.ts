@@ -343,9 +343,15 @@ export default {
     download: "Download",
     deleteTitle: "Delete attachment?",
     deleteDescription: "Remove “{{name}}” from this order. This cannot be undone.",
+    openDriveFolder: "Open order folder on Google Drive",
+    storedOnDrive: "On Google Drive",
+    storedOnNas: "On NAS",
     toast: {
       uploaded: "Attachment uploaded",
       deleted: "Attachment deleted",
+      driveFallback:
+        "Google Drive is unavailable — the photo was saved in the app. The owner needs to reconnect Drive.",
+      nasFallback: "NAS is unavailable — the photo was saved in the app",
     },
     errors: {
       orderRequired: "Order is required",

@@ -72,6 +72,7 @@ const workspace: WorkspaceDetails = {
   subscriptionStartedAt: null,
   subscriptionExpiresAt: null,
   subscriptionUpdatedAt: null,
+  attachmentStorage: "app",
 };
 
 describe("Company logo controls", () => {

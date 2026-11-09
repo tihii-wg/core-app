@@ -13,6 +13,7 @@ export const settingsTabs = [
   "printTemplates",
   "taxes",
   "backups",
+  "storage",
   "import",
   "migration",
   "modules",

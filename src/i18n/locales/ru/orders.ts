@@ -352,9 +352,15 @@ const orders: Messages<typeof en> = {
     download: "Скачать",
     deleteTitle: "Удалить вложение?",
     deleteDescription: "Удалить «{{name}}» из этого заказа. Это действие нельзя отменить.",
+    openDriveFolder: "Открыть папку заказа на Google Диске",
+    storedOnDrive: "На Google Диске",
+    storedOnNas: "На NAS",
     toast: {
       uploaded: "Вложение загружено",
       deleted: "Вложение удалено",
+      driveFallback:
+        "Google Диск недоступен — фото сохранено в приложении. Владельцу нужно переподключить Диск.",
+      nasFallback: "NAS недоступен — фото сохранено в приложении",
     },
     errors: {
       orderRequired: "Требуется заказ",

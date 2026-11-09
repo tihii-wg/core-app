@@ -103,6 +103,10 @@ const generalSettingsColumns = [
   "payment_stage_template",
 ] as const;
 
+function mentionsAttachmentStorageColumn(message?: string) {
+  return message?.includes("attachment_storage") === true;
+}
+
 function mentionsPreferenceColumn(message?: string) {
   return preferenceColumns.some((column) => message?.includes(column) === true);
 }
@@ -122,6 +126,7 @@ function membershipSelect(options: {
   preferences: boolean;
   subscription: boolean;
   general: boolean;
+  attachmentStorage: boolean;
 }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
@@ -129,6 +134,7 @@ function membershipSelect(options: {
   if (options.preferences) fields.push(...preferenceColumns);
   if (options.subscription) fields.push(...subscriptionColumns);
   if (options.general) fields.push(...generalSettingsColumns);
+  if (options.attachmentStorage) fields.push("attachment_storage");
   const industry = options.industry
     ? `,
     industry:industries (
@@ -154,7 +160,8 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
     error.message?.includes("inventory_markup") ||
     mentionsPreferenceColumn(error.message) ||
     mentionsSubscriptionColumn(error.message) ||
-    mentionsGeneralSettingsColumn(error.message)
+    mentionsGeneralSettingsColumn(error.message) ||
+    mentionsAttachmentStorageColumn(error.message)
   ) {
     return false;
   }
@@ -173,6 +180,10 @@ function isMissingGeneralSettingsColumn(error: { code?: string; message?: string
   return (error.code === "42703" || error.code === "PGRST204") && mentionsGeneralSettingsColumn(error.message);
 }
 
+function isMissingAttachmentStorageColumn(error: { code?: string; message?: string }) {
+  return (error.code === "42703" || error.code === "PGRST204") && mentionsAttachmentStorageColumn(error.message);
+}
+
 function isMissingMarkupColumn(error: { code?: string; message?: string }) {
   return (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("inventory_markup") === true;
 }
@@ -184,10 +195,17 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let preferences = true;
   let subscription = true;
   let general = true;
+  let attachmentStorage = true;
 
-  for (let attempt = 0; attempt < 14; attempt += 1) {
-    const { data, error } = await run(membershipSelect({ industry, avatar, markup, preferences, subscription, general }));
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const { data, error } = await run(
+      membershipSelect({ industry, avatar, markup, preferences, subscription, general, attachmentStorage }),
+    );
     if (!error) return data;
+    if (attachmentStorage && isMissingAttachmentStorageColumn(error)) {
+      attachmentStorage = false;
+      continue;
+    }
     if (general && isMissingGeneralSettingsColumn(error)) {
       general = false;
       continue;
@@ -272,6 +290,8 @@ export type WorkspaceDetails = {
   subscriptionStartedAt: string | null;
   subscriptionExpiresAt: string | null;
   subscriptionUpdatedAt: string | null;
+  /** workspaces.attachment_storage — where new order photos are stored. Defaults to 'app'. */
+  attachmentStorage: "app" | "google_drive" | "nas";
 };
 
 function firstRecord(value: unknown) {
@@ -393,6 +413,10 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     subscriptionStartedAt: readTimestamp(record.subscription_started_at),
     subscriptionExpiresAt: readTimestamp(record.subscription_expires_at),
     subscriptionUpdatedAt: readTimestamp(record.subscription_updated_at),
+    attachmentStorage:
+      record.attachment_storage === "google_drive" || record.attachment_storage === "nas"
+        ? record.attachment_storage
+        : "app",
   };
 }
 

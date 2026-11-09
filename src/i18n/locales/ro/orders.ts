@@ -349,9 +349,15 @@ const orders: Messages<typeof en> = {
     download: "Descarcă",
     deleteTitle: "Ștergeți atașamentul?",
     deleteDescription: "Eliminați „{{name}}” din această comandă. Acțiunea nu poate fi anulată.",
+    openDriveFolder: "Deschide folderul comenzii pe Google Drive",
+    storedOnDrive: "Pe Google Drive",
+    storedOnNas: "Pe NAS",
     toast: {
       uploaded: "Atașamentul a fost încărcat",
       deleted: "Atașamentul a fost șters",
+      driveFallback:
+        "Google Drive nu este disponibil — poza a fost salvată în aplicație. Proprietarul trebuie să reconecteze Drive.",
+      nasFallback: "NAS nu este disponibil — poza a fost salvată în aplicație",
     },
     errors: {
       orderRequired: "Comanda este obligatorie",
