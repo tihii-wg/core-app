@@ -3,7 +3,9 @@ import { industryWorkflow, type IndustryWorkflow } from "../industries/industryW
 import {
   BUILTIN_ORDER_FIELDS,
   builtinOrderFieldMeta,
+  LEGACY_ASSET_TO_VEHICLE_FIELD,
   type BuiltinOrderFieldKey,
+  type OrderFieldGroup,
   type OrderFieldType,
 } from "./orderFieldRegistry";
 
@@ -44,6 +46,7 @@ export type OrderFieldConfigItem = {
   canHide: boolean;
   canRequire: boolean;
   canRename: boolean;
+  group: OrderFieldGroup;
   /** Industry default label (for reset). */
   defaultLabel: string;
   defaultVisible: boolean;
@@ -101,10 +104,20 @@ export function mergeOrderFieldConfig(input: MergeOrderFieldConfigInput): {
   }
 
   const fields: OrderFieldConfigItem[] = [];
+  const usesVehicles = Boolean(profile.navigation.clientVehicles);
 
   for (const meta of BUILTIN_ORDER_FIELDS) {
     if (!meta.appliesTo(profile)) continue;
-    const override = systemByKey.get(meta.key);
+    let override = systemByKey.get(meta.key) ?? null;
+    // Read-time migration: legacy device/carNumber/vin overrides → vehicle* when no vehicle override exists.
+    if (!override && usesVehicles) {
+      for (const [legacyKey, vehicleKey] of Object.entries(LEGACY_ASSET_TO_VEHICLE_FIELD)) {
+        if (vehicleKey === meta.key && systemByKey.has(legacyKey) && !systemByKey.has(meta.key)) {
+          override = systemByKey.get(legacyKey) ?? null;
+          break;
+        }
+      }
+    }
     const defaultLabel = meta.defaultLabel(workflow);
     const defaultRequired = meta.defaultRequired(profile);
     const defaultVisible = true;
@@ -129,6 +142,7 @@ export function mergeOrderFieldConfig(input: MergeOrderFieldConfigInput): {
       canHide: meta.canHide,
       canRequire: meta.canRequire,
       canRename: meta.canRename,
+      group: meta.group,
       defaultLabel,
       defaultVisible,
       defaultRequired,
@@ -151,6 +165,7 @@ export function mergeOrderFieldConfig(input: MergeOrderFieldConfigInput): {
       canHide: true,
       canRequire: true,
       canRename: true,
+      group: "custom",
       defaultLabel: def.label,
       defaultVisible: true,
       defaultRequired: false,
@@ -174,6 +189,7 @@ export function mergeOrderFieldConfig(input: MergeOrderFieldConfigInput): {
     canHide: true,
     canRequire: true,
     canRename: true,
+    group: "custom" as const,
     defaultLabel: def.label,
     defaultVisible: false,
     defaultRequired: false,

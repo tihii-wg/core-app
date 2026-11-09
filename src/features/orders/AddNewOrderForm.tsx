@@ -405,6 +405,7 @@ export default function AddNewOrderForm({
             clientId={selectedClientId}
             disabled={isSubmitting}
             mileageMode="empty"
+            fieldConfig={orderFieldMap}
           />
         ) : null}
 

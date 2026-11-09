@@ -162,7 +162,13 @@ export function OrdersListView({
   }, [customValuesBatch]);
 
   const fieldByKey = useMemo(() => new Map(orderFieldConfig.map((field) => [field.key, field])), [orderFieldConfig]);
-  const deviceColumnLabel = fieldByKey.get("device")?.label ?? copy.deviceServiceColumn;
+  // Vehicle industries: list "device" column shows make/model + plate — prefer plate / vehicle labels.
+  const deviceColumnLabel =
+    fieldByKey.get("vehicleLicensePlate")?.label ??
+    fieldByKey.get("vehicleMake")?.label ??
+    fieldByKey.get("vehicle")?.label ??
+    fieldByKey.get("device")?.label ??
+    copy.deviceServiceColumn;
   const columnLabels = {
     client: fieldByKey.get("client")?.label,
     status: fieldByKey.get("status")?.label,
@@ -175,6 +181,17 @@ export function OrdersListView({
   const hiddenBuiltinColumns = useMemo(() => {
     const hidden = new Set<string>();
     for (const [columnKey, fieldKey] of Object.entries(ORDER_COLUMN_FIELD_KEY)) {
+      if (columnKey === "device") {
+        const vehiclePlate = fieldByKey.get("vehicleLicensePlate");
+        const vehicleMake = fieldByKey.get("vehicleMake");
+        const device = fieldByKey.get("device");
+        if (vehiclePlate || vehicleMake) {
+          if (vehiclePlate && !vehiclePlate.visible && vehicleMake && !vehicleMake.visible) hidden.add("device");
+          continue;
+        }
+        if (device && !device.visible) hidden.add("device");
+        continue;
+      }
       const cfg = fieldByKey.get(fieldKey);
       if (cfg && !cfg.visible) hidden.add(columnKey);
     }

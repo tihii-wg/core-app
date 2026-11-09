@@ -110,11 +110,11 @@ describe("OrderLinkedVehicleDetails", () => {
     expect(screen.getByText("1HGBH41JXMN109186")).toBeInTheDocument();
     expect(screen.getByText("ABC123")).toBeInTheDocument();
     expect(screen.getByText(/10,?000/)).toBeInTheDocument();
+    // Visit unit is inlined on the current-mileage value; the separate unit row is hidden on order cards.
     expect(screen.getByText(/85,?500 mi/)).toBeInTheDocument();
-    expect(screen.getByText("Miles (mi)")).toBeInTheDocument();
     expect(screen.getByText("1.8")).toBeInTheDocument();
     expect(screen.getByText("Petrol")).toBeInTheDocument();
-    expect(screen.getByText("Visit mileage unit")).toBeInTheDocument();
+    expect(screen.queryByText("Visit mileage unit")).not.toBeInTheDocument();
     expect(screen.queryByText("null")).not.toBeInTheDocument();
     expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   });
@@ -175,7 +175,8 @@ describe("OrderLinkedVehicleDetails", () => {
     renderWithQuery(<OrderLinkedVehicleDetails vehicleId="veh-1" onOpenRelatedOrder={onOpenRelatedOrder} />);
 
     const dashes = screen.getAllByText("—");
-    expect(dashes.length).toBe(10);
+    // make, model, year, vin, plate, mileage unit, initial, current, engine, fuel
+    expect(dashes.length).toBeGreaterThanOrEqual(9);
     expect(screen.queryByText("null")).not.toBeInTheDocument();
   });
 

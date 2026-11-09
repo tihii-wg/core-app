@@ -23,8 +23,8 @@ import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
 import type { OrderFieldConfigItem } from "../orders/orderFieldConfig";
-import type { OrderFieldType } from "../orders/orderFieldRegistry";
-import { slugifyOrderFieldKey } from "../orders/orderFieldRegistry";
+import type { OrderFieldGroup, OrderFieldType } from "../orders/orderFieldRegistry";
+import { orderFieldGroupLabel, slugifyOrderFieldKey } from "../orders/orderFieldRegistry";
 import {
   useCreateCustomOrderField,
   useOrderFieldConfig,
@@ -34,7 +34,10 @@ import {
   useUpdateCustomOrderField,
   useUpsertSystemOrderFieldOverride,
 } from "../orders/useOrderFieldConfig";
+import { useIndustryProfile } from "../industries/useIndustryProfile";
 import { Skeleton } from "../../ui/Skeleton";
+
+const GROUP_ORDER: OrderFieldGroup[] = ["clientOrder", "asset", "work", "custom"];
 
 const CUSTOM_TYPES: OrderFieldType[] = ["text", "textarea", "number", "date", "datetime", "select", "checkbox"];
 
@@ -81,6 +84,7 @@ export function OrderFieldsSettings() {
   );
 
   const { fields, archivedCustomFields, isLoading, isError, error, refetch } = useOrderFieldConfig();
+  const { profile } = useIndustryProfile();
   const upsertSystem = useUpsertSystemOrderFieldOverride();
   const updateCustom = useUpdateCustomOrderField();
   const createCustom = useCreateCustomOrderField();
@@ -96,6 +100,13 @@ export function OrderFieldsSettings() {
   const [draftLabels, setDraftLabels] = useState<Record<string, string>>({});
 
   const sorted = useMemo(() => [...fields].sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key)), [fields]);
+  const grouped = useMemo(() => {
+    return GROUP_ORDER.map((group) => ({
+      group,
+      title: orderFieldGroupLabel(group, profile),
+      fields: sorted.filter((field) => field.group === group),
+    })).filter((section) => section.fields.length > 0);
+  }, [sorted, profile]);
 
   function labelFor(field: OrderFieldConfigItem) {
     return draftLabels[field.key] ?? field.label;
@@ -234,135 +245,146 @@ export function OrderFieldsSettings() {
             ) : null}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {sorted.map((field, index) => (
-            <div
-              key={field.key}
-              className="space-y-3 rounded-lg border border-border p-3"
-              draggable={canEdit}
-              onDragStart={(event) => {
-                event.dataTransfer.setData("text/plain", field.key);
-              }}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={async (event) => {
-                event.preventDefault();
-                if (!canEdit) return;
-                const fromKey = event.dataTransfer.getData("text/plain");
-                const from = sorted.find((row) => row.key === fromKey);
-                if (!from || from.key === field.key) return;
-                await persistField(from, { sortOrder: field.sortOrder });
-                await persistField(field, { sortOrder: from.sortOrder });
-              }}
-            >
-              <div className="flex flex-wrap items-start gap-2">
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <Label htmlFor={`order-field-label-${field.key}`}>{t("settings.orderFields.label")}</Label>
-                  <Input
-                    id={`order-field-label-${field.key}`}
-                    value={labelFor(field)}
-                    disabled={!canEdit || !field.canRename}
-                    onChange={(event) => {
-                      setDraftLabels((prev) => ({ ...prev, [field.key]: event.target.value }));
+        <CardContent className="space-y-5">
+          {grouped.map((section) => (
+            <div key={section.group} className="space-y-3">
+              <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{section.title}</h3>
+              {section.fields.map((field) => {
+                const index = sorted.findIndex((row) => row.key === field.key);
+                const displayLabel = labelFor(field);
+                return (
+                  <div
+                    key={field.key}
+                    className="space-y-3 rounded-lg border border-border p-3"
+                    draggable={canEdit}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData("text/plain", field.key);
                     }}
-                    onBlur={(event) => {
-                      const next = event.target.value.trim();
-                      if (!next || next === field.label) {
-                        setDraftLabels((prev) => {
-                          const copy = { ...prev };
-                          delete copy[field.key];
-                          return copy;
-                        });
-                        return;
-                      }
-                      void persistField(field, { label: next }).then(() => {
-                        setDraftLabels((prev) => {
-                          const copy = { ...prev };
-                          delete copy[field.key];
-                          return copy;
-                        });
-                      });
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={async (event) => {
+                      event.preventDefault();
+                      if (!canEdit) return;
+                      const fromKey = event.dataTransfer.getData("text/plain");
+                      const from = sorted.find((row) => row.key === fromKey);
+                      if (!from || from.key === field.key) return;
+                      await persistField(from, { sortOrder: field.sortOrder });
+                      await persistField(field, { sortOrder: from.sortOrder });
                     }}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {field.isCustom ? t("settings.orderFields.customBadge") : t("settings.orderFields.builtinBadge")}
-                    {!field.isCustom && field.defaultLabel && field.label.trim() !== field.defaultLabel.trim()
-                      ? ` · ${t("settings.orderFields.defaultNameHint", { label: field.defaultLabel })}`
-                      : null}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col gap-1">
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={!canEdit || index === 0}
-                    aria-label={t("settings.orderFields.moveUp")}
-                    onClick={() => void moveField(field, -1)}
                   >
-                    <ArrowUp className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={!canEdit || index === sorted.length - 1}
-                    aria-label={t("settings.orderFields.moveDown")}
-                    onClick={() => void moveField(field, 1)}
-                  >
-                    <ArrowDown className="size-4" />
-                  </Button>
-                </div>
-              </div>
+                    <div className="flex flex-wrap items-start gap-2">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <Label htmlFor={`order-field-label-${field.key}`}>{t("settings.orderFields.label")}</Label>
+                        <Input
+                          id={`order-field-label-${field.key}`}
+                          value={displayLabel}
+                          disabled={!canEdit || !field.canRename}
+                          onChange={(event) => {
+                            setDraftLabels((prev) => ({ ...prev, [field.key]: event.target.value }));
+                          }}
+                          onBlur={(event) => {
+                            const next = event.target.value.trim();
+                            if (!next || next === field.label) {
+                              setDraftLabels((prev) => {
+                                const copy = { ...prev };
+                                delete copy[field.key];
+                                return copy;
+                              });
+                              return;
+                            }
+                            void persistField(field, { label: next }).then(() => {
+                              setDraftLabels((prev) => {
+                                const copy = { ...prev };
+                                delete copy[field.key];
+                                return copy;
+                              });
+                            });
+                          }}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {field.isCustom ? t("settings.orderFields.customBadge") : t("settings.orderFields.builtinBadge")}
+                          {!field.isCustom && field.defaultLabel && field.label.trim() !== field.defaultLabel.trim()
+                            ? ` · ${t("settings.orderFields.defaultNameHint", { label: field.defaultLabel })}`
+                            : null}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          disabled={!canEdit || index <= 0}
+                          aria-label={t("settings.orderFields.moveUp")}
+                          onClick={() => void moveField(field, -1)}
+                        >
+                          <ArrowUp className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          disabled={!canEdit || index < 0 || index >= sorted.length - 1}
+                          aria-label={t("settings.orderFields.moveDown")}
+                          onClick={() => void moveField(field, 1)}
+                        >
+                          <ArrowDown className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
 
-              <div className="flex flex-wrap items-center gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <Switch
-                    checked={field.visible}
-                    disabled={!canEdit || !field.canHide}
-                    onCheckedChange={(checked) => void persistField(field, { visible: checked })}
-                  />
-                  {t("settings.orderFields.visible")}
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Switch
-                    checked={field.required}
-                    disabled={!canEdit || !field.canRequire}
-                    onCheckedChange={(checked) => void persistField(field, { required: checked })}
-                  />
-                  {t("settings.orderFields.required")}
-                </label>
-                {canEdit && !field.isCustom ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void resetOne.mutateAsync(field.key)}
-                  >
-                    <RotateCcw className="size-3.5" />
-                    {t("settings.orderFields.resetOne")}
-                  </Button>
-                ) : null}
-                {canEdit && field.isCustom && field.definitionId ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={async () => {
-                      const ok = await confirm({
-                        title: t("settings.orderFields.deleteTitle"),
-                        description: t("settings.orderFields.deleteDescription"),
-                        confirmLabel: t("common.delete"),
-                        tone: "destructive",
-                      });
-                      if (ok) await softDelete.mutateAsync(field.definitionId!);
-                    }}
-                  >
-                    <Trash2 className="size-3.5" />
-                    {t("common.delete")}
-                  </Button>
-                ) : null}
-              </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm">
+                        <Switch
+                          checked={field.visible}
+                          disabled={!canEdit || !field.canHide}
+                          aria-label={t("settings.orderFields.visibleAria", { label: displayLabel })}
+                          onCheckedChange={(checked) => void persistField(field, { visible: checked })}
+                        />
+                        {t("settings.orderFields.visible")}
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <Switch
+                          checked={field.required}
+                          disabled={!canEdit || !field.canRequire}
+                          aria-label={t("settings.orderFields.requiredAria", { label: displayLabel })}
+                          onCheckedChange={(checked) => void persistField(field, { required: checked })}
+                        />
+                        {t("settings.orderFields.required")}
+                      </label>
+                      {canEdit && !field.isCustom ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void resetOne.mutateAsync(field.key)}
+                        >
+                          <RotateCcw className="size-3.5" />
+                          {t("settings.orderFields.resetOne")}
+                        </Button>
+                      ) : null}
+                      {canEdit && field.isCustom && field.definitionId ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: t("settings.orderFields.deleteTitle"),
+                              description: t("settings.orderFields.deleteDescription"),
+                              confirmLabel: t("common.delete"),
+                              tone: "destructive",
+                            });
+                            if (ok) await softDelete.mutateAsync(field.definitionId!);
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                          {t("common.delete")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ))}
 

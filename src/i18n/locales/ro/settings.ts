@@ -365,6 +365,8 @@ const settings: Messages<typeof en> = {
     type: "Tip",
     visible: "Vizibil",
     required: "Obligatoriu",
+    visibleAria: "{{label}}: vizibil",
+    requiredAria: "{{label}}: obligatoriu",
     moveUp: "Sus",
     moveDown: "Jos",
     resetOne: "Resetează",
@@ -378,11 +380,20 @@ const settings: Messages<typeof en> = {
     builtinBadge: "Integrat",
     customBadge: "Personalizat",
     optionsHint: "O opțiune pe linie: value|Etichetă",
+    groups: {
+      clientOrder: "Client și comandă",
+      transport: "Transport",
+      device: "Dispozitiv",
+      object: "Obiect",
+      work: "Lucrări",
+      custom: "Câmpuri proprii",
+    },
     toast: {
       created: "Câmp adăugat",
       deleted: "Câmp arhivat",
       resetAll: "Suprascrierile câmpurilor integrate au fost resetate",
     },
+
     validation: {
       required: "Acest câmp este obligatoriu",
     },

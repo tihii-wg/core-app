@@ -58,7 +58,11 @@ export function Orders() {
   const { workflow, copy } = useIndustryWorkflow();
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const deviceColumnLabel =
-    orderFieldConfig.find((field) => field.key === "device")?.label ?? copy.deviceServiceColumn;
+    orderFieldConfig.find((field) => field.key === "vehicleLicensePlate")?.label ??
+    orderFieldConfig.find((field) => field.key === "vehicleMake")?.label ??
+    orderFieldConfig.find((field) => field.key === "vehicle")?.label ??
+    orderFieldConfig.find((field) => field.key === "device")?.label ??
+    copy.deviceServiceColumn;
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
   const clientDetails = useOpenClientDetails();

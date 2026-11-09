@@ -362,6 +362,8 @@ export default {
     type: "Type",
     visible: "Visible",
     required: "Required",
+    visibleAria: "{{label}}: visible",
+    requiredAria: "{{label}}: required",
     moveUp: "Move up",
     moveDown: "Move down",
     resetOne: "Reset",
@@ -375,6 +377,14 @@ export default {
     builtinBadge: "Built-in",
     customBadge: "Custom",
     optionsHint: "One option per line: value|Label",
+    groups: {
+      clientOrder: "Client & order",
+      transport: "Vehicle",
+      device: "Device",
+      object: "Site / object",
+      work: "Work",
+      custom: "Custom fields",
+    },
     toast: {
       created: "Custom field added",
       deleted: "Custom field archived",

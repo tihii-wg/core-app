@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { industryProfile } from "../industries/industryProfile";
+import { industryProfile, KNOWN_INDUSTRY_SLUGS } from "../industries/industryProfile";
 import { industryWorkflow } from "../industries/industryWorkflow";
 import { mergeOrderFieldConfig, type CustomFieldDefinitionRow } from "./orderFieldConfig";
 
@@ -26,26 +26,75 @@ function def(partial: Partial<CustomFieldDefinitionRow> & Pick<CustomFieldDefini
 }
 
 describe("mergeOrderFieldConfig", () => {
-  it("returns industry defaults for auto_repair without overrides", () => {
+  it("exposes vehicle fields for auto_repair instead of legacy device/plate/VIN", () => {
     const profile = industryProfile("auto_repair");
     const { fields } = mergeOrderFieldConfig({ profile, workflow: industryWorkflow("auto_repair"), definitions: [] });
     const keys = fields.map((f) => f.key);
-    expect(keys).toContain("device");
-    expect(keys).toContain("carNumber");
-    expect(keys).toContain("vin");
+    expect(keys).toContain("vehicle");
+    expect(keys).toContain("vehicleLicensePlate");
+    expect(keys).toContain("vehicleVin");
+    expect(keys).toContain("vehicleMake");
+    expect(keys).not.toContain("device");
+    expect(keys).not.toContain("carNumber");
+    expect(keys).not.toContain("vin");
     expect(keys).not.toContain("deviceImei");
     expect(keys).not.toContain("siteAddress");
+    expect(fields.find((f) => f.key === "vehicle")?.canHide).toBe(false);
     expect(fields.find((f) => f.key === "client")?.canHide).toBe(false);
     expect(fields.find((f) => f.key === "services")?.canHide).toBe(false);
     expect(fields.find((f) => f.key === "status")?.canHide).toBe(false);
     expect(fields.find((f) => f.key === "total")?.canHide).toBe(false);
   });
 
-  it("applies system overrides for label, visibility, required, sort", () => {
+  it("applies legacy carNumber/vin overrides onto vehicleLicensePlate/vehicleVin", () => {
     const profile = industryProfile("auto_repair");
     const { fields } = mergeOrderFieldConfig({
       profile,
       workflow: industryWorkflow("auto_repair"),
+      definitions: [
+        def({
+          fieldKey: "carNumber",
+          label: "Госномер",
+          isSystem: true,
+          isActive: true,
+          isRequired: true,
+          sortOrder: 5,
+        }),
+        def({
+          fieldKey: "vin",
+          label: "Кузов",
+          isSystem: true,
+          isActive: false,
+          sortOrder: 40,
+        }),
+      ],
+    });
+    const plate = fields.find((f) => f.key === "vehicleLicensePlate")!;
+    expect(plate.label).toBe("Госномер");
+    expect(plate.required).toBe(true);
+    expect(plate.sortOrder).toBe(5);
+    expect(fields.find((f) => f.key === "vehicleVin")?.visible).toBe(false);
+    expect(fields.find((f) => f.key === "vehicleVin")?.label).toBe("Кузов");
+  });
+
+  it("prefers explicit vehicle* overrides over legacy fallbacks", () => {
+    const profile = industryProfile("auto_repair");
+    const { fields } = mergeOrderFieldConfig({
+      profile,
+      workflow: industryWorkflow("auto_repair"),
+      definitions: [
+        def({ fieldKey: "carNumber", label: "Legacy plate", isSystem: true, sortOrder: 1 }),
+        def({ fieldKey: "vehicleLicensePlate", label: "New plate", isSystem: true, sortOrder: 2 }),
+      ],
+    });
+    expect(fields.find((f) => f.key === "vehicleLicensePlate")?.label).toBe("New plate");
+  });
+
+  it("keeps legacy device/carNumber/vin for non-vehicle industries", () => {
+    const profile = industryProfile("home_services");
+    const { fields } = mergeOrderFieldConfig({
+      profile,
+      workflow: industryWorkflow("home_services"),
       definitions: [
         def({
           fieldKey: "device",
@@ -55,22 +104,11 @@ describe("mergeOrderFieldConfig", () => {
           isRequired: true,
           sortOrder: 5,
         }),
-        def({
-          fieldKey: "vin",
-          label: "VIN",
-          isSystem: true,
-          isActive: false,
-          isRequired: false,
-          sortOrder: 40,
-        }),
       ],
     });
-    const device = fields.find((f) => f.key === "device")!;
-    expect(device.label).toBe("Объект");
-    expect(device.required).toBe(true);
-    expect(device.sortOrder).toBe(5);
-    expect(fields.find((f) => f.key === "vin")?.visible).toBe(false);
-    expect(fields[0]?.key).toBe("device");
+    expect(fields.find((f) => f.key === "device")?.label).toBe("Объект");
+    expect(fields.find((f) => f.key === "vehicle")).toBeUndefined();
+    expect(fields.find((f) => f.key === "carNumber")).toBeUndefined();
   });
 
   it("includes custom fields and archives soft-deleted ones", () => {
@@ -87,6 +125,7 @@ describe("mergeOrderFieldConfig", () => {
       isCustom: true,
       visible: true,
       type: "select",
+      group: "custom",
     });
     expect(fields.find((f) => f.key === "siteAddress")).toBeTruthy();
     expect(fields.find((f) => f.key === "old_note")).toBeUndefined();
@@ -120,5 +159,19 @@ describe("mergeOrderFieldConfig", () => {
     });
     expect(fields.find((f) => f.key === "vin")).toBeUndefined();
     expect(fields.find((f) => f.key === "deviceImei")).toBeTruthy();
+  });
+
+  it("covers every known industry with registry fields", () => {
+    for (const slug of KNOWN_INDUSTRY_SLUGS) {
+      const profile = industryProfile(slug);
+      const { fields } = mergeOrderFieldConfig({ profile, workflow: industryWorkflow(slug), definitions: [] });
+      expect(fields.length).toBeGreaterThan(5);
+      expect(fields.some((f) => f.key === "client")).toBe(true);
+      expect(fields.some((f) => f.key === "services")).toBe(true);
+      if (profile.navigation.clientVehicles) {
+        expect(fields.some((f) => f.key === "vehicle")).toBe(true);
+        expect(fields.some((f) => f.key === "device")).toBe(false);
+      }
+    }
   });
 });

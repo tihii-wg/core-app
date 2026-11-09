@@ -15,6 +15,7 @@ import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useCreateVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
 import { mileageUnitAbbreviation, mileageUnitLabel } from "../vehicles/vehicleMileage";
+import type { OrderFieldConfigItem } from "./orderFieldConfig";
 import { VehicleFieldsGrid } from "./VehicleFieldsGrid";
 import { mileageFormValueFromVehicle } from "./orderVehicleMileage";
 
@@ -38,6 +39,8 @@ type OrderVehicleFieldsProps<T extends FieldValues> = {
    * selected vehicle id changes. Prevents live vehicle mileage from overwriting history on open.
    */
   preserveInitialMileage?: boolean;
+  /** Workspace order-field config (vehicle labels / visibility / required). */
+  fieldConfig?: Map<string, OrderFieldConfigItem>;
 };
 
 function applyOrderAssetSnapshot<T extends FieldValues>(setValue: UseFormSetValue<T>, vehicle: Vehicle | undefined) {
@@ -68,6 +71,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   disabled,
   mileageMode = "empty",
   preserveInitialMileage = false,
+  fieldConfig,
 }: OrderVehicleFieldsProps<T>) {
   const { t } = useTranslation();
   const vehicleIdPath = "vehicleId" as Path<T>;
@@ -191,10 +195,25 @@ export function OrderVehicleFields<T extends FieldValues>({
   // Never invent a unit or show "ед.?" as if it were a disabled selector.
   const mileageUnitAbbr = selectedVehicle ? mileageUnitAbbreviation(selectedVehicle.mileageUnit, t) : "";
 
+  const vehicleCfg = fieldConfig?.get("vehicle");
+  const mileageCfg = fieldConfig?.get("vehicleCurrentMileage");
+  const vehicleRequired = Boolean(vehicleCfg?.required);
+  const mileageRequired = Boolean(mileageCfg?.required);
+  const mileageVisible = mileageCfg?.visible !== false;
+  // Form entry uses "current odometer reading" unless a stored override renamed the field.
+  const mileageLabel =
+    mileageCfg?.definitionId && mileageCfg.label.trim()
+      ? mileageCfg.label
+      : t("vehicles.fields.currentMileage");
+  const vehicleLabel = vehicleCfg?.label ?? t("vehicles.selectLabel");
+
   return (
     <div className="space-y-2" data-edit-field="vehicle">
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor="order-vehicle">{t("vehicles.selectLabel")}</Label>
+        <Label htmlFor="order-vehicle">
+          {vehicleLabel}
+          {vehicleRequired ? <span className="text-destructive"> *</span> : null}
+        </Label>
         <Button type="button" size="sm" variant="ghost" disabled={disabled || createVehicle.isPending} onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" />
           {t("vehicles.add")}
@@ -203,6 +222,14 @@ export function OrderVehicleFields<T extends FieldValues>({
       <Controller
         name={vehicleIdPath}
         control={control}
+        rules={
+          vehicleRequired
+            ? {
+                validate: (value) =>
+                  Boolean(String(value ?? "").trim()) || t("settings.orderFields.validation.required"),
+              }
+            : undefined
+        }
         render={({ field }) => (
           <Select
             value={(field.value as string) || NONE}
@@ -237,33 +264,40 @@ export function OrderVehicleFields<T extends FieldValues>({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">{t("vehicles.selectedSummary")}</p>
             <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{summary?.title}</p>
-            <VehicleFieldsGrid vehicle={selectedVehicle} empty={t("common.noValue")} />
+            <VehicleFieldsGrid vehicle={selectedVehicle} empty={t("common.noValue")} fieldConfig={fieldConfig} />
             <p className="text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
           </div>
 
-          <div className="space-y-1.5 border-t border-border pt-3" data-edit-field="mileage">
-            <Label htmlFor="order-vehicle-current-mileage">
-              {t("vehicles.fields.currentMileage")}
-              {mileageUnitAbbr ? (
-                <span className="ml-1 font-normal text-muted-foreground">({mileageUnitAbbr})</span>
-              ) : null}
-            </Label>
-            <MileageInput
-              id="order-vehicle-current-mileage"
-              unitSuffix={mileageUnitAbbr || undefined}
-              placeholder={t("vehicles.placeholders.currentMileage")}
-              disabled={disabled}
-              {...register("currentMileage" as Path<T>, {
-                validate: (value) => mileageValidate(String(value ?? ""), t),
-              })}
-            />
-            {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
-            <p className="text-xs text-muted-foreground">
-              {t("vehicles.mileage.readingUnit", {
-                unit: mileageUnitLabel(selectedVehicle.mileageUnit, t),
-              })}
-            </p>
-          </div>
+          {mileageVisible ? (
+            <div className="space-y-1.5 border-t border-border pt-3" data-edit-field="vehicleCurrentMileage">
+              <Label htmlFor="order-vehicle-current-mileage">
+                {mileageLabel}
+                {mileageRequired ? <span className="text-destructive"> *</span> : null}
+                {mileageUnitAbbr ? (
+                  <span className="ml-1 font-normal text-muted-foreground">({mileageUnitAbbr})</span>
+                ) : null}
+              </Label>
+              <MileageInput
+                id="order-vehicle-current-mileage"
+                unitSuffix={mileageUnitAbbr || undefined}
+                placeholder={t("vehicles.placeholders.currentMileage")}
+                disabled={disabled}
+                {...register("currentMileage" as Path<T>, {
+                  validate: (value) => {
+                    const text = String(value ?? "").trim();
+                    if (mileageRequired && !text) return t("settings.orderFields.validation.required");
+                    return mileageValidate(String(value ?? ""), t);
+                  },
+                })}
+              />
+              {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
+              <p className="text-xs text-muted-foreground">
+                {t("vehicles.mileage.readingUnit", {
+                  unit: mileageUnitLabel(selectedVehicle.mileageUnit, t),
+                })}
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

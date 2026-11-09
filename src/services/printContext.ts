@@ -24,6 +24,9 @@ import { getWorkspaceVatRate } from "./apiWorkspaceVat";
 import { getWorkspace, type WorkspaceDetails } from "./apiWorkspaces";
 import { getLocations, pickPrintCompanyPhone } from "./apiLocations";
 import { requireWorkspaceId } from "./missingTable";
+import { industryProfile } from "../features/industries/industryProfile";
+import { industryWorkflow } from "../features/industries/industryWorkflow";
+import { mergeOrderFieldConfig } from "../features/orders/orderFieldConfig";
 
 async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
   try {
@@ -104,18 +107,17 @@ export async function buildOrderPrintContext(
   const paymentBalance = orderPaymentBalance(order, payments);
   const paymentStages = await loadAllocatedStages(order.id, resolved, order.totalPrice, paymentBalance.netPaid);
 
+  const profile = industryProfile(base.workspace?.industrySlug);
+  const workflow = industryWorkflow(profile.slug);
+  const { fields: mergedFields } = mergeOrderFieldConfig({ profile, workflow, definitions });
   const customFieldValues: Record<string, string> = {};
   const orderFieldLabels: Record<string, string> = {};
-  for (const def of definitions) {
-    if (def.deletedAt) continue;
-    if (def.isSystem) {
-      if (def.label?.trim()) orderFieldLabels[def.fieldKey] = def.label.trim();
-      continue;
-    }
-    if (!def.isActive) continue;
-    const row = customValues.find((value) => value.definitionId === def.id);
-    customFieldValues[def.fieldKey] = displayCustomFieldValue(def.fieldType, row?.value, def.options);
-    if (def.label?.trim()) orderFieldLabels[def.fieldKey] = def.label.trim();
+  for (const field of mergedFields) {
+    if (!field.visible) continue;
+    orderFieldLabels[field.key] = field.label;
+    if (!field.isCustom || !field.definitionId) continue;
+    const row = customValues.find((value) => value.definitionId === field.definitionId);
+    customFieldValues[field.key] = displayCustomFieldValue(field.type, row?.value, field.options);
   }
 
   return emptyPrintContext({

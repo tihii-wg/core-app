@@ -365,6 +365,8 @@ const settings: Messages<typeof en> = {
     type: "Тип",
     visible: "Видимо",
     required: "Обязательно",
+    visibleAria: "{{label}}: видимо",
+    requiredAria: "{{label}}: обязательно",
     moveUp: "Выше",
     moveDown: "Ниже",
     resetOne: "Сбросить",
@@ -378,11 +380,20 @@ const settings: Messages<typeof en> = {
     builtinBadge: "Встроенное",
     customBadge: "Своё",
     optionsHint: "По одному варианту на строку: value|Подпись",
+    groups: {
+      clientOrder: "Клиент и заказ",
+      transport: "Транспорт",
+      device: "Устройство",
+      object: "Объект",
+      work: "Работы",
+      custom: "Свои поля",
+    },
     toast: {
       created: "Поле добавлено",
       deleted: "Поле архивировано",
       resetAll: "Переопределения встроенных полей сброшены",
     },
+
     validation: {
       required: "Это поле обязательно",
     },

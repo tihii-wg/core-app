@@ -490,9 +490,13 @@ export default function OrderDetailPanel({
               {deadline ? (
                 <div className="min-w-0">
                   <dt className="flex min-w-0 items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
-                    <span className="min-w-0">{copy.deadlineDetail}</span>
+                    <span className="min-w-0">{fieldLabel("deadline", copy.deadlineDetail)}</span>
                     {showFieldEdit ? (
-                      <OrderFieldEditButton field="deadline" label={copy.deadlineDetail} onEdit={startFieldEdit} />
+                      <OrderFieldEditButton
+                        field="deadline"
+                        label={fieldLabel("deadline", copy.deadlineDetail)}
+                        onEdit={startFieldEdit}
+                      />
                     ) : null}
                   </dt>
                   <dd className="mt-1 flex flex-wrap items-center gap-2 font-medium text-foreground">
@@ -633,20 +637,14 @@ export default function OrderDetailPanel({
                 onOpenRelatedOrder={(order) => {
                   onOrderUpdated(order);
                 }}
+                fieldConfig={orderFieldMap}
+                showFieldEdit={showFieldEdit}
+                onEditField={showFieldEdit ? startFieldEdit : undefined}
                 sectionEditAction={
                   showFieldEdit ? (
                     <OrderFieldEditButton
                       field="vehicle"
-                      label={t("vehicles.orderDetailsTitle")}
-                      onEdit={startFieldEdit}
-                    />
-                  ) : undefined
-                }
-                mileageEditAction={
-                  showFieldEdit ? (
-                    <OrderFieldEditButton
-                      field="mileage"
-                      label={t("vehicles.fields.orderCurrentMileage")}
+                      label={fieldLabel("vehicle", t("vehicles.orderDetailsTitle"))}
                       onEdit={startFieldEdit}
                     />
                   ) : undefined
@@ -654,27 +652,31 @@ export default function OrderDetailPanel({
               />
             ) : null}
 
-            <div className="border-t border-border pt-5">
-              <OrderAssigneeSelect
-                id="order-assignee"
-                label={copy.assignedEmployeeLabel}
-                value={selectedOrder.assignedEmployeeId}
-                options={technicianOptions}
-                disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
-                errorMessage={assigneeErrorMessage}
-                emptyHint={assigneeEmptyHint}
-                onChange={handleAssigneeChange}
-              />
-            </div>
+            {fieldVisible("assignedEmployee") ? (
+              <div className="border-t border-border pt-5">
+                <OrderAssigneeSelect
+                  id="order-assignee"
+                  label={fieldLabel("assignedEmployee", copy.assignedEmployeeLabel)}
+                  value={selectedOrder.assignedEmployeeId}
+                  options={technicianOptions}
+                  disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
+                  errorMessage={assigneeErrorMessage}
+                  emptyHint={assigneeEmptyHint}
+                  onChange={handleAssigneeChange}
+                />
+              </div>
+            ) : null}
 
-            <OrderTeamSelect
-              id="order-team"
-              label={t("orders.team.title")}
-              value={(selectedOrder.team ?? []).map((member) => ({ employeeId: member.employeeId, role: member.role }))}
-              options={teamOptions}
-              disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
-              onChange={handleTeamChange}
-            />
+            {fieldVisible("team") ? (
+              <OrderTeamSelect
+                id="order-team"
+                label={fieldLabel("team", t("orders.team.title"))}
+                value={(selectedOrder.team ?? []).map((member) => ({ employeeId: member.employeeId, role: member.role }))}
+                options={teamOptions}
+                disabled={!canEditOrder || closedContentLocked || isAssigneeUpdating || isStatusUpdating}
+                onChange={handleTeamChange}
+              />
+            ) : null}
 
             {hasServiceLines ? (
               <div className="overflow-hidden rounded-lg border border-border">

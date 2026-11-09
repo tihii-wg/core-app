@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import {
@@ -16,6 +17,7 @@ import {
   type CreateCustomOrderFieldInput,
   type UpdateCustomOrderFieldInput,
   type UpsertSystemOrderFieldOverrideInput,
+  type CustomFieldValueRow,
 } from "../../services/apiCustomFields";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -27,10 +29,14 @@ export function orderFieldConfigQueryKey(workspaceId: string | undefined, indust
   return ["order-field-config", workspaceId, industrySlug ?? "other"] as const;
 }
 
+const EMPTY_DEFINITIONS: Awaited<ReturnType<typeof getOrderFieldDefinitions>> = [];
+const EMPTY_VALUES: CustomFieldValueRow[] = [];
+
 export function useOrderFieldConfig() {
   const { workspaceId } = useActiveWorkspaceId();
   const { workflow, industrySlug, profile: workflowProfile } = useIndustryWorkflow();
-  const profile = workflowProfile ?? industryProfile(industrySlug);
+  const fallbackProfile = useMemo(() => industryProfile(industrySlug), [industrySlug]);
+  const profile = workflowProfile ?? fallbackProfile;
 
   const query = useQuery({
     queryKey: orderFieldConfigQueryKey(workspaceId, industrySlug),
@@ -45,11 +51,13 @@ export function useOrderFieldConfig() {
     enabled: Boolean(workspaceId),
   });
 
-  const merged = mergeOrderFieldConfig({
-    profile,
-    workflow,
-    definitions: query.data ?? [],
-  });
+  // Memoized: callers use `fields` as an effect dependency — a new array each
+  // render caused an infinite update loop in EditOrderForm.
+  const definitions = query.data ?? EMPTY_DEFINITIONS;
+  const merged = useMemo(
+    () => mergeOrderFieldConfig({ profile, workflow, definitions }),
+    [profile, workflow, definitions],
+  );
 
   return {
     fields: merged.fields,
@@ -66,11 +74,13 @@ export function useOrderCustomFieldValues(orderId: string | null | undefined) {
   const { workspaceId } = useActiveWorkspaceId();
   const id = orderId?.trim() ?? "";
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ["custom-field-values", workspaceId, id],
     queryFn: () => getCustomFieldValuesForEntity(workspaceId, id),
     enabled: Boolean(workspaceId && id),
   });
+  // Stable empty array while loading / without values (used as an effect dependency).
+  return { ...query, data: query.data ?? EMPTY_VALUES };
 }
 
 /** Batch-load custom field values for many orders (list columns / client search). */
