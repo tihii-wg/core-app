@@ -22,7 +22,7 @@ import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
-import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
+import { industrySupportsClientVehicles, industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -98,6 +98,7 @@ export default function AddNewOrderForm({
   };
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const submitLockRef = useRef(false);
@@ -187,6 +188,7 @@ export default function AddNewOrderForm({
   const orderMileageUnit = useOrderMileageUnitSync({
     vehicleUnit: selectedVehicle?.mileageUnit,
     handlers: mileageUnitHandlers,
+    enabled: showWarrantyKm,
   });
 
   useEffect(() => {
@@ -548,6 +550,7 @@ export default function AddNewOrderForm({
                       days={watchedServices?.[index]?.warrantyDays}
                       km={watchedServices?.[index]?.warrantyKm}
                       mileageUnit={orderMileageUnit}
+                      showWarrantyKm={showWarrantyKm}
                       disabled={isSubmitting}
                       onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                         setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
@@ -575,6 +578,7 @@ export default function AddNewOrderForm({
             disabled={isSubmitting}
             warrantyDefaults={warrantyDefaults}
             orderMileageUnit={orderMileageUnit}
+            showWarrantyKm={showWarrantyKm}
             isSubmitted={isSubmitted}
             errors={errors.materials}
           />

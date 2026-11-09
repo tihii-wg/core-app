@@ -26,4 +26,17 @@ describe("OrderLineWarrantyBadge", () => {
     rerender(<OrderLineWarrantyBadge limits={{ durationMonths: null, mileageLimit: 31069 }} mileageUnit="mi" />);
     expect(screen.getByText(/Warranty: 31,069 mi/)).toBeInTheDocument();
   });
+
+  it("omits km from the label when showWarrantyKm is false", () => {
+    const { rerender } = renderWithQuery(
+      <OrderLineWarrantyBadge limits={{ durationMonths: 3, mileageLimit: 10000 }} showWarrantyKm={false} />,
+    );
+    expect(screen.getByText("Warranty: 3 months")).toBeInTheDocument();
+    expect(screen.queryByText(/km/i)).toBeNull();
+
+    rerender(
+      <OrderLineWarrantyBadge limits={{ durationMonths: null, mileageLimit: 10000 }} showWarrantyKm={false} />,
+    );
+    expect(screen.queryByText(/Warranty/)).toBeNull();
+  });
 });

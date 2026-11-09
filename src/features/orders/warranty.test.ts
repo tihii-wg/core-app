@@ -133,6 +133,50 @@ describe("warranty helpers", () => {
     expect(evaluateWarranty({ snapshot: base, nowIso: "2027-01-01T00:00:00.000Z", currentMileage: 90000 }).status).toBe("expired_mileage");
   });
 
+  it("ignores mileage for non-vehicle industries without clearing stored limits", () => {
+    const t = (key: string, options?: { count?: number; value?: string; unit?: string }) => {
+      if (key.endsWith(".withCoverage")) return `Warranty: ${options?.value}`;
+      if (key.includes(".months")) return `${options?.count} months`;
+      if (key.includes(".days")) return `${options?.count} days`;
+      if (key.includes(".km")) return `${options?.value} ${options?.unit ?? "km"}`;
+      return key;
+    };
+    const base = {
+      startsAt: "2026-11-04T12:00:00.000Z",
+      endsOn: "2027-11-04",
+      startMileage: 80000,
+      expiresAtMileage: 90000,
+      durationMonths: 12,
+      mileageLimit: 10000,
+    };
+    const overMileage = evaluateWarranty({
+      snapshot: base,
+      nowIso: "2027-01-01T00:00:00.000Z",
+      currentMileage: 95000,
+      useMileageWarranty: false,
+    });
+    expect(overMileage.status).toBe("active");
+    expect(overMileage.remainingMileage).toBeNull();
+    expect(overMileage.expiresAtMileage).toBeNull();
+
+    const pastDate = evaluateWarranty({
+      snapshot: base,
+      nowIso: "2027-11-05T00:00:00.000Z",
+      currentMileage: 95000,
+      useMileageWarranty: false,
+    });
+    expect(pastDate.status).toBe("expired_date");
+
+    expect(hasWarrantyCoverage(base, { includeMileage: false })).toBe(true);
+    expect(
+      hasWarrantyCoverage(
+        { durationMonths: null, mileageLimit: 10000, expiresAtMileage: 90000 },
+        { includeMileage: false },
+      ),
+    ).toBe(false);
+    expect(formatWarrantyLimitsLabel(base, t, (n) => String(n), "km", false)).toBe("Warranty: 12 months");
+  });
+
   it("expires on the exact expiration date and exact mileage threshold", () => {
     const base = {
       startsAt: "2026-11-04T12:00:00.000Z",

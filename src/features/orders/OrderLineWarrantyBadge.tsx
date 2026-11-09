@@ -16,6 +16,8 @@ type Props = {
   activated?: boolean;
   /** Unit for mileage limit display (order or snapshot unit). */
   mileageUnit?: MileageUnit;
+  /** When false, omit km from coverage label (non-vehicle industries). */
+  showWarrantyKm?: boolean;
   /** Live evaluation status (e.g. paused while source order is not closed). */
   status?: WarrantyStatusCode | null;
   /** Snapshot start date (ISO); used for paused copy. */
@@ -28,12 +30,13 @@ export function OrderLineWarrantyBadge({
   limits,
   activated = false,
   mileageUnit = "km",
+  showWarrantyKm = true,
   status = null,
   startsAt = null,
   className,
 }: Props) {
   const { t, i18n } = useTranslation();
-  if (!limits || !hasWarrantyCoverage(limits)) return null;
+  if (!limits || !hasWarrantyCoverage(limits, { includeMileage: showWarrantyKm })) return null;
 
   const unit = mileageUnitAbbreviation(mileageUnit, t);
   const label = formatWarrantyLimitsLabel(
@@ -41,6 +44,7 @@ export function OrderLineWarrantyBadge({
     (key, options) => String(t(key, { ...options, unit } as never)),
     (n) => formatWarrantyKm(n, i18n.language || "en"),
     mileageUnit,
+    showWarrantyKm,
   );
   if (!label) return null;
 

@@ -8,6 +8,7 @@ import { Switch } from "../../ui/Switch";
 import { Textarea } from "../../ui/Textarea";
 import { Spinner } from "../../ui/Spinner";
 import type { InventoryItemFormData } from "../../lib/types";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
@@ -61,6 +62,7 @@ export default function InventoryItemForm({
 }: InventoryItemFormProps) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const inventoryCopy = industryInventoryCopy(workflow);
   const [markupText, setMarkupText] = useState(String(markupPercent));
   const [markupError, setMarkupError] = useState("");
@@ -332,6 +334,7 @@ export default function InventoryItemForm({
         <CatalogWarrantyFields
           idPrefix="inventory-item"
           value={warranty}
+          showWarrantyKm={showWarrantyKm}
           onChange={(next) => {
             setWarranty(next);
             setWarrantyError(null);

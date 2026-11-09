@@ -17,6 +17,7 @@ import {
   normalizeServiceCategory,
   serviceCategoryLabel,
 } from "../industries/industryWorkflow";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
 import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults, type CatalogWarrantyDefaults } from "../orders/catalogWarranty";
@@ -58,6 +59,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
   const technicianOptions = assignableTechnicians(employees, service.defaultTechnicianId);
   const { currency } = useWorkspaceMoney();
   const { workflow } = useIndustryWorkflow();
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const copy = industryServiceCopy(workflow);
   const categoryOptions = industryServiceCategoryOptions(workflow, service.category);
 
@@ -253,6 +255,7 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
         <CatalogWarrantyFields
           idPrefix="edit-service"
           value={warranty}
+          showWarrantyKm={showWarrantyKm}
           onChange={(next) => {
             setWarranty(next);
             setWarrantyError(null);

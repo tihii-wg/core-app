@@ -33,3 +33,11 @@ export function industryCapabilities(workflow: IndustryWorkflow): IndustryCapabi
 export function industrySupportsClientVehicles(workflow: IndustryWorkflow) {
   return industryCapabilities(workflow).clientVehicles;
 }
+
+/**
+ * Mileage / km warranty limits apply only to vehicle industries (currently auto_repair).
+ * Same gate as client vehicles — pass a single `showWarrantyKm` boolean into forms/display.
+ */
+export function industryUsesMileageWarranty(workflow: IndustryWorkflow) {
+  return industrySupportsClientVehicles(workflow);
+}

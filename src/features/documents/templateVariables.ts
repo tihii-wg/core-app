@@ -12,6 +12,8 @@ import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import { documentVatBreakdown, type OrderVatBreakdown } from "../finance/orderVat";
 import type { InvoiceSections } from "../invoices/invoiceItemSections";
 import { computeOrderMoney, lineNet } from "../orders/orderTotals";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
+import { industryWorkflow } from "../industries/industryWorkflow";
 import {
   formatVehicleMileage,
   mileageUnitAbbreviation,
@@ -363,10 +365,14 @@ function printMileageT(locale: string) {
 function buildWarrantyList(ctx: PrintContext) {
   if (ctx.warrantyRecords.length === 0) return "";
   const t = printMileageT(ctx.locale);
+  const showMileage = industryUsesMileageWarranty(industryWorkflow(ctx.workspace?.industrySlug));
   const items = ctx.warrantyRecords
     .map((row) => {
       const name = escapeHtmlText(row.itemName || "—");
       const untilDate = row.endsOn ? escapeHtmlText(row.endsOn) : "—";
+      if (!showMileage) {
+        return `<li><strong>${name}</strong> — until ${untilDate}</li>`;
+      }
       const unit = snapshotMileageUnit(row);
       const untilMileage =
         row.expiresAtMileage != null && Number.isFinite(row.expiresAtMileage)

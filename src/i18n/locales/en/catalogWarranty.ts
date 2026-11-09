@@ -1,6 +1,8 @@
 export default {
   sectionTitle: "Warranty",
   sectionHint: "Default warranty applied when this item is added to an order. Order lines keep their own snapshot and can still be overridden.",
+  sectionHintDurationOnly:
+    "Default duration warranty applied when this item is added to an order. Order lines keep their own snapshot and can still be overridden.",
   typeLabel: "Warranty type",
   enableDuration: "Duration limit",
   enableMileage: "Mileage limit",
@@ -10,6 +12,7 @@ export default {
   kmPlaceholder: "e.g. 20000",
   kmOrderHint: "On orders for vehicles in miles this value is converted automatically.",
   whicheverFirst: "Warranty ends when either limit is reached, whichever comes first.",
+  durationOnlyHint: "Warranty ends when the time limit is reached.",
   types: {
     none: "No warranty",
     duration: "Duration only",

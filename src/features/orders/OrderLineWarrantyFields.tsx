@@ -15,6 +15,8 @@ type Props = {
   km: number | null | undefined;
   /** Order mileage unit for the warranty km field label. */
   mileageUnit?: MileageUnit;
+  /** When false, hide km input and use duration-only hint (non-vehicle industries). */
+  showWarrantyKm?: boolean;
   disabled?: boolean;
   idPrefix: string;
   onChange: (next: { warrantyMonths: number | null; warrantyDays: number | null; warrantyKm: number | null }) => void;
@@ -30,6 +32,7 @@ export default function OrderLineWarrantyFields({
   days,
   km,
   mileageUnit = "km",
+  showWarrantyKm = true,
   disabled,
   idPrefix,
   onChange,
@@ -37,7 +40,7 @@ export default function OrderLineWarrantyFields({
   const { t } = useTranslation();
   const locale = currentIntlLocale();
   const hasDuration = (months != null && months > 0) || (days != null && days > 0);
-  const hasMileage = km != null && km > 0;
+  const hasMileage = showWarrantyKm && km != null && km > 0;
   const unitAbbr = mileageUnitAbbreviation(mileageUnit, t);
 
   const [kmText, setKmText] = useState(() => (km != null ? formatMileageInput(km, locale) : ""));
@@ -66,7 +69,7 @@ export default function OrderLineWarrantyFields({
 
   return (
     <div className="mt-2 space-y-2">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className={`grid gap-2 ${showWarrantyKm ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2"}`}>
         <div className="space-y-1">
           <Label htmlFor={`${idPrefix}-warranty-months`} className="text-xs text-muted-foreground">
             {t("orders.warranty.monthsLabel")}
@@ -111,39 +114,45 @@ export default function OrderLineWarrantyFields({
             }
           />
         </div>
-        <div className="space-y-1 col-span-2 sm:col-span-1">
-          <Label htmlFor={`${idPrefix}-warranty-km`} className="text-xs text-muted-foreground">
-            {t("orders.warranty.kmLabel", { unit: unitAbbr })}
-          </Label>
-          <MileageInput
-            id={`${idPrefix}-warranty-km`}
-            disabled={disabled}
-            value={kmText}
-            placeholder={t("orders.warranty.noLimit")}
-            onFocus={() => {
-              kmFocused.current = true;
-            }}
-            onChange={(event) => {
-              setKmText(event.target.value);
-              const soft = normalizeWarrantyKm(event.target.value);
-              if (soft !== (km ?? null) && (soft != null || event.target.value.trim() === "")) {
-                onChange({
-                  warrantyMonths: months ?? null,
-                  warrantyDays: days ?? null,
-                  warrantyKm: soft,
-                });
-              }
-            }}
-            onBlur={() => {
-              kmFocused.current = false;
-              commitKm(kmText);
-            }}
-          />
-        </div>
+        {showWarrantyKm ? (
+          <div className="space-y-1 col-span-2 sm:col-span-1">
+            <Label htmlFor={`${idPrefix}-warranty-km`} className="text-xs text-muted-foreground">
+              {t("orders.warranty.kmLabel", { unit: unitAbbr })}
+            </Label>
+            <MileageInput
+              id={`${idPrefix}-warranty-km`}
+              disabled={disabled}
+              value={kmText}
+              placeholder={t("orders.warranty.noLimit")}
+              onFocus={() => {
+                kmFocused.current = true;
+              }}
+              onChange={(event) => {
+                setKmText(event.target.value);
+                const soft = normalizeWarrantyKm(event.target.value);
+                if (soft !== (km ?? null) && (soft != null || event.target.value.trim() === "")) {
+                  onChange({
+                    warrantyMonths: months ?? null,
+                    warrantyDays: days ?? null,
+                    warrantyKm: soft,
+                  });
+                }
+              }}
+              onBlur={() => {
+                kmFocused.current = false;
+                commitKm(kmText);
+              }}
+            />
+          </div>
+        ) : null}
       </div>
-      {hasDuration && hasMileage ? (
+      {showWarrantyKm && hasDuration && hasMileage ? (
         <p className="text-[11px] text-muted-foreground" data-warranty-whichever-first>
           {t("orders.warranty.whicheverFirst")}
+        </p>
+      ) : !showWarrantyKm && hasDuration ? (
+        <p className="text-[11px] text-muted-foreground" data-warranty-duration-only>
+          {t("orders.warranty.durationOnlyHint")}
         </p>
       ) : null}
     </div>

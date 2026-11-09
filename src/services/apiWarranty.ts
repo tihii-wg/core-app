@@ -232,6 +232,7 @@ export async function getOrdersWarrantyIndicatorMap(
     | "closedAt"
   >[],
   nowIso?: string,
+  options?: { useMileageWarranty?: boolean },
 ): Promise<Record<string, OrderWarrantyIndicatorModel>> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const result: Record<string, OrderWarrantyIndicatorModel> = {};
@@ -388,6 +389,7 @@ export async function getOrdersWarrantyIndicatorMap(
       sourceOrderClosed: order.warrantySourceOrderId
         ? sourceClosedByOrderId
         : isWarrantySourceFormallyClosed(order),
+      useMileageWarranty: options?.useMileageWarranty,
     });
   }
 
@@ -420,8 +422,16 @@ export function evaluateSnapshotAgainstVehicle(
   nowIso?: string,
   currentMileageUnit?: MileageUnit | null,
   sourceOrderClosed?: boolean,
+  useMileageWarranty?: boolean,
 ): WarrantyEvaluation {
-  return evaluateWarranty({ snapshot, currentMileage, currentMileageUnit, nowIso, sourceOrderClosed });
+  return evaluateWarranty({
+    snapshot,
+    currentMileage,
+    currentMileageUnit,
+    nowIso,
+    sourceOrderClosed,
+    useMileageWarranty,
+  });
 }
 
 /**

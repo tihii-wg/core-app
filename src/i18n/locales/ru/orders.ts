@@ -824,6 +824,7 @@ const orders: Messages<typeof en> = {
     kmLabel: "Гарантия ({{unit}})",
     noLimit: "Без лимита",
     whicheverFirst: "Гарантия заканчивается при достижении любого из лимитов — что наступит раньше.",
+    durationOnlyHint: "Гарантия заканчивается по истечении срока.",
     mileageUnitRecalculated: "Гарантийный пробег пересчитан в {{unit}}",
     line: {
       withCoverage: "Гарантия: {{value}}",

@@ -817,6 +817,7 @@ export default {
     kmLabel: "Warranty ({{unit}})",
     noLimit: "No limit",
     whicheverFirst: "Warranty ends when either limit is reached, whichever comes first.",
+    durationOnlyHint: "Warranty ends when the time limit is reached.",
     mileageUnitRecalculated: "Warranty mileage recalculated to {{unit}}",
     line: {
       withCoverage: "Warranty: {{value}}",

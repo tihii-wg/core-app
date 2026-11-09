@@ -21,6 +21,7 @@ import { PaymentFormDialog } from "../finance/PaymentFormDialog";
 import type { LedgerPayment } from "../finance/paymentTypes";
 import { assertMinPaidOrExplain, orderNetPaidForMinPaid, recordableOrderBalance } from "./minPaidStatusGuard";
 import { showMinPaidBlockedToast } from "./showMinPaidBlockedToast";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { orderAssetSecondaryLine } from "./industryOrderFieldHelpers";
 
@@ -72,7 +73,11 @@ export function OrdersBoard({
     [orders, employeeFilter, deadlineFilter, today],
   );
 
-  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(visibleOrders);
+  const { workflow: boardWorkflow } = useIndustryWorkflow();
+  const showWarrantyKm = industryUsesMileageWarranty(boardWorkflow);
+  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(visibleOrders, {
+    useMileageWarranty: showWarrantyKm,
+  });
   const columns = useMemo(() => buildOrderBoardColumns(visibleOrders, definitions), [visibleOrders, definitions]);
   const draggedOrder = draggedId ? visibleOrders.find((order) => order.id === draggedId) ?? null : null;
   const movingId = move.isPending ? move.variables?.orderId : undefined;

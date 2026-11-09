@@ -9,6 +9,7 @@ import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
 import type { CreateMadalProps, addNewServiceFormData } from "../../lib/types";
 import { defaultServiceCategory, industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import CatalogWarrantyFields from "../orders/CatalogWarrantyFields";
 import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults } from "../orders/catalogWarranty";
@@ -29,6 +30,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
   const technicianOptions = assignableTechnicians(employees);
   const { currency } = useWorkspaceMoney();
   const { workflow } = useIndustryWorkflow();
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const copy = industryServiceCopy(workflow);
   const categoryOptions = industryServiceCategoryOptions(workflow);
 
@@ -209,6 +211,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
         <CatalogWarrantyFields
           idPrefix="new-service"
           value={warranty}
+          showWarrantyKm={showWarrantyKm}
           onChange={(next) => {
             setWarranty(next);
             setWarrantyError(null);

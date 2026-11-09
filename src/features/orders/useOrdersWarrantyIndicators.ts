@@ -20,8 +20,12 @@ type OrderWarrantyInput = Pick<
  * Batched warranty indicator map for the current orders page / board set.
  * One query for the visible order ids — never one request per card.
  */
-export function useOrdersWarrantyIndicators(orders: readonly OrderWarrantyInput[]) {
+export function useOrdersWarrantyIndicators(
+  orders: readonly OrderWarrantyInput[],
+  options?: { useMileageWarranty?: boolean },
+) {
   const { workspaceId } = useActiveWorkspaceId();
+  const useMileageWarranty = options?.useMileageWarranty !== false;
   const orderKey = useMemo(
     () =>
       orders
@@ -35,8 +39,8 @@ export function useOrdersWarrantyIndicators(orders: readonly OrderWarrantyInput[
   );
 
   const query = useQuery({
-    queryKey: ["orders-warranty-indicators", workspaceId, orderKey],
-    queryFn: () => getOrdersWarrantyIndicatorMap(workspaceId, orders),
+    queryKey: ["orders-warranty-indicators", workspaceId, orderKey, useMileageWarranty],
+    queryFn: () => getOrdersWarrantyIndicatorMap(workspaceId, orders, undefined, { useMileageWarranty }),
     enabled: Boolean(workspaceId) && orders.length > 0,
     staleTime: 30_000,
   });

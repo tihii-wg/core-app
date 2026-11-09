@@ -29,7 +29,7 @@ import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
 import { formatWarrantyEndsOn } from "./OrderWarrantyIndicator";
 import { OrderWarrantyPauseNotice } from "./OrderWarrantyPauseNotice";
 import { canManageServices } from "../workspaces/workspaceRoles";
-import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
+import { industrySupportsClientVehicles, industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -146,6 +146,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
   };
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const orderFieldMap = useMemo(() => fieldConfigMap(orderFieldConfig), [orderFieldConfig]);
@@ -328,6 +329,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
     vehicleUnit: selectedVehicle?.mileageUnit,
     snapshotUnit: order.vehicleMileageUnitSnapshot,
     handlers: mileageUnitHandlers,
+    enabled: showWarrantyKm,
   });
 
   useEffect(() => {
@@ -640,6 +642,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
                   days={watchedServices?.[index]?.warrantyDays}
                   km={watchedServices?.[index]?.warrantyKm}
                   mileageUnit={orderMileageUnit}
+                  showWarrantyKm={showWarrantyKm}
                   disabled={warrantyDisabled}
                   onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                     setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
@@ -671,6 +674,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
           warrantyDisabled={warrantyDisabled}
           warrantyDefaults={warrantyDefaults}
           orderMileageUnit={orderMileageUnit}
+          showWarrantyKm={showWarrantyKm}
           isSubmitted={isSubmitted}
           errors={errors.materials}
           restartWarrantyHints={restartWarrantyHints}

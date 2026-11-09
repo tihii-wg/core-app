@@ -1,6 +1,8 @@
 export default {
   sectionTitle: "Garanție",
   sectionHint: "Garanția implicită aplicată când acest element este adăugat într-o comandă. Liniile din comandă păstrează propria copie și pot fi modificate.",
+  sectionHintDurationOnly:
+    "Garanția pe durată implicită aplicată când acest element este adăugat într-o comandă. Liniile din comandă păstrează propria copie și pot fi modificate.",
   typeLabel: "Tip garanție",
   enableDuration: "Limită de durată",
   enableMileage: "Limită de kilometraj",
@@ -10,6 +12,7 @@ export default {
   kmPlaceholder: "ex. 20000",
   kmOrderHint: "În comandă, pentru vehiculele în mile, valoarea se convertește automat.",
   whicheverFirst: "Garanția se încheie când se atinge oricare dintre limite, oricare vine prima.",
+  durationOnlyHint: "Garanția se încheie la expirarea termenului.",
   types: {
     none: "Fără garanție",
     duration: "Doar durată",

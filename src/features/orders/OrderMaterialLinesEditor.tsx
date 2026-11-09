@@ -54,6 +54,8 @@ type OrderMaterialLinesEditorProps = {
   warrantyDefaults?: WorkspaceWarrantyDefaults;
   /** Order mileage unit for catalog→line conversion and warranty field labels. */
   orderMileageUnit?: MileageUnit;
+  /** When false, hide per-line warranty km (non-vehicle industries). */
+  showWarrantyKm?: boolean;
   isSubmitted?: boolean;
   errors?: {
     root?: { message?: string };
@@ -87,6 +89,7 @@ export default function OrderMaterialLinesEditor({
   warrantyDisabled = false,
   warrantyDefaults,
   orderMileageUnit = "km",
+  showWarrantyKm = true,
   isSubmitted = false,
   errors,
   restartWarrantyHints,
@@ -639,6 +642,7 @@ export default function OrderMaterialLinesEditor({
                   days={line?.warrantyDays}
                   km={line?.warrantyKm}
                   mileageUnit={orderMileageUnit}
+                  showWarrantyKm={showWarrantyKm}
                   disabled={disabled || warrantyDisabled}
                   onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
                     setValue(`materials.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });

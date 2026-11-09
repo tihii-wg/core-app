@@ -4,6 +4,7 @@ import type { Order } from "../../lib/types";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { Skeleton } from "../../ui/Skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -91,14 +92,17 @@ export function OrdersListView({
 }: OrdersListViewProps) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
-  const { copy, profile, industrySlug } = useIndustryWorkflow();
+  const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const orderFieldBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const { formatMoney } = useWorkspaceMoney();
   const today = localDateKey(new Date());
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
   const { payments } = useGetPayments();
   const createInvoice = useCreateInvoice();
-  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(orders);
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
+  const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(orders, {
+    useMileageWarranty: showWarrantyKm,
+  });
 
   const { storageKey, defaults } = storageForKey(columnVisibilityKey);
   const [internalVisible, setInternalVisible] = useState(

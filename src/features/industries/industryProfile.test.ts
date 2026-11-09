@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { industryCapabilitiesFromProfile } from "./industryCapabilities";
+import {
+  industryCapabilitiesFromProfile,
+  industrySupportsClientVehicles,
+  industryUsesMileageWarranty,
+} from "./industryCapabilities";
 import {
   industryOpenStatusSeeds,
   industryPaymentStageTemplate,
@@ -37,6 +41,10 @@ describe("industryProfile registry", () => {
     for (const slug of KNOWN_INDUSTRY_SLUGS) {
       const profile = industryProfile(slug);
       expect(profile.warranty.mileage).toBe(slug === "auto_repair");
+      expect(industryUsesMileageWarranty(industryWorkflow(slug))).toBe(slug === "auto_repair");
+      expect(industryUsesMileageWarranty(industryWorkflow(slug))).toBe(
+        industrySupportsClientVehicles(industryWorkflow(slug)),
+      );
     }
   });
 

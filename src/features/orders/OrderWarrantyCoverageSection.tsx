@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import type { Order } from "../../lib/types";
 import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
+import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
+import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { mileageUnitAbbreviation } from "../vehicles/vehicleMileage";
 import { formatWarrantyEndsOn, formatWarrantyKm, remainingDurationLabel } from "./OrderWarrantyIndicator";
@@ -32,6 +34,8 @@ type Props = {
 export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
   const { t, i18n } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
+  const { workflow } = useIndustryWorkflow();
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const isClaim = Boolean(order.warrantySourceOrderId);
   const sourceClosed = isWarrantySourceFormallyClosed(order);
 
@@ -42,17 +46,21 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
   });
 
   const snapshots = recordsQuery.data ?? [];
-  const mileage = currentMileage ?? order.vehicleMileageSnapshot ?? null;
+  const mileage = showWarrantyKm ? (currentMileage ?? order.vehicleMileageSnapshot ?? null) : null;
   const orderUnit = order.vehicleMileageUnitSnapshot ?? "km";
 
   const configuredLines = useMemo(() => {
+    const coverageOpts = { includeMileage: showWarrantyKm };
     const services = (order.services ?? [])
       .filter((line) =>
-        hasWarrantyCoverage({
-          durationMonths: line.warrantyMonths ?? null,
-          durationDays: line.warrantyDays ?? null,
-          mileageLimit: line.warrantyKm ?? null,
-        }),
+        hasWarrantyCoverage(
+          {
+            durationMonths: line.warrantyMonths ?? null,
+            durationDays: line.warrantyDays ?? null,
+            mileageLimit: line.warrantyKm ?? null,
+          },
+          coverageOpts,
+        ),
       )
       .map((line) => ({
         key: line.id ?? `svc-${line.serviceId}`,
@@ -66,11 +74,14 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
       }));
     const materials = (order.materials ?? [])
       .filter((line) =>
-        hasWarrantyCoverage({
-          durationMonths: line.warrantyMonths ?? null,
-          durationDays: line.warrantyDays ?? null,
-          mileageLimit: line.warrantyKm ?? null,
-        }),
+        hasWarrantyCoverage(
+          {
+            durationMonths: line.warrantyMonths ?? null,
+            durationDays: line.warrantyDays ?? null,
+            mileageLimit: line.warrantyKm ?? null,
+          },
+          coverageOpts,
+        ),
       )
       .map((line) => ({
         key: line.id ?? `mat-${line.inventoryItemId ?? line.itemName}`,
@@ -83,7 +94,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
         },
       }));
     return [...services, ...materials];
-  }, [order.services, order.materials]);
+  }, [order.services, order.materials, showWarrantyKm]);
 
   if (isClaim) return null;
 
@@ -96,6 +107,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
           currentMileage: mileage,
           currentMileageUnit: orderUnit,
           sourceOrderClosed: sourceClosed,
+          useMileageWarranty: showWarrantyKm,
         }),
       }))
     : [];
@@ -109,6 +121,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
         currentMileageUnit: orderUnit,
         isWarrantyOrder: false,
         sourceOrderClosed: sourceClosed,
+        useMileageWarranty: showWarrantyKm,
       })
     : null;
 
@@ -144,7 +157,13 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
       {hasSnapshots ? (
         <ul className="space-y-2">
           {lines.map(({ snapshot, evaluation }) => (
-            <CoverageRow key={snapshot.id} snapshot={snapshot} evaluation={evaluation} language={i18n.language || "en"} />
+            <CoverageRow
+              key={snapshot.id}
+              snapshot={snapshot}
+              evaluation={evaluation}
+              language={i18n.language || "en"}
+              showWarrantyKm={showWarrantyKm}
+            />
           ))}
         </ul>
       ) : (
@@ -152,7 +171,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
           {configuredLines.map((line) => (
             <li key={line.key} className="min-w-0">
               <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{line.name}</p>
-              <OrderLineWarrantyBadge limits={line.limits} mileageUnit={orderUnit} />
+              <OrderLineWarrantyBadge limits={line.limits} mileageUnit={orderUnit} showWarrantyKm={showWarrantyKm} />
             </li>
           ))}
         </ul>
@@ -165,17 +184,19 @@ function CoverageRow({
   snapshot,
   evaluation,
   language,
+  showWarrantyKm,
 }: {
   snapshot: WarrantySnapshot;
   evaluation: ReturnType<typeof evaluateWarranty>;
   language: string;
+  showWarrantyKm: boolean;
 }) {
   const { t } = useTranslation();
   const unit = mileageUnitAbbreviation(snapshotMileageUnit(snapshot), t);
   const dateLabel = formatWarrantyEndsOn(evaluation.expiresOn);
   const startDateLabel = formatWarrantyEndsOn(snapshot.startsAt?.slice(0, 10) ?? null);
   const remainingKm =
-    evaluation.remainingMileage != null && evaluation.remainingMileage > 0
+    showWarrantyKm && evaluation.remainingMileage != null && evaluation.remainingMileage > 0
       ? formatWarrantyKm(evaluation.remainingMileage, language)
       : null;
   const expired = isWarrantyExpired(evaluation.status);
@@ -189,6 +210,7 @@ function CoverageRow({
         status={evaluation.status}
         startsAt={snapshot.startsAt}
         mileageUnit={snapshotMileageUnit(snapshot)}
+        showWarrantyKm={showWarrantyKm}
         limits={{
           durationMonths: snapshot.durationMonths,
           durationDays: snapshot.durationDays ?? null,
@@ -206,7 +228,7 @@ function CoverageRow({
             ? t("orders.warranty.pausedSinceClose", { date: startDateLabel })
             : t("orders.warranty.status.paused")
           : expired
-            ? evaluation.status === "expired_mileage"
+            ? showWarrantyKm && evaluation.status === "expired_mileage"
               ? [
                   t("orders.warranty.status.expired_mileage"),
                   evaluation.expiresAtMileage != null

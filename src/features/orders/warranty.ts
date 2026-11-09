@@ -87,18 +87,22 @@ export function normalizeWarrantyDays(value: unknown): number | null {
 
 export function hasWarrantyCoverage(
   limits: WarrantyLimits & { endsOn?: string | null; expiresAtMileage?: number | null },
+  options?: { includeMileage?: boolean },
 ): boolean {
+  const includeMileage = options?.includeMileage !== false;
   if (
     normalizeWarrantyMonths(limits.durationMonths) ||
     normalizeWarrantyDays(limits.durationDays) ||
-    normalizeWarrantyKm(limits.mileageLimit)
+    (includeMileage && normalizeWarrantyKm(limits.mileageLimit))
   ) {
     return true;
   }
   // Activated DB snapshots are authoritative: ends_on / expires_at_mileage count even if
   // duration_* columns are sparse on older rows.
   if (typeof limits.endsOn === "string" && limits.endsOn.trim()) return true;
-  if (limits.expiresAtMileage != null && Number.isFinite(Number(limits.expiresAtMileage))) return true;
+  if (includeMileage && limits.expiresAtMileage != null && Number.isFinite(Number(limits.expiresAtMileage))) {
+    return true;
+  }
   return false;
 }
 
@@ -177,10 +181,11 @@ export function formatWarrantyLimitsLabel(
   t: (key: string, options?: { count?: number; value?: string; unit?: string }) => string,
   formatKm: (n: number) => string,
   mileageUnit: MileageUnit = "km",
+  includeMileage = true,
 ): string | null {
   const months = normalizeWarrantyMonths(limits.durationMonths);
   const days = months ? null : normalizeWarrantyDays(limits.durationDays);
-  const km = normalizeWarrantyKm(limits.mileageLimit);
+  const km = includeMileage ? normalizeWarrantyKm(limits.mileageLimit) : null;
   if (!months && !days && !km) return null;
   const parts: string[] = [];
   if (months) parts.push(t("orders.warranty.line.months", { count: months }));
@@ -213,31 +218,44 @@ export function evaluateWarranty(params: {
    * Omit / true = evaluate date/mileage as usual.
    */
   sourceOrderClosed?: boolean;
+  /**
+   * When false (non-vehicle industries), ignore stored mileage limits entirely —
+   * only months/days decide coverage and expiry. Does not mutate stored values.
+   */
+  useMileageWarranty?: boolean;
 }): WarrantyEvaluation {
   const { snapshot } = params;
+  const useMileage = params.useMileageWarranty !== false;
   const now = params.nowIso ? new Date(params.nowIso) : new Date();
   const startsAt = new Date(snapshot.startsAt);
   const unit = snapshotMileageUnit(snapshot);
   const vehicleUnit = isMileageUnit(params.currentMileageUnit) ? params.currentMileageUnit : unit;
   const mileageInSnapshotUnit =
-    params.currentMileage == null || !Number.isFinite(params.currentMileage)
+    !useMileage || params.currentMileage == null || !Number.isFinite(params.currentMileage)
       ? null
       : vehicleUnit === unit
         ? Math.floor(params.currentMileage)
         : convertMileage(params.currentMileage, vehicleUnit, unit);
+  const expiresAtMileageDisplay = useMileage ? snapshot.expiresAtMileage : null;
 
   if (Number.isNaN(startsAt.getTime())) {
-    return { status: "unavailable", expiresOn: snapshot.endsOn, expiresAtMileage: snapshot.expiresAtMileage, remainingMileage: null, reason: "invalid_start" };
+    return {
+      status: "unavailable",
+      expiresOn: snapshot.endsOn,
+      expiresAtMileage: expiresAtMileageDisplay,
+      remainingMileage: null,
+      reason: "invalid_start",
+    };
   }
-  if (!hasWarrantyCoverage(snapshot)) {
+  if (!hasWarrantyCoverage(snapshot, { includeMileage: useMileage })) {
     return { status: "none", expiresOn: null, expiresAtMileage: null, remainingMileage: null, reason: null };
   }
   if (params.sourceOrderClosed === false) {
     return {
       status: "paused",
       expiresOn: snapshot.endsOn,
-      expiresAtMileage: snapshot.expiresAtMileage,
-      remainingMileage: remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit),
+      expiresAtMileage: expiresAtMileageDisplay,
+      remainingMileage: useMileage ? remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit) : null,
       reason: "paused_source_not_closed",
     };
   }
@@ -245,8 +263,8 @@ export function evaluateWarranty(params: {
     return {
       status: "pending",
       expiresOn: snapshot.endsOn,
-      expiresAtMileage: snapshot.expiresAtMileage,
-      remainingMileage: remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit),
+      expiresAtMileage: expiresAtMileageDisplay,
+      remainingMileage: useMileage ? remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit) : null,
       reason: null,
     };
   }
@@ -259,13 +277,13 @@ export function evaluateWarranty(params: {
     return {
       status: "expired_date",
       expiresOn: endsOn,
-      expiresAtMileage: snapshot.expiresAtMileage,
-      remainingMileage: remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit),
+      expiresAtMileage: expiresAtMileageDisplay,
+      remainingMileage: useMileage ? remainingMileage(snapshot.expiresAtMileage, mileageInSnapshotUnit) : null,
       reason: "expired_date",
     };
   }
 
-  const expiresAtMileage = snapshot.expiresAtMileage;
+  const expiresAtMileage = useMileage ? snapshot.expiresAtMileage : null;
   if (expiresAtMileage != null && mileageInSnapshotUnit != null) {
     if (mileageInSnapshotUnit >= expiresAtMileage) {
       return {
@@ -282,7 +300,7 @@ export function evaluateWarranty(params: {
     status: "active",
     expiresOn: endsOn,
     expiresAtMileage,
-    remainingMileage: remainingMileage(expiresAtMileage, mileageInSnapshotUnit),
+    remainingMileage: useMileage ? remainingMileage(expiresAtMileage, mileageInSnapshotUnit) : null,
     reason: null,
   };
 }
@@ -424,8 +442,13 @@ export function buildOrderWarrantyIndicator(params: {
    * Missing map entries default to closed (true) so time/mileage evaluation still works.
    */
   sourceOrderClosed?: boolean | ReadonlyMap<string, boolean>;
+  /** When false, ignore mileage limits for coverage/expiry (non-vehicle industries). */
+  useMileageWarranty?: boolean;
 }): OrderWarrantyIndicatorModel {
-  const covered = params.snapshots.filter((snapshot) => hasWarrantyCoverage(snapshot));
+  const useMileage = params.useMileageWarranty !== false;
+  const covered = params.snapshots.filter((snapshot) =>
+    hasWarrantyCoverage(snapshot, { includeMileage: useMileage }),
+  );
   if (covered.length === 0 && !params.isWarrantyOrder) {
     return {
       visible: false,
@@ -453,6 +476,7 @@ export function buildOrderWarrantyIndicator(params: {
       currentMileageUnit: params.currentMileageUnit,
       nowIso: params.nowIso,
       sourceOrderClosed: resolveSourceClosed(snapshot.orderId),
+      useMileageWarranty: useMileage,
     }),
   }));
   const primary = selectPrimaryWarrantyItem(evaluated, params.nowIso);
@@ -467,7 +491,7 @@ export function buildOrderWarrantyIndicator(params: {
   const nearExpiry =
     status === "active" &&
     ((remaining != null && remaining.totalDays <= WARRANTY_NEAR_EXPIRY_DAYS) ||
-      (evaluation?.remainingMileage != null && evaluation.remainingMileage <= nearExpiryThreshold));
+      (useMileage && evaluation?.remainingMileage != null && evaluation.remainingMileage <= nearExpiryThreshold));
 
   const visible = params.isWarrantyOrder || covered.length > 0;
   return {

@@ -822,6 +822,7 @@ const orders: Messages<typeof en> = {
     kmLabel: "Garanție ({{unit}})",
     noLimit: "Fără limită",
     whicheverFirst: "Garanția se încheie când se atinge oricare dintre limite, oricare vine prima.",
+    durationOnlyHint: "Garanția se încheie la expirarea termenului.",
     mileageUnitRecalculated: "Kilometrajul de garanție a fost recalculat în {{unit}}",
     line: {
       withCoverage: "Garanție: {{value}}",

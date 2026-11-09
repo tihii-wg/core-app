@@ -20,6 +20,8 @@ type Props = {
   idPrefix: string;
   disabled?: boolean;
   error?: string | null;
+  /** When false, hide mileage UI and preserve any stored warrantyKm (non-vehicle industries). */
+  showWarrantyKm?: boolean;
 };
 
 function deriveType(durationEnabled: boolean, mileageEnabled: boolean): CatalogWarrantyType {
@@ -33,13 +35,21 @@ function deriveType(durationEnabled: boolean, mileageEnabled: boolean): CatalogW
  * Catalog-card warranty defaults editor.
  * Duration and mileage are independent toggles; both can apply at once (first limit wins).
  */
-export default function CatalogWarrantyFields({ value, onChange, idPrefix, disabled, error }: Props) {
+export default function CatalogWarrantyFields({
+  value,
+  onChange,
+  idPrefix,
+  disabled,
+  error,
+  showWarrantyKm = true,
+}: Props) {
   const { t } = useTranslation();
   const locale = currentIntlLocale();
   const type = value.warrantyType ?? "none";
   const durationEnabled = catalogWarrantyShowsMonths(type);
-  const mileageEnabled = catalogWarrantyShowsKm(type);
+  const mileageEnabled = showWarrantyKm && catalogWarrantyShowsKm(type);
   const bothEnabled = durationEnabled && mileageEnabled;
+  const storedKm = value.warrantyKm;
 
   const [kmText, setKmText] = useState(() =>
     value.warrantyKm != null ? formatMileageInput(value.warrantyKm, locale) : "",
@@ -52,6 +62,25 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
   }, [value.warrantyKm, locale]);
 
   function emit(nextDuration: boolean, nextMileage: boolean, months: number | null, km: number | null) {
+    if (!showWarrantyKm) {
+      // Duration-only UI: never clear or invent mileage — preserve stored km/type aspect.
+      const hasKm = storedKm != null && storedKm > 0;
+      if (!nextDuration && !hasKm) {
+        onChange({ warrantyType: "none", warrantyMonths: null, warrantyKm: storedKm });
+        return;
+      }
+      if (!nextDuration && hasKm) {
+        onChange({ warrantyType: "mileage", warrantyMonths: null, warrantyKm: storedKm });
+        return;
+      }
+      onChange({
+        warrantyType: hasKm ? "both" : "duration",
+        warrantyMonths: months,
+        warrantyKm: storedKm,
+      });
+      return;
+    }
+
     const nextType = deriveType(nextDuration, nextMileage);
     if (nextType === "none") {
       onChange({ warrantyType: "none", warrantyMonths: null, warrantyKm: null });
@@ -80,7 +109,9 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
     <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
       <div className="space-y-1">
         <Label className="text-sm font-medium">{t("catalogWarranty.sectionTitle")}</Label>
-        <p className="text-xs text-muted-foreground">{t("catalogWarranty.sectionHint")}</p>
+        <p className="text-xs text-muted-foreground">
+          {showWarrantyKm ? t("catalogWarranty.sectionHint") : t("catalogWarranty.sectionHintDurationOnly")}
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -114,48 +145,56 @@ export default function CatalogWarrantyFields({ value, onChange, idPrefix, disab
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor={`${idPrefix}-warranty-mileage-enabled`} className="text-sm font-normal">
-            {t("catalogWarranty.enableMileage")}
-          </Label>
-          <Switch
-            id={`${idPrefix}-warranty-mileage-enabled`}
-            checked={mileageEnabled}
-            disabled={disabled}
-            onCheckedChange={(checked) => emit(durationEnabled, checked, value.warrantyMonths, value.warrantyKm)}
-          />
-        </div>
-        {mileageEnabled ? (
-          <div className="space-y-1.5">
-            <Label htmlFor={`${idPrefix}-warranty-km`}>{t("catalogWarranty.kmLabel")}</Label>
-            <MileageInput
-              id={`${idPrefix}-warranty-km`}
-              disabled={disabled}
-              value={kmText}
-              placeholder={t("catalogWarranty.kmPlaceholder")}
-              onFocus={() => {
-                kmFocused.current = true;
-              }}
-              onChange={(event) => {
-                setKmText(event.target.value);
-                const soft = normalizeWarrantyKm(event.target.value);
-                if (soft !== (value.warrantyKm ?? null) && (soft != null || event.target.value.trim() === "")) {
-                  emit(durationEnabled, true, value.warrantyMonths, soft);
-                }
-              }}
-              onBlur={() => {
-                kmFocused.current = false;
-                commitKm(kmText);
-              }}
-            />
-            <p className="text-xs text-muted-foreground">{t("catalogWarranty.kmOrderHint")}</p>
-          </div>
+        {showWarrantyKm ? (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor={`${idPrefix}-warranty-mileage-enabled`} className="text-sm font-normal">
+                {t("catalogWarranty.enableMileage")}
+              </Label>
+              <Switch
+                id={`${idPrefix}-warranty-mileage-enabled`}
+                checked={mileageEnabled}
+                disabled={disabled}
+                onCheckedChange={(checked) => emit(durationEnabled, checked, value.warrantyMonths, value.warrantyKm)}
+              />
+            </div>
+            {mileageEnabled ? (
+              <div className="space-y-1.5">
+                <Label htmlFor={`${idPrefix}-warranty-km`}>{t("catalogWarranty.kmLabel")}</Label>
+                <MileageInput
+                  id={`${idPrefix}-warranty-km`}
+                  disabled={disabled}
+                  value={kmText}
+                  placeholder={t("catalogWarranty.kmPlaceholder")}
+                  onFocus={() => {
+                    kmFocused.current = true;
+                  }}
+                  onChange={(event) => {
+                    setKmText(event.target.value);
+                    const soft = normalizeWarrantyKm(event.target.value);
+                    if (soft !== (value.warrantyKm ?? null) && (soft != null || event.target.value.trim() === "")) {
+                      emit(durationEnabled, true, value.warrantyMonths, soft);
+                    }
+                  }}
+                  onBlur={() => {
+                    kmFocused.current = false;
+                    commitKm(kmText);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">{t("catalogWarranty.kmOrderHint")}</p>
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
 
       {bothEnabled ? (
         <p className="text-xs text-muted-foreground" data-warranty-whichever-first>
           {t("catalogWarranty.whicheverFirst")}
+        </p>
+      ) : !showWarrantyKm && durationEnabled ? (
+        <p className="text-xs text-muted-foreground" data-warranty-duration-only>
+          {t("catalogWarranty.durationOnlyHint")}
         </p>
       ) : null}
 

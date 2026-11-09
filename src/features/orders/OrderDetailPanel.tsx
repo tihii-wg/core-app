@@ -29,7 +29,7 @@ import { OrderLineWarrantyBadge } from "./OrderLineWarrantyBadge";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
-import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
+import { industrySupportsClientVehicles, industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
 import { industryOrderStatusLabel, shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -140,6 +140,7 @@ export default function OrderDetailPanel({
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const showClientVehicles = industrySupportsClientVehicles(workflow);
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const workspaceRole = useActiveWorkspaceRole();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
   const closedOrderPerms = useClosedOrderActionPermissions();
@@ -732,6 +733,7 @@ export default function OrderDetailPanel({
                               }
                               startsAt={selectedOrder.closedAt}
                               mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
+                              showWarrantyKm={showWarrantyKm}
                               limits={{
                                 durationMonths: line.warrantyMonths ?? null,
                                 durationDays: line.warrantyDays ?? null,
@@ -819,6 +821,7 @@ export default function OrderDetailPanel({
                                   }
                                   startsAt={selectedOrder.closedAt}
                                   mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
+                                  showWarrantyKm={showWarrantyKm}
                                   limits={{
                                     durationMonths: line.warrantyMonths ?? null,
                                     durationDays: line.warrantyDays ?? null,
@@ -1304,7 +1307,9 @@ function TaxInvoiceNumberField({
 }
 
 function OrderDetailWarrantyUnderNumber({ order }: { order: Order }) {
-  const { byOrderId } = useOrdersWarrantyIndicators([order]);
+  const { workflow } = useIndustryWorkflow();
+  const showWarrantyKm = industryUsesMileageWarranty(workflow);
+  const { byOrderId } = useOrdersWarrantyIndicators([order], { useMileageWarranty: showWarrantyKm });
   return <OrderWarrantyIndicator model={byOrderId.get(order.id)} className="mt-1 font-normal" />;
 }
 
