@@ -4,10 +4,45 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
 
 import { cn } from '../lib/utils'
 
+type TouchSafeMenuContext = {
+  open: boolean
+  setOpen: (open: boolean) => void
+}
+
+const TouchSafeMenuContext = React.createContext<TouchSafeMenuContext | null>(null)
+
+/**
+ * Radix opens the menu on pointerdown. On touch screens that means a finger
+ * that merely starts a scroll over a "⋯" button opens the menu. We keep the
+ * open state here so the trigger can open on a real tap (click) instead.
+ */
 function DropdownMenu({
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false)
+  const isControlled = openProp !== undefined
+  const open = isControlled ? openProp : uncontrolledOpen
+  const onOpenChangeRef = React.useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
+
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!isControlled) setUncontrolledOpen(next)
+      onOpenChangeRef.current?.(next)
+    },
+    [isControlled],
+  )
+
+  const ctx = React.useMemo(() => ({ open, setOpen }), [open, setOpen])
+
+  return (
+    <TouchSafeMenuContext.Provider value={ctx}>
+      <DropdownMenuPrimitive.Root data-slot="dropdown-menu" open={open} onOpenChange={setOpen} {...props} />
+    </TouchSafeMenuContext.Provider>
+  )
 }
 
 function DropdownMenuPortal({
@@ -19,12 +54,37 @@ function DropdownMenuPortal({
 }
 
 function DropdownMenuTrigger({
+  onPointerDown,
+  onClick,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+  const ctx = React.useContext(TouchSafeMenuContext)
+  const lastPointerType = React.useRef<string>('mouse')
+  const openAtPointerDown = React.useRef(false)
+
   return (
     <DropdownMenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
       {...props}
+      onPointerDown={(event) => {
+        onPointerDown?.(event)
+        lastPointerType.current = event.pointerType
+        openAtPointerDown.current = ctx?.open ?? false
+        // Touch / pen: don't open on finger-down (it may be the start of a scroll).
+        // preventDefault makes Radix skip its own pointerdown toggle.
+        if (ctx && event.pointerType !== 'mouse') event.preventDefault()
+      }}
+      onClick={(event) => {
+        onClick?.(event)
+        if (event.defaultPrevented) return
+        // The browser fires click only for a tap without scrolling.
+        if (ctx && lastPointerType.current !== 'mouse') {
+          // Use the state from finger-down: an outside-dismiss may already
+          // have closed the menu before this click arrives.
+          ctx.setOpen(!openAtPointerDown.current)
+        }
+        lastPointerType.current = 'mouse'
+      }}
     />
   )
 }
