@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type React from "react";
 import { Controller, useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -64,6 +65,10 @@ export type OrderPaymentFormProps = {
   showCancelButton?: boolean;
   /** Optional «Сейчас оплачивается: …» line above the form. */
   currentStageLabel?: string | null;
+  /** Rendered after the note field, before the submit row (e.g. order status after payment). */
+  extraFields?: React.ReactNode;
+  /** Reports the amount being entered (for live min-paid evaluation). */
+  onAmountChange?: (amount: number) => void;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -91,6 +96,11 @@ export function PaymentFormDialog({
   const { t } = useTranslation();
   const [step, setStep] = useState<"payment" | "status">("payment");
   const [recordedAmount, setRecordedAmount] = useState(0);
+  const [enteredAmount, setEnteredAmount] = useState(0);
+  /** null = keep the current status. */
+  const [chosenStatusId, setChosenStatusId] = useState<string | null>(null);
+  const [statusStepError, setStatusStepError] = useState<string | null>(null);
+  const handleAmountChange = useCallback((amount: number) => setEnteredAmount(amount), []);
   const { payments, isLoading: paymentsLoading, isFetching: paymentsFetching, refetch } = useGetPayments();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
@@ -99,17 +109,22 @@ export function PaymentFormDialog({
     if (!open) {
       setStep("payment");
       setRecordedAmount(0);
+      setEnteredAmount(0);
+      setChosenStatusId(null);
+      setStatusStepError(null);
     }
   }, [open]);
 
   const netPaidOverride = useMemo(() => {
-    if (!order || step !== "status") return null;
+    if (!order) return null;
+    // Payment form: evaluate min-paid as if the amount being entered were already paid.
+    if (step === "payment") return orderNetPaidForMinPaid(order, payments) + enteredAmount;
     // Prefer live ledger after invalidate/refetch; fall back to pre-payment + recorded amount.
     if (!paymentsLoading && !paymentsFetching) {
       return orderNetPaidForMinPaid(order, payments);
     }
     return orderNetPaidForMinPaid(order, payments) + recordedAmount;
-  }, [order, step, payments, paymentsLoading, paymentsFetching, recordedAmount]);
+  }, [order, step, payments, paymentsLoading, paymentsFetching, recordedAmount, enteredAmount]);
 
   const statusChange = useOrderStatusChange(order, {
     payments,
@@ -124,6 +139,9 @@ export function PaymentFormDialog({
     if (!nextOpen) {
       setStep("payment");
       setRecordedAmount(0);
+      setEnteredAmount(0);
+      setChosenStatusId(null);
+      setStatusStepError(null);
     }
     onOpenChange(nextOpen);
   }
@@ -152,13 +170,33 @@ export function PaymentFormDialog({
                 balance={balance}
                 currentStageLabel={currentStageLabel}
                 onDone={() => closeDialog(false)}
+                onAmountChange={handleAmountChange}
+                extraFields={
+                  offerStatusStep && order ? (
+                    <StatusAfterPaymentField
+                      statusChange={statusChange}
+                      value={chosenStatusId}
+                      onChange={setChosenStatusId}
+                    />
+                  ) : null
+                }
                 onRecorded={async (amount) => {
-                  if (!offerStatusStep || !order) return;
+                  if (!offerStatusStep || !order || !chosenStatusId) return;
                   setRecordedAmount(amount);
-                  // Ensure min-paid options see the new payment before step 2 renders options.
                   void queryClient.invalidateQueries({ queryKey: ["payments", workspaceId] });
                   void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
                   await refetch();
+                  const option = statusChange.options.find((item) => item.id === chosenStatusId);
+                  const result = await statusChange.changeTo(chosenStatusId);
+                  if (result.ok) {
+                    toast.success(
+                      t("finance.payments.afterPayment.recordedWithStatus", { status: option?.name ?? "" }),
+                      { id: "post-payment-status" },
+                    );
+                    return;
+                  }
+                  // Payment is saved; let the user pick another status or keep the current one.
+                  setStatusStepError(result.reason);
                   setStep("status");
                   return false;
                 }}
@@ -168,6 +206,7 @@ export function PaymentFormDialog({
         ) : (
           <PostPaymentStatusStep
             statusChange={statusChange}
+            initialError={statusStepError}
             onKeep={() => closeDialog(false)}
             onChanged={() => closeDialog(false)}
           />
@@ -177,17 +216,74 @@ export function PaymentFormDialog({
   );
 }
 
+const KEEP_STATUS = "__keep__";
+
+/** «Статус заказа после оплаты» select shown inside the payment form. */
+function StatusAfterPaymentField({
+  statusChange,
+  value,
+  onChange,
+}: {
+  statusChange: ReturnType<typeof useOrderStatusChange>;
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const currentLabel = statusChange.current?.name ?? "—";
+  const choices = statusChange.options.filter((option) => option.id !== statusChange.current?.id);
+  const selected = value ? choices.find((option) => option.id === value) : undefined;
+
+  // Drop a choice that became unavailable (e.g. amount lowered below the min-paid threshold).
+  useEffect(() => {
+    if (value && (!selected || selected.disabled)) onChange(null);
+  }, [value, selected, onChange]);
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+      <Label htmlFor="payment-order-status">{t("finance.payments.afterPayment.fieldLabel")}</Label>
+      <Select value={value ?? KEEP_STATUS} onValueChange={(next) => onChange(next === KEEP_STATUS ? null : next)}>
+        <SelectTrigger id="payment-order-status" className="w-full min-w-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={KEEP_STATUS}>{t("finance.payments.afterPayment.keepCurrent", { status: currentLabel })}</SelectItem>
+          {choices.map((option) => (
+            <SelectItem key={option.id} value={option.id} disabled={option.disabled}>
+              <span className="flex min-w-0 flex-col">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
+                    style={option.color ? { backgroundColor: option.color } : undefined}
+                  />
+                  <span className="truncate">{option.name}</span>
+                </span>
+                {option.disabled && option.disabledReason ? (
+                  <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{option.disabledReason}</span>
+                ) : null}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">{t("finance.payments.afterPayment.fieldHint")}</p>
+    </div>
+  );
+}
+
 function PostPaymentStatusStep({
   statusChange,
+  initialError = null,
   onKeep,
   onChanged,
 }: {
   statusChange: ReturnType<typeof useOrderStatusChange>;
+  initialError?: string | null;
   onKeep: () => void;
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const currentLabel = statusChange.current?.name ?? "—";
 
@@ -297,6 +393,8 @@ export function OrderPaymentForm({
   onRecorded,
   showCancelButton = true,
   currentStageLabel,
+  extraFields,
+  onAmountChange,
 }: OrderPaymentFormProps) {
   const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
@@ -320,6 +418,10 @@ export function OrderPaymentForm({
     },
   });
   const enteredAmount = watch("amount");
+  useEffect(() => {
+    const value = Number(enteredAmount);
+    onAmountChange?.(Number.isFinite(value) && value > 0 ? value : 0);
+  }, [enteredAmount, onAmountChange]);
 
   function onSubmit(values: PaymentFormValues) {
     if (isPending) return;
@@ -480,6 +582,8 @@ export function OrderPaymentForm({
           />
           <FieldError message={errors.note?.message} />
         </div>
+
+        {extraFields}
       </div>
 
       <div className="flex justify-end gap-2 pt-2">

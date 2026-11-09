@@ -159,85 +159,55 @@ describe("PaymentFormDialog post-payment status step", () => {
     changeTo.mockResolvedValue({ ok: true, order: { ...order, status: "in-progress" } });
   });
 
-  it("shows step 2 after recording a payment for an open order", async () => {
-    const user = userEvent.setup();
+  it("shows the status field in the payment form for an open order", () => {
     renderDialog({ order });
-
-    expect(screen.getByRole("button", { name: /Record payment/i })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Record payment/i }));
-
-    expect(await screen.findByText(/What status should this order have/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Payment recorded/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /In Progress/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Leave as is \(New\)/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Order status after payment/i)).toBeInTheDocument();
   });
 
-  it("does not show step 2 without an order prop", async () => {
-    const user = userEvent.setup();
-    const { onOpenChange } = renderDialog();
-
-    await user.click(screen.getByRole("button", { name: /Record payment/i }));
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
-    expect(screen.queryByText(/What status should this order have/i)).not.toBeInTheDocument();
+  it("does not show the status field without an order prop", () => {
+    renderDialog();
+    expect(screen.queryByLabelText(/Order status after payment/i)).not.toBeInTheDocument();
   });
 
-  it("does not show step 2 for closed or cancelled orders", async () => {
-    const user = userEvent.setup();
-    const { onOpenChange } = renderDialog({
-      order: { ...order, status: "closed", closedAt: "2026-01-02T00:00:00.000Z" },
-    });
-
-    await user.click(screen.getByRole("button", { name: /Record payment/i }));
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
-    expect(screen.queryByText(/What status should this order have/i)).not.toBeInTheDocument();
+  it("does not show the status field for closed or cancelled orders", () => {
+    renderDialog({ order: { ...order, status: "cancelled" } });
+    expect(screen.queryByLabelText(/Order status after payment/i)).not.toBeInTheDocument();
   });
 
-  it("does not show step 2 when the user cannot change status", async () => {
+  it("does not show the status field when the user cannot change status", () => {
     statusState.canChangeStatus = false;
+    renderDialog({ order });
+    expect(screen.queryByLabelText(/Order status after payment/i)).not.toBeInTheDocument();
+  });
+
+  it("keeping the current status records the payment, closes, and never calls changeTo", async () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderDialog({ order });
-
     await user.click(screen.getByRole("button", { name: /Record payment/i }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
-    expect(screen.queryByText(/What status should this order have/i)).not.toBeInTheDocument();
-  });
-
-  it("keep current and closing the dialog do not call changeTo", async () => {
-    const user = userEvent.setup();
-    const { onOpenChange } = renderDialog({ order });
-
-    await user.click(screen.getByRole("button", { name: /Record payment/i }));
-    expect(await screen.findByText(/What status should this order have/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Leave as is \(New\)/i }));
     expect(changeTo).not.toHaveBeenCalled();
-    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("tapping a status calls changeTo once and closes on success", async () => {
+  it("a chosen status is applied once right after the payment", async () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderDialog({ order });
-
+    await user.click(screen.getByLabelText(/Order status after payment/i));
+    await user.click(await screen.findByRole("option", { name: /In Progress/i }));
     await user.click(screen.getByRole("button", { name: /Record payment/i }));
-    expect(await screen.findByText(/What status should this order have/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /In Progress/i }));
     await waitFor(() => expect(changeTo).toHaveBeenCalledTimes(1));
     expect(changeTo).toHaveBeenCalledWith("system:in-progress");
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
-  it("shows the failure reason and keeps the dialog open", async () => {
-    changeTo.mockResolvedValue({ ok: false, reason: "Need more payment" });
+  it("if the chosen status fails, the payment stays and step 2 shows the reason", async () => {
+    changeTo.mockResolvedValueOnce({ ok: false, reason: "Need more payment" });
     const user = userEvent.setup();
-    const { onOpenChange } = renderDialog({ order });
-
+    renderDialog({ order });
+    await user.click(screen.getByLabelText(/Order status after payment/i));
+    await user.click(await screen.findByRole("option", { name: /In Progress/i }));
     await user.click(screen.getByRole("button", { name: /Record payment/i }));
-    expect(await screen.findByText(/What status should this order have/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /In Progress/i }));
     expect(await screen.findByText("Need more payment")).toBeInTheDocument();
-    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByRole("heading", { name: /Payment recorded/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Leave as is \(New\)/i })).toBeInTheDocument();
   });
 });

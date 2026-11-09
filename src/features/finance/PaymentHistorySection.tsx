@@ -35,6 +35,9 @@ type PaymentHistorySectionProps = {
   canRecord?: boolean;
   /** When set, runs before opening the record-payment dialog (e.g. save dirty order edits). */
   onBeforeRecord?: () => Promise<boolean>;
+  /** Full order: enables «Статус заказа после оплаты» in the payment dialog. */
+  fullOrder?: Order | null;
+  onOrderUpdated?: (order: Order) => void;
 };
 
 function kindBadgeVariant(kind: LedgerPayment["kind"]): "success" | "warning" | "danger" {
@@ -51,6 +54,8 @@ export function PaymentHistorySection({
   isLoading,
   canRecord: canRecordProp,
   onBeforeRecord,
+  fullOrder,
+  onOrderUpdated,
 }: PaymentHistorySectionProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
@@ -226,6 +231,8 @@ export function PaymentHistorySection({
         target={target}
         orderId={orderId}
         invoiceId={invoiceId}
+        order={target === "order" ? (fullOrder ?? null) : null}
+        onOrderUpdated={onOrderUpdated}
         balance={dialogBalance}
         currentStageLabel={
           currentStage

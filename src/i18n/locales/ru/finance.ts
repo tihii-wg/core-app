@@ -137,6 +137,9 @@ const finance: Messages<typeof en> = {
       targetInvoice: "этого счёта",
     },
     afterPayment: {
+      fieldLabel: "Статус заказа после оплаты",
+      fieldHint: "Статус поменяется сразу после записи платежа.",
+      recordedWithStatus: "Платёж записан, статус: {{status}}",
       title: "Платёж записан ✓",
       subtitle: "Какой статус поставить заказу?",
       currentBadge: "сейчас",

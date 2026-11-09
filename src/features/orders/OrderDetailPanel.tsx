@@ -883,6 +883,8 @@ export default function OrderDetailPanel({
             <PaymentHistorySection
               target="order"
               order={selectedOrder}
+              fullOrder={selectedOrder}
+              onOrderUpdated={onOrderUpdated}
               payments={payments}
               isLoading={paymentsLoading}
               canRecord={canEditOrder && !closedContentLocked}

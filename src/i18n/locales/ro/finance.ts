@@ -137,6 +137,9 @@ const finance: Messages<typeof en> = {
       targetInvoice: "factură",
     },
     afterPayment: {
+      fieldLabel: "Starea comenzii după plată",
+      fieldHint: "Starea se schimbă imediat după înregistrarea plății.",
+      recordedWithStatus: "Plată înregistrată, stare: {{status}}",
       title: "Plata a fost înregistrată ✓",
       subtitle: "Ce status să setăm pentru comandă?",
       currentBadge: "acum",

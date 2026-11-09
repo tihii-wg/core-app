@@ -134,6 +134,9 @@ export default {
       targetInvoice: "invoice",
     },
     afterPayment: {
+      fieldLabel: "Order status after payment",
+      fieldHint: "The status changes right after the payment is recorded.",
+      recordedWithStatus: "Payment recorded, status: {{status}}",
       title: "Payment recorded ✓",
       subtitle: "What status should this order have?",
       currentBadge: "current",
