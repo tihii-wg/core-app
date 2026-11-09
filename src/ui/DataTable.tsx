@@ -90,7 +90,10 @@ export function DataTable<T>({
           {data?.map((item) => (
             <TableRow
               key={keyExtractor(item)}
-              onClick={() => onRowClick?.(item)}
+              onClick={(event) => {
+                if (isRowClickIgnored(event.target)) return;
+                onRowClick?.(item);
+              }}
               className={cn(rowClassName?.(item), onRowClick && 'cursor-pointer hover:bg-accent/60')}
             >
               {columns.map((column) => (
@@ -107,4 +110,9 @@ export function DataTable<T>({
       </Table>
     </div>
   );
+}
+
+/** True when the click started on an element that handles its own tap (e.g. price breakdown). */
+export function isRowClickIgnored(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("[data-row-click-ignore]") != null;
 }

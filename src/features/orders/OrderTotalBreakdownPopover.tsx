@@ -71,11 +71,15 @@ export function OrderTotalBreakdownPopover({
     <TooltipPrimitive.Provider delayDuration={150}>
     {/* Opening is driven only by mouse hover / tap below. Radix would also open on
         focus — the card focuses its first control when it opens, which popped this up. */}
-    <TooltipPrimitive.Root open={open} onOpenChange={(next) => (next ? undefined : scheduleClose())}>
+    {/* Radix's own open/close is ignored entirely: on phones it reports "pointer left the
+        trigger" right after a tap and closed the popup instantly. We close on mouse leave,
+        outside tap and Escape ourselves. */}
+    <TooltipPrimitive.Root open={open} onOpenChange={() => undefined}>
       <TooltipPrimitive.Trigger asChild>
         <button
           type="button"
-          className={`cursor-pointer rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none ${className ?? ""}`}
+          data-row-click-ignore=""
+          className={`cursor-pointer touch-manipulation rounded-sm text-right underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 outline-none ${className ?? ""}`}
           aria-label={t("orders.totalBreakdown.ariaLabel")}
           ref={triggerRef}
           // Not a tab stop: the card auto-focuses its first focusable element on open,
@@ -115,7 +119,11 @@ export function OrderTotalBreakdownPopover({
         collisionPadding={16}
         className="z-50 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover p-3 text-left text-sm font-normal tracking-normal text-popover-foreground shadow-md"
         onPointerEnter={cancelClose}
-        onPointerLeave={scheduleClose}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") scheduleClose();
+        }}
+        onEscapeKeyDown={() => setOpen(false)}
+        data-row-click-ignore=""
         data-testid="order-total-breakdown"
         onClick={(event) => event.stopPropagation()}
       >

@@ -1,4 +1,5 @@
 import { useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import { isRowClickIgnored } from "../../ui/DataTable";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -295,7 +296,10 @@ function BoardCard({
       draggable={draggable}
       aria-busy={isMoving || undefined}
       aria-label={t("orders.board.openOrder", { number: order.orderNumber })}
-      onClick={() => onOpen(order)}
+      onClick={(event) => {
+        if (isRowClickIgnored(event.target)) return;
+        onOpen(order);
+      }}
       onKeyDown={handleKeyDown}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}

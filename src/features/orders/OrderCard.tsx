@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { isRowClickIgnored } from "../../ui/DataTable";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
@@ -66,7 +67,10 @@ export function OrderCard({
 
   return (
     <article
-      onClick={() => onView(order)}
+      onClick={(event) => {
+        if (isRowClickIgnored(event.target)) return;
+        onView(order);
+      }}
       className="cursor-pointer rounded-lg border border-border bg-card p-3 shadow-xs transition-colors hover:bg-accent/40 active:bg-accent/60"
     >
       <div className="flex items-start gap-2">
