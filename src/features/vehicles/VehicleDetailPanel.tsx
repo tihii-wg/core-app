@@ -143,7 +143,7 @@ export function VehicleDetailPanel({
                     ) : null}
                   </div>
                   {vehicle.licensePlate ? (
-                    <div className="shrink-0 text-right">
+                    <div className="min-w-0 max-w-[50%] shrink-0 text-right [overflow-wrap:anywhere]">
                       <h3 className="text-xs font-medium text-muted-foreground">{t("vehicles.fields.licensePlate")}</h3>
                       <p className="mt-1 text-sm font-semibold tracking-tight text-foreground">{vehicle.licensePlate}</p>
                     </div>

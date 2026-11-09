@@ -93,7 +93,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                 <h3 className="text-xs font-medium text-muted-foreground">{t("invoices.detail.billTo")}</h3>
                 <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{invoice.clientName || "—"}</p>
               </div>
-              <div className="shrink-0 text-right">
+              <div className="min-w-0 max-w-[55%] shrink-0 text-right [overflow-wrap:anywhere]">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("common.total")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(invoice.total)}</p>
                 {paymentBalance ? (
