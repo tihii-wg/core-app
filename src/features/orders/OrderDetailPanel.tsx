@@ -22,6 +22,7 @@ import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/Stat
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
 import { OrderFieldEditButton } from "./OrderFieldEditButton";
+import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { OrderEditField } from "./orderEditFields";
 import WarrantyOrderSection from "./WarrantyOrderSection";
 import { OrderWarrantyCoverageSection } from "./OrderWarrantyCoverageSection";
@@ -446,7 +447,16 @@ export default function OrderDetailPanel({
               </div>
               <div className="min-w-0 max-w-[55%] shrink-0 text-right [overflow-wrap:anywhere]">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
-                <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">{formatMoney(selectedOrder.totalPrice)}</p>
+                <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">
+                  <OrderTotalBreakdownPopover
+                    order={selectedOrder}
+                    formatMoney={formatMoney}
+                    worksLabel={t("orders.totalBreakdown.works")}
+                    materialsLabel={t("orders.detail.materials")}
+                  >
+                    {formatMoney(selectedOrder.totalPrice)}
+                  </OrderTotalBreakdownPopover>
+                </p>
                 {(selectedOrder.discountTotal ?? 0) > 0 ? (
                   <dl className="mt-1 space-y-0.5 text-xs text-muted-foreground tabular-nums" data-testid="order-detail-discount">
                     <div className="flex justify-end gap-2">

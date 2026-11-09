@@ -242,6 +242,17 @@ const orders: Messages<typeof en> = {
     title: "Editează comanda {{number}}",
     description: "Actualizați VIN-ul, serviciile, automobilul, responsabilul și termenul comenzii selectate.",
   },
+  totalBreakdown: {
+    title: "Din ce constă suma",
+    works: "Manoperă",
+    unassigned: "Fără executant",
+    linesCount_one: "{{count}} serviciu",
+    linesCount_few: "{{count}} servicii",
+    linesCount_other: "{{count}} de servicii",
+    discountIncluded: "Reducere (inclusă)",
+    total: "Total",
+    ariaLabel: "Arată din ce constă suma",
+  },
   form: {
     priceBelowPurchase: "Prețul este sub prețul de achiziție ({{purchase}}) — vânzare în pierdere",
     clientDiscountServices: "Reducere client la servicii: {{percent}}%",

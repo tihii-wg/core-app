@@ -245,6 +245,18 @@ const orders: Messages<typeof en> = {
     title: "Редактирование заказа {{number}}",
     description: "Измените VIN, услуги, автомобиль, ответственного и срок выбранного заказа.",
   },
+  totalBreakdown: {
+    title: "Из чего складывается сумма",
+    works: "Работы",
+    unassigned: "Без исполнителя",
+    linesCount_one: "{{count}} услуга",
+    linesCount_few: "{{count}} услуги",
+    linesCount_many: "{{count}} услуг",
+    linesCount_other: "{{count}} услуги",
+    discountIncluded: "Скидка (уже учтена)",
+    total: "Итого",
+    ariaLabel: "Показать, из чего складывается сумма",
+  },
   form: {
     priceBelowPurchase: "Цена ниже закупочной ({{purchase}}) — продажа в убыток",
     clientDiscountServices: "Скидка клиента на услуги: {{percent}}%",

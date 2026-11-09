@@ -236,6 +236,16 @@ export default {
     title: "Edit Order {{number}}",
     description: "Update the selected order's VIN, services, device, assignment, and deadline.",
   },
+  totalBreakdown: {
+    title: "Total breakdown",
+    works: "Labour",
+    unassigned: "Unassigned",
+    linesCount_one: "{{count}} service",
+    linesCount_other: "{{count}} services",
+    discountIncluded: "Discount (included)",
+    total: "Total",
+    ariaLabel: "Show total breakdown",
+  },
   form: {
     priceBelowPurchase: "Price is below the purchase price ({{purchase}}) — selling at a loss",
     clientDiscountServices: "Client discount on services: {{percent}}%",
