@@ -75,6 +75,7 @@ export default function AddNewOrderForm({
   /** Restore a preselected / just-created vehicle once the client vehicle list includes it. */
   const pendingVehicleIdRef = useRef<string | null>(initialVehicleId.trim() || null);
   const clientInputRef = useRef<HTMLInputElement | null>(null);
+  const clientJustCreatedRef = useRef(false);
   const debouncedClientSearch = useDebounce(clientName.trim(), 250);
   const clientListSearch = debouncedClientSearch || searchQuery;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
@@ -612,10 +613,20 @@ export default function AddNewOrderForm({
         onOpenChange={(open) => {
           setClientDialogOpen(open);
           if (!open) {
-            window.requestAnimationFrame(() => clientInputRef.current?.focus());
+            const created = clientJustCreatedRef.current;
+            clientJustCreatedRef.current = false;
+            if (created) {
+              // New client is already selected: leave the field so its suggestion list does not reopen.
+              // Timeout (not rAF) so this runs after the dialog returns focus to the input.
+              window.setTimeout(() => clientInputRef.current?.blur(), 0);
+              window.setTimeout(() => clientInputRef.current?.blur(), 150);
+            } else {
+              window.requestAnimationFrame(() => clientInputRef.current?.focus());
+            }
           }
         }}
         onCreated={({ client, vehicleId }) => {
+          clientJustCreatedRef.current = true;
           setExtraClients((previous) => [client, ...previous.filter((item) => item.id !== client.id)]);
           setClientName(client.name);
           setValue("clientId", client.id, { shouldDirty: true, shouldValidate: true });
