@@ -5,7 +5,6 @@ import type { Order, OrderStatus } from "../../lib/types";
 import type { Column } from "../../ui/DataTable";
 import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
-import ClientTypeBadge from "../clients/ClientTypeBadge";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
@@ -78,14 +77,15 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
             <div className="truncate text-xs text-muted-foreground" title={phone}>
               {phone}
             </div>
+            {/* Client type lives under the name/phone (the separate «Тип клиента» column was removed). */}
+            {order.clientType ? (
+              <div className="truncate text-xs text-muted-foreground" data-testid="order-client-type">
+                {args.t(`clients.types.${order.clientType}`)}
+              </div>
+            ) : null}
           </div>
         );
       },
-    },
-    {
-      key: "clientType",
-      header: args.t("orders.table.clientType"),
-      cell: (order) => <ClientTypeBadge clientType={order.clientType} />,
     },
     {
       key: "device",

@@ -38,7 +38,6 @@ export function OrderColumnsMenu({
 
   const builtinLabels: Record<OrderBuiltinToggleableColumn, string> = {
     client: byKey.get("client")?.label ?? t("orders.table.client"),
-    clientType: t("orders.table.clientType"),
     device: byKey.get("device")?.label ?? deviceColumnLabel,
     status: t("orders.table.statusPayment"),
     createdBy: t("orders.table.createdBy"),

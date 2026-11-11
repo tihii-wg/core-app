@@ -1,6 +1,5 @@
 export const ORDER_TOGGLEABLE_COLUMNS = [
   "client",
-  "clientType",
   "device",
   "status",
   "createdBy",
@@ -21,7 +20,6 @@ export const DASHBOARD_ORDER_COLUMN_STORAGE_KEY = "coreapp.dashboard.orders.visi
 /** Orders / Dashboard defaults — payment status stays stacked under the Status / Payment column. */
 export const DEFAULT_ORDER_VISIBLE_COLUMNS: OrderToggleableColumn[] = [
   "client",
-  "clientType",
   "device",
   "status",
   "createdBy",
