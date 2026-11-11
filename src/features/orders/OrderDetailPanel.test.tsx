@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,13 @@ const updateOrderHooks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
   isPending: false,
 }));
+
+const updateOrderFieldsHooks = vi.hoisted(() => ({
+  mutateAsync: vi.fn(),
+  isPending: false,
+}));
+
+const unsavedConfirm = vi.hoisted(() => ({ confirm: vi.fn(async () => true) }));
 
 const taxInvoiceHooks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
@@ -30,6 +37,19 @@ vi.mock("./useUpdateOrder", () => ({
     isPending: updateOrderHooks.isPending,
   }),
 }));
+
+vi.mock("./useUpdateOrderFields", () => ({
+  useUpdateOrderFields: () => ({
+    mutateAsync: updateOrderFieldsHooks.mutateAsync,
+    isPending: updateOrderFieldsHooks.isPending,
+  }),
+  useUpdateOrderCustomFieldValue: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../../ui/ConfirmProvider", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../ui/ConfirmProvider")>();
+  return { ...actual, useUnsavedChangesConfirm: () => unsavedConfirm.confirm };
+});
 
 vi.mock("./useDeleteOrder", () => ({
   useDeleteOrder: () => ({
@@ -342,6 +362,10 @@ beforeEach(() => {
   closedOrderPermState.canDeleteClosed = true;
   updateOrderHooks.isPending = false;
   updateOrderHooks.mutateAsync.mockReset();
+  updateOrderFieldsHooks.isPending = false;
+  updateOrderFieldsHooks.mutateAsync.mockReset();
+  unsavedConfirm.confirm.mockReset();
+  unsavedConfirm.confirm.mockResolvedValue(true);
   taxInvoiceHooks.isPending = false;
   taxInvoiceHooks.mutateAsync.mockReset();
   workspaceState.requireTaxInvoiceNumber = false;
@@ -383,36 +407,198 @@ describe("OrderDetailPanel", () => {
     warn.mockRestore();
   });
 
-  it("shows field pencils on an open order and focuses the description field from its pencil", async () => {
+  it("shows click-to-edit fields on an open order and opens the description editor inline", async () => {
     const user = userEvent.setup();
-    Element.prototype.scrollIntoView = vi.fn();
 
     renderPanel();
 
-    expect(await screen.findByRole("button", { name: "Edit: Description" })).toBeInTheDocument();
+    const descriptionField = await screen.findByRole("button", { name: "Edit: Description" });
+    expect(descriptionField).toHaveTextContent("Noise");
     expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit: Services" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Services & materials/i }));
-    expect(await screen.findByRole("button", { name: "Edit: Services" })).toBeInTheDocument();
+    // Services / materials stay non-inline: no per-field pencil on the idle view.
+    expect(screen.queryByRole("button", { name: "Edit: Services" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit: Materials" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Information/i }));
     await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
 
-    const description = await screen.findByLabelText(/Description/i);
-    await waitFor(() => {
-      expect(description).toHaveFocus();
-    });
+    const editor = await screen.findByRole("textbox", { name: "Description" });
+    expect(editor).toHaveValue("Noise");
+    await waitFor(() => expect(editor).toHaveFocus());
+    // Inline editing never swaps the card for the full form.
+    expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
-  it("hides field pencils on a closed order", async () => {
+  it("renders closed-order fields as plain text, not buttons", async () => {
     renderPanel(vi.fn(), vi.fn(), {
       order: { ...order, status: "closed", closedAt: "2026-11-05T14:59:54.258807+00:00" },
     });
 
     expect(await screen.findByText("Order closed")).toBeInTheDocument();
+    expect(screen.getByText("Noise")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit: / })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("saves the description inline without calling the full order update", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    const saved = { ...order, description: "Brake noise" };
+    updateOrderFieldsHooks.mutateAsync.mockResolvedValue(saved);
+
+    renderPanel(onOrderUpdated);
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    const editor = await screen.findByRole("textbox", { name: "Description" });
+    await user.clear(editor);
+    await user.type(editor, "Brake noise");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(updateOrderFieldsHooks.mutateAsync).toHaveBeenCalledWith({
+        orderId: "order-1",
+        patch: { description: "Brake noise" },
+      });
+    });
+    expect(onOrderUpdated).toHaveBeenCalledWith(saved);
+    expect(updateOrderHooks.mutateAsync).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument());
+  });
+
+  it("keeps the editor open and shows the error under the control when the save fails", async () => {
+    const user = userEvent.setup();
+    updateOrderFieldsHooks.mutateAsync.mockRejectedValue(new Error("Order is closed"));
+
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    const editor = await screen.findByRole("textbox", { name: "Description" });
+    await user.type(editor, " more");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Order is closed");
+    expect(screen.getByRole("textbox", { name: "Description" })).toBeInTheDocument();
+  });
+
+  it("asks before discarding a dirty inline field when another field is opened", async () => {
+    const user = userEvent.setup();
+    unsavedConfirm.confirm.mockResolvedValueOnce(false);
+
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    await user.type(await screen.findByRole("textbox", { name: "Description" }), " draft");
+
+    await user.click(screen.getByRole("button", { name: /Edit: Deadline/i }));
+    expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(1);
+    // Kept editing: description draft still open, deadline untouched.
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Noise draft");
+    expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Edit: Deadline/i }));
+    expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(2);
+    // Discarded: only one editor is open at a time.
+    expect(await screen.findByLabelText(/Deadline/i)).toHaveAttribute("type", "date");
+    expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit: Description" })).toHaveTextContent("Noise");
+  });
+
+  it("switches fields without a prompt when the open field is clean", async () => {
+    const user = userEvent.setup();
+
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    await screen.findByRole("textbox", { name: "Description" });
+    await user.click(screen.getByRole("button", { name: /Edit: Deadline/i }));
+
+    expect(unsavedConfirm.confirm).not.toHaveBeenCalled();
+    expect(await screen.findByLabelText(/Deadline/i)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument();
+  });
+
+  it("confirms before closing the sheet with a dirty inline field", async () => {
+    const user = userEvent.setup();
+    const setDetailPanelOpen = vi.fn();
+    unsavedConfirm.confirm.mockResolvedValueOnce(false);
+
+    renderPanel(vi.fn(), setDetailPanelOpen);
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    await user.type(await screen.findByRole("textbox", { name: "Description" }), " draft");
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(1);
+    expect(setDetailPanelOpen).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(setDetailPanelOpen).toHaveBeenCalledWith(false));
+  });
+
+  it("closes the sheet without a prompt when the inline field is not dirty", async () => {
+    const user = userEvent.setup();
+    const setDetailPanelOpen = vi.fn();
+
+    renderPanel(vi.fn(), setDetailPanelOpen);
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    await screen.findByRole("textbox", { name: "Description" });
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(unsavedConfirm.confirm).not.toHaveBeenCalled();
+    expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
+  });
+
+  it("shows click-to-add placeholders for empty visible fields when editable", async () => {
+    industryState.slug = "phone_electronics_repair";
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, vehicleId: null, description: "", deadline: "", deviceSerial: "", devicePasscode: "" },
+    });
+
+    expect(await screen.findByRole("button", { name: "Edit: Description" })).toHaveTextContent(
+      "+ Add",
+    );
+    expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toHaveTextContent("+ Add");
+    expect(screen.getByTestId("inline-field-deviceSerial")).toHaveTextContent("+ Add");
+    expect(screen.getByRole("button", { name: "Edit: Passcode / pattern" })).toHaveTextContent("+ Add");
+  });
+
+  it("saves the deadline inline as a date patch", async () => {
+    const user = userEvent.setup();
+    updateOrderFieldsHooks.mutateAsync.mockResolvedValue({ ...order, deadline: "2026-12-24" });
+
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: /Edit: Deadline/i }));
+    const input = await screen.findByLabelText(/Deadline/i);
+    expect(input).toHaveValue("2026-10-01");
+    await user.clear(input);
+    await user.type(input, "2026-12-24");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(updateOrderFieldsHooks.mutateAsync).toHaveBeenCalledWith({
+        orderId: "order-1",
+        patch: { deadline: "2026-12-24" },
+      });
+    });
+  });
+
+  it("makes only the order visit mileage inline-editable in the vehicle block", async () => {
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, vehicleMileageSnapshot: 85500, vehicleMileageUnitSnapshot: "km" },
+    });
+
+    const linked = await screen.findByTestId("order-linked-vehicle");
+    const editButtons = within(linked).getAllByRole("button", { name: /^Edit: / });
+    expect(editButtons).toHaveLength(1);
+    expect(editButtons[0]).toHaveTextContent(/85,?500/);
+    // Make / model / VIN etc. are plain values that open the vehicle card.
+    expect(within(linked).getByRole("button", { name: "Toyota" })).toHaveAttribute("title", "View vehicle details");
   });
 
   it("saves order edits and closes the details window without clearing stored vehicle assets", async () => {
@@ -584,9 +770,11 @@ describe("OrderDetailPanel", () => {
     expect(await screen.findByRole("combobox", { name: /Assigned technician/i })).toBeDisabled();
   });
 
-  it("hides empty optional fields instead of placeholder dashes", async () => {
+  it("hides empty optional fields instead of placeholder dashes when the order is read-only", async () => {
     const sparse: Order = {
       ...order,
+      status: "closed",
+      closedAt: "2026-11-05T14:59:54.258807+00:00",
       clientType: null,
       clientEmail: "",
       clientPhone: "",

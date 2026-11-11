@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { MileageUnit, Vehicle } from "../../lib/types";
+import { cn } from "../../lib/utils";
 import { formatVehicleMileage, mileageUnitLabel } from "../vehicles/vehicleMileage";
 import type { OrderFieldConfigItem } from "./orderFieldConfig";
 import { VEHICLE_GRID_FIELD_KEY } from "./orderFieldRegistry";
@@ -23,7 +24,7 @@ export type OrderMileageSnapshotDisplay = {
   unit: MileageUnit | null | undefined;
 };
 
-type VehicleGridRow = {
+export type VehicleGridRow = {
   key: string;
   registryKey: string | null;
   label: string;
@@ -38,8 +39,14 @@ export function VehicleFieldsGrid({
   hideKeys = [],
   /** When set (order details), visit mileage uses the historical snapshot — not the vehicle's live reading/unit. */
   orderMileageSnapshot,
-  /** Optional controls rendered on the label row for specific keys (e.g. mileage pencil). */
-  rowActions,
+  /**
+   * Order card: replace a whole row (label + value) with custom content — e.g. the inline-editable visit mileage.
+   * Return `undefined` to keep the default row.
+   */
+  renderRow,
+  /** Order card: clicking a read-only value opens the full vehicle card. */
+  onOpenVehicle,
+  openVehicleTitle,
   /**
    * Order-context field config: applies label / visibility / order overrides.
    * Omit on the standalone vehicle card so it keeps default vehicle translations.
@@ -50,7 +57,9 @@ export function VehicleFieldsGrid({
   empty: string;
   hideKeys?: string[];
   orderMileageSnapshot?: OrderMileageSnapshotDisplay | null;
-  rowActions?: Partial<Record<string, ReactNode>>;
+  renderRow?: (row: VehicleGridRow) => ReactNode | undefined;
+  onOpenVehicle?: () => void;
+  openVehicleTitle?: string;
   fieldConfig?: Map<string, OrderFieldConfigItem> | OrderFieldConfigItem[];
 }) {
   const { t } = useTranslation();
@@ -144,21 +153,33 @@ export function VehicleFieldsGrid({
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm" data-testid="vehicle-fields-grid">
       {rows.map((row) => {
+        const custom = renderRow?.(row);
+        if (custom !== undefined) return <Fragment key={row.key}>{custom}</Fragment>;
         const editKey = row.registryKey ?? VEHICLE_GRID_FIELD_KEY[row.key] ?? row.key;
+        const valueClassName = row.mono
+          ? "font-mono text-base font-semibold tracking-wide [overflow-wrap:anywhere] text-foreground sm:text-lg"
+          : "font-medium [overflow-wrap:anywhere] text-foreground";
         return (
           <div key={row.key} className="min-w-0" data-edit-field={configMap ? editKey : undefined}>
-            <dt className="flex min-w-0 items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
+            <dt className="text-xs font-medium text-muted-foreground">
               <span className="min-w-0">{row.label}</span>
-              {rowActions?.[row.key]}
             </dt>
-            <dd
-              className={
-                row.mono
-                  ? "mt-1 font-mono text-base font-semibold tracking-wide [overflow-wrap:anywhere] text-foreground sm:text-lg"
-                  : "mt-1 font-medium [overflow-wrap:anywhere] text-foreground"
-              }
-            >
-              {row.value}
+            <dd className="mt-1">
+              {onOpenVehicle ? (
+                <button
+                  type="button"
+                  onClick={onOpenVehicle}
+                  title={openVehicleTitle}
+                  className={cn(
+                    "-mx-1.5 block max-w-full cursor-pointer rounded-md px-1.5 py-0.5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/35",
+                    valueClassName,
+                  )}
+                >
+                  {row.value}
+                </button>
+              ) : (
+                <span className={cn("block", valueClassName)}>{row.value}</span>
+              )}
             </dd>
           </div>
         );

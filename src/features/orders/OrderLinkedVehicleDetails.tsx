@@ -7,10 +7,7 @@ import { useOpenClientDetails } from "../clients/useOpenClientDetails";
 import { useGetVehicle } from "../vehicles/useGetVehicle";
 import { VehicleDetailPanel } from "../vehicles/VehicleDetailPanel";
 import type { OrderFieldConfigItem } from "./orderFieldConfig";
-import { VEHICLE_GRID_FIELD_KEY } from "./orderFieldRegistry";
-import { OrderFieldEditButton } from "./OrderFieldEditButton";
-import type { OrderEditField } from "./orderEditFields";
-import { VehicleFieldsGrid } from "./VehicleFieldsGrid";
+import { VehicleFieldsGrid, type VehicleGridRow } from "./VehicleFieldsGrid";
 
 export { VehicleFieldsGrid };
 
@@ -21,11 +18,11 @@ type OrderLinkedVehicleDetailsProps = {
   vehicleMileageUnitSnapshot?: MileageUnit | null;
   /** Switch the host Order Details panel to a related order (avoids nesting another Order Details sheet). */
   onOpenRelatedOrder: (order: Order) => void;
-  /** Pencil on the section header (opens edit form focused on vehicle). */
-  sectionEditAction?: ReactNode;
-  /** When set, show per-row edit pencils using order field keys. */
-  showFieldEdit?: boolean;
-  onEditField?: (field: OrderEditField) => void;
+  /**
+   * Replace a grid row with custom content (e.g. inline-editable visit mileage). Return `undefined` for the default row.
+   * Every other value is read-only here: clicking it opens the vehicle card.
+   */
+  renderRow?: (row: VehicleGridRow, vehicleId: string) => ReactNode | undefined;
   /** Order field config for labels / visibility / order (order context only). */
   fieldConfig?: Map<string, OrderFieldConfigItem> | OrderFieldConfigItem[];
 };
@@ -36,9 +33,7 @@ export function OrderLinkedVehicleDetails({
   vehicleMileageSnapshot = null,
   vehicleMileageUnitSnapshot = null,
   onOpenRelatedOrder,
-  sectionEditAction,
-  showFieldEdit = false,
-  onEditField,
+  renderRow,
   fieldConfig,
 }: OrderLinkedVehicleDetailsProps) {
   const { t } = useTranslation();
@@ -55,28 +50,11 @@ export function OrderLinkedVehicleDetails({
 
   const vehicleSectionLabel = configMap?.get("vehicle")?.label ?? t("vehicles.orderDetailsTitle");
 
-  const rowActions = useMemo(() => {
-    if (!showFieldEdit || !onEditField) return undefined;
-    const actions: Partial<Record<string, ReactNode>> = {};
-    for (const [gridKey, registryKey] of Object.entries(VEHICLE_GRID_FIELD_KEY)) {
-      const cfg = configMap?.get(registryKey);
-      if (cfg && !cfg.visible) continue;
-      const label = cfg?.label ?? t(`vehicles.fields.${gridKey === "currentMileage" ? "orderCurrentMileage" : gridKey}` as never);
-      actions[gridKey] = (
-        <OrderFieldEditButton field={registryKey as OrderEditField} label={label} onEdit={onEditField} />
-      );
-    }
-    return actions;
-  }, [showFieldEdit, onEditField, configMap, t]);
-
   if (!id) return null;
 
   return (
     <section className="space-y-3" data-testid="order-linked-vehicle">
-      <div className="flex min-w-0 items-center justify-between gap-1">
-        <h3 className="min-w-0 text-sm font-medium text-foreground">{vehicleSectionLabel}</h3>
-        {sectionEditAction}
-      </div>
+      <h3 className="min-w-0 text-sm font-medium text-foreground">{vehicleSectionLabel}</h3>
 
       {isLoading ? (
         <div className="space-y-2">
@@ -100,7 +78,9 @@ export function OrderLinkedVehicleDetails({
               value: vehicleMileageSnapshot,
               unit: vehicleMileageUnitSnapshot,
             }}
-            rowActions={rowActions}
+            renderRow={renderRow ? (row) => renderRow(row, id) : undefined}
+            onOpenVehicle={() => setDetailOpen(true)}
+            openVehicleTitle={t("vehicles.details.view")}
             fieldConfig={configMap ?? undefined}
           />
           <button

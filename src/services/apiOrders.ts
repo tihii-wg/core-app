@@ -3099,6 +3099,21 @@ function orderIndustryColumnPatch(input: {
   };
 }
 
+/**
+ * Closed-order immutability gate shared by `updateOrder` / `updateOrderFields`.
+ * Cancelled (incl. closed-then-cancelled): owner_id may edit; ordinary closed rows are immutable for everyone.
+ */
+async function assertOrderRowContentEditable(workspaceId: string, existingOrder: unknown) {
+  const row = existingOrder as { status?: unknown; closed_at?: unknown };
+  const existingStatus = typeof row.status === "string" ? row.status : "";
+  const existingClosedAt = typeof row.closed_at === "string" ? row.closed_at : null;
+  const isClosedRow = Boolean(existingClosedAt) || existingStatus === "closed";
+  if (!isClosedRow) return;
+  if (existingStatus !== "cancelled" || !(await isWorkspaceOwnerIdOnServer(workspaceId))) {
+    throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
+  }
+}
+
 export async function updateOrder(
   {
     orderId,
@@ -3142,22 +3157,7 @@ export async function updateOrder(
   if (existingError) throw new Error(existingError.message);
   if (!existingOrder) throw new Error(orderPermissionMessage());
 
-  const existingStatus =
-    typeof (existingOrder as { status?: unknown }).status === "string"
-      ? (existingOrder as { status: string }).status
-      : "";
-  const existingClosedAt =
-    typeof (existingOrder as { closed_at?: unknown }).closed_at === "string"
-      ? (existingOrder as { closed_at: string }).closed_at
-      : null;
-  const isClosedRow = Boolean(existingClosedAt) || existingStatus === "closed";
-  if (isClosedRow) {
-    // Cancelled (incl. closed-then-cancelled): owner_id may edit lines/warranty.
-    // Ordinary closed rows are immutable for everyone.
-    if (existingStatus !== "cancelled" || !(await isWorkspaceOwnerIdOnServer(workspaceId))) {
-      throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
-    }
-  }
+  await assertOrderRowContentEditable(workspaceId, existingOrder);
 
   const clientId = typeof existingOrder.client_id === "string" ? existingOrder.client_id : null;
   // Omit vehicleId from the payload to leave orders.vehicle_id unchanged (assignee-only updates).
@@ -3371,6 +3371,116 @@ export async function updateOrder(
     new Map(),
     teamsByOrderId.get(orderId) ?? [],
   );
+}
+
+/** Single-field (click-to-edit) patch. Only keys that are present are written. */
+export type UpdateOrderFieldsPatch = Partial<{
+  description: string | null;
+  /** YYYY-MM-DD or empty. */
+  deadline: string | null;
+  device: string | null;
+  carNumber: string | null;
+  vin: string | null;
+  deviceSerial: string | null;
+  deviceImei: string | null;
+  deviceCondition: string | null;
+  deviceCompleteness: string | null;
+  devicePasscode: string | null;
+  siteAddress: string | null;
+  productDimensions: string | null;
+  /** ISO datetime. */
+  measurementAt: string | null;
+  installationAt: string | null;
+  vehicleMileageSnapshot: number | null;
+  vehicleMileageUnitSnapshot: MileageUnit | null;
+}>;
+
+function trimmedTimestampOrNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
+ * Partial order update for inline field editing.
+ *
+ * Writes ONLY the provided columns and never touches lines, materials, warehouse stock or team
+ * (no syncOrderServices / syncOrderMaterials / warehouse RPCs / syncOrderEmployees), so it is safe
+ * for closed-content-adjacent flows where the full `updateOrder` would re-sync everything.
+ * Returns the freshly hydrated order (services / materials / team as stored).
+ */
+export async function updateOrderFields(
+  orderId: string,
+  patch: UpdateOrderFieldsPatch,
+  targetWorkspaceId: string | undefined,
+): Promise<Order> {
+  const workspaceId = requireWorkspaceId(targetWorkspaceId);
+
+  const columns: Record<string, unknown> = {};
+  if (patch.description !== undefined) columns.description = nullIfEmptyText(patch.description);
+  if (patch.deadline !== undefined) {
+    const deadline = patch.deadline?.trim();
+    columns.deadline = deadline ? `${deadline}T00:00:00.000Z` : null;
+  }
+  if (patch.device !== undefined) columns.device = nullIfEmptyText(patch.device);
+  if (patch.carNumber !== undefined) columns.car_number = nullIfEmptyText(patch.carNumber)?.toUpperCase() ?? null;
+  if (patch.vin !== undefined) columns.vin = assertValidOptionalVin(patch.vin, "orders.validation.vinLength");
+  if (patch.deviceSerial !== undefined) columns.device_serial = nullIfEmptyText(patch.deviceSerial);
+  if (patch.deviceImei !== undefined) columns.device_imei = nullIfEmptyText(patch.deviceImei);
+  if (patch.deviceCondition !== undefined) columns.device_condition = nullIfEmptyText(patch.deviceCondition);
+  if (patch.deviceCompleteness !== undefined) columns.device_completeness = nullIfEmptyText(patch.deviceCompleteness);
+  if (patch.devicePasscode !== undefined) columns.device_passcode = nullIfEmptyText(patch.devicePasscode);
+  if (patch.siteAddress !== undefined) columns.site_address = nullIfEmptyText(patch.siteAddress);
+  if (patch.productDimensions !== undefined) columns.product_dimensions = nullIfEmptyText(patch.productDimensions);
+  if (patch.measurementAt !== undefined) columns.measurement_at = trimmedTimestampOrNull(patch.measurementAt);
+  if (patch.installationAt !== undefined) columns.installation_at = trimmedTimestampOrNull(patch.installationAt);
+
+  const mileageSnapshotPatch = orderMileageSnapshotFields({
+    vehicleMileageSnapshot: patch.vehicleMileageSnapshot,
+    vehicleMileageUnitSnapshot: patch.vehicleMileageUnitSnapshot,
+  });
+  // Snapshot value without a unit must not wipe the stored unit.
+  if (patch.vehicleMileageUnitSnapshot === undefined) delete mileageSnapshotPatch.vehicle_mileage_unit_snapshot;
+
+  const { data: existingOrder, error: existingError } = await supabase
+    .from("orders")
+    .select("client_id, status, closed_at")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existingOrder) throw new Error(orderPermissionMessage());
+  await assertOrderRowContentEditable(workspaceId, existingOrder);
+
+  const runUpdate = (includeMileageSnapshot: boolean) => {
+    const payload = { ...columns, ...(includeMileageSnapshot ? mileageSnapshotPatch : {}) };
+    if (Object.keys(payload).length === 0) return null;
+    return supabase
+      .from("orders")
+      .update(payload as Record<string, unknown>)
+      .eq("id", orderId)
+      .eq("workspace_id", workspaceId)
+      .select("id")
+      .maybeSingle();
+  };
+
+  let request = runUpdate(true);
+  if (request) {
+    let { data, error } = await request;
+    if (error && isMissingOrderMileageSnapshotColumn(error)) {
+      orderMileageSnapshotSupported = false;
+      // Snapshot columns are absent — continue without them rather than failing the whole save.
+      request = runUpdate(false);
+      if (request) ({ data, error } = await request);
+      else {
+        data = { id: orderId };
+        error = null;
+      }
+    }
+    if (error) throw mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
+    if (!data) throw new Error(orderPermissionMessage());
+  }
+
+  return getOrder(orderId, workspaceId);
 }
 
 function serviceLineToMoney(line: OrderServiceLine): MoneyLine {

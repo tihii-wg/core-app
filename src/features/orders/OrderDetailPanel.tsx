@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, CircleX, Eye, EyeOff, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
-import { displayCustomFieldValue } from "../../services/apiCustomFields";
+import { Calendar, CircleX, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { displayCustomFieldValue, serializeCustomFieldValue } from "../../services/apiCustomFields";
+import type { UpdateOrderFieldsPatch } from "../../services/apiOrders";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from "../../lib/utils";
-import { customEditFieldKey } from "./orderFieldRegistry";
+import { customEditFieldKey, parseCustomEditField } from "./orderFieldRegistry";
 import { fieldConfigMap, useOrderCustomFieldValues, useOrderFieldConfig } from "./useOrderFieldConfig";
 import { Button } from "../../ui/Button";
 import {
@@ -24,7 +26,11 @@ import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm from "./EditOrderForm";
-import { OrderFieldEditButton } from "./OrderFieldEditButton";
+import { OrderInlineField, type OrderInlineFieldKind, type OrderInlineFieldValue } from "./OrderInlineField";
+import { useUpdateOrderCustomFieldValue, useUpdateOrderFields } from "./useUpdateOrderFields";
+import { combineDateTimeLocal, isInstallationBeforeMeasurement, splitDateTimeLocal } from "./industryOrderFieldHelpers";
+import { buildOrderMileageSnapshot, parseVisitMileage, persistOrderVehicleMileage } from "./orderVehicleMileage";
+import { useGetVehicle } from "../vehicles/useGetVehicle";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { OrderEditField } from "./orderEditFields";
 import WarrantyOrderSection from "./WarrantyOrderSection";
@@ -46,7 +52,7 @@ import { OrderVatBreakdownView } from "./OrderVatBreakdown";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices, canManageWarehouse } from "../workspaces/workspaceRoles";
 import { OrderCatalogLinkDialogs } from "./OrderCatalogLinkDialogs";
-import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
+import { useGuardSubscriptionWrite, useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import {
   materialIssued,
@@ -110,7 +116,7 @@ import {
   canOfferDeleteClosedOrderAction,
 } from "./closedOrderPermissions";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
-import { useConfirm } from "../../ui/ConfirmProvider";
+import { useConfirm, useUnsavedChangesConfirm } from "../../ui/ConfirmProvider";
 import { prepareOrderForCloseOrPayment } from "./requestCloseOrder";
 
 type OrderDetailPanelProps = {
@@ -138,7 +144,14 @@ export default function OrderDetailPanel({
 }: OrderDetailPanelProps) {
   const { t, i18n } = useTranslation();
   const confirm = useConfirm();
+  const confirmDiscardChanges = useUnsavedChangesConfirm();
+  const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
   const [isEditing, setIsEditing] = useState(false);
+  /** Field currently open in its click-to-edit editor (only one at a time). */
+  const [editingField, setEditingField] = useState<OrderEditField | null>(null);
+  /** Mirrors the active inline editor's dirty state (reported by OrderInlineField). */
+  const [inlineDirty, setInlineDirty] = useState(false);
   const [editFocusField, setEditFocusField] = useState<OrderEditField | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -157,7 +170,9 @@ export default function OrderDetailPanel({
   }
   // History is a separate right column on desktop, so it is not a valid left-column tab there.
   const detailTab: OrderDetailTab = isDesktopFeedLayout && storedDetailTab === "history" ? "info" : storedDetailTab;
-  function selectDetailTab(tab: OrderDetailTab) {
+  async function selectDetailTab(tab: OrderDetailTab) {
+    // Leaving the info tab unmounts the inline editor; never drop a draft silently.
+    if (tab !== detailTab && editingField && !(await settleInlineEdit())) return;
     setStoredDetailTab(tab);
     writeOrderDetailTab(tab);
   }
@@ -258,6 +273,7 @@ export default function OrderDetailPanel({
     setEditingOrderId(selectedOrder?.id);
     setIsEditing(false);
     setEditFocusField(null);
+    setEditingField(null);
   }
 
   function stopEditing() {
@@ -265,20 +281,60 @@ export default function OrderDetailPanel({
     setEditFocusField(null);
   }
 
-  function startFieldEdit(field: OrderEditField) {
+  function closeInlineEditor() {
+    setInlineDirty(false);
+    setEditingField(null);
+  }
+
+  /**
+   * Resolve the open inline editor before something else takes over (another field, full form, tab, close).
+   * Returns false when the user chose to keep editing.
+   */
+  async function settleInlineEdit(): Promise<boolean> {
+    if (!editingField) return true;
+    // The confirm dialog is modal, so a second field click cannot queue another prompt.
+    if (inlineDirty && !(await confirmDiscardChanges())) return false;
+    closeInlineEditor();
+    return true;
+  }
+
+  async function requestInlineEdit(field: OrderEditField) {
+    if (editingField === field || inlineSaving) return;
+    if (editingField && !(await settleInlineEdit())) return;
+    setEditingField(field);
+  }
+
+  async function startFieldEdit(field: OrderEditField | null) {
+    if (editingField && !(await settleInlineEdit())) return;
     setEditFocusField(field);
     setIsEditing(true);
   }
 
   function handleOpenChange(open: boolean) {
+    if (!open && editingField && inlineDirty) {
+      // Dirty inline draft: ask first; closing proceeds only when the user discards it.
+      void settleInlineEdit().then((settled) => {
+        if (!settled) return;
+        setDetailPanelOpen(false);
+        stopEditing();
+        setConfirmDeleteOpen(false);
+      });
+      return;
+    }
     setDetailPanelOpen(open);
     if (!open) {
+      closeInlineEditor();
       stopEditing();
       setConfirmDeleteOpen(false);
     }
   }
 
+  /** Click-to-edit is available exactly when the old per-field pencils were. */
   const showFieldEdit = Boolean(selectedOrder && !isEditing && canEditOrder && !closedContentLocked);
+  const { mutateAsync: saveOrderFields, isPending: isFieldSaving } = useUpdateOrderFields();
+  const { mutateAsync: saveCustomFieldValue, isPending: isCustomFieldSaving } = useUpdateOrderCustomFieldValue();
+  const inlineSaving = isFieldSaving || isCustomFieldSaving;
+  const { vehicle: linkedVehicle } = useGetVehicle(showClientVehicles ? selectedOrder?.vehicleId : null);
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const orderFieldMap = useMemo(() => fieldConfigMap(orderFieldConfig), [orderFieldConfig]);
   const { data: customFieldValues = [] } = useOrderCustomFieldValues(selectedOrder?.id);
@@ -287,6 +343,150 @@ export default function OrderDetailPanel({
     if (!industryDefault) return false;
     const cfg = orderFieldMap.get(key);
     return cfg ? cfg.visible : true;
+  };
+
+  /** Shared wiring for every click-to-edit field (one editor open at a time). */
+  const inlineCommon = (field: OrderEditField) => {
+    const customKey = parseCustomEditField(field);
+    const configKey = customKey ?? field;
+    return {
+      fieldKey: field,
+      editable: showFieldEdit,
+      isEditing: editingField === field,
+      required: orderFieldMap.get(configKey)?.required ?? false,
+      saving: inlineSaving && editingField === field,
+      onRequestEdit: () => void requestInlineEdit(field),
+      onCancel: closeInlineEditor,
+      onDirtyChange: setInlineDirty,
+      onSave: (next: OrderInlineFieldValue) => saveInlineField(field, next),
+    };
+  };
+
+  /** Persist one inline field. Throws (message shown under the control) on validation / API failure. */
+  async function saveInlineField(field: OrderEditField, raw: OrderInlineFieldValue) {
+    if (!selectedOrder) return;
+    const order = selectedOrder;
+    const text = typeof raw === "string" ? raw : "";
+
+    const customKey = parseCustomEditField(field);
+    if (customKey) {
+      const definition = orderFieldConfig.find((item) => item.isCustom && item.key === customKey);
+      if (!definition?.definitionId) throw new Error(t("common.somethingWentWrong"));
+      await saveCustomFieldValue({
+        orderId: order.id,
+        definitionId: definition.definitionId,
+        value: serializeCustomFieldValue(definition.type, raw),
+      });
+      closeInlineEditor();
+      return;
+    }
+
+    let patch: UpdateOrderFieldsPatch;
+    switch (field) {
+      case "measurementAt":
+      case "installationAt": {
+        const [date = "", time = ""] = text.split("T");
+        const iso = combineDateTimeLocal(date, time);
+        if (text.trim() && !iso) throw new Error(t("common.somethingWentWrong"));
+        const invalidOrder =
+          field === "installationAt"
+            ? isInstallationBeforeMeasurement(order.measurementAt ?? null, iso)
+            : isInstallationBeforeMeasurement(iso, order.installationAt ?? null);
+        if (invalidOrder) throw new Error(t("orders.validation.installationBeforeMeasurement"));
+        patch = { [field]: iso };
+        break;
+      }
+      case "vehicleCurrentMileage": {
+        // Match EditOrderForm: empty never clears the vehicle reading or the order snapshot.
+        const reading = parseVisitMileage(text);
+        if (reading == null) {
+          closeInlineEditor();
+          return;
+        }
+        if (!linkedVehicle) throw new Error(t("vehicles.errors.notFound"));
+        guardWrite();
+        // Vehicle reading first — a failed vehicle write must not report the order as saved.
+        await persistOrderVehicleMileage({
+          workspaceId,
+          clientId: linkedVehicle.clientId,
+          vehicle: linkedVehicle,
+          formMileage: text,
+          queryClient,
+        });
+        patch = buildOrderMileageSnapshot(text, linkedVehicle) ?? {};
+        if (Object.keys(patch).length === 0) {
+          closeInlineEditor();
+          return;
+        }
+        break;
+      }
+      case "description":
+      case "deadline":
+      case "device":
+      case "carNumber":
+      case "vin":
+      case "deviceSerial":
+      case "deviceImei":
+      case "deviceCondition":
+      case "deviceCompleteness":
+      case "devicePasscode":
+      case "siteAddress":
+      case "productDimensions":
+        patch = { [field]: text } as UpdateOrderFieldsPatch;
+        break;
+      default:
+        throw new Error(t("common.somethingWentWrong"));
+    }
+
+    const updated = await saveOrderFields({ orderId: order.id, patch });
+    onOrderUpdated(updated);
+    closeInlineEditor();
+  }
+
+  function renderTextField(
+    field: OrderEditField,
+    label: string,
+    current: string | null | undefined,
+    options: { kind?: "text" | "textarea"; mono?: boolean; masked?: boolean } = {},
+  ) {
+    const kind = options.kind ?? "text";
+    return (
+      <OrderInlineField
+        key={field}
+        label={label}
+        value={current?.trim() ? current : ""}
+        editValue={current ?? ""}
+        kind={kind}
+        mono={options.mono}
+        masked={options.masked}
+        className={kind === "textarea" && editingField === field ? "col-span-2" : undefined}
+        {...inlineCommon(field)}
+      />
+    );
+  }
+
+  function renderDateTimeField(field: "measurementAt" | "installationAt", label: string, iso: string | null | undefined) {
+    const parts = splitDateTimeLocal(iso);
+    return (
+      <OrderInlineField
+        key={field}
+        label={label}
+        value={iso ? formatIndustryDateTime(iso, i18n.language) : ""}
+        editValue={parts.date ? `${parts.date}T${parts.time || "00:00"}` : ""}
+        kind="datetime-local"
+        {...inlineCommon(field)}
+      />
+    );
+  }
+
+  /** Vehicle-less assets: with edit rights an empty visible field shows a click-to-add placeholder. */
+  const showAssetField = (name: "device" | "carNumber" | "vin") => {
+    if (!selectedOrder) return false;
+    const value = selectedOrder[name];
+    const show = showFieldEdit
+      ? Boolean(value?.trim()) || workflow.orderFields[name].visible
+      : shouldShowOrderAssetValue(workflow.orderFields[name], value, name);
+    return fieldVisible(name, show);
   };
 
   async function requestClose() {
@@ -472,7 +672,14 @@ export default function OrderDetailPanel({
 
   return (
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]">
+      <SheetContent
+        className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]"
+        onEscapeKeyDown={(event) => {
+          // Esc while a field is being edited cancels only that field (handled by OrderInlineField),
+          // it must not close the whole order card.
+          if (editingField) event.preventDefault();
+        }}
+      >
         <SheetHeader className="shrink-0 pr-24">
           <SheetTitle className="min-w-0">
             <span className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
@@ -489,10 +696,7 @@ export default function OrderDetailPanel({
           {selectedOrder && !isEditing && canEditOrder && !closedContentLocked && (
             <button
               type="button"
-              onClick={() => {
-                setEditFocusField(null);
-                setIsEditing(true);
-              }}
+              onClick={() => void startFieldEdit(null)}
               aria-label={t("common.edit")}
               title={t("orders.detail.editTitle")}
               className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
@@ -764,143 +968,125 @@ export default function OrderDetailPanel({
             ) : null}
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-              {deadline ? (
-                <div className="min-w-0">
-                  <dt className="flex min-w-0 items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
-                    <span className="min-w-0">{fieldLabel("deadline", copy.deadlineDetail)}</span>
-                    {showFieldEdit ? (
-                      <OrderFieldEditButton
-                        field="deadline"
-                        label={fieldLabel("deadline", copy.deadlineDetail)}
-                        onEdit={startFieldEdit}
-                      />
-                    ) : null}
-                  </dt>
-                  <dd className="mt-1 flex flex-wrap items-center gap-2 font-medium text-foreground">
-                    <span className={`inline-flex items-center gap-1.5 ${overdue ? "text-destructive" : ""}`}>
-                      <Calendar className={`size-3.5 ${overdue ? "text-destructive" : "text-subtle-foreground"}`} />
-                      {deadline}
-                    </span>
-                    {overdue ? <StatusBadge variant="danger">{t("orders.detail.overdue")}</StatusBadge> : null}
-                  </dd>
-                </div>
+              {deadline || (showFieldEdit && fieldVisible("deadline")) ? (
+                <OrderInlineField
+                  label={fieldLabel("deadline", copy.deadlineDetail)}
+                  value={
+                    deadline ? (
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 ${overdue ? "text-destructive" : ""}`}>
+                          <Calendar className={`size-3.5 ${overdue ? "text-destructive" : "text-subtle-foreground"}`} />
+                          {deadline}
+                        </span>
+                        {overdue ? <StatusBadge variant="danger">{t("orders.detail.overdue")}</StatusBadge> : null}
+                      </span>
+                    ) : (
+                      ""
+                    )
+                  }
+                  editValue={deadline.slice(0, 10)}
+                  kind="date"
+                  {...inlineCommon("deadline")}
+                />
               ) : null}
 
-              {!showClientVehicles &&
-              fieldVisible("device", shouldShowOrderAssetValue(workflow.orderFields.device, selectedOrder.device, "device")) ? (
-                <DetailItem
-                  label={fieldLabel("device", copy.deviceDetail)}
-                  value={selectedOrder.device}
-                  editField={showFieldEdit ? "device" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {!showClientVehicles &&
-              fieldVisible("carNumber", shouldShowOrderAssetValue(workflow.orderFields.carNumber, selectedOrder.carNumber, "carNumber")) ? (
-                <DetailItem
-                  label={fieldLabel("carNumber", copy.carNumberDetail)}
-                  value={selectedOrder.carNumber}
-                  editField={showFieldEdit ? "carNumber" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {!showClientVehicles &&
-              fieldVisible("vin", shouldShowOrderAssetValue(workflow.orderFields.vin, selectedOrder.vin, "vin")) ? (
-                <DetailItem
-                  label={fieldLabel("vin", copy.vinDetail)}
-                  value={selectedOrder.vin}
-                  mono
-                  editField={showFieldEdit ? "vin" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("deviceSerial", industryBlocks.deviceSerial) && selectedOrder.deviceSerial?.trim() ? (
-                <DetailItem
-                  label={fieldLabel("deviceSerial", t("orders.industryFields.deviceSerial"))}
-                  value={selectedOrder.deviceSerial}
-                  mono
-                  editField={showFieldEdit ? "deviceSerial" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("deviceImei", industryBlocks.deviceImei) && selectedOrder.deviceImei?.trim() ? (
-                <DetailItem
-                  label={fieldLabel("deviceImei", t("orders.industryFields.deviceImei"))}
-                  value={selectedOrder.deviceImei}
-                  mono
-                  editField={showFieldEdit ? "deviceImei" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("deviceCondition", industryBlocks.deviceCondition) && selectedOrder.deviceCondition?.trim() ? (
-                <DetailItem
-                  label={fieldLabel("deviceCondition", t("orders.industryFields.deviceCondition"))}
-                  value={selectedOrder.deviceCondition}
-                  editField={showFieldEdit ? "deviceCondition" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("deviceCompleteness", industryBlocks.deviceCompleteness) && selectedOrder.deviceCompleteness?.trim() ? (
-                <DetailItem
-                  label={fieldLabel("deviceCompleteness", t("orders.industryFields.deviceCompleteness"))}
-                  value={selectedOrder.deviceCompleteness}
-                  editField={showFieldEdit ? "deviceCompleteness" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("devicePasscode", industryBlocks.devicePasscode) && selectedOrder.devicePasscode?.trim() ? (
-                <PasscodeDetailItem
-                  label={fieldLabel("devicePasscode", t("orders.industryFields.devicePasscode"))}
-                  value={selectedOrder.devicePasscode}
-                  editField={showFieldEdit ? "devicePasscode" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("siteAddress", industryBlocks.siteAddress) && selectedOrder.siteAddress?.trim() ? (
-                <DetailItem
-                  label={fieldLabel("siteAddress", t("orders.industryFields.siteAddress"))}
-                  value={selectedOrder.siteAddress}
-                  editField={showFieldEdit ? "siteAddress" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("productDimensions", industryBlocks.productDimensions) && selectedOrder.productDimensions?.trim() ? (
-                <DetailItem
-                  label={fieldLabel("productDimensions", t("orders.industryFields.productDimensions"))}
-                  value={selectedOrder.productDimensions}
-                  editField={showFieldEdit ? "productDimensions" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("measurementAt", industryBlocks.measurementAt) && selectedOrder.measurementAt ? (
-                <DetailItem
-                  label={fieldLabel("measurementAt", t("orders.industryFields.measurementAt"))}
-                  value={formatIndustryDateTime(selectedOrder.measurementAt, i18n.language)}
-                  editField={showFieldEdit ? "measurementAt" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
-              {fieldVisible("installationAt", industryBlocks.installationAt) && selectedOrder.installationAt ? (
-                <DetailItem
-                  label={fieldLabel("installationAt", t("orders.industryFields.installationAt"))}
-                  value={formatIndustryDateTime(selectedOrder.installationAt, i18n.language)}
-                  editField={showFieldEdit ? "installationAt" : undefined}
-                  onEdit={showFieldEdit ? startFieldEdit : undefined}
-                />
-              ) : null}
+              {!showClientVehicles && showAssetField("device")
+                ? renderTextField("device", fieldLabel("device", copy.deviceDetail), selectedOrder.device)
+                : null}
+              {!showClientVehicles && showAssetField("carNumber")
+                ? renderTextField("carNumber", fieldLabel("carNumber", copy.carNumberDetail), selectedOrder.carNumber)
+                : null}
+              {!showClientVehicles && showAssetField("vin")
+                ? renderTextField("vin", fieldLabel("vin", copy.vinDetail), selectedOrder.vin, { mono: true })
+                : null}
+              {fieldVisible("deviceSerial", industryBlocks.deviceSerial)
+                ? renderTextField(
+                    "deviceSerial",
+                    fieldLabel("deviceSerial", t("orders.industryFields.deviceSerial")),
+                    selectedOrder.deviceSerial,
+                    { mono: true },
+                  )
+                : null}
+              {fieldVisible("deviceImei", industryBlocks.deviceImei)
+                ? renderTextField(
+                    "deviceImei",
+                    fieldLabel("deviceImei", t("orders.industryFields.deviceImei")),
+                    selectedOrder.deviceImei,
+                    { mono: true },
+                  )
+                : null}
+              {fieldVisible("deviceCondition", industryBlocks.deviceCondition)
+                ? renderTextField(
+                    "deviceCondition",
+                    fieldLabel("deviceCondition", t("orders.industryFields.deviceCondition")),
+                    selectedOrder.deviceCondition,
+                    { kind: "textarea" },
+                  )
+                : null}
+              {fieldVisible("deviceCompleteness", industryBlocks.deviceCompleteness)
+                ? renderTextField(
+                    "deviceCompleteness",
+                    fieldLabel("deviceCompleteness", t("orders.industryFields.deviceCompleteness")),
+                    selectedOrder.deviceCompleteness,
+                    { kind: "textarea" },
+                  )
+                : null}
+              {fieldVisible("devicePasscode", industryBlocks.devicePasscode)
+                ? renderTextField(
+                    "devicePasscode",
+                    fieldLabel("devicePasscode", t("orders.industryFields.devicePasscode")),
+                    selectedOrder.devicePasscode,
+                    { mono: true, masked: true },
+                  )
+                : null}
+              {fieldVisible("siteAddress", industryBlocks.siteAddress)
+                ? renderTextField(
+                    "siteAddress",
+                    fieldLabel("siteAddress", t("orders.industryFields.siteAddress")),
+                    selectedOrder.siteAddress,
+                  )
+                : null}
+              {fieldVisible("productDimensions", industryBlocks.productDimensions)
+                ? renderTextField(
+                    "productDimensions",
+                    fieldLabel("productDimensions", t("orders.industryFields.productDimensions")),
+                    selectedOrder.productDimensions,
+                  )
+                : null}
+              {fieldVisible("measurementAt", industryBlocks.measurementAt)
+                ? renderDateTimeField(
+                    "measurementAt",
+                    fieldLabel("measurementAt", t("orders.industryFields.measurementAt")),
+                    selectedOrder.measurementAt,
+                  )
+                : null}
+              {fieldVisible("installationAt", industryBlocks.installationAt)
+                ? renderDateTimeField(
+                    "installationAt",
+                    fieldLabel("installationAt", t("orders.industryFields.installationAt")),
+                    selectedOrder.installationAt,
+                  )
+                : null}
               {orderFieldConfig
                 .filter((field) => field.isCustom && field.visible)
                 .map((field) => {
                   const row = customFieldValues.find((value) => value.definitionId === field.definitionId);
                   const text = displayCustomFieldValue(field.type, row?.value, field.options);
-                  if (!text && field.type !== "checkbox") return null;
+                  const editKey = customEditFieldKey(field.key);
+                  const kind = customInlineKind(field.type);
+                  const checked = row?.value === true || row?.value === "true";
                   return (
-                    <DetailItem
+                    <OrderInlineField
                       key={field.key}
                       label={field.label}
-                      value={field.type === "checkbox" ? (row?.value === true || row?.value === "true" ? "✓" : "—") : text}
-                      editField={showFieldEdit ? customEditFieldKey(field.key) : undefined}
-                      onEdit={showFieldEdit ? startFieldEdit : undefined}
+                      value={field.type === "checkbox" ? (checked ? "✓" : "—") : text}
+                      editValue={field.type === "checkbox" ? checked : row?.value == null ? "" : String(row.value)}
+                      kind={kind}
+                      options={field.options}
+                      className={
+                        field.type === "textarea" && editingField === editKey ? "col-span-2" : undefined
+                      }
+                      {...inlineCommon(editKey)}
                     />
                   );
                 })}
@@ -915,16 +1101,23 @@ export default function OrderDetailPanel({
                   onOrderUpdated(order);
                 }}
                 fieldConfig={orderFieldMap}
-                showFieldEdit={showFieldEdit}
-                onEditField={showFieldEdit ? startFieldEdit : undefined}
-                sectionEditAction={
-                  showFieldEdit ? (
-                    <OrderFieldEditButton
-                      field="vehicle"
-                      label={fieldLabel("vehicle", t("vehicles.orderDetailsTitle"))}
-                      onEdit={startFieldEdit}
-                    />
-                  ) : undefined
+                renderRow={
+                  showFieldEdit
+                    ? (row) => {
+                        // Only the visit mileage snapshot belongs to the order; every other vehicle value opens the vehicle card.
+                        if (row.key !== "currentMileage") return undefined;
+                        const snapshot = selectedOrder.vehicleMileageSnapshot ?? null;
+                        return (
+                          <OrderInlineField
+                            label={row.label}
+                            value={snapshot == null ? "" : row.value}
+                            editValue={snapshot}
+                            kind="number"
+                            {...inlineCommon("vehicleCurrentMileage")}
+                          />
+                        );
+                      }
+                    : undefined
                 }
               />
             ) : null}
@@ -955,20 +1148,17 @@ export default function OrderDetailPanel({
               />
             ) : null}
 
-            {description ? (
-              <div>
-                <div className="flex min-w-0 items-center justify-between gap-1">
-                  <h3 className="min-w-0 text-xs font-medium text-muted-foreground">{t("orders.detail.description")}</h3>
-                  {showFieldEdit ? (
-                    <OrderFieldEditButton
-                      field="description"
-                      label={t("orders.detail.description")}
-                      onEdit={startFieldEdit}
-                    />
-                  ) : null}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{description}</p>
-              </div>
+            {description || (showFieldEdit && fieldVisible("description")) ? (
+              <dl>
+                <OrderInlineField
+                  label={t("orders.detail.description")}
+                  value={description}
+                  editValue={selectedOrder.description ?? ""}
+                  kind="textarea"
+                  valueClassName="text-sm font-normal"
+                  {...inlineCommon("description")}
+                />
+              </dl>
             ) : null}
               </>
             ) : null}
@@ -979,7 +1169,7 @@ export default function OrderDetailPanel({
               <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center" data-testid="order-items-empty">
                 <p className="text-sm font-medium text-foreground">{t("orders.detail.tabs.itemsEmpty")}</p>
                 {showFieldEdit ? (
-                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => startFieldEdit("services")}>
+                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void startFieldEdit("services")}>
                     {t("orders.detail.tabs.itemsAdd")}
                   </Button>
                 ) : null}
@@ -991,16 +1181,7 @@ export default function OrderDetailPanel({
                   <thead className="bg-muted/50 text-xs text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium">
-                        <span className="flex min-w-0 items-center justify-between gap-1">
-                          <span className="min-w-0">{t("orders.detail.services")}</span>
-                          {showFieldEdit ? (
-                            <OrderFieldEditButton
-                              field="services"
-                              label={t("orders.detail.services")}
-                              onEdit={startFieldEdit}
-                            />
-                          ) : null}
-                        </span>
+                        {t("orders.detail.services")}
                       </th>
                       <th className="px-3 py-2 text-right font-medium">{t("orders.detail.quantity")}</th>
                       <th className="px-3 py-2 text-right font-medium">{t("orders.detail.price")}</th>
@@ -1081,8 +1262,6 @@ export default function OrderDetailPanel({
               <DetailItem
                 label={t("orders.detail.service")}
                 value={fallbackService}
-                editField={showFieldEdit ? "services" : undefined}
-                onEdit={showFieldEdit ? startFieldEdit : undefined}
               />
             ) : null}
 
@@ -1093,16 +1272,7 @@ export default function OrderDetailPanel({
                     <thead className="bg-muted/50 text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 text-left font-medium">
-                          <span className="flex min-w-0 items-center justify-between gap-1">
-                            <span className="min-w-0">{t("orders.detail.materials")}</span>
-                            {showFieldEdit ? (
-                              <OrderFieldEditButton
-                                field="materials"
-                                label={t("orders.detail.materials")}
-                                onEdit={startFieldEdit}
-                              />
-                            ) : null}
-                          </span>
+                          {t("orders.detail.materials")}
                         </th>
                         <th className="px-3 py-2 text-right font-medium">{t("orders.detail.quantity")}</th>
                         <th className="px-3 py-2 text-right font-medium">{t("orders.detail.price")}</th>
@@ -1494,6 +1664,21 @@ function OrderDetailWarrantyUnderNumber({ order }: { order: Order }) {
   return <OrderWarrantyIndicator model={byOrderId.get(order.id)} className="mt-1 font-normal" />;
 }
 
+function customInlineKind(type: string): OrderInlineFieldKind {
+  switch (type) {
+    case "textarea":
+    case "number":
+    case "date":
+    case "select":
+    case "checkbox":
+      return type;
+    case "datetime":
+      return "datetime-local";
+    default:
+      return "text";
+  }
+}
+
 function formatIndustryDateTime(iso: string, locale: string) {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso;
@@ -1506,71 +1691,14 @@ function formatIndustryDateTime(iso: string, locale: string) {
   }).format(parsed);
 }
 
-function DetailItem({
-  label,
-  value,
-  mono,
-  editField,
-  onEdit,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-  editField?: OrderEditField;
-  onEdit?: (field: OrderEditField) => void;
-}) {
+function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
   if (value == null || value === "") return null;
   return (
     <div className="min-w-0">
-      <dt className="flex min-w-0 items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
+      <dt className="text-xs font-medium text-muted-foreground">
         <span className="min-w-0">{label}</span>
-        {editField && onEdit ? <OrderFieldEditButton field={editField} label={label} onEdit={onEdit} /> : null}
       </dt>
-      <dd
-        className={
-          mono
-            ? "mt-1 font-mono text-[13px] [overflow-wrap:anywhere] text-foreground"
-            : "mt-1 font-medium [overflow-wrap:anywhere] text-foreground"
-        }
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-function PasscodeDetailItem({
-  label,
-  value,
-  editField,
-  onEdit,
-}: {
-  label: string;
-  value: string;
-  editField?: OrderEditField;
-  onEdit?: (field: OrderEditField) => void;
-}) {
-  const { t } = useTranslation();
-  const [visible, setVisible] = useState(false);
-  return (
-    <div className="min-w-0">
-      <dt className="flex min-w-0 items-center justify-between gap-1 text-xs font-medium text-muted-foreground">
-        <span className="min-w-0">{label}</span>
-        {editField && onEdit ? <OrderFieldEditButton field={editField} label={label} onEdit={onEdit} /> : null}
-      </dt>
-      <dd className="mt-1 flex items-center gap-2 font-medium text-foreground">
-        <span className="min-w-0 font-mono text-[13px] [overflow-wrap:anywhere]">{visible ? value : "••••••••"}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={visible ? t("orders.industryFields.hidePasscode") : t("orders.industryFields.showPasscode")}
-          aria-pressed={visible}
-          onClick={() => setVisible((current) => !current)}
-        >
-          {visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-        </Button>
-      </dd>
+      <dd className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{value}</dd>
     </div>
   );
 }
