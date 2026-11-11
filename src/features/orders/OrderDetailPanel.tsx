@@ -1062,6 +1062,37 @@ export default function OrderDetailPanel({
               interactive={canChangeClientVehicle}
               onChangeRequest={() => setChangeClientOpen(true)}
               onOpenClient={onOpenClient}
+              details={
+                showClientVehicles ? (
+              <OrderLinkedVehicleDetails
+                vehicleId={selectedOrder.vehicleId}
+                vehicleMileageSnapshot={selectedOrder.vehicleMileageSnapshot ?? null}
+                vehicleMileageUnitSnapshot={selectedOrder.vehicleMileageUnitSnapshot ?? null}
+                onOpenRelatedOrder={(order) => {
+                  onOrderUpdated(order);
+                }}
+                fieldConfig={orderFieldMap}
+                renderRow={
+                  showFieldEdit
+                    ? (row) => {
+                        // Only the visit mileage snapshot belongs to the order; every other vehicle value opens the vehicle card.
+                        if (row.key !== "currentMileage") return undefined;
+                        const snapshot = selectedOrder.vehicleMileageSnapshot ?? null;
+                        return (
+                          <OrderInlineField
+                            label={row.label}
+                            value={snapshot == null ? "" : row.value}
+                            editValue={snapshot}
+                            kind="number"
+                            {...inlineCommon("vehicleCurrentMileage")}
+                          />
+                        );
+                      }
+                    : undefined
+                }
+              />
+                ) : undefined
+              }
             />
 
             <div className="flex items-start justify-end gap-4 rounded-lg border border-border bg-muted/50 p-4">
@@ -1240,36 +1271,6 @@ export default function OrderDetailPanel({
                   );
                 })}
             </dl>
-
-            {showClientVehicles ? (
-              <OrderLinkedVehicleDetails
-                vehicleId={selectedOrder.vehicleId}
-                vehicleMileageSnapshot={selectedOrder.vehicleMileageSnapshot ?? null}
-                vehicleMileageUnitSnapshot={selectedOrder.vehicleMileageUnitSnapshot ?? null}
-                onOpenRelatedOrder={(order) => {
-                  onOrderUpdated(order);
-                }}
-                fieldConfig={orderFieldMap}
-                renderRow={
-                  showFieldEdit
-                    ? (row) => {
-                        // Only the visit mileage snapshot belongs to the order; every other vehicle value opens the vehicle card.
-                        if (row.key !== "currentMileage") return undefined;
-                        const snapshot = selectedOrder.vehicleMileageSnapshot ?? null;
-                        return (
-                          <OrderInlineField
-                            label={row.label}
-                            value={snapshot == null ? "" : row.value}
-                            editValue={snapshot}
-                            kind="number"
-                            {...inlineCommon("vehicleCurrentMileage")}
-                          />
-                        );
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
 
             {fieldVisible("assignedEmployee") ? (
               <div className="border-t border-border pt-5">

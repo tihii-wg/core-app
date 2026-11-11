@@ -1,4 +1,5 @@
 import { ChevronRight, Phone } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ClientType, MileageUnit, Order } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -19,6 +20,11 @@ export type OrderClientCardProps = {
   interactive: boolean;
   onChangeRequest: () => void;
   onOpenClient?: (clientId: string) => void;
+  /**
+   * Full vehicle / asset block rendered inside the same card, below the client data (not part of the
+   * clickable area, so its own links and inline fields keep working). Replaces the one-line summary.
+   */
+  details?: ReactNode;
 };
 
 function AssetSummaryLine({
@@ -114,6 +120,7 @@ export function OrderClientCard({
   interactive,
   onChangeRequest,
   onOpenClient,
+  details,
 }: OrderClientCardProps) {
   const { t } = useTranslation();
   const showVehicles = industrySupportsClientVehicles(workflow);
@@ -144,6 +151,7 @@ export function OrderClientCard({
           <p className="font-medium text-primary">{t("orders.changeClient.addClient")}</p>
         )}
 
+        {details ? null : (
         <div className="border-t border-border pt-2">
           {showVehicles ? (
             <VehicleSummary
@@ -161,6 +169,7 @@ export function OrderClientCard({
             />
           )}
         </div>
+        )}
 
         {hasClient && onOpenClient ? (
           <span
@@ -195,13 +204,27 @@ export function OrderClientCard({
   );
 
   const className = cn(
-    "flex w-full min-w-0 items-start gap-3 rounded-lg border border-border bg-muted/50 p-4 text-left transition-colors",
+    "flex w-full min-w-0 items-start gap-3 p-4 text-left transition-colors",
+    details ? "rounded-t-lg" : "rounded-lg border border-border bg-muted/50",
     interactive &&
-      "cursor-pointer hover:border-primary/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35",
+      "cursor-pointer hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35",
+    interactive && !details && "hover:border-primary/40",
   );
 
+  const withDetails = (header: ReactNode) =>
+    details ? (
+      <div className="min-w-0 rounded-lg border border-border bg-muted/50" data-testid="order-client-card-shell">
+        {header}
+        <div className="border-t border-border p-4" data-testid="order-client-card-details">
+          {details}
+        </div>
+      </div>
+    ) : (
+      header
+    );
+
   if (interactive) {
-    return (
+    return withDetails(
       <div
         role="button"
         tabIndex={0}
@@ -217,13 +240,13 @@ export function OrderClientCard({
         aria-label={hasClient ? t("orders.changeClient.changeTitle") : t("orders.changeClient.addClient")}
       >
         {body}
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return withDetails(
     <div data-testid="order-client-card" className={className} aria-readonly="true">
       {body}
-    </div>
+    </div>,
   );
 }
