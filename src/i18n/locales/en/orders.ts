@@ -445,6 +445,8 @@ export default {
     editTitle: "Edit order",
     editField: "Edit: {{field}}",
     inlineEmpty: "+ Add",
+    saveAndClose: "Save & close",
+    closeWindow: "Close window",
     srDescription: "View and edit this order's VIN, services, device, assignment, and deadline.",
     tabs: {
       itemsEmpty: "No services or items yet",

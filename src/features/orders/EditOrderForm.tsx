@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -80,7 +80,16 @@ type EditOrderFormProps = {
   onUpdated: (order: Order) => void;
   /** When set, scroll/focus the matching `[data-edit-field]` after mount. */
   initialFocusField?: OrderEditField;
+  /** Mirrors the form's submitting state (lets the panel footer show a spinner for the same save). */
+  onSubmittingChange?: (submitting: boolean) => void;
 };
+
+/**
+ * Imperative handle for external save buttons (the order panel footer).
+ * `submit()` runs the same validation / save as the in-form Save button and resolves true only when the
+ * order was saved (`onUpdated` has been called); false on validation or API failure.
+ */
+export type EditOrderFormHandle = { submit: () => Promise<boolean> };
 
 /** react-hook-form marks field-array dirtiness as nested objects/arrays — treat any nested true as dirty. */
 function isFieldArrayDirty(value: unknown): boolean {
@@ -124,7 +133,10 @@ function findMaterialWarrantyRecord(
   return records.find((row) => row.orderMaterialId === lineId);
 }
 
-export default function EditOrderForm({ order, onCancel, onUpdated, initialFocusField }: EditOrderFormProps) {
+const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(function EditOrderForm(
+  { order, onCancel, onUpdated, initialFocusField, onSubmittingChange },
+  ref,
+) {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { mutateAsync: updateOrder } = useUpdateOrder();
@@ -438,16 +450,34 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
   const deadlineCfg = orderFieldMap.get("deadline");
   const materialsCfg = orderFieldMap.get("materials");
 
-  const onSubmit = async (data: EditOrderFormData) => {
+  /** Shared by the Save button and the imperative `submit()`; true only when the order was saved. */
+  const onSubmit = async (data: EditOrderFormData): Promise<boolean> => {
     try {
       const updatedOrder = await saveOrder(data);
-      if (!updatedOrder) return;
+      if (!updatedOrder) return false;
       onUpdated(updatedOrder);
+      return true;
     } catch {
       // useUpdateOrder already toasts API failures.
-      return;
+      return false;
     }
   };
+
+  const submitRef = useRef<() => Promise<boolean>>(async () => false);
+  submitRef.current = () =>
+    new Promise<boolean>((resolve) => {
+      void handleSubmit(
+        async (data) => resolve(await onSubmit(data)),
+        () => resolve(false),
+      )();
+    });
+  useImperativeHandle(ref, () => ({ submit: () => submitRef.current() }), []);
+
+  const onSubmittingChangeRef = useRef(onSubmittingChange);
+  onSubmittingChangeRef.current = onSubmittingChange;
+  useEffect(() => {
+    onSubmittingChangeRef.current?.(isSubmitting);
+  }, [isSubmitting]);
 
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
@@ -793,4 +823,6 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
       </div>
     </form>
   );
-}
+});
+
+export default EditOrderForm;

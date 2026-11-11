@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, CircleX, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { Calendar, CircleX, EllipsisVertical, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { displayCustomFieldValue, serializeCustomFieldValue } from "../../services/apiCustomFields";
 import type { UpdateOrderFieldsPatch } from "../../services/apiOrders";
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/Dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/DropdownMenu";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -25,8 +26,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
-import EditOrderForm from "./EditOrderForm";
-import { OrderInlineField, type OrderInlineFieldKind, type OrderInlineFieldValue } from "./OrderInlineField";
+import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
+import {
+  OrderInlineField,
+  type OrderInlineFieldHandle,
+  type OrderInlineFieldKind,
+  type OrderInlineFieldValue,
+} from "./OrderInlineField";
 import { useUpdateOrderCustomFieldValue, useUpdateOrderFields } from "./useUpdateOrderFields";
 import { combineDateTimeLocal, isInstallationBeforeMeasurement, splitDateTimeLocal } from "./industryOrderFieldHelpers";
 import { buildOrderMileageSnapshot, parseVisitMileage, persistOrderVehicleMileage } from "./orderVehicleMileage";
@@ -153,6 +159,16 @@ export default function OrderDetailPanel({
   /** Mirrors the active inline editor's dirty state (reported by OrderInlineField). */
   const [inlineDirty, setInlineDirty] = useState(false);
   const [editFocusField, setEditFocusField] = useState<OrderEditField | null>(null);
+  /** Handle of the open inline editor (only the active field receives it) — used by the footer «Save & close». */
+  const inlineFieldRef = useRef<OrderInlineFieldHandle | null>(null);
+  const setInlineFieldHandle = useCallback((handle: OrderInlineFieldHandle | null) => {
+    inlineFieldRef.current = handle;
+  }, []);
+  /** Handle of the full edit form — used by the footer «Save & close» in edit mode. */
+  const editFormRef = useRef<EditOrderFormHandle>(null);
+  const [editFormSubmitting, setEditFormSubmitting] = useState(false);
+  /** True while the footer «Save & close» is waiting for an inline / form save. */
+  const [footerSaving, setFooterSaving] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -279,6 +295,15 @@ export default function OrderDetailPanel({
   function stopEditing() {
     setIsEditing(false);
     setEditFocusField(null);
+    setEditFormSubmitting(false);
+  }
+
+  /** Closes the sheet itself (never the order lifecycle) and drops any editor state. */
+  function closeSheet() {
+    setDetailPanelOpen(false);
+    closeInlineEditor();
+    stopEditing();
+    setConfirmDeleteOpen(false);
   }
 
   function closeInlineEditor() {
@@ -353,6 +378,9 @@ export default function OrderDetailPanel({
       fieldKey: field,
       editable: showFieldEdit,
       isEditing: editingField === field,
+      // Callback ref (not read during render): only the open editor exposes its imperative `save()`.
+      // eslint-disable-next-line react-hooks/refs
+      ref: editingField === field ? setInlineFieldHandle : undefined,
       required: orderFieldMap.get(configKey)?.required ?? false,
       saving: inlineSaving && editingField === field,
       onRequestEdit: () => void requestInlineEdit(field),
@@ -500,6 +528,38 @@ export default function OrderDetailPanel({
     setCloseOpen(true);
   }
 
+  /** «Save & close»: persists whatever is open, then closes the sheet. Stays open when the save fails. */
+  async function handleSaveAndClose() {
+    if (footerSaving) return;
+    if (isEditing) {
+      // The form's `onUpdated` already stops editing and closes the sheet on success.
+      setFooterSaving(true);
+      try {
+        await editFormRef.current?.submit();
+      } finally {
+        setFooterSaving(false);
+      }
+      return;
+    }
+    if (editingField) {
+      setFooterSaving(true);
+      try {
+        // Clean editor → closes it and resolves true; dirty → saves; validation / server error → false (stay open).
+        const saved = (await inlineFieldRef.current?.save()) ?? true;
+        if (!saved) return;
+      } finally {
+        setFooterSaving(false);
+      }
+    }
+    closeSheet();
+  }
+
+  /** «Close order» opens the lifecycle dialog; it never closes the sheet. */
+  async function handleCloseOrderClick() {
+    if (!(await settleInlineEdit())) return;
+    await requestClose();
+  }
+
   async function handleAssigneeChange(assignedEmployeeId: string) {
     if (!selectedOrder || isAssigneeUpdating) return;
     if (closedContentLocked) return;
@@ -594,6 +654,12 @@ export default function OrderDetailPanel({
 
   const showOrderColumn = isDesktopFeedLayout || detailTab !== "history";
   const showFeedColumn = isDesktopFeedLayout || detailTab === "history";
+  // Pinned under the order column only: on phones the History tab swaps it for the feed (comment box stays free).
+  const showFooter = Boolean(selectedOrder) && showOrderColumn;
+  const canSaveAndClose = canEditOrder && !closedContentLocked;
+  const lifecycleBusy = isStatusUpdating || isUnifiedStatusUpdating;
+  const showCancelAction = !isEditing && (showOpenLifecycleActions || showCancelClosedAction);
+  const footerSavePending = footerSaving || inlineSaving || editFormSubmitting;
 
   const filesTabActive = detailPanelOpen && detailTab === "files";
   const { attachments: orderAttachments, isFetched: attachmentsFetched } = useOrderAttachments(selectedOrder?.id, {
@@ -768,26 +834,6 @@ export default function OrderDetailPanel({
                     </SelectContent>
                   </Select>
                 )}
-                {showOpenLifecycleActions ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => void requestClose()} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
-                      <Lock className="size-3.5" />
-                      {t("orders.lifecycle.closeAction")}
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
-                      <CircleX className="size-3.5" />
-                      {t("orders.lifecycle.cancelAction")}
-                    </Button>
-                  </div>
-                ) : null}
-                {showCancelClosedAction ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
-                      <CircleX className="size-3.5" />
-                      {t("orders.lifecycle.cancelAction")}
-                    </Button>
-                  </div>
-                ) : null}
               </div>
               {isOrderCurrentlyClosed(selectedOrder) ? (
                 <div className="mt-2 space-y-0.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm" data-closed-order-banner>
@@ -840,17 +886,17 @@ export default function OrderDetailPanel({
             data-order-detail-layout={isDesktopFeedLayout ? "desktop" : "mobile"}
           >
             <div
-              className={cn(
-                "min-h-0 min-w-0",
-                isDesktopFeedLayout ? "flex-1 overflow-y-auto" : showOrderColumn ? "flex-1 overflow-y-auto" : "hidden",
-              )}
+              className={cn("min-h-0 min-w-0", showOrderColumn ? "flex flex-1 flex-col" : "hidden")}
               data-testid="order-detail-main"
               aria-hidden={!showOrderColumn}
             >
+              <div className="min-h-0 flex-1 overflow-y-auto" data-testid="order-detail-scroll">
               {isEditing ? (
                 <div className="space-y-5 px-5 py-5">
                   <EditOrderForm
+                    ref={editFormRef}
                     key={`${selectedOrder.id}:${editFocusField ?? "top"}`}
+                    onSubmittingChange={setEditFormSubmitting}
                     order={selectedOrder}
                     initialFocusField={editFocusField ?? undefined}
                     onCancel={stopEditing}
@@ -1468,6 +1514,91 @@ export default function OrderDetailPanel({
             ) : null}
                 </div>
               )}
+              </div>
+
+              {showFooter ? (
+                <footer
+                  data-testid="order-detail-footer"
+                  className={cn(
+                    "shrink-0 border-t border-border bg-background px-5 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]",
+                    // Phones: two rows so labels are never truncated —
+                    // row 1 «Сохранить и закрыть» full width, row 2 «Закрыть заказ» + ⋯.
+                    isDesktopFeedLayout ? "flex flex-wrap items-center justify-end gap-2" : "grid grid-cols-[1fr_auto] gap-2",
+                  )}
+                >
+                  {isDesktopFeedLayout && showCancelAction ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="mr-auto min-h-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setCancelOpen(true)}
+                      disabled={lifecycleBusy}
+                    >
+                      <CircleX />
+                      {t("orders.lifecycle.cancelAction")}
+                    </Button>
+                  ) : null}
+
+                  {showOpenLifecycleActions && !isEditing ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn("min-h-11", !isDesktopFeedLayout && "w-full min-w-0", !isDesktopFeedLayout && !showCancelAction && "col-span-2")}
+                      onClick={() => void handleCloseOrderClick()}
+                      disabled={lifecycleBusy || footerSavePending}
+                    >
+                      <Lock />
+                      <span className="truncate">{t("orders.lifecycle.closeAction")}</span>
+                    </Button>
+                  ) : null}
+
+                  {canSaveAndClose ? (
+                    <Button
+                      type="button"
+                      className={cn("min-h-11", !isDesktopFeedLayout && "order-first col-span-2 w-full min-w-0")}
+                      loading={footerSavePending}
+                      onClick={() => void handleSaveAndClose()}
+                    >
+                      <span className="truncate">{t("orders.detail.saveAndClose")}</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn("min-h-11", !isDesktopFeedLayout && "order-first col-span-2 w-full min-w-0")}
+                      onClick={closeSheet}
+                    >
+                      <span className="truncate">{t("orders.detail.closeWindow")}</span>
+                    </Button>
+                  )}
+
+                  {!isDesktopFeedLayout && showCancelAction ? (
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-11 shrink-0"
+                          aria-label={t("common.actions")}
+                          disabled={lifecycleBusy}
+                        >
+                          <EllipsisVertical />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" side="top">
+                        <DropdownMenuItem
+                          className="min-h-11 text-destructive focus:text-destructive"
+                          onSelect={() => setCancelOpen(true)}
+                        >
+                          <CircleX />
+                          {t("orders.lifecycle.cancelAction")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                </footer>
+              ) : null}
             </div>
 
             <div

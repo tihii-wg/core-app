@@ -1,21 +1,23 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { OrderInlineField, type OrderInlineFieldProps } from "./OrderInlineField";
+import { OrderInlineField, type OrderInlineFieldHandle, type OrderInlineFieldProps } from "./OrderInlineField";
 
 type HarnessProps = Partial<Omit<OrderInlineFieldProps, "isEditing" | "onRequestEdit" | "onCancel">> & {
   onRequestEdit?: () => void;
   onCancel?: () => void;
   startEditing?: boolean;
+  fieldRef?: React.Ref<OrderInlineFieldHandle>;
 };
 
 /** Owns `isEditing` like OrderDetailPanel does (one open editor, parent closes on success). */
-function Harness({ startEditing = false, onRequestEdit, onCancel, onSave, ...props }: HarnessProps) {
+function Harness({ startEditing = false, onRequestEdit, onCancel, onSave, fieldRef, ...props }: HarnessProps) {
   const [isEditing, setIsEditing] = useState(startEditing);
   return (
     <dl>
       <OrderInlineField
+        ref={fieldRef}
         label="Description"
         fieldKey="description"
         value="Noise"
@@ -239,5 +241,57 @@ describe("OrderInlineField", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith(true));
+  });
+
+  describe("imperative save()", () => {
+    it("saves a dirty draft and resolves true", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const ref = createRef<OrderInlineFieldHandle>();
+      render(<Harness startEditing fieldRef={ref} onSave={onSave} />);
+
+      await user.type(screen.getByRole("textbox", { name: "Description" }), "!");
+      await expect(ref.current!.save()).resolves.toBe(true);
+
+      expect(onSave).toHaveBeenCalledWith("Noise!");
+    });
+
+    it("resolves true and closes the editor when the draft is clean", async () => {
+      const onSave = vi.fn();
+      const onCancel = vi.fn();
+      const ref = createRef<OrderInlineFieldHandle>();
+      render(<Harness startEditing fieldRef={ref} onSave={onSave} onCancel={onCancel} />);
+
+      await expect(ref.current!.save()).resolves.toBe(true);
+
+      expect(onSave).not.toHaveBeenCalled();
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves false and keeps the editor open with the error when saving fails", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockRejectedValue(new Error("Boom"));
+      const ref = createRef<OrderInlineFieldHandle>();
+      render(<Harness startEditing fieldRef={ref} onSave={onSave} />);
+
+      await user.type(screen.getByRole("textbox", { name: "Description" }), "!");
+      await expect(ref.current!.save()).resolves.toBe(false);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Boom");
+      expect(screen.getByRole("textbox", { name: "Description" })).toBeInTheDocument();
+    });
+
+    it("resolves false for an empty required field without saving", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+      const ref = createRef<OrderInlineFieldHandle>();
+      render(<Harness startEditing required fieldRef={ref} onSave={onSave} />);
+
+      await user.clear(screen.getByRole("textbox", { name: "Description" }));
+      await expect(ref.current!.save()).resolves.toBe(false);
+
+      expect(onSave).not.toHaveBeenCalled();
+      expect(await screen.findByRole("alert")).toHaveTextContent("This field is required");
+    });
   });
 });

@@ -1367,3 +1367,172 @@ describe("OrderDetailPanel content tabs", () => {
     expect(await screen.findByRole("tab", { name: /Works & materials \(1\)/i })).toBeInTheDocument();
   });
 });
+
+describe("OrderDetailPanel sticky footer", () => {
+  const closedAt = "2026-11-05T14:59:54.258807+00:00";
+
+  beforeEach(() => {
+    resetOrderDetailTabSession();
+    industryState.slug = "auto_repair";
+    roleState.role = "owner";
+    ownerIdState.isOwner = true;
+    stubViewport(true);
+  });
+
+  it("is pinned under the order column on every desktop tab and keeps lifecycle actions out of the header", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(screen.getByTestId("order-detail-main")).toContainElement(footer);
+    expect(screen.getByTestId("order-detail-feed-column")).not.toContainElement(footer);
+    expect(within(footer).getByRole("button", { name: "Save & close" })).toBeInTheDocument();
+    expect(within(footer).getByRole("button", { name: "Close order" })).toBeInTheDocument();
+    expect(within(footer).getByRole("button", { name: "Cancel order" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("order-detail-status-bar")).queryByRole("button", { name: /order$/i })).toBeNull();
+
+    for (const tab of [/Services & materials/i, /Invoices & payments/i, /^Files$/i, /^Information$/i]) {
+      await user.click(screen.getByRole("tab", { name: tab }));
+      expect(screen.getByTestId("order-detail-footer")).toBeInTheDocument();
+    }
+  });
+
+  it("is hidden on the mobile History tab and shows an overflow menu for Cancel order on phones", async () => {
+    const user = userEvent.setup();
+    stubViewport(false);
+    renderPanel();
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(within(footer).getByRole("button", { name: "Save & close" })).toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
+    await user.click(within(footer).getByRole("button", { name: "Actions" }));
+    expect(await screen.findByRole("menuitem", { name: "Cancel order" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("tab", { name: /History \(3\)/i }));
+    expect(screen.queryByTestId("order-detail-footer")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Information$/i }));
+    expect(screen.getByTestId("order-detail-footer")).toBeInTheDocument();
+  });
+
+  it("saves a dirty inline field and then closes the sheet", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    const saved = { ...order, description: "Brake noise" };
+    updateOrderFieldsHooks.mutateAsync.mockResolvedValue(saved);
+    const { setDetailPanelOpen } = renderPanel(onOrderUpdated);
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    const editor = await screen.findByRole("textbox", { name: "Description" });
+    await user.clear(editor);
+    await user.type(editor, "Brake noise");
+    await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
+
+    await waitFor(() => {
+      expect(updateOrderFieldsHooks.mutateAsync).toHaveBeenCalledWith({
+        orderId: "order-1",
+        patch: { description: "Brake noise" },
+      });
+    });
+    expect(onOrderUpdated).toHaveBeenCalledWith(saved);
+    await waitFor(() => expect(setDetailPanelOpen).toHaveBeenCalledWith(false));
+    expect(updateOrderHooks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("stays open and shows the error under the field when the save fails", async () => {
+    const user = userEvent.setup();
+    updateOrderFieldsHooks.mutateAsync.mockRejectedValue(new Error("Order is closed"));
+    const { setDetailPanelOpen } = renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    await user.type(await screen.findByRole("textbox", { name: "Description" }), " more");
+    await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Order is closed");
+    expect(screen.getByRole("textbox", { name: "Description" })).toBeInTheDocument();
+    expect(setDetailPanelOpen).not.toHaveBeenCalled();
+  });
+
+  it("just closes the sheet when no field is open", async () => {
+    const user = userEvent.setup();
+    const { setDetailPanelOpen } = renderPanel();
+
+    await user.click(within(await screen.findByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
+
+    expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
+    expect(updateOrderFieldsHooks.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("submits the edit form from the footer and then closes the sheet", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    updateOrderHooks.mutateAsync.mockResolvedValue({ ...order, description: "Updated noise" });
+    const { setDetailPanelOpen } = renderPanel(onOrderUpdated);
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const description = screen.getByLabelText(/Description/i);
+    await user.clear(description);
+    await user.type(description, "Updated noise");
+    await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
+
+    await waitFor(() =>
+      expect(updateOrderHooks.mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: "order-1", description: "Updated noise" }),
+      ),
+    );
+    expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ description: "Updated noise" }));
+    await waitFor(() => expect(setDetailPanelOpen).toHaveBeenCalledWith(false));
+    expect(setDetailPanelOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the edit form open when the footer submit fails", async () => {
+    const user = userEvent.setup();
+    updateOrderHooks.mutateAsync.mockRejectedValue(new Error("Boom"));
+    const { setDetailPanelOpen } = renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
+
+    await waitFor(() => expect(updateOrderHooks.mutateAsync).toHaveBeenCalled());
+    expect(setDetailPanelOpen).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeInTheDocument();
+  });
+
+  it("opens the close-order dialog from Close order without closing the sheet", async () => {
+    const user = userEvent.setup();
+    const { setDetailPanelOpen } = renderPanel();
+
+    await user.click(within(await screen.findByTestId("order-detail-footer")).getByRole("button", { name: "Close order" }));
+
+    expect(await screen.findByRole("dialog", { name: /Close order/i })).toBeInTheDocument();
+    expect(setDetailPanelOpen).not.toHaveBeenCalled();
+  });
+
+  it("asks before discarding a dirty inline field when Close order is pressed", async () => {
+    const user = userEvent.setup();
+    unsavedConfirm.confirm.mockResolvedValueOnce(false);
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    await user.type(await screen.findByRole("textbox", { name: "Description" }), " draft");
+    await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Close order" }));
+
+    expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Noise draft");
+    expect(screen.queryByRole("dialog", { name: /Close order/i })).not.toBeInTheDocument();
+  });
+
+  it("shows only Close window (no Save & close, no lifecycle close) for a closed order", async () => {
+    const user = userEvent.setup();
+    const { setDetailPanelOpen } = renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "closed", closedAt },
+    });
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(within(footer).queryByRole("button", { name: "Save & close" })).not.toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: "Close order" })).not.toBeInTheDocument();
+    await user.click(within(footer).getByRole("button", { name: "Close window" }));
+    expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
+  });
+});

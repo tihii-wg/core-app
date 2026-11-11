@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
@@ -10,6 +10,12 @@ import { Textarea } from "../../ui/Textarea";
 export type OrderInlineFieldKind = "text" | "textarea" | "number" | "date" | "datetime-local" | "select" | "checkbox";
 
 export type OrderInlineFieldValue = string | boolean;
+
+/**
+ * Imperative handle of the open editor. `save()` resolves true when the draft was saved (or was clean and the
+ * editor simply closed) and false when validation / the server rejected it (editor stays open, error shown).
+ */
+export type OrderInlineFieldHandle = { save: () => Promise<boolean> };
 
 export type OrderInlineFieldOption = { value: string; label: string };
 
@@ -58,7 +64,7 @@ function isEmptyDisplay(value: ReactNode): boolean {
 }
 
 /** Click-to-edit order field: plain text when locked, button when editable, control + Save / Cancel when editing. */
-export function OrderInlineField({
+export const OrderInlineField = forwardRef<OrderInlineFieldHandle, OrderInlineFieldProps>(function OrderInlineField({
   label,
   fieldKey,
   value,
@@ -79,9 +85,11 @@ export function OrderInlineField({
   errorMessage = null,
   className,
   valueClassName: valueClassNameOverride,
-}: OrderInlineFieldProps) {
+}, ref) {
   const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
+  const editorRef = useRef<OrderInlineFieldHandle>(null);
+  useImperativeHandle(ref, () => ({ save: async () => (await editorRef.current?.save()) ?? true }), []);
   const empty = isEmptyDisplay(value);
 
   if (!editable && empty) return null;
@@ -105,6 +113,7 @@ export function OrderInlineField({
       <dd className="mt-1">
         {editable && isEditing ? (
           <InlineEditor
+            ref={editorRef}
             key={fieldKey}
             label={label}
             kind={kind}
@@ -148,7 +157,7 @@ export function OrderInlineField({
       </dd>
     </div>
   );
-}
+});
 
 function RevealToggle({ revealed, onToggle }: { revealed: boolean; onToggle: () => void }) {
   const { t } = useTranslation();
@@ -180,7 +189,7 @@ type InlineEditorProps = {
   onDirtyChange?: (dirty: boolean) => void;
 };
 
-function InlineEditor({
+const InlineEditor = forwardRef<OrderInlineFieldHandle, InlineEditorProps>(function InlineEditor({
   label,
   kind,
   options,
@@ -192,7 +201,7 @@ function InlineEditor({
   onCancel,
   onSave,
   onDirtyChange,
-}: InlineEditorProps) {
+}, ref) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<OrderInlineFieldValue>(initial);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -235,24 +244,34 @@ function InlineEditor({
     return kind === "checkbox" ? next !== true : String(next).trim() === "";
   }
 
-  async function submit() {
-    if (saving) return;
+  /** Resolves true when saved (or clean → closed), false when the editor stays open. */
+  async function submit(): Promise<boolean> {
+    if (saving) return false;
     if (required && isEmptyDraft(draft)) {
       setLocalError(t("settings.orderFields.validation.required"));
-      return;
+      return false;
     }
     if (!dirty) {
       onCancel();
-      return;
+      return true;
     }
     setLocalError(null);
     try {
       await onSave(draft);
+      return true;
     } catch (error) {
-      if (!mountedRef.current) return;
-      setLocalError(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+      if (mountedRef.current) {
+        setLocalError(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+      }
+      return false;
     }
   }
+
+  const submitRef = useRef(submit);
+  useEffect(() => {
+    submitRef.current = submit;
+  });
+  useImperativeHandle(ref, () => ({ save: () => submitRef.current() }), []);
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
@@ -356,4 +375,4 @@ function InlineEditor({
       </div>
     </div>
   );
-}
+});
