@@ -1,6 +1,6 @@
 import type { Client, ClientListFilter, ClientType, CreateClientInput, UpdateClientInput } from "../lib/types";
 import i18n from "../i18n";
-import { normalizePlateVin, plateIlikeLoosePattern, plateMatchesQuery } from "../lib/plateVin";
+import { plateLoosePatterns, plateMatchesQuery } from "../lib/plateVin";
 import { MIN_PHONE_SEARCH_DIGITS, phoneDigits, phoneSearchVariants } from "../lib/phoneSearch";
 import { vehicleMakeModelMatches } from "../lib/vehicleTextSearch";
 import supabase from "./supabase";
@@ -45,10 +45,9 @@ function vehicleSearchOrFilter(term: string): string {
     `make.ilike.%${term}%`,
     `model.ilike.%${term}%`,
   ];
-  const compactPlate = normalizePlateVin(term).replace(/[%_]/g, "");
-  if (compactPlate.length >= 2) {
-    const loose = plateIlikeLoosePattern(compactPlate);
-    if (loose) parts.push(`license_plate.ilike.${loose}`);
+  // Latin-mapped and as-typed (Cyrillic) loose patterns, so "ТАК 123" finds "ТАК123".
+  for (const loose of plateLoosePatterns(term)) {
+    parts.push(`license_plate.ilike.${loose}`);
   }
   for (const token of term.split(/\s+/)) {
     const safe = searchTerm(token);

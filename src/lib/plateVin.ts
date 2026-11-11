@@ -26,11 +26,12 @@ const PLATE_LOOKALIKES: Record<string, string> = {
   Y: "Y",
 };
 
-/** Normalize for plate/VIN matching: upper, strip spaces/dashes, map look-alikes. */
+/** Normalize for plate/VIN matching: upper, keep only letters/digits, map look-alikes. */
 export function normalizePlateVin(value: string): string {
   return Array.from(value.toUpperCase())
     .map((ch) => {
-      if (ch === " " || ch === "-" || ch === "–" || ch === "—") return "";
+      // Separators people type in plates: spaces, dashes, dots, slashes, commas…
+      if (!/[\p{L}\p{N}]/u.test(ch)) return "";
       return PLATE_LOOKALIKES[ch] ?? ch;
     })
     .join("");
@@ -52,4 +53,22 @@ export function plateIlikeLoosePattern(compactNormalized: string): string {
   const safe = compactNormalized.replace(/[%_]/g, "");
   if (!safe) return "";
   return `%${safe.split("").join("%")}%`;
+}
+
+/**
+ * Loose `ilike` patterns for a plate query, safe for PostgREST `or()`:
+ * one with Cyrillic look-alikes mapped to Latin (matches plates stored in Latin) and one
+ * keeping the typed letters (matches plates stored in Cyrillic). `term` must already be
+ * sanitized with `searchTerm` (no `%_,().`).
+ */
+export function plateLoosePatterns(term: string): string[] {
+  const mapped = normalizePlateVin(term).replace(/[^\p{L}\p{N}]/gu, "");
+  const typed = term.toUpperCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const out = new Set<string>();
+  for (const compact of [mapped, typed]) {
+    if (compact.length < 2) continue;
+    const pattern = plateIlikeLoosePattern(compact);
+    if (pattern) out.add(pattern);
+  }
+  return [...out];
 }

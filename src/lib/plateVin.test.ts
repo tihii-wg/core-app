@@ -26,3 +26,15 @@ describe("plateIlikeLoosePattern", () => {
     expect(plateIlikeLoosePattern("")).toBe("");
   });
 });
+
+describe("plateLoosePatterns", () => {
+  it("returns Latin-mapped and as-typed patterns without PostgREST syntax chars", async () => {
+    const { plateLoosePatterns } = await import("./plateVin");
+    const patterns = plateLoosePatterns("ТАК 123");
+    expect(patterns).toContain("%T%A%K%1%2%3%");
+    expect(patterns).toContain("%Т%А%К%1%2%3%");
+    for (const pattern of plateLoosePatterns("B 12 3")) {
+      expect(pattern).not.toMatch(/[,().]/);
+    }
+  });
+});

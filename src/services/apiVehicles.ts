@@ -2,7 +2,7 @@ import i18n from "../i18n";
 import type { Client, Vehicle, VehicleInput } from "../lib/types";
 import { assertStoredMileage, MileageParseError } from "../lib/mileage";
 import { nullIfEmptyNumber, nullIfEmptyText } from "../lib/nullish";
-import { normalizePlateVin, plateIlikeLoosePattern, plateMatchesQuery } from "../lib/plateVin";
+import { plateLoosePatterns, plateMatchesQuery } from "../lib/plateVin";
 import { vehicleMakeModelMatches } from "../lib/vehicleTextSearch";
 import { assertValidOptionalVin } from "../lib/vin";
 import { isMileageUnit, parseMileageUnit } from "../features/vehicles/vehicleMileage";
@@ -238,13 +238,14 @@ const VEHICLE_REGISTRATION_SEARCH_LIMIT = 25;
 /** PostgREST OR filter for create-order vehicle hits: plate (loose) + make/model tokens. */
 function clientComboboxVehicleOrFilter(rawSearch: string, term: string): string | null {
   const parts: string[] = [];
-  const compact = normalizePlateVin(rawSearch).replace(/[%_]/g, "");
-  if (compact.length >= 2) {
-    const loose = plateIlikeLoosePattern(compact);
-    if (loose) parts.push(`license_plate.ilike.${loose}`);
-    if (term && normalizePlateVin(term) !== compact) {
-      parts.push(`license_plate.ilike.%${term}%`);
-    }
+  // Build plate patterns from the sanitized term: the raw input may contain `,().` which
+  // are PostgREST or() syntax and broke the whole query (e.g. typing "B.123").
+  void rawSearch;
+  for (const loose of plateLoosePatterns(term)) {
+    parts.push(`license_plate.ilike.${loose}`);
+  }
+  if (term.length >= 2) {
+    parts.push(`license_plate.ilike.%${term}%`);
   }
   if (term.length >= 2) {
     parts.push(`make.ilike.%${term}%`, `model.ilike.%${term}%`);
