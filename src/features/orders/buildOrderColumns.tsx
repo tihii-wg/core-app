@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { ReactNode } from "react";
 import type { Order, OrderStatus } from "../../lib/types";
@@ -79,8 +80,8 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
             </div>
             {/* Client type lives under the name/phone (the separate «Тип клиента» column was removed). */}
             {order.clientType ? (
-              <div className="truncate text-xs text-muted-foreground" data-testid="order-client-type">
-                {args.t(`clients.types.${order.clientType}`)}
+              <div className="mt-1" data-testid="order-client-type">
+                <ClientTypeBadge clientType={order.clientType} />
               </div>
             ) : null}
           </div>
