@@ -502,6 +502,7 @@ export default function EditOrderForm({ order, onCancel, onUpdated, initialFocus
           disabled={isSubmitting}
           mileageMode="vehicle"
           preserveInitialMileage
+          preserveInitialAssetSnapshot
           fieldConfig={orderFieldMap}
         />
       ) : null}

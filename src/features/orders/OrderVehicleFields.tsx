@@ -39,6 +39,12 @@ type OrderVehicleFieldsProps<T extends FieldValues> = {
    * selected vehicle id changes. Prevents live vehicle mileage from overwriting history on open.
    */
   preserveInitialMileage?: boolean;
+  /**
+   * When true (edit orders), keep seeded `device` / `carNumber` / `vin` until the selected
+   * vehicle id changes. Create forms must leave this false so a preselected `initialVehicleId`
+   * still snapshots make/model/plate into the order columns the Orders list renders.
+   */
+  preserveInitialAssetSnapshot?: boolean;
   /** Workspace order-field config (vehicle labels / visibility / required). */
   fieldConfig?: Map<string, OrderFieldConfigItem>;
 };
@@ -71,6 +77,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   disabled,
   mileageMode = "empty",
   preserveInitialMileage = false,
+  preserveInitialAssetSnapshot = false,
   fieldConfig,
 }: OrderVehicleFieldsProps<T>) {
   const { t } = useTranslation();
@@ -81,8 +88,8 @@ export function OrderVehicleFields<T extends FieldValues>({
   const [createOpen, setCreateOpen] = useState(false);
   /** Optimistic row so the selector/summary work before the client vehicles query settles. */
   const [createdVehicle, setCreatedVehicle] = useState<Vehicle | null>(null);
-  /** Skip the first sync so edit forms keep existing order snapshot columns until the user changes vehicle. */
-  const skipInitialAssetSync = useRef(true);
+  /** Skip the first asset sync only when editing (preserve historical order snapshot columns). */
+  const skipInitialAssetSync = useRef(preserveInitialAssetSnapshot);
   /** Last vehicle id we wrote device/carNumber/vin for (waits until the row is in `vehicles`). */
   const syncedAssetVehicleId = useRef<string | null>(null);
   /** Last vehicle id we synced currentMileage for. */

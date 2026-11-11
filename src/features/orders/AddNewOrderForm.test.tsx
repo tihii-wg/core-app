@@ -442,12 +442,18 @@ describe("AddNewOrderForm client validation", () => {
     );
 
     expect(await screen.findByTestId("selected-vehicle-summary")).toHaveTextContent(/Toyota Corolla/i);
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("selected-vehicle-summary")).toHaveTextContent(/AAA111|Toyota/i);
+    });
     await user.click(saveDraftButton());
     await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
     expect(createOrderMock).toHaveBeenCalledWith(
       expect.objectContaining({
         clientId: "client-1",
         vehicleId: "veh-a",
+        device: "Toyota Corolla 2018",
+        carNumber: "AAA111",
+        vin: "VIN-A",
       }),
     );
 
@@ -469,6 +475,9 @@ describe("AddNewOrderForm client validation", () => {
       expect.objectContaining({
         clientId: "client-1",
         vehicleId: "veh-b",
+        device: "VW Golf 2020",
+        carNumber: "BBB222",
+        vin: "VIN-B",
       }),
     );
   });

@@ -76,6 +76,8 @@ function Harness({
   initialVin = "",
   initialCurrentMileage = "",
   mileageMode = "empty",
+  preserveInitialMileage = false,
+  preserveInitialAssetSnapshot = false,
   onParentSubmit,
 }: {
   clientId?: string;
@@ -85,6 +87,8 @@ function Harness({
   initialVin?: string;
   initialCurrentMileage?: string;
   mileageMode?: "empty" | "vehicle";
+  preserveInitialMileage?: boolean;
+  preserveInitialAssetSnapshot?: boolean;
   onParentSubmit?: () => void;
 }) {
   const workflow = industryWorkflow("auto_repair");
@@ -116,6 +120,8 @@ function Harness({
         errors={formState.errors}
         clientId={clientId}
         mileageMode={mileageMode}
+        preserveInitialMileage={preserveInitialMileage}
+        preserveInitialAssetSnapshot={preserveInitialAssetSnapshot}
       />
       <OrderAssetFields
         register={register}
@@ -444,7 +450,10 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         initialDevice="Legacy Device"
         initialCarNumber="OLD1"
         initialVin="1HGBH41JXMN109186"
+        initialCurrentMileage="12,000"
         mileageMode="vehicle"
+        preserveInitialMileage
+        preserveInitialAssetSnapshot
       />,
     );
 
@@ -454,7 +463,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Legacy Device",
         carNumber: "OLD1",
         vin: "1HGBH41JXMN109186",
-        currentMileage: expect.stringMatching(/45[\s,]?000/),
+        currentMileage: "12,000",
       });
     });
 
@@ -467,6 +476,20 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Honda Civic",
         carNumber: "XYZ999",
         vin: "",
+        currentMileage: "",
+      });
+    });
+  });
+
+  it("snapshots device, plate, and VIN from a preselected initialVehicleId (create-from-vehicle)", async () => {
+    renderWithQuery(<Harness initialVehicleId="veh-1" />);
+
+    await vi.waitFor(() => {
+      expect(readSnapshot()).toEqual({
+        vehicleId: "veh-1",
+        device: "Toyota Corolla 2018",
+        carNumber: "ABC123",
+        vin: "1HGBH41JXMN109186",
         currentMileage: "",
       });
     });

@@ -175,4 +175,43 @@ describe("OrderCard", () => {
     const { container } = renderCard({}, { warrantyIndicator: { visible: false, isWarrantyOrder: false, coveredItemCount: 0, status: "none", evaluation: null, remaining: null, nearExpiry: false, primary: null } });
     expect(container.querySelector("[data-warranty-indicator]")).toBeNull();
   });
+
+  it("shows make/model and plate on a new draft created from a client vehicle snapshot", () => {
+    renderCard({
+      status: "new",
+      vehicleId: "veh-from-client",
+      device: "Toyota Corolla 2018",
+      carNumber: "AAA111",
+      vin: "VIN-A",
+    });
+
+    expect(screen.getByText("Toyota Corolla 2018")).toBeInTheDocument();
+    expect(screen.getByText("AAA111")).toBeInTheDocument();
+  });
+
+  it("still renders a new draft with no vehicle without inventing vehicle text", () => {
+    const { container } = renderCard({
+      status: "new",
+      vehicleId: null,
+      device: "",
+      carNumber: "",
+      vin: "",
+    });
+
+    expect(screen.queryByText("Toyota Corolla 2018")).not.toBeInTheDocument();
+    expect(screen.queryByText("AAA111")).not.toBeInTheDocument();
+    expect(container.querySelector("article")).not.toBeNull();
+  });
+
+  it("shows each order's own vehicle snapshot, not another order's", () => {
+    renderCard({
+      id: "order-a",
+      vehicleId: "veh-a",
+      device: "BMW X5",
+      carNumber: "B111BMW",
+    });
+    expect(screen.getByText("BMW X5")).toBeInTheDocument();
+    expect(screen.getByText("B111BMW")).toBeInTheDocument();
+    expect(screen.queryByText("Mercedes-Benz Sprinter 316 CDI Extra Long")).not.toBeInTheDocument();
+  });
 });
