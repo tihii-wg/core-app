@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -33,6 +33,7 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { defaultsForKind, type WorkspaceWarrantyDefaults } from "./warranty";
 
 type MaterialsFormSlice = { materials: OrderMaterial[] };
+type AddMode = "catalog" | "one_time" | "customer";
 
 type OrderMaterialLinesEditorProps = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,6 +65,12 @@ type OrderMaterialLinesEditorProps = {
   /** Catalog keys for lines that replace a deleted warranty-covered line in this edit session. */
   restartWarrantyHints?: ReadonlySet<string>;
   warrantyCatalogKeyForLine?: (line: Pick<OrderMaterial, "inventoryItemId" | "itemName">) => string | null;
+  /** Prefill freeform add mode (items-tab unified search → one-time / customer). */
+  initialAddMode?: AddMode;
+  /** Prefill freeform name when opening in one-time / customer mode. */
+  initialFreeName?: string;
+  /** Prefill catalog item selection when opening from the items-tab search. */
+  initialCatalogItem?: InventoryItem | null;
 };
 
 function quantityValidationMessage(value: unknown, t: TFunction): true | string {
@@ -73,8 +80,6 @@ function quantityValidationMessage(value: unknown, t: TFunction): true | string 
   if (parsed === "maxDecimals") return t("orders.validation.quantityMaxDecimals") as string;
   return true;
 }
-
-type AddMode = "catalog" | "one_time" | "customer";
 
 export default function OrderMaterialLinesEditor({
   control,
@@ -94,6 +99,9 @@ export default function OrderMaterialLinesEditor({
   errors,
   restartWarrantyHints,
   warrantyCatalogKeyForLine,
+  initialAddMode = "catalog",
+  initialFreeName = "",
+  initialCatalogItem = null,
 }: OrderMaterialLinesEditorProps) {
   const { t, i18n } = useTranslation();
   const qtyLocale = i18n.language;
@@ -109,12 +117,13 @@ export default function OrderMaterialLinesEditor({
   const [createInitialName, setCreateInitialName] = useState("");
   const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
   const [receiveDefaultQty, setReceiveDefaultQty] = useState(1);
-  const [addMode, setAddMode] = useState<AddMode>("catalog");
-  const [freeName, setFreeName] = useState("");
+  const [addMode, setAddMode] = useState<AddMode>(initialAddMode);
+  const [freeName, setFreeName] = useState(initialFreeName);
   const [freePrice, setFreePrice] = useState("0");
   const [freeQty, setFreeQty] = useState("1");
   const [freeError, setFreeError] = useState("");
   const [issueWarehouseId, setIssueWarehouseId] = useState(() => defaultIssueWarehouseId(warehouseRows));
+  const seededCatalogRef = useRef(false);
 
   // Keep default warehouse when the list loads / changes.
   useEffect(() => {
@@ -122,6 +131,13 @@ export default function OrderMaterialLinesEditor({
       setIssueWarehouseId(defaultIssueWarehouseId(warehouses));
     }
   }, [warehouses, issueWarehouseId]);
+
+  // Seed one catalog line when opened from the items-tab search with a picked inventory item.
+  useEffect(() => {
+    if (seededCatalogRef.current || !initialCatalogItem || !issueWarehouseId) return;
+    seededCatalogRef.current = true;
+    append(catalogItemToOrderMaterial(initialCatalogItem, 1, issueWarehouseId, warrantyDefaults, orderMileageUnit));
+  }, [append, initialCatalogItem, issueWarehouseId, orderMileageUnit, warrantyDefaults]);
 
   const effectiveAddMode: AddMode = !freeformSupported && addMode !== "catalog" ? "catalog" : addMode;
 

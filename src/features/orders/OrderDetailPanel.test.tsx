@@ -51,14 +51,48 @@ vi.mock("../../ui/ConfirmProvider", async (importOriginal) => {
   return { ...actual, useUnsavedChangesConfirm: () => unsavedConfirm.confirm };
 });
 
-vi.mock("./AddOrderServiceDialog", () => ({
-  default: ({ open, order }: { open: boolean; order: { id: string } }) =>
-    open ? <div data-testid="add-service-dialog-stub">{order.id}</div> : null,
+vi.mock("./OrderAddLinesSearch", () => ({
+  default: ({
+    order,
+    allowServices,
+    allowMaterials,
+    onOpenMaterial,
+  }: {
+    order: { id: string };
+    allowServices: boolean;
+    allowMaterials: boolean;
+    onOpenMaterial: (prefill: { kind: "catalog"; item: { id: string } }) => void;
+  }) => (
+    <div data-testid="order-add-lines-search">
+      <span data-testid="order-add-lines-allow-services">{String(allowServices)}</span>
+      <span data-testid="order-add-lines-allow-materials">{String(allowMaterials)}</span>
+      <button
+        type="button"
+        data-testid="order-add-lines-open-material"
+        onClick={() => onOpenMaterial({ kind: "catalog", item: { id: "item-stub" } as never })}
+      >
+        Open material
+      </button>
+      <span data-testid="order-add-lines-order">{order.id}</span>
+    </div>
+  ),
 }));
 
 vi.mock("./AddOrderMaterialDialog", () => ({
-  default: ({ open, order }: { open: boolean; order: { id: string } }) =>
-    open ? <div data-testid="add-material-dialog-stub">{order.id}</div> : null,
+  default: ({
+    open,
+    order,
+    prefill,
+  }: {
+    open: boolean;
+    order: { id: string };
+    prefill?: { kind: string } | null;
+  }) =>
+    open ? (
+      <div data-testid="add-material-dialog-stub">
+        {order.id}:{prefill?.kind ?? "none"}
+      </div>
+    ) : null,
 }));
 
 vi.mock("./useDeleteOrder", () => ({
@@ -1559,77 +1593,72 @@ describe("OrderDetailPanel sticky footer", () => {
   });
 });
 
-describe("OrderDetailPanel items tab add buttons", () => {
+describe("OrderDetailPanel items tab add search", () => {
   const closedAt = "2026-11-05T14:59:54.258807+00:00";
 
-  it("shows add buttons above the tables and opens the dialogs on an open order", async () => {
+  it("shows the unified search above the tables and opens the material dialog from it", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
     const actions = await screen.findByTestId("order-items-actions");
     expect(screen.queryByTestId("order-items-empty")).not.toBeInTheDocument();
+    expect(within(actions).getByTestId("order-add-lines-search")).toBeInTheDocument();
+    expect(within(actions).getByTestId("order-add-lines-allow-services")).toHaveTextContent("true");
+    expect(within(actions).getByTestId("order-add-lines-allow-materials")).toHaveTextContent("true");
 
-    await user.click(within(actions).getByRole("button", { name: "Add service" }));
-    expect(screen.getByTestId("add-service-dialog-stub")).toHaveTextContent("order-1");
-    expect(screen.queryByTestId("add-material-dialog-stub")).not.toBeInTheDocument();
-
-    await user.click(within(actions).getByRole("button", { name: "Add product" }));
-    expect(screen.getByTestId("add-material-dialog-stub")).toHaveTextContent("order-1");
+    await user.click(within(actions).getByTestId("order-add-lines-open-material"));
+    expect(screen.getByTestId("add-material-dialog-stub")).toHaveTextContent("order-1:catalog");
   });
 
-  it("replaces the full-form empty-state button with the two add buttons", async () => {
+  it("keeps the search at the top of an empty editable items tab", async () => {
     const user = userEvent.setup();
     renderPanel(vi.fn(), vi.fn(), { order: { ...order, services: [], materials: [] } });
 
     await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
     const empty = await screen.findByTestId("order-items-empty");
-    expect(within(empty).queryByRole("button", { name: "Add services and items" })).not.toBeInTheDocument();
-    expect(screen.queryByTestId("order-items-actions")).not.toBeInTheDocument();
-    expect(within(empty).getByRole("button", { name: "Add service" })).toBeInTheDocument();
-    await user.click(within(empty).getByRole("button", { name: "Add product" }));
-    expect(screen.getByTestId("add-material-dialog-stub")).toBeInTheDocument();
+    expect(within(empty).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("order-items-actions")).toBeInTheDocument();
+    expect(screen.getByTestId("order-add-lines-search")).toBeInTheDocument();
   });
 
-  it("uses work / material wording for works-and-materials industries", async () => {
+  it("uses works-and-materials tab wording for industries that need it", async () => {
     const user = userEvent.setup();
     industryState.slug = "home_services";
     renderPanel();
 
     await user.click(await screen.findByRole("tab", { name: /Works & materials/i }));
-    const actions = await screen.findByTestId("order-items-actions");
-    expect(within(actions).getByRole("button", { name: "Add work" })).toBeInTheDocument();
-    expect(within(actions).getByRole("button", { name: "Add material" })).toBeInTheDocument();
+    expect(await screen.findByTestId("order-add-lines-search")).toBeInTheDocument();
   });
 
-  it("hides the material button without warehouse rights but keeps the service button", async () => {
+  it("hides materials in the search without warehouse rights but keeps services", async () => {
     const user = userEvent.setup();
     roleState.role = "member";
     renderPanel();
 
     await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
     const actions = await screen.findByTestId("order-items-actions");
-    expect(within(actions).getByRole("button", { name: "Add service" })).toBeInTheDocument();
-    expect(within(actions).queryByRole("button", { name: "Add product" })).not.toBeInTheDocument();
+    expect(within(actions).getByTestId("order-add-lines-allow-services")).toHaveTextContent("true");
+    expect(within(actions).getByTestId("order-add-lines-allow-materials")).toHaveTextContent("false");
   });
 
-  it("offers no add buttons on a closed (content-locked) order", async () => {
+  it("shows no search on a closed (content-locked) order", async () => {
     const user = userEvent.setup();
     renderPanel(vi.fn(), vi.fn(), { order: { ...order, status: "closed", closedAt } });
 
     await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
     expect(await screen.findByText("Oil change")).toBeInTheDocument();
     expect(screen.queryByTestId("order-items-actions")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add service" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Add product" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("order-add-lines-search")).not.toBeInTheDocument();
   });
 
-  it("offers no add buttons on a locked order with no lines either", async () => {
+  it("shows no search on a locked order with no lines either", async () => {
     const user = userEvent.setup();
     renderPanel(vi.fn(), vi.fn(), { order: { ...order, services: [], materials: [], status: "closed", closedAt } });
 
     await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
     const empty = await screen.findByTestId("order-items-empty");
     expect(within(empty).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("order-add-lines-search")).not.toBeInTheDocument();
   });
 });

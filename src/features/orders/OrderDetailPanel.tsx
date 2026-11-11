@@ -27,8 +27,8 @@ import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
-import AddOrderServiceDialog from "./AddOrderServiceDialog";
-import AddOrderMaterialDialog from "./AddOrderMaterialDialog";
+import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "./AddOrderMaterialDialog";
+import OrderAddLinesSearch from "./OrderAddLinesSearch";
 import {
   OrderInlineField,
   type OrderInlineFieldHandle,
@@ -175,8 +175,10 @@ export default function OrderDetailPanel({
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
-  const [addServiceOpen, setAddServiceOpen] = useState(false);
   const [addMaterialOpen, setAddMaterialOpen] = useState(false);
+  const [addMaterialPrefill, setAddMaterialPrefill] = useState<AddOrderMaterialPrefill | null>(null);
+  const [highlightedServiceId, setHighlightedServiceId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
   // Session-backed tab: survives order switches and sheet reopen; first open in a session starts on info.
@@ -294,8 +296,8 @@ export default function OrderDetailPanel({
     setIsEditing(false);
     setEditFocusField(null);
     setEditingField(null);
-    setAddServiceOpen(false);
     setAddMaterialOpen(false);
+    setAddMaterialPrefill(null);
   }
 
   function stopEditing() {
@@ -631,25 +633,21 @@ export default function OrderDetailPanel({
   }, [inventoryItemsForCost]);
   const hasServiceLines = serviceLines.length > 0;
   const hasMaterialLines = materialLines.length > 0;
-  // Add-only dialogs: services follow the content-edit gate; materials also need warehouse rights (stock is issued on save).
+  // Unified items search: services follow the content-edit gate; materials also need warehouse rights.
   const showAddService = showFieldEdit;
   const showAddMaterial = showFieldEdit && canWarehouse;
-  const itemsUseWorks = usesWorksAndMaterialsTabLabel(industrySlug);
-  const addLineButtons =
-    showAddService || showAddMaterial ? (
-      <>
-        {showAddService ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setAddServiceOpen(true)}>
-            {t(itemsUseWorks ? "orders.detail.tabs.addWork" : "orders.detail.tabs.addService")}
-          </Button>
-        ) : null}
-        {showAddMaterial ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setAddMaterialOpen(true)}>
-            {t(itemsUseWorks ? "orders.detail.tabs.addMaterial" : "orders.detail.tabs.addProduct")}
-          </Button>
-        ) : null}
-      </>
-    ) : null;
+  const showAddLinesSearch = showAddService || showAddMaterial;
+
+  function highlightExistingServiceLine(serviceId: string) {
+    setHighlightedServiceId(serviceId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedServiceId(null), 2400);
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-order-service-line-id="${serviceId}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }
   const detailVatRate = selectedOrder
     ? effectiveOrderVatRate(selectedOrder, workspaceVatRate)
     : null;
@@ -1244,15 +1242,25 @@ export default function OrderDetailPanel({
 
             {detailTab === "items" ? (
               <>
-            {addLineButtons && (hasServiceLines || hasMaterialLines) ? (
-              <div className="flex flex-wrap justify-end gap-2" data-testid="order-items-actions">
-                {addLineButtons}
+            {showAddLinesSearch && selectedOrder ? (
+              <div data-testid="order-items-actions">
+                <OrderAddLinesSearch
+                  order={selectedOrder}
+                  industrySlug={industrySlug}
+                  allowServices={showAddService}
+                  allowMaterials={showAddMaterial}
+                  onServiceAdded={onOrderUpdated}
+                  onHighlightServiceLine={highlightExistingServiceLine}
+                  onOpenMaterial={(prefill) => {
+                    setAddMaterialPrefill(prefill);
+                    setAddMaterialOpen(true);
+                  }}
+                />
               </div>
             ) : null}
             {!hasServiceLines && !hasMaterialLines ? (
               <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center" data-testid="order-items-empty">
                 <p className="text-sm font-medium text-foreground">{t("orders.detail.tabs.itemsEmpty")}</p>
-                {addLineButtons ? <div className="mt-3 flex flex-wrap justify-center gap-2">{addLineButtons}</div> : null}
               </div>
             ) : null}
             {hasServiceLines ? (
@@ -1273,8 +1281,13 @@ export default function OrderDetailPanel({
                       const lineGross = orderLineAmount({ price: line.price, quantity: line.quantity });
                       const lineVat =
                         detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
+                      const isHighlighted = Boolean(line.serviceId && highlightedServiceId === line.serviceId);
                       return (
-                      <tr key={line.id ?? `${line.serviceId}-${index}`}>
+                      <tr
+                        key={line.id ?? `${line.serviceId}-${index}`}
+                        data-order-service-line-id={line.serviceId || undefined}
+                        className={cn(isHighlighted && "bg-primary/10 ring-1 ring-inset ring-primary/40")}
+                      >
                         <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
                           <div className="min-w-0 space-y-0.5">
                             <p>
@@ -1788,20 +1801,16 @@ export default function OrderDetailPanel({
         />
       ) : null}
       {selectedOrder ? (
-        <>
-          <AddOrderServiceDialog
-            open={addServiceOpen && showAddService}
-            onOpenChange={setAddServiceOpen}
-            order={selectedOrder}
-            onAdded={onOrderUpdated}
-          />
-          <AddOrderMaterialDialog
-            open={addMaterialOpen && showAddMaterial}
-            onOpenChange={setAddMaterialOpen}
-            order={selectedOrder}
-            onAdded={onOrderUpdated}
-          />
-        </>
+        <AddOrderMaterialDialog
+          open={addMaterialOpen && showAddMaterial}
+          onOpenChange={(open) => {
+            setAddMaterialOpen(open);
+            if (!open) setAddMaterialPrefill(null);
+          }}
+          order={selectedOrder}
+          onAdded={onOrderUpdated}
+          prefill={addMaterialPrefill}
+        />
       ) : null}
       <OrderCatalogLinkDialogs
         serviceId={catalogServiceId}

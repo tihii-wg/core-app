@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import type { Order, OrderMaterial } from "../../lib/types";
+import type { InventoryItem, Order, OrderMaterial } from "../../lib/types";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
@@ -11,16 +11,22 @@ import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
 import { useAppendOrderLines } from "./useAppendOrderLines";
 import { useWorkspaceWarrantyDefaults } from "./useWorkspaceWarrantyDefaults";
 
+export type AddOrderMaterialPrefill =
+  | { kind: "catalog"; item: InventoryItem }
+  | { kind: "one_time" | "customer"; name: string };
+
 type AddOrderMaterialDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   order: Order;
   onAdded: (order: Order) => void;
+  /** Optional seed from the items-tab unified search. */
+  prefill?: AddOrderMaterialPrefill | null;
 };
 
 type DraftMaterialsForm = { materials: OrderMaterial[] };
 
-function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded }: AddOrderMaterialDialogProps) {
+function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, prefill }: AddOrderMaterialDialogProps) {
   const { t } = useTranslation();
   const { workflow, industrySlug } = useIndustryWorkflow();
   const works = usesWorksAndMaterialsTabLabel(industrySlug);
@@ -86,6 +92,9 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded }: AddO
         showWarrantyKm={industryUsesMileageWarranty(workflow)}
         isSubmitted={isSubmitted}
         errors={errors.materials}
+        initialAddMode={prefill?.kind === "one_time" || prefill?.kind === "customer" ? prefill.kind : "catalog"}
+        initialFreeName={prefill?.kind === "one_time" || prefill?.kind === "customer" ? prefill.name : ""}
+        initialCatalogItem={prefill?.kind === "catalog" ? prefill.item : null}
       />
     </AddOrderLinesDialogShell>
   );

@@ -53,11 +53,22 @@ vi.mock("./OrderMaterialLinesEditor", () => ({
   default: ({
     fields,
     append,
+    initialAddMode,
+    initialFreeName,
+    initialCatalogItem,
   }: {
     fields: Array<{ id: string; itemName: string }>;
     append: (line: OrderMaterial) => void;
+    initialAddMode?: string;
+    initialFreeName?: string;
+    initialCatalogItem?: { id: string; name: string } | null;
   }) => (
-    <div data-testid="material-editor-stub">
+    <div
+      data-testid="material-editor-stub"
+      data-initial-mode={initialAddMode ?? "catalog"}
+      data-initial-free-name={initialFreeName ?? ""}
+      data-initial-catalog-id={initialCatalogItem?.id ?? ""}
+    >
       <button
         type="button"
         onClick={() =>
@@ -216,6 +227,34 @@ describe("AddOrderMaterialDialog", () => {
     await user.click(await screen.findByTestId("add-order-lines-submit"));
     expect(await screen.findByText("Add at least one material")).toBeInTheDocument();
     expect(appendMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts catalog prefill from the items-tab search", async () => {
+    renderWithQuery(
+      <AddOrderMaterialDialog
+        open
+        onOpenChange={vi.fn()}
+        order={order}
+        onAdded={vi.fn()}
+        prefill={{ kind: "catalog", item: { id: "item-filter", name: "Oil filter", sellingPrice: 12 } as never }}
+      />,
+    );
+    expect(await screen.findByTestId("material-editor-stub")).toHaveAttribute("data-initial-catalog-id", "item-filter");
+  });
+
+  it("accepts freeform prefill from the items-tab search", async () => {
+    renderWithQuery(
+      <AddOrderMaterialDialog
+        open
+        onOpenChange={vi.fn()}
+        order={order}
+        onAdded={vi.fn()}
+        prefill={{ kind: "one_time", name: "Custom gasket" }}
+      />,
+    );
+    const editor = await screen.findByTestId("material-editor-stub");
+    expect(editor).toHaveAttribute("data-initial-mode", "one_time");
+    expect(editor).toHaveAttribute("data-initial-free-name", "Custom gasket");
   });
 });
 
