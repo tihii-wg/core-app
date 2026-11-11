@@ -1,5 +1,6 @@
 export default {
   sectionTitle: "Vehicles",
+  sectionTitleWithCount: "Vehicles ({{count}})",
   add: "Add vehicle",
   addTitle: "Add vehicle",
   addDescription: "Add a vehicle for this client.",

@@ -3,6 +3,7 @@ import type { Vehicle } from "../lib/types";
 import {
   assertVehicleAssignable,
   createVehicle,
+  getClientVehicles,
   orderAssetFieldsFromVehicle,
   resetVehicleMileageUnitSupport,
   searchVehiclesByRegistration,
@@ -57,6 +58,57 @@ function writeQuery(result: { data: unknown; error: unknown }, terminal: "single
   chain.maybeSingle = () => Promise.resolve(result);
   return { chain, selectArgs, insertArgs, updateArgs, terminal };
 }
+
+describe("getClientVehicles", () => {
+  beforeEach(() => {
+    from.mockReset();
+  });
+
+  it("scopes by workspace and client and excludes soft-deleted vehicles", async () => {
+    const eqArgs: unknown[][] = [];
+    const isArgs: unknown[][] = [];
+    const chain: Record<string, unknown> = {};
+    chain.select = () => chain;
+    chain.eq = (...args: unknown[]) => {
+      eqArgs.push(args);
+      return chain;
+    };
+    chain.is = (...args: unknown[]) => {
+      isArgs.push(args);
+      return chain;
+    };
+    chain.order = () =>
+      Promise.resolve({
+        data: [
+          {
+            id: "veh-1",
+            workspace_id: "ws-1",
+            client_id: "client-1",
+            make: "Toyota",
+            model: "Corolla",
+            year: 2018,
+            vin: null,
+            license_plate: "ABC123",
+            initial_mileage: null,
+            current_mileage: null,
+            engine_displacement: null,
+            fuel_type: null,
+            created_at: "",
+            updated_at: "",
+            deleted_at: null,
+          },
+        ],
+        error: null,
+      });
+    from.mockReturnValue(chain);
+
+    const rows = await getClientVehicles("ws-1", "client-1");
+    expect(rows).toHaveLength(1);
+    expect(eqArgs).toContainEqual(["workspace_id", "ws-1"]);
+    expect(eqArgs).toContainEqual(["client_id", "client-1"]);
+    expect(isArgs).toContainEqual(["deleted_at", null]);
+  });
+});
 
 describe("assertVehicleAssignable", () => {
   beforeEach(() => {

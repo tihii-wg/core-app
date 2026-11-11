@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Vehicle } from "../../lib/types";
 import { renderWithQuery } from "../../tests/renderQuery";
 import { ClientVehiclesSection } from "./ClientVehiclesSection";
@@ -50,12 +50,58 @@ const sampleVehicle: Vehicle = {
 };
 
 describe("ClientVehiclesSection", () => {
-  it("shows an empty state and add action when the client has no vehicles", () => {
+  beforeEach(() => {
+    vehiclesState.vehicles = [];
+  });
+
+  it("shows an empty state and Vehicles (0) when the client has no vehicles", () => {
     vehiclesState.vehicles = [];
     renderWithQuery(<ClientVehiclesSection clientId="client-1" />);
 
+    expect(screen.getByRole("heading", { name: "Vehicles (0)" })).toBeInTheDocument();
     expect(screen.getByText("No vehicles found")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Add vehicle" }).length).toBeGreaterThan(0);
+  });
+
+  it("shows Vehicles (n) for multiple active vehicles belonging to this client", () => {
+    vehiclesState.vehicles = [
+      sampleVehicle,
+      { ...sampleVehicle, id: "veh-2", make: "VW", model: "Golf", year: 2020, vin: null, licensePlate: "XYZ999", currentMileage: 12000 },
+      { ...sampleVehicle, id: "veh-3", make: "BMW", model: "X5", year: 2021, vin: null, licensePlate: "B111BMW", currentMileage: 5000 },
+    ];
+    renderWithQuery(<ClientVehiclesSection clientId="client-1" />);
+
+    expect(screen.getByRole("heading", { name: "Vehicles (3)" })).toBeInTheDocument();
+  });
+
+  it("counts all active vehicles even when search filters the visible list", () => {
+    vehiclesState.vehicles = [
+      sampleVehicle,
+      { ...sampleVehicle, id: "veh-2", make: "VW", model: "Golf", year: 2020, vin: null, licensePlate: "XYZ999", currentMileage: 12000 },
+    ];
+    renderWithQuery(<ClientVehiclesSection clientId="client-1" visibleVehicleIds={["veh-1"]} />);
+
+    expect(screen.getByRole("heading", { name: "Vehicles (2)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Toyota Corolla 2018/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /VW Golf 2020/i })).not.toBeInTheDocument();
+  });
+
+  it("updates the heading count when vehicles are added or archived (query refetch)", () => {
+    vehiclesState.vehicles = [sampleVehicle];
+    const { rerender } = renderWithQuery(<ClientVehiclesSection clientId="client-1" />);
+    expect(screen.getByRole("heading", { name: "Vehicles (1)" })).toBeInTheDocument();
+
+    vehiclesState.vehicles = [
+      sampleVehicle,
+      { ...sampleVehicle, id: "veh-2", make: "VW", model: "Golf", year: 2020, vin: null, licensePlate: "XYZ999", currentMileage: 12000 },
+    ];
+    rerender(<ClientVehiclesSection clientId="client-1" />);
+    expect(screen.getByRole("heading", { name: "Vehicles (2)" })).toBeInTheDocument();
+
+    // Soft-deleted vehicles are excluded by getClientVehicles; the query returns only active rows.
+    vehiclesState.vehicles = [sampleVehicle];
+    rerender(<ClientVehiclesSection clientId="client-1" />);
+    expect(screen.getByRole("heading", { name: "Vehicles (1)" })).toBeInTheDocument();
   });
 
   it("lists vehicles and opens the vehicle details drawer without navigating", async () => {
@@ -66,6 +112,7 @@ describe("ClientVehiclesSection", () => {
     const user = userEvent.setup();
     renderWithQuery(<ClientVehiclesSection clientId="client-1" />);
 
+    expect(screen.getByRole("heading", { name: "Vehicles (2)" })).toBeInTheDocument();
     const first = screen.getByRole("button", { name: /Toyota Corolla 2018/i });
     expect(first).toHaveTextContent("VIN: 1HGBH41JXMN109186");
     expect(first).toHaveTextContent("License plate: ABC123");

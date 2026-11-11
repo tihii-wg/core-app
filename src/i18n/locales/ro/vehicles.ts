@@ -1,5 +1,6 @@
 export default {
   sectionTitle: "Vehicule",
+  sectionTitleWithCount: "Vehicule ({{count}})",
   add: "Adaugă vehicul",
   addTitle: "Adaugă vehicul",
   addDescription: "Adăugați un vehicul pentru acest client.",

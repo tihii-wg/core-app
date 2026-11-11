@@ -78,7 +78,10 @@ export function ClientVehiclesSection({
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-foreground">{t("vehicles.sectionTitle")}</h3>
+        <h3 className="text-sm font-medium text-foreground">
+          {/* Total active vehicles for this client (not the search-filtered subset). */}
+          {t("vehicles.sectionTitleWithCount", { count: allVehicles.length })}
+        </h3>
         <Button
           type="button"
           size="sm"
