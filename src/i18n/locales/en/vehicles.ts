@@ -16,6 +16,9 @@ export default {
   emptyTitle: "No vehicles found",
   emptyDescription: "Add a vehicle to keep make, model, VIN, and mileage with this client.",
   emptyForOrder: "No vehicles for this client yet. Add one or continue without a vehicle.",
+  searchPlaceholder: "Search vehicles...",
+  noMatch: "No matching vehicles",
+
   selectLabel: "Vehicle",
   selectPlaceholder: "Select vehicle",
   noneSelected: "No vehicle",

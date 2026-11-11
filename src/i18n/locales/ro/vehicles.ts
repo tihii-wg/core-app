@@ -16,6 +16,9 @@ export default {
   emptyTitle: "Nu există vehicule",
   emptyDescription: "Adăugați un vehicul pentru a păstra marca, modelul, VIN-ul și kilometrajul la acest client.",
   emptyForOrder: "Acest client nu are încă vehicule. Adăugați unul sau continuați fără vehicul.",
+  searchPlaceholder: "Caută vehicule...",
+  noMatch: "Niciun vehicul potrivit",
+
   selectLabel: "Vehicul",
   selectPlaceholder: "Selectați vehiculul",
   noneSelected: "Fără vehicul",

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Car, Pencil, Plus, Trash2 } from "lucide-react";
+import { Car, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import type { Order, Vehicle } from "../../lib/types";
 import { Button } from "../../ui/Button";
 import {
@@ -11,10 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/Dialog";
+import { Input } from "../../ui/Input";
 import { Skeleton } from "../../ui/Skeleton";
 import { vehicleDisplayLabel } from "../../services/apiVehicles";
 import { highlightMatch } from "../clients/clientSearch";
 import { formatVehicleMileage } from "./vehicleMileage";
+import { filterClientVehiclesByQuery } from "./clientVehicleSearch";
 import { useGetClientVehicles } from "./useGetClientVehicles";
 import { useArchiveVehicle, useCreateVehicle, useUpdateVehicle } from "./useVehicleMutations";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
@@ -44,7 +46,7 @@ export function ClientVehiclesSection({
 }: ClientVehiclesSectionProps) {
   const { t } = useTranslation();
   const { vehicles: allVehicles, isLoading, isError } = useGetClientVehicles(clientId);
-  const vehicles =
+  const baseVehicles =
     visibleVehicleIds == null
       ? allVehicles
       : allVehicles.filter((vehicle) => visibleVehicleIds.includes(vehicle.id));
@@ -52,11 +54,21 @@ export function ClientVehiclesSection({
   const updateVehicle = useUpdateVehicle(clientId);
   const archiveVehicle = useArchiveVehicle(clientId);
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Vehicle | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [vehicleOpen, setVehicleOpen] = useState(false);
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, [clientId]);
+
+  const vehicles = filterClientVehiclesByQuery(baseVehicles, searchQuery);
+  const searchActive = searchQuery.trim().length > 0;
+  const effectiveHighlight = searchActive ? searchQuery.trim().toLowerCase() : highlightQuery;
+  const showSearch = !isLoading && !isError && allVehicles.length > 0;
 
   function openVehicle(vehicleId: string) {
     setSelectedVehicleId(vehicleId);
@@ -96,6 +108,33 @@ export function ClientVehiclesSection({
         </Button>
       </div>
 
+      {showSearch ? (
+        <div className="relative w-full sm:max-w-xs lg:max-w-sm">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground"
+          />
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("vehicles.searchPlaceholder")}
+            aria-label={t("vehicles.searchPlaceholder").replace(/\.+$/, "")}
+            className="h-9 pr-8 pl-9 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              aria-label={t("common.clearSearch")}
+              className="absolute right-1.5 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-subtle-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {isLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-16 w-full" />
@@ -103,7 +142,7 @@ export function ClientVehiclesSection({
         </div>
       ) : isError ? (
         <p className="text-sm text-destructive">{t("vehicles.loadFailed")}</p>
-      ) : vehicles.length === 0 ? (
+      ) : baseVehicles.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
           <Car className="mx-auto mb-2 size-6 text-muted-foreground" aria-hidden />
           <p className="text-sm font-medium text-foreground">{t("vehicles.emptyTitle")}</p>
@@ -121,6 +160,11 @@ export function ClientVehiclesSection({
             {t("vehicles.add")}
           </Button>
         </div>
+      ) : vehicles.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+          <Car className="mx-auto mb-2 size-6 text-muted-foreground" aria-hidden />
+          <p className="text-sm font-medium text-foreground">{t("vehicles.noMatch")}</p>
+        </div>
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {vehicles.map((vehicle) => (
@@ -131,14 +175,18 @@ export function ClientVehiclesSection({
                 className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
               >
                 <p className="text-sm font-medium text-primary [overflow-wrap:anywhere] hover:underline">
-                  {highlightQuery ? (
-                    <span dangerouslySetInnerHTML={{ __html: highlightMatch(vehicleDisplayLabel(vehicle), highlightQuery) }} />
+                  {effectiveHighlight ? (
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: highlightMatch(vehicleDisplayLabel(vehicle), effectiveHighlight),
+                      }}
+                    />
                   ) : (
                     vehicleDisplayLabel(vehicle)
                   )}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                  {highlightQuery ? (
+                  {effectiveHighlight ? (
                     <span
                       dangerouslySetInnerHTML={{
                         __html: highlightMatch(
@@ -147,14 +195,16 @@ export function ClientVehiclesSection({
                             vehicle.model ? `${t("vehicles.fields.model")}: ${vehicle.model}` : null,
                             vehicle.year != null ? `${t("vehicles.fields.year")}: ${vehicle.year}` : null,
                             vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
-                            vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
+                            vehicle.licensePlate
+                              ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}`
+                              : null,
                             vehicle.currentMileage != null
                               ? `${t("vehicles.fields.currentMileage")}: ${formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t)}`
                               : null,
                           ]
                             .filter(Boolean)
                             .join(" · "),
-                          highlightQuery,
+                          effectiveHighlight,
                         ),
                       }}
                     />
@@ -164,7 +214,9 @@ export function ClientVehiclesSection({
                       vehicle.model ? `${t("vehicles.fields.model")}: ${vehicle.model}` : null,
                       vehicle.year != null ? `${t("vehicles.fields.year")}: ${vehicle.year}` : null,
                       vehicle.vin ? `${t("vehicles.fields.vin")}: ${vehicle.vin}` : null,
-                      vehicle.licensePlate ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}` : null,
+                      vehicle.licensePlate
+                        ? `${t("vehicles.fields.licensePlate")}: ${vehicle.licensePlate}`
+                        : null,
                       vehicle.currentMileage != null
                         ? `${t("vehicles.fields.currentMileage")}: ${formatVehicleMileage(vehicle.currentMileage, vehicle.mileageUnit, t)}`
                         : null,
