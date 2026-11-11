@@ -32,6 +32,7 @@ import { ClientPaymentsTab } from "./ClientPaymentsTab";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { clientOrderHistoryLine, type ClientOrderSummary } from "./clientOrders";
+import { useClientOrdersCount } from "./useClientOrdersCount";
 import { filterClientCardSearch, highlightMatch, type ClientSearchableOrder } from "./clientSearch";
 import {
   applyClientAssetFilter,
@@ -196,6 +197,12 @@ export default function ClientDetailPanel({
     (isOrganization && Boolean(taxId));
 
   const clientOrders = selectedClient ? getClientOrders(selectedClient.id) : [];
+  const { count: remoteOrdersCount } = useClientOrdersCount(selectedClient?.id, {
+    enabled: Boolean(selectedClient) && detailPanelOpen,
+  });
+  /** Total for this client — exact head count when ready, else full client-scoped list length (not filtered/sliced). */
+  const totalOrdersCount =
+    selectedClient == null ? null : remoteOrdersCount ?? clientOrders.length;
 
   const searchableOrders: ClientSearchableOrder[] = useMemo(() => {
     if (!selectedClient) return [];
@@ -298,7 +305,13 @@ export default function ClientDetailPanel({
           },
         ]
       : []),
-    { value: "orders", label: t("clients.detail.tabs.orders") },
+    {
+      value: "orders",
+      label:
+        totalOrdersCount == null
+          ? t("clients.detail.tabs.orders")
+          : t("clients.detail.orderHistoryWithCount", { count: totalOrdersCount }),
+    },
     { value: "documents", label: t("clients.detail.tabs.documents") },
     { value: "payments", label: t("clients.detail.tabs.payments") },
   ];
@@ -518,7 +531,11 @@ export default function ClientDetailPanel({
                     {!searchEmpty ? (
                       <div>
                         <div className="mb-3 flex items-center justify-between gap-2">
-                          <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.orderHistory")}</h3>
+                          <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+                            {totalOrdersCount == null
+                              ? t("clients.detail.orderHistory")
+                              : t("clients.detail.orderHistoryWithCount", { count: totalOrdersCount })}
+                          </h3>
                           {canCreateOrder ? (
                             <Button type="button" variant="outline" size="sm" onClick={() => onCreateOrder?.(selectedClient)}>
                               <Plus />

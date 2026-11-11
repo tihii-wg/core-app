@@ -147,7 +147,9 @@ const clients: Messages<typeof en> = {
     currentBalance: "Sold curent",
     balanceHint: "Avansul (plata în avans) al clientului.",
     orderHistory: "Istoricul comenzilor",
+    orderHistoryWithCount: "Comenzi ({{count}})",
     noOrders: "Nicio comandă încă",
+
     noOrdersHint: "Comenzile acestui client vor apărea aici.",
     ordersLoadFailed: "Comenzile nu au putut fi încărcate",
     ordersLoadFailedHint: "Reîmprospătați pagina pentru a încerca din nou.",

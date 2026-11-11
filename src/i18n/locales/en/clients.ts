@@ -143,7 +143,9 @@ export default {
     currentBalance: "Current Balance",
     balanceHint: "Advance (prepayment) held for this client.",
     orderHistory: "Order History",
+    orderHistoryWithCount: "Orders ({{count}})",
     noOrders: "No orders yet",
+
     noOrdersHint: "Orders for this client will show up here.",
     ordersLoadFailed: "Could not load orders",
     ordersLoadFailedHint: "Refresh the page to try again.",

@@ -148,7 +148,9 @@ const clients: Messages<typeof en> = {
     currentBalance: "Текущий баланс",
     balanceHint: "Аванс (предоплата) клиента.",
     orderHistory: "История заказов",
+    orderHistoryWithCount: "Заказы ({{count}})",
     noOrders: "Заказов пока нет",
+
     noOrdersHint: "Заказы этого клиента появятся здесь.",
     ordersLoadFailed: "Не удалось загрузить заказы",
     ordersLoadFailedHint: "Обновите страницу, чтобы попробовать снова.",

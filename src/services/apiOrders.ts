@@ -1930,6 +1930,25 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
 }
 
+/**
+ * Exact order count for one client in the active workspace (`orders.client_id`).
+ * Includes every status; head-only — no row payload. Orders are hard-deleted (no soft-delete filter).
+ */
+export async function countClientOrders(workspaceId: string | undefined, clientId: string): Promise<number> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const id = clientId.trim();
+  if (!id) return 0;
+
+  const { count, error } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("client_id", id);
+
+  if (error) throw new Error(error.message);
+  return typeof count === "number" && count >= 0 ? count : 0;
+}
+
 /** Orders linked through `orders.vehicle_id`, newest first. Workspace-scoped. */
 export async function getVehicleOrders(workspaceId: string | undefined, vehicleId: string) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);

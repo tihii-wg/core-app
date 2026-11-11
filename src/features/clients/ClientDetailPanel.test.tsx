@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -100,6 +100,25 @@ const clientVehiclesState = vi.hoisted(() => ({
     updatedAt: string;
     deletedAt: string | null;
   }[],
+}));
+
+const clientOrdersCountState = vi.hoisted(() => ({
+  count: null as number | null,
+}));
+
+vi.mock("./useClientOrdersCount", () => ({
+  useClientOrdersCount: () => ({
+    count: clientOrdersCountState.count,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  clientOrdersCountQueryKey: (workspaceId: string | undefined, clientId: string) => [
+    "orders",
+    workspaceId,
+    "client-count",
+    clientId,
+  ],
 }));
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
@@ -316,6 +335,7 @@ describe("ClientDetailPanel", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     clientVehiclesState.vehicles = [];
+    clientOrdersCountState.count = null;
     resetClientDetailTabSession();
     testState.slug = "auto_repair";
     testState.canWrite = true;
@@ -374,14 +394,17 @@ describe("ClientDetailPanel", () => {
   it("shows a clear empty state when the client has no orders", async () => {
     renderPanel({ getClientOrders: () => [], tab: "orders" });
 
-    expect(await screen.findByText("No orders yet")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Orders (0)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Orders (0)" })).toBeInTheDocument();
+    expect(screen.getByText("No orders yet")).toBeInTheDocument();
     expect(screen.getByText("Orders for this client will show up here.")).toBeInTheDocument();
   });
 
   it("lists order history with number, date, status, and total", async () => {
     renderPanel({ getClientOrders: () => history, tab: "orders" });
 
-    expect(await screen.findByText("ORD-2026-002")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Orders (2)" })).toBeInTheDocument();
+    expect(screen.getByText("ORD-2026-002")).toBeInTheDocument();
     expect(screen.getByText("2026-10-02")).toBeInTheDocument();
     expect(screen.getByText("MDL 80.00")).toBeInTheDocument();
     expect(screen.getByText("ORD-2026-001")).toBeInTheDocument();
@@ -557,7 +580,7 @@ describe("ClientDetailPanel", () => {
       await user.click(await screen.findByRole("button", { name: /Show orders for iPhone 13/ }));
 
       const tabs = screen.getByTestId("client-detail-tabs");
-      expect(within(tabs).getByRole("tab", { name: "Orders" })).toHaveAttribute("data-state", "active");
+      expect(within(tabs).getByRole("tab", { name: "Orders (3)" })).toHaveAttribute("data-state", "active");
       expect(screen.getByText("ORD-D1")).toBeInTheDocument();
       expect(screen.getByText("ORD-D2")).toBeInTheDocument();
       expect(screen.queryByText("ORD-D3")).not.toBeInTheDocument();
@@ -595,7 +618,7 @@ describe("ClientDetailPanel", () => {
       const tabs = await screen.findByTestId("client-detail-tabs");
       expect(within(tabs).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
         "General",
-        "Orders",
+        "Orders (0)",
         "Documents",
         "Payments",
       ]);
@@ -617,6 +640,98 @@ describe("ClientDetailPanel", () => {
       expect(await screen.findByTestId("client-card-search-count")).toBeInTheDocument();
       expect(await screen.findByRole("button", { name: /Create order for VW Golf 2020/i })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Create order for Toyota Corolla/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("orders total count", () => {
+    const mixedStatusHistory: ClientOrderSummary[] = [
+      { ...history[0]!, id: "o-new", orderNumber: "ORD-N", status: "new", createdAt: "2026-10-10" },
+      { ...history[0]!, id: "o-prog", orderNumber: "ORD-P", status: "in-progress", createdAt: "2026-10-09" },
+      { ...history[0]!, id: "o-wait", orderNumber: "ORD-W", status: "waiting-parts", createdAt: "2026-10-08" },
+      { ...history[1]!, id: "o-done", orderNumber: "ORD-C", status: "completed", createdAt: "2026-10-07" },
+      { ...history[1]!, id: "o-paid", orderNumber: "ORD-PA", status: "paid", isPaid: true, createdAt: "2026-10-06" },
+      { ...history[1]!, id: "o-closed", orderNumber: "ORD-CL", status: "closed", createdAt: "2026-10-05" },
+      { ...history[1]!, id: "o-cancel", orderNumber: "ORD-X", status: "cancelled", createdAt: "2026-10-04" },
+    ];
+
+    it("shows Orders (n) for a client with multiple orders across statuses", async () => {
+      clientOrdersCountState.count = 7;
+      renderPanel({ getClientOrders: () => mixedStatusHistory, tab: "orders" });
+
+      expect(await screen.findByRole("heading", { name: "Orders (7)" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Orders (7)" })).toBeInTheDocument();
+    });
+
+    it("shows Orders (0) when the client has no orders", async () => {
+      clientOrdersCountState.count = 0;
+      renderPanel({ getClientOrders: () => [], tab: "orders" });
+
+      expect(await screen.findByRole("heading", { name: "Orders (0)" })).toBeInTheDocument();
+    });
+
+    it("counts only the selected client's orders (workspace isolation via client_id)", async () => {
+      const forClient = (clientId: string) =>
+        clientId === "client-1" ? history : [{ ...history[0]!, id: "other-1", orderNumber: "ORD-OTHER" }];
+      clientOrdersCountState.count = 2;
+      renderPanel({ getClientOrders: forClient, tab: "orders" });
+
+      expect(await screen.findByRole("heading", { name: "Orders (2)" })).toBeInTheDocument();
+      expect(screen.queryByText("ORD-OTHER")).not.toBeInTheDocument();
+      expect(screen.getByText("ORD-2026-002")).toBeInTheDocument();
+    });
+
+    it("keeps the total unchanged while card search filters the visible list", async () => {
+      const user = userEvent.setup();
+      clientOrdersCountState.count = 2;
+      renderPanel({ getClientOrders: () => history, tab: "orders" });
+
+      expect(await screen.findByRole("heading", { name: "Orders (2)" })).toBeInTheDocument();
+      await user.type(screen.getByRole("searchbox"), "ORD-2026-002");
+
+      await waitFor(() => {
+        expect(screen.queryByText("ORD-2026-001")).not.toBeInTheDocument();
+      });
+      expect(screen.getByText("ORD-2026-002")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Orders (2)" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Orders (2)" })).toBeInTheDocument();
+    });
+
+    it("refreshes the count after create, delete, and client reassignment", async () => {
+      clientOrdersCountState.count = 2;
+      const { unmount } = renderPanel({ getClientOrders: () => history, tab: "orders" });
+      expect(await screen.findByRole("heading", { name: "Orders (2)" })).toBeInTheDocument();
+      unmount();
+
+      // Create
+      clientOrdersCountState.count = 3;
+      const afterCreate = renderPanel({
+        getClientOrders: () => [
+          ...history,
+          { ...history[0]!, id: "order-3", orderNumber: "ORD-2026-003", status: "new", createdAt: "2026-10-11" },
+        ],
+        tab: "orders",
+      });
+      expect(await screen.findByRole("heading", { name: "Orders (3)" })).toBeInTheDocument();
+      afterCreate.unmount();
+
+      // Delete
+      clientOrdersCountState.count = 1;
+      const afterDelete = renderPanel({ getClientOrders: () => [history[0]!], tab: "orders" });
+      expect(await screen.findByRole("heading", { name: "Orders (1)" })).toBeInTheDocument();
+      afterDelete.unmount();
+
+      // Reassigned away from this client
+      clientOrdersCountState.count = 0;
+      renderPanel({ getClientOrders: () => [], tab: "orders" });
+      expect(await screen.findByRole("heading", { name: "Orders (0)" })).toBeInTheDocument();
+    });
+
+    it("does not show a count when no client is selected", async () => {
+      clientOrdersCountState.count = 99;
+      renderPanel({ selectedClient: null as unknown as Client, tab: "orders" });
+
+      expect(screen.queryByRole("heading", { name: /Orders \(\d+\)/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: /Orders/ })).not.toBeInTheDocument();
     });
   });
 
