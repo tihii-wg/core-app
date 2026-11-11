@@ -1,45 +1,10 @@
 import type { Order, OrderStatus, Vehicle } from "../../lib/types";
+import { plateMatchesQuery } from "../../lib/plateVin";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import type { LedgerPayment } from "../finance/paymentTypes";
 import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
 
-/** Cyrillic ↔ Latin look-alikes used on MD/RU plates. */
-const PLATE_LOOKALIKES: Record<string, string> = {
-  А: "A",
-  В: "B",
-  Е: "E",
-  К: "K",
-  М: "M",
-  Н: "H",
-  О: "O",
-  Р: "P",
-  С: "C",
-  Т: "T",
-  Х: "X",
-  У: "Y",
-  A: "A",
-  B: "B",
-  E: "E",
-  K: "K",
-  M: "M",
-  H: "H",
-  O: "O",
-  P: "P",
-  C: "C",
-  T: "T",
-  X: "X",
-  Y: "Y",
-};
-
-/** Normalize for plate/VIN matching: upper, strip spaces/dashes, map look-alikes. */
-export function normalizePlateVin(value: string): string {
-  return Array.from(value.toUpperCase())
-    .map((ch) => {
-      if (ch === " " || ch === "-" || ch === "–" || ch === "—") return "";
-      return PLATE_LOOKALIKES[ch] ?? ch;
-    })
-    .join("");
-}
+export { normalizePlateVin } from "../../lib/plateVin";
 
 function fold(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -51,9 +16,7 @@ function includesFold(haystack: string, needle: string): boolean {
 }
 
 function includesPlate(haystack: string, needleRaw: string): boolean {
-  const needle = normalizePlateVin(needleRaw);
-  if (!needle) return true;
-  return normalizePlateVin(haystack).includes(needle);
+  return plateMatchesQuery(haystack, needleRaw);
 }
 
 function formatDdMmYyyy(isoLike: string): string {

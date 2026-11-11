@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../tests/renderQuery";
 import type { Client } from "../../lib/types";
+import type { VehicleRegistrationSearchHit } from "../../services/apiVehicles";
 import ClientCombobox from "./ClientCombobox";
 
 const pavelA: Client = {
@@ -66,5 +67,72 @@ describe("ClientCombobox duplicate names", () => {
     await user.click(screen.getByRole("combobox", { name: /^Client$/i }));
     await user.click(screen.getByRole("button", { name: /Create new client/i }));
     expect(onCreateRequest).toHaveBeenCalledWith("Pavel");
+  });
+});
+
+describe("ClientCombobox vehicle registration hits", () => {
+  const hitA: VehicleRegistrationSearchHit = {
+    vehicleId: "veh-a",
+    licensePlate: "B123ABC",
+    make: "Toyota",
+    model: "Corolla",
+    year: 2018,
+    client: pavelA,
+  };
+  const hitB: VehicleRegistrationSearchHit = {
+    vehicleId: "veh-b",
+    licensePlate: "B123XYZ",
+    make: "VW",
+    model: "Golf",
+    year: 2020,
+    client: pavelB,
+  };
+
+  it("lists each matching vehicle separately and selects client + vehicle together", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onSelectVehicle = vi.fn();
+
+    renderWithQuery(
+      <ClientCombobox
+        clients={[pavelA]}
+        value="B123"
+        onChange={vi.fn()}
+        onSelect={onSelect}
+        onSelectVehicle={onSelectVehicle}
+        vehicleHits={[hitA, hitB]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByTestId("client-combobox-vehicle-hits")).toBeInTheDocument();
+    expect(screen.getByText("Toyota Corolla 2018 · B123ABC")).toBeInTheDocument();
+    expect(screen.getByText("VW Golf 2020 · B123XYZ")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("client-combobox-vehicle-veh-b"));
+    expect(onSelectVehicle).toHaveBeenCalledExactlyOnceWith(hitB);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps client name matches available alongside vehicle hits", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+
+    renderWithQuery(
+      <ClientCombobox
+        clients={[pavelA]}
+        value="Pav"
+        onChange={vi.fn()}
+        onSelect={onSelect}
+        onSelectVehicle={vi.fn()}
+        vehicleHits={[hitA]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByText("Vehicles")).toBeInTheDocument();
+    expect(screen.getByText("Clients")).toBeInTheDocument();
+    await user.click(screen.getByText("+37369111111"));
+    expect(onSelect).toHaveBeenCalledWith(pavelA);
   });
 });

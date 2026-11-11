@@ -40,6 +40,8 @@ vi.mock("../orders/useGetOrders", () => ({
       { id: "order-3", clientId: "client-9", orderNumber: "ORD-2026-003", device: "Audi", vin: "", carNumber: "", service: "Oil change", totalPrice: 40, status: "new", createdAt: "2026-10-03" },
     ],
   }),
+  useUpdateOrderStatus: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
+  useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../orders/useOrderDetails", () => ({

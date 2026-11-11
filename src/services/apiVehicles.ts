@@ -1,10 +1,23 @@
 import i18n from "../i18n";
-import type { Vehicle, VehicleInput } from "../lib/types";
+import type { Client, Vehicle, VehicleInput } from "../lib/types";
 import { assertStoredMileage, MileageParseError } from "../lib/mileage";
 import { nullIfEmptyNumber, nullIfEmptyText } from "../lib/nullish";
+import { normalizePlateVin, plateIlikeLoosePattern, plateMatchesQuery } from "../lib/plateVin";
 import { assertValidOptionalVin } from "../lib/vin";
 import { isMileageUnit, parseMileageUnit } from "../features/vehicles/vehicleMileage";
+import { toClient } from "./apiClients";
+import { searchTerm } from "./searchTerm";
 import supabase from "./supabase";
+
+/** One vehicle + owning client for create-order Client field plate search. */
+export type VehicleRegistrationSearchHit = {
+  vehicleId: string;
+  licensePlate: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  client: Client;
+};
 
 const vehicleBaseColumns =
   "id, workspace_id, client_id, make, model, year, vin, license_plate, initial_mileage, current_mileage, engine_displacement, fuel_type, created_at, updated_at, deleted_at";
@@ -216,6 +229,99 @@ export async function getVehicle(workspaceId: string | undefined, vehicleId: str
   if (error) throw new Error(error.message);
   if (!data) return null;
   return toVehicle(data as unknown as Record<string, unknown>);
+}
+
+const VEHICLE_REGISTRATION_SEARCH_LIMIT = 25;
+
+/**
+ * Workspace-scoped vehicle search by registration number for the create-order Client field.
+ * Uses `vehicles.license_plate` + `vehicles.client_id` → `clients` (RLS + workspace_id).
+ * Over-fetches loose `ilike` candidates, then filters with `normalizePlateVin` so
+ * `B123ABC` / `b123abc` / `B 123 ABC` match the same stored plate without rewriting DB values.
+ */
+export async function searchVehiclesByRegistration(
+  workspaceId: string | undefined,
+  search: string,
+  { limit = VEHICLE_REGISTRATION_SEARCH_LIMIT }: { limit?: number } = {},
+): Promise<VehicleRegistrationSearchHit[]> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const compact = normalizePlateVin(search).replace(/[%_]/g, "");
+  if (compact.length < 2) return [];
+
+  const term = searchTerm(search);
+  const loose = plateIlikeLoosePattern(compact);
+  if (!loose) return [];
+
+  const orFilter =
+    term && normalizePlateVin(term) !== compact
+      ? `license_plate.ilike.%${term}%,license_plate.ilike.${loose}`
+      : `license_plate.ilike.${loose}`;
+
+  const fetchLimit = Math.min(Math.max(limit * 3, limit), 75);
+  const { data, error } = await withVehicleColumns(() =>
+    supabase
+      .from("vehicles")
+      .select(vehicleColumns() as typeof vehicleBaseColumns)
+      .eq("workspace_id", targetWorkspaceId)
+      .is("deleted_at", null)
+      .not("license_plate", "is", null)
+      .or(orFilter)
+      .order("created_at", { ascending: false })
+      .limit(fetchLimit),
+  );
+
+  if (error) {
+    if (error.code === "42P01" || error.code === "42703" || error.code === "PGRST204") return [];
+    throw new Error(error.message);
+  }
+
+  const vehicles = ((data ?? []) as unknown as Record<string, unknown>[])
+    .map(toVehicle)
+    .filter((vehicle) => vehicle.licensePlate && plateMatchesQuery(vehicle.licensePlate, search))
+    .slice(0, limit);
+
+  if (vehicles.length === 0) return [];
+
+  const clientIds = [...new Set(vehicles.map((vehicle) => vehicle.clientId).filter(Boolean))];
+  let clientsQuery = supabase
+    .from("clients")
+    .select("*")
+    .eq("workspace_id", targetWorkspaceId)
+    .is("deleted_at", null)
+    .in("id", clientIds);
+
+  let { data: clientRows, error: clientsError } = await clientsQuery;
+  if (clientsError && (clientsError.code === "42703" || clientsError.code === "PGRST204") && clientsError.message?.includes("deleted_at")) {
+    ({ data: clientRows, error: clientsError } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("id", clientIds));
+  }
+  if (clientsError) throw new Error(clientsError.message);
+
+  const clientsById = new Map(
+    ((clientRows ?? []) as Record<string, unknown>[]).map((row) => {
+      const client = toClient(row);
+      return [client.id, client] as const;
+    }),
+  );
+
+  const hits: VehicleRegistrationSearchHit[] = [];
+  for (const vehicle of vehicles) {
+    const client = clientsById.get(vehicle.clientId);
+    const plate = vehicle.licensePlate?.trim();
+    if (!client || !plate) continue;
+    hits.push({
+      vehicleId: vehicle.id,
+      licensePlate: plate,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      client,
+    });
+  }
+  return hits;
 }
 
 function stripMileageUnitFromPayload(payload: Record<string, unknown>) {

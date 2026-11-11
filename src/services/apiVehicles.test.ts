@@ -5,6 +5,7 @@ import {
   createVehicle,
   orderAssetFieldsFromVehicle,
   resetVehicleMileageUnitSupport,
+  searchVehiclesByRegistration,
   toVehicle,
   updateVehicle,
   vehicleMakeModelLabel,
@@ -263,5 +264,103 @@ describe("vehicle mileage_unit mapping", () => {
 
     expect(write.updateArgs[0]).not.toHaveProperty("mileage_unit");
     expect(write.updateArgs[0]).toEqual(expect.objectContaining({ current_mileage: 46000 }));
+  });
+});
+
+describe("searchVehiclesByRegistration", () => {
+  beforeEach(() => {
+    from.mockReset();
+  });
+
+  it("returns workspace vehicles whose plates match after normalization, with owning clients", async () => {
+    const vehicleChain: Record<string, unknown> = {};
+    vehicleChain.select = () => vehicleChain;
+    vehicleChain.eq = () => vehicleChain;
+    vehicleChain.is = () => vehicleChain;
+    vehicleChain.not = () => vehicleChain;
+    vehicleChain.or = () => vehicleChain;
+    vehicleChain.order = () => vehicleChain;
+    vehicleChain.limit = () =>
+      Promise.resolve({
+        data: [
+          {
+            id: "veh-1",
+            workspace_id: "ws-1",
+            client_id: "client-1",
+            make: "Toyota",
+            model: "Corolla",
+            year: 2018,
+            vin: null,
+            license_plate: "B 123 ABC",
+            initial_mileage: null,
+            current_mileage: null,
+            engine_displacement: null,
+            fuel_type: null,
+            created_at: "",
+            updated_at: "",
+            deleted_at: null,
+          },
+          {
+            id: "veh-skip",
+            workspace_id: "ws-1",
+            client_id: "client-1",
+            make: "Other",
+            model: "Car",
+            year: 2010,
+            vin: null,
+            license_plate: "ZZZ999",
+            initial_mileage: null,
+            current_mileage: null,
+            engine_displacement: null,
+            fuel_type: null,
+            created_at: "",
+            updated_at: "",
+            deleted_at: null,
+          },
+        ],
+        error: null,
+      });
+
+    const clientsChain: Record<string, unknown> = {};
+    clientsChain.select = () => clientsChain;
+    clientsChain.eq = () => clientsChain;
+    clientsChain.is = () => clientsChain;
+    clientsChain.in = () =>
+      Promise.resolve({
+        data: [
+          {
+            id: "client-1",
+            name: "Ada",
+            email: "",
+            phone: "",
+            address: "",
+            balance: 0,
+            created_at: "",
+            client_type: "individual",
+            tax_id: null,
+            contact_person: null,
+          },
+        ],
+        error: null,
+      });
+
+    from.mockImplementation((table: string) => (table === "vehicles" ? vehicleChain : clientsChain));
+
+    const hits = await searchVehiclesByRegistration("ws-1", "b123abc");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toEqual(
+      expect.objectContaining({
+        vehicleId: "veh-1",
+        licensePlate: "B 123 ABC",
+        client: expect.objectContaining({ id: "client-1", name: "Ada" }),
+      }),
+    );
+    expect(from).toHaveBeenCalledWith("vehicles");
+    expect(from).toHaveBeenCalledWith("clients");
+  });
+
+  it("returns an empty list for short queries without hitting the database", async () => {
+    await expect(searchVehiclesByRegistration("ws-1", "B")).resolves.toEqual([]);
+    expect(from).not.toHaveBeenCalled();
   });
 });

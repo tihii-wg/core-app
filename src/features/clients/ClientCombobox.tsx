@@ -3,6 +3,8 @@ import { Trans, useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Input } from "../../ui/Input";
 import type { Client } from "../../lib/types";
+import { vehicleMakeModelLabel } from "../../services/apiVehicles";
+import type { VehicleRegistrationSearchHit } from "../../services/apiVehicles";
 import { industryClientCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import ClientTypeBadge from "./ClientTypeBadge";
@@ -16,6 +18,13 @@ type ClientComboboxProps = {
   onSelect: (client: Client) => void;
   /** Explicit create action — always available when the typed name is non-empty. */
   onCreateRequest?: (name: string) => void;
+  /** Plate/registration hits from workspace vehicle search (create-order). */
+  vehicleHits?: VehicleRegistrationSearchHit[];
+  vehicleHitsLoading?: boolean;
+  vehicleHitsError?: boolean;
+  onSelectVehicle?: (hit: VehicleRegistrationSearchHit) => void;
+  /** Override the industry placeholder (e.g. mention license plate search). */
+  placeholder?: string;
 };
 
 function clientSecondaryLabel(client: Client, emptyPhone: string) {
@@ -26,6 +35,15 @@ function clientSecondaryLabel(client: Client, emptyPhone: string) {
   return emptyPhone;
 }
 
+function vehicleHitSecondary(hit: VehicleRegistrationSearchHit, untitled: string) {
+  const makeModel = vehicleMakeModelLabel({
+    make: hit.make,
+    model: hit.model,
+    year: hit.year,
+  });
+  return makeModel ? `${makeModel} · ${hit.licensePlate}` : hit.licensePlate || untitled;
+}
+
 export default function ClientCombobox({
   clients,
   value,
@@ -34,6 +52,11 @@ export default function ClientCombobox({
   onCreateRequest,
   errors,
   inputRef,
+  vehicleHits = [],
+  vehicleHitsLoading = false,
+  vehicleHitsError = false,
+  onSelectVehicle,
+  placeholder,
 }: ClientComboboxProps) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
@@ -68,9 +91,20 @@ export default function ClientCombobox({
 
   const canCreate = Boolean(onCreateRequest) && value.trim().length > 0;
   const emptyPhone = t("clients.combobox.noPhone");
+  const untitledVehicle = t("vehicles.untitled");
+  const hasVehicleSection = Boolean(onSelectVehicle);
+  const showVehicleHits = hasVehicleSection && (vehicleHitsLoading || vehicleHitsError || vehicleHits.length > 0 || value.trim().length >= 2);
+  const noClientMatches = filteredClients.length === 0;
+  const noVehicleMatches = !vehicleHitsLoading && !vehicleHitsError && vehicleHits.length === 0;
+  const showEmpty = noClientMatches && (!hasVehicleSection || noVehicleMatches) && !vehicleHitsLoading;
 
   function selectClient(client: Client) {
     onSelect(client);
+    setOpen(false);
+  }
+
+  function selectVehicle(hit: VehicleRegistrationSearchHit) {
+    onSelectVehicle?.(hit);
     setOpen(false);
   }
 
@@ -87,8 +121,8 @@ export default function ClientCombobox({
         name="client"
         value={value}
         autoComplete="off"
-        placeholder={copy.comboboxPlaceholder}
-        aria-label={copy.comboboxPlaceholder}
+        placeholder={placeholder ?? copy.comboboxPlaceholder}
+        aria-label={placeholder ?? copy.comboboxPlaceholder}
         aria-invalid={errors || undefined}
         aria-expanded={open}
         aria-controls="client-combobox-list"
@@ -108,27 +142,69 @@ export default function ClientCombobox({
           role="listbox"
           className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover shadow"
         >
-          {filteredClients.length === 0 ? (
+          {showVehicleHits ? (
+            <div className="border-b border-border" data-testid="client-combobox-vehicle-hits">
+              <p className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+                {t("clients.combobox.vehicleMatches")}
+              </p>
+              {vehicleHitsLoading ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">{t("clients.combobox.vehicleSearchLoading")}</p>
+              ) : vehicleHitsError ? (
+                <p className="px-3 py-2 text-sm text-destructive">{t("clients.combobox.vehicleSearchFailed")}</p>
+              ) : vehicleHits.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">{t("clients.combobox.noVehicleMatches")}</p>
+              ) : (
+                vehicleHits.map((hit) => (
+                  <button
+                    key={hit.vehicleId}
+                    type="button"
+                    role="option"
+                    data-testid={`client-combobox-vehicle-${hit.vehicleId}`}
+                    className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectVehicle(hit)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-foreground">{hit.client.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {vehicleHitSecondary(hit, untitledVehicle)}
+                      </span>
+                    </span>
+                    <ClientTypeBadge clientType={hit.client.client_type} />
+                  </button>
+                ))
+              )}
+            </div>
+          ) : null}
+
+          {showEmpty ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">{t("clients.combobox.noMatches")}</p>
-          ) : (
-            filteredClients.map((client) => (
-              <button
-                key={client.id}
-                type="button"
-                role="option"
-                className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
-                // Keep focus on the input so the list is not torn down before click.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => selectClient(client)}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-foreground">{client.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{clientSecondaryLabel(client, emptyPhone)}</span>
-                </span>
-                <ClientTypeBadge clientType={client.client_type} />
-              </button>
-            ))
-          )}
+          ) : filteredClients.length > 0 ? (
+            <>
+              {showVehicleHits ? (
+                <p className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+                  {t("clients.combobox.clientMatches")}
+                </p>
+              ) : null}
+              {filteredClients.map((client) => (
+                <button
+                  key={client.id}
+                  type="button"
+                  role="option"
+                  className="flex w-full items-start justify-between gap-2 px-3 py-2 text-left hover:bg-muted"
+                  // Keep focus on the input so the list is not torn down before click.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => selectClient(client)}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-foreground">{client.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{clientSecondaryLabel(client, emptyPhone)}</span>
+                  </span>
+                  <ClientTypeBadge clientType={client.client_type} />
+                </button>
+              ))}
+            </>
+          ) : null}
 
           {canCreate ? (
             <button

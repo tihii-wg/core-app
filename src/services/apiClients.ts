@@ -1,7 +1,161 @@
 import type { Client, ClientListFilter, ClientType, CreateClientInput, UpdateClientInput } from "../lib/types";
 import i18n from "../i18n";
+import { normalizePlateVin, plateIlikeLoosePattern, plateMatchesQuery } from "../lib/plateVin";
+import { MIN_PHONE_SEARCH_DIGITS, phoneDigits, phoneSearchVariants } from "../lib/phoneSearch";
+import { vehicleMakeModelMatches } from "../lib/vehicleTextSearch";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
+
+/**
+ * Page size for vehicle candidate scans during Clients search.
+ * Filtering runs in Supabase (`workspace_id`, `deleted_at`, OR make/model/plate/VIN);
+ * pages are fetched until exhausted so matches beyond any single page are not dropped.
+ * Client-side `vehicleRowMatchesSearch` then applies plate/VIN normalization and
+ * multi-token make/model AND semantics on each complete page.
+ */
+export const CLIENT_VEHICLE_SEARCH_PAGE_SIZE = 500;
+
+/** Field `or` filter for clients list search, including digit-normalized phone variants. */
+function clientFieldSearchOrFilter(term: string): string {
+  const parts = [
+    `name.ilike.%${term}%`,
+    `email.ilike.%${term}%`,
+    `phone.ilike.%${term}%`,
+    `tax_id.ilike.%${term}%`,
+    `contact_person.ilike.%${term}%`,
+    `address.ilike.%${term}%`,
+  ];
+  const digits = phoneDigits(term);
+  if (digits.length >= MIN_PHONE_SEARCH_DIGITS) {
+    for (const variant of phoneSearchVariants(digits)) {
+      // Variants are digits-only; strip PostgREST-sensitive chars defensively.
+      const safe = variant.replace(/[%_,().]/g, "");
+      if (safe.length >= MIN_PHONE_SEARCH_DIGITS) {
+        parts.push(`phone.ilike.%${safe}%`);
+      }
+    }
+  }
+  return parts.join(",");
+}
+
+function vehicleSearchOrFilter(term: string): string {
+  const parts = [
+    `license_plate.ilike.%${term}%`,
+    `vin.ilike.%${term}%`,
+    `make.ilike.%${term}%`,
+    `model.ilike.%${term}%`,
+  ];
+  const compactPlate = normalizePlateVin(term).replace(/[%_]/g, "");
+  if (compactPlate.length >= 2) {
+    const loose = plateIlikeLoosePattern(compactPlate);
+    if (loose) parts.push(`license_plate.ilike.${loose}`);
+  }
+  for (const token of term.split(/\s+/)) {
+    const safe = searchTerm(token);
+    if (safe.length < 2) continue;
+    parts.push(`make.ilike.%${safe}%`, `model.ilike.%${safe}%`);
+  }
+  return parts.join(",");
+}
+
+function vehicleRowMatchesSearch(
+  row: { make?: unknown; model?: unknown; license_plate?: unknown; vin?: unknown },
+  rawSearch: string,
+  term: string,
+): boolean {
+  const plate = typeof row.license_plate === "string" ? row.license_plate : "";
+  const vin = typeof row.vin === "string" ? row.vin : "";
+  const make = typeof row.make === "string" ? row.make : null;
+  const model = typeof row.model === "string" ? row.model : null;
+  if (plate && plateMatchesQuery(plate, rawSearch)) return true;
+  if (vin && plateMatchesQuery(vin, rawSearch)) return true;
+  if (vehicleMakeModelMatches(make, model, term)) return true;
+  return false;
+}
+
+type VehicleSearchRow = {
+  client_id?: unknown;
+  make?: unknown;
+  model?: unknown;
+  license_plate?: unknown;
+  vin?: unknown;
+};
+
+/**
+ * Collect distinct client IDs whose vehicles match the search within the workspace.
+ * Paginates the Supabase OR-filtered vehicle query until every matching page is read —
+ * no fixed row ceiling that can silently drop later matches.
+ */
+export async function collectVehicleMatchedClientIds(
+  workspaceId: string,
+  rawSearch: string,
+  term: string,
+  { pageSize = CLIENT_VEHICLE_SEARCH_PAGE_SIZE }: { pageSize?: number } = {},
+): Promise<{ clientIds: string[]; error: { code?: string; message: string } | null }> {
+  const safePageSize = Math.max(1, Math.min(1000, Math.floor(pageSize) || CLIENT_VEHICLE_SEARCH_PAGE_SIZE));
+  const orFilter = vehicleSearchOrFilter(term);
+  const clientIds = new Set<string>();
+  let offset = 0;
+
+  for (;;) {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("client_id, make, model, license_plate, vin")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .or(orFilter)
+      .order("id", { ascending: true })
+      .range(offset, offset + safePageSize - 1);
+
+    if (error) {
+      return { clientIds: [...clientIds], error: { code: error.code, message: error.message } };
+    }
+
+    const rows = (data ?? []) as VehicleSearchRow[];
+    for (const row of rows) {
+      if (!vehicleRowMatchesSearch(row, rawSearch, term)) continue;
+      const id = typeof row.client_id === "string" ? row.client_id.trim() : "";
+      if (id) clientIds.add(id);
+    }
+
+    if (rows.length < safePageSize) break;
+    offset += safePageSize;
+  }
+
+  return { clientIds: [...clientIds], error: null };
+}
+
+const CLIENT_IN_CHUNK = 200;
+
+async function fetchClientsByIds(
+  workspaceId: string,
+  clientIds: string[],
+  clientType: ClientListFilter,
+): Promise<Client[]> {
+  if (clientIds.length === 0) return [];
+
+  const out: Client[] = [];
+  for (let i = 0; i < clientIds.length; i += CLIENT_IN_CHUNK) {
+    const chunk = clientIds.slice(i, i + CLIENT_IN_CHUNK);
+    let vehicleClientsQuery = supabase
+      .from("clients")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .in("id", chunk);
+
+    if (clientType === "individual" || clientType === "organization") {
+      vehicleClientsQuery = vehicleClientsQuery.eq("client_type", clientType);
+    }
+
+    const { data: vehicleClients, error: vehicleClientsError } = await vehicleClientsQuery;
+    if (vehicleClientsError) throw new Error(vehicleClientsError.message);
+    for (const row of (vehicleClients ?? []) as Record<string, unknown>[]) {
+      out.push(toClient(row));
+    }
+  }
+  return out;
+}
 
 function textValue(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -113,14 +267,19 @@ export async function createClient({
   return ((data ?? []) as Record<string, unknown>[]).map(toClient);
 }
 
-export async function getClients(search: string, workspaceId: string | undefined, clientType: ClientListFilter = "all") {
+export async function getClients(
+  search: string,
+  workspaceId: string | undefined,
+  clientType: ClientListFilter = "all",
+  { includeVehicleMatches = true }: { includeVehicleMatches?: boolean } = {},
+) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
 
   let query = supabase.from("clients").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
 
   const term = searchTerm(search);
   if (term) {
-    query = query.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,tax_id.ilike.%${term}%,contact_person.ilike.%${term}%,address.ilike.%${term}%`);
+    query = query.or(clientFieldSearchOrFilter(term));
   }
 
   if (clientType === "individual" || clientType === "organization") {
@@ -133,7 +292,7 @@ export async function getClients(search: string, workspaceId: string | undefined
   if (error && (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("deleted_at")) {
     let fallback = supabase.from("clients").select("*").eq("workspace_id", workspaceId);
     if (term) {
-      fallback = fallback.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,tax_id.ilike.%${term}%,contact_person.ilike.%${term}%,address.ilike.%${term}%`);
+      fallback = fallback.or(clientFieldSearchOrFilter(term));
     }
     if (clientType === "individual" || clientType === "organization") {
       fallback = fallback.eq("client_type", clientType);
@@ -145,49 +304,33 @@ export async function getClients(search: string, workspaceId: string | undefined
 
   const byFields = ((clients ?? []) as Record<string, unknown>[]).map(toClient);
 
-  // Also match clients whose vehicle plate/VIN contains the term (merge picker / list search).
-  if (!term) return byFields;
+  // Also match clients via vehicles: plate/VIN (normalized) and make/model.
+  // Order create form disables this when it shows explicit vehicle+client plate hits instead.
+  if (!term || !includeVehicleMatches) return byFields;
 
-  const { data: plateHits, error: plateError } = await supabase
-    .from("vehicles")
-    .select("client_id")
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .or(`license_plate.ilike.%${term}%,vin.ilike.%${term}%`);
+  const { clientIds: matchedVehicleClientIds, error: vehicleError } = await collectVehicleMatchedClientIds(
+    workspaceId,
+    search,
+    term,
+  );
 
-  if (plateError) {
+  if (vehicleError) {
     // vehicles table / columns may be missing in older DBs — keep field matches only.
-    if (plateError.code === "42P01" || plateError.code === "42703" || plateError.code === "PGRST204") {
+    if (vehicleError.code === "42P01" || vehicleError.code === "42703" || vehicleError.code === "PGRST204") {
       return byFields;
     }
-    throw new Error(plateError.message);
+    throw new Error(vehicleError.message);
   }
 
-  const plateClientIds = [
-    ...new Set(
-      (plateHits ?? [])
-        .map((row) => (typeof row.client_id === "string" ? row.client_id.trim() : ""))
-        .filter(Boolean),
-    ),
-  ].filter((id) => !byFields.some((client) => client.id === id));
+  const seen = new Set(byFields.map((client) => client.id));
+  const vehicleClientIds = matchedVehicleClientIds.filter((id) => id && !seen.has(id));
+  if (vehicleClientIds.length === 0) return byFields;
 
-  if (plateClientIds.length === 0) return byFields;
+  const extras = (await fetchClientsByIds(workspaceId, vehicleClientIds, clientType)).filter(
+    (client) => !seen.has(client.id),
+  );
 
-  let plateQuery = supabase
-    .from("clients")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .in("id", plateClientIds);
-
-  if (clientType === "individual" || clientType === "organization") {
-    plateQuery = plateQuery.eq("client_type", clientType);
-  }
-
-  const { data: plateClients, error: plateClientsError } = await plateQuery;
-  if (plateClientsError) throw new Error(plateClientsError.message);
-
-  return [...byFields, ...((plateClients ?? []) as Record<string, unknown>[]).map(toClient)];
+  return [...byFields, ...extras];
 }
 
 export async function getClient(workspaceId: string | undefined, clientId: string) {

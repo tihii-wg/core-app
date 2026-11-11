@@ -140,8 +140,41 @@ vi.mock("../../services/apiCustomFields", async () => {
 });
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
-  useGetClientVehicles: () => ({ vehicles: vehiclesState.vehicles, isLoading: false, isError: false }),
+  useGetClientVehicles: () => ({ vehicles: vehiclesState.vehicles, isLoading: false, isError: false, isFetched: true }),
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
+}));
+
+const plateSearchState = vi.hoisted(() => ({
+  hits: [] as {
+    vehicleId: string;
+    licensePlate: string;
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    client: {
+      id: string;
+      name: string;
+      email: string;
+      phone: string;
+      address: string;
+      balance: number;
+      created_at: string;
+      client_type: "individual" | "organization" | null;
+      tax_id: string | null;
+      contact_person: string | null;
+    };
+  }[],
+  isLoading: false,
+  isError: false,
+}));
+
+vi.mock("../vehicles/useSearchVehiclesByRegistration", () => ({
+  useSearchVehiclesByRegistration: () => ({
+    hits: plateSearchState.hits,
+    isLoading: plateSearchState.isLoading,
+    isError: plateSearchState.isError,
+    error: null,
+  }),
 }));
 
 const createVehicleMock = vi.hoisted(() => vi.fn());
@@ -238,6 +271,9 @@ describe("AddNewOrderForm client validation", () => {
     employeesState.services = [];
     vehiclesState.vehicles = [];
     clientsState.clients = [];
+    plateSearchState.hits = [];
+    plateSearchState.isLoading = false;
+    plateSearchState.isError = false;
     Element.prototype.hasPointerCapture = () => false;
     Element.prototype.setPointerCapture = () => {};
     Element.prototype.releasePointerCapture = () => {};
@@ -298,8 +334,10 @@ describe("AddNewOrderForm client validation", () => {
     renderWithQuery(<AddNewOrderForm setCreateModalOpen={() => {}} searchQuery="" />);
 
     expect(screen.queryByLabelText(/^VIN$/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/License plate/i)).not.toBeInTheDocument();
+    // Client combobox mentions "license plate" in its placeholder; assert the order-level field is absent.
+    expect(screen.queryByLabelText(/^License plate$/i)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Make and model/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /license plate/i })).toBeInTheDocument();
   });
 
   it("shows the client vehicle selector (optional) and can select an existing vehicle", async () => {
@@ -431,6 +469,160 @@ describe("AddNewOrderForm client validation", () => {
       expect.objectContaining({
         clientId: "client-1",
         vehicleId: "veh-b",
+      }),
+    );
+  });
+
+  it("selecting a plate search hit sets both client_id and vehicle_id", async () => {
+    const user = userEvent.setup();
+    const plateClient = {
+      id: "client-plate",
+      name: "Plate Owner",
+      email: "",
+      phone: "+37360000000",
+      address: "",
+      balance: 0,
+      created_at: "",
+      client_type: "individual" as const,
+      tax_id: null,
+      contact_person: null,
+    };
+    plateSearchState.hits = [
+      {
+        vehicleId: "veh-plate",
+        licensePlate: "B123ABC",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        client: plateClient,
+      },
+      {
+        vehicleId: "veh-plate-2",
+        licensePlate: "B123XYZ",
+        make: "VW",
+        model: "Golf",
+        year: 2020,
+        client: { ...plateClient, id: "client-other", name: "Other Owner", phone: "+37361111111" },
+      },
+    ];
+    vehiclesState.vehicles = [
+      {
+        id: "veh-plate",
+        workspaceId: "ws-1",
+        clientId: "client-plate",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: null,
+        licensePlate: "B123ABC",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={vi.fn()} searchQuery="" />);
+
+    const clientInput = screen.getByRole("combobox", { name: /license plate/i });
+    await user.click(clientInput);
+    await user.type(clientInput, "B123");
+    expect(await screen.findByTestId("client-combobox-vehicle-veh-plate")).toBeInTheDocument();
+    expect(screen.getByTestId("client-combobox-vehicle-veh-plate-2")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("client-combobox-vehicle-veh-plate"));
+    expect(await screen.findByTestId("selected-vehicle-summary")).toHaveTextContent(/Toyota Corolla/i);
+
+    await user.click(saveDraftButton());
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-plate",
+        vehicleId: "veh-plate",
+      }),
+    );
+  });
+
+  it("clears a plate-selected vehicle when the user picks a different client by name", async () => {
+    const user = userEvent.setup();
+    clientsState.clients = [
+      {
+        id: "client-2",
+        name: "Grace Hopper",
+        email: "",
+        phone: "+37362222222",
+        address: "",
+        balance: 0,
+        created_at: "",
+        client_type: "individual",
+        tax_id: null,
+        contact_person: null,
+      },
+    ];
+    plateSearchState.hits = [
+      {
+        vehicleId: "veh-plate",
+        licensePlate: "B123ABC",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        client: {
+          id: "client-plate",
+          name: "Plate Owner",
+          email: "",
+          phone: "+37360000000",
+          address: "",
+          balance: 0,
+          created_at: "",
+          client_type: "individual",
+          tax_id: null,
+          contact_person: null,
+        },
+      },
+    ];
+    vehiclesState.vehicles = [
+      {
+        id: "veh-plate",
+        workspaceId: "ws-1",
+        clientId: "client-plate",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: null,
+        licensePlate: "B123ABC",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={vi.fn()} searchQuery="" />);
+    const clientInput = screen.getByRole("combobox", { name: /license plate/i });
+    await user.click(clientInput);
+    await user.type(clientInput, "B123");
+    await user.click(await screen.findByTestId("client-combobox-vehicle-veh-plate"));
+    expect(await screen.findByTestId("selected-vehicle-summary")).toBeInTheDocument();
+
+    await user.clear(clientInput);
+    await user.type(clientInput, "Grace");
+    await user.click(await screen.findByText("Grace Hopper"));
+    expect(screen.queryByTestId("selected-vehicle-summary")).not.toBeInTheDocument();
+
+    await user.click(saveDraftButton());
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-2",
+        vehicleId: null,
       }),
     );
   });

@@ -27,6 +27,7 @@ import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { clientVehiclesQueryKey, useGetClientVehicles } from "../vehicles/useGetClientVehicles";
+import { useSearchVehiclesByRegistration } from "../vehicles/useSearchVehiclesByRegistration";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
@@ -83,12 +84,6 @@ export default function AddNewOrderForm({
   const clientInputRef = useRef<HTMLInputElement | null>(null);
   const debouncedClientSearch = useDebounce(clientName.trim(), 250);
   const clientListSearch = debouncedClientSearch || searchQuery;
-  const { clients } = useGetClients(clientListSearch);
-  const clientsForCombobox = useMemo(() => {
-    const base = clients ?? [];
-    const extras = extraClients.filter((extra) => !base.some((client) => client.id === extra.id));
-    return extras.length > 0 ? [...extras, ...base] : base;
-  }, [clients, extraClients]);
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: createOrder } = useCreateOrder();
@@ -107,6 +102,20 @@ export default function AddNewOrderForm({
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const showWarrantyKm = industryUsesMileageWarranty(workflow);
+  // When plate hits are shown separately, skip getClients' plate→client expansion to avoid
+  // client-only rows that would clear the vehicle on select.
+  const { clients } = useGetClients(clientListSearch, "all", { includeVehicleMatches: !showVehicles });
+  const plateSearchEnabled = showVehicles && debouncedClientSearch.length >= 2;
+  const {
+    hits: vehicleRegistrationHits,
+    isLoading: vehicleRegistrationLoading,
+    isError: vehicleRegistrationError,
+  } = useSearchVehiclesByRegistration(debouncedClientSearch, { enabled: plateSearchEnabled });
+  const clientsForCombobox = useMemo(() => {
+    const base = clients ?? [];
+    const extras = extraClients.filter((extra) => !base.some((client) => client.id === extra.id));
+    return extras.length > 0 ? [...extras, ...base] : base;
+  }, [clients, extraClients]);
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const submitLockRef = useRef(false);
@@ -367,6 +376,10 @@ export default function AddNewOrderForm({
                 errors={!!errors.clientId}
                 clients={clientsForCombobox}
                 value={clientName}
+                placeholder={showVehicles ? t("clients.combobox.placeholderWithPlate") : undefined}
+                vehicleHits={showVehicles ? vehicleRegistrationHits : undefined}
+                vehicleHitsLoading={showVehicles && plateSearchEnabled ? vehicleRegistrationLoading : false}
+                vehicleHitsError={showVehicles && plateSearchEnabled ? vehicleRegistrationError : false}
                 onChange={(value) => {
                   setClientName(value);
                   field.onChange("");
@@ -382,6 +395,19 @@ export default function AddNewOrderForm({
                   setValue("vehicleId", "");
                   pendingVehicleIdRef.current = null;
                 }}
+                onSelectVehicle={
+                  showVehicles
+                    ? (hit) => {
+                        setExtraClients((current) =>
+                          current.some((client) => client.id === hit.client.id) ? current : [hit.client, ...current],
+                        );
+                        setClientName(hit.client.name);
+                        field.onChange(hit.client.id);
+                        setValue("vehicleId", hit.vehicleId, { shouldDirty: true });
+                        pendingVehicleIdRef.current = hit.vehicleId;
+                      }
+                    : undefined
+                }
                 onCreateRequest={(name) => {
                   setClientName(name);
                   field.onChange("");
