@@ -183,7 +183,7 @@ describe("describeOrderEvent", () => {
       ),
     ).toMatchObject({
       key: "paymentPartial",
-      params: { amount: "40", currency: "EUR", method: "cash", remaining: "60" },
+      params: { amount: "40", currency: "EUR", method: "Cash", remaining: "60" },
     });
 
     expect(

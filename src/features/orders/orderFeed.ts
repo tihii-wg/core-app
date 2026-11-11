@@ -126,12 +126,25 @@ function updatedLineParams(event: OrderEvent) {
   };
 }
 
-function methodLabel(method: string | null) {
+/**
+ * Resolve a stored payment_method code to a short UI label.
+ * Known codes use typed i18n keys (dynamic `string` keys make `t()` return `{}`
+ * under CustomTypeOptions and break `Record<string, string>` params).
+ * Unknown / empty values fall back safely — never `[object Object]`.
+ */
+function methodLabel(method: string | null): string {
   if (!method) return EMPTY;
-  // Translated name ("Наличные") instead of the stored code ("cash").
-  const key = `finance.paymentMethods.short.${method}`;
-  const translated = i18n.t(key);
-  return translated && translated !== key ? translated : method.replace(/_/g, "-");
+
+  switch (method) {
+    case "cash":
+    case "card":
+    case "bank-transfer":
+    case "bank_transfer":
+    case "other":
+      return i18n.t(`finance.paymentMethods.short.${method}`);
+    default:
+      return method.replace(/_/g, "-");
+  }
 }
 
 function fieldChangeSummary(event: OrderEvent): string {
@@ -232,7 +245,7 @@ function statusChangedNames(event: OrderEvent, statusLabel: (value: string) => s
   };
 }
 
-function paymentParams(event: OrderEvent) {
+function paymentParams(event: OrderEvent): Record<string, string> {
   const amount = payloadNumber(event, "amount");
   const remaining = payloadNumber(event, "remaining_after");
   const currency = payloadText(event, "currency_code") ?? "";
