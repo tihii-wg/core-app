@@ -128,7 +128,7 @@ export default function EmployeeDetailPanel({
               <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
                 {t("employees.detail.currentWorkload")}
               </h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-lg border border-border bg-muted/50 p-4">
                   <p className="text-xs font-medium text-muted-foreground">{t("employees.workload.open")}</p>
                   <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground tabular-nums">{workload.open}</p>
@@ -143,6 +143,10 @@ export default function EmployeeDetailPanel({
                   >
                     {workload.overdue}
                   </p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/50 p-4">
+                  <p className="text-xs font-medium text-muted-foreground">{t("employees.workload.closed")}</p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground tabular-nums">{workload.closed}</p>
                 </div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{t("employees.detail.workloadHint")}</p>

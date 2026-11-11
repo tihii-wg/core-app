@@ -1,6 +1,9 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubLocalStorage } from "../../tests/memoryStorage";
 import { renderWithQuery } from "../../tests/renderQuery";
-import { describe, expect, it, vi } from "vitest";
+import { CLIENT_COLUMN_STORAGE_KEY } from "./clientColumnVisibility";
 import { Clients } from "./Clients";
 
 vi.mock("./useGetClients", () => ({
@@ -61,7 +64,15 @@ vi.mock("../orders/useOrderDetails", () => ({
   }),
 }));
 
+vi.mock("../../hooks/use-mobile", () => ({
+  useIsMobile: () => false,
+}));
+
 describe("Clients order counts", () => {
+  beforeEach(() => {
+    stubLocalStorage();
+  });
+
   it("shows how many saved orders belong to each client", () => {
     renderWithQuery(<Clients />);
 
@@ -70,5 +81,44 @@ describe("Clients order counts", () => {
 
     expect(within(adaRow).getAllByRole("cell")[3]).toHaveTextContent("2");
     expect(within(graceRow).getAllByRole("cell")[3]).toHaveTextContent("0");
+  });
+
+  it("lets the user hide and show client fields from the Columns menu", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Clients />);
+
+    expect(screen.getByRole("columnheader", { name: "Contact" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Balance" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Columns" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Contact" }));
+    expect(screen.queryByRole("columnheader", { name: "Contact" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(CLIENT_COLUMN_STORAGE_KEY) ?? "[]")).not.toContain("contact");
+
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Contact" }));
+    expect(screen.getByRole("columnheader", { name: "Contact" })).toBeInTheDocument();
+  });
+
+  it("restores the saved column selection on load", () => {
+    window.localStorage.setItem(CLIENT_COLUMN_STORAGE_KEY, JSON.stringify(["orders", "balance"]));
+    renderWithQuery(<Clients />);
+
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Orders" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Balance" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Contact" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Client Type" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the search field available after column preferences change", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Clients />);
+
+    await user.click(screen.getByRole("button", { name: "Columns" }));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Balance" }));
+
+    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
   });
 });

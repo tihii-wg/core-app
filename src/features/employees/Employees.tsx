@@ -11,6 +11,12 @@ import type { Employee, EmployeeRole } from "../../lib/types";
 import AddNewEmployeesForm from "./AddNewEmployeesForm";
 import EditEmployeeForm from "./EditEmployeeForm";
 import EmployeeDetailPanel from "./EmployeeDetailPanel";
+import { EmployeeColumnsMenu } from "./EmployeeColumnsMenu";
+import {
+  readEmployeeVisibleColumns,
+  writeEmployeeVisibleColumns,
+  type EmployeeToggleableColumn,
+} from "./employeeColumnVisibility";
 import useGetEmployees from "./useGetEmployees";
 import { useDebounce } from "../../hooks/useDebounce";
 import { ErrorState, NoEmployees, NoSearchResults } from "../../ui/EmptyState";
@@ -29,7 +35,7 @@ const roleVariants: Record<EmployeeRole, "info" | "violet" | "default" | "warnin
   receptionist: "warning",
 };
 
-const emptyWorkload: EmployeeWorkloadCounts = { open: 0, overdue: 0 };
+const emptyWorkload: EmployeeWorkloadCounts = { open: 0, overdue: 0, closed: 0 };
 const emptyEmployees: Employee[] = [];
 
 export function Employees() {
@@ -52,6 +58,14 @@ export function Employees() {
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState(
+    () => new Set<EmployeeToggleableColumn>(readEmployeeVisibleColumns()),
+  );
+
+  const handleVisibleColumnsChange = (columns: Set<EmployeeToggleableColumn>) => {
+    setVisibleColumns(columns);
+    writeEmployeeVisibleColumns(columns);
+  };
 
   const today = localDateKey(new Date());
   const roster = employees ?? emptyEmployees;
@@ -72,7 +86,7 @@ export function Employees() {
   const showNoAssignedWork =
     workloadReady && roster.length > 0 && workload.assignedOpen === 0 && workload.unassigned.open === 0;
 
-  const columns: Column<Employee>[] = [
+  const allColumns: Column<Employee>[] = [
     {
       key: "name",
       header: t("employees.columns.name"),
@@ -144,6 +158,17 @@ export function Employees() {
       },
       className: "hidden md:table-cell text-right whitespace-nowrap",
     },
+    {
+      key: "closed",
+      header: t("employees.columns.closedOrders"),
+      cell: (emp) => {
+        if (ordersLoading) return <Skeleton className="ml-auto h-4 w-8" />;
+        if (ordersError) return <span className="text-muted-foreground">—</span>;
+        const counts = workload.byEmployeeId.get(emp.id) ?? emptyWorkload;
+        return <span className="font-medium text-foreground tabular-nums">{counts.closed}</span>;
+      },
+      className: "hidden lg:table-cell text-right whitespace-nowrap",
+    },
     ...(canMutateEmployees
       ? [
           {
@@ -172,6 +197,11 @@ export function Employees() {
       : []),
   ];
 
+  const columns = allColumns.filter((column) => {
+    if (column.key === "name" || column.key === "actions") return true;
+    return visibleColumns.has(column.key as EmployeeToggleableColumn);
+  });
+
   const handleRowClick = (emp: Employee) => {
     setSelectedEmployee(emp);
     setDetailPanelOpen(true);
@@ -199,42 +229,46 @@ export function Employees() {
 
       <SubscriptionReadOnlyNotice />
 
-      <SearchAndFilters
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder={t("employees.searchPlaceholder")}
-        filters={[
-          {
-            key: "role",
-            label: t("employees.filters.role"),
-            options: [
-              { value: "all", label: t("employees.filters.allRoles") },
-              { value: "admin", label: roleLabels.admin },
-              { value: "manager", label: roleLabels.manager },
-              { value: "technician", label: roleLabels.technician },
-              { value: "receptionist", label: roleLabels.receptionist },
-            ],
-            value: roleFilter,
-            onChange: (value) => setRoleFilter(value as EmployeeRole | "all"),
-          },
-          {
-            key: "status",
-            label: t("employees.filters.status"),
-            options: [
-              { value: "all", label: t("employees.filters.allStatuses") },
-              { value: "active", label: t("employees.statuses.active") },
-              { value: "inactive", label: t("employees.statuses.inactive") },
-            ],
-            value: statusFilter,
-            onChange: (value) => setStatusFilter(value as "all" | "active" | "inactive"),
-          },
-        ]}
-        onClearFilters={() => {
-          setSearchQuery("");
-          setRoleFilter("all");
-          setStatusFilter("all");
-        }}
-      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <SearchAndFilters
+          className="min-w-0 flex-1"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={t("employees.searchPlaceholder")}
+          filters={[
+            {
+              key: "role",
+              label: t("employees.filters.role"),
+              options: [
+                { value: "all", label: t("employees.filters.allRoles") },
+                { value: "admin", label: roleLabels.admin },
+                { value: "manager", label: roleLabels.manager },
+                { value: "technician", label: roleLabels.technician },
+                { value: "receptionist", label: roleLabels.receptionist },
+              ],
+              value: roleFilter,
+              onChange: (value) => setRoleFilter(value as EmployeeRole | "all"),
+            },
+            {
+              key: "status",
+              label: t("employees.filters.status"),
+              options: [
+                { value: "all", label: t("employees.filters.allStatuses") },
+                { value: "active", label: t("employees.statuses.active") },
+                { value: "inactive", label: t("employees.statuses.inactive") },
+              ],
+              value: statusFilter,
+              onChange: (value) => setStatusFilter(value as "all" | "active" | "inactive"),
+            },
+          ]}
+          onClearFilters={() => {
+            setSearchQuery("");
+            setRoleFilter("all");
+            setStatusFilter("all");
+          }}
+        />
+        <EmployeeColumnsMenu visibleColumns={visibleColumns} onVisibleColumnsChange={handleVisibleColumnsChange} />
+      </div>
 
       {showUnassignedSummary ? (
         <div className="flex flex-wrap items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-xs">

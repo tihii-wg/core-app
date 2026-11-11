@@ -76,6 +76,10 @@ export default {
     balance: "Balance",
     added: "Added",
   },
+  columns: {
+    button: "Columns",
+    menuLabel: "Show columns",
+  },
   addDialog: {
     title: "Add New Client",
     description: "Fill in client details below",

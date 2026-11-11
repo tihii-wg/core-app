@@ -80,6 +80,10 @@ const clients: Messages<typeof en> = {
     balance: "Sold",
     added: "Adăugat",
   },
+  columns: {
+    button: "Coloane",
+    menuLabel: "Afișează coloanele",
+  },
   addDialog: {
     title: "Client nou",
     description: "Completați datele clientului mai jos",

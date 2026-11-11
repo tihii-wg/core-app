@@ -1,11 +1,14 @@
 import type { Employee, Order } from "../../lib/types";
 import { orderAssignedToEmployee } from "../orders/orderAssignee";
+import { isOrderCurrentlyClosed } from "../orders/orderLifecycle";
 import { isOpenOrder, isOrderOverdue } from "../orders/orderVisibility";
 
-/** Live open-order workload for one employee (not period-scoped like Reports). */
+/** Live order workload for one employee (not period-scoped like Reports). */
 export type EmployeeWorkloadCounts = {
   open: number;
   overdue: number;
+  /** Orders currently closed (`status === "closed"` and `closedAt` set). */
+  closed: number;
 };
 
 export type TeamWorkloadSummary = {
@@ -15,11 +18,12 @@ export type TeamWorkloadSummary = {
   assignedOpen: number;
 };
 
-const emptyCounts = (): EmployeeWorkloadCounts => ({ open: 0, overdue: 0 });
+const emptyCounts = (): EmployeeWorkloadCounts => ({ open: 0, overdue: 0, closed: 0 });
 
 /**
- * Current open/overdue workload from live orders.
- * Reuses order visibility + assignee matching — not the Reports period helper.
+ * Current open/overdue/closed workload from live workspace orders.
+ * Assignee matching uses `orders.employee_id` via `orderAssignedToEmployee`.
+ * Closed uses `isOrderCurrentlyClosed` (not completed/paid as a stand-in).
  */
 export function teamWorkloadSummary(orders: Order[], employees: Employee[], today: string): TeamWorkloadSummary {
   const byEmployeeId = new Map<string, EmployeeWorkloadCounts>();
@@ -31,9 +35,19 @@ export function teamWorkloadSummary(orders: Order[], employees: Employee[], toda
   const unassigned = emptyCounts();
 
   for (const order of orders) {
+    const owner = employees.find((employee) => orderAssignedToEmployee(order.assignedEmployeeId, employee));
+
+    if (isOrderCurrentlyClosed(order)) {
+      if (owner) {
+        const counts = byEmployeeId.get(owner.id) ?? emptyCounts();
+        counts.closed += 1;
+        byEmployeeId.set(owner.id, counts);
+      }
+      continue;
+    }
+
     if (!isOpenOrder(order)) continue;
 
-    const owner = employees.find((employee) => orderAssignedToEmployee(order.assignedEmployeeId, employee));
     const overdue = isOrderOverdue(order, today);
 
     if (owner) {
@@ -62,5 +76,6 @@ export function workloadForEmployee(
   return {
     open: assigned.filter((order) => isOpenOrder(order)).length,
     overdue: assigned.filter((order) => isOrderOverdue(order, today)).length,
+    closed: assigned.filter((order) => isOrderCurrentlyClosed(order)).length,
   };
 }

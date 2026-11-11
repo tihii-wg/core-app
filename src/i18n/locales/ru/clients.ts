@@ -81,6 +81,10 @@ const clients: Messages<typeof en> = {
     balance: "Баланс",
     added: "Добавлен",
   },
+  columns: {
+    button: "Колонки",
+    menuLabel: "Показать колонки",
+  },
   addDialog: {
     title: "Новый клиент",
     description: "Заполните данные клиента ниже",

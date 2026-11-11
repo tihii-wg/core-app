@@ -14,6 +14,12 @@ import { AddClientDialog } from "./AddClientDialog";
 import EditClientForm from "./EditClientForm";
 import { DeleteClientDialog } from "./DeleteClientDialog";
 import { MergeClientsDialog } from "./MergeClientsDialog";
+import { ClientColumnsMenu } from "./ClientColumnsMenu";
+import {
+  readClientVisibleColumns,
+  writeClientVisibleColumns,
+  type ClientToggleableColumn,
+} from "./clientColumnVisibility";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { useGetClients } from "./useGetClients";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -59,6 +65,14 @@ export function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState(
+    () => new Set<ClientToggleableColumn>(readClientVisibleColumns()),
+  );
+
+  const handleVisibleColumnsChange = (columns: Set<ClientToggleableColumn>) => {
+    setVisibleColumns(columns);
+    writeClientVisibleColumns(columns);
+  };
 
   const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
 
@@ -95,8 +109,8 @@ export function Clients() {
     if (order) orderDetails.openOrder(order);
   }
 
-  // Table columns
-  const columns: Column<Client>[] = [
+  // Table columns — `name` and `actions` stay always visible; the rest follow Columns menu prefs.
+  const allColumns: Column<Client>[] = [
     {
       key: "name",
       header: t("clients.table.name"),
@@ -187,6 +201,11 @@ export function Clients() {
     },
   ];
 
+  const columns = allColumns.filter((column) => {
+    if (column.key === "name" || column.key === "actions") return true;
+    return visibleColumns.has(column.key as ClientToggleableColumn);
+  });
+
   const handleRowClick = (client: Client) => {
     setSelectedClient(client);
     setDetailPanelOpen(true);
@@ -215,25 +234,31 @@ export function Clients() {
 
       <SubscriptionReadOnlyNotice />
 
-      <SearchAndFilters
-        searchValue={searchQuery}
-        onSearchChange={setSearchQuery}
-        searchPlaceholder={clientCopy.searchPlaceholder}
-        filters={[
-          {
-            key: "clientType",
-            label: clientCopy.typeFilterLabel,
-            value: clientType,
-            onChange: (value) => setClientType(value as ClientListFilter),
-            options: [
-              { value: "all", label: t("common.all") },
-              { value: "individual", label: t("clients.filters.individuals") },
-              { value: "organization", label: t("clients.filters.organizations") },
-            ],
-          },
-        ]}
-        onClearFilters={() => setClientType("all")}
-      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <SearchAndFilters
+          className="min-w-0 flex-1"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          searchPlaceholder={clientCopy.searchPlaceholder}
+          filters={[
+            {
+              key: "clientType",
+              label: clientCopy.typeFilterLabel,
+              value: clientType,
+              onChange: (value) => setClientType(value as ClientListFilter),
+              options: [
+                { value: "all", label: t("common.all") },
+                { value: "individual", label: t("clients.filters.individuals") },
+                { value: "organization", label: t("clients.filters.organizations") },
+              ],
+            },
+          ]}
+          onClearFilters={() => setClientType("all")}
+        />
+        {isMobile ? null : (
+          <ClientColumnsMenu visibleColumns={visibleColumns} onVisibleColumnsChange={handleVisibleColumnsChange} />
+        )}
+      </div>
 
       {isMobile ? (
         isLoading || ordersLoading ? (

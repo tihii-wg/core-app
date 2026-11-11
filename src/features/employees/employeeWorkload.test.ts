@@ -62,13 +62,58 @@ describe("teamWorkloadSummary", () => {
 
     const summary = teamWorkloadSummary(orders, employees, today);
 
-    expect(summary.byEmployeeId.get("emp-1")).toEqual({ open: 2, overdue: 1 });
-    expect(summary.byEmployeeId.get("emp-2")).toEqual({ open: 1, overdue: 1 });
-    expect(summary.unassigned).toEqual({ open: 2, overdue: 1 });
+    expect(summary.byEmployeeId.get("emp-1")).toEqual({ open: 2, overdue: 1, closed: 0 });
+    expect(summary.byEmployeeId.get("emp-2")).toEqual({ open: 1, overdue: 1, closed: 0 });
+    expect(summary.unassigned).toEqual({ open: 2, overdue: 1, closed: 0 });
     expect(summary.assignedOpen).toBe(3);
   });
 
-  it("returns zero counts when there are no open orders", () => {
+  it("counts currently closed orders per assignee without double-counting", () => {
+    const employees = [
+      employee({ id: "emp-1", name: "Ada", profile_id: "profile-ada" }),
+      employee({ id: "emp-2", name: "Bob" }),
+    ];
+    const orders = [
+      order({
+        id: "closed-1",
+        assignedEmployeeId: "emp-1",
+        status: "closed",
+        closedAt: "2026-10-05T12:00:00.000Z",
+      }),
+      order({
+        id: "closed-2",
+        assignedEmployeeId: "profile-ada",
+        status: "closed",
+        closedAt: "2026-10-06T12:00:00.000Z",
+      }),
+      order({
+        id: "closed-bob",
+        assignedEmployeeId: "emp-2",
+        status: "closed",
+        closedAt: "2026-10-07T12:00:00.000Z",
+      }),
+      // completed/paid are not "currently closed"
+      order({ id: "completed", assignedEmployeeId: "emp-1", status: "completed" }),
+      order({ id: "paid", assignedEmployeeId: "emp-1", status: "paid", isPaid: true }),
+      // cancelled with preserved closedAt is formally closed history, not currently closed
+      order({
+        id: "cancelled-was-closed",
+        assignedEmployeeId: "emp-1",
+        status: "cancelled",
+        closedAt: "2026-09-01T12:00:00.000Z",
+      }),
+      // status closed without closedAt does not count
+      order({ id: "closed-no-ts", assignedEmployeeId: "emp-1", status: "closed", closedAt: null }),
+      order({ id: "open", assignedEmployeeId: "emp-1", status: "in-progress", deadline: "2026-10-12" }),
+    ];
+
+    const summary = teamWorkloadSummary(orders, employees, today);
+
+    expect(summary.byEmployeeId.get("emp-1")).toEqual({ open: 1, overdue: 0, closed: 2 });
+    expect(summary.byEmployeeId.get("emp-2")).toEqual({ open: 0, overdue: 0, closed: 1 });
+  });
+
+  it("returns zero closed when the employee has none", () => {
     const employees = [employee({ id: "emp-1" })];
     const summary = teamWorkloadSummary(
       [order({ status: "completed", deadline: "2026-10-01" }), order({ status: "paid", isPaid: true, assignedEmployeeId: "" })],
@@ -76,8 +121,8 @@ describe("teamWorkloadSummary", () => {
       today,
     );
 
-    expect(summary.byEmployeeId.get("emp-1")).toEqual({ open: 0, overdue: 0 });
-    expect(summary.unassigned).toEqual({ open: 0, overdue: 0 });
+    expect(summary.byEmployeeId.get("emp-1")).toEqual({ open: 0, overdue: 0, closed: 0 });
+    expect(summary.unassigned).toEqual({ open: 0, overdue: 0, closed: 0 });
     expect(summary.assignedOpen).toBe(0);
   });
 
@@ -89,8 +134,8 @@ describe("teamWorkloadSummary", () => {
       today,
     );
 
-    expect(summary.byEmployeeId.get("emp-old")).toEqual({ open: 1, overdue: 1 });
-    expect(summary.unassigned).toEqual({ open: 0, overdue: 0 });
+    expect(summary.byEmployeeId.get("emp-old")).toEqual({ open: 1, overdue: 1, closed: 0 });
+    expect(summary.unassigned).toEqual({ open: 0, overdue: 0, closed: 0 });
   });
 });
 
@@ -100,8 +145,14 @@ describe("workloadForEmployee", () => {
     const orders = [
       order({ id: "a", assignedEmployeeId: "emp-1", deadline: "2026-10-12", status: "new" }),
       order({ id: "b", assignedEmployeeId: "auth-1", deadline: "2026-10-01", status: "waiting-parts" }),
+      order({
+        id: "c",
+        assignedEmployeeId: "emp-1",
+        status: "closed",
+        closedAt: "2026-10-02T00:00:00.000Z",
+      }),
     ];
 
-    expect(workloadForEmployee(orders, emp, today)).toEqual({ open: 2, overdue: 1 });
+    expect(workloadForEmployee(orders, emp, today)).toEqual({ open: 2, overdue: 1, closed: 1 });
   });
 });
