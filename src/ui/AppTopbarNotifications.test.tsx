@@ -191,6 +191,68 @@ describe("AppTopbarNotifications", () => {
     expect(screen.getByText("ORD-FREE has no assignee")).toBeInTheDocument();
   });
 
+  it("suppresses the unassigned alert when a service has a technician even without a general assignee", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    orderHooks.orders = [
+      order({
+        id: "svc-assigned",
+        orderNumber: "ORD-SVC",
+        clientName: "Cara",
+        assignedEmployeeId: "",
+        assignedEmployeeName: "",
+        deadline: "2026-11-01",
+        status: "new",
+        services: [
+          { serviceId: "s1", serviceName: "Oil", price: 10, quantity: 1, technicianId: null },
+          { serviceId: "s2", serviceName: "Brakes", price: 20, quantity: 1, technicianId: "emp-line" },
+        ],
+      }),
+    ];
+    renderNotifications();
+
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(await screen.findByText("You're all caught up")).toBeInTheDocument();
+    expect(screen.queryByText("ORD-SVC has no assignee")).not.toBeInTheDocument();
+  });
+
+  it("refreshes the unassigned alert when live order assignee data changes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    orderHooks.orders = [
+      order({
+        id: "live-1",
+        orderNumber: "ORD-LIVE",
+        assignedEmployeeId: "",
+        assignedEmployeeName: "",
+        deadline: "",
+        status: "new",
+        services: [{ serviceId: "s1", serviceName: "Oil", price: 10, quantity: 1, technicianId: null }],
+      }),
+    ];
+    const { rerender } = renderNotifications();
+
+    expect(screen.getByRole("button", { name: /Notifications, 1 alert/i })).toBeInTheDocument();
+
+    orderHooks.orders = [
+      order({
+        id: "live-1",
+        orderNumber: "ORD-LIVE",
+        assignedEmployeeId: "",
+        assignedEmployeeName: "",
+        deadline: "",
+        status: "new",
+        services: [{ serviceId: "s1", serviceName: "Oil", price: 10, quantity: 1, technicianId: "emp-2" }],
+      }),
+    ];
+    rerender(<AppTopbarNotifications />);
+
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Notifications, \d+ alert/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(await screen.findByText("You're all caught up")).toBeInTheDocument();
+    expect(screen.queryByText("ORD-LIVE has no assignee")).not.toBeInTheDocument();
+  });
+
   it("lists low-stock and out-of-stock inventory alerts with remaining quantity", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     inventoryHooks.items = [

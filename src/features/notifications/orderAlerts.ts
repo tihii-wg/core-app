@@ -1,4 +1,4 @@
-import type { Order } from "../../lib/types";
+import type { Order, OrderService } from "../../lib/types";
 import { isOpenOrder, listOverdueOrders, listUpcomingOrders } from "../orders/orderVisibility";
 
 export type OrderAlertKind = "overdue" | "upcoming" | "unassigned";
@@ -36,8 +36,32 @@ function byDeadlineThenNumber(a: Order, b: Order) {
   return a.orderNumber.localeCompare(b.orderNumber);
 }
 
-function isUnassigned(order: Order) {
-  return !order.assignedEmployeeId?.trim();
+type OrderAssigneeFields = {
+  assignedEmployeeId?: string | null;
+  services?: Array<Pick<OrderService, "technicianId">> | null;
+};
+
+/** General/order-level assignee (`orders.employee_id` → `assignedEmployeeId`). */
+export function hasOrderLevelAssignee(order: OrderAssigneeFields) {
+  return Boolean(order.assignedEmployeeId?.trim());
+}
+
+/** True when any service line has a technician (`order_services.technician_id` → `technicianId`). */
+export function hasAtLeastOneServiceAssignee(order: OrderAssigneeFields) {
+  return (order.services ?? []).some((service) => Boolean(service.technicianId?.trim()));
+}
+
+/**
+ * Order has an assignee somewhere: general employee field OR any service technician.
+ * Team membership alone does not count.
+ */
+export function orderHasAnyAssignee(order: OrderAssigneeFields) {
+  return hasOrderLevelAssignee(order) || hasAtLeastOneServiceAssignee(order);
+}
+
+/** Open-order “without an assignee” alert — only when nobody is assigned at order or service level. */
+export function isOrderUnassignedForAlert(order: OrderAssigneeFields) {
+  return !orderHasAnyAssignee(order);
 }
 
 /**
@@ -62,7 +86,9 @@ export function buildOrderAlerts(orders: Order[], today: string, limit = DEFAULT
     alerts.push(toAlert("upcoming", order));
   }
 
-  const unassigned = orders.filter((order) => isOpenOrder(order) && isUnassigned(order) && !listed.has(order.id)).sort(byDeadlineThenNumber);
+  const unassigned = orders
+    .filter((order) => isOpenOrder(order) && isOrderUnassignedForAlert(order) && !listed.has(order.id))
+    .sort(byDeadlineThenNumber);
 
   for (const order of unassigned) {
     listed.add(order.id);
