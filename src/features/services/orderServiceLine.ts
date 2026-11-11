@@ -1,10 +1,35 @@
 import type { MileageUnit, OrderService, Service } from "../../lib/types";
 import {
   catalogWarrantyFromDbRow,
+  catalogWarrantyKmToOrderUnit,
   resolveOrderLineWarrantyForKind,
   type CatalogWarrantyDefaults,
 } from "../orders/catalogWarranty";
-import type { WorkspaceWarrantyDefaults } from "../orders/warranty";
+import { defaultsForKind, type WorkspaceWarrantyDefaults } from "../orders/warranty";
+
+/**
+ * Order line for a service typed in the combobox («create new» flow): not in the catalog yet, so it gets a
+ * client-side id plus the workspace default warranty. Shared by every form that composes service lines.
+ */
+export function newServiceToOrderLine(
+  serviceName: string,
+  price: number,
+  workspaceDefaults?: WorkspaceWarrantyDefaults | null,
+  orderUnit: MileageUnit = "km",
+): OrderService {
+  const warranty = workspaceDefaults
+    ? defaultsForKind(workspaceDefaults, "service")
+    : { durationMonths: null, mileageLimit: null };
+  return {
+    serviceId: crypto.randomUUID(),
+    serviceName,
+    price,
+    quantity: 1,
+    warrantyMonths: warranty.durationMonths,
+    warrantyKm: catalogWarrantyKmToOrderUnit(warranty.mileageLimit, orderUnit),
+    warrantyDays: null,
+  };
+}
 
 /**
  * Copies the current catalog name, price, and warranty defaults into a new order line snapshot.

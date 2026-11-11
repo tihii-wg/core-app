@@ -27,6 +27,8 @@ import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
+import AddOrderServiceDialog from "./AddOrderServiceDialog";
+import AddOrderMaterialDialog from "./AddOrderMaterialDialog";
 import {
   OrderInlineField,
   type OrderInlineFieldHandle,
@@ -173,6 +175,8 @@ export default function OrderDetailPanel({
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+  const [addServiceOpen, setAddServiceOpen] = useState(false);
+  const [addMaterialOpen, setAddMaterialOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
   // Session-backed tab: survives order switches and sheet reopen; first open in a session starts on info.
@@ -290,6 +294,8 @@ export default function OrderDetailPanel({
     setIsEditing(false);
     setEditFocusField(null);
     setEditingField(null);
+    setAddServiceOpen(false);
+    setAddMaterialOpen(false);
   }
 
   function stopEditing() {
@@ -625,6 +631,25 @@ export default function OrderDetailPanel({
   }, [inventoryItemsForCost]);
   const hasServiceLines = serviceLines.length > 0;
   const hasMaterialLines = materialLines.length > 0;
+  // Add-only dialogs: services follow the content-edit gate; materials also need warehouse rights (stock is issued on save).
+  const showAddService = showFieldEdit;
+  const showAddMaterial = showFieldEdit && canWarehouse;
+  const itemsUseWorks = usesWorksAndMaterialsTabLabel(industrySlug);
+  const addLineButtons =
+    showAddService || showAddMaterial ? (
+      <>
+        {showAddService ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setAddServiceOpen(true)}>
+            {t(itemsUseWorks ? "orders.detail.tabs.addWork" : "orders.detail.tabs.addService")}
+          </Button>
+        ) : null}
+        {showAddMaterial ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setAddMaterialOpen(true)}>
+            {t(itemsUseWorks ? "orders.detail.tabs.addMaterial" : "orders.detail.tabs.addProduct")}
+          </Button>
+        ) : null}
+      </>
+    ) : null;
   const detailVatRate = selectedOrder
     ? effectiveOrderVatRate(selectedOrder, workspaceVatRate)
     : null;
@@ -1211,14 +1236,15 @@ export default function OrderDetailPanel({
 
             {detailTab === "items" ? (
               <>
+            {addLineButtons && (hasServiceLines || hasMaterialLines) ? (
+              <div className="flex flex-wrap justify-end gap-2" data-testid="order-items-actions">
+                {addLineButtons}
+              </div>
+            ) : null}
             {!hasServiceLines && !hasMaterialLines ? (
               <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center" data-testid="order-items-empty">
                 <p className="text-sm font-medium text-foreground">{t("orders.detail.tabs.itemsEmpty")}</p>
-                {showFieldEdit ? (
-                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void startFieldEdit("services")}>
-                    {t("orders.detail.tabs.itemsAdd")}
-                  </Button>
-                ) : null}
+                {addLineButtons ? <div className="mt-3 flex flex-wrap justify-center gap-2">{addLineButtons}</div> : null}
               </div>
             ) : null}
             {hasServiceLines ? (
@@ -1717,6 +1743,22 @@ export default function OrderDetailPanel({
           balance={recordableOrderBalance(selectedOrder, payments)}
           onOrderUpdated={onOrderUpdated}
         />
+      ) : null}
+      {selectedOrder ? (
+        <>
+          <AddOrderServiceDialog
+            open={addServiceOpen && showAddService}
+            onOpenChange={setAddServiceOpen}
+            order={selectedOrder}
+            onAdded={onOrderUpdated}
+          />
+          <AddOrderMaterialDialog
+            open={addMaterialOpen && showAddMaterial}
+            onOpenChange={setAddMaterialOpen}
+            order={selectedOrder}
+            onAdded={onOrderUpdated}
+          />
+        </>
       ) : null}
       <OrderCatalogLinkDialogs
         serviceId={catalogServiceId}

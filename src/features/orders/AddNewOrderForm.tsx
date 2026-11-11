@@ -7,9 +7,7 @@ import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, Client, CreateMadalProps, Vehicle } from "../../lib/types";
-import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
@@ -41,22 +39,17 @@ import {
 } from "./industryOrderFieldHelpers";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderTeamSelect from "./OrderTeamSelect";
-import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
 import { mergeOrderTeam } from "./orderTeam";
 import { OrderVehicleFields } from "./OrderVehicleFields";
 import { buildOrderMileageSnapshot, persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
-import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
-import OrderLinePriceField from "./OrderLinePriceField";
-import OrderServiceKindSelect from "./OrderServiceKindSelect";
+import OrderServiceLinesFields from "./OrderServiceLinesFields";
 import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
 import OrderTotalsSummary from "./OrderTotalsSummary";
 import { previewOrderMoney } from "./orderMoneyPreview";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { defaultsForKind } from "./warranty";
-import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
 import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 
 export default function AddNewOrderForm({
@@ -481,123 +474,25 @@ export default function AddNewOrderForm({
           }}
         />
 
-        <div className="space-y-1.5">
-          <Label htmlFor="service">{servicesCfg?.label ?? copy.serviceLabel}</Label>
-
-          <ServiceCombobox
-            services={activeServices}
-            allowCreate={canCreateServices}
-            errors={!!errors.services?.root}
-            onSelect={(service) => {
-              const alreadyExists = serviceField.some((field) => field.serviceId === service.id);
-
-              if (alreadyExists) return;
-
-              const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
-              serviceAppend(line);
-              addPerformerToTeam(line.technicianId);
-              clearErrors("services");
-            }}
-            onCreate={(serviceName, price) => {
-              const alreadyExists = serviceField.some((field) => field.serviceName.toLowerCase() === serviceName.toLowerCase());
-
-              if (alreadyExists) return;
-
-              const warranty = defaultsForKind(warrantyDefaults, "service");
-              serviceAppend({
-                serviceId: crypto.randomUUID(),
-                serviceName,
-                price,
-                quantity: 1,
-                warrantyMonths: warranty.durationMonths,
-                warrantyKm: catalogWarrantyKmToOrderUnit(warranty.mileageLimit, orderMileageUnit),
-                warrantyDays: null,
-              });
-              clearErrors("services");
-            }}
-          />
-          {errors.services?.root?.message && <p className="text-xs text-destructive">{errors.services.root.message}</p>}
-
-          {serviceField.length > 0 && (
-            <div className="space-y-2">
-              {serviceField.map((field, index) => {
-                return (
-                  <div key={field.id} className="space-y-2 rounded-md border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
-                      </div>
-                      <OrderServiceKindSelect
-                        value={watchedServices?.[index]?.kind}
-                        lineName={field.serviceName}
-                        disabled={isSubmitting}
-                        onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={isSubmitting}
-                        onClick={() => serviceRemove(index)}
-                        aria-label={t("orders.form.removeService", { name: field.serviceName })}
-                      >
-                        {t("orders.form.remove")}
-                      </Button>
-                    </div>
-                    <Controller
-                      name={`services.${index}.price`}
-                      control={control}
-                      rules={{
-                        validate: (value) => {
-                          const number = typeof value === "number" ? value : Number(value);
-                          if ((value as unknown) === "" || !Number.isFinite(number) || number < 0) {
-                            return t("orders.form.freeformPriceInvalid") as string;
-                          }
-                          return true;
-                        },
-                      }}
-                      render={({ field: priceField }) => (
-                        <OrderLinePriceField
-                          id={`create-service-price-${index}`}
-                          value={priceField.value as number | "" | null | undefined}
-                          catalogPrice={activeServices?.find((service) => service.id === field.serviceId)?.service_price ?? null}
-                          disabled={isSubmitting}
-                          errorMessage={errors.services?.[index]?.price?.message}
-                          formatMoney={formatMoney}
-                          onChange={priceField.onChange}
-                        />
-                      )}
-                    />
-                    <OrderLinePerformerSelect
-                      id={`create-service-performer-${index}`}
-                      value={watchedServices?.[index]?.technicianId ?? ""}
-                      options={technicianOptions}
-                      disabled={isSubmitting}
-                      onChange={(technicianId) => {
-                        setValue(`services.${index}.technicianId`, technicianId || null, { shouldDirty: true });
-                        addPerformerToTeam(technicianId);
-                      }}
-                    />
-                    <OrderLineWarrantyFields
-                      idPrefix={`create-service-${index}`}
-                      months={watchedServices?.[index]?.warrantyMonths}
-                      days={watchedServices?.[index]?.warrantyDays}
-                      km={watchedServices?.[index]?.warrantyKm}
-                      mileageUnit={orderMileageUnit}
-                      showWarrantyKm={showWarrantyKm}
-                      disabled={isSubmitting}
-                      onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
-                        setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
-                        setValue(`services.${index}.warrantyDays`, warrantyDays, { shouldDirty: true });
-                        setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true });
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <OrderServiceLinesFields
+          control={control as never}
+          fields={serviceField}
+          append={serviceAppend}
+          onRemove={serviceRemove}
+          setValue={setValue}
+          catalogServices={activeServices}
+          allowCreate={canCreateServices}
+          performerOptions={technicianOptions}
+          onPerformerChosen={addPerformerToTeam}
+          onLineAdded={() => clearErrors("services")}
+          warrantyDefaults={warrantyDefaults}
+          orderMileageUnit={orderMileageUnit}
+          showWarrantyKm={showWarrantyKm}
+          disabled={isSubmitting}
+          idPrefix="create-service"
+          label={servicesCfg?.label ?? copy.serviceLabel}
+          errors={errors.services}
+        />
 
         {materialsCfg?.visible !== false ? (
           <OrderMaterialLinesEditor

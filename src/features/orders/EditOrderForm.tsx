@@ -11,9 +11,7 @@ import { Textarea } from "../../ui/Textarea";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import type { EditOrderFormData, Order, OrderMaterial, OrderService } from "../../lib/types";
 import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
-import ServiceCombobox from "../services/ServiceCombobox";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
@@ -24,8 +22,7 @@ import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 import { canMutateOrderContent } from "./closedOrderPermissions";
-import { defaultsForKind, isWarrantySourceFormallyClosed, type WarrantySnapshot } from "./warranty";
-import { catalogWarrantyKmToOrderUnit } from "./catalogWarranty";
+import { isWarrantySourceFormallyClosed, type WarrantySnapshot } from "./warranty";
 import { formatWarrantyEndsOn } from "./OrderWarrantyIndicator";
 import { OrderWarrantyPauseNotice } from "./OrderWarrantyPauseNotice";
 import { canManageServices } from "../workspaces/workspaceRoles";
@@ -42,7 +39,6 @@ import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscriptio
 import { assignableTeamOptions, assignableTechnicians } from "./assignableTechnicians";
 import OrderAssigneeSelect from "./OrderAssigneeSelect";
 import OrderTeamSelect from "./OrderTeamSelect";
-import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
 import { mergeOrderTeam } from "./orderTeam";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderIndustryFields from "./OrderIndustryFields";
@@ -67,9 +63,7 @@ import {
 } from "./orderVehicleMileage";
 import { useClearHiddenOrderAssetErrors } from "./useClearHiddenOrderAssetErrors";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
-import OrderServiceKindSelect from "./OrderServiceKindSelect";
-import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
-import OrderLinePriceField from "./OrderLinePriceField";
+import OrderServiceLinesFields from "./OrderServiceLinesFields";
 import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 import { registerOrderUnsavedEdits } from "./orderUnsavedEdits";
 import { focusOrderEditField, type OrderEditField } from "./orderEditFields";
@@ -358,10 +352,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
     if (hideDuplicateVehicleAssetFields) clearErrors(["device", "carNumber", "vin"]);
   }, [clearErrors, hideDuplicateVehicleAssetFields]);
 
-  function hasService(serviceId: string | null, serviceName: string) {
-    return serviceFields.some((field) => (serviceId !== null && field.serviceId === serviceId) || field.serviceName.toLowerCase() === serviceName.toLowerCase());
-  }
-
   const saveOrder = async (data: EditOrderFormData): Promise<Order | null> => {
     const selectedVehicleId = data.vehicleId?.trim() || "";
     let selectedVehicle = selectedVehicleId
@@ -579,124 +569,30 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
 
       <OrderWarrantyPauseNotice order={order} records={warrantyRecords} />
 
-      <div className="space-y-1.5" data-edit-field="services">
-        <Label htmlFor="service">{t("orders.form.addServiceLabel")}</Label>
-        <ServiceCombobox
-          services={activeServices}
-          allowCreate={canCreateServices}
-          errors={!!errors.services?.root}
-          onSelect={(service) => {
-            if (hasService(service.id, service.service_name)) return;
-            const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
-            serviceAppend(line);
-            addPerformerToTeam(line.technicianId);
-            clearErrors("services");
-          }}
-          onCreate={(serviceName, price) => {
-            if (hasService(null, serviceName)) return;
-            const warranty = defaultsForKind(warrantyDefaults, "service");
-            serviceAppend({
-              serviceId: crypto.randomUUID(),
-              serviceName,
-              price,
-              quantity: 1,
-              warrantyMonths: warranty.durationMonths,
-              warrantyKm: catalogWarrantyKmToOrderUnit(warranty.mileageLimit, orderMileageUnit),
-              warrantyDays: null,
-            });
-            clearErrors("services");
-          }}
-        />
-        {errors.services?.root?.message && <p className="text-xs text-destructive">{errors.services.root.message}</p>}
-        {serviceFields.length > 0 && (
-          <div className="space-y-2">
-            {serviceFields.map((field, index) => {
-              const line = watchedServices?.[index] ?? field;
-              const restartKey = warrantyCatalogKeyForService(line);
-              const showRestartHint = Boolean(restartKey && restartWarrantyHints.has(restartKey));
-              return (
-              <div key={field.fieldKey} className="space-y-2 rounded-md border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{field.serviceName}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <OrderServiceKindSelect
-                      value={watchedServices?.[index]?.kind}
-                      lineName={field.serviceName}
-                      disabled={isSubmitting}
-                      onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void requestRemoveService(index)}
-                      disabled={isSubmitting}
-                      aria-label={t("orders.form.removeService", { name: field.serviceName })}
-                    >
-                      {t("orders.form.remove")}
-                    </Button>
-                  </div>
-                </div>
-                {showRestartHint ? (
-                  <p className="text-xs text-amber-700 dark:text-amber-400" data-warranty-restart-hint>
-                    {t("orders.warranty.newWarrantyFromCloseHint")}
-                  </p>
-                ) : null}
-                <Controller
-                  name={`services.${index}.price`}
-                  control={control}
-                  rules={{
-                    validate: (value) => {
-                      const number = typeof value === "number" ? value : Number(value);
-                      if ((value as unknown) === "" || !Number.isFinite(number) || number < 0) {
-                        return t("orders.form.freeformPriceInvalid") as string;
-                      }
-                      return true;
-                    },
-                  }}
-                  render={({ field: priceField }) => (
-                    <OrderLinePriceField
-                      id={`edit-service-price-${index}`}
-                      value={priceField.value as number | "" | null | undefined}
-                      catalogPrice={activeServices?.find((service) => service.id === field.serviceId)?.service_price ?? null}
-                      disabled={warrantyDisabled}
-                      errorMessage={errors.services?.[index]?.price?.message}
-                      formatMoney={formatMoney}
-                      onChange={priceField.onChange}
-                    />
-                  )}
-                />
-                <OrderLinePerformerSelect
-                  id={`edit-service-performer-${index}`}
-                  value={watchedServices?.[index]?.technicianId ?? ""}
-                  options={teamOptions}
-                  disabled={isSubmitting}
-                  onChange={(technicianId) => {
-                    setValue(`services.${index}.technicianId`, technicianId || null, { shouldDirty: true });
-                    addPerformerToTeam(technicianId);
-                  }}
-                />
-                <OrderLineWarrantyFields
-                  idPrefix={`edit-service-${index}`}
-                  months={watchedServices?.[index]?.warrantyMonths}
-                  days={watchedServices?.[index]?.warrantyDays}
-                  km={watchedServices?.[index]?.warrantyKm}
-                  mileageUnit={orderMileageUnit}
-                  showWarrantyKm={showWarrantyKm}
-                  disabled={warrantyDisabled}
-                  onChange={({ warrantyMonths, warrantyDays, warrantyKm }) => {
-                    setValue(`services.${index}.warrantyMonths`, warrantyMonths, { shouldDirty: true });
-                    setValue(`services.${index}.warrantyDays`, warrantyDays, { shouldDirty: true });
-                    setValue(`services.${index}.warrantyKm`, warrantyKm, { shouldDirty: true });
-                  }}
-                />
-              </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <OrderServiceLinesFields
+        control={control as never}
+        fields={serviceFields}
+        append={serviceAppend}
+        onRemove={(index) => void requestRemoveService(index)}
+        setValue={setValue}
+        catalogServices={activeServices}
+        allowCreate={canCreateServices}
+        performerOptions={teamOptions}
+        onPerformerChosen={addPerformerToTeam}
+        onLineAdded={() => clearErrors("services")}
+        warrantyDefaults={warrantyDefaults}
+        orderMileageUnit={orderMileageUnit}
+        showWarrantyKm={showWarrantyKm}
+        disabled={isSubmitting}
+        warrantyDisabled={warrantyDisabled}
+        idPrefix="edit-service"
+        label={t("orders.form.addServiceLabel")}
+        errors={errors.services}
+        restartHintForLine={(line) => {
+          const key = warrantyCatalogKeyForService(line);
+          return Boolean(key && restartWarrantyHints.has(key));
+        }}
+      />
 
       {materialsCfg?.visible !== false ? (
         <OrderMaterialLinesEditor
