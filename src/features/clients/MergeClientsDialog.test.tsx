@@ -126,4 +126,27 @@ describe("MergeClientsDialog", () => {
     await waitFor(() => expect(onMerged).toHaveBeenCalledWith(expect.objectContaining({ id: ada.id, name: "Merged Client" })));
     expect(onClose).toHaveBeenCalled();
   });
+  it("preselects the initial client and keeps it as the main client", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    renderWithQuery(
+      <MergeClientsDialog
+        open
+        onClose={onClose}
+        clients={[ada, grace]}
+        orderCountByClientId={new Map([[ada.id, 0], [grace.id, 9]])}
+        initialTargetClientId={ada.id}
+        onMerged={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("Grace Hopper");
+    expect(screen.getByRole("checkbox", { name: /Ada Lovelace/i })).toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: /Grace Hopper/i }));
+    await user.click(screen.getByRole("button", { name: /Next|Далее|Înainte/i }));
+
+    // Grace has more orders, but the card's client stays the target.
+    await waitFor(() => expect(mergeClientsPreview).toHaveBeenCalledWith("ws-1", ada.id, [grace.id]));
+  });
 });

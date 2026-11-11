@@ -489,6 +489,11 @@ export interface Invoice {
   workspaceId: string;
   invoiceNumber: string;
   clientId: string;
+  /**
+   * Optional payer client (invoices.payer_client_id). Absent when the column is not
+   * available on the workspace DB, or when no payer was set.
+   */
+  payerClientId?: string;
   clientName: string;
   /** Live clients.phone for the linked client when available. */
   clientPhone?: string;

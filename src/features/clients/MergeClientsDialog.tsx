@@ -24,6 +24,11 @@ type MergeClientsDialogProps = {
   clients: Client[];
   orderCountByClientId: Map<string, number>;
   onMerged: (client: Client) => void;
+  /**
+   * Client opened from its card: preselected in step 1 and kept as the main (surviving) client
+   * in step 2. The user still picks the other client(s) to merge into it.
+   */
+  initialTargetClientId?: string;
 };
 
 type Step = 1 | 2 | 3;
@@ -36,6 +41,7 @@ export function MergeClientsDialog({
   clients,
   orderCountByClientId,
   onMerged,
+  initialTargetClientId,
 }: MergeClientsDialogProps) {
   const { t } = useTranslation();
   const [isCompact, setIsCompact] = useState(() =>
@@ -47,8 +53,20 @@ export function MergeClientsDialog({
   const [step, setStep] = useState<Step>(1);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 250);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [selectedCache, setSelectedCache] = useState<Map<string, Client>>(new Map());
+  const initialTarget = initialTargetClientId ? clients.find((client) => client.id === initialTargetClientId) : undefined;
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => (open && initialTarget ? [initialTarget.id] : []));
+  const [selectedCache, setSelectedCache] = useState<Map<string, Client>>(
+    () => new Map(open && initialTarget ? [[initialTarget.id, initialTarget]] : []),
+  );
+  // Preselect the card's client each time the dialog opens (the close effect below clears the selection).
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open && initialTarget) {
+      setSelectedIds([initialTarget.id]);
+      setSelectedCache(new Map([[initialTarget.id, initialTarget]]));
+    }
+  }
   const [mainId, setMainId] = useState<string>("");
   const [newName, setNewName] = useState("");
   const [preview, setPreview] = useState<MergeClientsPreview | null>(null);
@@ -134,9 +152,14 @@ export function MergeClientsDialog({
     const ranked = [...selectedClients].sort(
       (a, b) => (orderCountByClientId.get(b.id) ?? 0) - (orderCountByClientId.get(a.id) ?? 0) || a.name.localeCompare(b.name),
     );
-    const main = ranked[0]?.id ?? selectedIds[0];
+    const preferred =
+      initialTargetClientId && selectedIds.includes(initialTargetClientId)
+        ? selectedClients.find((client) => client.id === initialTargetClientId)
+        : undefined;
+    const mainClient = preferred ?? ranked[0];
+    const main = mainClient?.id ?? selectedIds[0];
     setMainId(main);
-    setNewName(ranked[0]?.name ?? "");
+    setNewName(mainClient?.name ?? "");
     const sources = selectedIds.filter((id) => id !== main);
     try {
       const result = await previewMutation.mutateAsync({ targetClientId: main, sourceClientIds: sources });

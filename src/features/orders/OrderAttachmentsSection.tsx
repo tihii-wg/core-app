@@ -80,7 +80,7 @@ function ProviderBadge({ attachment }: { attachment: OrderAttachment }) {
   return null;
 }
 
-function AttachmentThumb({ attachment, onOpen }: { attachment: OrderAttachment; onOpen: () => void }) {
+export function AttachmentThumb({ attachment, onOpen }: { attachment: OrderAttachment; onOpen: () => void }) {
   const { t } = useTranslation();
   const isImage = isImageMimeType(attachment.mimeType);
   const drive = isDriveAttachment(attachment);
@@ -126,7 +126,7 @@ function AttachmentThumb({ attachment, onOpen }: { attachment: OrderAttachment; 
   );
 }
 
-function AttachmentPreviewDialog({
+export function AttachmentPreviewDialog({
   attachment,
   open,
   onOpenChange,

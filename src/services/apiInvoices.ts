@@ -65,9 +65,23 @@ export function alreadyInvoicedMessage(invoiceNumber?: string) {
 const invoiceStatuses = new Set<InvoiceStatus>(["draft", "sent", "paid", "overdue", "erroneous"]);
 const invoiceColumns =
   "id, workspace_id, order_id, client_id, number, status, client_name, order_number, device, car_number, vin, description, subtotal, total, due_date, paid_at, created_by, created_at, updated_at";
+/** Soft-optional: crm_ro_v1 added payer_client_id; older DBs omit it. */
+let invoicePayerClientIdSupported: boolean | null = null;
+function invoiceColumnsWithOptionalPayer(): string {
+  return invoicePayerClientIdSupported === false ? invoiceColumns : `${invoiceColumns}, payer_client_id`;
+}
 // Disambiguate: invoices has two FKs to clients (client_id + payer_client_id from crm_ro_v1).
-const invoiceListColumns = `${invoiceColumns},clients!invoices_client_id_fkey(phone)`;
+function invoiceListColumnsWithOptionalPayer(): string {
+  return `${invoiceColumnsWithOptionalPayer()},clients!invoices_client_id_fkey(phone)`;
+}
 const invoiceItemColumns = "id, invoice_id, service_id, service_name, price, quantity, position, created_at";
+
+function isMissingInvoicePayerClientIdColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/payer_client_id/i.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
+}
 
 function text(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -113,11 +127,13 @@ function toInvoice(row: Record<string, unknown>, memberNames: Map<string, string
   const total = Number(row.total ?? 0);
   const createdById = text(row.created_by);
   const clientPhone = clientPhoneFromRow(row.clients);
+  const payerClientId = text(row.payer_client_id);
   return {
     id: String(row.id),
     workspaceId: text(row.workspace_id),
     invoiceNumber: text(row.number),
     clientId: text(row.client_id),
+    ...(payerClientId ? { payerClientId } : {}),
     clientName: text(row.client_name),
     ...(clientPhone ? { clientPhone } : {}),
     ...(text(row.order_id) ? { orderId: text(row.order_id) } : {}),
@@ -163,17 +179,35 @@ function toInvoiceDocument(row: Record<string, unknown>, items: Record<string, u
   };
 }
 
+/** Dynamic select string — cast keeps supabase-js happy when payer_client_id is soft-optional. */
+function invoiceListSelect() {
+  return invoiceListColumnsWithOptionalPayer() as typeof invoiceColumns;
+}
+function invoiceRowSelect() {
+  return invoiceColumnsWithOptionalPayer() as typeof invoiceColumns;
+}
+
 /** Invoices of the workspace, newest first. Invoices still being numbered are left out. */
 export async function getInvoices(workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("invoices")
-    .select(invoiceListColumns)
+    .select(invoiceListSelect())
     .eq("workspace_id", targetWorkspaceId)
     .order("created_at", { ascending: false });
+  if (error && isMissingInvoicePayerClientIdColumn(error)) {
+    invoicePayerClientIdSupported = false;
+    ({ data, error } = await supabase
+      .from("invoices")
+      .select(invoiceListSelect())
+      .eq("workspace_id", targetWorkspaceId)
+      .order("created_at", { ascending: false }));
+  }
 
   if (error) throw toInvoiceError(error);
-  const rows = ((data ?? []) as Record<string, unknown>[]).filter((row) => !text(row.number).startsWith(pendingNumberPrefix));
+  const rows = ((data ?? []) as unknown as Record<string, unknown>[]).filter(
+    (row) => !text(row.number).startsWith(pendingNumberPrefix),
+  );
   const createdByIds = rows.map((row) => text(row.created_by)).filter(Boolean);
   const memberNames = await memberDisplayNames(targetWorkspaceId, [...new Set(createdByIds)]);
   return rows.map((row) => toInvoice(row, memberNames));
@@ -182,12 +216,21 @@ export async function getInvoices(workspaceId: string | undefined) {
 /** One invoice of the workspace with the lines it copied from its order. */
 export async function getInvoice(invoiceId: string, workspaceId: string | undefined): Promise<InvoiceDocument> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("invoices")
-    .select(invoiceListColumns)
+    .select(invoiceListSelect())
     .eq("id", invoiceId)
     .eq("workspace_id", targetWorkspaceId)
     .maybeSingle();
+  if (error && isMissingInvoicePayerClientIdColumn(error)) {
+    invoicePayerClientIdSupported = false;
+    ({ data, error } = await supabase
+      .from("invoices")
+      .select(invoiceListSelect())
+      .eq("id", invoiceId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle());
+  }
 
   if (error) throw toInvoiceError(error);
   if (!data) throw new Error(i18n.t("invoices.errors.notFound"));
@@ -195,7 +238,7 @@ export async function getInvoice(invoiceId: string, workspaceId: string | undefi
   const { data: items, error: itemsError } = await supabase.from("invoice_items").select(invoiceItemColumns).eq("invoice_id", invoiceId).order("position", { ascending: true });
   if (itemsError) throw toInvoiceError(itemsError);
 
-  const row = data as Record<string, unknown>;
+  const row = data as unknown as Record<string, unknown>;
   const createdById = text(row.created_by);
   const memberNames = await memberDisplayNames(targetWorkspaceId, createdById ? [createdById] : []);
   return toInvoiceDocument(row, (items ?? []) as Record<string, unknown>[], memberNames);
@@ -208,7 +251,7 @@ export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStat
 
   const { data: current, error: currentError } = await supabase
     .from("invoices")
-    .select(invoiceColumns)
+    .select(invoiceRowSelect())
     .eq("id", invoiceId)
     .eq("workspace_id", targetWorkspaceId)
     .maybeSingle();
@@ -228,7 +271,7 @@ export async function updateInvoiceStatus(invoiceId: string, status: InvoiceStat
     .update({ status, paid_at: status === "paid" ? new Date().toISOString() : null })
     .eq("id", invoiceId)
     .eq("workspace_id", targetWorkspaceId)
-    .select(invoiceColumns)
+    .select(invoiceRowSelect())
     .maybeSingle();
 
   if (error) throw toInvoiceError(error);
@@ -305,7 +348,7 @@ async function issueInvoiceNumber(workspaceId: string, invoice: Record<string, u
     .eq("id", invoice.id)
     .eq("workspace_id", workspaceId)
     .eq("number", invoice.number)
-    .select(invoiceColumns)
+    .select(invoiceRowSelect())
     .maybeSingle();
 
   if (error) throw toInvoiceError(error);
@@ -394,7 +437,7 @@ export async function createInvoiceFromOrder(orderId: string, workspaceId: strin
       subtotal,
       total: subtotal,
     })
-    .select(invoiceColumns)
+    .select(invoiceRowSelect())
     .single();
 
   if (insertError) throw insertError.code === "23505" ? new Error(alreadyInvoicedMessage()) : toInvoiceError(insertError);

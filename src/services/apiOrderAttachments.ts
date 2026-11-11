@@ -129,6 +129,50 @@ export async function listOrderAttachments(workspaceId: string | undefined, orde
     .filter((row): row is OrderAttachment => row != null);
 }
 
+const ATTACHMENT_ORDER_CHUNK = 100;
+
+/**
+ * Metadata for many orders at once (client card «Файлы заказов»). Same rows/select and
+ * legacy-column fallback as `listOrderAttachments`, but one `IN (...)` query per chunk of 100 order ids
+ * instead of one request per order.
+ */
+export async function listOrderAttachmentsForOrders(workspaceId: string | undefined, orderIds: string[]) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const ids = [...new Set(orderIds.filter(Boolean))];
+  if (ids.length === 0) return [];
+
+  const selectLegacy =
+    "id, workspace_id, order_id, uploaded_by, file_name, storage_path, storage_provider, drive_file_id, drive_folder_id, mime_type, file_size, created_at";
+
+  const rows: Record<string, unknown>[] = [];
+  for (let index = 0; index < ids.length; index += ATTACHMENT_ORDER_CHUNK) {
+    const chunk = ids.slice(index, index + ATTACHMENT_ORDER_CHUNK);
+    let result = await supabase
+      .from("order_attachments")
+      .select(ATTACHMENT_SELECT)
+      .eq("workspace_id", targetWorkspaceId)
+      .in("order_id", chunk)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    if (result.error && /nas_path|deleted_at|PGRST204|42703/i.test(result.error.message ?? "")) {
+      result = (await supabase
+        .from("order_attachments")
+        .select(selectLegacy)
+        .eq("workspace_id", targetWorkspaceId)
+        .in("order_id", chunk)
+        .order("created_at", { ascending: false })) as unknown as typeof result;
+    }
+    if (result.error) throw new Error(errorMessage(result.error, attachmentErrors.loadFailed()));
+    rows.push(...((result.data ?? []) as Record<string, unknown>[]));
+  }
+
+  return rows
+    .map((row) => toOrderAttachment(row))
+    .filter((row): row is OrderAttachment => row != null)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 export async function createOrderAttachmentSignedUrl(
   storagePath: string | null | undefined,
   expiresIn = ORDER_ATTACHMENT_SIGNED_URL_SECONDS,
