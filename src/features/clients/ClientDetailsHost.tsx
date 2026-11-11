@@ -10,7 +10,7 @@ type ClientDetailsHostProps = {
   onClientUpdated: (client: Client) => void;
   onClientDeleted?: (clientId: string) => void;
   onOpenOrder?: (order: Order) => void;
-  onCreateOrder?: (client: Client) => void;
+  onCreateOrder?: (client: Client, vehicleId?: string) => void;
 };
 
 /** Wires the existing Client Details sheet to workspace orders. */

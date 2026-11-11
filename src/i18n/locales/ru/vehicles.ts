@@ -4,6 +4,8 @@ export default {
   addTitle: "Добавить транспорт",
   addDescription: "Добавьте транспорт для этого клиента.",
   addFromOrderDescription: "Создайте транспорт для выбранного клиента. Черновик заказа сохранится.",
+  createOrder: "Создать заказ",
+  createOrderFor: "Создать заказ для {{name}}",
   edit: "Редактировать транспорт",
   editTitle: "Редактировать транспорт",
   editDescription: "Обновите данные этого транспорта.",

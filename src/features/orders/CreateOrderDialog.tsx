@@ -8,11 +8,20 @@ type CreateOrderDialogProps = {
   searchQuery?: string;
   /** Prefill the create form with an existing client (e.g. from the client details panel). */
   initialClient?: { id: string; name: string } | null;
+  /** Prefill `orders.vehicle_id` for a vehicle that belongs to `initialClient`. */
+  initialVehicleId?: string | null;
 };
 
-export function CreateOrderDialog({ open, onOpenChange, searchQuery = "", initialClient = null }: CreateOrderDialogProps) {
+export function CreateOrderDialog({
+  open,
+  onOpenChange,
+  searchQuery = "",
+  initialClient = null,
+  initialVehicleId = null,
+}: CreateOrderDialogProps) {
   const { t } = useTranslation();
   const formSearch = searchQuery || initialClient?.name || "";
+  const formKey = `${initialClient?.id ?? "new"}:${initialVehicleId ?? ""}:${formSearch || "new-order"}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -28,11 +37,12 @@ export function CreateOrderDialog({ open, onOpenChange, searchQuery = "", initia
         <div className="overflow-y-auto pr-2">
           {open ? (
             <AddNewOrderForm
-              key={initialClient?.id ?? (formSearch || "new-order")}
+              key={formKey}
               setCreateModalOpen={onOpenChange}
               searchQuery={formSearch}
               initialClientId={initialClient?.id}
               initialClientName={initialClient?.name}
+              initialVehicleId={initialVehicleId ?? undefined}
             />
           ) : null}
         </div>

@@ -44,7 +44,8 @@ type ClientDetailPanelProps = {
   ordersLoading?: boolean;
   ordersError?: boolean;
   onOpenOrder?: (orderId: string) => void;
-  onCreateOrder?: (client: Client) => void;
+  /** Second arg is set when creating from a specific vehicle row on this card. */
+  onCreateOrder?: (client: Client, vehicleId?: string) => void;
 };
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
@@ -336,6 +337,9 @@ export default function ClientDetailPanel({
                 <ClientVehiclesSection
                   clientId={selectedClient.id}
                   onOpenOrder={onOpenOrder}
+                  onCreateOrder={
+                    onCreateOrder ? (vehicleId) => onCreateOrder(selectedClient, vehicleId) : undefined
+                  }
                   visibleVehicleIds={visibleVehicleIds}
                   highlightQuery={searchResult.normalizedQuery}
                 />

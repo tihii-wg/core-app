@@ -85,4 +85,27 @@ describe("ClientVehiclesSection", () => {
     await user.click(screen.getByRole("button", { name: "Edit vehicle" }));
     expect(screen.getByRole("heading", { name: "Edit vehicle" })).toBeInTheDocument();
   });
+
+  it("calls onCreateOrder with the exact vehicle id for each row", async () => {
+    vehiclesState.vehicles = [
+      sampleVehicle,
+      { ...sampleVehicle, id: "veh-2", make: "VW", model: "Golf", year: 2020, vin: null, licensePlate: "XYZ999", currentMileage: 12000 },
+    ];
+    const onCreateOrder = vi.fn();
+    const user = userEvent.setup();
+    renderWithQuery(<ClientVehiclesSection clientId="client-1" onCreateOrder={onCreateOrder} />);
+
+    await user.click(screen.getByRole("button", { name: /Create order for Toyota Corolla 2018/i }));
+    expect(onCreateOrder).toHaveBeenCalledExactlyOnceWith("veh-1");
+
+    onCreateOrder.mockClear();
+    await user.click(screen.getByRole("button", { name: /Create order for VW Golf 2020/i }));
+    expect(onCreateOrder).toHaveBeenCalledExactlyOnceWith("veh-2");
+  });
+
+  it("hides per-vehicle Create Order when the callback is omitted", () => {
+    vehiclesState.vehicles = [sampleVehicle];
+    renderWithQuery(<ClientVehiclesSection clientId="client-1" />);
+    expect(screen.queryByRole("button", { name: /Create order for/i })).not.toBeInTheDocument();
+  });
 });

@@ -352,6 +352,128 @@ describe("AddNewOrderForm client validation", () => {
     );
   });
 
+  it("prefills client and vehicle from initialVehicleId and saves that vehicle_id", async () => {
+    const user = userEvent.setup();
+    vehiclesState.vehicles = [
+      {
+        id: "veh-a",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: "VIN-A",
+        licensePlate: "AAA111",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+      {
+        id: "veh-b",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "VW",
+        model: "Golf",
+        year: 2020,
+        vin: "VIN-B",
+        licensePlate: "BBB222",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+    const setCreateModalOpen = vi.fn();
+    const { rerender } = renderWithQuery(
+      <AddNewOrderForm
+        setCreateModalOpen={setCreateModalOpen}
+        searchQuery=""
+        initialClientId="client-1"
+        initialClientName="Ada"
+        initialVehicleId="veh-a"
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-vehicle-summary")).toHaveTextContent(/Toyota Corolla/i);
+    await user.click(saveDraftButton());
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-1",
+        vehicleId: "veh-a",
+      }),
+    );
+
+    createOrderMock.mockClear();
+    rerender(
+      <AddNewOrderForm
+        key="veh-b"
+        setCreateModalOpen={setCreateModalOpen}
+        searchQuery=""
+        initialClientId="client-1"
+        initialClientName="Ada"
+        initialVehicleId="veh-b"
+      />,
+    );
+    expect(await screen.findByTestId("selected-vehicle-summary")).toHaveTextContent(/VW Golf/i);
+    await user.click(saveDraftButton());
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-1",
+        vehicleId: "veh-b",
+      }),
+    );
+  });
+
+  it("does not create an order when the form is closed without saving", async () => {
+    const user = userEvent.setup();
+    const setCreateModalOpen = vi.fn();
+    vehiclesState.vehicles = [
+      {
+        id: "veh-1",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: null,
+        licensePlate: null,
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+    renderWithQuery(
+      <AddNewOrderForm
+        setCreateModalOpen={setCreateModalOpen}
+        searchQuery=""
+        initialClientId="client-1"
+        initialClientName="Ada"
+        initialVehicleId="veh-1"
+      />,
+    );
+
+    expect(await screen.findByTestId("selected-vehicle-summary")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(setCreateModalOpen).toHaveBeenCalledWith(false);
+    expect(createOrderMock).not.toHaveBeenCalled();
+  });
+
   it("leaves current mileage empty on vehicle select and only persists an explicit entry", async () => {
     const user = userEvent.setup();
     vehiclesState.vehicles = [

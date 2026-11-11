@@ -4,6 +4,8 @@ export default {
   addTitle: "Adaugă vehicul",
   addDescription: "Adăugați un vehicul pentru acest client.",
   addFromOrderDescription: "Creați un vehicul pentru clientul selectat. Ciorna comenzii rămâne neschimbată.",
+  createOrder: "Creează comandă",
+  createOrderFor: "Creează comandă pentru {{name}}",
   edit: "Editează vehiculul",
   editTitle: "Editează vehiculul",
   editDescription: "Actualizați detaliile acestui vehicul.",

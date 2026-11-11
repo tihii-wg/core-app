@@ -54,6 +54,7 @@ export function Clients() {
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
+  const [orderForVehicleId, setOrderForVehicleId] = useState<string | null>(null);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -294,9 +295,13 @@ export function Clients() {
       <CreateOrderDialog
         open={Boolean(orderForClient)}
         onOpenChange={(open) => {
-          if (!open) setOrderForClient(null);
+          if (!open) {
+            setOrderForClient(null);
+            setOrderForVehicleId(null);
+          }
         }}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+        initialVehicleId={orderForVehicleId}
       />
 
       <Dialog
@@ -338,7 +343,14 @@ export function Clients() {
         ordersLoading={ordersLoading}
         ordersError={Boolean(ordersError)}
         onOpenOrder={handleOpenHistoricalOrder}
-        onCreateOrder={canMutateClients ? setOrderForClient : undefined}
+        onCreateOrder={
+          canMutateClients
+            ? (client, vehicleId) => {
+                setOrderForClient(client);
+                setOrderForVehicleId(vehicleId ?? null);
+              }
+            : undefined
+        }
       />
 
       <DeleteClientDialog

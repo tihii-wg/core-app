@@ -63,7 +63,14 @@ export default function AddNewOrderForm({
   searchQuery,
   initialClientId = "",
   initialClientName = "",
-}: CreateMadalProps & { searchQuery: string; initialClientId?: string; initialClientName?: string }) {
+  initialVehicleId = "",
+}: CreateMadalProps & {
+  searchQuery: string;
+  initialClientId?: string;
+  initialClientName?: string;
+  /** Prefill the vehicle selector; must belong to `initialClientId` when both are set. */
+  initialVehicleId?: string;
+}) {
   const { t } = useTranslation();
   const { services } = useGetServices();
   const [clientName, setClientName] = useState(initialClientName);
@@ -71,7 +78,8 @@ export default function AddNewOrderForm({
   const [clientDialogInitialName, setClientDialogInitialName] = useState("");
   /** Clients just created in this session — shown immediately before the list refetch lands. */
   const [extraClients, setExtraClients] = useState<Client[]>([]);
-  const pendingVehicleIdRef = useRef<string | null>(null);
+  /** Restore a preselected / just-created vehicle once the client vehicle list includes it. */
+  const pendingVehicleIdRef = useRef<string | null>(initialVehicleId.trim() || null);
   const clientInputRef = useRef<HTMLInputElement | null>(null);
   const debouncedClientSearch = useDebounce(clientName.trim(), 250);
   const clientListSearch = debouncedClientSearch || searchQuery;
@@ -125,7 +133,7 @@ export default function AddNewOrderForm({
   } = useForm<addNewOrderFormData>({
     defaultValues: {
       clientId: initialClientId,
-      vehicleId: "",
+      vehicleId: initialVehicleId,
       device: "",
       vin: "",
       carNumber: "",

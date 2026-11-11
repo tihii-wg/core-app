@@ -67,6 +67,7 @@ export function Orders() {
   const orderDetails = useOrderDetails();
   const clientDetails = useOpenClientDetails();
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
+  const [orderForVehicleId, setOrderForVehicleId] = useState<string | null>(null);
   const today = localDateKey(new Date());
 
   function openClientFromOrder(clientId: string) {
@@ -447,10 +448,12 @@ export function Orders() {
           if (!open) {
             setCreateModalOpen(false);
             setOrderForClient(null);
+            setOrderForVehicleId(null);
           }
         }}
         searchQuery={orderForClient ? "" : searchQuery}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+        initialVehicleId={orderForVehicleId}
       />
 
       <ClientDetailsHost
@@ -463,7 +466,10 @@ export function Orders() {
           clientDetails.setDetailPanelOpen(false);
           orderDetails.openOrder(order);
         }}
-        onCreateOrder={setOrderForClient}
+        onCreateOrder={(client, vehicleId) => {
+          setOrderForClient(client);
+          setOrderForVehicleId(vehicleId ?? null);
+        }}
       />
 
       <EditOrderDialog order={editingOrder} onClose={() => setEditingOrder(null)} onUpdated={orderDetails.syncOrder} />

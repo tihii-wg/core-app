@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Client } from "../../lib/types";
 import ClientDetailPanel from "./ClientDetailPanel";
 import type { ClientOrderSummary } from "./clientOrders";
@@ -40,8 +40,34 @@ vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ formatMoney: (value: number) => `MDL ${value.toFixed(2)}` }),
 }));
 
+const clientVehiclesState = vi.hoisted(() => ({
+  vehicles: [] as {
+    id: string;
+    workspaceId: string;
+    clientId: string;
+    make: string | null;
+    model: string | null;
+    year: number | null;
+    vin: string | null;
+    licensePlate: string | null;
+    initialMileage: number | null;
+    currentMileage: number | null;
+    mileageUnit: "km" | "mi" | null;
+    engineDisplacement: number | null;
+    fuelType: string | null;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+  }[],
+}));
+
 vi.mock("../vehicles/useGetClientVehicles", () => ({
-  useGetClientVehicles: () => ({ vehicles: [], isLoading: false, isError: false }),
+  useGetClientVehicles: () => ({
+    vehicles: clientVehiclesState.vehicles,
+    isLoading: false,
+    isError: false,
+    isFetched: true,
+  }),
   clientVehiclesQueryKey: (workspaceId: string | undefined, clientId: string) => ["vehicles", workspaceId, clientId],
 }));
 
@@ -117,7 +143,7 @@ function renderPanel({
   ordersLoading?: boolean;
   ordersError?: boolean;
   onOpenOrder?: (orderId: string) => void;
-  onCreateOrder?: (client: Client) => void;
+  onCreateOrder?: (client: Client, vehicleId?: string) => void;
   selectedClient?: Client;
 } = {}) {
   renderWithQuery(
@@ -138,6 +164,11 @@ function renderPanel({
 }
 
 describe("ClientDetailPanel", () => {
+  beforeEach(() => {
+    mutateAsync.mockReset();
+    clientVehiclesState.vehicles = [];
+  });
+
   it("opens with a description and an edit button", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -233,5 +264,57 @@ describe("ClientDetailPanel", () => {
     expect(await screen.findByRole("heading", { name: /Ada Lovelace/ })).toBeInTheDocument();
     expect(screen.queryByText("ada@example.com")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "ada@example.com" })).not.toBeInTheDocument();
+  });
+
+  it("passes the clicked vehicle id into onCreateOrder from the vehicles section", async () => {
+    const user = userEvent.setup();
+    const onCreateOrder = vi.fn();
+    clientVehiclesState.vehicles = [
+      {
+        id: "veh-a",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "Toyota",
+        model: "Corolla",
+        year: 2018,
+        vin: null,
+        licensePlate: "AAA111",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+      {
+        id: "veh-b",
+        workspaceId: "ws-1",
+        clientId: "client-1",
+        make: "VW",
+        model: "Golf",
+        year: 2020,
+        vin: null,
+        licensePlate: "BBB222",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+
+    renderPanel({ onCreateOrder });
+
+    await user.click(await screen.findByRole("button", { name: /Create order for Toyota Corolla 2018/i }));
+    expect(onCreateOrder).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: "client-1" }), "veh-a");
+
+    onCreateOrder.mockClear();
+    await user.click(screen.getByRole("button", { name: /Create order for VW Golf 2020/i }));
+    expect(onCreateOrder).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ id: "client-1" }), "veh-b");
   });
 });

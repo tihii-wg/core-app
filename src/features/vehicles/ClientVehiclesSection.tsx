@@ -24,6 +24,11 @@ type ClientVehiclesSectionProps = {
   clientId: string;
   /** Reuse the parent Client Details → Order Details flow when present. */
   onOpenOrder?: (orderId: string) => void;
+  /**
+   * Opens the existing create-order flow for this client with the clicked vehicle
+   * preselected (`orders.vehicle_id`).
+   */
+  onCreateOrder?: (vehicleId: string) => void;
   /** When set, only these vehicle ids are shown (client-card search). */
   visibleVehicleIds?: string[];
   /** Lowercased query for match highlighting. */
@@ -33,6 +38,7 @@ type ClientVehiclesSectionProps = {
 export function ClientVehiclesSection({
   clientId,
   onOpenOrder,
+  onCreateOrder,
   visibleVehicleIds,
   highlightQuery = "",
 }: ClientVehiclesSectionProps) {
@@ -165,7 +171,19 @@ export function ClientVehiclesSection({
                   )}
                 </p>
               </button>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+                {onCreateOrder ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    aria-label={t("vehicles.createOrderFor", { name: vehicleDisplayLabel(vehicle) })}
+                    onClick={() => onCreateOrder(vehicle.id)}
+                  >
+                    <Plus className="size-4" />
+                    {t("vehicles.createOrder")}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="icon-sm"

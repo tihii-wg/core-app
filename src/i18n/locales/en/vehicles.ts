@@ -4,6 +4,8 @@ export default {
   addTitle: "Add vehicle",
   addDescription: "Add a vehicle for this client.",
   addFromOrderDescription: "Create a vehicle for the selected client. Your order draft stays as entered.",
+  createOrder: "Create Order",
+  createOrderFor: "Create order for {{name}}",
   edit: "Edit vehicle",
   editTitle: "Edit vehicle",
   editDescription: "Update this vehicle's details.",

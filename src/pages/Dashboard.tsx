@@ -108,6 +108,7 @@ export default function Dashboard() {
   const orderDetails = useOrderDetails();
   const clientDetails = useOpenClientDetails();
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
+  const [orderForVehicleId, setOrderForVehicleId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [listView, setListView] = useState<DashboardListView>("recent");
   const [previousOrderListView, setPreviousOrderListView] = useState<DashboardOrderListView>("recent");
@@ -428,11 +429,13 @@ export default function Dashboard() {
           if (!open) {
             setOpenDialog(null);
             setOrderForClient(null);
+            setOrderForVehicleId(null);
           } else {
             setOpenDialog("order");
           }
         }}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+        initialVehicleId={orderForVehicleId}
       />
       <AddClientDialog {...dialogProps("client")} />
       <AddInventoryItemDialog {...dialogProps("inventory")} />
@@ -454,7 +457,10 @@ export default function Dashboard() {
           clientDetails.setDetailPanelOpen(false);
           orderDetails.openOrder(order);
         }}
-        onCreateOrder={setOrderForClient}
+        onCreateOrder={(client, vehicleId) => {
+          setOrderForClient(client);
+          setOrderForVehicleId(vehicleId ?? null);
+        }}
       />
       <EditInventoryItemDialog itemId={editInventoryId} onClose={() => setEditInventoryId(null)} />
 
