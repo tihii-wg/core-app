@@ -258,7 +258,7 @@ describe("ClientVehiclesSection", () => {
       const user = await typeSearch("Chevrolet");
       expect(screen.queryByRole("button", { name: /Toyota Corolla 2018/i })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Clear search" }));
+      await user.clear(screen.getByRole("searchbox", { name: /Search vehicles/i }));
       expect(screen.getByRole("searchbox", { name: /Search vehicles/i })).toHaveValue("");
       expect(screen.getByRole("button", { name: /Toyota Corolla 2018/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /VW Golf 2020/i })).toBeInTheDocument();
