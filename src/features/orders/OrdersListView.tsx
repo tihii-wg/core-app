@@ -175,7 +175,7 @@ export function OrdersListView({
     copy.deviceServiceColumn;
   const columnLabels = {
     client: fieldByKey.get("client")?.label,
-    status: fieldByKey.get("status")?.label,
+    status: t("orders.table.statusPayment"),
     employee: fieldByKey.get("assignedEmployee")?.label,
     team: fieldByKey.get("team")?.label,
     deadline: fieldByKey.get("deadline")?.label,
@@ -243,7 +243,6 @@ export function OrdersListView({
       onCreateInvoice: handleCreateInvoice,
       onOrderUpdated: orderDetails.syncOrder,
       onDeleted: handleDeleted,
-      includePaymentColumn: true,
     });
     base = base.filter((column) => !hiddenBuiltinColumns.has(column.key));
     const injected = [...customColumnDefs, ...extraColumns];

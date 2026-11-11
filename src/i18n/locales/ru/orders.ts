@@ -45,6 +45,7 @@ const orders: Messages<typeof en> = {
     team: "Команда",
     deadline: "Срок",
     payment: "Оплата",
+    statusPayment: "Статус / Оплата",
   },
   team: {
     title: "Команда",

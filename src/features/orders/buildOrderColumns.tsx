@@ -49,8 +49,6 @@ export type BuildOrderColumnsArgs = {
   onCreateInvoice: (order: Order) => void;
   onOrderUpdated: (order: Order) => void;
   onDeleted: (orderId: string) => void;
-  /** When true, render a standalone payment column (toggleable). */
-  includePaymentColumn?: boolean;
 };
 
 /** Shared Orders / Dashboard table columns (order # … actions). */
@@ -115,7 +113,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "status",
-      header: args.columnLabels?.status ?? args.t("common.status"),
+      header: args.columnLabels?.status ?? args.t("orders.table.statusPayment"),
       cell: (order) => (
         <div className="flex min-w-0 flex-col items-start gap-1">
           <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
@@ -124,14 +122,6 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
       ),
     },
   ];
-
-  if (args.includePaymentColumn) {
-    columns.push({
-      key: "payment",
-      header: args.t("orders.table.payment"),
-      cell: (order) => <PaymentStatusBadge status={args.paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />,
-    });
-  }
 
   columns.push(
     {

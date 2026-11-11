@@ -3,7 +3,6 @@ export const ORDER_TOGGLEABLE_COLUMNS = [
   "clientType",
   "device",
   "status",
-  "payment",
   "createdBy",
   "employee",
   "team",
@@ -19,7 +18,7 @@ export type OrderToggleableColumn = OrderBuiltinToggleableColumn | `custom:${str
 export const ORDER_COLUMN_STORAGE_KEY = "coreapp.orders.visibleColumns";
 export const DASHBOARD_ORDER_COLUMN_STORAGE_KEY = "coreapp.dashboard.orders.visibleColumns";
 
-/** Orders page defaults — payment stays stacked under status (optional column off). */
+/** Orders / Dashboard defaults — payment status stays stacked under the Status / Payment column. */
 export const DEFAULT_ORDER_VISIBLE_COLUMNS: OrderToggleableColumn[] = [
   "client",
   "clientType",
@@ -32,12 +31,8 @@ export const DEFAULT_ORDER_VISIBLE_COLUMNS: OrderToggleableColumn[] = [
   "total",
 ];
 
-/** Dashboard defaults — same as Orders plus standalone payment column. */
-export const DEFAULT_DASHBOARD_ORDER_VISIBLE_COLUMNS: OrderToggleableColumn[] = [
-  ...DEFAULT_ORDER_VISIBLE_COLUMNS.slice(0, 4),
-  "payment",
-  ...DEFAULT_ORDER_VISIBLE_COLUMNS.slice(4),
-];
+/** Dashboard uses the same visible-column defaults as the Orders list. */
+export const DEFAULT_DASHBOARD_ORDER_VISIBLE_COLUMNS: OrderToggleableColumn[] = [...DEFAULT_ORDER_VISIBLE_COLUMNS];
 
 /** Map list column key → order field registry key (for visibility / labels). */
 export const ORDER_COLUMN_FIELD_KEY: Partial<Record<OrderBuiltinToggleableColumn, string>> = {
@@ -80,7 +75,7 @@ export function readOrderVisibleColumns(
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [...defaults];
     const valid = parsed.filter(isOrderToggleableColumn);
-    // Former standalone "payment" column is stacked under status — keep status visible.
+    // Legacy standalone "payment" column was removed; payment status stays under Status / Payment.
     if (parsed.includes("payment") && !valid.includes("status")) {
       valid.push("status");
     }

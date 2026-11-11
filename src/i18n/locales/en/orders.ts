@@ -38,6 +38,7 @@ export default {
     team: "Team",
     deadline: "Deadline",
     payment: "Payment",
+    statusPayment: "Status / Payment",
   },
   team: {
     title: "Team",

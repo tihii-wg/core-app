@@ -43,6 +43,7 @@ const orders: Messages<typeof en> = {
     team: "Echipă",
     deadline: "Termen",
     payment: "Plată",
+    statusPayment: "Status / Plată",
   },
   team: {
     title: "Echipă",

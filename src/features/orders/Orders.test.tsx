@@ -505,6 +505,8 @@ describe("Orders page", () => {
     expect(screen.getByRole("columnheader", { name: "Created by" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Columns" }));
+    expect(screen.getByRole("menuitemcheckbox", { name: "Status / Payment" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitemcheckbox", { name: /^Payment$/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitemcheckbox", { name: "Client" }));
     expect(screen.queryByRole("columnheader", { name: "Client" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Order #" })).toBeInTheDocument();
@@ -519,7 +521,7 @@ describe("Orders page", () => {
     renderWithQuery(<Orders />);
 
     expect(screen.getByRole("columnheader", { name: "Order #" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Status / Payment" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Total" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Client" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Created by" })).not.toBeInTheDocument();
@@ -533,11 +535,12 @@ describe("Orders page", () => {
     expect(clientCell).toHaveTextContent("+37361111111");
   });
 
-  it("stacks order status above payment status in one Status column", () => {
+  it("stacks order status above payment status in one Status / Payment column", () => {
     renderWithQuery(<Orders />);
 
-    expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Status / Payment" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Payment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /^Status$/ })).not.toBeInTheDocument();
 
     const orderStatus = screen.getByText("New");
     const paymentStatus = screen.getByText("Unpaid");
