@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { issueRequestsExceedingStock } from "./catalogMaterialStockLimit";
 import { defaultIssueWarehouseId, issuableWarehouses, linesExceedingWarehouseStock, warehouseStockOf } from "./issueWarehouse";
 
 const warehouses = [
@@ -38,5 +39,18 @@ describe("issueWarehouse helpers", () => {
     ];
     expect(linesExceedingWarehouseStock(lines, stock, "w-main")).toEqual(["i2"]);
     expect(linesExceedingWarehouseStock(lines, stock, "w-b")).toEqual(["i1", "i2"]);
+  });
+
+  it("sums duplicate item issue requests against on-hand stock", () => {
+    expect(
+      issueRequestsExceedingStock(
+        [
+          { inventoryItemId: "i1", quantity: 3 },
+          { inventoryItemId: "i1", quantity: 3 },
+        ],
+        stock,
+        "w-main",
+      ),
+    ).toEqual([{ inventoryItemId: "i1", available: 5, requested: 6 }]);
   });
 });

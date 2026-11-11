@@ -20,12 +20,12 @@ const line: OrderService = {
 function renderCells(props: {
   editable?: boolean;
   editing?: ServiceLineInlineEditTarget | null;
-  onSaveField?: (field: "quantity" | "price" | "performer", value: string) => Promise<void>;
+  onSaveField?: (field: "price" | "performer", value: string) => Promise<void>;
   onCancel?: () => void;
   onSaved?: () => void;
   onEditorClosed?: () => void;
   onTabFromPrice?: () => void;
-  onRequestEdit?: (field: "quantity" | "price" | "performer") => void;
+  onRequestEdit?: (field: "price" | "performer") => void;
 }) {
   const onSaveField = props.onSaveField ?? vi.fn(async () => undefined);
   const onCancel = props.onCancel ?? vi.fn();
@@ -162,6 +162,14 @@ describe("OrderServiceLineInlineCells", () => {
     expect(screen.queryByTestId("service-line-price-line-1")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit.*price/i })).not.toBeInTheDocument();
     expect(screen.queryByTestId("service-line-performer-line-1")).not.toBeInTheDocument();
+  });
+
+  it("renders quantity as plain text (not click-to-edit)", () => {
+    renderCells({ editable: true });
+    const qty = screen.getByTestId("service-line-qty-line-1");
+    expect(qty.tagName).toBe("SPAN");
+    expect(qty).toHaveTextContent("1");
+    expect(screen.queryByRole("button", { name: /edit.*quantity/i })).not.toBeInTheDocument();
   });
 
   it("shows the add-performer placeholder when empty and editable", () => {

@@ -34,8 +34,16 @@ import OrderServiceLineInlineCells, {
   type ServiceLineInlineEditTarget,
   type ServiceLineInlineField,
 } from "./OrderServiceLineInlineCells";
+import OrderMaterialLineInlineCells, {
+  type MaterialLineInlineEditTarget,
+  type MaterialLineInlineField,
+} from "./OrderMaterialLineInlineCells";
 import { useUpdateOrderServiceLine } from "./useUpdateOrderServiceLine";
+import { useUpdateOrderMaterialLine } from "./useUpdateOrderMaterialLine";
 import { parseOrderServiceLinePrice } from "./updateOrderServiceLine";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
+import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { resolveCatalogLineStockLimit } from "./catalogMaterialStockLimit";
 import {
   OrderInlineField,
   type OrderInlineFieldHandle,
@@ -78,7 +86,7 @@ import {
   warehouseMaterialStatus,
   warehouseStatusBadgeVariant,
 } from "../inventory/warehouseMaterialStatus";
-import { formatQuantity, parseQuantity } from "../../lib/quantity";
+import { formatQuantity } from "../../lib/quantity";
 import { isCatalogOrderMaterial, resolveMaterialSupplySource } from "../inventory/orderMaterialLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { orderLineAmount } from "../services/orderServiceLine";
@@ -192,9 +200,13 @@ export default function OrderDetailPanel({
   const [addMaterialPrefill, setAddMaterialPrefill] = useState<AddOrderMaterialPrefill | null>(null);
   const [highlightedServiceId, setHighlightedServiceId] = useState<string | null>(null);
   const [serviceLineEdit, setServiceLineEdit] = useState<ServiceLineInlineEditTarget | null>(null);
+  const [materialLineEdit, setMaterialLineEdit] = useState<MaterialLineInlineEditTarget | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const addLinesSearchFocusRef = useRef<(() => void) | null>(null);
   const updateServiceLine = useUpdateOrderServiceLine();
+  const updateMaterialLine = useUpdateOrderMaterialLine();
+  const { data: warehouses = [] } = useGetWarehouses();
+  const { data: warehouseStock = [] } = useGetWarehouseStock();
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
   // Session-backed tab: survives order switches and sheet reopen; first open in a session starts on info.
@@ -708,29 +720,41 @@ export default function OrderDetailPanel({
       onOrderUpdated(updated);
       return;
     }
-    if (field === "quantity") {
-      const quantity = parseQuantity(raw);
-      if (typeof quantity !== "number") {
-        throw new Error(
-          quantity === "min"
-            ? t("orders.validation.quantityMin")
-            : quantity === "maxDecimals"
-              ? t("orders.validation.quantityMaxDecimals")
-              : t("orders.validation.quantityRequired"),
-        );
-      }
-      const updated = await updateServiceLine.mutateAsync({
-        orderId: selectedOrder.id,
-        lineId,
-        patch: { quantity },
-      });
-      onOrderUpdated(updated);
-      return;
-    }
     const updated = await updateServiceLine.mutateAsync({
       orderId: selectedOrder.id,
       lineId,
       patch: { technicianId: raw.trim() ? raw.trim() : null },
+    });
+    onOrderUpdated(updated);
+  }
+
+  async function saveMaterialLineField(lineId: string, field: MaterialLineInlineField, raw: string) {
+    if (!selectedOrder) return;
+    const line = (selectedOrder.materials ?? []).find((entry) => entry.id === lineId);
+    const warehouseName = line?.warehouseId
+      ? warehouses.find((warehouse) => warehouse.id === line.warehouseId)?.name
+      : undefined;
+    if (field === "price") {
+      const price = parseOrderServiceLinePrice(raw);
+      if (price === "invalid") throw new Error(t("orders.errors.materialPriceInvalid"));
+      const updated = await updateMaterialLine.mutateAsync({
+        orderId: selectedOrder.id,
+        lineId,
+        patch: { price },
+        warehouseName,
+      });
+      onOrderUpdated(updated);
+      return;
+    }
+    const quantity = Number(raw);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error(t("orders.validation.quantityMin"));
+    }
+    const updated = await updateMaterialLine.mutateAsync({
+      orderId: selectedOrder.id,
+      lineId,
+      patch: { quantity },
+      warehouseName,
     });
     onOrderUpdated(updated);
   }
@@ -859,7 +883,7 @@ export default function OrderDetailPanel({
         className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]"
         onEscapeKeyDown={(event) => {
           // Esc while a field / service line / change-client dialog is active must not close the sheet.
-          if (editingField || serviceLineEdit || changeClientOpen) event.preventDefault();
+          if (editingField || serviceLineEdit || materialLineEdit || changeClientOpen) event.preventDefault();
         }}
       >
         <SheetHeader className="shrink-0 pr-24">
@@ -1343,7 +1367,7 @@ export default function OrderDetailPanel({
               </div>
             ) : null}
             {hasServiceLines ? (
-              <div className="overflow-hidden rounded-lg border border-border">
+              <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
                 <table className="w-full table-fixed text-sm">
                   <colgroup>
                     <col className="w-[42%]" />
@@ -1481,16 +1505,33 @@ export default function OrderDetailPanel({
 
             {hasMaterialLines ? (
               <div className="space-y-3">
-                <div className="overflow-hidden rounded-lg border border-border">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
+                  {/* Fixed layout only from sm: on phones the auto layout keeps the money cells readable. */}
+                  <table className="w-full text-sm sm:table-fixed">
+                    {/* The open quantity editor carries the stock hint / warning: give that column more room. */}
+                    {materialLineEdit?.field === "quantity" ? (
+                      <colgroup>
+                        <col className="w-[32%]" />
+                        <col className="w-[34%]" />
+                        <col className="w-[17%]" />
+                        <col className="w-[17%]" />
+                      </colgroup>
+                    ) : (
+                      <colgroup>
+                        <col className="w-[42%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[22%]" />
+                        <col className="w-[20%]" />
+                      </colgroup>
+                    )}
                     <thead className="bg-muted/50 text-xs text-muted-foreground">
                       <tr>
-                        <th className="px-3 py-2 text-left font-medium">
+                        <th className="px-2 py-2 text-left font-medium sm:px-3">
                           {t("orders.detail.materials")}
                         </th>
-                        <th className="px-3 py-2 text-right font-medium">{t("orders.detail.quantity")}</th>
-                        <th className="px-3 py-2 text-right font-medium">{t("orders.detail.price")}</th>
-                        <th className="px-3 py-2 text-right font-medium">{t("orders.detail.amount")}</th>
+                        <th className="px-2 py-2 text-right font-medium sm:px-3">{t("orders.detail.quantity")}</th>
+                        <th className="px-2 py-2 text-right font-medium sm:px-3">{t("orders.detail.price")}</th>
+                        <th className="px-2 py-2 text-right font-medium sm:px-3">{t("orders.detail.amount")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -1507,9 +1548,14 @@ export default function OrderDetailPanel({
                         const lineGross = orderLineAmount({ price: line.price, quantity: line.quantity });
                         const lineVat =
                           detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
+                        const lineId = line.id?.trim() ?? "";
+                        const warehouseName = line.warehouseId
+                          ? warehouses.find((warehouse) => warehouse.id === line.warehouseId)?.name
+                          : undefined;
+                        const purchase = line.inventoryItemId ? purchasePriceById.get(line.inventoryItemId) : undefined;
                         return (
                           <tr key={line.id ?? `${line.inventoryItemId ?? "free"}-${index}`}>
-                            <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
+                            <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
                               <div className="space-y-1">
                                 <p>
                                   {catalog && line.inventoryItemId ? (
@@ -1562,29 +1608,66 @@ export default function OrderDetailPanel({
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                              {formatQuantity(line.quantity, i18n.language)}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                              <div>{formatMoney(line.price)}</div>
-                              {(() => {
-                                const purchase = line.inventoryItemId ? purchasePriceById.get(line.inventoryItemId) : undefined;
-                                if (!catalog || purchase == null || !(Number(line.price) < purchase)) return null;
-                                return (
-                                  <div role="alert" className="mt-0.5 text-[11px] font-medium text-destructive" data-testid="material-price-below-cost">
-                                    {t("orders.form.priceBelowPurchase", { purchase: formatMoney(purchase) })}
-                                  </div>
-                                );
-                              })()}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                              <div>{formatMoney(lineGross)}</div>
-                              {lineVat != null ? (
-                                <div className="text-[11px] text-muted-foreground">
-                                  {t("orders.vat.included")}: {formatMoney(lineVat)}
-                                </div>
-                              ) : null}
-                            </td>
+                            <OrderMaterialLineInlineCells
+                              line={line}
+                              editable={showFieldEdit}
+                              editing={materialLineEdit}
+                              formatMoney={formatMoney}
+                              locale={i18n.language}
+                              saving={updateMaterialLine.isPending}
+                              purchasePrice={purchase}
+                              warehouseName={warehouseName}
+                              warehouseOnHand={
+                                isCatalogOrderMaterial(line) && line.warehouseId && line.inventoryItemId
+                                  ? resolveCatalogLineStockLimit({
+                                      line,
+                                      lines: selectedOrder.materials ?? [],
+                                      stock: warehouseStock,
+                                      exclude: { lineId: line.id },
+                                    })?.warehouseOnHand
+                                  : null
+                              }
+                              maxQuantity={
+                                isCatalogOrderMaterial(line) && line.warehouseId && line.inventoryItemId
+                                  ? resolveCatalogLineStockLimit({
+                                      line,
+                                      lines: selectedOrder.materials ?? [],
+                                      stock: warehouseStock,
+                                      exclude: { lineId: line.id },
+                                    })?.max
+                                  : null
+                              }
+                              amountNode={
+                                <>
+                                  <div>{formatMoney(lineGross)}</div>
+                                  {lineVat != null ? (
+                                    <div className="text-[11px] text-muted-foreground">
+                                      {t("orders.vat.included")}: {formatMoney(lineVat)}
+                                    </div>
+                                  ) : null}
+                                </>
+                              }
+                              onRequestEdit={(field) => {
+                                if (!lineId) return;
+                                setMaterialLineEdit({ lineId, field });
+                              }}
+                              onCancel={() => setMaterialLineEdit(null)}
+                              onSaved={() => setMaterialLineEdit(null)}
+                              onSaveField={async (field, raw) => {
+                                if (!lineId) return;
+                                await saveMaterialLineField(lineId, field, raw);
+                              }}
+                              onEditorClosed={focusAddLinesSearch}
+                              onSetQuantityToMax={(max) => {
+                                if (!lineId) return;
+                                void saveMaterialLineField(lineId, "quantity", String(max))
+                                  .then(() => setMaterialLineEdit(null))
+                                  .catch((error: unknown) => {
+                                    // The editor stays open; surface the failure instead of swallowing it.
+                                    toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+                                  });
+                              }}
+                            />
                           </tr>
                         );
                       })}

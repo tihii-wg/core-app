@@ -26,6 +26,11 @@ import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { orderLineAmount } from "../services/orderServiceLine";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { defaultIssueWarehouseId, issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
+import {
+  catalogLineOutstanding,
+  checkCatalogMaterialQuantity,
+  resolveCatalogLineStockLimit,
+} from "./catalogMaterialStockLimit";
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 import OrderLinePriceField from "./OrderLinePriceField";
@@ -95,7 +100,7 @@ export default function OrderMaterialLinesEditor({
   warrantyDefaults,
   orderMileageUnit = "km",
   showWarrantyKm = true,
-  isSubmitted = false,
+  isSubmitted: _isSubmitted = false,
   errors,
   restartWarrantyHints,
   warrantyCatalogKeyForLine,
@@ -123,7 +128,18 @@ export default function OrderMaterialLinesEditor({
   const [freeQty, setFreeQty] = useState("1");
   const [freeError, setFreeError] = useState("");
   const [issueWarehouseId, setIssueWarehouseId] = useState(() => defaultIssueWarehouseId(warehouseRows));
+  const [addStockError, setAddStockError] = useState<string | null>(null);
   const seededCatalogRef = useRef(false);
+
+  const warehouseStockByItemId = useMemo(() => {
+    if (!issueWarehouseId) return undefined;
+    const map = new Map<string, number>();
+    for (const row of warehouseStock) {
+      if (row.warehouseId !== issueWarehouseId) continue;
+      map.set(row.inventoryItemId, (map.get(row.inventoryItemId) ?? 0) + (Number(row.quantity) || 0));
+    }
+    return map;
+  }, [warehouseStock, issueWarehouseId]);
 
   // Keep default warehouse when the list loads / changes.
   useEffect(() => {
@@ -135,33 +151,93 @@ export default function OrderMaterialLinesEditor({
   // Seed one catalog line when opened from the items-tab search with a picked inventory item.
   useEffect(() => {
     if (seededCatalogRef.current || !initialCatalogItem || !issueWarehouseId) return;
+    const onHand = warehouseStockOf(warehouseStock, issueWarehouseId, initialCatalogItem.id);
+    if (onHand <= 0) {
+      setAddStockError(
+        t("orders.form.cannotAddZeroStock", {
+          warehouse: warehouses.find((warehouse) => warehouse.id === issueWarehouseId)?.name ?? issueWarehouseId,
+        }),
+      );
+      // Do not mark seeded — user may switch warehouse to one that has stock.
+      return;
+    }
     seededCatalogRef.current = true;
+    setAddStockError(null);
     append(catalogItemToOrderMaterial(initialCatalogItem, 1, issueWarehouseId, warrantyDefaults, orderMileageUnit));
-  }, [append, initialCatalogItem, issueWarehouseId, orderMileageUnit, warrantyDefaults]);
+  }, [append, initialCatalogItem, issueWarehouseId, orderMileageUnit, t, warehouseStock, warehouses, warrantyDefaults]);
+
+  useEffect(() => {
+    setAddStockError(null);
+  }, [issueWarehouseId]);
 
   const effectiveAddMode: AddMode = !freeformSupported && addMode !== "catalog" ? "catalog" : addMode;
+
+  function lineStockLimitAt(index: number) {
+    const materials = (getValues("materials") ?? []) as OrderMaterial[];
+    const line = materials[index];
+    if (!line || !isCatalogOrderMaterial(line)) return null;
+    return resolveCatalogLineStockLimit({
+      line,
+      lines: materials,
+      stock: warehouseStock,
+      exclude: { index },
+    });
+  }
 
   function adjustQuantity(index: number, delta: number) {
     const current = parseOrderMaterialQuantity(getValues(`materials.${index}.quantity`)) ?? 0;
     const issuedFloor = Number(getValues(`materials.${index}.quantityIssued`) ?? 0);
+    const returnedFloor = Number(getValues(`materials.${index}.quantityReturned`) ?? 0);
+    const outstandingFloor = Math.max(0, issuedFloor - returnedFloor);
     const next = roundQuantity(current + delta);
     if (!(next > 0)) return;
-    if (Number.isFinite(issuedFloor) && issuedFloor > 0 && next < issuedFloor) return;
+    if (Number.isFinite(outstandingFloor) && outstandingFloor > 0 && next < outstandingFloor) return;
+    const limit = lineStockLimitAt(index);
+    if (limit && next > limit.max + 1e-9) return;
     setValue(`materials.${index}.quantity`, next, { shouldDirty: true, shouldValidate: true });
   }
 
   function handleSelect(item: InventoryItem) {
     if (!issueWarehouseId) return;
+    setAddStockError(null);
+    const onHand = warehouseStockOf(warehouseStock, issueWarehouseId, item.id);
     const existingIndex = fields.findIndex((field) => isCatalogOrderMaterial(field) && field.inventoryItemId === item.id);
     if (existingIndex >= 0) {
       const existingWarehouse = String(getValues(`materials.${existingIndex}.warehouseId`) ?? "");
       if (!existingWarehouse) {
         setValue(`materials.${existingIndex}.warehouseId`, issueWarehouseId, { shouldDirty: true });
       }
+      const limit = lineStockLimitAt(existingIndex);
+      const current = parseOrderMaterialQuantity(getValues(`materials.${existingIndex}.quantity`)) ?? 0;
+      if (limit && current >= limit.max - 1e-9) {
+        setAddStockError(
+          t("orders.form.onlyNAvailableOnWarehouse", {
+            available: formatQuantity(limit.max, qtyLocale),
+            warehouse: warehouses.find((warehouse) => warehouse.id === issueWarehouseId)?.name ?? issueWarehouseId,
+          }),
+        );
+        return;
+      }
       adjustQuantity(existingIndex, 1);
       return;
     }
+    if (onHand <= 0) {
+      setAddStockError(
+        t("orders.form.cannotAddZeroStock", {
+          warehouse: warehouses.find((warehouse) => warehouse.id === issueWarehouseId)?.name ?? issueWarehouseId,
+        }),
+      );
+      return;
+    }
     append(catalogItemToOrderMaterial(item, 1, issueWarehouseId, warrantyDefaults, orderMileageUnit));
+  }
+
+  function handleSelectOutOfStock(_item: InventoryItem) {
+    setAddStockError(
+      t("orders.form.cannotAddZeroStock", {
+        warehouse: warehouses.find((warehouse) => warehouse.id === issueWarehouseId)?.name ?? issueWarehouseId,
+      }),
+    );
   }
 
   function handleCreated(item: InventoryItem) {
@@ -287,11 +363,18 @@ export default function OrderMaterialLinesEditor({
           <InventoryItemCombobox
             items={inventoryItems}
             onSelect={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelect}
+            onSelectOutOfStock={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelectOutOfStock}
             onCreateRequest={disabled || warehouses.length === 0 ? undefined : handleCreateRequest}
             onAddOneTimeRequest={disabled || !freeformSupported ? undefined : handleAddOneTimeRequest}
             searchPlaceholder={copy.materialSearchPlaceholder}
-            errors={!!errors?.root}
+            errors={!!errors?.root || Boolean(addStockError)}
+            warehouseStockByItemId={warehouseStockByItemId}
           />
+          {addStockError ? (
+            <p className="text-xs text-destructive" role="alert" data-testid="material-add-stock-error">
+              {addStockError}
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">{t("orders.form.materialsImmediateHint")}</p>
           <AddInventoryItemDialog
             open={createOpen}
@@ -377,9 +460,32 @@ export default function OrderMaterialLinesEditor({
             const itemId = String(line?.inventoryItemId ?? field.inventoryItemId ?? "");
             const catalogItem = itemId ? inventoryItems.find((item) => item.id === itemId) : undefined;
             const materialUnit = catalogItem?.unit?.trim() || "";
-            const warehouseAvailable =
-              catalog && lineWarehouseId && itemId ? warehouseStockOf(warehouseStock, lineWarehouseId, itemId) : undefined;
+            const stockLimit =
+              catalog && lineWarehouseId && itemId
+                ? resolveCatalogLineStockLimit({
+                    line: {
+                      ...(line ?? field),
+                      inventoryItemId: itemId,
+                      warehouseId: lineWarehouseId,
+                    },
+                    lines: (watched ?? fields) as OrderMaterial[],
+                    stock: warehouseStock,
+                    exclude: { index },
+                  })
+                : null;
+            const warehouseAvailable = stockLimit?.warehouseOnHand;
+            const maxQuantity = stockLimit?.max;
             const warehouseName = warehouses.find((warehouse) => warehouse.id === lineWarehouseId)?.name;
+            const quantityOverStock =
+              catalog &&
+              parsedQty != null &&
+              maxQuantity != null &&
+              !checkCatalogMaterialQuantity({
+                desiredQuantity: parsedQty,
+                warehouseOnHand: stockLimit!.warehouseOnHand,
+                lineOutstanding: stockLimit!.outstanding,
+                otherLinesClaim: stockLimit!.otherClaim,
+              }).ok;
             const quantityError = errors?.[index]?.quantity;
             const quantityInputId = `order-material-qty-${field.id}`;
             const sourceLabel =
@@ -528,9 +634,11 @@ export default function OrderMaterialLinesEditor({
                           )}
                         />
                         {warehouseAvailable != null ? (
-                          <p className="text-[13px] text-muted-foreground">
-                            {t("orders.warehouse.warehouseStock", { count: formatQuantity(warehouseAvailable, qtyLocale) })}
-                            {warehouseName ? ` · ${warehouseName}` : ""}
+                          <p className="text-[13px] text-muted-foreground" data-testid={`material-line-available-${index}`}>
+                            {t("orders.form.availableOnWarehouse", {
+                              warehouse: warehouseName ?? lineWarehouseId,
+                              count: formatQuantity(warehouseAvailable, qtyLocale),
+                            })}
                           </p>
                         ) : null}
                         {hasWarehouseHistory ? (
@@ -602,15 +710,20 @@ export default function OrderMaterialLinesEditor({
                           if (minQuantity > 0 && number < minQuantity) {
                             return t("orders.errors.cannotReduceBelowIssued") as string;
                           }
-                          if (catalog && lineWarehouseId && itemId && warehouseAvailable != null) {
-                            const alreadyIssued = outstanding;
-                            const needFromWarehouse = Math.max(0, number - alreadyIssued);
-                            if (needFromWarehouse > warehouseAvailable) {
-                              return t("orders.errors.insufficientWarehouseStockDetail", {
-                                material: line?.itemName ?? field.itemName,
-                                requested: formatQuantity(needFromWarehouse, qtyLocale),
-                                available: formatQuantity(warehouseAvailable, qtyLocale),
-                                warehouse: warehouseName ?? "",
+                          if (catalog && lineWarehouseId && itemId && stockLimit) {
+                            const check = checkCatalogMaterialQuantity({
+                              desiredQuantity: number,
+                              warehouseOnHand: stockLimit.warehouseOnHand,
+                              lineOutstanding: catalogLineOutstanding({
+                                quantityIssued: issuedQty,
+                                quantityReturned: returnedQty,
+                              }),
+                              otherLinesClaim: stockLimit.otherClaim,
+                            });
+                            if (!check.ok) {
+                              return t("orders.form.onlyNAvailableOnWarehouse", {
+                                available: formatQuantity(check.max, qtyLocale),
+                                warehouse: warehouseName ?? lineWarehouseId,
                               }) as string;
                             }
                           }
@@ -624,7 +737,7 @@ export default function OrderMaterialLinesEditor({
                           inputMode="decimal"
                           disabled={disabled}
                           aria-label={t("orders.form.quantityForMaterial", { name: line?.itemName ?? field.itemName })}
-                          className={`h-8 min-w-[4.5rem] w-20 max-w-[30vw] px-1.5 text-center tabular-nums ${quantityError ? "border-destructive" : ""}`}
+                          className={`h-8 min-w-[4.5rem] w-20 max-w-[30vw] px-1.5 text-center tabular-nums ${quantityError || quantityOverStock ? "border-destructive" : ""}`}
                           value={quantityField.value === "" || quantityField.value == null ? "" : quantityField.value}
                           onChange={(event) => {
                             const raw = event.target.value;
@@ -634,7 +747,7 @@ export default function OrderMaterialLinesEditor({
                               const parsed = parseQuantity(raw);
                               quantityField.onChange(typeof parsed === "number" ? parsed : raw);
                             }
-                            if (isSubmitted) void trigger?.(`materials.${index}.quantity`);
+                            void trigger?.(`materials.${index}.quantity`);
                           }}
                           onBlur={() => {
                             quantityField.onBlur();
@@ -650,7 +763,10 @@ export default function OrderMaterialLinesEditor({
                       type="button"
                       variant="outline"
                       size="icon-sm"
-                      disabled={disabled}
+                      disabled={
+                        disabled ||
+                        (maxQuantity != null && parsedQty != null && parsedQty >= maxQuantity - 1e-9)
+                      }
                       onClick={() => adjustQuantity(index, 1)}
                       aria-label={t("orders.form.increaseQuantity", { name: line?.itemName ?? field.itemName })}
                     >
@@ -661,7 +777,51 @@ export default function OrderMaterialLinesEditor({
                     {t("orders.detail.amount")}: {formatMoney(orderLineAmount({ price: unitPrice, quantity: parsedQty ?? 0 }))}
                   </p>
                 </div>
-                {quantityError?.message && <p className="text-xs text-destructive">{quantityError.message}</p>}
+                {quantityError?.message && !quantityOverStock ? (
+                  <p className="text-xs text-destructive" data-testid={`material-qty-error-${index}`}>
+                    {quantityError.message}
+                  </p>
+                ) : null}
+                {quantityOverStock && maxQuantity != null ? (
+                  <div className="space-y-1 text-xs" data-testid={`material-qty-stock-warning-${index}`}>
+                    <p className="text-destructive" role="alert">
+                      {t("orders.form.onlyNAvailableOnWarehouse", {
+                        available: formatQuantity(maxQuantity, qtyLocale),
+                        warehouse: warehouseName ?? lineWarehouseId,
+                      })}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {maxQuantity > 0 ? (
+                        <button
+                          type="button"
+                          className="font-medium text-primary hover:underline"
+                          data-testid={`material-qty-set-max-${index}`}
+                          disabled={disabled}
+                          onClick={() => {
+                            setValue(`materials.${index}.quantity`, maxQuantity, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            });
+                          }}
+                        >
+                          {t("orders.form.setToMaximum", { available: formatQuantity(maxQuantity, qtyLocale) })}
+                        </button>
+                      ) : null}
+                      {canReceiveStock && catalogItem ? (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="h-auto px-0 text-xs"
+                          disabled={disabled}
+                          onClick={() => openReceiveForLine(catalogItem, Math.max(1, (parsedQty ?? 1) - (maxQuantity ?? 0)))}
+                        >
+                          {t("orders.form.receiveStock")}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
                 {catalog && outstanding > 0 && parsedQty != null && parsedQty < outstanding ? (
                   <p className="text-xs text-destructive">{t("orders.errors.returnBeforeReduce")}</p>
                 ) : null}

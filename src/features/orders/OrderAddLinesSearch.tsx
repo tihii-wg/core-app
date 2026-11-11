@@ -436,10 +436,13 @@ export default function OrderAddLinesSearch({
 
               if (option.type === "item") {
                 const stock = Number(option.item.quantity) || 0;
-                const stockLabel = t("orders.addLinesSearch.inStock", {
-                  count: stock,
-                  unit: option.item.unit || t("orders.addLinesSearch.unitFallback"),
-                });
+                const stockLabel =
+                  stock <= 0
+                    ? t("orders.addLinesSearch.outOfStock")
+                    : t("orders.addLinesSearch.inStock", {
+                        count: stock,
+                        unit: option.item.unit || t("orders.addLinesSearch.unitFallback"),
+                      });
                 return (
                   <div key={`item-${option.item.id}`}>
                     {index === firstItemIndex ? (

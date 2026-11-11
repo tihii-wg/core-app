@@ -15,7 +15,23 @@ type InventoryItemComboboxProps = {
   onAddOneTimeRequest?: (searchQuery: string) => void;
   /** Industry-aware search placeholder; falls back to orders.form.materialSearchPlaceholder. */
   searchPlaceholder?: string;
+  /**
+   * Optional per-item on-hand for the currently selected warehouse.
+   * When set, the list shows warehouse stock (incl. "out of stock") instead of the global total.
+   */
+  warehouseStockByItemId?: ReadonlyMap<string, number> | Record<string, number>;
+  /** Called when the user picks an out-of-stock row (row stays visible). */
+  onSelectOutOfStock?: (item: InventoryItem) => void;
 };
+
+function stockForItem(
+  item: InventoryItem,
+  warehouseStockByItemId: InventoryItemComboboxProps["warehouseStockByItemId"],
+): number {
+  if (!warehouseStockByItemId) return Number(item.quantity) || 0;
+  if (warehouseStockByItemId instanceof Map) return Number(warehouseStockByItemId.get(item.id) ?? 0) || 0;
+  return Number((warehouseStockByItemId as Record<string, number>)[item.id] ?? 0) || 0;
+}
 
 export default function InventoryItemCombobox({
   items,
@@ -24,6 +40,8 @@ export default function InventoryItemCombobox({
   onCreateRequest,
   onAddOneTimeRequest,
   searchPlaceholder,
+  warehouseStockByItemId,
+  onSelectOutOfStock,
 }: InventoryItemComboboxProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
@@ -106,7 +124,11 @@ export default function InventoryItemCombobox({
           ) : (
             filtered.map((item) => {
               const priceLabel = formatMoney(item.sellingPrice ?? 0);
-              const stockLabel = t("orders.form.availableStockValue", { count: item.quantity, unit: item.unit });
+              const stockCount = stockForItem(item, warehouseStockByItemId);
+              const outOfStock = warehouseStockByItemId != null && stockCount <= 0;
+              const stockLabel = outOfStock
+                ? t("orders.form.outOfStockOnWarehouse")
+                : t("orders.form.availableStockValue", { count: stockCount, unit: item.unit });
               return (
                 <button
                   key={item.id}
@@ -114,6 +136,12 @@ export default function InventoryItemCombobox({
                   className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left hover:bg-muted"
                   aria-label={t("orders.form.materialOptionAria", { name: item.name, stock: stockLabel, price: priceLabel })}
                   onClick={() => {
+                    if (outOfStock) {
+                      onSelectOutOfStock?.(item);
+                      setQuery("");
+                      setOpen(false);
+                      return;
+                    }
                     onSelect?.(item);
                     setQuery("");
                     setOpen(false);
@@ -121,7 +149,11 @@ export default function InventoryItemCombobox({
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-foreground">{item.name}</span>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{stockLabel}</span>
+                    <span
+                      className={`mt-0.5 block truncate text-xs ${outOfStock ? "text-destructive/80" : "text-muted-foreground"}`}
+                    >
+                      {stockLabel}
+                    </span>
                   </span>
                   <span className="shrink-0 text-sm font-medium tabular-nums text-foreground">{priceLabel}</span>
                 </button>

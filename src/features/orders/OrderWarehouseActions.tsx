@@ -14,7 +14,8 @@ import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { issueOrderMaterialsFromWarehouse, returnOrderMaterialsToWarehouse } from "../../services/apiWarehouse";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
-import { defaultIssueWarehouseId, issuableWarehouses, linesExceedingWarehouseStock, warehouseStockOf } from "./issueWarehouse";
+import { defaultIssueWarehouseId, issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
+import { issueRequestsExceedingStock } from "./catalogMaterialStockLimit";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { getOrder } from "../../services/apiOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -30,7 +31,7 @@ type OrderWarehouseActionsProps = {
 };
 
 export default function OrderWarehouseActions({ order, canManage, onOrderUpdated }: OrderWarehouseActionsProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [mode, setMode] = useState<Mode | null>(null);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
@@ -107,9 +108,19 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       return;
     }
 
-    if (mode === "issue" && warehouseStockLoaded && linesExceedingWarehouseStock(lines, warehouseStock, warehouseId).length > 0) {
-      toast.error(t("orders.errors.insufficientWarehouseStock"));
-      return;
+    if (mode === "issue" && warehouseStockLoaded) {
+      const over = issueRequestsExceedingStock(lines, warehouseStock, warehouseId);
+      if (over.length > 0) {
+        const first = over[0]!;
+        const warehouseName = warehouses.find((warehouse) => warehouse.id === warehouseId)?.name ?? warehouseId;
+        toast.error(
+          t("orders.form.onlyNAvailableOnWarehouse", {
+            available: formatQuantity(first.available, i18n.language),
+            warehouse: warehouseName,
+          }),
+        );
+        return;
+      }
     }
 
     submitLock.current = true;
@@ -223,6 +234,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
                   value={quantities[itemId] ?? ""}
                   stock={inventoryItems.find((item) => item.id === itemId)?.quantity}
                   warehouseStock={mode === "issue" && warehouseId && warehouseStockLoaded ? warehouseStockOf(warehouseStock, warehouseId, itemId) : undefined}
+                  warehouseName={warehouses.find((warehouse) => warehouse.id === warehouseId)?.name}
                   onChange={(value) => setQuantities((prev) => ({ ...prev, [itemId]: value }))}
                   disabled={busy}
                 />
@@ -265,6 +277,7 @@ function WarehouseLineEditor({
   value,
   stock,
   warehouseStock,
+  warehouseName,
   onChange,
   disabled,
 }: {
@@ -273,12 +286,18 @@ function WarehouseLineEditor({
   value: string;
   stock?: number;
   warehouseStock?: number;
+  warehouseName?: string;
   onChange: (value: string) => void;
   disabled: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const max = mode === "issue" ? remainingToIssue(line) : remainingToReturn(line);
+  const remaining = mode === "issue" ? remainingToIssue(line) : remainingToReturn(line);
+  const max =
+    mode === "issue" && warehouseStock != null ? Math.min(remaining, Math.max(0, warehouseStock)) : remaining;
   const locale = i18n.language;
+  const parsed = parseQuantity(value);
+  const typedQty = typeof parsed === "number" ? parsed : null;
+  const overStock = mode === "issue" && warehouseStock != null && typedQty != null && typedQty > max + 1e-9;
 
   return (
     <div className="space-y-2 rounded-md border border-border p-3">
@@ -298,7 +317,10 @@ function WarehouseLineEditor({
         ) : null}
         {mode === "issue" && warehouseStock != null ? (
           <p className="text-[13px] text-muted-foreground tabular-nums">
-            {t("orders.warehouse.warehouseStock", { count: formatQuantity(warehouseStock, locale) })}
+            {t("orders.form.availableOnWarehouse", {
+              warehouse: warehouseName ?? "",
+              count: formatQuantity(warehouseStock, locale),
+            })}
           </p>
         ) : null}
       </div>
@@ -311,12 +333,20 @@ function WarehouseLineEditor({
           type="text"
           inputMode="decimal"
           disabled={disabled}
-          className="h-8 min-w-[4.5rem] w-24 max-w-[40vw] tabular-nums"
+          className={`h-8 min-w-[4.5rem] w-24 max-w-[40vw] tabular-nums ${overStock ? "border-destructive" : ""}`}
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
         <span className="text-xs text-muted-foreground tabular-nums">/ {formatQuantity(max, locale)}</span>
       </div>
+      {overStock ? (
+        <p className="text-xs text-destructive" role="alert">
+          {t("orders.form.onlyNAvailableOnWarehouse", {
+            available: formatQuantity(max, locale),
+            warehouse: warehouseName ?? "",
+          })}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -42,8 +42,8 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, prefil
     setValue,
     getValues,
     trigger,
-    formState: { errors, isSubmitted },
-  } = useForm<DraftMaterialsForm>({ defaultValues: { materials: [] } });
+    formState: { errors, isSubmitted, isValid },
+  } = useForm<DraftMaterialsForm>({ defaultValues: { materials: [] }, mode: "onChange" });
   const { fields, append, remove } = useFieldArray({ control, name: "materials" });
   const activeInventory = useMemo(() => inventoryItems.filter((item) => item.isActive), [inventoryItems]);
 
@@ -72,6 +72,7 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, prefil
       description={t("orders.addLines.materialHint")}
       error={saveError ?? (emptyError ? t("orders.addLines.needMaterial") : null)}
       pending={isPending}
+      submitDisabled={fields.length > 0 && !isValid}
       onSubmit={() => void onSubmit()}
     >
       <OrderMaterialLinesEditor

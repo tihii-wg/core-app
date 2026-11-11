@@ -3,19 +3,18 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { OrderService } from "../../lib/types";
-import { formatQuantity, parseQuantity } from "../../lib/quantity";
+import { formatQuantity } from "../../lib/quantity";
 import { cn } from "../../lib/utils";
-import { Input } from "../../ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import type { AssignableTechnician } from "./assignableTechnicians";
+import { OrderLineInlineNumberEditor as InlineNumberEditor } from "./OrderLineInlineNumberEditor";
 import { parseOrderServiceLinePrice } from "./updateOrderServiceLine";
 
-export type ServiceLineInlineField = "quantity" | "price" | "performer";
+export type ServiceLineInlineField = "price" | "performer";
 
 export type ServiceLineInlineEditTarget = {
   lineId: string;
@@ -43,7 +42,8 @@ type OrderServiceLineInlineCellsProps = {
 const NONE_VALUE = "__service_line_none__";
 
 /**
- * Click-to-edit quantity / price / performer cells for one order service line.
+ * Click-to-edit price / performer cells for one order service line.
+ * Quantity is read-only on the order card (edit it in the full form).
  * Enter or blur saves; Esc cancels; errors render under the control (no toast).
  */
 export default function OrderServiceLineInlineCells({
@@ -69,40 +69,9 @@ export default function OrderServiceLineInlineCells({
   return (
     <>
       <td className="px-2 py-2 align-top text-right tabular-nums text-muted-foreground sm:px-3">
-        {isEditing("quantity") ? (
-          <InlineNumberEditor
-            label={t("orders.detail.quantity")}
-            initial={String(line.quantity ?? "")}
-            testId={`service-line-qty-editor-${line.id}`}
-            saving={saving}
-            parse={(raw) => {
-              const parsed = parseQuantity(raw);
-              if (parsed === "required") return t("orders.validation.quantityRequired");
-              if (parsed === "min") return t("orders.validation.quantityMin");
-              if (parsed === "maxDecimals") return t("orders.validation.quantityMaxDecimals");
-              return { value: String(parsed) };
-            }}
-            onCancel={() => {
-              onCancel();
-              onEditorClosed();
-            }}
-            onSave={async (raw) => {
-              await onSaveField("quantity", raw);
-              onSaved();
-            }}
-            onAfterSave={() => onEditorClosed()}
-          />
-        ) : (
-          <InlineValueButton
-            editable={canEditLine}
-            label={t("orders.detail.quantity")}
-            testId={`service-line-qty-${line.id ?? "legacy"}`}
-            onClick={() => onRequestEdit("quantity")}
-            className="w-full text-right"
-          >
-            {formatQuantity(line.quantity, locale)}
-          </InlineValueButton>
-        )}
+        <span className="block min-w-0 [overflow-wrap:anywhere]" data-testid={`service-line-qty-${line.id ?? "legacy"}`}>
+          {formatQuantity(line.quantity, locale)}
+        </span>
       </td>
       <td className="px-2 py-2 align-top text-right tabular-nums text-muted-foreground sm:px-3">
         {isEditing("price") ? (
@@ -268,127 +237,6 @@ function InlineValueButton({
     >
       {children}
     </button>
-  );
-}
-
-function InlineNumberEditor({
-  label,
-  initial,
-  testId,
-  saving,
-  selectOnFocus = false,
-  parse,
-  onCancel,
-  onSave,
-  onAfterSave,
-}: {
-  label: string;
-  initial: string;
-  testId: string;
-  saving: boolean;
-  selectOnFocus?: boolean;
-  parse: (raw: string) => string | { value: string };
-  onCancel: () => void;
-  onSave: (raw: string) => Promise<void>;
-  onAfterSave?: (viaTab: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const skipBlurSaveRef = useRef(false);
-  const mountedRef = useRef(true);
-  const supportsTab = Boolean(onAfterSave);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus({ preventScroll: true });
-    if (selectOnFocus) input.select();
-  }, [selectOnFocus]);
-
-  async function submit(viaTab = false): Promise<boolean> {
-    if (saving) return false;
-    const result = parse(draft);
-    if (typeof result === "string") {
-      setError(result);
-      return false;
-    }
-    if (result.value === initial) {
-      if (viaTab) onAfterSave?.(true);
-      else onCancel();
-      return true;
-    }
-    setError(null);
-    try {
-      await onSave(result.value);
-      onAfterSave?.(viaTab);
-      return true;
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(err instanceof Error && err.message ? err.message : t("common.somethingWentWrong"));
-      }
-      return false;
-    }
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      skipBlurSaveRef.current = true;
-      onCancel();
-      return;
-    }
-    if (event.key === "Tab" && supportsTab && !event.shiftKey) {
-      event.preventDefault();
-      skipBlurSaveRef.current = true;
-      void submit(true);
-      return;
-    }
-    if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      skipBlurSaveRef.current = true;
-      void submit(false);
-    }
-  }
-
-  return (
-    <div className="space-y-1" data-testid={testId} onClick={(event) => event.stopPropagation()}>
-      <Input
-        ref={inputRef}
-        aria-label={label}
-        aria-invalid={error ? true : undefined}
-        disabled={saving}
-        inputMode="decimal"
-        className={cn("h-9 w-full min-w-[4.5rem] text-base tabular-nums md:text-sm", error && "border-destructive")}
-        value={draft}
-        onChange={(event) => {
-          setDraft(event.target.value);
-          if (error) setError(null);
-        }}
-        onKeyDown={handleKeyDown}
-        onBlur={() => {
-          if (skipBlurSaveRef.current) {
-            skipBlurSaveRef.current = false;
-            return;
-          }
-          void submit(false);
-        }}
-      />
-      {error ? (
-        <p role="alert" className="text-left text-xs text-destructive [overflow-wrap:anywhere]">
-          {error}
-        </p>
-      ) : null}
-    </div>
   );
 }
 

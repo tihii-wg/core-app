@@ -14,6 +14,13 @@ function warehouseError(error: { message?: string; code?: string } | null, fallb
   if (/may have at most 2 decimal places/i.test(message)) {
     return i18n.t("orders.validation.quantityMaxDecimals");
   }
+  if (message.includes("order_material:insufficient_stock")) {
+    const availableMatch = message.match(/available[=:\s]+(-?\d+(?:\.\d+)?)/i);
+    return i18n.t("orders.form.onlyNAvailableOnWarehouse", {
+      available: availableMatch?.[1] ?? "—",
+      warehouse: "",
+    });
+  }
   if (message.includes("insufficient_warehouse_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_batch_stock")) return i18n.t("orders.errors.insufficientWarehouseStock");
   if (message.includes("insufficient_stock")) return i18n.t("orders.errors.insufficientStock");
