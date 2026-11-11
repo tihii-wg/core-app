@@ -67,7 +67,9 @@ export default function AddOrderLinesDialogShell({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={guardedOpenChange}>
-        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-lg">
+        {/* Fixed comfortable height: the catalog dropdowns open inside the scrolling body, so a
+            content-sized dialog (one field tall) clipped the list and nothing could be picked. */}
+        <DialogContent className="flex h-[min(640px,90vh)] max-h-[90vh] flex-col sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
