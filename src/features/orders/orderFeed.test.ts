@@ -6,7 +6,9 @@ import {
   buildServiceLineEventPayload,
   classifyPaymentSettlement,
   describeOrderEvent,
+  isPlaceholderOrderNumber,
   orderEventCategory,
+  resolveOrderCreatedNumber,
 } from "./orderFeed";
 
 const event = (partial: Partial<OrderEvent>): OrderEvent => ({
@@ -271,5 +273,59 @@ describe("describeOrderEvent", () => {
     expect(
       describeOrderEvent(event({ eventType: "warranty_activated", payload: { item_name: "Battery" } }), label),
     ).toEqual({ key: "warrantyActivated", params: { item: "Battery" } });
+  });
+
+  it("resolves creation history to the live order number instead of ORD-PENDING / UUID", () => {
+    const pending = `ORD-PENDING-${"a".repeat(8)}-bbbb-cccc-dddd-${"e".repeat(12)}`;
+    expect(
+      describeOrderEvent(
+        event({ eventType: "order_created", payload: { order_number: pending }, newValue: pending }),
+        label,
+        { orderNumber: "ORD-2026-015" },
+      ),
+    ).toEqual({ key: "orderCreated", params: { number: "ORD-2026-015" } });
+
+    expect(
+      describeOrderEvent(
+        event({
+          eventType: "order_created",
+          payload: { order_number: "11111111-2222-3333-4444-555555555555" },
+          newValue: "11111111-2222-3333-4444-555555555555",
+        }),
+        label,
+        { orderNumber: "ORD-2026-015" },
+      ).params.number,
+    ).toBe("ORD-2026-015");
+
+    // Never invent a number or surface ORD-PENDING / UUID when no live number exists.
+    expect(
+      describeOrderEvent(
+        event({ eventType: "order_created", payload: { order_number: pending }, newValue: pending }),
+        label,
+        { orderNumber: "" },
+      ).params.number,
+    ).toBe("—");
+
+    // Stored real number stays compatible when no live override is passed.
+    expect(
+      describeOrderEvent(event({ eventType: "order_created", payload: { order_number: "ORD-2026-009" }, newValue: "ORD-2026-009" }), label)
+        .params.number,
+    ).toBe("ORD-2026-009");
+  });
+});
+
+describe("isPlaceholderOrderNumber / resolveOrderCreatedNumber", () => {
+  it("detects pending placeholders and bare UUIDs", () => {
+    expect(isPlaceholderOrderNumber("ORD-PENDING-abc")).toBe(true);
+    expect(isPlaceholderOrderNumber("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")).toBe(true);
+    expect(isPlaceholderOrderNumber("ORD-2026-015")).toBe(false);
+    expect(isPlaceholderOrderNumber("")).toBe(true);
+  });
+
+  it("prefers the live order number over a placeholder event snapshot", () => {
+    expect(resolveOrderCreatedNumber("ORD-PENDING-x", "ORD-2026-015")).toBe("ORD-2026-015");
+    expect(resolveOrderCreatedNumber("ORD-2026-001", "ORD-2026-015")).toBe("ORD-2026-015");
+    expect(resolveOrderCreatedNumber("ORD-2026-001", "")).toBe("ORD-2026-001");
+    expect(resolveOrderCreatedNumber(null, null)).toBe("—");
   });
 });

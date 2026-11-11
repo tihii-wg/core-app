@@ -258,11 +258,43 @@ function paymentParams(event: OrderEvent): Record<string, string> {
   };
 }
 
-export function describeOrderEvent(event: OrderEvent, statusLabel: (value: string) => string): OrderEventDescription {
+/** Temporary insert placeholder (`ORD-PENDING-<uuid>`) or a bare UUID — not a user-facing order number. */
+export function isPlaceholderOrderNumber(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed || trimmed === EMPTY) return true;
+  if (/^ORD-PENDING-/i.test(trimmed)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Prefer the live order number when the creation event still holds `ORD-PENDING-…` / a UUID.
+ * Never invents a number — only chooses among stored event data and the saved order record.
+ */
+export function resolveOrderCreatedNumber(stored: string | null | undefined, liveOrderNumber?: string | null) {
+  const fromEvent = stored?.trim() ?? "";
+  const fromOrder = liveOrderNumber?.trim() ?? "";
+  if (fromOrder && !isPlaceholderOrderNumber(fromOrder)) return fromOrder;
+  if (fromEvent && !isPlaceholderOrderNumber(fromEvent)) return fromEvent;
+  // Never surface ORD-PENDING-… / bare UUIDs in the user-facing feed.
+  return EMPTY;
+}
+
+export type DescribeOrderEventOptions = {
+  /** Current `orders.number` for this order — used when the creation event still has a pending placeholder. */
+  orderNumber?: string | null;
+};
+
+export function describeOrderEvent(
+  event: OrderEvent,
+  statusLabel: (value: string) => string,
+  options?: DescribeOrderEventOptions,
+): OrderEventDescription {
   if (event.eventType === "order_created") {
+    const stored = payloadText(event, "order_number") ?? event.newValue ?? "";
     return {
       key: "orderCreated",
-      params: { number: payloadText(event, "order_number") ?? event.newValue ?? EMPTY },
+      params: { number: resolveOrderCreatedNumber(stored, options?.orderNumber) },
     };
   }
 

@@ -966,6 +966,7 @@ export function installSecurityModel() {
             payload: lifecycle ? { lifecycle } : {},
           });
         } else if (oldRow.custom_status_id !== newRow.custom_status_id) {
+          // custom_status_id-only UPDATE (status unchanged) — still log one row.
           pushOrderEvent(ctx, {
             workspaceId: newRow.workspace_id,
             orderId: newRow.id,
@@ -975,6 +976,27 @@ export function installSecurityModel() {
             newValue: newRow.custom_status_id == null ? null : String(newRow.custom_status_id),
             payload: {},
           });
+        }
+
+        // When number is finalized after ORD-PENDING-…, sync the creation event snapshot
+        // (mirrors optional crm_orders_created_number_sync trigger).
+        const oldNumber = oldRow.number == null ? "" : String(oldRow.number);
+        const newNumber = newRow.number == null ? "" : String(newRow.number);
+        if (
+          oldNumber !== newNumber &&
+          /^ORD-PENDING-/i.test(oldNumber) &&
+          newNumber &&
+          !/^ORD-PENDING-/i.test(newNumber)
+        ) {
+          for (const event of ctx.fake.all("order_events")) {
+            if (event.order_id !== newRow.id || event.event_type !== "order_created") continue;
+            const payload =
+              event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+                ? { ...(event.payload as Record<string, unknown>) }
+                : {};
+            event.new_value = newNumber;
+            event.payload = { ...payload, order_number: newNumber };
+          }
         }
 
         const fieldKeys = [

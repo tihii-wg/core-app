@@ -143,7 +143,7 @@ const orders: Messages<typeof en> = {
       orderClosed: "Comandă închisă (din {{from}})",
       orderCancelled: "Comandă anulată (din {{from}})",
       orderReopened: "Comandă redeschisă: {{from}} → {{to}}",
-      orderCreated: "Comandă creată: {{number}}",
+      orderCreated: "Comandă creată — Comanda {{number}}",
       orderFieldChanged: "Detalii comandă actualizate: {{fields}}",
       serviceAdded: "Serviciu adăugat: {{item}} · cant. {{quantity}} · {{price}}",
       workAdded: "Lucrare adăugată: {{item}} · cant. {{quantity}} · {{price}}",

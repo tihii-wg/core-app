@@ -755,6 +755,7 @@ export default function OrderDetailPanel({
   const orderFeedSection = selectedOrder ? (
     <OrderFeedSection
       orderId={selectedOrder.id}
+      orderNumber={selectedOrder.orderNumber}
       enabled={detailPanelOpen}
       canComment={canEditOrder && !closedContentLocked}
       layout="panel"

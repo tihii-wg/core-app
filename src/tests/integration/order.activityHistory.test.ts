@@ -37,7 +37,14 @@ describe("order activity history", () => {
       WS.A,
     );
 
-    expect(eventsFor(String(created.id)).filter((event) => event.event_type === "order_created")).toHaveLength(1);
+    const createdEvents = eventsFor(String(created.id)).filter((event) => event.event_type === "order_created");
+    expect(createdEvents).toHaveLength(1);
+    // After number assignment, the creation snapshot must hold the real order number (not ORD-PENDING-…).
+    const orderNumber = String((created as { number?: string }).number ?? "");
+    expect(orderNumber).toMatch(/^ORD-\d{4}-\d+$/);
+    expect(createdEvents[0]?.new_value).toBe(orderNumber);
+    expect((createdEvents[0]?.payload as { order_number?: string }).order_number).toBe(orderNumber);
+    expect(String(createdEvents[0]?.new_value)).not.toMatch(/^ORD-PENDING-/i);
 
     const added = eventsFor(String(created.id)).filter((event) => event.event_type === "service_added");
     expect(added).toHaveLength(2);
@@ -255,6 +262,53 @@ describe("order activity history", () => {
     // Idempotent re-submit must not append another history row.
     await updateOrderStatus("order-a1", "in-progress", WS.A);
     expect(eventsFor("order-a1").filter((event) => event.event_type === "status_changed")).toHaveLength(afterFirst.length);
+  });
+
+  it("does not dual-write custom_status_id when status also changes on the same UPDATE", async () => {
+    Object.assign(row("orders", "order-a1")!, {
+      status: "new",
+      custom_status_id: "status-new",
+    });
+    const before = eventsFor("order-a1").filter((event) => event.event_type === "status_changed").length;
+
+    const { error } = await fake.client
+      .from("orders")
+      .update({ status: "in-progress", custom_status_id: "status-progress" })
+      .eq("id", "order-a1")
+      .eq("workspace_id", WS.A);
+    expect(error).toBeNull();
+
+    const added = eventsFor("order-a1").filter((event) => event.event_type === "status_changed").slice(before);
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({
+      field_name: "status",
+      old_value: "new",
+      new_value: "in-progress",
+    });
+    expect(added.some((event) => event.field_name === "custom_status_id")).toBe(false);
+  });
+
+  it("still records a custom_status_id-only change as its own history event", async () => {
+    Object.assign(row("orders", "order-a1")!, {
+      status: "in-progress",
+      custom_status_id: "status-progress",
+    });
+    const before = eventsFor("order-a1").filter((event) => event.event_type === "status_changed").length;
+
+    const { error } = await fake.client
+      .from("orders")
+      .update({ custom_status_id: "status-ready" })
+      .eq("id", "order-a1")
+      .eq("workspace_id", WS.A);
+    expect(error).toBeNull();
+
+    const added = eventsFor("order-a1").filter((event) => event.event_type === "status_changed").slice(before);
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({
+      field_name: "custom_status_id",
+      old_value: "status-progress",
+      new_value: "status-ready",
+    });
   });
 
   it("records one payment_recorded event per ledger insert with settlement details", async () => {

@@ -146,7 +146,7 @@ const orders: Messages<typeof en> = {
       orderClosed: "Заказ закрыт (было: {{from}})",
       orderCancelled: "Заказ отменён (было: {{from}})",
       orderReopened: "Заказ снова открыт: {{from}} → {{to}}",
-      orderCreated: "Заказ создан: {{number}}",
+      orderCreated: "Заказ создан — Заказ {{number}}",
       orderFieldChanged: "Обновлены данные заказа: {{fields}}",
       serviceAdded: "Добавлена услуга: {{item}} · кол-во {{quantity}} · {{price}}",
       workAdded: "Добавлена работа: {{item}} · кол-во {{quantity}} · {{price}}",

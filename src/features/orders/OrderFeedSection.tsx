@@ -32,6 +32,8 @@ const categoryDotClass: Record<OrderEventCategory, string> = {
 
 type OrderFeedSectionProps = {
   orderId: string;
+  /** Current human-readable `orders.number` — resolves creation events that still store ORD-PENDING-… */
+  orderNumber?: string | null;
   /** Nothing is fetched while the panel is closed. */
   enabled: boolean;
   /** False when the subscription is read-only or the user cannot edit orders. */
@@ -60,6 +62,7 @@ function formatStamp(value: string, locale: string) {
 /** Order detail: comments (add/delete) and the activity event timeline. Degrades to notices when tables/RPC are missing. */
 export default function OrderFeedSection({
   orderId,
+  orderNumber,
   enabled,
   canComment,
   layout = "panel",
@@ -155,7 +158,7 @@ export default function OrderFeedSection({
     ) : (
       <ol className="space-y-3 border-l border-border pl-4">
         {events.events.map((event) => {
-          const description = describeOrderEvent(event, statusLabel);
+          const description = describeOrderEvent(event, statusLabel, { orderNumber });
           const category = orderEventCategory(event);
           return (
             <li key={event.id} className="relative min-w-0" data-event-category={category} data-event-type={event.eventType}>

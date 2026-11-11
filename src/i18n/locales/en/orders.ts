@@ -137,7 +137,7 @@ export default {
       orderClosed: "Closed order (from {{from}})",
       orderCancelled: "Cancelled order (from {{from}})",
       orderReopened: "Reopened order: {{from}} → {{to}}",
-      orderCreated: "Order created: {{number}}",
+      orderCreated: "Order created — Order {{number}}",
       orderFieldChanged: "Order details updated: {{fields}}",
       serviceAdded: "Added service: {{item}} · qty {{quantity}} · {{price}}",
       workAdded: "Added work: {{item}} · qty {{quantity}} · {{price}}",
