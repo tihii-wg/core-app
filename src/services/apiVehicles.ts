@@ -3,15 +3,17 @@ import type { Client, Vehicle, VehicleInput } from "../lib/types";
 import { assertStoredMileage, MileageParseError } from "../lib/mileage";
 import { nullIfEmptyNumber, nullIfEmptyText } from "../lib/nullish";
 import { normalizePlateVin, plateIlikeLoosePattern, plateMatchesQuery } from "../lib/plateVin";
+import { vehicleMakeModelMatches } from "../lib/vehicleTextSearch";
 import { assertValidOptionalVin } from "../lib/vin";
 import { isMileageUnit, parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import { toClient } from "./apiClients";
 import { searchTerm } from "./searchTerm";
 import supabase from "./supabase";
 
-/** One vehicle + owning client for create-order Client field plate search. */
+/** One vehicle + owning client for create-order Client field (plate and/or make/model). */
 export type VehicleRegistrationSearchHit = {
   vehicleId: string;
+  /** May be empty when the hit matched make/model only. */
   licensePlate: string;
   make: string | null;
   model: string | null;
@@ -233,11 +235,38 @@ export async function getVehicle(workspaceId: string | undefined, vehicleId: str
 
 const VEHICLE_REGISTRATION_SEARCH_LIMIT = 25;
 
+/** PostgREST OR filter for create-order vehicle hits: plate (loose) + make/model tokens. */
+function clientComboboxVehicleOrFilter(rawSearch: string, term: string): string | null {
+  const parts: string[] = [];
+  const compact = normalizePlateVin(rawSearch).replace(/[%_]/g, "");
+  if (compact.length >= 2) {
+    const loose = plateIlikeLoosePattern(compact);
+    if (loose) parts.push(`license_plate.ilike.${loose}`);
+    if (term && normalizePlateVin(term) !== compact) {
+      parts.push(`license_plate.ilike.%${term}%`);
+    }
+  }
+  if (term.length >= 2) {
+    parts.push(`make.ilike.%${term}%`, `model.ilike.%${term}%`);
+    for (const token of term.split(/\s+/)) {
+      const safe = searchTerm(token);
+      if (safe.length < 2) continue;
+      parts.push(`make.ilike.%${safe}%`, `model.ilike.%${safe}%`);
+    }
+  }
+  return parts.length > 0 ? parts.join(",") : null;
+}
+
+function vehicleMatchesClientComboboxSearch(vehicle: Vehicle, rawSearch: string, term: string): boolean {
+  if (vehicle.licensePlate && plateMatchesQuery(vehicle.licensePlate, rawSearch)) return true;
+  if (vehicleMakeModelMatches(vehicle.make, vehicle.model, term)) return true;
+  return false;
+}
+
 /**
- * Workspace-scoped vehicle search by registration number for the create-order Client field.
- * Uses `vehicles.license_plate` + `vehicles.client_id` → `clients` (RLS + workspace_id).
- * Over-fetches loose `ilike` candidates, then filters with `normalizePlateVin` so
- * `B123ABC` / `b123abc` / `B 123 ABC` match the same stored plate without rewriting DB values.
+ * Workspace-scoped vehicle search for the create-order Client field.
+ * Matches registration number (normalized) and/or make/model (token AND), then loads
+ * owning clients via `vehicles.client_id` (RLS + workspace_id, soft-deletes excluded).
  */
 export async function searchVehiclesByRegistration(
   workspaceId: string | undefined,
@@ -245,17 +274,9 @@ export async function searchVehiclesByRegistration(
   { limit = VEHICLE_REGISTRATION_SEARCH_LIMIT }: { limit?: number } = {},
 ): Promise<VehicleRegistrationSearchHit[]> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const compact = normalizePlateVin(search).replace(/[%_]/g, "");
-  if (compact.length < 2) return [];
-
   const term = searchTerm(search);
-  const loose = plateIlikeLoosePattern(compact);
-  if (!loose) return [];
-
-  const orFilter =
-    term && normalizePlateVin(term) !== compact
-      ? `license_plate.ilike.%${term}%,license_plate.ilike.${loose}`
-      : `license_plate.ilike.${loose}`;
+  const orFilter = clientComboboxVehicleOrFilter(search, term);
+  if (!orFilter) return [];
 
   const fetchLimit = Math.min(Math.max(limit * 3, limit), 75);
   const { data, error } = await withVehicleColumns(() =>
@@ -264,7 +285,6 @@ export async function searchVehiclesByRegistration(
       .select(vehicleColumns() as typeof vehicleBaseColumns)
       .eq("workspace_id", targetWorkspaceId)
       .is("deleted_at", null)
-      .not("license_plate", "is", null)
       .or(orFilter)
       .order("created_at", { ascending: false })
       .limit(fetchLimit),
@@ -277,7 +297,7 @@ export async function searchVehiclesByRegistration(
 
   const vehicles = ((data ?? []) as unknown as Record<string, unknown>[])
     .map(toVehicle)
-    .filter((vehicle) => vehicle.licensePlate && plateMatchesQuery(vehicle.licensePlate, search))
+    .filter((vehicle) => vehicleMatchesClientComboboxSearch(vehicle, search, term))
     .slice(0, limit);
 
   if (vehicles.length === 0) return [];
@@ -310,11 +330,10 @@ export async function searchVehiclesByRegistration(
   const hits: VehicleRegistrationSearchHit[] = [];
   for (const vehicle of vehicles) {
     const client = clientsById.get(vehicle.clientId);
-    const plate = vehicle.licensePlate?.trim();
-    if (!client || !plate) continue;
+    if (!client) continue;
     hits.push({
       vehicleId: vehicle.id,
-      licensePlate: plate,
+      licensePlate: vehicle.licensePlate?.trim() ?? "",
       make: vehicle.make,
       model: vehicle.model,
       year: vehicle.year,

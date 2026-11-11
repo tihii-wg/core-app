@@ -121,7 +121,7 @@ const clients: Messages<typeof en> = {
   },
   combobox: {
     placeholder: "Client",
-    placeholderWithPlate: "Nume client sau număr de înmatriculare",
+    placeholderWithPlate: "Nume, telefon, număr de înmatriculare sau marcă/model",
     newClient: "Client nou: <strong>{{name}}</strong>",
     createNew: "Creează client nou \"<strong>{{name}}</strong>\"",
     noMatches: "Niciun client potrivit",

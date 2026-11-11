@@ -122,7 +122,7 @@ const clients: Messages<typeof en> = {
   },
   combobox: {
     placeholder: "Клиент",
-    placeholderWithPlate: "Имя клиента или госномер",
+    placeholderWithPlate: "Имя, телефон, госномер или марка/модель",
     newClient: "Новый клиент: <strong>{{name}}</strong>",
     createNew: "Создать нового клиента «<strong>{{name}}</strong>»",
     noMatches: "Нет подходящих клиентов",

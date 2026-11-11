@@ -117,7 +117,7 @@ export default {
   },
   combobox: {
     placeholder: "Client",
-    placeholderWithPlate: "Client name or license plate",
+    placeholderWithPlate: "Client name, phone, license plate, or make/model",
     newClient: "New client: <strong>{{name}}</strong>",
     createNew: "Create new client \"<strong>{{name}}</strong>\"",
     noMatches: "No matching clients",

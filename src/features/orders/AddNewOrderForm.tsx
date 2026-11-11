@@ -102,15 +102,15 @@ export default function AddNewOrderForm({
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const showWarrantyKm = industryUsesMileageWarranty(workflow);
-  // When plate hits are shown separately, skip getClients' plate→client expansion to avoid
+  // When vehicle hits are shown separately, skip getClients' vehicle→client expansion to avoid
   // client-only rows that would clear the vehicle on select.
   const { clients } = useGetClients(clientListSearch, "all", { includeVehicleMatches: !showVehicles });
-  const plateSearchEnabled = showVehicles && debouncedClientSearch.length >= 2;
+  const vehicleFieldSearchEnabled = showVehicles && debouncedClientSearch.length >= 2;
   const {
     hits: vehicleRegistrationHits,
     isLoading: vehicleRegistrationLoading,
     isError: vehicleRegistrationError,
-  } = useSearchVehiclesByRegistration(debouncedClientSearch, { enabled: plateSearchEnabled });
+  } = useSearchVehiclesByRegistration(debouncedClientSearch, { enabled: vehicleFieldSearchEnabled });
   const clientsForCombobox = useMemo(() => {
     const base = clients ?? [];
     const extras = extraClients.filter((extra) => !base.some((client) => client.id === extra.id));
@@ -378,8 +378,8 @@ export default function AddNewOrderForm({
                 value={clientName}
                 placeholder={showVehicles ? t("clients.combobox.placeholderWithPlate") : undefined}
                 vehicleHits={showVehicles ? vehicleRegistrationHits : undefined}
-                vehicleHitsLoading={showVehicles && plateSearchEnabled ? vehicleRegistrationLoading : false}
-                vehicleHitsError={showVehicles && plateSearchEnabled ? vehicleRegistrationError : false}
+                vehicleHitsLoading={showVehicles && vehicleFieldSearchEnabled ? vehicleRegistrationLoading : false}
+                vehicleHitsError={showVehicles && vehicleFieldSearchEnabled ? vehicleRegistrationError : false}
                 onChange={(value) => {
                   setClientName(value);
                   field.onChange("");

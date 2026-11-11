@@ -482,6 +482,137 @@ describe("AddNewOrderForm client validation", () => {
     );
   });
 
+  it("selecting a make/model search hit sets both client_id and vehicle_id", async () => {
+    const user = userEvent.setup();
+    const makeClient = {
+      id: "client-bmw",
+      name: "BMW Owner",
+      email: "",
+      phone: "+37363333333",
+      address: "",
+      balance: 0,
+      created_at: "",
+      client_type: "individual" as const,
+      tax_id: null,
+      contact_person: null,
+    };
+    plateSearchState.hits = [
+      {
+        vehicleId: "veh-bmw-x5",
+        licensePlate: "B111BMW",
+        make: "BMW",
+        model: "X5",
+        year: 2021,
+        client: makeClient,
+      },
+      {
+        vehicleId: "veh-bmw-x3",
+        licensePlate: "",
+        make: "BMW",
+        model: "X3",
+        year: 2019,
+        client: makeClient,
+      },
+    ];
+    vehiclesState.vehicles = [
+      {
+        id: "veh-bmw-x5",
+        workspaceId: "ws-1",
+        clientId: "client-bmw",
+        make: "BMW",
+        model: "X5",
+        year: 2021,
+        vin: null,
+        licensePlate: "B111BMW",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={vi.fn()} searchQuery="" />);
+
+    const clientInput = screen.getByRole("combobox", { name: /license plate/i });
+    await user.click(clientInput);
+    await user.type(clientInput, "BMW");
+    expect(await screen.findByTestId("client-combobox-vehicle-veh-bmw-x5")).toBeInTheDocument();
+    expect(screen.getByTestId("client-combobox-vehicle-veh-bmw-x3")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("client-combobox-vehicle-veh-bmw-x5"));
+    expect(await screen.findByTestId("selected-vehicle-summary")).toHaveTextContent(/BMW X5/i);
+
+    await user.click(saveDraftButton());
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-bmw",
+        vehicleId: "veh-bmw-x5",
+      }),
+    );
+  });
+
+  it("selecting a phone-matched client does not attach a vehicle", async () => {
+    const user = userEvent.setup();
+    clientsState.clients = [
+      {
+        id: "client-phone",
+        name: "Phone Client",
+        email: "",
+        phone: "+37369123456",
+        address: "",
+        balance: 0,
+        created_at: "",
+        client_type: "individual",
+        tax_id: null,
+        contact_person: null,
+      },
+    ];
+    plateSearchState.hits = [];
+    vehiclesState.vehicles = [
+      {
+        id: "veh-owned",
+        workspaceId: "ws-1",
+        clientId: "client-phone",
+        make: "Audi",
+        model: "A4",
+        year: 2018,
+        vin: null,
+        licensePlate: "AA111AA",
+        initialMileage: null,
+        currentMileage: null,
+        mileageUnit: null,
+        engineDisplacement: null,
+        fuelType: null,
+        createdAt: "",
+        updatedAt: "",
+        deletedAt: null,
+      },
+    ];
+
+    renderWithQuery(<AddNewOrderForm setCreateModalOpen={vi.fn()} searchQuery="" />);
+
+    const clientInput = screen.getByRole("combobox", { name: /license plate/i });
+    await user.click(clientInput);
+    await user.type(clientInput, "069123456");
+    expect(await screen.findByText("Phone Client")).toBeInTheDocument();
+    await user.click(screen.getByText("+37369123456"));
+
+    expect(screen.queryByTestId("selected-vehicle-summary")).not.toBeInTheDocument();
+    await user.click(saveDraftButton());
+    await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-phone",
+        vehicleId: null,
+      }),
+    );
+  });
+
   it("selecting a plate search hit sets both client_id and vehicle_id", async () => {
     const user = userEvent.setup();
     const plateClient = {

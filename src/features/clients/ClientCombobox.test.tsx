@@ -135,4 +135,57 @@ describe("ClientCombobox vehicle registration hits", () => {
     await user.click(screen.getByText("+37369111111"));
     expect(onSelect).toHaveBeenCalledWith(pavelA);
   });
+
+  it("keeps phone-matched clients visible despite formatting differences", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onSelectVehicle = vi.fn();
+
+    renderWithQuery(
+      <ClientCombobox
+        clients={[pavelA]}
+        value="069111111"
+        onChange={vi.fn()}
+        onSelect={onSelect}
+        onSelectVehicle={onSelectVehicle}
+        vehicleHits={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByText("Pavel")).toBeInTheDocument();
+    expect(screen.getByText("+37369111111")).toBeInTheDocument();
+    await user.click(screen.getByText("+37369111111"));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(pavelA);
+    expect(onSelectVehicle).not.toHaveBeenCalled();
+  });
+
+  it("lists make/model vehicle hits without requiring a plate", async () => {
+    const user = userEvent.setup();
+    const onSelectVehicle = vi.fn();
+    const makeHit: VehicleRegistrationSearchHit = {
+      vehicleId: "veh-camry",
+      licensePlate: "",
+      make: "Toyota",
+      model: "Camry",
+      year: 2019,
+      client: pavelA,
+    };
+
+    renderWithQuery(
+      <ClientCombobox
+        clients={[]}
+        value="Camry"
+        onChange={vi.fn()}
+        onSelect={vi.fn()}
+        onSelectVehicle={onSelectVehicle}
+        vehicleHits={[makeHit]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByText("Toyota Camry 2019")).toBeInTheDocument();
+    await user.click(screen.getByTestId("client-combobox-vehicle-veh-camry"));
+    expect(onSelectVehicle).toHaveBeenCalledExactlyOnceWith(makeHit);
+  });
 });

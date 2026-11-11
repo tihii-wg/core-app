@@ -3,6 +3,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Input } from "../../ui/Input";
 import type { Client } from "../../lib/types";
+import { phoneMatchesQuery } from "../../lib/phoneSearch";
 import { vehicleMakeModelLabel } from "../../services/apiVehicles";
 import type { VehicleRegistrationSearchHit } from "../../services/apiVehicles";
 import { industryClientCopy } from "../industries/industryWorkflow";
@@ -18,12 +19,12 @@ type ClientComboboxProps = {
   onSelect: (client: Client) => void;
   /** Explicit create action — always available when the typed name is non-empty. */
   onCreateRequest?: (name: string) => void;
-  /** Plate/registration hits from workspace vehicle search (create-order). */
+  /** Plate / make / model hits from workspace vehicle search (create-order). */
   vehicleHits?: VehicleRegistrationSearchHit[];
   vehicleHitsLoading?: boolean;
   vehicleHitsError?: boolean;
   onSelectVehicle?: (hit: VehicleRegistrationSearchHit) => void;
-  /** Override the industry placeholder (e.g. mention license plate search). */
+  /** Override the industry placeholder (e.g. mention plate / phone / vehicle search). */
   placeholder?: string;
 };
 
@@ -41,7 +42,21 @@ function vehicleHitSecondary(hit: VehicleRegistrationSearchHit, untitled: string
     model: hit.model,
     year: hit.year,
   });
-  return makeModel ? `${makeModel} · ${hit.licensePlate}` : hit.licensePlate || untitled;
+  const plate = hit.licensePlate?.trim() ?? "";
+  if (makeModel && plate) return `${makeModel} · ${plate}`;
+  if (makeModel) return makeModel;
+  if (plate) return plate;
+  return untitled;
+}
+
+function clientMatchesComboboxQuery(client: Client, rawQuery: string): boolean {
+  const normalized = rawQuery.trim().toLowerCase();
+  if (!normalized) return true;
+  const name = client.name?.toLowerCase() ?? "";
+  const taxId = client.tax_id?.toLowerCase() ?? "";
+  if (name.includes(normalized) || taxId.includes(normalized)) return true;
+  if (client.phone?.trim() && phoneMatchesQuery(client.phone, rawQuery)) return true;
+  return false;
 }
 
 export default function ClientCombobox({
@@ -79,15 +94,9 @@ export default function ClientCombobox({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
 
-  const normalized = value.trim().toLowerCase();
   // Keep every matching row — do not dedupe by name. Identity is client.id.
-  const filteredClients = clients.filter((client) => {
-    if (!normalized) return true;
-    const name = client.name?.toLowerCase() ?? "";
-    const phone = client.phone?.toLowerCase() ?? "";
-    const taxId = client.tax_id?.toLowerCase() ?? "";
-    return name.includes(normalized) || phone.includes(normalized) || taxId.includes(normalized);
-  });
+  // Phone uses digit/variant matching so server phone hits (069 ↔ +373) are not dropped.
+  const filteredClients = clients.filter((client) => clientMatchesComboboxQuery(client, value));
 
   const canCreate = Boolean(onCreateRequest) && value.trim().length > 0;
   const emptyPhone = t("clients.combobox.noPhone");

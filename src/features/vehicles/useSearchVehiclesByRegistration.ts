@@ -6,7 +6,7 @@ export function vehicleRegistrationSearchQueryKey(workspaceId: string | undefine
   return ["vehicles", "registration-search", workspaceId, search] as const;
 }
 
-/** Debounced plate search for the create-order Client combobox. */
+/** Debounced plate / make / model search for the create-order Client combobox. */
 export function useSearchVehiclesByRegistration(search: string, { enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
   const term = search.trim();
