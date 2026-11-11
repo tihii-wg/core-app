@@ -757,6 +757,7 @@ const orders: Messages<typeof en> = {
   lifecycle: {
     closeAction: "Закрыть заказ",
     cancelAction: "Отменить заказ",
+    cancelDeleteHint: "Заказ можно удалить только после отмены",
     closeTitle: "Закрытие заказа",
     closeDescription: "Формально закрыть заказ {{number}}. Будет записана дата закрытия для гарантии.",
     cancelTitle: "Отмена заказа",

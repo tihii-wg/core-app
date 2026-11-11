@@ -684,7 +684,14 @@ export default function OrderDetailPanel({
   const canSaveAndClose = canEditOrder && !closedContentLocked;
   const lifecycleBusy = isStatusUpdating || isUnifiedStatusUpdating;
   const showCancelAction = !isEditing && (showOpenLifecycleActions || showCancelClosedAction);
+  /** Same Delete action as before, shown in the Cancel control's place after the order is cancelled. */
+  const showFooterDeleteAction = Boolean(canEditOrder && !isEditing && selectedOrder && isCancelledForDelete);
   const footerSavePending = footerSaving || inlineSaving || editFormSubmitting;
+
+  function openDeleteConfirm() {
+    if (deleteBlockedReason) return;
+    setConfirmDeleteOpen(true);
+  }
 
   const filesTabActive = detailPanelOpen && detailTab === "files";
   const { attachments: orderAttachments, isFetched: attachmentsFetched } = useOrderAttachments(selectedOrder?.id, {
@@ -1515,28 +1522,6 @@ export default function OrderDetailPanel({
                 {selectedOrder.updatedAt ? <p>{t("orders.detail.updated", { date: selectedOrder.updatedAt })}</p> : null}
               </div>
             )}
-
-            {canEditOrder ? (
-              <div className="border-t border-border pt-4">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="w-full min-w-0 sm:w-auto"
-                  disabled={Boolean(deleteBlockedReason) || deleteOrder.isPending}
-                  title={deleteBlockedReason ?? undefined}
-                  onClick={() => {
-                    if (deleteBlockedReason) return;
-                    setConfirmDeleteOpen(true);
-                  }}
-                >
-                  <Trash2 className="size-4 shrink-0" />
-                  <span className="truncate">{t("orders.actions.delete")}</span>
-                </Button>
-                {deleteBlockedReason ? (
-                  <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{deleteBlockedReason}</p>
-                ) : null}
-              </div>
-            ) : null}
               </>
             ) : null}
                 </div>
@@ -1554,23 +1539,54 @@ export default function OrderDetailPanel({
                   )}
                 >
                   {isDesktopFeedLayout && showCancelAction ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="mr-auto min-h-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setCancelOpen(true)}
-                      disabled={lifecycleBusy}
-                    >
-                      <CircleX />
-                      {t("orders.lifecycle.cancelAction")}
-                    </Button>
+                    <div className="mr-auto flex min-w-0 max-w-full flex-col gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="min-h-11 self-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setCancelOpen(true)}
+                        disabled={lifecycleBusy}
+                      >
+                        <CircleX />
+                        {t("orders.lifecycle.cancelAction")}
+                      </Button>
+                      <p
+                        className="text-xs text-destructive [overflow-wrap:anywhere]"
+                        data-testid="order-detail-cancel-delete-hint"
+                      >
+                        {t("orders.lifecycle.cancelDeleteHint")}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {isDesktopFeedLayout && showFooterDeleteAction ? (
+                    <div className="mr-auto flex min-w-0 max-w-full flex-col gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="min-h-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={Boolean(deleteBlockedReason) || deleteOrder.isPending}
+                        title={deleteBlockedReason ?? undefined}
+                        onClick={openDeleteConfirm}
+                      >
+                        <Trash2 className="size-4 shrink-0" />
+                        <span className="truncate">{t("orders.actions.delete")}</span>
+                      </Button>
+                      {deleteBlockedReason ? (
+                        <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{deleteBlockedReason}</p>
+                      ) : null}
+                    </div>
                   ) : null}
 
                   {showOpenLifecycleActions && !isEditing ? (
                     <Button
                       type="button"
                       variant="outline"
-                      className={cn("min-h-11", !isDesktopFeedLayout && "w-full min-w-0", !isDesktopFeedLayout && !showCancelAction && "col-span-2")}
+                      className={cn(
+                        "min-h-11",
+                        !isDesktopFeedLayout && "w-full min-w-0",
+                        !isDesktopFeedLayout && !showCancelAction && !showFooterDeleteAction && "col-span-2",
+                      )}
                       onClick={() => void handleCloseOrderClick()}
                       disabled={lifecycleBusy || footerSavePending}
                     >
@@ -1599,30 +1615,56 @@ export default function OrderDetailPanel({
                     </Button>
                   )}
 
-                  {!isDesktopFeedLayout && showCancelAction ? (
-                    <DropdownMenu modal={false}>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="size-11 shrink-0"
-                          aria-label={t("common.actions")}
-                          disabled={lifecycleBusy}
+                  {!isDesktopFeedLayout && (showCancelAction || showFooterDeleteAction) ? (
+                    <div className="flex min-w-0 flex-col items-end gap-1">
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-11 shrink-0"
+                            aria-label={t("common.actions")}
+                            disabled={lifecycleBusy || (showFooterDeleteAction && deleteOrder.isPending)}
+                          >
+                            <EllipsisVertical />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" side="top">
+                          {showCancelAction ? (
+                            <DropdownMenuItem
+                              className="min-h-11 text-destructive focus:text-destructive"
+                              onSelect={() => setCancelOpen(true)}
+                            >
+                              <CircleX />
+                              {t("orders.lifecycle.cancelAction")}
+                            </DropdownMenuItem>
+                          ) : null}
+                          {showFooterDeleteAction ? (
+                            <DropdownMenuItem
+                              className="min-h-11 text-destructive focus:text-destructive"
+                              disabled={Boolean(deleteBlockedReason) || deleteOrder.isPending}
+                              title={deleteBlockedReason ?? undefined}
+                              onSelect={() => {
+                                if (deleteBlockedReason || deleteOrder.isPending) return;
+                                openDeleteConfirm();
+                              }}
+                            >
+                              <Trash2 />
+                              {t("orders.actions.delete")}
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {showCancelAction ? (
+                        <p
+                          className="max-w-[11rem] text-right text-xs text-destructive [overflow-wrap:anywhere]"
+                          data-testid="order-detail-cancel-delete-hint"
                         >
-                          <EllipsisVertical />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" side="top">
-                        <DropdownMenuItem
-                          className="min-h-11 text-destructive focus:text-destructive"
-                          onSelect={() => setCancelOpen(true)}
-                        >
-                          <CircleX />
-                          {t("orders.lifecycle.cancelAction")}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                          {t("orders.lifecycle.cancelDeleteHint")}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                 </footer>
               ) : null}

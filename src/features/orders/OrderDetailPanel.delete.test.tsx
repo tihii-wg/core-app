@@ -161,6 +161,23 @@ vi.mock("../vehicles/useVehicleMutations", () => ({
   useArchiveVehicle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+function stubDesktopViewport() {
+  window.matchMedia = ((query: string) => {
+    const wantsDesktop = /min-width:\s*1024px/.test(query);
+    return {
+      matches: wantsDesktop,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    };
+  }) as unknown as typeof window.matchMedia;
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
+}
+
 const order = {
   id: "order-1",
   clientId: "client-1",
@@ -218,6 +235,58 @@ describe("OrderDetailPanel delete action", () => {
     deletePending.value = false;
     paymentsState.payments = [];
     subscriptionState.canWrite = true;
+    stubDesktopViewport();
+  });
+
+  it("shows Cancel order (not Delete) in the footer for an active order", async () => {
+    renderPanel({ selectedOrder: { ...order, status: "new" } });
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(within(footer).getByRole("button", { name: /Cancel order/i })).toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: /Delete order/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Delete order/i })).not.toBeInTheDocument();
+    expect(within(footer).getByTestId("order-detail-cancel-delete-hint")).toHaveTextContent(
+      /only be deleted after cancellation/i,
+    );
+  });
+
+  it("shows Delete order in the former Cancel location after cancellation and not at the card bottom", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(within(footer).getByRole("button", { name: /Delete order/i })).toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: /Cancel order/i })).not.toBeInTheDocument();
+    expect(within(footer).queryByTestId("order-detail-cancel-delete-hint")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Information$/i }));
+    // Bottom-of-card delete was removed; only the footer action remains.
+    expect(screen.getAllByRole("button", { name: /Delete order/i })).toHaveLength(1);
+    expect(within(footer).getByRole("button", { name: /Delete order/i })).toBeInTheDocument();
+  });
+
+  it("shows the cancel-delete hint only while the order is not cancelled", async () => {
+    const { rerender } = renderPanel({ selectedOrder: { ...order, status: "in-progress" } });
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(within(footer).getByTestId("order-detail-cancel-delete-hint")).toHaveTextContent(
+      /only be deleted after cancellation/i,
+    );
+    expect(within(footer).getByRole("button", { name: /Cancel order/i })).toBeInTheDocument();
+
+    rerender(
+      <OrderDetailPanel
+        selectedOrder={{ ...order, status: "cancelled" }}
+        detailPanelOpen
+        setDetailPanelOpen={vi.fn()}
+        onOrderUpdated={vi.fn()}
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    const cancelledFooter = await screen.findByTestId("order-detail-footer");
+    expect(within(cancelledFooter).queryByTestId("order-detail-cancel-delete-hint")).not.toBeInTheDocument();
+    expect(within(cancelledFooter).getByRole("button", { name: /Delete order/i })).toBeInTheDocument();
   });
 
   it("opens a confirmation dialog and cancels without deleting", async () => {
@@ -225,11 +294,11 @@ describe("OrderDetailPanel delete action", () => {
     const onDeleted = vi.fn();
     renderPanel({ onDeleted });
 
-    await user.click(screen.getByRole("button", { name: /Delete order/i }));
+    await user.click(within(await screen.findByTestId("order-detail-footer")).getByRole("button", { name: /Delete order/i }));
     expect(screen.getByRole("heading", { name: /Delete order permanently/i })).toBeInTheDocument();
     expect(screen.getByText(/This cannot be undone/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    await user.click(screen.getByRole("button", { name: /^Cancel$/i }));
     await waitFor(() => {
       expect(screen.queryByRole("heading", { name: /Delete order permanently/i })).not.toBeInTheDocument();
     });
@@ -237,12 +306,12 @@ describe("OrderDetailPanel delete action", () => {
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
-  it("deletes the cancelled order and notifies the parent on confirm", async () => {
+  it("deletes the cancelled order via the existing delete flow and notifies the parent on confirm", async () => {
     const user = userEvent.setup();
     const onDeleted = vi.fn();
     renderPanel({ onDeleted });
 
-    await user.click(screen.getByRole("button", { name: /Delete order/i }));
+    await user.click(within(await screen.findByTestId("order-detail-footer")).getByRole("button", { name: /Delete order/i }));
     const dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByRole("button", { name: /^Delete order$/i }));
 
@@ -250,13 +319,6 @@ describe("OrderDetailPanel delete action", () => {
       expect(mutateAsync).toHaveBeenCalledWith("order-1");
     });
     expect(onDeleted).toHaveBeenCalledWith("order-1");
-  });
-
-  it("refuses delete when the order is not cancelled", async () => {
-    renderPanel({ selectedOrder: { ...order, status: "new" } });
-    const deleteButton = screen.getByRole("button", { name: /Delete order/i });
-    expect(deleteButton).toBeDisabled();
-    expect(screen.getByText(/Cancel the order first/i)).toBeInTheDocument();
   });
 
   it("blocks delete when active payments remain", async () => {
@@ -278,7 +340,9 @@ describe("OrderDetailPanel delete action", () => {
       },
     ];
     renderPanel();
-    const deleteButton = screen.getByRole("button", { name: /Delete order/i });
+    const deleteButton = within(await screen.findByTestId("order-detail-footer")).getByRole("button", {
+      name: /Delete order/i,
+    });
     expect(deleteButton).toBeDisabled();
     expect(screen.getByText(/active payments/i)).toBeInTheDocument();
   });
@@ -288,9 +352,12 @@ describe("OrderDetailPanel delete action", () => {
     const onDeleted = vi.fn();
     renderPanel({ invoiceNumber: "INV-1", onDeleted });
 
-    const deleteButton = screen.getByRole("button", { name: /Delete order/i });
+    const footer = await screen.findByTestId("order-detail-footer");
+    const deleteButton = within(footer).getByRole("button", {
+      name: /Delete order/i,
+    });
     expect(deleteButton).toBeDisabled();
-    expect(screen.getByText(/invoice/i)).toBeInTheDocument();
+    expect(within(footer).getByText(/still has an invoice/i)).toBeInTheDocument();
 
     await user.click(deleteButton);
     expect(mutateAsync).not.toHaveBeenCalled();
@@ -298,9 +365,16 @@ describe("OrderDetailPanel delete action", () => {
     expect(screen.queryByRole("heading", { name: /Delete order permanently/i })).not.toBeInTheDocument();
   });
 
-  it("hides the delete action when subscription write is disabled", () => {
+  it("hides the delete action when subscription write is disabled", async () => {
     subscriptionState.canWrite = false;
     renderPanel();
+    expect(await screen.findByTestId("order-detail-footer")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Delete order/i })).not.toBeInTheDocument();
+  });
+
+  it("does not auto-delete when the order is only cancelled", async () => {
+    renderPanel();
+    await screen.findByTestId("order-detail-footer");
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 });

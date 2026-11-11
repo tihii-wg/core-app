@@ -1545,6 +1545,18 @@ describe("OrderDetailPanel sticky footer", () => {
     await user.click(within(footer).getByRole("button", { name: "Close window" }));
     expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
   });
+
+  it("replaces Cancel order with Delete order in the footer after the order is cancelled", async () => {
+    stubViewport(true);
+    renderPanel(vi.fn(), vi.fn(), {
+      order: { ...order, status: "cancelled", closedAt },
+    });
+
+    const footer = await screen.findByTestId("order-detail-footer");
+    expect(within(footer).getByRole("button", { name: "Delete order" })).toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: "Close order" })).not.toBeInTheDocument();
+  });
 });
 
 describe("OrderDetailPanel items tab add buttons", () => {

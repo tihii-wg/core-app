@@ -747,6 +747,7 @@ export default {
   lifecycle: {
     closeAction: "Close order",
     cancelAction: "Cancel order",
+    cancelDeleteHint: "The order can only be deleted after cancellation",
     closeTitle: "Close order",
     closeDescription: "Formally close order {{number}}. This sets the closure timestamp used for warranty.",
     cancelTitle: "Cancel order",

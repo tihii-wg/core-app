@@ -753,6 +753,7 @@ const orders: Messages<typeof en> = {
   lifecycle: {
     closeAction: "Închide comanda",
     cancelAction: "Anulează comanda",
+    cancelDeleteHint: "Comanda poate fi ștearsă doar după anulare",
     closeTitle: "Închiderea comenzii",
     closeDescription: "Închide formal comanda {{number}}. Se salvează data închiderii pentru garanție.",
     cancelTitle: "Anularea comenzii",
