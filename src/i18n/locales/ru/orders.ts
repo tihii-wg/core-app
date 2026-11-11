@@ -458,6 +458,7 @@ const orders: Messages<typeof en> = {
     editTitle: "Редактировать заказ",
     editField: "Изменить: {{field}}",
     inlineEmpty: "+ Добавить",
+    addPerformer: "+ Добавить исполнителя",
     saveAndClose: "Сохранить и закрыть",
     closeWindow: "Закрыть окно",
     srDescription: "Просмотр и редактирование VIN, услуг, автомобиля, ответственного и срока этого заказа.",

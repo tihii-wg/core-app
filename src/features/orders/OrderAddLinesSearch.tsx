@@ -32,9 +32,11 @@ type OrderAddLinesSearchProps = {
   industrySlug: string | null | undefined;
   allowServices: boolean;
   allowMaterials: boolean;
-  onServiceAdded: (order: Order) => void;
+  onServiceAdded: (order: Order, meta?: { catalogServiceId: string }) => void;
   onHighlightServiceLine: (serviceId: string) => void;
   onOpenMaterial: (prefill: OrderAddLinesMaterialPrefill) => void;
+  /** Lets the parent restore focus to the search after a line-price / performer editor closes. */
+  focusRegistration?: (focus: () => void) => void;
 };
 
 type FlatOption =
@@ -59,6 +61,7 @@ export default function OrderAddLinesSearch({
   onServiceAdded,
   onHighlightServiceLine,
   onOpenMaterial,
+  focusRegistration,
 }: OrderAddLinesSearchProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
@@ -73,6 +76,7 @@ export default function OrderAddLinesSearch({
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const suppressOpenOnFocusRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [servicesExpanded, setServicesExpanded] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
@@ -204,23 +208,32 @@ export default function OrderAddLinesSearch({
     active?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, open]);
 
-  function clearAndKeepFocus() {
+  function clearQueryState() {
     setQuery("");
     setServicesExpanded(false);
     setItemsExpanded(false);
     setCreatingService(false);
     setCreatePrice("");
     setCreatePriceError("");
-    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
-  async function addServiceLine(draft: OrderService, pendingId: string) {
+  useEffect(() => {
+    focusRegistration?.(() => {
+      // Programmatic focus (after a line editor closes) must not pop the result list over the lines.
+      suppressOpenOnFocusRef.current = true;
+      inputRef.current?.focus();
+      suppressOpenOnFocusRef.current = false;
+    });
+  }, [focusRegistration]);
+
+  async function addServiceLine(draft: OrderService, pendingId: string, catalogServiceId: string) {
     setPendingServiceId(pendingId);
     try {
       const updated = await appendLines({ orderId: order.id, kind: "services", drafts: [draft] });
-      onServiceAdded(updated);
-      clearAndKeepFocus();
-      setOpen(true);
+      clearQueryState();
+      setOpen(false);
+      // Parent opens the new row's price editor; search focus is restored when that editor closes.
+      onServiceAdded(updated, { catalogServiceId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
     } finally {
@@ -242,7 +255,7 @@ export default function OrderAddLinesSearch({
       warrantyDefaults,
       order.vehicleMileageUnitSnapshot ?? "km",
     );
-    await addServiceLine(draft, service.id);
+    await addServiceLine(draft, service.id, service.id);
   }
 
   function handleSelectItem(item: InventoryItem) {
@@ -271,7 +284,7 @@ export default function OrderAddLinesSearch({
       warrantyDefaults,
       order.vehicleMileageUnitSnapshot ?? "km",
     );
-    await addServiceLine(draft, draft.serviceId);
+    await addServiceLine(draft, draft.serviceId, draft.serviceId);
   }
 
   function activateOption(option: FlatOption) {
@@ -604,7 +617,9 @@ export default function OrderAddLinesSearch({
         placeholder={placeholder}
         className="min-h-11 w-full"
         disabled={Boolean(pendingServiceId)}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          if (!suppressOpenOnFocusRef.current) setOpen(true);
+        }}
         onClick={() => setOpen(true)}
         onChange={(event) => {
           setQuery(event.target.value);

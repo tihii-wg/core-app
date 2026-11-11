@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { renderWithQuery } from "../../tests/renderQuery";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,31 +52,66 @@ vi.mock("../../ui/ConfirmProvider", async (importOriginal) => {
   return { ...actual, useUnsavedChangesConfirm: () => unsavedConfirm.confirm };
 });
 
+const addLinesSearchHandlers = vi.hoisted(() => ({
+  onServiceAdded: null as null | ((order: unknown, meta?: { catalogServiceId: string }) => void),
+}));
+
 vi.mock("./OrderAddLinesSearch", () => ({
   default: ({
     order,
     allowServices,
     allowMaterials,
     onOpenMaterial,
+    onServiceAdded,
+    focusRegistration,
   }: {
     order: { id: string };
     allowServices: boolean;
     allowMaterials: boolean;
     onOpenMaterial: (prefill: { kind: "catalog"; item: { id: string } }) => void;
-  }) => (
-    <div data-testid="order-add-lines-search">
-      <span data-testid="order-add-lines-allow-services">{String(allowServices)}</span>
-      <span data-testid="order-add-lines-allow-materials">{String(allowMaterials)}</span>
-      <button
-        type="button"
-        data-testid="order-add-lines-open-material"
-        onClick={() => onOpenMaterial({ kind: "catalog", item: { id: "item-stub" } as never })}
-      >
-        Open material
-      </button>
-      <span data-testid="order-add-lines-order">{order.id}</span>
-    </div>
-  ),
+    onServiceAdded: (order: unknown, meta?: { catalogServiceId: string }) => void;
+    focusRegistration?: (focus: () => void) => void;
+  }) => {
+    addLinesSearchHandlers.onServiceAdded = onServiceAdded;
+    focusRegistration?.(() => undefined);
+    return (
+      <div data-testid="order-add-lines-search">
+        <span data-testid="order-add-lines-allow-services">{String(allowServices)}</span>
+        <span data-testid="order-add-lines-allow-materials">{String(allowMaterials)}</span>
+        <button
+          type="button"
+          data-testid="order-add-lines-open-material"
+          onClick={() => onOpenMaterial({ kind: "catalog", item: { id: "item-stub" } as never })}
+        >
+          Open material
+        </button>
+        <span data-testid="order-add-lines-order">{order.id}</span>
+      </div>
+    );
+  },
+}));
+
+const updateServiceLineMock = vi.hoisted(() =>
+  vi.fn(async ({ lineId, patch }: { lineId: string; patch: { price?: number; quantity?: number } }) => ({
+    id: "order-1",
+    services: [
+      {
+        id: lineId,
+        serviceId: "svc-oil",
+        serviceName: "Oil change",
+        price: patch.price ?? 40,
+        quantity: patch.quantity ?? 1,
+      },
+    ],
+    totalPrice: patch.price ?? 40,
+  })),
+);
+
+vi.mock("./useUpdateOrderServiceLine", () => ({
+  useUpdateOrderServiceLine: () => ({
+    mutateAsync: updateServiceLineMock,
+    isPending: false,
+  }),
 }));
 
 vi.mock("./AddOrderMaterialDialog", () => ({
@@ -408,6 +444,8 @@ beforeEach(() => {
   updateOrderHooks.mutateAsync.mockReset();
   updateOrderFieldsHooks.isPending = false;
   updateOrderFieldsHooks.mutateAsync.mockReset();
+  updateServiceLineMock.mockReset();
+  addLinesSearchHandlers.onServiceAdded = null;
   unsavedConfirm.confirm.mockReset();
   unsavedConfirm.confirm.mockResolvedValue(true);
   taxInvoiceHooks.isPending = false;
@@ -1660,5 +1698,89 @@ describe("OrderDetailPanel items tab add search", () => {
     const empty = await screen.findByTestId("order-items-empty");
     expect(within(empty).queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByTestId("order-add-lines-search")).not.toBeInTheDocument();
+  });
+
+  it("edits a service line price inline and saves through the narrow mutation", async () => {
+    const user = userEvent.setup();
+    const onOrderUpdated = vi.fn();
+    updateServiceLineMock.mockClear();
+    renderPanel(onOrderUpdated);
+
+    await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
+    await user.click(await screen.findByTestId("service-line-price-line-1"));
+    const input = await screen.findByLabelText("Price");
+    await user.clear(input);
+    await user.type(input, "55");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(updateServiceLineMock).toHaveBeenCalledWith({
+        orderId: "order-1",
+        lineId: "line-1",
+        patch: { price: 55 },
+      });
+    });
+    expect(onOrderUpdated).toHaveBeenCalled();
+  });
+
+  it("keeps the sheet open when Esc cancels a service line price editor", async () => {
+    const user = userEvent.setup();
+    const setDetailPanelOpen = vi.fn();
+    renderPanel(vi.fn(), setDetailPanelOpen);
+
+    await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
+    await user.click(await screen.findByTestId("service-line-price-line-1"));
+    expect(await screen.findByTestId("service-line-price-editor-line-1")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByTestId("service-line-price-editor-line-1")).not.toBeInTheDocument();
+    });
+    expect(setDetailPanelOpen).not.toHaveBeenCalledWith(false);
+    expect(updateServiceLineMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps service line prices read-only on a closed order", async () => {
+    const user = userEvent.setup();
+    renderPanel(vi.fn(), vi.fn(), { order: { ...order, status: "closed", closedAt } });
+
+    await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
+    expect(await screen.findByText("Oil change")).toBeInTheDocument();
+    expect(screen.queryByTestId("service-line-price-line-1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /edit.*price/i })).not.toBeInTheDocument();
+  });
+
+  it("auto-opens the price editor after a service is added from search", async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [selected, setSelected] = useState(order);
+      return (
+        <OrderDetailPanel
+          selectedOrder={selected}
+          detailPanelOpen
+          setDetailPanelOpen={vi.fn()}
+          onOrderUpdated={setSelected}
+          onStatusChange={vi.fn()}
+        />
+      );
+    }
+    renderWithQuery(<Harness />);
+
+    await user.click(await screen.findByRole("tab", { name: /Services & materials/i }));
+    expect(addLinesSearchHandlers.onServiceAdded).toBeTruthy();
+
+    act(() => {
+      addLinesSearchHandlers.onServiceAdded?.(
+        {
+          ...order,
+          services: [
+            { id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 },
+            { id: "line-new", serviceId: "svc-new", serviceName: "Alignment", price: 0, quantity: 1 },
+          ],
+        },
+        { catalogServiceId: "svc-new" },
+      );
+    });
+
+    expect(await screen.findByTestId("service-line-price-editor-line-new")).toBeInTheDocument();
   });
 });

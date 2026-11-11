@@ -3,10 +3,13 @@ import type { Order, OrderMaterial, OrderService, UpdateOrderDetails } from "../
 
 /**
  * `updateOrder` always rewrites the order row (device, description, assignee, deadline, ...) and the team, so a
- * lines-only append must echo the freshly loaded values back — same shape the panel's assignee / team handlers send.
- * Industry fields and mileage snapshots are omitted on purpose: omitted means "leave the columns untouched".
+ * lines-only append / single-line patch must echo the freshly loaded values back — same shape the panel's
+ * assignee / team handlers send. Industry fields and mileage snapshots are omitted on purpose: omitted means
+ * "leave the columns untouched".
  */
-function preservedOrderFields(fresh: Order): Omit<UpdateOrderDetails, "orderId" | "services" | "materials"> {
+export function preservedOrderFieldsForLineAppend(
+  fresh: Order,
+): Omit<UpdateOrderDetails, "orderId" | "services" | "materials"> {
   return {
     vehicleId: fresh.vehicleId ?? undefined,
     device: fresh.device,
@@ -34,7 +37,7 @@ export async function appendOrderServiceLines(
   return updateOrder(
     {
       orderId,
-      ...preservedOrderFields(fresh),
+      ...preservedOrderFieldsForLineAppend(fresh),
       services: [...fresh.services, ...drafts.map(stripDraftIdentity)],
     },
     workspaceId,
@@ -55,7 +58,7 @@ export async function appendOrderMaterialLines(
   return updateOrder(
     {
       orderId,
-      ...preservedOrderFields(fresh),
+      ...preservedOrderFieldsForLineAppend(fresh),
       materials: [...(fresh.materials ?? []), ...drafts.map(stripDraftIdentity)],
     },
     workspaceId,

@@ -447,6 +447,7 @@ export default {
     editTitle: "Edit order",
     editField: "Edit: {{field}}",
     inlineEmpty: "+ Add",
+    addPerformer: "+ Add performer",
     saveAndClose: "Save & close",
     closeWindow: "Close window",
     srDescription: "View and edit this order's VIN, services, device, assignment, and deadline.",

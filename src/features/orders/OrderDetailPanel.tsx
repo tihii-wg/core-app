@@ -29,6 +29,13 @@ import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
 import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "./AddOrderMaterialDialog";
 import OrderAddLinesSearch from "./OrderAddLinesSearch";
+import OrderServiceLineInlineCells, {
+  OrderServiceLinePerformerInline,
+  type ServiceLineInlineEditTarget,
+  type ServiceLineInlineField,
+} from "./OrderServiceLineInlineCells";
+import { useUpdateOrderServiceLine } from "./useUpdateOrderServiceLine";
+import { parseOrderServiceLinePrice } from "./updateOrderServiceLine";
 import {
   OrderInlineField,
   type OrderInlineFieldHandle,
@@ -70,7 +77,7 @@ import {
   warehouseMaterialStatus,
   warehouseStatusBadgeVariant,
 } from "../inventory/warehouseMaterialStatus";
-import { formatQuantity } from "../../lib/quantity";
+import { formatQuantity, parseQuantity } from "../../lib/quantity";
 import { isCatalogOrderMaterial, resolveMaterialSupplySource } from "../inventory/orderMaterialLine";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { orderLineAmount } from "../services/orderServiceLine";
@@ -178,7 +185,10 @@ export default function OrderDetailPanel({
   const [addMaterialOpen, setAddMaterialOpen] = useState(false);
   const [addMaterialPrefill, setAddMaterialPrefill] = useState<AddOrderMaterialPrefill | null>(null);
   const [highlightedServiceId, setHighlightedServiceId] = useState<string | null>(null);
+  const [serviceLineEdit, setServiceLineEdit] = useState<ServiceLineInlineEditTarget | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const addLinesSearchFocusRef = useRef<(() => void) | null>(null);
+  const updateServiceLine = useUpdateOrderServiceLine();
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
   // Session-backed tab: survives order switches and sheet reopen; first open in a session starts on info.
@@ -298,6 +308,7 @@ export default function OrderDetailPanel({
     setEditingField(null);
     setAddMaterialOpen(false);
     setAddMaterialPrefill(null);
+    setServiceLineEdit(null);
   }
 
   function stopEditing() {
@@ -638,15 +649,80 @@ export default function OrderDetailPanel({
   const showAddMaterial = showFieldEdit && canWarehouse;
   const showAddLinesSearch = showAddService || showAddMaterial;
 
-  function highlightExistingServiceLine(serviceId: string) {
-    setHighlightedServiceId(serviceId);
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedServiceId(null), 2400);
+  function scrollServiceLineIntoView(serviceId: string) {
     requestAnimationFrame(() => {
       document
         .querySelector<HTMLElement>(`[data-order-service-line-id="${serviceId}"]`)
         ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
+  }
+
+  function highlightExistingServiceLine(serviceId: string) {
+    setHighlightedServiceId(serviceId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedServiceId(null), 2400);
+    scrollServiceLineIntoView(serviceId);
+    const existing = selectedOrder?.services.find((line) => line.serviceId === serviceId && line.id);
+    if (existing?.id) {
+      setServiceLineEdit({ lineId: existing.id, field: "price" });
+    }
+  }
+
+  function openServiceLinePriceAfterAdd(updated: Order, catalogServiceId: string) {
+    const prevIds = new Set((selectedOrder?.services ?? []).map((line) => line.id).filter(Boolean));
+    const created =
+      updated.services.find((line) => line.serviceId === catalogServiceId && line.id && !prevIds.has(line.id)) ??
+      updated.services.find((line) => line.serviceId === catalogServiceId && line.id);
+    if (!created?.id) return;
+    setHighlightedServiceId(catalogServiceId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedServiceId(null), 2400);
+    scrollServiceLineIntoView(catalogServiceId);
+    setServiceLineEdit({ lineId: created.id, field: "price" });
+  }
+
+  function focusAddLinesSearch() {
+    requestAnimationFrame(() => addLinesSearchFocusRef.current?.());
+  }
+
+  async function saveServiceLineField(lineId: string, field: ServiceLineInlineField, raw: string) {
+    if (!selectedOrder) return;
+    if (field === "price") {
+      const price = parseOrderServiceLinePrice(raw);
+      if (price === "invalid") throw new Error(t("orders.form.freeformPriceInvalid"));
+      const updated = await updateServiceLine.mutateAsync({
+        orderId: selectedOrder.id,
+        lineId,
+        patch: { price },
+      });
+      onOrderUpdated(updated);
+      return;
+    }
+    if (field === "quantity") {
+      const quantity = parseQuantity(raw);
+      if (typeof quantity !== "number") {
+        throw new Error(
+          quantity === "min"
+            ? t("orders.validation.quantityMin")
+            : quantity === "maxDecimals"
+              ? t("orders.validation.quantityMaxDecimals")
+              : t("orders.validation.quantityRequired"),
+        );
+      }
+      const updated = await updateServiceLine.mutateAsync({
+        orderId: selectedOrder.id,
+        lineId,
+        patch: { quantity },
+      });
+      onOrderUpdated(updated);
+      return;
+    }
+    const updated = await updateServiceLine.mutateAsync({
+      orderId: selectedOrder.id,
+      lineId,
+      patch: { technicianId: raw.trim() ? raw.trim() : null },
+    });
+    onOrderUpdated(updated);
   }
   const detailVatRate = selectedOrder
     ? effectiveOrderVatRate(selectedOrder, workspaceVatRate)
@@ -772,9 +848,9 @@ export default function OrderDetailPanel({
       <SheetContent
         className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]"
         onEscapeKeyDown={(event) => {
-          // Esc while a field is being edited cancels only that field (handled by OrderInlineField),
+          // Esc while a field / service line is being edited cancels only that editor,
           // it must not close the whole order card.
-          if (editingField) event.preventDefault();
+          if (editingField || serviceLineEdit) event.preventDefault();
         }}
       >
         <SheetHeader className="shrink-0 pr-24">
@@ -1249,7 +1325,13 @@ export default function OrderDetailPanel({
                   industrySlug={industrySlug}
                   allowServices={showAddService}
                   allowMaterials={showAddMaterial}
-                  onServiceAdded={onOrderUpdated}
+                  focusRegistration={(focus) => {
+                    addLinesSearchFocusRef.current = focus;
+                  }}
+                  onServiceAdded={(updated, meta) => {
+                    onOrderUpdated(updated);
+                    if (meta?.catalogServiceId) openServiceLinePriceAfterAdd(updated, meta.catalogServiceId);
+                  }}
                   onHighlightServiceLine={highlightExistingServiceLine}
                   onOpenMaterial={(prefill) => {
                     setAddMaterialPrefill(prefill);
@@ -1265,15 +1347,21 @@ export default function OrderDetailPanel({
             ) : null}
             {hasServiceLines ? (
               <div className="overflow-hidden rounded-lg border border-border">
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col className="w-[42%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[20%]" />
+                  </colgroup>
                   <thead className="bg-muted/50 text-xs text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium">
+                      <th className="px-2 py-2 text-left font-medium sm:px-3">
                         {t("orders.detail.services")}
                       </th>
-                      <th className="px-3 py-2 text-right font-medium">{t("orders.detail.quantity")}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t("orders.detail.price")}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t("orders.detail.amount")}</th>
+                      <th className="px-2 py-2 text-right font-medium sm:px-3">{t("orders.detail.quantity")}</th>
+                      <th className="px-2 py-2 text-right font-medium sm:px-3">{t("orders.detail.price")}</th>
+                      <th className="px-2 py-2 text-right font-medium sm:px-3">{t("orders.detail.amount")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1282,13 +1370,15 @@ export default function OrderDetailPanel({
                       const lineVat =
                         detailVatRate != null ? vatIncludedAmount(lineGross, detailVatRate) : null;
                       const isHighlighted = Boolean(line.serviceId && highlightedServiceId === line.serviceId);
+                      const lineId = line.id?.trim() ?? "";
                       return (
                       <tr
                         key={line.id ?? `${line.serviceId}-${index}`}
                         data-order-service-line-id={line.serviceId || undefined}
+                        data-order-service-line-row={lineId || undefined}
                         className={cn(isHighlighted && "bg-primary/10 ring-1 ring-inset ring-primary/40")}
                       >
-                        <td className="px-3 py-2 [overflow-wrap:anywhere] text-foreground">
+                        <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
                           <div className="min-w-0 space-y-0.5">
                             <p>
                               {canOpenServiceForm && line.serviceId ? (
@@ -1309,11 +1399,24 @@ export default function OrderDetailPanel({
                                 </StatusBadge>
                               ) : null}
                             </p>
-                            {line.technicianName?.trim() ? (
-                              <p className="text-xs text-muted-foreground">
-                                {t("orders.team.performer")}: {line.technicianName}
-                              </p>
-                            ) : null}
+                            <OrderServiceLinePerformerInline
+                              line={line}
+                              editable={showFieldEdit}
+                              editing={serviceLineEdit}
+                              performerOptions={teamOptions}
+                              saving={updateServiceLine.isPending}
+                              onRequestEdit={() => {
+                                if (!lineId) return;
+                                setServiceLineEdit({ lineId, field: "performer" });
+                              }}
+                              onCancel={() => setServiceLineEdit(null)}
+                              onSaved={() => setServiceLineEdit(null)}
+                              onSaveField={async (technicianId) => {
+                                if (!lineId) return;
+                                await saveServiceLineField(lineId, "performer", technicianId);
+                              }}
+                              onEditorClosed={focusAddLinesSearch}
+                            />
                             <OrderLineWarrantyBadge
                               activated={Boolean(selectedOrder.closedAt)}
                               status={
@@ -1333,18 +1436,39 @@ export default function OrderDetailPanel({
                             />
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                          {formatQuantity(line.quantity, i18n.language)}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{formatMoney(line.price)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                          <div>{formatMoney(lineGross)}</div>
-                          {lineVat != null ? (
-                            <div className="text-[11px] text-muted-foreground">
-                              {t("orders.vat.included")}: {formatMoney(lineVat)}
-                            </div>
-                          ) : null}
-                        </td>
+                        <OrderServiceLineInlineCells
+                          line={line}
+                          editable={showFieldEdit}
+                          editing={serviceLineEdit}
+                          formatMoney={formatMoney}
+                          locale={i18n.language}
+                          saving={updateServiceLine.isPending}
+                          amountNode={
+                            <>
+                              <div>{formatMoney(lineGross)}</div>
+                              {lineVat != null ? (
+                                <div className="text-[11px] text-muted-foreground">
+                                  {t("orders.vat.included")}: {formatMoney(lineVat)}
+                                </div>
+                              ) : null}
+                            </>
+                          }
+                          onRequestEdit={(field) => {
+                            if (!lineId) return;
+                            setServiceLineEdit({ lineId, field });
+                          }}
+                          onCancel={() => setServiceLineEdit(null)}
+                          onSaved={() => setServiceLineEdit(null)}
+                          onSaveField={async (field, raw) => {
+                            if (!lineId) return;
+                            await saveServiceLineField(lineId, field, raw);
+                          }}
+                          onTabFromPrice={() => {
+                            if (!lineId) return;
+                            setServiceLineEdit({ lineId, field: "performer" });
+                          }}
+                          onEditorClosed={focusAddLinesSearch}
+                        />
                       </tr>
                       );
                     })}

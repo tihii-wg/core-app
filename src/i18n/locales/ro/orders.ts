@@ -454,6 +454,7 @@ const orders: Messages<typeof en> = {
     editTitle: "Editează comanda",
     editField: "Editează: {{field}}",
     inlineEmpty: "+ Adaugă",
+    addPerformer: "+ Adaugă executant",
     saveAndClose: "Salvează și închide",
     closeWindow: "Închide fereastra",
     srDescription: "Vizualizați și editați VIN-ul, serviciile, automobilul, responsabilul și termenul acestei comenzi.",
