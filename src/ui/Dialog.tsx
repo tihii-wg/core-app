@@ -35,17 +35,24 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  container,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
+  /** When set, portal into this element (e.g. an open sheet) instead of document.body. */
+  container?: HTMLElement | null;
 }) {
+  const nested = Boolean(container);
   return (
-    <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+    <DialogPortal data-slot="dialog-portal" container={container ?? undefined}>
+      <DialogOverlay className={nested ? "absolute" : undefined} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-elevated text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] min-w-0 translate-x-[-50%] translate-y-[-50%] gap-5 rounded-xl border p-6 shadow-lg duration-150 sm:max-w-lg",
+          "bg-elevated text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 z-50 grid w-full max-w-[calc(100%-2rem)] min-w-0 gap-5 rounded-xl border p-6 shadow-lg duration-150 sm:max-w-lg",
+          nested
+            ? "absolute top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]"
+            : "fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]",
           className
         )}
         {...props}

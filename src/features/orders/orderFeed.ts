@@ -10,6 +10,8 @@ export type OrderEventDescriptionKey =
   | "orderReopened"
   | "orderCreated"
   | "orderFieldChanged"
+  | "clientChanged"
+  | "vehicleChanged"
   | "serviceAdded"
   | "workAdded"
   | "serviceRemoved"
@@ -302,6 +304,20 @@ export function describeOrderEvent(
     return { key: "orderFieldChanged", params: { fields: fieldChangeSummary(event) } };
   }
 
+  if (event.eventType === "client_changed") {
+    return {
+      key: "clientChanged",
+      params: { from: event.oldValue?.trim() || EMPTY, to: event.newValue?.trim() || EMPTY },
+    };
+  }
+
+  if (event.eventType === "vehicle_changed") {
+    return {
+      key: "vehicleChanged",
+      params: { from: event.oldValue?.trim() || EMPTY, to: event.newValue?.trim() || EMPTY },
+    };
+  }
+
   if (event.eventType === "status_changed") {
     const lifecycle = payloadText(event, "lifecycle");
     const names = statusChangedNames(event, statusLabel);
@@ -399,6 +415,8 @@ export function orderEventCategory(event: OrderEvent): OrderEventCategory {
   switch (event.eventType) {
     case "order_created":
     case "order_field_changed":
+    case "client_changed":
+    case "vehicle_changed":
       return event.eventType === "order_created" ? "lifecycle" : "field";
     case "status_changed": {
       const lifecycle = payloadText(event, "lifecycle");

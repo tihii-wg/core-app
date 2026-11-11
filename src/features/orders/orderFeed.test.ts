@@ -157,6 +157,17 @@ describe("describeOrderEvent", () => {
     });
   });
 
+  it("describes client and vehicle changes", () => {
+    expect(describeOrderEvent(event({ eventType: "client_changed", oldValue: "Ada", newValue: "Bob" }), label)).toEqual({
+      key: "clientChanged",
+      params: { from: "Ada", to: "Bob" },
+    });
+    expect(describeOrderEvent(event({ eventType: "vehicle_changed", oldValue: "Toyota", newValue: "Honda" }), label)).toEqual({
+      key: "vehicleChanged",
+      params: { from: "Toyota", to: "Honda" },
+    });
+  });
+
   it("classifies payment settlements for partial, full, and balance payments", () => {
     expect(classifyPaymentSettlement({ kind: "payment", remainingAfter: 40, priorNetPaid: 0 })).toBe("partial");
     expect(classifyPaymentSettlement({ kind: "payment", remainingAfter: 0, priorNetPaid: 0 })).toBe("full");

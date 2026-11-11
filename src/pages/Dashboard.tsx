@@ -441,6 +441,7 @@ export default function Dashboard() {
       <AddInventoryItemDialog {...dialogProps("inventory")} />
       <OrderDetailPanel
         {...orderDetails.panelProps}
+        onOpenClient={openClientFromOrder}
         onDeleted={(orderId) => {
           orderDetails.clearOrder(orderId);
           setEditingOrder((current) => (current?.id === orderId ? null : current));

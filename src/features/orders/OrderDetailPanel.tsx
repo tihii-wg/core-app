@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { Calendar, CircleX, EllipsisVertical, Lock, Pencil, Phone, Save, Trash2 } from "lucide-react";
+import { Calendar, CircleX, EllipsisVertical, Lock, Pencil, Save, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { displayCustomFieldValue, serializeCustomFieldValue } from "../../services/apiCustomFields";
 import type { UpdateOrderFieldsPatch } from "../../services/apiOrders";
@@ -53,11 +53,12 @@ import { OrderWarrantyCoverageSection } from "./OrderWarrantyCoverageSection";
 import { OrderLineWarrantyBadge } from "./OrderLineWarrantyBadge";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
-import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { industrySupportsClientVehicles, industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { industryProfile } from "../industries/industryProfile";
 import { shouldShowOrderAssetValue } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import ChangeOrderClientDialog from "./ChangeOrderClientDialog";
+import { OrderClientCard } from "./OrderClientCard";
 import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { effectiveOrderVatRate, orderVatBreakdown } from "../finance/orderVat";
@@ -145,6 +146,8 @@ type OrderDetailPanelProps = {
   invoiceNumber?: string;
   /** Called after a successful delete so the parent can clear selection and return to the list. */
   onDeleted?: (orderId: string) => void;
+  /** Open the client card from the Information tab client card link. */
+  onOpenClient?: (clientId: string) => void;
 };
 
 export default function OrderDetailPanel({
@@ -156,12 +159,15 @@ export default function OrderDetailPanel({
   isStatusUpdating = false,
   invoiceNumber,
   onDeleted,
+  onOpenClient,
 }: OrderDetailPanelProps) {
   const { t, i18n } = useTranslation();
   const confirm = useConfirm();
   const confirmDiscardChanges = useUnsavedChangesConfirm();
   const queryClient = useQueryClient();
   const guardWrite = useGuardSubscriptionWrite();
+  const sheetContentRef = useRef<HTMLDivElement | null>(null);
+  const [changeClientOpen, setChangeClientOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   /** Field currently open in its click-to-edit editor (only one at a time). */
   const [editingField, setEditingField] = useState<OrderEditField | null>(null);
@@ -375,6 +381,10 @@ export default function OrderDetailPanel({
 
   /** Click-to-edit is available exactly when the old per-field pencils were. */
   const showFieldEdit = Boolean(selectedOrder && !isEditing && canEditOrder && !closedContentLocked);
+  /** Client/vehicle change is locked for cancelled orders even when other owner edits are allowed. */
+  const canChangeClientVehicle = Boolean(
+    showFieldEdit && selectedOrder && selectedOrder.status !== "cancelled",
+  );
   const { mutateAsync: saveOrderFields, isPending: isFieldSaving } = useUpdateOrderFields();
   const { mutateAsync: saveCustomFieldValue, isPending: isCustomFieldSaving } = useUpdateOrderCustomFieldValue();
   const inlineSaving = isFieldSaving || isCustomFieldSaving;
@@ -729,7 +739,6 @@ export default function OrderDetailPanel({
     : null;
   const fallbackService = selectedOrder?.service?.trim() ?? "";
   const description = selectedOrder?.description?.trim() ?? "";
-  const clientPhone = selectedOrder?.clientPhone?.trim() ?? "";
   const deadline = selectedOrder?.deadline?.trim() ?? "";
   const assigneeEmptyHint =
     !employeesError && !employeesLoading && employees && technicianOptions.length === 0
@@ -846,11 +855,11 @@ export default function OrderDetailPanel({
   return (
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
       <SheetContent
+        ref={sheetContentRef}
         className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]"
         onEscapeKeyDown={(event) => {
-          // Esc while a field / service line is being edited cancels only that editor,
-          // it must not close the whole order card.
-          if (editingField || serviceLineEdit) event.preventDefault();
+          // Esc while a field / service line / change-client dialog is active must not close the sheet.
+          if (editingField || serviceLineEdit || changeClientOpen) event.preventDefault();
         }}
       >
         <SheetHeader className="shrink-0 pr-24">
@@ -1044,32 +1053,19 @@ export default function OrderDetailPanel({
               currentMileage={selectedOrder.vehicleMileageSnapshot ?? null}
             />
 
-            <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
-              <div className="min-w-0 flex-1 space-y-2">
-                <div>
-                  <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.client")}</h3>
-                  <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{selectedOrder.clientName}</p>
-                </div>
-                {selectedOrder.clientType ? (
-                  <div>
-                    <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.clientType")}</h3>
-                    <div className="mt-1">
-                      <ClientTypeBadge clientType={selectedOrder.clientType} />
-                    </div>
-                  </div>
-                ) : null}
-                {clientPhone ? (
-                  <div className="space-y-1.5 pt-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Phone className="size-3.5 shrink-0 text-subtle-foreground" />
-                      <a href={`tel:${clientPhone}`} className="tabular-nums text-foreground hover:underline">
-                        {clientPhone}
-                      </a>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              <div className="min-w-0 max-w-[55%] shrink-0 text-right [overflow-wrap:anywhere]">
+            <OrderClientCard
+              order={selectedOrder}
+              workflow={workflow}
+              deviceLabel={fieldLabel("device", copy.deviceDetail)}
+              carNumberLabel={fieldLabel("carNumber", copy.carNumberDetail)}
+              vinLabel={fieldLabel("vin", copy.vinDetail)}
+              interactive={canChangeClientVehicle}
+              onChangeRequest={() => setChangeClientOpen(true)}
+              onOpenClient={onOpenClient}
+            />
+
+            <div className="flex items-start justify-end gap-4 rounded-lg border border-border bg-muted/50 p-4">
+              <div className="min-w-0 text-right [overflow-wrap:anywhere]">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
                 <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">
                   <OrderTotalBreakdownPopover
@@ -1884,6 +1880,15 @@ export default function OrderDetailPanel({
           </DialogContent>
         </Dialog>
       ) : null}
+
+      <ChangeOrderClientDialog
+        order={selectedOrder}
+        open={changeClientOpen}
+        onOpenChange={setChangeClientOpen}
+        hasInvoice={hasInvoice}
+        portalContainer={sheetContentRef.current}
+        onChanged={onOrderUpdated}
+      />
 
       <CloseOrderDialog
         order={selectedOrder}

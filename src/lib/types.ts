@@ -108,6 +108,11 @@ export interface Order {
   clientEmail?: string;
   /** Present when the orders query embeds clients.phone. */
   clientPhone?: string;
+  /**
+   * Optional payer (`orders.payer_client_id`). Absent when unset or column missing.
+   * When equal to clientId (or null), changing the client moves the payer with the order.
+   */
+  payerClientId?: string | null;
   /** Empty string when number is NULL (unexpected; create still assigns a number). */
   orderNumber: string;
   /** Linked public.vehicles.id when set. */

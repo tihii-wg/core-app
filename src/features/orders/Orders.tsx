@@ -481,6 +481,7 @@ export function Orders() {
             ? invoiceNumberByOrder.get(orderDetails.panelProps.selectedOrder.id)
             : undefined
         }
+        onOpenClient={openClientFromOrder}
         onDeleted={(orderId) => {
           orderDetails.clearOrder(orderId);
           setEditingOrder((current) => (current?.id === orderId ? null : current));

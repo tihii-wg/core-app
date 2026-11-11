@@ -399,7 +399,23 @@ export function Clients() {
         }}
       />
 
-      <OrderDetailPanel {...orderDetails.panelProps} />
+      <OrderDetailPanel
+        {...orderDetails.panelProps}
+        onOpenClient={(clientId) => {
+          orderDetails.panelProps.setDetailPanelOpen(false);
+          const existing = clients.find((client) => client.id === clientId);
+          if (existing) {
+            setSelectedClient(existing);
+            setDetailPanelOpen(true);
+            return;
+          }
+          void getClient(workspaceId, clientId).then((client) => {
+            if (!client) return;
+            setSelectedClient(client);
+            setDetailPanelOpen(true);
+          });
+        }}
+      />
     </div>
   );
 }

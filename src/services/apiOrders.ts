@@ -1548,6 +1548,9 @@ export function toOrder(
     clientName: client.name,
     clientType: client.clientType,
     ...(client.phone ? { clientPhone: client.phone } : {}),
+    ...(typeof row.payer_client_id === "string" && row.payer_client_id.trim()
+      ? { payerClientId: row.payer_client_id.trim() }
+      : {}),
     orderNumber: typeof row.number === "string" ? row.number : "",
     vehicleId: typeof row.vehicle_id === "string" ? row.vehicle_id : null,
     ...readOrderMileageSnapshot(row),
@@ -3497,6 +3500,118 @@ export async function updateOrderFields(
     }
     if (error) throw mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
     if (!data) throw new Error(orderPermissionMessage());
+  }
+
+  return getOrder(orderId, workspaceId);
+}
+
+const CHANGE_ORDER_CLIENT_RPC = "crm_change_order_client";
+
+export type ChangeOrderClientInput = {
+  clientId: string;
+  /** `null` clears the linked vehicle. */
+  vehicleId: string | null;
+  /** Required when the order already has an issued invoice. */
+  confirmInvoice?: boolean;
+};
+
+/**
+ * Payer rule for client reassignment: when the payer was unset or identical to the old
+ * client, move it with the order; a distinct payer stays put.
+ */
+export function resolvePayerClientIdAfterClientChange(
+  oldClientId: string | null | undefined,
+  oldPayerClientId: string | null | undefined,
+  newClientId: string | null | undefined,
+): string | null {
+  const oldClient = nullIfEmptyUuid(oldClientId ?? null);
+  const oldPayer = nullIfEmptyUuid(oldPayerClientId ?? null);
+  const nextClient = nullIfEmptyUuid(newClientId ?? null);
+  if (oldPayer == null || oldPayer === oldClient) return nextClient;
+  return oldPayer;
+}
+
+function mapChangeOrderClientRpcError(error: { code?: string; message?: string } | null | undefined): Error | null {
+  if (!error?.message) return null;
+  const message = error.message;
+  if (/change_order_client:closed_order_immutable|order_lifecycle:closed_order_immutable/i.test(message)) {
+    return new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
+  }
+  if (/change_order_client:cancelled_order_immutable/i.test(message)) {
+    return new Error(i18n.t("orders.changeClient.errors.cancelledOrder"));
+  }
+  if (/change_order_client:vehicle_not_assignable/i.test(message)) {
+    return new Error(i18n.t("vehicles.errors.invalidSelection"));
+  }
+  if (/change_order_client:invoice_confirm_required/i.test(message)) {
+    return new Error(i18n.t("orders.changeClient.errors.invoiceConfirmRequired"));
+  }
+  if (/change_order_client:client_not_found|change_order_client:order_not_found/i.test(message)) {
+    return new Error(i18n.t("orders.changeClient.errors.notFound"));
+  }
+  if (/change_order_client:forbidden|change_order_client:not_authenticated/i.test(message)) {
+    return new Error(orderPermissionMessage());
+  }
+  if (/change_order_client:client_required/i.test(message)) {
+    return new Error(i18n.t("orders.validation.clientRequired"));
+  }
+  return null;
+}
+
+/**
+ * Dedicated client/vehicle reassignment for an existing order.
+ * Uses SECURITY DEFINER RPC `crm_change_order_client` (atomic). Does not go through `updateOrder`.
+ * Payments follow the order via `orders.client_id` (ledger has no payment.client_id).
+ * Issued invoices keep their printed snapshot; require `confirmInvoice` when any exist.
+ */
+export async function changeOrderClient(
+  orderId: string,
+  input: ChangeOrderClientInput,
+  targetWorkspaceId: string | undefined,
+): Promise<Order> {
+  const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  const clientId = nullIfEmptyUuid(input.clientId);
+  if (!clientId) throw new Error(i18n.t("orders.validation.clientRequired"));
+
+  const { data: existingOrder, error: existingError } = await supabase
+    .from("orders")
+    .select("id, client_id, payer_client_id, vehicle_id, status, closed_at")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existingOrder) throw new Error(orderPermissionMessage());
+
+  const existingStatus = typeof existingOrder.status === "string" ? existingOrder.status : "";
+  if (existingStatus === "cancelled") {
+    throw new Error(i18n.t("orders.changeClient.errors.cancelledOrder"));
+  }
+  await assertOrderRowContentEditable(workspaceId, existingOrder);
+
+  const vehicleId = await assertVehicleAssignable(workspaceId, clientId, nullIfEmptyUuid(input.vehicleId));
+
+  const { count: invoiceCount, error: invoiceError } = await supabase
+    .from("invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .eq("order_id", orderId);
+  if (invoiceError) throw new Error(invoiceError.message);
+  if ((invoiceCount ?? 0) > 0 && !input.confirmInvoice) {
+    throw new Error(i18n.t("orders.changeClient.errors.invoiceConfirmRequired"));
+  }
+
+  const { error: rpcError } = await supabase.rpc(CHANGE_ORDER_CLIENT_RPC, {
+    p_order_id: orderId,
+    p_client_id: clientId,
+    p_vehicle_id: vehicleId,
+    p_confirm_invoice: Boolean(input.confirmInvoice),
+  });
+
+  if (rpcError) {
+    if (isMissingRpcError(rpcError, CHANGE_ORDER_CLIENT_RPC)) {
+      throw new MissingRpcError(CHANGE_ORDER_CLIENT_RPC, i18n.t("orders.changeClient.errors.rpcRequired"));
+    }
+    throw mapChangeOrderClientRpcError(rpcError) ?? new Error(rpcError.message);
   }
 
   return getOrder(orderId, workspaceId);
