@@ -84,7 +84,18 @@ import { useGetOrderComments, useGetOrderEvents } from "./useOrderFeed";
 import { PaymentHistorySection } from "../finance/PaymentHistorySection";
 import { PaymentFormDialog } from "../finance/PaymentFormDialog";
 import { OrderPaymentStagesSection } from "../finance/OrderPaymentStagesSection";
-import { recordableOrderBalance } from "./minPaidStatusGuard";
+import { assertMinPaidOrExplain, orderNetPaidForMinPaid, recordableOrderBalance } from "./minPaidStatusGuard";
+import { showMinPaidBlockedToast } from "./showMinPaidBlockedToast";
+import { useOrderAttachments } from "./useOrderAttachments";
+import {
+  isOrderDetailTab,
+  orderDetailItemsCount,
+  peekOrderDetailTab,
+  readOrderDetailTabOnOpen,
+  usesWorksAndMaterialsTabLabel,
+  writeOrderDetailTab,
+  type OrderDetailTab,
+} from "./orderDetailTabs";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { useGetPayments } from "../finance/usePayments";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
@@ -135,7 +146,21 @@ export default function OrderDetailPanel({
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
-  const [mobileDetailTab, setMobileDetailTab] = useState<"order" | "history">("order");
+  // Session-backed tab: survives order switches and sheet reopen; first open in a session starts on info.
+  const [storedDetailTab, setStoredDetailTab] = useState<OrderDetailTab>(() =>
+    detailPanelOpen ? readOrderDetailTabOnOpen() : peekOrderDetailTab(),
+  );
+  const [prevDetailPanelOpen, setPrevDetailPanelOpen] = useState(detailPanelOpen);
+  if (detailPanelOpen !== prevDetailPanelOpen) {
+    setPrevDetailPanelOpen(detailPanelOpen);
+    if (detailPanelOpen) setStoredDetailTab(readOrderDetailTabOnOpen());
+  }
+  // History is a separate right column on desktop, so it is not a valid left-column tab there.
+  const detailTab: OrderDetailTab = isDesktopFeedLayout && storedDetailTab === "history" ? "info" : storedDetailTab;
+  function selectDetailTab(tab: OrderDetailTab) {
+    setStoredDetailTab(tab);
+    writeOrderDetailTab(tab);
+  }
   const { formatMoney } = useWorkspaceMoney();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
   const { workflow, copy, profile, industrySlug } = useIndustryWorkflow();
@@ -367,8 +392,74 @@ export default function OrderDetailPanel({
     !feedEvents.isUnavailable;
   const feedItemCount = feedCountReady ? feedComments.comments.length + feedEvents.events.length : null;
 
-  const showOrderColumn = isDesktopFeedLayout || mobileDetailTab === "order";
-  const showFeedColumn = isDesktopFeedLayout || mobileDetailTab === "history";
+  const showOrderColumn = isDesktopFeedLayout || detailTab !== "history";
+  const showFeedColumn = isDesktopFeedLayout || detailTab === "history";
+
+  const filesTabActive = detailPanelOpen && detailTab === "files";
+  const { attachments: orderAttachments, isFetched: attachmentsFetched } = useOrderAttachments(selectedOrder?.id, {
+    enabled: filesTabActive,
+  });
+  const itemsCount = orderDetailItemsCount(serviceLines.length, materialLines.length);
+  const detailTabs: { value: OrderDetailTab; label: string }[] = [
+    { value: "info", label: t("orders.detail.tabs.info") },
+    {
+      value: "items",
+      label: t(usesWorksAndMaterialsTabLabel(industrySlug) ? "orders.detail.tabs.itemsWorks" : "orders.detail.tabs.items", {
+        count: itemsCount,
+      }),
+    },
+    {
+      value: "payments",
+      label:
+        linkedPaymentCount > 0
+          ? t("orders.detail.tabs.paymentsWithCount", { count: linkedPaymentCount })
+          : t("orders.detail.tabs.payments"),
+    },
+    {
+      value: "files",
+      label:
+        attachmentsFetched && orderAttachments.length > 0
+          ? t("orders.detail.tabs.filesWithCount", { count: orderAttachments.length })
+          : t("orders.detail.tabs.files"),
+    },
+    ...(isDesktopFeedLayout
+      ? []
+      : [
+          {
+            value: "history" as const,
+            label:
+              feedItemCount != null
+                ? t("orders.detail.tabs.historyWithCount", { count: feedItemCount })
+                : t("orders.detail.tabs.history"),
+          },
+        ]),
+  ];
+
+  async function handleStatusSelect(value: string) {
+    if (!selectedOrder || !value || value === currentUnifiedStatus?.id) return;
+    const result = await changeOrderStatus(value);
+    if (result.ok) return;
+    const option = statusOptions.find((item) => item.id === value);
+    const minPaidBlock = assertMinPaidOrExplain({
+      order: selectedOrder,
+      targetDefinition: option?.definition,
+      netPaid: orderNetPaidForMinPaid(selectedOrder, payments),
+      formatMoney,
+      t,
+    });
+    if (minPaidBlock) {
+      showMinPaidBlockedToast({
+        block: minPaidBlock,
+        recordPaymentLabel: t("orders.minPaid.recordPayment"),
+        onRecordPayment: () => {
+          selectDetailTab("payments");
+          setRecordPaymentOpen(true);
+        },
+      });
+      return;
+    }
+    toast.error(result.reason);
+  }
 
   const orderFeedSection = selectedOrder ? (
     <OrderFeedSection
@@ -412,22 +503,131 @@ export default function OrderDetailPanel({
           <SheetDescription className="sr-only">{copy.detailSrDescription}</SheetDescription>
         </SheetHeader>
 
-        {selectedOrder && !isDesktopFeedLayout ? (
-          <div className="shrink-0 border-b border-border px-5 py-2" data-testid="order-detail-mobile-tabs">
-            <Tabs
-              value={mobileDetailTab}
-              onValueChange={(value) => setMobileDetailTab(value === "history" ? "history" : "order")}
+        {selectedOrder && !isEditing ? (
+          <>
+            <div
+              className="max-h-40 shrink-0 overflow-y-auto border-b border-border px-5 py-2"
+              data-testid="order-detail-status-bar"
             >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="order">{t("orders.detail.tabs.order")}</TabsTrigger>
-                <TabsTrigger value="history">
-                  {feedItemCount != null
-                    ? t("orders.detail.tabs.historyWithCount", { count: feedItemCount })
-                    : t("orders.detail.tabs.history")}
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Label htmlFor="order-status" className="sr-only">
+                  {lifecycleStatusLocked || paidStatusLocked
+                    ? t("orders.actions.statusLocked")
+                    : t("orders.detail.updateStatus")}
+                </Label>
+                {lifecycleStatusLocked ? (
+                  <div id="order-status" className="flex min-w-0 items-center gap-2">
+                    <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
+                    <span className="text-xs text-muted-foreground">
+                      {selectedOrder.status === "cancelled"
+                        ? t("orders.lifecycle.errors.orderAlreadyCancelled")
+                        : t("orders.lifecycle.errors.closedOrderImmutable")}
+                    </span>
+                  </div>
+                ) : (
+                  <Select
+                    value={currentUnifiedStatus?.id ?? statusOptions[0]?.id ?? ""}
+                    onValueChange={(value) => {
+                      void handleStatusSelect(value);
+                    }}
+                    disabled={
+                      !canEditOrder ||
+                      isStatusUpdating ||
+                      isUnifiedStatusUpdating ||
+                      isAssigneeUpdating ||
+                      paidStatusLocked
+                    }
+                  >
+                    <SelectTrigger id="order-status" className="min-w-0 flex-1 basis-48 sm:max-w-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem
+                          key={option.id}
+                          value={option.id}
+                          disabled={option.disabled}
+                          title={option.disabledReason ?? undefined}
+                        >
+                          <span className="inline-flex min-w-0 items-center gap-2">
+                            {option.color ? (
+                              <span
+                                aria-hidden
+                                className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
+                                style={{ backgroundColor: option.color }}
+                              />
+                            ) : null}
+                            <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {showOpenLifecycleActions ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void requestClose()} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
+                      <Lock className="size-3.5" />
+                      {t("orders.lifecycle.closeAction")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
+                      <CircleX className="size-3.5" />
+                      {t("orders.lifecycle.cancelAction")}
+                    </Button>
+                  </div>
+                ) : null}
+                {showCancelClosedAction ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
+                      <CircleX className="size-3.5" />
+                      {t("orders.lifecycle.cancelAction")}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              {isOrderCurrentlyClosed(selectedOrder) ? (
+                <div className="mt-2 space-y-0.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm" data-closed-order-banner>
+                  <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>
+                  <p className="text-xs text-muted-foreground">{t("orders.lifecycle.closedAt", { date: selectedOrder.closedAt })}</p>
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-closed-order-immutable-hint
+                    data-testid="closed-order-immutable-hint"
+                  >
+                    {t("orders.lifecycle.errors.closedOrderImmutable")}
+                  </p>
+                  {paymentBalance && paymentBalance.remaining > 0.005 ? (
+                    <p className="text-sm text-destructive">
+                      {t("orders.lifecycle.postCloseOutstanding", { amount: formatMoney(paymentBalance.remaining) })}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {paidStatusLocked ? (
+                <p className="mt-1.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.actions.paidStatusImmutable")}</p>
+              ) : paidStatusBlocked ? (
+                <p className="mt-1.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.taxInvoice.paidRequiresNumber")}</p>
+              ) : null}
+            </div>
+
+            <div
+              className="shrink-0 border-b border-border px-5 py-1.5"
+              data-testid="order-detail-tabs"
+            >
+              {/* Mobile widths also expose the legacy test id so existing mobile-tab lookups keep working. */}
+              <div data-testid={isDesktopFeedLayout ? undefined : "order-detail-mobile-tabs"}>
+                <Tabs value={detailTab} onValueChange={(value) => isOrderDetailTab(value) && selectDetailTab(value)}>
+                  <TabsList className="h-auto w-full flex-nowrap justify-start overflow-x-auto">
+                    {detailTabs.map((tab) => (
+                      <TabsTrigger key={tab.value} value={tab.value} className="h-11 min-h-11 shrink-0">
+                        {tab.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
+          </>
         ) : null}
 
         {selectedOrder ? (
@@ -464,6 +664,8 @@ export default function OrderDetailPanel({
                 </div>
               ) : (
                 <div className="space-y-5 px-5 py-5">
+            {detailTab === "info" ? (
+              <>
             {selectedOrder.warrantySourceOrderId ? (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-warranty-claim-banner>
                 <p className="text-sm font-semibold text-foreground">{t("orders.warranty.claimTitle")}</p>
@@ -753,6 +955,36 @@ export default function OrderDetailPanel({
               />
             ) : null}
 
+            {description ? (
+              <div>
+                <div className="flex min-w-0 items-center justify-between gap-1">
+                  <h3 className="min-w-0 text-xs font-medium text-muted-foreground">{t("orders.detail.description")}</h3>
+                  {showFieldEdit ? (
+                    <OrderFieldEditButton
+                      field="description"
+                      label={t("orders.detail.description")}
+                      onEdit={startFieldEdit}
+                    />
+                  ) : null}
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{description}</p>
+              </div>
+            ) : null}
+              </>
+            ) : null}
+
+            {detailTab === "items" ? (
+              <>
+            {!hasServiceLines && !hasMaterialLines ? (
+              <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center" data-testid="order-items-empty">
+                <p className="text-sm font-medium text-foreground">{t("orders.detail.tabs.itemsEmpty")}</p>
+                {showFieldEdit ? (
+                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => startFieldEdit("services")}>
+                    {t("orders.detail.tabs.itemsAdd")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             {hasServiceLines ? (
               <div className="overflow-hidden rounded-lg border border-border">
                 <table className="w-full text-sm">
@@ -982,23 +1214,11 @@ export default function OrderDetailPanel({
                 />
               </div>
             ) : null}
-
-            {description ? (
-              <div>
-                <div className="flex min-w-0 items-center justify-between gap-1">
-                  <h3 className="min-w-0 text-xs font-medium text-muted-foreground">{t("orders.detail.description")}</h3>
-                  {showFieldEdit ? (
-                    <OrderFieldEditButton
-                      field="description"
-                      label={t("orders.detail.description")}
-                      onEdit={startFieldEdit}
-                    />
-                  ) : null}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{description}</p>
-              </div>
+              </>
             ) : null}
 
+            {detailTab === "payments" ? (
+              <>
             <PaymentHistorySection
               target="order"
               order={selectedOrder}
@@ -1033,114 +1253,19 @@ export default function OrderDetailPanel({
                 return true;
               }}
             />
+              </>
+            ) : null}
 
-            <OrderAttachmentsSection
-              orderId={selectedOrder.id}
-              enabled={detailPanelOpen}
-              canMutateOverride={closedContentLocked ? false : undefined}
-            />
+            {detailTab === "files" ? (
+              <OrderAttachmentsSection
+                orderId={selectedOrder.id}
+                enabled={filesTabActive}
+                canMutateOverride={closedContentLocked ? false : undefined}
+              />
+            ) : null}
 
-            <div className="border-t border-border pt-5">
-              <Label htmlFor="order-status" className="mb-2 block">
-                {lifecycleStatusLocked || paidStatusLocked
-                  ? t("orders.actions.statusLocked")
-                  : t("orders.detail.updateStatus")}
-              </Label>
-              {lifecycleStatusLocked ? (
-                <div id="order-status" className="flex items-center gap-2">
-                  <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
-                  <span className="text-xs text-muted-foreground">
-                    {selectedOrder.status === "cancelled"
-                      ? t("orders.lifecycle.errors.orderAlreadyCancelled")
-                      : t("orders.lifecycle.errors.closedOrderImmutable")}
-                  </span>
-                </div>
-              ) : (
-              <Select
-                value={currentUnifiedStatus?.id ?? statusOptions[0]?.id ?? ""}
-                onValueChange={(value) => {
-                  if (!value || value === currentUnifiedStatus?.id) return;
-                  void changeOrderStatus(value);
-                }}
-                disabled={
-                  !canEditOrder ||
-                  isStatusUpdating ||
-                  isUnifiedStatusUpdating ||
-                  isAssigneeUpdating ||
-                  paidStatusLocked
-                }
-              >
-                <SelectTrigger id="order-status" className="w-full min-w-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((option) => (
-                    <SelectItem
-                      key={option.id}
-                      value={option.id}
-                      disabled={option.disabled}
-                      title={option.disabledReason ?? undefined}
-                    >
-                      <span className="inline-flex min-w-0 items-center gap-2">
-                        {option.color ? (
-                          <span
-                            aria-hidden
-                            className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-border"
-                            style={{ backgroundColor: option.color }}
-                          />
-                        ) : null}
-                        <span className="min-w-0 [overflow-wrap:anywhere]">{option.name}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              )}
-              {isOrderCurrentlyClosed(selectedOrder) ? (
-                <div className="mt-3 space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-closed-order-banner>
-                  <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>
-                  <p className="text-xs text-muted-foreground">{t("orders.lifecycle.closedAt", { date: selectedOrder.closedAt })}</p>
-                  <p
-                    className="text-xs text-muted-foreground"
-                    data-closed-order-immutable-hint
-                    data-testid="closed-order-immutable-hint"
-                  >
-                    {t("orders.lifecycle.errors.closedOrderImmutable")}
-                  </p>
-                  {paymentBalance && paymentBalance.remaining > 0.005 ? (
-                    <p className="text-sm text-destructive">
-                      {t("orders.lifecycle.postCloseOutstanding", { amount: formatMoney(paymentBalance.remaining) })}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              {showOpenLifecycleActions ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => void requestClose()} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
-                    <Lock className="size-3.5" />
-                    {t("orders.lifecycle.closeAction")}
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
-                    <CircleX className="size-3.5" />
-                    {t("orders.lifecycle.cancelAction")}
-                  </Button>
-                </div>
-              ) : null}
-              {showCancelClosedAction ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)} disabled={isStatusUpdating || isUnifiedStatusUpdating}>
-                    <CircleX className="size-3.5" />
-                    {t("orders.lifecycle.cancelAction")}
-                  </Button>
-                </div>
-              ) : null}
-              {paidStatusLocked ? (
-                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.actions.paidStatusImmutable")}</p>
-              ) : paidStatusBlocked ? (
-                <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{t("orders.taxInvoice.paidRequiresNumber")}</p>
-              ) : null}
-            </div>
-
+            {detailTab === "info" ? (
+              <>
             {(selectedOrder.createdAt || selectedOrder.updatedAt) && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-subtle-foreground tabular-nums">
                 {selectedOrder.createdAt ? <p>{t("orders.detail.created", { date: selectedOrder.createdAt })}</p> : null}
@@ -1168,6 +1293,8 @@ export default function OrderDetailPanel({
                   <p className="mt-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{deleteBlockedReason}</p>
                 ) : null}
               </div>
+            ) : null}
+              </>
             ) : null}
                 </div>
               )}

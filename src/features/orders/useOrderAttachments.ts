@@ -34,6 +34,7 @@ export function useOrderAttachments(orderId: string | undefined, { enabled = tru
     attachments: query.data ?? [],
     isLoading: query.isLoading,
     isFetching: query.isFetching,
+    isFetched: query.isFetched,
     error: query.error,
     refetch: query.refetch,
   };

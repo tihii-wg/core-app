@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee, Order } from "../../lib/types";
 import OrderDetailPanel from "./OrderDetailPanel";
+import { resetOrderDetailTabSession } from "./orderDetailTabs";
 
 const updateOrderHooks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
@@ -145,12 +146,35 @@ vi.mock("./OrderAttachmentsSection", () => ({
   default: () => <div data-testid="order-attachments-stub" />,
 }));
 
+vi.mock("./useOrderAttachments", () => ({
+  useOrderAttachments: () => ({
+    attachments: [],
+    isLoading: false,
+    isFetching: false,
+    isFetched: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useCanMutateOrderAttachments: () => true,
+  useUploadOrderAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteOrderAttachment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useOrderAttachmentUrl: () => ({ url: null, isLoading: false }),
+}));
+
 vi.mock("../finance/usePayments", () => ({
   useGetPayments: () => ({ payments: [], isLoading: false, error: null, isUnavailable: false, refetch: vi.fn() }),
   useRecordPayment: () => ({ mutate: vi.fn(), isPending: false }),
   useRecordRefund: () => ({ mutate: vi.fn(), isPending: false }),
   useRecordPaymentVoid: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteFullyVoidedPayment: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../finance/PaymentHistorySection", () => ({
+  PaymentHistorySection: () => <div data-testid="payment-history-stub" />,
+}));
+
+vi.mock("../finance/OrderPaymentStagesSection", () => ({
+  OrderPaymentStagesSection: () => <div data-testid="payment-stages-stub" />,
 }));
 
 vi.mock("../vehicles/useGetClientVehicles", () => ({
@@ -309,6 +333,7 @@ function renderPanel(
 }
 
 beforeEach(() => {
+  resetOrderDetailTabSession();
   industryState.slug = "auto_repair";
   roleState.role = "owner";
   ownerIdState.isOwner = true;
@@ -365,10 +390,14 @@ describe("OrderDetailPanel", () => {
     renderPanel();
 
     expect(await screen.findByRole("button", { name: "Edit: Description" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit: Services" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit: Services" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Edit: Description" }));
+    await user.click(screen.getByRole("tab", { name: /Services & materials/i }));
+    expect(await screen.findByRole("button", { name: "Edit: Services" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Information/i }));
+    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
 
     const description = await screen.findByLabelText(/Description/i);
     await waitFor(() => {
@@ -485,6 +514,7 @@ describe("OrderDetailPanel", () => {
   });
 
   it("surfaces status, overdue deadline, assignee, contact, and service lines", async () => {
+    const user = userEvent.setup();
     renderPanel(vi.fn(), vi.fn(), {
       order: {
         ...order,
@@ -503,11 +533,14 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toHaveTextContent("Ada Tech");
     expect(screen.getByRole("link", { name: "+37361111111" })).toHaveAttribute("href", "tel:+37361111111");
     expect(screen.queryByRole("link", { name: "ada@example.com" })).not.toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Services" })).toBeInTheDocument();
+    expect(screen.getAllByText("MDL 70.00").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole("columnheader", { name: "Services" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Services & materials \(2\)/i }));
+    expect(await screen.findByRole("columnheader", { name: "Services" })).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
     expect(screen.getByText("Oil filter")).toBeInTheDocument();
     expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("MDL 70.00").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows Unassigned when no employee is assigned", async () => {
@@ -1030,6 +1063,7 @@ function stubViewport(minWidth1024: boolean) {
 
 describe("OrderDetailPanel feed layout", () => {
   beforeEach(() => {
+    resetOrderDetailTabSession();
     industryState.slug = "auto_repair";
     roleState.role = "owner";
     ownerIdState.isOwner = true;
@@ -1042,6 +1076,9 @@ describe("OrderDetailPanel feed layout", () => {
     const layout = await screen.findByTestId("order-detail-main");
     expect(layout.closest("[data-order-detail-layout]")).toHaveAttribute("data-order-detail-layout", "desktop");
     expect(screen.queryByTestId("order-detail-mobile-tabs")).not.toBeInTheDocument();
+    expect(screen.getByTestId("order-detail-tabs")).toBeInTheDocument();
+    expect(screen.getByTestId("order-detail-status-bar")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /History/i })).not.toBeInTheDocument();
 
     const feedColumn = screen.getByTestId("order-detail-feed-column");
     expect(feedColumn).toContainElement(screen.getByTestId("order-feed-stub"));
@@ -1061,6 +1098,10 @@ describe("OrderDetailPanel feed layout", () => {
     );
     expect(screen.getByTestId("order-detail-main")).not.toHaveClass("hidden");
     expect(screen.getByTestId("order-detail-feed-column")).toHaveClass("hidden");
+    expect(screen.getByRole("tab", { name: /^Information$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Services & materials/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Invoices & payments/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^Files$/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /History \(3\)/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /History \(3\)/i }));
@@ -1069,5 +1110,72 @@ describe("OrderDetailPanel feed layout", () => {
     const feedColumn = screen.getByTestId("order-detail-feed-column");
     expect(feedColumn).not.toHaveClass("hidden");
     expect(feedColumn).toContainElement(screen.getByTestId("order-feed-stub"));
+  });
+});
+
+describe("OrderDetailPanel content tabs", () => {
+  beforeEach(() => {
+    resetOrderDetailTabSession();
+    industryState.slug = "auto_repair";
+    roleState.role = "owner";
+    ownerIdState.isOwner = true;
+    stubViewport(true);
+  });
+
+  it("switches between info, items, payments, and files sections", async () => {
+    const user = userEvent.setup();
+    renderPanel(vi.fn(), vi.fn(), {
+      order: {
+        ...order,
+        services: [{ id: "line-1", serviceId: "svc-oil", serviceName: "Oil change", price: 40, quantity: 1 }],
+      },
+    });
+
+    expect(await screen.findByRole("tab", { name: /^Information$/i })).toHaveAttribute("data-state", "active");
+    expect(screen.getByRole("button", { name: "Edit: Description" })).toBeInTheDocument();
+    expect(screen.queryByTestId("order-attachments-stub")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("payment-history-stub")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Services & materials \(1\)/i }));
+    expect(await screen.findByRole("columnheader", { name: "Services" })).toBeInTheDocument();
+    expect(screen.getByText("Oil change")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Invoices & payments/i }));
+    expect(await screen.findByTestId("payment-history-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("payment-stages-stub")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Files$/i }));
+    expect(await screen.findByTestId("order-attachments-stub")).toBeInTheDocument();
+  });
+
+  it("hides the tab bar while editing and restores the previous tab afterward", async () => {
+    const user = userEvent.setup();
+    Element.prototype.scrollIntoView = vi.fn();
+    renderPanel();
+
+    await user.click(await screen.findByRole("tab", { name: /Invoices & payments/i }));
+    expect(screen.getByTestId("payment-history-stub")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByTestId("order-detail-tabs")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("order-detail-status-bar")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Cancel/i }));
+    expect(await screen.findByTestId("order-detail-tabs")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Invoices & payments/i })).toHaveAttribute("data-state", "active");
+    expect(screen.getByTestId("payment-history-stub")).toBeInTheDocument();
+  });
+
+  it("uses works/materials wording for furniture industries", async () => {
+    industryState.slug = "furniture_manufacturing";
+    renderPanel(vi.fn(), vi.fn(), {
+      order: {
+        ...order,
+        services: [{ id: "line-1", serviceId: "svc-1", serviceName: "Assembly", price: 10, quantity: 1 }],
+      },
+    });
+
+    expect(await screen.findByRole("tab", { name: /Works & materials \(1\)/i })).toBeInTheDocument();
   });
 });
