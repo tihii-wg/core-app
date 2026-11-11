@@ -24,7 +24,7 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
-import { OrderStatusBadge, PaymentStatusBadge, StatusBadge } from "../../ui/StatusBadge";
+import { OrderStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
 import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
 import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "./AddOrderMaterialDialog";
@@ -40,7 +40,13 @@ import OrderMaterialLineInlineCells, {
 } from "./OrderMaterialLineInlineCells";
 import { useUpdateOrderServiceLine } from "./useUpdateOrderServiceLine";
 import { useUpdateOrderMaterialLine } from "./useUpdateOrderMaterialLine";
+import { useDeleteOrderServiceLine } from "./useDeleteOrderServiceLine";
+import { useDeleteOrderMaterialLine } from "./useDeleteOrderMaterialLine";
 import { parseOrderServiceLinePrice } from "./updateOrderServiceLine";
+import { materialDraftForUndo } from "./deleteOrderMaterialLine";
+import { appendOrderMaterialLines, appendOrderServiceLines } from "./appendOrderLines";
+import { OrderLineDeleteButton } from "./OrderLineDeleteButton";
+import { showOrderLineDeletedToast } from "./orderLineDeleteToast";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { resolveCatalogLineStockLimit } from "./catalogMaterialStockLimit";
@@ -54,7 +60,6 @@ import { useUpdateOrderCustomFieldValue, useUpdateOrderFields } from "./useUpdat
 import { combineDateTimeLocal, isInstallationBeforeMeasurement, splitDateTimeLocal } from "./industryOrderFieldHelpers";
 import { buildOrderMileageSnapshot, parseVisitMileage, persistOrderVehicleMileage } from "./orderVehicleMileage";
 import { useGetVehicle } from "../vehicles/useGetVehicle";
-import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { OrderEditField } from "./orderEditFields";
 import WarrantyOrderSection from "./WarrantyOrderSection";
 import { OrderWarrantyCoverageSection } from "./OrderWarrantyCoverageSection";
@@ -69,10 +74,10 @@ import ChangeOrderClientDialog from "./ChangeOrderClientDialog";
 import { OrderClientCard } from "./OrderClientCard";
 import { OrderLinkedVehicleDetails } from "./OrderLinkedVehicleDetails";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { effectiveOrderVatRate, orderVatBreakdown } from "../finance/orderVat";
+import { effectiveOrderVatRate } from "../finance/orderVat";
 import { useWorkspaceVatRate } from "../finance/useWorkspaceVatRate";
 import { vatIncludedAmount } from "../finance/vat";
-import { OrderVatBreakdownView } from "./OrderVatBreakdown";
+import { OrderDetailHeaderTotal } from "./OrderDetailHeaderTotal";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices, canManageWarehouse } from "../workspaces/workspaceRoles";
 import { OrderCatalogLinkDialogs } from "./OrderCatalogLinkDialogs";
@@ -205,6 +210,8 @@ export default function OrderDetailPanel({
   const addLinesSearchFocusRef = useRef<(() => void) | null>(null);
   const updateServiceLine = useUpdateOrderServiceLine();
   const updateMaterialLine = useUpdateOrderMaterialLine();
+  const deleteServiceLine = useDeleteOrderServiceLine();
+  const deleteMaterialLine = useDeleteOrderMaterialLine();
   const { data: warehouses = [] } = useGetWarehouses();
   const { data: warehouseStock = [] } = useGetWarehouseStock();
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
@@ -758,6 +765,47 @@ export default function OrderDetailPanel({
     });
     onOrderUpdated(updated);
   }
+
+  const canDeleteServiceLine = showFieldEdit;
+
+  async function handleDeleteServiceLine(lineId: string) {
+    if (!selectedOrder || !canDeleteServiceLine) return;
+    const line = selectedOrder.services.find((entry) => entry.id === lineId);
+    if (!line) return;
+    const snapshot = { ...line };
+    try {
+      const updated = await deleteServiceLine.mutateAsync({ orderId: selectedOrder.id, lineId });
+      onOrderUpdated(updated);
+      focusAddLinesSearch();
+      showOrderLineDeletedToast(async () => {
+        const restored = await appendOrderServiceLines(selectedOrder.id, [snapshot], workspaceId);
+        onOrderUpdated(restored);
+      });
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+    }
+  }
+
+  async function handleDeleteMaterialLine(lineId: string) {
+    if (!selectedOrder || !showFieldEdit) return;
+    const line = (selectedOrder.materials ?? []).find((entry) => entry.id === lineId);
+    if (!line) return;
+    // Catalog deletes move warehouse stock — same bar as quantity change / issue.
+    if (isCatalogOrderMaterial(line) && !canWarehouse) return;
+    const snapshot = materialDraftForUndo(line);
+    try {
+      const updated = await deleteMaterialLine.mutateAsync({ orderId: selectedOrder.id, lineId });
+      onOrderUpdated(updated);
+      focusAddLinesSearch();
+      showOrderLineDeletedToast(async () => {
+        const restored = await appendOrderMaterialLines(selectedOrder.id, [snapshot], workspaceId);
+        onOrderUpdated(restored);
+      });
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+    }
+  }
+
   const detailVatRate = selectedOrder
     ? effectiveOrderVatRate(selectedOrder, workspaceVatRate)
     : null;
@@ -886,26 +934,48 @@ export default function OrderDetailPanel({
           if (editingField || serviceLineEdit || materialLineEdit || changeClientOpen) event.preventDefault();
         }}
       >
-        <SheetHeader className="shrink-0 pr-24">
-          <SheetTitle className="min-w-0">
-            <span className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums">
-              {selectedOrder?.orderNumber}
-              {selectedOrder && !isEditing && <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />}
-              {selectedOrder?.warrantySourceOrderId && !isEditing ? (
-                <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge>
+        <SheetHeader
+          className={cn(
+            "shrink-0 space-y-2",
+            // Room for pencil + close; larger tap targets on phones (>= 44px).
+            "pr-14 sm:pr-24",
+            "[&_[data-slot=sheet-close]]:size-11 sm:[&_[data-slot=sheet-close]]:size-8",
+          )}
+        >
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+            <SheetTitle className="min-w-0 flex-1">
+              <span className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums [overflow-wrap:anywhere]">
+                {selectedOrder?.orderNumber}
+                {selectedOrder && !isEditing && (
+                  <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
+                )}
+                {selectedOrder?.warrantySourceOrderId && !isEditing ? (
+                  <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge>
+                ) : null}
+              </span>
+              {selectedOrder && !isEditing ? (
+                <OrderDetailWarrantyUnderNumber order={selectedOrder} />
               ) : null}
-            </span>
+            </SheetTitle>
             {selectedOrder && !isEditing ? (
-              <OrderDetailWarrantyUnderNumber order={selectedOrder} />
+              <OrderDetailHeaderTotal
+                order={selectedOrder}
+                formatMoney={formatMoney}
+                paymentStatus={paymentBalance?.status ?? selectedOrder.paymentStatus}
+                workspaceVatRate={workspaceVatRate}
+                worksLabel={t("orders.totalBreakdown.works")}
+                materialsLabel={t("orders.detail.materials")}
+                className="w-full sm:w-auto sm:max-w-[14rem]"
+              />
             ) : null}
-          </SheetTitle>
+          </div>
           {selectedOrder && !isEditing && canEditOrder && !closedContentLocked && (
             <button
               type="button"
               onClick={() => void startFieldEdit(null)}
               aria-label={t("common.edit")}
               title={t("orders.detail.editTitle")}
-              className="absolute top-3.5 right-12 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
+              className="absolute top-3 right-14 inline-flex size-11 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35 sm:top-3.5 sm:right-12 sm:size-8"
             >
               <Pencil className="size-4" />
             </button>
@@ -1119,47 +1189,6 @@ export default function OrderDetailPanel({
               }
             />
 
-            <div className="flex items-start justify-end gap-4 rounded-lg border border-border bg-muted/50 p-4">
-              <div className="min-w-0 text-right [overflow-wrap:anywhere]">
-                <h3 className="text-xs font-medium text-muted-foreground">{t("orders.detail.totalPrice")}</h3>
-                <p className="mt-1 text-xl font-semibold tracking-tight text-foreground tabular-nums">
-                  <OrderTotalBreakdownPopover
-                    order={selectedOrder}
-                    formatMoney={formatMoney}
-                    worksLabel={t("orders.totalBreakdown.works")}
-                    materialsLabel={t("orders.detail.materials")}
-                  >
-                    {formatMoney(selectedOrder.totalPrice)}
-                  </OrderTotalBreakdownPopover>
-                </p>
-                {(selectedOrder.discountTotal ?? 0) > 0 ? (
-                  <dl className="mt-1 space-y-0.5 text-xs text-muted-foreground tabular-nums" data-testid="order-detail-discount">
-                    <div className="flex justify-end gap-2">
-                      <dt>{t("orders.detail.subtotal")}</dt>
-                      <dd>{formatMoney(selectedOrder.subtotal ?? selectedOrder.totalPrice + (selectedOrder.discountTotal ?? 0))}</dd>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <dt>{t("orders.detail.discount")}</dt>
-                      <dd>−{formatMoney(selectedOrder.discountTotal ?? 0)}</dd>
-                    </div>
-                  </dl>
-                ) : null}
-                <OrderVatBreakdownView
-                  className="mt-2 space-y-0.5 text-xs text-muted-foreground"
-                  breakdown={orderVatBreakdown({
-                    total: selectedOrder.totalPrice,
-                    vatRate: effectiveOrderVatRate(selectedOrder, workspaceVatRate),
-                  })}
-                  formatMoney={formatMoney}
-                  showNoRateHint
-                  testId="order-detail-vat"
-                />
-                <div className="mt-2">
-                  <PaymentStatusBadge status={paymentBalance?.status ?? selectedOrder.paymentStatus} />
-                </div>
-              </div>
-            </div>
-
             {isLegalEntityCustomer(selectedOrder.clientType) ? (
               <TaxInvoiceNumberField
                 // Include persisted number in the key so a reopen/refetch that
@@ -1368,7 +1397,7 @@ export default function OrderDetailPanel({
             ) : null}
             {hasServiceLines ? (
               <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
-                <table className="w-full table-fixed text-sm">
+                <table className="w-full text-sm sm:table-fixed">
                   <colgroup>
                     <col className="w-[42%]" />
                     <col className="w-[16%]" />
@@ -1400,61 +1429,70 @@ export default function OrderDetailPanel({
                         className={cn(isHighlighted && "bg-primary/10 ring-1 ring-inset ring-primary/40")}
                       >
                         <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
-                          <div className="min-w-0 space-y-0.5">
-                            <p>
-                              {canOpenServiceForm && line.serviceId ? (
-                                <button
-                                  type="button"
-                                  className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none [overflow-wrap:anywhere]"
-                                  onClick={() => setCatalogServiceId(line.serviceId)}
-                                  title={t("orders.catalogLink.openService")}
-                                >
-                                  {line.serviceName}
-                                </button>
-                              ) : (
-                                line.serviceName
-                              )}
-                              {line.kind ? (
-                                <StatusBadge variant="muted" className="ml-2 align-middle">
-                                  {t(`orders.form.lineKind.${line.kind}`)}
-                                </StatusBadge>
-                              ) : null}
-                            </p>
-                            <OrderServiceLinePerformerInline
-                              line={line}
-                              editable={showFieldEdit}
-                              editing={serviceLineEdit}
-                              performerOptions={teamOptions}
-                              saving={updateServiceLine.isPending}
-                              onRequestEdit={() => {
-                                if (!lineId) return;
-                                setServiceLineEdit({ lineId, field: "performer" });
-                              }}
-                              onCancel={() => setServiceLineEdit(null)}
-                              onSaved={() => setServiceLineEdit(null)}
-                              onSaveField={async (technicianId) => {
-                                if (!lineId) return;
-                                await saveServiceLineField(lineId, "performer", technicianId);
-                              }}
-                              onEditorClosed={focusAddLinesSearch}
-                            />
-                            <OrderLineWarrantyBadge
-                              activated={Boolean(selectedOrder.closedAt)}
-                              status={
-                                selectedOrder.closedAt &&
-                                selectedOrder.status !== "closed"
-                                  ? "paused"
-                                  : undefined
-                              }
-                              startsAt={selectedOrder.closedAt}
-                              mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
-                              showWarrantyKm={showWarrantyKm}
-                              limits={{
-                                durationMonths: line.warrantyMonths ?? null,
-                                durationDays: line.warrantyDays ?? null,
-                                mileageLimit: line.warrantyKm ?? null,
-                              }}
-                            />
+                          <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row">
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <p>
+                                {canOpenServiceForm && line.serviceId ? (
+                                  <button
+                                    type="button"
+                                    className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none [overflow-wrap:anywhere]"
+                                    onClick={() => setCatalogServiceId(line.serviceId)}
+                                    title={t("orders.catalogLink.openService")}
+                                  >
+                                    {line.serviceName}
+                                  </button>
+                                ) : (
+                                  line.serviceName
+                                )}
+                                {line.kind ? (
+                                  <StatusBadge variant="muted" className="ml-2 align-middle">
+                                    {t(`orders.form.lineKind.${line.kind}`)}
+                                  </StatusBadge>
+                                ) : null}
+                              </p>
+                              <OrderServiceLinePerformerInline
+                                line={line}
+                                editable={showFieldEdit}
+                                editing={serviceLineEdit}
+                                performerOptions={teamOptions}
+                                saving={updateServiceLine.isPending}
+                                onRequestEdit={() => {
+                                  if (!lineId) return;
+                                  setServiceLineEdit({ lineId, field: "performer" });
+                                }}
+                                onCancel={() => setServiceLineEdit(null)}
+                                onSaved={() => setServiceLineEdit(null)}
+                                onSaveField={async (technicianId) => {
+                                  if (!lineId) return;
+                                  await saveServiceLineField(lineId, "performer", technicianId);
+                                }}
+                                onEditorClosed={focusAddLinesSearch}
+                              />
+                              <OrderLineWarrantyBadge
+                                activated={Boolean(selectedOrder.closedAt)}
+                                status={
+                                  selectedOrder.closedAt &&
+                                  selectedOrder.status !== "closed"
+                                    ? "paused"
+                                    : undefined
+                                }
+                                startsAt={selectedOrder.closedAt}
+                                mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
+                                showWarrantyKm={showWarrantyKm}
+                                limits={{
+                                  durationMonths: line.warrantyMonths ?? null,
+                                  durationDays: line.warrantyDays ?? null,
+                                  mileageLimit: line.warrantyKm ?? null,
+                                }}
+                              />
+                            </div>
+                            {canDeleteServiceLine && lineId ? (
+                              <OrderLineDeleteButton
+                                testId={`service-line-delete-${lineId}`}
+                                disabled={deleteServiceLine.isPending}
+                                onClick={() => void handleDeleteServiceLine(lineId)}
+                              />
+                            ) : null}
                           </div>
                         </td>
                         <OrderServiceLineInlineCells
@@ -1556,56 +1594,65 @@ export default function OrderDetailPanel({
                         return (
                           <tr key={line.id ?? `${line.inventoryItemId ?? "free"}-${index}`}>
                             <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
-                              <div className="space-y-1">
-                                <p>
-                                  {catalog && line.inventoryItemId ? (
-                                    <button
-                                      type="button"
-                                      className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none [overflow-wrap:anywhere]"
-                                      onClick={() => setCatalogInventoryId(line.inventoryItemId ?? null)}
-                                      title={t("orders.catalogLink.openMaterial")}
-                                    >
-                                      {line.itemName}
-                                    </button>
+                              <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row">
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <p>
+                                    {catalog && line.inventoryItemId ? (
+                                      <button
+                                        type="button"
+                                        className="text-left font-medium text-primary underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none [overflow-wrap:anywhere]"
+                                        onClick={() => setCatalogInventoryId(line.inventoryItemId ?? null)}
+                                        title={t("orders.catalogLink.openMaterial")}
+                                      >
+                                        {line.itemName}
+                                      </button>
+                                    ) : (
+                                      line.itemName
+                                    )}
+                                  </p>
+                                  <OrderLineWarrantyBadge
+                                    activated={Boolean(selectedOrder.closedAt)}
+                                    status={
+                                      selectedOrder.closedAt &&
+                                      selectedOrder.status !== "closed"
+                                        ? "paused"
+                                        : undefined
+                                    }
+                                    startsAt={selectedOrder.closedAt}
+                                    mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
+                                    showWarrantyKm={showWarrantyKm}
+                                    limits={{
+                                      durationMonths: line.warrantyMonths ?? null,
+                                      durationDays: line.warrantyDays ?? null,
+                                      mileageLimit: line.warrantyKm ?? null,
+                                    }}
+                                  />
+                                  <p className="text-[11px] text-muted-foreground">{sourceLabel}</p>
+                                  {status ? (
+                                    <>
+                                      <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
+                                        {t(`orders.warehouse.status.${status}`)}
+                                      </StatusBadge>
+                                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                                        {t("orders.warehouse.fulfillmentSummary", {
+                                          issued: formatQuantity(materialIssued(line), i18n.language),
+                                          returned: formatQuantity(materialReturned(line), i18n.language),
+                                          remaining: formatQuantity(remainingToIssue(line), i18n.language),
+                                          net: formatQuantity(netOutsideWarehouse(line), i18n.language),
+                                        })}
+                                      </p>
+                                    </>
                                   ) : (
-                                    line.itemName
+                                    <p className="text-[11px] text-muted-foreground">{t("orders.form.freeformNoStockImpact")}</p>
                                   )}
-                                </p>
-                                <OrderLineWarrantyBadge
-                                  activated={Boolean(selectedOrder.closedAt)}
-                                  status={
-                                    selectedOrder.closedAt &&
-                                    selectedOrder.status !== "closed"
-                                      ? "paused"
-                                      : undefined
-                                  }
-                                  startsAt={selectedOrder.closedAt}
-                                  mileageUnit={selectedOrder.vehicleMileageUnitSnapshot ?? "km"}
-                                  showWarrantyKm={showWarrantyKm}
-                                  limits={{
-                                    durationMonths: line.warrantyMonths ?? null,
-                                    durationDays: line.warrantyDays ?? null,
-                                    mileageLimit: line.warrantyKm ?? null,
-                                  }}
-                                />
-                                <p className="text-[11px] text-muted-foreground">{sourceLabel}</p>
-                                {status ? (
-                                  <>
-                                    <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
-                                      {t(`orders.warehouse.status.${status}`)}
-                                    </StatusBadge>
-                                    <p className="text-[11px] text-muted-foreground tabular-nums">
-                                      {t("orders.warehouse.fulfillmentSummary", {
-                                        issued: formatQuantity(materialIssued(line), i18n.language),
-                                        returned: formatQuantity(materialReturned(line), i18n.language),
-                                        remaining: formatQuantity(remainingToIssue(line), i18n.language),
-                                        net: formatQuantity(netOutsideWarehouse(line), i18n.language),
-                                      })}
-                                    </p>
-                                  </>
-                                ) : (
-                                  <p className="text-[11px] text-muted-foreground">{t("orders.form.freeformNoStockImpact")}</p>
-                                )}
+                                </div>
+                                {showFieldEdit && lineId && (!catalog || canWarehouse) ? (
+                                  <OrderLineDeleteButton
+                                    testId={`material-line-delete-${lineId}`}
+                                    disabled={deleteMaterialLine.isPending}
+                                    onClick={() => void handleDeleteMaterialLine(lineId)}
+                                  />
+                                ) : null}
                               </div>
                             </td>
                             <OrderMaterialLineInlineCells

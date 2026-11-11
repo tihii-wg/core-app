@@ -521,6 +521,13 @@ const orders: Messages<typeof en> = {
     quantityRpcRequired:
       "Изменение количества материала со складом требует функцию БД {{rpc}}. Примените supabase/manual/20261111210000_change_order_material_quantity.PRODUCTION.sql.",
   },
+  lineDelete: {
+    ariaLabel: "Удалить",
+    deleted: "Удалено",
+    undo: "Отменить",
+    materialRpcRequired:
+      "Удаление материала с возвратом на склад требует функцию БД {{rpc}}. Примените supabase/manual/20261111230000_delete_order_material.PRODUCTION.sql.",
+  },
   changeClient: {
     changeTitle: "Сменить клиента и автомобиль",
     changeDescription: "Выберите другого клиента и, если нужно, автомобиль для этого заказа.",

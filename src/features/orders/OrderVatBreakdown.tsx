@@ -7,6 +7,8 @@ type OrderVatBreakdownProps = {
   formatMoney: (amount: number) => string;
   /** When true and breakdown is null, show the muted “set rate in settings” hint. */
   showNoRateHint?: boolean;
+  /** One-line net · VAT summary (header); skips the gross row because the total is shown above. */
+  compact?: boolean;
   className?: string;
   testId?: string;
 };
@@ -16,6 +18,7 @@ export function OrderVatBreakdownView({
   breakdown,
   formatMoney,
   showNoRateHint = false,
+  compact = false,
   className,
   testId = "order-vat-breakdown",
 }: OrderVatBreakdownProps) {
@@ -33,6 +36,20 @@ export function OrderVatBreakdownView({
         >
           {t("orders.vat.setRate")}
         </Link>
+      </p>
+    );
+  }
+
+  if (compact) {
+    return (
+      <p className={className ?? "text-[11px] text-muted-foreground"} data-testid={testId}>
+        <span data-testid={`${testId}-net`}>
+          {t("orders.vat.net")}: {formatMoney(breakdown.net)}
+        </span>
+        <span aria-hidden="true"> · </span>
+        <span data-testid={`${testId}-vat`}>
+          {t("orders.vat.vat", { rate: breakdown.rate })}: {formatMoney(breakdown.vat)}
+        </span>
       </p>
     );
   }

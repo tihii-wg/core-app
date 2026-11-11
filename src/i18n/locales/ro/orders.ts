@@ -517,6 +517,13 @@ const orders: Messages<typeof en> = {
     quantityRpcRequired:
       "Schimbarea cantității materialului cu stoc necesită funcția de bază de date {{rpc}}. Aplicați supabase/manual/20261111210000_change_order_material_quantity.PRODUCTION.sql.",
   },
+  lineDelete: {
+    ariaLabel: "Șterge",
+    deleted: "Șters",
+    undo: "Anulează",
+    materialRpcRequired:
+      "Ștergerea unui material cu returnare în stoc necesită funcția de bază de date {{rpc}}. Aplicați supabase/manual/20261111230000_delete_order_material.PRODUCTION.sql.",
+  },
   changeClient: {
     changeTitle: "Schimbă clientul și vehiculul",
     changeDescription: "Alegeți alt client și, dacă e cazul, un vehicul pentru această comandă.",

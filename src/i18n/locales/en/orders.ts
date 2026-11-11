@@ -510,6 +510,13 @@ export default {
     quantityRpcRequired:
       "Changing material quantity with stock requires the database function {{rpc}}. Apply supabase/manual/20261111210000_change_order_material_quantity.PRODUCTION.sql.",
   },
+  lineDelete: {
+    ariaLabel: "Delete",
+    deleted: "Deleted",
+    undo: "Undo",
+    materialRpcRequired:
+      "Deleting a material line with stock return requires the database function {{rpc}}. Apply supabase/manual/20261111230000_delete_order_material.PRODUCTION.sql.",
+  },
   changeClient: {
     changeTitle: "Change client and vehicle",
     changeDescription: "Pick another client and, when applicable, a vehicle for this order.",
