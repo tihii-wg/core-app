@@ -826,15 +826,19 @@ export default function OrderDetailPanel({
     // Optimistic: the row disappears and the total updates at once; the delete runs in the background.
     onOrderUpdated(withoutLine(previous, "service", lineId));
     focusAddLinesSearch();
+    // Undo must run after the background delete has finished, or the re-add races the delete.
+    const deletion = deleteServiceLine.mutateAsync({ orderId: previous.id, lineId });
     showOrderLineDeletedToast(async () => {
+      const deleted = await deletion.then(() => true).catch(() => false);
+      if (!deleted) return; // the delete failed → the line was never removed
       const restored = await appendOrderServiceLines(previous.id, [snapshot], workspaceId);
       onOrderUpdated(restored);
     });
     try {
-      const updated = await deleteServiceLine.mutateAsync({ orderId: previous.id, lineId });
-      onOrderUpdated(updated);
+      onOrderUpdated(await deletion);
     } catch (error) {
       onOrderUpdated(previous);
+      toast.dismiss("order-line-deleted");
       toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
     }
   }
@@ -849,15 +853,18 @@ export default function OrderDetailPanel({
     const previous = selectedOrder;
     onOrderUpdated(withoutLine(previous, "material", lineId));
     focusAddLinesSearch();
+    const deletion = deleteMaterialLine.mutateAsync({ orderId: previous.id, lineId });
     showOrderLineDeletedToast(async () => {
+      const deleted = await deletion.then(() => true).catch(() => false);
+      if (!deleted) return;
       const restored = await appendOrderMaterialLines(previous.id, [snapshot], workspaceId);
       onOrderUpdated(restored);
     });
     try {
-      const updated = await deleteMaterialLine.mutateAsync({ orderId: previous.id, lineId });
-      onOrderUpdated(updated);
+      onOrderUpdated(await deletion);
     } catch (error) {
       onOrderUpdated(previous);
+      toast.dismiss("order-line-deleted");
       toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
     }
   }
@@ -1020,6 +1027,13 @@ export default function OrderDetailPanel({
         onEscapeKeyDown={(event) => {
           // Esc while a field / service line / change-client dialog is active must not close the sheet.
           if (editingField || serviceLineEdit || materialLineEdit || changeClientOpen) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          // Toasts (e.g. «Deleted · Undo») live outside the sheet; clicking them must not close the order.
+          const target = event.target as HTMLElement | null;
+          if (target?.closest?.('[role="status"], [data-rht-toaster], [data-testid="order-line-deleted-toast"]')) {
+            event.preventDefault();
+          }
         }}
       >
         <SheetHeader
