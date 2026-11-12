@@ -1925,7 +1925,6 @@ export default function OrderDetailPanel({
                   ) : (
                     <Button
                       type="button"
-                      variant="outline"
                       className={cn("min-h-11", !isDesktopFeedLayout && "order-first col-span-2 w-full min-w-0")}
                       onClick={closeSheet}
                     >
