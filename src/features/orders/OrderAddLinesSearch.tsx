@@ -33,7 +33,10 @@ type OrderAddLinesSearchProps = {
   allowServices: boolean;
   allowMaterials: boolean;
   onServiceAdded: (order: Order, meta?: { catalogServiceId: string }) => void;
+  /** Catalog service already on the order: the parent bumps that line's quantity (no duplicate line). */
   onHighlightServiceLine: (serviceId: string) => void;
+  /** Catalog item already on the order: the parent bumps that line. Returns false when there is no such line. */
+  onIncrementMaterialLine?: (inventoryItemId: string) => boolean;
   onOpenMaterial: (prefill: OrderAddLinesMaterialPrefill) => void;
   /** Lets the parent restore focus to the search after a line-price / performer editor closes. */
   focusRegistration?: (focus: () => void) => void;
@@ -60,6 +63,7 @@ export default function OrderAddLinesSearch({
   allowMaterials,
   onServiceAdded,
   onHighlightServiceLine,
+  onIncrementMaterialLine,
   onOpenMaterial,
   focusRegistration,
 }: OrderAddLinesSearchProps) {
@@ -246,9 +250,11 @@ export default function OrderAddLinesSearch({
     if (isPending || pendingServiceId) return;
     const existing = order.services.find((line) => line.serviceId === service.id);
     if (existing) {
-      toast(t("orders.toast.serviceAlreadyInOrder"));
-      onHighlightServiceLine(service.id);
+      // No duplicate line: the parent bumps the existing line's quantity and explains it in a toast.
+      clearQueryState();
       setOpen(false);
+      inputRef.current?.blur();
+      onHighlightServiceLine(service.id);
       return;
     }
     const draft = catalogServiceToOrderLine(
@@ -261,6 +267,11 @@ export default function OrderAddLinesSearch({
 
   function handleSelectItem(item: InventoryItem) {
     setOpen(false);
+    if (onIncrementMaterialLine?.(item.id)) {
+      clearQueryState();
+      inputRef.current?.blur();
+      return;
+    }
     setQuery("");
     onOpenMaterial({ kind: "catalog", item });
   }

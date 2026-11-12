@@ -182,6 +182,7 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
   const {
     focusAddLinesSearch,
     highlightExistingServiceLine,
+    incrementExistingMaterialLine,
     openServiceLinePriceAfterAdd,
     saveServiceLineField,
     saveMaterialLineField,
@@ -369,6 +370,7 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
     showAddMaterial,
     openServiceLinePriceAfterAdd,
     highlightExistingServiceLine,
+    incrementExistingMaterialLine,
     hasServiceLines,
     hasMaterialLines,
     serviceLines,

@@ -40,7 +40,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
     showAssetField, industryBlocks, deadline, overdue, description, inlineCommon, renderTextField,
     renderDateTimeField, technicianOptions, teamOptions, assigneeErrorMessage, assigneeEmptyHint,
     handleAssigneeChange, handleTeamChange, workflow, industrySlug, showAddLinesSearch, showAddService,
-    showAddMaterial, addLinesSearchFocusRef, openServiceLinePriceAfterAdd, highlightExistingServiceLine,
+    showAddMaterial, addLinesSearchFocusRef, openServiceLinePriceAfterAdd, highlightExistingServiceLine, incrementExistingMaterialLine,
     setAddMaterialPrefill, setAddMaterialOpen, hasServiceLines, hasMaterialLines, serviceLines, materialLines,
     fallbackService, highlightedServiceId, canDeleteServiceLine, canOpenServiceForm, canWarehouse,
     showWarrantyKm, detailVatRate, warehouseNameById, purchasePriceById, warehouseStock,
@@ -74,6 +74,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
       if (meta?.catalogServiceId) openServiceLinePriceAfterAdd(updated, meta.catalogServiceId);
     },
     highlightServiceLine: (serviceId: string) => highlightExistingServiceLine(serviceId),
+    incrementMaterialLine: (inventoryItemId: string) => incrementExistingMaterialLine(inventoryItemId),
     openMaterial: (prefill: Parameters<typeof setAddMaterialPrefill>[0]) => {
       setAddMaterialPrefill(prefill);
       setAddMaterialOpen(true);
@@ -284,6 +285,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
                 addLinesSearchFocusRef={addLinesSearchFocusRef}
                 onServiceAdded={h.serviceAdded}
                 onHighlightServiceLine={h.highlightServiceLine}
+                onIncrementMaterialLine={h.incrementMaterialLine}
                 onOpenMaterial={h.openMaterial}
                 hasServiceLines={hasServiceLines}
                 hasMaterialLines={hasMaterialLines}

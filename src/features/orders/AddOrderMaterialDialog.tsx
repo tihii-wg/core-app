@@ -10,6 +10,8 @@ import AddOrderLinesDialogShell from "./AddOrderLinesDialogShell";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
 import { useAppendOrderLines } from "./useAppendOrderLines";
+import { useUpdateOrderMaterialLine } from "./useUpdateOrderMaterialLine";
+import { isCatalogOrderMaterial } from "../inventory/orderMaterialLine";
 import { useWorkspaceWarrantyDefaults } from "./useWorkspaceWarrantyDefaults";
 
 export type AddOrderMaterialPrefill =
@@ -38,7 +40,9 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
   const works = usesWorksAndMaterialsTabLabel(industrySlug);
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const warrantyDefaults = useWorkspaceWarrantyDefaults();
-  const { mutateAsync: appendLines, isPending } = useAppendOrderLines();
+  const { mutateAsync: appendLines, isPending: appendPending } = useAppendOrderLines();
+  const { mutateAsync: updateMaterialLine, isPending: updatePending } = useUpdateOrderMaterialLine();
+  const isPending = appendPending || updatePending;
   const [saveError, setSaveError] = useState<string | null>(null);
   const [emptyError, setEmptyError] = useState(false);
 
@@ -60,12 +64,54 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
       setEmptyError(true);
       return;
     }
+    // A catalog item already on the order (same warehouse) is not added as a second line: its quantity grows.
+    const merges: { lineId: string; quantity: number }[] = [];
+    const newDrafts: OrderMaterial[] = [];
+    for (const draft of drafts) {
+      const existing = isCatalogOrderMaterial(draft)
+        ? (order.materials ?? []).find(
+            (line) =>
+              line.id &&
+              isCatalogOrderMaterial(line) &&
+              line.inventoryItemId === draft.inventoryItemId &&
+              (line.warehouseId ?? null) === (draft.warehouseId ?? null),
+          )
+        : undefined;
+      if (existing?.id) {
+        const already = merges.find((merge) => merge.lineId === existing.id);
+        if (already) already.quantity += Number(draft.quantity) || 0;
+        else
+          merges.push({
+            lineId: existing.id,
+            quantity: (Number(existing.quantity) || 0) + (Number(draft.quantity) || 0),
+          });
+      } else {
+        newDrafts.push(draft);
+      }
+    }
+    const save = async (): Promise<Order> => {
+      let latest: Order | null = null;
+      for (const merge of merges) {
+        latest = await updateMaterialLine({ orderId: order.id, lineId: merge.lineId, patch: { quantity: merge.quantity } });
+      }
+      if (newDrafts.length > 0) latest = await appendLines({ orderId: order.id, kind: "materials", drafts: newDrafts });
+      if (merges.length > 0) {
+        const quantity = merges.length === 1 ? merges[0]!.quantity : null;
+        toast.success(
+          quantity != null
+            ? t("orders.toast.materialAlreadyInOrderIncreased", { quantity })
+            : t("orders.toast.materialAlreadyInOrder"),
+          { id: "order-field-saved" },
+        );
+      }
+      return latest!;
+    };
     if (onPending) {
       // Stock limits were already enforced in the form, so show the lines immediately and save in the background.
-      const revert = onPending(drafts);
+      const revert = newDrafts.length > 0 ? onPending(newDrafts) : () => undefined;
       onOpenChange(false);
       try {
-        onAdded(await appendLines({ orderId: order.id, kind: "materials", drafts }));
+        onAdded(await save());
       } catch (error) {
         revert();
         toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
@@ -73,7 +119,7 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
       return;
     }
     try {
-      const updated = await appendLines({ orderId: order.id, kind: "materials", drafts });
+      const updated = await save();
       onAdded(updated);
       onOpenChange(false);
     } catch (error) {

@@ -23,6 +23,8 @@ export type OrderItemsTabProps = {
   addLinesSearchFocusRef: MutableRefObject<(() => void) | null>;
   onServiceAdded: (updated: Order, meta?: { catalogServiceId?: string }) => void;
   onHighlightServiceLine: (serviceId: string) => void;
+  /** Catalog item already on the order: bump that line. Returns false when there is no such line. */
+  onIncrementMaterialLine: (inventoryItemId: string) => boolean;
   onOpenMaterial: (prefill: AddOrderMaterialPrefill) => void;
   hasServiceLines: boolean;
   hasMaterialLines: boolean;
@@ -81,6 +83,7 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
     addLinesSearchFocusRef,
     onServiceAdded,
     onHighlightServiceLine,
+    onIncrementMaterialLine,
     onOpenMaterial,
     hasServiceLines,
     hasMaterialLines,
@@ -103,6 +106,7 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
             }}
             onServiceAdded={onServiceAdded}
             onHighlightServiceLine={onHighlightServiceLine}
+            onIncrementMaterialLine={onIncrementMaterialLine}
             onOpenMaterial={onOpenMaterial}
           />
         </div>

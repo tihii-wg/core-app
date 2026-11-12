@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import type { TFunction } from "i18next";
 import type { Control, FieldArrayWithId, UseFieldArrayAppend, UseFieldArrayRemove, UseFormGetValues, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
@@ -231,6 +232,9 @@ export default function OrderMaterialLinesEditor({
         return;
       }
       adjustQuantity(existingIndex, 1);
+      toast.success(t("orders.toast.materialAlreadyInOrderIncreased", { quantity: formatQuantity(current + 1, qtyLocale) }), {
+        id: "order-form-line-increment",
+      });
       return;
     }
     if (onHand <= 0) {

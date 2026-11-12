@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import type { TFunction } from "i18next";
 import type { Control, UseFieldArrayAppend, UseFormSetValue } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
@@ -115,12 +116,22 @@ export default function OrderServiceLinesFields({
   const watched = useWatch({ control, name: "services" }) as OrderService[] | undefined;
   const lineLocked = warrantyDisabled ?? disabled;
 
-  function hasService(serviceId: string | null, serviceName: string) {
-    return fields.some(
+  function existingServiceIndex(serviceId: string | null, serviceName: string) {
+    return fields.findIndex(
       (field) =>
         (serviceId !== null && field.serviceId === serviceId) ||
         field.serviceName.toLowerCase() === serviceName.toLowerCase(),
     );
+  }
+
+  /** Same service picked again: no duplicate line — bump the existing line's quantity and say so. */
+  function incrementExisting(index: number): boolean {
+    if (index < 0) return false;
+    const current = Number(watched?.[index]?.quantity) || 1;
+    const quantity = current + 1;
+    setValue(`services.${index}.quantity` as never, quantity as never, { shouldDirty: true, shouldValidate: true });
+    toast.success(t("orders.toast.serviceAlreadyInOrderIncreased", { quantity }), { id: "order-form-line-increment" });
+    return true;
   }
 
   return (
@@ -133,14 +144,14 @@ export default function OrderServiceLinesFields({
             allowCreate={allowCreate}
             errors={!!errors?.root}
             onSelect={(service) => {
-              if (hasService(service.id, service.service_name)) return;
+              if (incrementExisting(existingServiceIndex(service.id, service.service_name))) return;
               const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
               append(line);
               onPerformerChosen?.(line.technicianId);
               onLineAdded?.();
             }}
             onCreate={(serviceName, price) => {
-              if (hasService(null, serviceName)) return;
+              if (incrementExisting(existingServiceIndex(null, serviceName))) return;
               append(newServiceToOrderLine(serviceName, price, warrantyDefaults, orderMileageUnit));
               onLineAdded?.();
             }}

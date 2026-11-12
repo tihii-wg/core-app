@@ -130,7 +130,7 @@ function OrderMaterialLineRowComponent({
   );
 
   return (
-    <tr>
+    <tr data-order-material-line-row={line.id || undefined} className="transition-colors">
       <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
         <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:justify-between">
           <div className="min-w-0 flex-1 space-y-1">
