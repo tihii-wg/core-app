@@ -20,6 +20,7 @@ const event = (partial: Partial<OrderEvent>): OrderEvent => ({
   newValue: null,
   payload: {},
   actorName: null,
+  actorUserId: null,
   createdAt: "2026-11-01T10:00:00Z",
   ...partial,
 });

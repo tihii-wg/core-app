@@ -17,6 +17,7 @@ import {
 } from "./orderFeed";
 import { useCreateOrderComment, useDeleteOrderComment, useGetOrderComments, useGetOrderEvents } from "./useOrderFeed";
 import type { OrderStatus } from "../../lib/types";
+import { useMemberDisplayName } from "../workspaces/useMemberDisplayName";
 
 const categoryDotClass: Record<OrderEventCategory, string> = {
   lifecycle: "bg-foreground/70",
@@ -69,6 +70,7 @@ export default function OrderFeedSection({
   className,
 }: OrderFeedSectionProps) {
   const { t, i18n } = useTranslation();
+  const displayName = useMemberDisplayName();
   const { workflow } = useIndustryWorkflow();
   const locale = i18n.language || "en";
   const comments = useGetOrderComments(orderId, enabled);
@@ -120,7 +122,7 @@ export default function OrderFeedSection({
           <li key={comment.id} className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
             <div className="flex items-start justify-between gap-2">
               <p className="min-w-0 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{comment.authorName ?? t("orders.feed.unknownAuthor")}</span>
+                <span className="font-medium text-foreground">{displayName(comment.authorUserId, comment.authorName) ?? t("orders.feed.unknownAuthor")}</span>
                 {" · "}
                 <time dateTime={comment.createdAt} className="tabular-nums">
                   {formatStamp(comment.createdAt, locale)}
@@ -168,7 +170,7 @@ export default function OrderFeedSection({
               />
               <p className="text-sm [overflow-wrap:anywhere] text-foreground">{eventText(t, description)}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {event.actorName ?? t("orders.feed.unknownAuthor")}
+                {displayName(event.actorUserId, event.actorName) ?? t("orders.feed.unknownAuthor")}
                 {" · "}
                 <time dateTime={event.createdAt} className="tabular-nums">
                   {formatStamp(event.createdAt, locale)}

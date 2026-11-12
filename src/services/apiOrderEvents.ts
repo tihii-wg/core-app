@@ -24,6 +24,8 @@ export type OrderEvent = {
   newValue: string | null;
   payload: Record<string, unknown>;
   actorName: string | null;
+  /** auth user id of the actor (resolves the display name; `actorName` may hold an email). */
+  actorUserId: string | null;
   createdAt: string;
 };
 
@@ -33,7 +35,7 @@ export type OrderEventsResult = {
   isUnavailable: boolean;
 };
 
-const orderEventColumns = "id, order_id, event_type, field_name, old_value, new_value, payload, actor_name, created_at";
+const orderEventColumns = "id, order_id, event_type, field_name, old_value, new_value, payload, actor_name, actor_user_id, created_at";
 export const ORDER_EVENTS_LIMIT = 100;
 
 const text = (value: unknown) => (typeof value === "string" ? value : null);
@@ -50,6 +52,7 @@ export function toOrderEvent(row: Record<string, unknown>): OrderEvent {
     newValue: text(row.new_value),
     payload,
     actorName: actor || null,
+    actorUserId: text(row.actor_user_id),
     createdAt: text(row.created_at) ?? "",
   };
 }
