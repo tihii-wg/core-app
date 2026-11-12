@@ -32,6 +32,14 @@ import {
   type OrderBuiltinToggleableColumn,
   type OrderToggleableColumn,
 } from "./orderColumnVisibility";
+import {
+  ORDER_FLEX_COLUMN_ID,
+  ORDER_PINNED_END_COLUMN_IDS,
+  clearOrderColumnLayout,
+  defaultWidthForOrderColumn,
+  minWidthForOrderColumn,
+  orderColumnLayoutStorageKey,
+} from "./orderColumnLayout";
 import type { useOrderDetails } from "./useOrderDetails";
 import { useOrderCustomFieldValuesForOrders, useOrderFieldConfig } from "./useOrderFieldConfig";
 import { displayCustomFieldValue } from "../../services/apiCustomFields";
@@ -54,6 +62,9 @@ export type OrdersListViewProps = {
   /** Controlled visibility (Orders page toolbar). When set, skips internal storage writes unless onVisibleColumnsChange is also set. */
   visibleColumns?: ReadonlySet<OrderToggleableColumn>;
   onVisibleColumnsChange?: (columns: Set<OrderToggleableColumn>) => void;
+  /** Bump after clearing column layout storage so the table reloads defaults. */
+  layoutEpoch?: number;
+  onResetLayout?: () => void;
   cardExtra?: (order: Order) => ReactNode;
   /** Open client details from the client name cell. */
   onOpenClient?: (clientId: string) => void;
@@ -86,6 +97,8 @@ export function OrdersListView({
   columnVisibilityKey = "orders",
   visibleColumns: visibleColumnsProp,
   onVisibleColumnsChange,
+  layoutEpoch = 0,
+  onResetLayout,
   cardExtra,
   onOpenClient,
   className,
@@ -109,6 +122,8 @@ export function OrdersListView({
     () => new Set<OrderToggleableColumn>(readOrderVisibleColumns(storageKey, defaults)),
   );
   const visibleColumns = visibleColumnsProp ?? internalVisible;
+  const [internalLayoutEpoch, setInternalLayoutEpoch] = useState(0);
+  const effectiveLayoutEpoch = layoutEpoch + internalLayoutEpoch;
   const [internalEditing, setInternalEditing] = useState<Order | null>(null);
   const editingControlled = onEdit != null;
   const setEditingOrder = onEdit ?? setInternalEditing;
@@ -210,11 +225,17 @@ export function OrdersListView({
         return {
           key,
           header: field.label,
+          defaultWidth: defaultWidthForOrderColumn(key),
+          minWidth: minWidthForOrderColumn(key),
           cell: (order: Order) => {
             const rows = customValuesByOrder.get(order.id) ?? [];
             const row = rows.find((value) => value.definitionId === field.definitionId);
             const text = displayCustomFieldValue(field.type, row?.value, field.options);
-            return <span className="block max-w-[10rem] truncate">{text || "—"}</span>;
+            return (
+              <span className="block truncate" title={text || undefined}>
+                {text || "—"}
+              </span>
+            );
           },
         } satisfies Column<Order>;
       });
@@ -290,6 +311,12 @@ export function OrdersListView({
     writeOrderVisibleColumns(next, storageKey);
   }
 
+  function handleResetLayout() {
+    clearOrderColumnLayout(columnVisibilityKey);
+    setInternalLayoutEpoch((value) => value + 1);
+    onResetLayout?.();
+  }
+
   return (
     <div className={className}>
       {showColumnsMenu ? (
@@ -299,6 +326,7 @@ export function OrdersListView({
             onVisibleColumnsChange={handleVisibleColumnsChange}
             deviceColumnLabel={deviceColumnLabel}
             fieldConfig={orderFieldConfig}
+            onResetLayout={handleResetLayout}
           />
         </div>
       ) : null}
@@ -352,6 +380,12 @@ export function OrdersListView({
           onRowClick={orderDetails.openOrder}
           isLoading={isLoading}
           emptyState={emptyState}
+          resizable
+          reorderable
+          layoutStorageKey={orderColumnLayoutStorageKey(columnVisibilityKey)}
+          layoutEpoch={effectiveLayoutEpoch}
+          flexibleColumnId={ORDER_FLEX_COLUMN_ID}
+          pinnedEndColumnIds={ORDER_PINNED_END_COLUMN_IDS}
         />
       )}
 

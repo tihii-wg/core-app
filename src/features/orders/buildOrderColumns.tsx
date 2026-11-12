@@ -15,8 +15,19 @@ import { isOrderOverdue } from "./orderVisibility";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
 import { orderAssetSecondaryLine } from "./industryOrderFieldHelpers";
+import {
+  ORDER_COLUMN_DEFAULT_WIDTHS,
+  ORDER_COLUMN_MIN_WIDTHS,
+} from "./orderColumnLayout";
 
 type PaymentBalanceStatus = ReturnType<typeof orderPaymentBalance>["status"];
+
+function colSize(key: keyof typeof ORDER_COLUMN_DEFAULT_WIDTHS) {
+  return {
+    defaultWidth: ORDER_COLUMN_DEFAULT_WIDTHS[key],
+    minWidth: ORDER_COLUMN_MIN_WIDTHS[key],
+  };
+}
 
 export type BuildOrderColumnsArgs = {
   t: TFunction;
@@ -57,9 +68,12 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "orderNumber",
       header: args.t("orders.table.orderNumber"),
+      ...colSize("orderNumber"),
       cell: (order) => (
         <div className="min-w-0">
-          <span className="font-medium text-primary tabular-nums">{order.orderNumber}</span>
+          <span className="font-medium text-primary tabular-nums" title={order.orderNumber}>
+            {order.orderNumber}
+          </span>
           <OrderWarrantyIndicator model={args.warrantyByOrderId.get(order.id)} className="mt-0.5" />
         </div>
       ),
@@ -68,11 +82,13 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "client",
       header: args.columnLabels?.client ?? args.t("orders.table.client"),
+      ...colSize("client"),
+      flexible: true,
       cell: (order) => {
         const phone = order.clientPhone?.trim() || "—";
         return (
-          <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
-            <div className="truncate font-medium">
+          <div className="min-w-0">
+            <div className="truncate font-medium" title={order.clientName}>
               <OrderClientName clientId={order.clientId} clientName={order.clientName} onOpenClient={args.onOpenClient} />
             </div>
             <div className="truncate text-xs text-muted-foreground" title={phone}>
@@ -91,10 +107,11 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "device",
       header: args.deviceServiceColumn,
+      ...colSize("device"),
       cell: (order) => {
         const secondary = args.orderFieldBlocks ? orderAssetSecondaryLine(order, args.orderFieldBlocks) : "";
         return (
-          <div className="max-w-[11rem] min-w-0 2xl:max-w-[13rem]">
+          <div className="min-w-0">
             <div className="truncate" title={order.device}>
               {order.device}
             </div>
@@ -115,8 +132,9 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "status",
       header: args.columnLabels?.status ?? args.t("orders.table.statusPayment"),
+      ...colSize("status"),
       cell: (order) => (
-        <div className="flex min-w-0 flex-col items-start gap-1">
+        <div className="flex min-w-0 flex-col flex-wrap items-start gap-1">
           <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
           <PaymentStatusBadge status={args.paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
         </div>
@@ -128,10 +146,11 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "createdBy",
       header: args.t("orders.table.createdBy"),
+      ...colSize("createdBy"),
       cell: (order) => {
         const creator = order.createdByName?.trim() || args.t("orders.table.unknownCreator");
         return (
-          <div className="max-w-[11rem] min-w-0">
+          <div className="min-w-0">
             <div className="truncate font-medium" title={creator}>
               {creator}
             </div>
@@ -143,9 +162,10 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "employee",
       header: args.columnLabels?.employee ?? args.t("orders.table.assigned"),
+      ...colSize("employee"),
       cell: (order) => (
         <span
-          className="block max-w-[10rem] truncate text-muted-foreground"
+          className="block truncate text-muted-foreground"
           title={order.assignedEmployeeName || args.t("orders.detail.unassigned")}
         >
           {order.assignedEmployeeName || args.t("orders.detail.unassigned")}
@@ -155,17 +175,20 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "team",
       header: args.columnLabels?.team ?? args.t("orders.table.team"),
+      ...colSize("team"),
       cell: (order) => <OrderTeamAvatars team={order.team ?? []} />,
     },
     {
       key: "deadline",
       header: args.columnLabels?.deadline ?? args.t("orders.table.deadline"),
+      ...colSize("deadline"),
       cell: (order) => (
         <span
           className={cn(
             "tabular-nums",
             isOrderOverdue(order, args.today) ? "font-medium text-destructive" : "text-muted-foreground",
           )}
+          title={order.deadline || undefined}
         >
           {order.deadline || "—"}
         </span>
@@ -175,18 +198,24 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     {
       key: "total",
       header: args.columnLabels?.total ?? args.t("common.total"),
+      ...colSize("total"),
       cell: (order) => (
         <OrderTotalBreakdownPopover order={order} formatMoney={args.formatMoney}>
-          <span className="font-medium tabular-nums">{args.formatMoney(order.totalPrice)}</span>
+          <span className="font-medium tabular-nums" title={args.formatMoney(order.totalPrice)}>
+            {args.formatMoney(order.totalPrice)}
+          </span>
         </OrderTotalBreakdownPopover>
       ),
-      className: "text-right whitespace-nowrap",
+      className: "text-left whitespace-nowrap",
     },
     {
       key: "actions",
       header: args.t("common.actions"),
+      ...colSize("actions"),
       stickyRight: true,
-      className: "w-[80px] text-right",
+      resizable: false,
+      reorderable: false,
+      className: "text-right",
       cell: (order) => (
         <div className="flex justify-end gap-1">
           <OrderActionsMenu

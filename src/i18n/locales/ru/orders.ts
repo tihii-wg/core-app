@@ -24,6 +24,7 @@ const orders: Messages<typeof en> = {
     button: "Колонки",
     menuLabel: "Показать колонки",
     customFields: "Доп. поля",
+    resetLayout: "Сбросить ширину и порядок",
   },
   filters: {
     employee: "Сотрудник",

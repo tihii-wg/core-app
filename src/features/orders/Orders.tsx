@@ -39,6 +39,7 @@ import {
   writeOrderVisibleColumns,
   type OrderToggleableColumn,
 } from "./orderColumnVisibility";
+import { clearOrderColumnLayout } from "./orderColumnLayout";
 import { useOrderFieldConfig } from "./useOrderFieldConfig";
 import { localDateKey } from "../../pages/dashboardStats";
 import { cn } from "../../lib/utils";
@@ -86,6 +87,7 @@ export function Orders() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
   const [visibleColumns, setVisibleColumns] = useState(() => new Set<OrderToggleableColumn>(readOrderVisibleColumns()));
+  const [layoutEpoch, setLayoutEpoch] = useState(0);
   const [viewMode, setViewMode] = useState<OrderViewMode>(() => readOrderViewMode());
   const isBoard = viewMode === "board";
   const isCalendar = viewMode === "calendar";
@@ -104,6 +106,11 @@ export function Orders() {
   const handleVisibleColumnsChange = (columns: Set<OrderToggleableColumn>) => {
     setVisibleColumns(columns);
     writeOrderVisibleColumns(columns);
+  };
+
+  const handleResetColumnLayout = () => {
+    clearOrderColumnLayout("orders");
+    setLayoutEpoch((value) => value + 1);
   };
 
   const { employees } = useGetEmployees();
@@ -372,6 +379,7 @@ export function Orders() {
               onVisibleColumnsChange={handleVisibleColumnsChange}
               deviceColumnLabel={deviceColumnLabel}
               fieldConfig={orderFieldConfig}
+              onResetLayout={handleResetColumnLayout}
             />
           )}
         </div>
@@ -411,6 +419,7 @@ export function Orders() {
           }}
           visibleColumns={visibleColumns}
           onVisibleColumnsChange={handleVisibleColumnsChange}
+          layoutEpoch={layoutEpoch}
           onOpenClient={openClientFromOrder}
         />
       )}

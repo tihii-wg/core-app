@@ -67,4 +67,12 @@ export default {
     page: "Page {{page}}",
     showing: "Showing {{from}}–{{to}} of {{total}}",
   },
+  tableLayout: {
+    resizeColumn: "Resize column «{{column}}»",
+    lifted: "Picked up column «{{column}}»",
+    movedOver: "Column «{{column}}» over «{{over}}»",
+    dropped: "Dropped column «{{column}}» on «{{over}}»",
+    cancelled: "Cancelled moving column «{{column}}»",
+    noDrop: "No drop target",
+  },
 };

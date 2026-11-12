@@ -70,6 +70,14 @@ const common: Messages<typeof en> = {
     page: "Pagina {{page}}",
     showing: "Se afișează {{from}}–{{to}} din {{total}}",
   },
+  tableLayout: {
+    resizeColumn: "Modifică lățimea coloanei «{{column}}»",
+    lifted: "Coloana «{{column}}» a fost ridicată",
+    movedOver: "Coloana «{{column}}» peste «{{over}}»",
+    dropped: "Coloana «{{column}}» a fost plasată pe «{{over}}»",
+    cancelled: "Mutarea coloanei «{{column}}» a fost anulată",
+    noDrop: "Nicio țintă de plasare",
+  },
 };
 
 export default common;

@@ -2,20 +2,23 @@ import * as React from 'react'
 
 import { cn } from '../lib/utils'
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
-  return (
-    <div
-      data-slot="table-container"
-      className="relative w-full max-w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn('w-full caption-bottom text-sm', className)}
-        {...props}
-      />
-    </div>
-  )
-}
+const Table = React.forwardRef<HTMLTableElement, React.ComponentProps<'table'>>(
+  function Table({ className, ...props }, ref) {
+    return (
+      <div
+        data-slot="table-container"
+        className="relative w-full max-w-full overflow-x-auto"
+      >
+        <table
+          ref={ref}
+          data-slot="table"
+          className={cn('w-full caption-bottom text-sm', className)}
+          {...props}
+        />
+      </div>
+    )
+  },
+)
 
 function TableHeader({ className, ...props }: React.ComponentProps<'thead'>) {
   return (
@@ -63,18 +66,21 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<'th'>) {
-  return (
-    <th
-      data-slot="table-head"
-      className={cn(
-        'text-muted-foreground h-10 px-4 text-left align-middle text-xs font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
+const TableHead = React.forwardRef<HTMLTableCellElement, React.ComponentProps<'th'>>(
+  function TableHead({ className, ...props }, ref) {
+    return (
+      <th
+        ref={ref}
+        data-slot="table-head"
+        className={cn(
+          'text-muted-foreground h-10 px-4 text-left align-middle text-xs font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]',
+          className,
+        )}
+        {...props}
+      />
+    )
+  },
+)
 
 function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
   return (

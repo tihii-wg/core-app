@@ -17,6 +17,7 @@ export default {
     button: "Columns",
     menuLabel: "Show columns",
     customFields: "Custom fields",
+    resetLayout: "Reset widths and order",
   },
   filters: {
     employee: "Employee",

@@ -22,6 +22,7 @@ const orders: Messages<typeof en> = {
     button: "Coloane",
     menuLabel: "Afișează coloanele",
     customFields: "Câmpuri personalizate",
+    resetLayout: "Resetează lățimea și ordinea",
   },
   filters: {
     employee: "Angajat",

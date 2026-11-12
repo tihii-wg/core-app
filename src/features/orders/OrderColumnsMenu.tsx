@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -25,6 +26,8 @@ type OrderColumnsMenuProps = {
   deviceColumnLabel: string;
   /** Merged order field config — drives labels, hidden built-ins, and custom columns. */
   fieldConfig?: OrderFieldConfigItem[];
+  /** Clears persisted column widths and order for this page. */
+  onResetLayout?: () => void;
 };
 
 export function OrderColumnsMenu({
@@ -32,6 +35,7 @@ export function OrderColumnsMenu({
   onVisibleColumnsChange,
   deviceColumnLabel,
   fieldConfig = [],
+  onResetLayout,
 }: OrderColumnsMenuProps) {
   const { t } = useTranslation();
   const byKey = new Map(fieldConfig.map((field) => [field.key, field]));
@@ -101,6 +105,17 @@ export function OrderColumnsMenu({
                 </DropdownMenuCheckboxItem>
               );
             })}
+          </>
+        ) : null}
+        {onResetLayout ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="order-columns-reset-layout"
+              onSelect={() => onResetLayout()}
+            >
+              {t("orders.columns.resetLayout")}
+            </DropdownMenuItem>
           </>
         ) : null}
       </DropdownMenuContent>

@@ -70,6 +70,14 @@ const common: Messages<typeof en> = {
     page: "Страница {{page}}",
     showing: "Показаны {{from}}–{{to}} из {{total}}",
   },
+  tableLayout: {
+    resizeColumn: "Изменить ширину столбца «{{column}}»",
+    lifted: "Взят столбец «{{column}}»",
+    movedOver: "Столбец «{{column}}» над «{{over}}»",
+    dropped: "Столбец «{{column}}» помещён на «{{over}}»",
+    cancelled: "Перемещение столбца «{{column}}» отменено",
+    noDrop: "Нет цели для сброса",
+  },
 };
 
 export default common;
