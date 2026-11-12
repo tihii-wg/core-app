@@ -605,7 +605,6 @@ export function DataTable<T>({
         className={cn(rowClassName?.(item), onRowClick && "cursor-pointer hover:bg-accent/60")}
       >
         {cols.map((column) => {
-          const id = columnIdOf(column);
           const content = column.cell(item);
           return (
             <TableCell
