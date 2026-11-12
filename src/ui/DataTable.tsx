@@ -589,7 +589,7 @@ export function DataTable<T>({
   );
 
   // Narrowed columns just cut their text at the edge (no "…", no wrapping, row height never changes).
-  const tableClassName = cn(layoutEnabled && "table-fixed [&_td_*]:whitespace-nowrap [&_th_*]:whitespace-nowrap [&_td_*]:text-clip [&_th_*]:text-clip");
+  const tableClassName = cn(layoutEnabled && "table-fixed data-clip-cells [&_td_*]:whitespace-nowrap [&_th_*]:whitespace-nowrap [&_td_*]:text-clip [&_th_*]:text-clip");
   const tableStyle: CSSProperties | undefined = layoutEnabled
     ? { minWidth: tableMinWidth, width: "100%" }
     : undefined;

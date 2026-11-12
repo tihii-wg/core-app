@@ -262,3 +262,14 @@
     display: none !important;
   }
 }
+
+
+/*
+ * Resizable tables (DataTable with column layout): a narrowed column cuts its content at the cell edge.
+ * Pills (status / payment / client type) keep their full size and colour fill — they are clipped by the
+ * cell together with their text instead of shrinking while the letters spill out of the fill.
+ */
+table.data-clip-cells td [data-slot="status-badge"] {
+  max-width: none;
+  flex-shrink: 0;
+}

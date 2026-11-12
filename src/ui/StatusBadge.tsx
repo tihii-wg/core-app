@@ -37,6 +37,7 @@ const dotStyles: Record<BadgeVariant, string> = {
 export function StatusBadge({ variant = 'default', children, className, dot = false }: StatusBadgeProps) {
   return (
     <span
+      data-slot="status-badge"
       className={cn(
         // min-w-0 + wrap-friendly text so long EN/RO/RU labels stay inside narrow cards;
         // min-h keeps the single-line look while multi-line labels grow vertically.
