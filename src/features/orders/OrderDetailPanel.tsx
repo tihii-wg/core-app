@@ -711,24 +711,38 @@ export default function OrderDetailPanel({
     setServiceLineEdit({ lineId: created.id, field: "price" });
   }
 
+  /**
+   * Called when an inline line editor closes. The search field is deliberately NOT re-focused: a focused
+   * search reopens its result list over the lines, so focus leaves the editor and lands nowhere.
+   */
   function focusAddLinesSearch() {
-    requestAnimationFrame(() => addLinesSearchFocusRef.current?.());
+    requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest('[data-testid="order-items-actions"]')) active.blur();
+    });
   }
 
   /**
    * Optimistic copy of the order with one line's unit price changed and the total recomputed the same
    * way the server does (per-line discounts included). Shown at once; the server response replaces it.
    */
-  function withOptimisticLinePrice(order: Order, kind: "service" | "material", lineId: string, price: number): Order {
+  function withOptimisticLinePrice(
+    order: Order,
+    kind: "service" | "material",
+    lineId: string,
+    price: number,
+    quantity?: number,
+  ): Order {
+    const patchLine = <T extends { id?: string }>(line: T): T =>
+      line.id === lineId ? { ...line, price, ...(quantity !== undefined ? { quantity } : {}) } : line;
     const toMoney = (line: { price: number; quantity: number; discountType?: LineDiscountType | null; discountValue?: number | null }): MoneyLine => ({
       price: Number(line.price) || 0,
       qty: Number(line.quantity) || 0,
       discountType: line.discountType ?? null,
       discountValue: line.discountValue ?? null,
     });
-    const services = kind === "service" ? order.services.map((line) => (line.id === lineId ? { ...line, price } : line)) : order.services;
-    const materials =
-      kind === "material" ? (order.materials ?? []).map((line) => (line.id === lineId ? { ...line, price } : line)) : (order.materials ?? []);
+    const services = kind === "service" ? order.services.map(patchLine) : order.services;
+    const materials = kind === "material" ? (order.materials ?? []).map(patchLine) : (order.materials ?? []);
     const money = computeOrderMoney({ services: services.map(toMoney), materials: materials.map(toMoney) });
     return { ...order, services, materials, totalPrice: money.total };
   }
@@ -783,13 +797,22 @@ export default function OrderDetailPanel({
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new Error(t("orders.validation.quantityMin"));
     }
-    const updated = await updateMaterialLine.mutateAsync({
-      orderId: selectedOrder.id,
-      lineId,
-      patch: { quantity },
-      warehouseName,
-    });
-    onOrderUpdated(updated);
+    if (!line) {
+      const updated = await updateMaterialLine.mutateAsync({ orderId: selectedOrder.id, lineId, patch: { quantity }, warehouseName });
+      onOrderUpdated(updated);
+      return;
+    }
+    // The editor already blocked quantities above the warehouse stock, so a failure here is rare (a race or a
+    // missing RPC): show the new quantity and total at once, save in the background, roll back on error.
+    const previous = selectedOrder;
+    onOrderUpdated(withOptimisticLinePrice(previous, "material", lineId, Number(line.price) || 0, quantity));
+    void updateMaterialLine
+      .mutateAsync({ orderId: previous.id, lineId, patch: { quantity }, warehouseName })
+      .then((updated) => onOrderUpdated(updated))
+      .catch((error: unknown) => {
+        onOrderUpdated(previous);
+        toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+      });
   }
 
   const canDeleteServiceLine = showFieldEdit;
@@ -862,7 +885,10 @@ export default function OrderDetailPanel({
   const showFeedColumn = isDesktopFeedLayout || detailTab === "history";
   // Pinned under the order column only: on phones the History tab swaps it for the feed (comment box stays free).
   const showFooter = Boolean(selectedOrder) && showOrderColumn;
-  const canSaveAndClose = canEditOrder && !closedContentLocked;
+  // Inline edits save on Enter/blur, so the primary «Save & close» only makes sense while something is
+  // still being edited; otherwise the footer offers a plain «Close».
+  const hasPendingEdit = isEditing || Boolean(editingField) || Boolean(serviceLineEdit) || Boolean(materialLineEdit);
+  const canSaveAndClose = canEditOrder && !closedContentLocked && hasPendingEdit;
   const lifecycleBusy = isStatusUpdating || isUnifiedStatusUpdating;
   const showCancelAction = !isEditing && (showOpenLifecycleActions || showCancelClosedAction);
   /** Same Delete action as before, shown in the Cancel control's place after the order is cancelled. */

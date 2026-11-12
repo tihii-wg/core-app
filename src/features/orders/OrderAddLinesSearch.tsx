@@ -232,7 +232,8 @@ export default function OrderAddLinesSearch({
       const updated = await appendLines({ orderId: order.id, kind: "services", drafts: [draft] });
       clearQueryState();
       setOpen(false);
-      // Parent opens the new row's price editor; search focus is restored when that editor closes.
+      // Leave the search: the parent opens the new row's price editor and focus must not come back here.
+      inputRef.current?.blur();
       onServiceAdded(updated, { catalogServiceId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
