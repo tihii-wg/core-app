@@ -345,6 +345,7 @@ describe("Orders page", () => {
         isWarrantyOrder: false,
         coveredItemCount: 1,
     activeItemCount: 1,
+    mileage: null,
         status: "active",
         evaluation: {
           status: "active",
@@ -373,6 +374,7 @@ describe("Orders page", () => {
         isWarrantyOrder: false,
         coveredItemCount: 0,
     activeItemCount: 0,
+    mileage: null,
         status: "none",
         evaluation: null,
         remaining: null,

@@ -381,6 +381,12 @@ export type OrderWarrantyIndicatorModel = {
    * one by one; equals `coveredItemCount` while nothing has expired.
    */
   activeItemCount: number;
+  /**
+   * Mileage side of the order's coverage, shown next to the months: the largest remaining mileage among the
+   * items still covered by a mileage limit (`remaining`), or — when the current reading is unknown — the
+   * highest odometer value they run to (`until`). Null when no running item has a mileage limit.
+   */
+  mileage: { remaining: number | null; until: number | null; unit: MileageUnit } | null;
   status: WarrantyStatusCode;
   evaluation: WarrantyEvaluation | null;
   remaining: RemainingDuration | null;
@@ -472,6 +478,7 @@ export function buildOrderWarrantyIndicator(params: {
       isWarrantyOrder: false,
       coveredItemCount: 0,
       activeItemCount: 0,
+      mileage: null,
       status: "none",
       evaluation: null,
       remaining: null,
@@ -515,12 +522,33 @@ export function buildOrderWarrantyIndicator(params: {
     ((remaining != null && remaining.totalDays <= WARRANTY_NEAR_EXPIRY_DAYS) ||
       (useMileage && evaluation?.remainingMileage != null && evaluation.remainingMileage <= nearExpiryThreshold));
 
+  // Months come from the longest item; the mileage shown beside them is the furthest mileage limit still running
+  // (it may belong to another item, e.g. 12 months on labour and 10 000 km on a part).
+  let mileage: OrderWarrantyIndicatorModel["mileage"] = null;
+  if (useMileage && status !== "paused") {
+    for (const { snapshot, evaluation: itemEvaluation } of evaluated) {
+      if (isWarrantyExpired(itemEvaluation.status) || itemEvaluation.status === "paused") continue;
+      const until = itemEvaluation.expiresAtMileage ?? snapshot.expiresAtMileage ?? null;
+      if (until == null || !Number.isFinite(Number(until)) || Number(until) <= 0) continue;
+      const remainingKm =
+        itemEvaluation.remainingMileage != null && itemEvaluation.remainingMileage > 0 ? itemEvaluation.remainingMileage : null;
+      const unit = snapshotMileageUnit(snapshot);
+      if (!mileage) {
+        mileage = { remaining: remainingKm, until: Number(until), unit };
+        continue;
+      }
+      if (remainingKm != null && (mileage.remaining == null || remainingKm > mileage.remaining)) mileage.remaining = remainingKm;
+      if (Number(until) > (mileage.until ?? 0)) mileage.until = Number(until);
+    }
+  }
+
   const visible = params.isWarrantyOrder || covered.length > 0;
   return {
     visible,
     isWarrantyOrder: params.isWarrantyOrder,
     coveredItemCount: covered.length,
     activeItemCount,
+    mileage,
     status,
     evaluation,
     remaining,

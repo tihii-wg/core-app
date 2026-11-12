@@ -94,8 +94,9 @@ describe("OrderWarrantyIndicator", () => {
       currentMileage: 82500,
     });
     renderWithQuery(<OrderWarrantyIndicator model={model} />);
-    expect(screen.getByText("Warranty order · 8 months remaining")).toBeInTheDocument();
-    expect(screen.getByText(/Until 04\.07\.2027 · 7,500 km remaining/)).toBeInTheDocument();
+    // Mileage sits next to the months on the first line.
+    expect(screen.getByText("Warranty order · 8 months remaining / 7,500 km")).toBeInTheDocument();
+    expect(screen.getByText(/Until 04\.07\.2027/)).toBeInTheDocument();
   });
 
   it("shows expired-by-date state without negative remaining", () => {

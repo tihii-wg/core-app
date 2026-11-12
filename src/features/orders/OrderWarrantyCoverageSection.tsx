@@ -138,6 +138,24 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
       })
     : null;
 
+  const summaryMileageUnit = summary?.mileage ? mileageUnitAbbreviation(summary.mileage.unit, t) : "";
+  const summaryMileageText = summary?.mileage
+    ? summary.mileage.remaining != null
+      ? summary.remaining
+        ? // Next to the months: «Осталось 9 месяцев / 6 214 ми».
+          `${formatWarrantyKm(summary.mileage.remaining, i18n.language || "en")} ${summaryMileageUnit}`
+        : t("orders.warranty.indicator.remainingKm", {
+            value: formatWarrantyKm(summary.mileage.remaining, i18n.language || "en"),
+            unit: summaryMileageUnit,
+          })
+      : summary.mileage.until != null
+        ? t("orders.warranty.indicator.untilMileage", {
+            value: formatWarrantyKm(summary.mileage.until, i18n.language || "en"),
+            unit: summaryMileageUnit,
+          })
+        : null
+    : null;
+
   return (
     <section className="space-y-3 rounded-lg border border-border bg-muted/30 p-4" data-warranty-coverage>
       <OrderWarrantyPauseNotice order={order} records={snapshots} />
@@ -159,8 +177,15 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
               : summary.status === "paused"
                 ? t("orders.warranty.status.paused")
                 : summary.remaining
-                  ? remainingDurationLabel(summary.remaining, (key, options) => String(t(key, options as never)))
-                  : t(`orders.warranty.status.${summary.status}`)}
+                  ? [
+                      remainingDurationLabel(summary.remaining, (key, options) => String(t(key, options as never))),
+                      summaryMileageText,
+                    ]
+                      .filter(Boolean)
+                      .join(" / ")
+                  : summaryMileageText
+                    ? summaryMileageText
+                    : t(`orders.warranty.status.${summary.status}`)}
           </span>
         ) : !hasSnapshots ? (
           <span className="text-xs text-muted-foreground">{t("orders.warranty.notStartedHint")}</span>

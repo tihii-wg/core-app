@@ -54,6 +54,19 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
       ? formatWarrantyKm(evaluation.expiresAtMileage, language)
       : null;
 
+  // Mileage of the whole order (furthest mileage limit still running), shown together with the months.
+  const orderMileageUnit = model.mileage ? mileageUnitAbbreviation(model.mileage.unit, t) : unit;
+  const orderMileageText = model.mileage
+    ? model.mileage.remaining != null
+      ? `${formatWarrantyKm(model.mileage.remaining, language)} ${orderMileageUnit}`
+      : model.mileage.until != null
+        ? t("orders.warranty.indicator.untilMileage", {
+            value: formatWarrantyKm(model.mileage.until, language),
+            unit: orderMileageUnit,
+          })
+        : null
+    : null;
+
   const startDateLabel = formatWarrantyEndsOn(model.primary?.startsAt?.slice(0, 10) ?? null);
   const paused = model.status === "paused";
 
@@ -73,7 +86,13 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
         : t("orders.warranty.indicator.remainingDays", {
             count: Math.max(1, model.remaining.totalDays || model.remaining.days),
           });
-    primaryText = `${label} · ${remainingText}`;
+    // «Гарантия · Осталось 9 месяцев / 6 214 ми»
+    primaryText = orderMileageText ? `${label} · ${remainingText} / ${orderMileageText}` : `${label} · ${remainingText}`;
+  } else if (model.mileage?.remaining != null) {
+    primaryText = `${label} · ${t("orders.warranty.indicator.remainingKm", {
+      value: formatWarrantyKm(model.mileage.remaining, language),
+      unit: orderMileageUnit,
+    })}`;
   } else if (remainingKm) {
     primaryText = `${label} · ${t("orders.warranty.indicator.remainingKm", { value: remainingKm, unit })}`;
   } else if (model.isWarrantyOrder) {
@@ -95,8 +114,17 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
     secondaryParts.push(t("orders.warranty.status.paused"));
   } else {
     if (dateLabel) secondaryParts.push(t("orders.warranty.indicator.untilDate", { date: dateLabel }));
-    // Show remaining mileage whenever known (including when both time and mileage limits apply).
-    if (remainingKm) {
+    // Mileage already sits next to the months in the first line; only fall back here when it did not.
+    if (model.mileage) {
+      if (!model.remaining && model.mileage.remaining == null && model.mileage.until != null) {
+        secondaryParts.push(
+          t("orders.warranty.indicator.untilMileage", {
+            value: formatWarrantyKm(model.mileage.until, language),
+            unit: orderMileageUnit,
+          }),
+        );
+      }
+    } else if (remainingKm) {
       secondaryParts.push(t("orders.warranty.indicator.remainingKm", { value: remainingKm, unit }));
     } else {
       // Current mileage unknown: still show the mileage limit as «до 106 214 ми».

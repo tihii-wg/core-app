@@ -70,6 +70,7 @@ export function emptyWarrantyIndicator(): OrderWarrantyIndicatorModel {
     isWarrantyOrder: false,
     coveredItemCount: 0,
     activeItemCount: 0,
+    mileage: null,
     status: "none",
     evaluation: null,
     remaining: null,

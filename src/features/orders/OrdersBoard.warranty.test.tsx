@@ -10,6 +10,7 @@ const indicatorModel: OrderWarrantyIndicatorModel = {
   isWarrantyOrder: false,
   coveredItemCount: 1,
     activeItemCount: 1,
+    mileage: null,
   status: "active",
   evaluation: {
     status: "active",
