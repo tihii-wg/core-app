@@ -9,6 +9,7 @@ const indicatorModel: OrderWarrantyIndicatorModel = {
   visible: true,
   isWarrantyOrder: false,
   coveredItemCount: 1,
+    activeItemCount: 1,
   status: "active",
   evaluation: {
     status: "active",

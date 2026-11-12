@@ -25,7 +25,7 @@ function mapPausedWarrantyClaimError(error: {
   }
   return null;
 }
-import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
+import { convertMileage, parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import supabase from "./supabase";
 
 function storedMileageOrThrow(value: number | null | undefined): number | null {
@@ -214,6 +214,75 @@ export async function getWarrantyClaimsForOrder(workspaceId: string | undefined,
 }
 
 /**
+ * Latest known odometer reading per vehicle, in the vehicle's unit: the greater of `vehicles.current_mileage`
+ * and every non-cancelled visit's intake mileage (a later visit may still be open). Mileage-limited warranty
+ * items expire against this value.
+ */
+export async function loadLatestVehicleMileage(
+  targetWorkspaceId: string,
+  vehicleIds: readonly string[],
+): Promise<Map<string, { mileage: number; unit: MileageUnit | null }>> {
+  const mileageByVehicleId = new Map<string, { mileage: number; unit: MileageUnit | null }>();
+  if (vehicleIds.length > 0) {
+    const { data: vehicles, error: vehiclesError } = await supabase
+      .from("vehicles")
+      .select("id, current_mileage, mileage_unit")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("id", [...vehicleIds]);
+    if (vehiclesError) {
+      // Mileage is optional for time-only warranties; surface unexpected errors.
+      if (!(isMissingRelationError(vehiclesError) || isMissingColumnError(vehiclesError))) {
+        throw new Error(vehiclesError.message);
+      }
+    } else {
+      for (const row of (vehicles ?? []) as Record<string, unknown>[]) {
+        const id = String(row.id ?? "");
+        const mileage = row.current_mileage == null ? null : Number(row.current_mileage);
+        if (id && mileage != null && Number.isFinite(mileage)) {
+          mileageByVehicleId.set(id, { mileage: Math.floor(mileage), unit: parseMileageUnit(row.mileage_unit) });
+        }
+      }
+    }
+  }
+
+  // Latest known reading: a later visit's intake mileage (even while that order is still open) can be above the
+  // vehicle's stored current mileage, and it is what ends mileage-limited items one by one.
+  if (vehicleIds.length > 0) {
+    const { data: visits, error: visitsError } = await supabase
+      .from("orders")
+      .select("vehicle_id, status, vehicle_mileage_snapshot, vehicle_mileage_unit_snapshot")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("vehicle_id", [...vehicleIds])
+      .not("vehicle_mileage_snapshot", "is", null);
+    if (visitsError) {
+      if (!(isMissingRelationError(visitsError) || isMissingColumnError(visitsError))) {
+        throw new Error(visitsError.message);
+      }
+    } else {
+      for (const row of (visits ?? []) as Record<string, unknown>[]) {
+        const vehicleId = String(row.vehicle_id ?? "");
+        if (!vehicleId || row.status === "cancelled") continue;
+        const reading = Number(row.vehicle_mileage_snapshot);
+        if (!Number.isFinite(reading) || reading <= 0) continue;
+        const known = mileageByVehicleId.get(vehicleId);
+        const readingUnit = parseMileageUnit(row.vehicle_mileage_unit_snapshot) ?? known?.unit ?? null;
+        const targetUnit = known?.unit ?? readingUnit;
+        const converted =
+          readingUnit && targetUnit && readingUnit !== targetUnit
+            ? convertMileage(reading, readingUnit, targetUnit)
+            : reading;
+        if (converted == null || !Number.isFinite(converted)) continue;
+        if (!known || converted > known.mileage) {
+          mileageByVehicleId.set(vehicleId, { mileage: Math.floor(converted), unit: targetUnit });
+        }
+      }
+    }
+  }
+
+  return mileageByVehicleId;
+}
+
+/**
  * Batched warranty indicator payloads for a page of orders (no N+1).
  * - Warranty claim orders: snapshots from warranty_order_claims → warranty_records
  * - Original orders: snapshots from warranty_records for that order_id
@@ -304,28 +373,7 @@ export async function getOrdersWarrantyIndicatorMap(
   const vehicleIds = [
     ...new Set(orders.map((order) => order.vehicleId?.trim()).filter((id): id is string => Boolean(id))),
   ];
-  const mileageByVehicleId = new Map<string, { mileage: number; unit: MileageUnit | null }>();
-  if (vehicleIds.length > 0) {
-    const { data: vehicles, error: vehiclesError } = await supabase
-      .from("vehicles")
-      .select("id, current_mileage, mileage_unit")
-      .eq("workspace_id", targetWorkspaceId)
-      .in("id", vehicleIds);
-    if (vehiclesError) {
-      // Mileage is optional for time-only warranties; surface unexpected errors.
-      if (!(isMissingRelationError(vehiclesError) || isMissingColumnError(vehiclesError))) {
-        throw new Error(vehiclesError.message);
-      }
-    } else {
-      for (const row of (vehicles ?? []) as Record<string, unknown>[]) {
-        const id = String(row.id ?? "");
-        const mileage = row.current_mileage == null ? null : Number(row.current_mileage);
-        if (id && mileage != null && Number.isFinite(mileage)) {
-          mileageByVehicleId.set(id, { mileage: Math.floor(mileage), unit: parseMileageUnit(row.mileage_unit) });
-        }
-      }
-    }
-  }
+  const mileageByVehicleId = await loadLatestVehicleMileage(targetWorkspaceId, vehicleIds);
 
   // Source-order closedness for claim snapshots (records live on the original order).
   const sourceOrderIds = new Set<string>();

@@ -1000,6 +1000,10 @@ const orders: Messages<typeof en> = {
       coveredItems_few: "{{count}} позиции",
       coveredItems_many: "{{count}} позиций",
       coveredItems_other: "{{count}} позиции",
+      activeOfCoveredItems_one: "{{active}} из {{count}} позиции",
+      activeOfCoveredItems_few: "{{active}} из {{count}} позиций",
+      activeOfCoveredItems_many: "{{active}} из {{count}} позиций",
+      activeOfCoveredItems_other: "{{active}} из {{count}} позиций",
     },
     status: {
       none: "Без гарантии",

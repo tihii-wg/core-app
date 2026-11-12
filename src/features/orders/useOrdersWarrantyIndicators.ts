@@ -69,6 +69,7 @@ export function emptyWarrantyIndicator(): OrderWarrantyIndicatorModel {
     visible: false,
     isWarrantyOrder: false,
     coveredItemCount: 0,
+    activeItemCount: 0,
     status: "none",
     evaluation: null,
     remaining: null,

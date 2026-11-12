@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import type { Order } from "../../lib/types";
-import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
+import { getWarrantyRecordsForOrder, loadLatestVehicleMileage } from "../../services/apiWarranty";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -46,8 +46,21 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
   });
 
   const snapshots = recordsQuery.data ?? [];
-  const mileage = showWarrantyKm ? (currentMileage ?? order.vehicleMileageSnapshot ?? null) : null;
+  const vehicleId = order.vehicleId?.trim() || null;
+  // Mileage-limited items expire against the vehicle's LATEST reading (later visits), not this order's intake.
+  const latestMileageQuery = useQuery({
+    queryKey: ["vehicle-latest-mileage", workspaceId, vehicleId],
+    queryFn: async () => {
+      const map = await loadLatestVehicleMileage(String(workspaceId), [vehicleId!]);
+      return map.get(vehicleId!) ?? null;
+    },
+    enabled: Boolean(workspaceId && vehicleId && showWarrantyKm && !isClaim && snapshots.length > 0),
+    staleTime: 30_000,
+  });
+  const latest = latestMileageQuery.data ?? null;
   const orderUnit = order.vehicleMileageUnitSnapshot ?? "km";
+  const mileage = showWarrantyKm ? (latest?.mileage ?? currentMileage ?? order.vehicleMileageSnapshot ?? null) : null;
+  const mileageUnit = latest ? (latest.unit ?? orderUnit) : orderUnit;
 
   const configuredLines = useMemo(() => {
     const coverageOpts = { includeMileage: showWarrantyKm };
@@ -105,7 +118,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
         evaluation: evaluateWarranty({
           snapshot,
           currentMileage: mileage,
-          currentMileageUnit: orderUnit,
+          currentMileageUnit: mileageUnit,
           sourceOrderClosed: sourceClosed,
           useMileageWarranty: showWarrantyKm,
         }),
@@ -118,7 +131,7 @@ export function OrderWarrantyCoverageSection({ order, currentMileage }: Props) {
     ? buildOrderWarrantyIndicator({
         snapshots,
         currentMileage: mileage,
-        currentMileageUnit: orderUnit,
+        currentMileageUnit: mileageUnit,
         isWarrantyOrder: false,
         sourceOrderClosed: sourceClosed,
         useMileageWarranty: showWarrantyKm,

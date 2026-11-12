@@ -151,6 +151,7 @@ describe("OrderCard", () => {
           visible: true,
           isWarrantyOrder: false,
           coveredItemCount: 1,
+    activeItemCount: 1,
           status: "active",
           evaluation: {
             status: "active",
@@ -172,7 +173,8 @@ describe("OrderCard", () => {
   });
 
   it("hides the warranty indicator when there is no coverage", () => {
-    const { container } = renderCard({}, { warrantyIndicator: { visible: false, isWarrantyOrder: false, coveredItemCount: 0, status: "none", evaluation: null, remaining: null, nearExpiry: false, primary: null } });
+    const { container } = renderCard({}, { warrantyIndicator: { visible: false, isWarrantyOrder: false, coveredItemCount: 0,
+    activeItemCount: 0, status: "none", evaluation: null, remaining: null, nearExpiry: false, primary: null } });
     expect(container.querySelector("[data-warranty-indicator]")).toBeNull();
   });
 

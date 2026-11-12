@@ -446,6 +446,60 @@ describe("order warranty indicator model", () => {
     expect(model.remaining?.months).toBe(2);
   });
 
+  it("original order: shows the longest running item and counts items down as they expire", () => {
+    const at = "2027-02-01T12:00:00.000Z";
+    const months12 = snapshot({ id: "m12", endsOn: "2027-11-04", expiresAtMileage: null, durationMonths: 12, mileageLimit: null });
+    const months6 = snapshot({ id: "m6", endsOn: "2027-05-04", expiresAtMileage: null, durationMonths: 6, mileageLimit: null });
+    const km5000 = snapshot({ id: "km5", endsOn: "2027-11-04", expiresAtMileage: 85000, durationMonths: 12, mileageLimit: 5000 });
+
+    const all = buildOrderWarrantyIndicator({
+      snapshots: [months6, km5000, months12],
+      currentMileage: 82000,
+      currentMileageUnit: "km",
+      isWarrantyOrder: false,
+      nowIso: at,
+    });
+    expect(all.activeItemCount).toBe(3);
+    expect(all.status).toBe("active");
+    expect(all.evaluation?.expiresOn).toBe("2027-11-04");
+
+    // 5 000 km driven since: the mileage item ran out → 2 of 3.
+    const afterKm = buildOrderWarrantyIndicator({
+      snapshots: [months6, km5000, months12],
+      currentMileage: 86000,
+      currentMileageUnit: "km",
+      isWarrantyOrder: false,
+      nowIso: at,
+    });
+    expect(afterKm.coveredItemCount).toBe(3);
+    expect(afterKm.activeItemCount).toBe(2);
+    expect(afterKm.status).toBe("active");
+    expect(afterKm.primary?.id).toBe("m12");
+
+    // Six months later the 6-month item ran out too → 1 of 3, still the 12-month term.
+    const afterMonths = buildOrderWarrantyIndicator({
+      snapshots: [months6, km5000, months12],
+      currentMileage: 86000,
+      currentMileageUnit: "km",
+      isWarrantyOrder: false,
+      nowIso: "2027-06-01T12:00:00.000Z",
+    });
+    expect(afterMonths.activeItemCount).toBe(1);
+    expect(afterMonths.status).toBe("active");
+    expect(afterMonths.primary?.id).toBe("m12");
+
+    // Everything over → expired.
+    const done = buildOrderWarrantyIndicator({
+      snapshots: [months6, km5000, months12],
+      currentMileage: 86000,
+      currentMileageUnit: "km",
+      isWarrantyOrder: false,
+      nowIso: "2027-12-01T12:00:00.000Z",
+    });
+    expect(done.activeItemCount).toBe(0);
+    expect(done.status).toBe("expired_date");
+  });
+
   it("flags near-expiry without changing status", () => {
     const model = buildOrderWarrantyIndicator({
       snapshots: [

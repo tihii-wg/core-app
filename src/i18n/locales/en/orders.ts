@@ -981,6 +981,8 @@ export default {
       expiredAtKm: "{{value}} {{unit}}",
       coveredItems_one: "{{count}} covered item",
       coveredItems_other: "{{count}} covered items",
+      activeOfCoveredItems_one: "{{active}} of {{count}} item covered",
+      activeOfCoveredItems_other: "{{active}} of {{count}} items covered",
     },
     status: {
       none: "No warranty",

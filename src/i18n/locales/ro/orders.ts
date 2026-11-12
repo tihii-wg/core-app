@@ -992,6 +992,9 @@ const orders: Messages<typeof en> = {
       coveredItems_one: "{{count}} poziție acoperită",
       coveredItems_few: "{{count}} poziții acoperite",
       coveredItems_other: "{{count}} de poziții acoperite",
+      activeOfCoveredItems_one: "{{active}} din {{count}} poziție acoperită",
+      activeOfCoveredItems_few: "{{active}} din {{count}} poziții acoperite",
+      activeOfCoveredItems_other: "{{active}} din {{count}} de poziții acoperite",
     },
     status: {
       none: "Fără garanție",

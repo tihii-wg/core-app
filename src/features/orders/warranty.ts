@@ -376,6 +376,11 @@ export type OrderWarrantyIndicatorModel = {
   visible: boolean;
   isWarrantyOrder: boolean;
   coveredItemCount: number;
+  /**
+   * Covered items still under warranty (not expired by date or mileage). Drops 3 → 2 → 1 as items run out
+   * one by one; equals `coveredItemCount` while nothing has expired.
+   */
+  activeItemCount: number;
   status: WarrantyStatusCode;
   evaluation: WarrantyEvaluation | null;
   remaining: RemainingDuration | null;
@@ -406,21 +411,33 @@ function urgencyKey(
 export function selectPrimaryWarrantyItem(
   items: readonly { snapshot: WarrantySnapshot; evaluation: WarrantyEvaluation }[],
   nowIso?: string,
+  options?: {
+    /**
+     * Original order: active items first and, among them, the one with the LONGEST warranty (latest end
+     * date, else most remaining mileage) — the order is under warranty until its last item runs out.
+     * Default (warranty claim): any expired item wins, then the earliest end.
+     */
+    longestActive?: boolean;
+  },
 ): { snapshot: WarrantySnapshot; evaluation: WarrantyEvaluation } | null {
   if (items.length === 0) return null;
   const nowMs = (nowIso ? new Date(nowIso) : new Date()).getTime();
+  const longest = options?.longestActive === true;
+  const expiredFirst = !longest;
   const ranked = [...items].sort((a, b) => {
     const aExpired = isWarrantyExpired(a.evaluation.status);
     const bExpired = isWarrantyExpired(b.evaluation.status);
-    if (aExpired !== bExpired) return aExpired ? -1 : 1;
+    if (aExpired !== bExpired) return aExpired === expiredFirst ? -1 : 1;
     const aPaused = a.evaluation.status === "paused";
     const bPaused = b.evaluation.status === "paused";
     // Prefer non-paused when neither is expired so mixed claim sets surface live coverage.
     if (aPaused !== bPaused) return aPaused ? 1 : -1;
     const aKey = urgencyKey(a.evaluation, nowMs);
     const bKey = urgencyKey(b.evaluation, nowMs);
-    if (aKey.dateMs !== bKey.dateMs) return aKey.dateMs - bKey.dateMs;
-    return aKey.mileage - bKey.mileage;
+    const direction = longest ? -1 : 1;
+    if (aKey.dateMs !== bKey.dateMs) return aKey.dateMs < bKey.dateMs ? -direction : direction;
+    if (aKey.mileage !== bKey.mileage) return aKey.mileage < bKey.mileage ? -direction : direction;
+    return 0;
   });
   return ranked[0] ?? null;
 }
@@ -454,6 +471,7 @@ export function buildOrderWarrantyIndicator(params: {
       visible: false,
       isWarrantyOrder: false,
       coveredItemCount: 0,
+      activeItemCount: 0,
       status: "none",
       evaluation: null,
       remaining: null,
@@ -479,7 +497,11 @@ export function buildOrderWarrantyIndicator(params: {
       useMileageWarranty: useMileage,
     }),
   }));
-  const primary = selectPrimaryWarrantyItem(evaluated, params.nowIso);
+  // Original order: items expire one by one (12 vs 6 months, different km). The term shown is the item with
+  // the longest warranty still running; the item count drops 3 → 2 → 1 as the others run out, and «expired»
+  // shows only once all of them have. A warranty claim keeps «any expired wins».
+  const primary = selectPrimaryWarrantyItem(evaluated, params.nowIso, { longestActive: !params.isWarrantyOrder });
+  const activeItemCount = evaluated.filter(({ evaluation }) => !isWarrantyExpired(evaluation.status)).length;
   const evaluation = primary?.evaluation ?? null;
   const status = evaluation?.status ?? (params.isWarrantyOrder ? "unavailable" : "none");
   const remaining =
@@ -498,6 +520,7 @@ export function buildOrderWarrantyIndicator(params: {
     visible,
     isWarrantyOrder: params.isWarrantyOrder,
     coveredItemCount: covered.length,
+    activeItemCount,
     status,
     evaluation,
     remaining,

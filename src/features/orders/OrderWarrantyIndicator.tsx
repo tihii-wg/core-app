@@ -16,7 +16,7 @@ export function formatWarrantyKm(value: number, language: string): string {
   return formatMileageInput(Math.max(0, Math.floor(value)), language || "en");
 }
 
-type TranslateFn = (key: string, options?: { count?: number; value?: string; date?: string }) => string;
+type TranslateFn = (key: string, options?: { count?: number; value?: string; date?: string; active?: number }) => string;
 
 /** Compact remaining-time phrase from engine RemainingDuration (never negative). */
 export function remainingDurationLabel(remaining: RemainingDuration, t: TranslateFn): string {
@@ -107,7 +107,15 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
         );
       }
     }
-    if (model.coveredItemCount > 1) {
+    if (model.activeItemCount < model.coveredItemCount && model.activeItemCount > 0) {
+      // Some items already ran out: «2 из 3 позиций», then «1 из 3 позиций».
+      secondaryParts.push(
+        t("orders.warranty.indicator.activeOfCoveredItems", {
+          active: model.activeItemCount,
+          count: model.coveredItemCount,
+        }),
+      );
+    } else if (model.coveredItemCount > 1) {
       secondaryParts.push(t("orders.warranty.indicator.coveredItems", { count: model.coveredItemCount }));
     }
   }
