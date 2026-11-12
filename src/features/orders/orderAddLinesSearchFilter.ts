@@ -29,11 +29,13 @@ export function filterServicesForAddLinesSearch(services: readonly Service[], qu
   );
 }
 
+/** Only items with stock left: an out-of-stock item cannot be issued to the order, so it is not offered. */
 export function filterInventoryForAddLinesSearch(items: readonly InventoryItem[], query: string): InventoryItem[] {
   const tokens = tokenizeAddLinesQuery(query);
   return items.filter(
     (item) =>
       item.isActive &&
+      (Number(item.quantity) || 0) > 0 &&
       matchesAddLinesTokens(
         `${item.name ?? ""} ${item.sku ?? ""} ${item.category ?? ""} ${item.supplier ?? ""}`,
         tokens,

@@ -40,6 +40,7 @@ describe("orderAddLinesSearchFilter helpers", () => {
         category: "Filters",
         supplier: "Bosch",
         isActive: true,
+        quantity: 5,
       },
       {
         id: "b",
@@ -48,6 +49,16 @@ describe("orderAddLinesSearchFilter helpers", () => {
         category: "Brakes",
         supplier: "Brembo",
         isActive: true,
+        quantity: 2,
+      },
+      {
+        id: "d",
+        name: "Oil filter sold out",
+        sku: "OF-3",
+        category: "Filters",
+        supplier: "Bosch",
+        isActive: true,
+        quantity: 0,
       },
       {
         id: "c",
@@ -61,6 +72,8 @@ describe("orderAddLinesSearchFilter helpers", () => {
 
     expect(filterInventoryForAddLinesSearch(items, "bosch oil").map((i) => i.id)).toEqual(["a"]);
     expect(filterInventoryForAddLinesSearch(items, "bp-9").map((i) => i.id)).toEqual(["b"]);
+    // Out of stock (d) is not offered.
+    expect(filterInventoryForAddLinesSearch(items, "oil filter").map((i) => i.id)).toEqual(["a"]);
   });
 
   it("limits groups and reports hidden count", () => {
