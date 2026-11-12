@@ -18,6 +18,7 @@ import { OrderInfoTab } from "./tabs/OrderInfoTab";
 import { customEditFieldKey } from "../orderFieldRegistry";
 import { customInlineKind } from "./detailHelpers";
 import { useStableCallback, useStableHandlers } from "./useStableCallback";
+import { OrderInlineField } from "../OrderInlineField";
 
 /** Presentational sheet for order detail — receives a precomputed view model from the panel shell. */
 export function OrderDetailSheet(p: Record<string, any>) {
@@ -261,6 +262,20 @@ export function OrderDetailSheet(p: Record<string, any>) {
             {detailTab === "items" ? (
               <OrderItemsTab
                 order={selectedOrder}
+                descriptionSlot={
+                  description || (showFieldEdit && fieldVisible("description")) ? (
+                    <dl>
+                      <OrderInlineField
+                        label={t("orders.detail.description")}
+                        value={description}
+                        editValue={selectedOrder.description ?? ""}
+                        kind="textarea"
+                        valueClassName="text-sm font-normal"
+                        {...inlineCommon("description")}
+                      />
+                    </dl>
+                  ) : null
+                }
                 industrySlug={industrySlug ?? ""}
                 showAddLinesSearch={showAddLinesSearch}
                 showAddService={showAddService}

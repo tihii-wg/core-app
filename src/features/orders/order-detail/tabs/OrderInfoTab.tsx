@@ -73,7 +73,7 @@ function OrderInfoTabComponent(props: OrderInfoTabProps) {
     order, workflow, copy, showClientVehicles, showFieldEdit, canChangeClientVehicle,
     canEditOrder, closedContentLocked, taxInvoiceRequired, onOrderUpdated, onOpenClient,
     onChangeClientRequest, orderFieldMap, orderFieldConfig, customFieldValues,
-    fieldLabel, fieldVisible, showAssetField, industryBlocks, deadline, overdue, description,
+    fieldLabel, fieldVisible, showAssetField, industryBlocks, deadline, overdue,
     editingField, inlineCommon, renderTextField, renderDateTimeField,
     technicianOptions, teamOptions, isAssigneeUpdating, isStatusUpdating,
     assigneeErrorMessage, assigneeEmptyHint, onAssigneeChange, onTeamChange,
@@ -205,18 +205,7 @@ function OrderInfoTabComponent(props: OrderInfoTabProps) {
               />
             ) : null}
 
-            {description || (showFieldEdit && fieldVisible("description")) ? (
-              <dl>
-                <OrderInlineField
-                  label={t("orders.detail.description")}
-                  value={description}
-                  editValue={order.description ?? ""}
-                  kind="textarea"
-                  valueClassName="text-sm font-normal"
-                  {...inlineCommon("description")}
-                />
-              </dl>
-            ) : null}
+            {/* The order description lives on the «Services & items» tab, under the search. */}
               
 
             {(order.createdAt || order.updatedAt) && (

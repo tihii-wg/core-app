@@ -1,4 +1,4 @@
-import { memo, type MutableRefObject } from "react";
+import { memo, type MutableRefObject, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Order, OrderMaterial, OrderService } from "../../../../lib/types";
 import type { AssignableTechnician } from "../../assignableTechnicians";
@@ -14,6 +14,8 @@ import type { resolveCatalogLineStockLimit } from "../../catalogMaterialStockLim
 
 export type OrderItemsTabProps = {
   order: Order;
+  /** Order description (click-to-edit), shown right under the search field. */
+  descriptionSlot?: ReactNode;
   industrySlug: string;
   showAddLinesSearch: boolean;
   showAddService: boolean;
@@ -105,6 +107,7 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
           />
         </div>
       ) : null}
+      {props.descriptionSlot ? <div data-testid="order-items-description">{props.descriptionSlot}</div> : null}
       {!hasServiceLines && !hasMaterialLines ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center" data-testid="order-items-empty">
           <p className="text-sm font-medium text-foreground">{t("orders.detail.tabs.itemsEmpty")}</p>

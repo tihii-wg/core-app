@@ -494,17 +494,18 @@ describe("OrderDetailPanel", () => {
 
     renderPanel();
 
-    const descriptionField = await screen.findByRole("button", { name: "Edit: Description" });
-    expect(descriptionField).toHaveTextContent("Noise");
-    expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
+    // The description moved to the «Services & materials» tab (under the search field).
+    expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Services & materials/i }));
     // Services / materials stay non-inline: no per-field pencil on the idle view.
     expect(screen.queryByRole("button", { name: "Edit: Services" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit: Materials" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Information/i }));
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
+    const descriptionField = await screen.findByRole("button", { name: "Edit: Description" });
+    expect(descriptionField).toHaveTextContent("Noise");
+    await user.click(descriptionField);
 
     const editor = await screen.findByRole("textbox", { name: "Description" });
     expect(editor).toHaveValue("Noise");
