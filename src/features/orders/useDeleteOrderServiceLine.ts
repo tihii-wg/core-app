@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { applyOrderLineMutationCache } from "./applyOrderLineMutationCache";
 import { deleteOrderServiceLine } from "./deleteOrderServiceLine";
-import { invalidateOrderCaches } from "./useUpdateOrder";
 
 export function useDeleteOrderServiceLine() {
   const queryClient = useQueryClient();
@@ -14,8 +14,8 @@ export function useDeleteOrderServiceLine() {
       guardWrite();
       return deleteOrderServiceLine(input.orderId, input.lineId, workspaceId);
     },
-    onSuccess: (_order, variables) => {
-      invalidateOrderCaches(queryClient, workspaceId, variables.orderId);
+    onSuccess: (order) => {
+      applyOrderLineMutationCache(queryClient, workspaceId, order);
     },
   });
 }

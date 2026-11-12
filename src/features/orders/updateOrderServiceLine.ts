@@ -1,8 +1,12 @@
-import { getOrder, updateOrder, updateOrderServiceLinePrice } from "../../services/apiOrders";
+import { getOrder, orderFromLineRpcPayload, updateOrder, updateOrderServiceLinePrice } from "../../services/apiOrders";
+import { isMissingRpcError } from "../../services/missingRpc";
+import supabase from "../../services/supabase";
 import type { Order, OrderService } from "../../lib/types";
 import { parseQuantity } from "../../lib/quantity";
 import { roundMoney } from "./orderTotals";
 import { preservedOrderFieldsForLineAppend } from "./appendOrderLines";
+
+export const UPDATE_ORDER_SERVICE_LINE_RPC = "crm_update_order_service_line";
 
 export type OrderServiceLinePatch = {
   price?: number;
@@ -45,10 +49,31 @@ export function applyOrderServiceLinePatch(line: OrderService, patch: OrderServi
   };
 }
 
+async function updateOrderServiceLineViaRpc(
+  orderId: string,
+  lineId: string,
+  patch: OrderServiceLinePatch,
+): Promise<Order | null> {
+  const { data, error } = await supabase.rpc(UPDATE_ORDER_SERVICE_LINE_RPC, {
+    p_order_id: orderId,
+    p_line_id: lineId,
+    p_price: patch.price ?? null,
+    p_quantity: patch.quantity ?? null,
+    p_technician_id: patch.technicianId === undefined ? null : patch.technicianId,
+    p_set_technician: patch.technicianId !== undefined,
+  });
+  if (error) {
+    if (isMissingRpcError(error, UPDATE_ORDER_SERVICE_LINE_RPC)) return null;
+    throw new Error(error.message);
+  }
+  const order = orderFromLineRpcPayload(data);
+  if (!order) throw new Error("Invalid order payload");
+  return order;
+}
+
 /**
- * Re-reads the order, patches ONE service line by `order_services.id`, and saves through `updateOrder`
- * so totals / VAT / team-from-performers stay consistent with the full edit form.
- * Other lines are echoed from the fresh read — never invented client-side.
+ * Patches ONE service line by `order_services.id`. Prefers `crm_update_order_service_line`
+ * (write + full order in one round trip); falls back to the multi-query path when the RPC is missing.
  */
 export async function updateOrderServiceLine(
   orderId: string,
@@ -69,6 +94,9 @@ export async function updateOrderServiceLine(
     if (typeof quantity !== "number") throw new Error("Invalid quantity");
     patch = { ...patch, quantity };
   }
+
+  const viaRpc = await updateOrderServiceLineViaRpc(orderId, id, patch);
+  if (viaRpc) return viaRpc;
 
   // Price / quantity only: direct line update + totals (fast). Technician changes rewrite the team → full path.
   if (patch.technicianId === undefined && (patch.price !== undefined || patch.quantity !== undefined)) {

@@ -109,6 +109,14 @@ export function AppRoutes() {
 }
 
 const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // List/catalog data stays fresh for 30s; avoid refetch storms on every remount/focus.
+      // Open-order and payments queries can opt back into focus refetch via per-query options.
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
   queryCache: new QueryCache({
     onError: (error) => {
       if (isInvalidSessionError(error)) void supabase.auth.signOut();

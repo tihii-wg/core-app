@@ -1493,6 +1493,19 @@ async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[]
 }
 
 /** Exported for unit tests (VAT column fallback when `vat_rate` / `tax_total` are absent). */
+/** Exported for `orderFromFullRpc` fixture tests — same mapper `toOrder` uses for materials. */
+export function mapOrderMaterialLinesForTest(materialLines: readonly Record<string, unknown>[]): OrderMaterial[] {
+  return mapMaterialLines(materialLines as OrderMaterialLine[]);
+}
+
+/** Exported for `orderFromFullRpc` fixture tests — same mapper `toOrder` uses for services. */
+export function mapOrderServiceLinesForTest(
+  serviceLines: readonly Record<string, unknown>[],
+  employees: Array<{ id: string; name: string }> = [],
+): OrderService[] {
+  return mapServiceLines(serviceLines as OrderServiceLine[], employees);
+}
+
 export function toOrder(
   row: Record<string, unknown>,
   employees: { id: string; name: string; profile_id: string | null }[] = [],
@@ -1601,6 +1614,102 @@ export function toOrder(
     createdAt: formatOrderDate(row.created_at),
     updatedAt: formatOrderDate(row.updated_at),
   };
+}
+
+export const GET_ORDER_FULL_RPC = "crm_get_order_full";
+
+type FullOrderRpcPayload = {
+  order?: Record<string, unknown> | null;
+  client?: { name?: unknown; client_type?: unknown; phone?: unknown } | null;
+  services?: unknown;
+  materials?: unknown;
+  team?: unknown;
+  employees?: unknown;
+  member_names?: unknown;
+  custom_status?: { id?: unknown; name?: unknown; color?: unknown } | null;
+};
+
+function asRpcRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+/**
+ * Map `crm_get_order_full` jsonb (or a mutation payload that nests it under `order`) to the same
+ * `Order` shape `getOrder` / `toOrder` produce.
+ */
+export function orderFromFullRpc(payload: unknown): Order {
+  const root = asRpcRecord(payload);
+  if (!root) throw new Error("Invalid order payload");
+
+  const nested = asRpcRecord(root.order);
+  const full: FullOrderRpcPayload =
+    nested && ("services" in nested || "materials" in nested || "client" in nested)
+      ? (nested as FullOrderRpcPayload)
+      : (root as FullOrderRpcPayload);
+
+  const orderRow = asRpcRecord(full.order);
+  if (!orderRow || typeof orderRow.id !== "string") {
+    throw new Error("Invalid order payload");
+  }
+
+  const row: Record<string, unknown> = {
+    ...orderRow,
+    clients: full.client ?? null,
+  };
+
+  const employees = (Array.isArray(full.employees) ? full.employees : [])
+    .map((item) => {
+      const emp = asRpcRecord(item) ?? {};
+      return {
+        id: String(emp.id ?? ""),
+        name: typeof emp.name === "string" ? emp.name : "",
+        profile_id: typeof emp.profile_id === "string" ? emp.profile_id : null,
+      };
+    })
+    .filter((emp) => emp.id);
+
+  const memberNames = new Map<string, string>();
+  const names = asRpcRecord(full.member_names);
+  if (names) {
+    for (const [id, label] of Object.entries(names)) {
+      if (typeof label === "string" && label.trim()) memberNames.set(id, label.trim());
+    }
+  }
+
+  const customStatuses = new Map<string, { name: string; color: string | null }>();
+  const custom = asRpcRecord(full.custom_status);
+  if (custom && typeof custom.id === "string") {
+    customStatuses.set(custom.id, {
+      name: typeof custom.name === "string" ? custom.name : "",
+      color: typeof custom.color === "string" ? custom.color : custom.color == null ? null : String(custom.color),
+    });
+  }
+
+  const team: OrderTeamMember[] = (Array.isArray(full.team) ? full.team : [])
+    .map((item) => {
+      const member = asRpcRecord(item) ?? {};
+      return {
+        employeeId: String(member.employee_id ?? ""),
+        name: typeof member.name === "string" ? member.name : "",
+        role: (member.role === "lead" ? "lead" : "helper") as OrderTeamMember["role"],
+      };
+    })
+    .filter((member) => member.employeeId);
+
+  const services = (Array.isArray(full.services) ? full.services : []) as OrderServiceLine[];
+  const materials = (Array.isArray(full.materials) ? full.materials : []) as OrderMaterialLine[];
+
+  return toOrder(row, employees, services, memberNames, materials, customStatuses, team);
+}
+
+/** Extract an Order from a line-mutation RPC result (full payload or `{ order: full }`). */
+export function orderFromLineRpcPayload(data: unknown): Order | null {
+  if (data == null) return null;
+  try {
+    return orderFromFullRpc(data);
+  } catch {
+    return null;
+  }
 }
 
 async function assigneeDisplayNames(workspaceId: string, assignedUserIds: string[]) {
@@ -2096,6 +2205,25 @@ function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<R
 
 export async function getOrder(orderId: string, workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+
+  // Prefer one-shot RPC when applied (see supabase/manual/20261112140000_order_line_rpcs.PRODUCTION.sql).
+  {
+    const { data, error } = await supabase.rpc(GET_ORDER_FULL_RPC, { p_order_id: orderId });
+    if (!error && data != null) {
+      try {
+        const mapped = orderFromFullRpc(data);
+        if (mapped.workspace_id && mapped.workspace_id !== resolvedWorkspaceId) {
+          throw new Error(orderPermissionMessage());
+        }
+        return mapped;
+      } catch {
+        // Fall through to the multi-query path when the payload shape is unexpected.
+      }
+    } else if (error && !isMissingRpcError(error, GET_ORDER_FULL_RPC)) {
+      throw new Error(error.message);
+    }
+  }
+
   // Load only this order (previously fetched and hydrated every order in the workspace).
   const { data, error } = await supabase
     .from("orders")

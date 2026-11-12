@@ -5,11 +5,12 @@ import type { Order } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { ORDER_FIELD_SAVED_TOAST_ID } from "./useUpdateOrderFields";
-import { invalidateOrderCaches } from "./useUpdateOrder";
+import { applyOrderLineMutationCache } from "./applyOrderLineMutationCache";
 import {
   updateOrderMaterialLine,
   type OrderMaterialLinePatch,
 } from "./updateOrderMaterialLine";
+import { isCatalogOrderMaterial } from "../inventory/orderMaterialLine";
 
 export type UpdateOrderMaterialLineInput = {
   orderId: string;
@@ -34,8 +35,11 @@ export function useUpdateOrderMaterialLine() {
         warehouseName: input.warehouseName,
       });
     },
-    onSuccess: (_order, variables) => {
-      invalidateOrderCaches(queryClient, workspaceId, variables.orderId);
+    onSuccess: (order, variables) => {
+      const line = (order.materials ?? []).find((row) => row.id === variables.lineId);
+      const stockMoved =
+        variables.patch.quantity !== undefined && Boolean(line && isCatalogOrderMaterial(line));
+      applyOrderLineMutationCache(queryClient, workspaceId, order, { stockMoved });
       toast.success(i18n.t("orders.toast.fieldSaved"), { id: ORDER_FIELD_SAVED_TOAST_ID });
     },
   });

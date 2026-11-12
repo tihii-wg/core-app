@@ -2,7 +2,7 @@ import i18n from "../../i18n";
 import type { Order, OrderMaterial } from "../../lib/types";
 import { parseQuantity } from "../../lib/quantity";
 import { isCatalogOrderMaterial } from "../inventory/orderMaterialLine";
-import { getOrder } from "../../services/apiOrders";
+import { getOrder, orderFromLineRpcPayload } from "../../services/apiOrders";
 import { getWarehouseStock } from "../../services/apiWarehouseStock";
 import { isMissingRpcError, MissingRpcError } from "../../services/missingRpc";
 import supabase from "../../services/supabase";
@@ -174,38 +174,42 @@ async function changeMaterialQuantityViaRpc(
   orderId: string,
   lineId: string,
   quantity: number,
-): Promise<void> {
-  const { error } = await supabase.rpc(CHANGE_ORDER_MATERIAL_QUANTITY_RPC, {
+): Promise<Order | null> {
+  const { data, error } = await supabase.rpc(CHANGE_ORDER_MATERIAL_QUANTITY_RPC, {
     p_order_id: orderId,
     p_order_material_id: lineId,
     p_quantity: quantity,
   });
-  if (!error) return;
-  if (isMissingRpcError(error, CHANGE_ORDER_MATERIAL_QUANTITY_RPC)) {
-    throw new MissingRpcError(
-      CHANGE_ORDER_MATERIAL_QUANTITY_RPC,
-      i18n.t("orders.materialInline.quantityRpcRequired", { rpc: CHANGE_ORDER_MATERIAL_QUANTITY_RPC }),
-    );
+  if (error) {
+    if (isMissingRpcError(error, CHANGE_ORDER_MATERIAL_QUANTITY_RPC)) {
+      throw new MissingRpcError(
+        CHANGE_ORDER_MATERIAL_QUANTITY_RPC,
+        i18n.t("orders.materialInline.quantityRpcRequired", { rpc: CHANGE_ORDER_MATERIAL_QUANTITY_RPC }),
+      );
+    }
+    throw mapQuantityRpcError(error) ?? new Error(error.message);
   }
-  throw mapQuantityRpcError(error) ?? new Error(error.message);
+  return orderFromLineRpcPayload(data);
 }
 
-async function changeMaterialPriceViaRpc(orderId: string, lineId: string, price: number): Promise<void> {
-  const { error } = await supabase.rpc(SET_MATERIAL_PRICES_RPC, {
+async function changeMaterialPriceViaRpc(orderId: string, lineId: string, price: number): Promise<Order | null> {
+  const { data, error } = await supabase.rpc(SET_MATERIAL_PRICES_RPC, {
     p_order_id: orderId,
     p_lines: [{ line_id: lineId, price }],
   });
-  if (!error) return;
-  if (isMissingRpcError(error, SET_MATERIAL_PRICES_RPC)) {
-    throw new MissingRpcError(SET_MATERIAL_PRICES_RPC, i18n.t("orders.errors.materialPriceRpcRequired"));
+  if (error) {
+    if (isMissingRpcError(error, SET_MATERIAL_PRICES_RPC)) {
+      throw new MissingRpcError(SET_MATERIAL_PRICES_RPC, i18n.t("orders.errors.materialPriceRpcRequired"));
+    }
+    if (/order_material_price:forbidden/i.test(error.message)) {
+      throw new Error(i18n.t("orders.errors.materialPriceForbidden"));
+    }
+    if (/order_lifecycle:closed_order_immutable/i.test(error.message)) {
+      throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
+    }
+    throw new Error(error.message || i18n.t("orders.errors.materialPriceInvalid"));
   }
-  if (/order_material_price:forbidden/i.test(error.message)) {
-    throw new Error(i18n.t("orders.errors.materialPriceForbidden"));
-  }
-  if (/order_lifecycle:closed_order_immutable/i.test(error.message)) {
-    throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
-  }
-  throw new Error(error.message || i18n.t("orders.errors.materialPriceInvalid"));
+  return orderFromLineRpcPayload(data);
 }
 
 /**
@@ -246,6 +250,8 @@ export async function updateOrderMaterialLine(
   if (index < 0) throw new Error(i18n.t("orders.errors.materialsSyncFailed"));
   const current = materials[index]!;
 
+  let fromRpc: Order | null = null;
+
   if (nextPatch.quantity !== undefined && nextPatch.quantity !== Number(current.quantity)) {
     const delta = materialQuantityStockDelta(current, nextPatch.quantity);
     if (delta.kind === "blocked") {
@@ -260,12 +266,13 @@ export async function updateOrderMaterialLine(
         materials,
       );
     }
-    await changeMaterialQuantityViaRpc(orderId, id, nextPatch.quantity);
+    fromRpc = await changeMaterialQuantityViaRpc(orderId, id, nextPatch.quantity);
   }
 
   if (nextPatch.price !== undefined && roundMoney(nextPatch.price) !== roundMoney(Number(current.price))) {
-    await changeMaterialPriceViaRpc(orderId, id, nextPatch.price);
+    fromRpc = (await changeMaterialPriceViaRpc(orderId, id, nextPatch.price)) ?? fromRpc;
   }
 
+  if (fromRpc) return fromRpc;
   return getOrder(orderId, ws);
 }

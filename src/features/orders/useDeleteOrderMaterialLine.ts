@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { applyOrderLineMutationCache } from "./applyOrderLineMutationCache";
 import { deleteOrderMaterialLine } from "./deleteOrderMaterialLine";
-import { invalidateOrderCaches } from "./useUpdateOrder";
 
 export function useDeleteOrderMaterialLine() {
   const queryClient = useQueryClient();
@@ -14,8 +14,9 @@ export function useDeleteOrderMaterialLine() {
       guardWrite();
       return deleteOrderMaterialLine(input.orderId, input.lineId, workspaceId);
     },
-    onSuccess: (_order, variables) => {
-      invalidateOrderCaches(queryClient, workspaceId, variables.orderId);
+    onSuccess: (order) => {
+      // Deleting a catalog line returns outstanding stock — always refresh stock caches.
+      applyOrderLineMutationCache(queryClient, workspaceId, order, { stockMoved: true });
     },
   });
 }

@@ -75,15 +75,25 @@ describe("deleteOrderMaterialLine", () => {
     rpc.mockReset();
   });
 
-  it("calls the delete RPC with the line id and reloads the order", async () => {
-    rpc.mockResolvedValue({ data: { deleted: true }, error: null });
-    getOrder.mockResolvedValue(orderWith([]));
+  it("uses the full order from the RPC when present", async () => {
+    const empty = orderWith([]);
+    rpc.mockResolvedValue({ data: { deleted: true, order: { order: { id: "order-1" }, services: [], materials: [] } }, error: null });
+    // importActual orderFromLineRpcPayload will fail on incomplete payload → getOrder fallback
+    getOrder.mockResolvedValue(empty);
 
     const updated = await deleteOrderMaterialLine("order-1", "m1", "ws-1");
     expect(rpc).toHaveBeenCalledWith(DELETE_ORDER_MATERIAL_RPC, {
       p_order_id: "order-1",
       p_order_material_id: "m1",
     });
+    expect(updated.materials).toEqual([]);
+  });
+
+  it("falls back to getOrder when the RPC returns no order payload", async () => {
+    rpc.mockResolvedValue({ data: { deleted: true }, error: null });
+    getOrder.mockResolvedValue(orderWith([]));
+    const updated = await deleteOrderMaterialLine("order-1", "m1", "ws-1");
+    expect(getOrder).toHaveBeenCalledWith("order-1", "ws-1");
     expect(updated.materials).toEqual([]);
   });
 

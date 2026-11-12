@@ -5,7 +5,7 @@ import type { Order } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { ORDER_FIELD_SAVED_TOAST_ID } from "./useUpdateOrderFields";
-import { invalidateOrderCaches } from "./useUpdateOrder";
+import { applyOrderLineMutationCache } from "./applyOrderLineMutationCache";
 import { updateOrderServiceLine, type OrderServiceLinePatch } from "./updateOrderServiceLine";
 
 export type UpdateOrderServiceLineInput = {
@@ -28,8 +28,8 @@ export function useUpdateOrderServiceLine() {
       guardWrite();
       return updateOrderServiceLine(input.orderId, input.lineId, input.patch, workspaceId);
     },
-    onSuccess: (_order, variables) => {
-      invalidateOrderCaches(queryClient, workspaceId, variables.orderId);
+    onSuccess: (order) => {
+      applyOrderLineMutationCache(queryClient, workspaceId, order);
       toast.success(i18n.t("orders.toast.fieldSaved"), { id: ORDER_FIELD_SAVED_TOAST_ID });
     },
   });

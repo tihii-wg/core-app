@@ -24,6 +24,9 @@ export function useGetPayments(filters: PaymentListFilters = {}) {
     queryKey: paymentsQueryKey(workspaceId, filters),
     queryFn: () => getPayments(workspaceId, filters),
     enabled: Boolean(workspaceId),
+    // Keep focus refetch for the open ledger even though QueryClient defaults turn it off.
+    refetchOnWindowFocus: true,
+    staleTime: 0,
     retry: (failureCount, queryError) => !(queryError instanceof PaymentsUnavailableError) && failureCount < 3,
   });
 

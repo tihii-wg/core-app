@@ -1,19 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Order, OrderService } from "../../lib/types";
-import {
-  applyOrderServiceLinePatch,
-  parseOrderServiceLinePrice,
-  patchServicesForLineUpdate,
-  updateOrderServiceLine,
-} from "./updateOrderServiceLine";
 
 const getOrder = vi.hoisted(() => vi.fn());
 const updateOrder = vi.hoisted(() => vi.fn());
+const updateOrderServiceLinePrice = vi.hoisted(() => vi.fn());
+const orderFromLineRpcPayload = vi.hoisted(() => vi.fn());
+const rpc = vi.hoisted(() => vi.fn());
 
 vi.mock("../../services/apiOrders", () => ({
   getOrder: (...args: unknown[]) => getOrder(...args),
   updateOrder: (...args: unknown[]) => updateOrder(...args),
+  updateOrderServiceLinePrice: (...args: unknown[]) => updateOrderServiceLinePrice(...args),
+  orderFromLineRpcPayload: (...args: unknown[]) => orderFromLineRpcPayload(...args),
 }));
+
+vi.mock("../../services/supabase", () => ({
+  default: { rpc },
+}));
+
+import {
+  applyOrderServiceLinePatch,
+  parseOrderServiceLinePrice,
+  patchServicesForLineUpdate,
+  UPDATE_ORDER_SERVICE_LINE_RPC,
+  updateOrderServiceLine,
+} from "./updateOrderServiceLine";
 
 const lineA: OrderService = {
   id: "line-a",
@@ -81,28 +92,60 @@ describe("updateOrderServiceLine", () => {
   beforeEach(() => {
     getOrder.mockReset();
     updateOrder.mockReset();
+    updateOrderServiceLinePrice.mockReset();
+    orderFromLineRpcPayload.mockReset();
+    rpc.mockReset();
     getOrder.mockResolvedValue(order);
     updateOrder.mockResolvedValue({ ...order, services: [{ ...lineA, price: 99 }, lineB] });
+    updateOrderServiceLinePrice.mockResolvedValue({ ...order, services: [{ ...lineA, price: 99 }, lineB] });
   });
 
-  it("re-reads the order, patches one line, and saves through updateOrder", async () => {
-    await updateOrderServiceLine("order-1", "line-a", { price: 99 }, "ws-1");
+  it("uses the RPC result when present (no fallback)", async () => {
+    const fromRpc = { ...order, totalPrice: 123 } as Order;
+    rpc.mockResolvedValue({ data: { order: fromRpc }, error: null });
+    orderFromLineRpcPayload.mockReturnValue(fromRpc);
 
+    const result = await updateOrderServiceLine("order-1", "line-a", { price: 99 }, "ws-1");
+    expect(rpc).toHaveBeenCalledWith(UPDATE_ORDER_SERVICE_LINE_RPC, expect.objectContaining({
+      p_order_id: "order-1",
+      p_line_id: "line-a",
+      p_price: 99,
+      p_set_technician: false,
+    }));
+    expect(result.totalPrice).toBe(123);
+    expect(updateOrderServiceLinePrice).not.toHaveBeenCalled();
+    expect(updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the fast price path when the RPC is missing", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: `Could not find the function ${UPDATE_ORDER_SERVICE_LINE_RPC}`, code: "PGRST202" },
+    });
+
+    await updateOrderServiceLine("order-1", "line-a", { price: 99 }, "ws-1");
+    expect(updateOrderServiceLinePrice).toHaveBeenCalledWith("order-1", "line-a", { price: 99, quantity: undefined }, "ws-1");
+    expect(updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("falls back to updateOrder for technician changes when the RPC is missing", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: `Could not find the function ${UPDATE_ORDER_SERVICE_LINE_RPC}`, code: "PGRST202" },
+    });
+
+    await updateOrderServiceLine("order-1", "line-a", { technicianId: "emp-9" }, "ws-1");
     expect(getOrder).toHaveBeenCalledWith("order-1", "ws-1");
     expect(updateOrder).toHaveBeenCalledTimes(1);
-    const payload = updateOrder.mock.calls[0][0];
-    expect(payload.orderId).toBe("order-1");
-    expect(payload.services).toHaveLength(2);
-    expect(payload.services[0]).toMatchObject({ id: "line-a", price: 99, quantity: 1 });
-    expect(payload.services[1]).toEqual(lineB);
-    expect(payload.assignedEmployeeId).toBe("emp-1");
-    expect(payload.materials).toBeUndefined();
+    expect(updateOrder.mock.calls[0][0].services[0]).toMatchObject({ id: "line-a", technicianId: "emp-9" });
   });
 
-  it("rejects unknown line ids", async () => {
-    await expect(updateOrderServiceLine("order-1", "missing", { price: 1 }, "ws-1")).rejects.toThrow(
-      /not found/i,
-    );
+  it("rejects unknown line ids on the fallback path", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: `Could not find the function ${UPDATE_ORDER_SERVICE_LINE_RPC}`, code: "PGRST202" },
+    });
+    await expect(updateOrderServiceLine("order-1", "missing", { technicianId: "x" }, "ws-1")).rejects.toThrow(/not found/i);
     expect(updateOrder).not.toHaveBeenCalled();
   });
 });

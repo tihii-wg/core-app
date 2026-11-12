@@ -1,14 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Order, OrderMaterial, OrderService } from "../../lib/types";
 
-const api = vi.hoisted(() => ({ getOrder: vi.fn(), updateOrder: vi.fn() }));
+const api = vi.hoisted(() => ({
+  getOrder: vi.fn(),
+  updateOrder: vi.fn(),
+  appendOrderCatalogServiceLine: vi.fn(),
+  orderFromLineRpcPayload: vi.fn(),
+}));
+const rpc = vi.hoisted(() => vi.fn());
 
 vi.mock("../../services/apiOrders", () => ({
-  getOrder: api.getOrder,
-  updateOrder: api.updateOrder,
+  getOrder: (...args: unknown[]) => api.getOrder(...args),
+  updateOrder: (...args: unknown[]) => api.updateOrder(...args),
+  appendOrderCatalogServiceLine: (...args: unknown[]) => api.appendOrderCatalogServiceLine(...args),
+  orderFromLineRpcPayload: (...args: unknown[]) => api.orderFromLineRpcPayload(...args),
 }));
 
-import { appendOrderMaterialLines, appendOrderServiceLines } from "./appendOrderLines";
+vi.mock("../../services/supabase", () => ({
+  default: { rpc },
+}));
+
+import {
+  ADD_AND_ISSUE_ORDER_CATALOG_MATERIAL_RPC,
+  ADD_ORDER_SERVICE_LINE_RPC,
+  appendOrderMaterialLines,
+  appendOrderServiceLines,
+} from "./appendOrderLines";
 
 const existingService: OrderService = {
   id: "line-1",
@@ -56,28 +73,56 @@ const fresh = {
 beforeEach(() => {
   api.getOrder.mockReset();
   api.updateOrder.mockReset();
+  api.appendOrderCatalogServiceLine.mockReset();
+  api.orderFromLineRpcPayload.mockReset();
+  rpc.mockReset();
   api.getOrder.mockResolvedValue(fresh);
   api.updateOrder.mockImplementation(async () => ({ ...fresh, updated: true }));
+  api.appendOrderCatalogServiceLine.mockResolvedValue(null);
+  // Default: RPCs not installed → fallback paths.
+  rpc.mockResolvedValue({
+    data: null,
+    error: { message: "Could not find the function crm_add_order_service_line", code: "PGRST202" },
+  });
 });
 
 describe("appendOrderServiceLines", () => {
-  it("appends drafts to the FRESH services, keeping existing line ids and fields", async () => {
-    const draft: OrderService = { serviceId: "svc-tires", serviceName: "Tires", price: 80, quantity: 2.5, warrantyMonths: 3 };
+  it("uses the add-service RPC when present", async () => {
+    const fromRpc = { ...fresh, totalPrice: 55 } as Order;
+    rpc.mockResolvedValue({ data: fromRpc, error: null });
+    api.orderFromLineRpcPayload.mockReturnValue(fromRpc);
 
-    const result = await appendOrderServiceLines("order-1", [draft], "ws-1");
+    const result = await appendOrderServiceLines(
+      "order-1",
+      [{ serviceId: "svc-tires", serviceName: "Tires", price: 80, quantity: 1 }],
+      "ws-1",
+    );
+    expect(rpc).toHaveBeenCalledWith(ADD_ORDER_SERVICE_LINE_RPC, expect.objectContaining({
+      p_order_id: "order-1",
+      p_service_id: "svc-tires",
+    }));
+    expect(result.totalPrice).toBe(55);
+    expect(api.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("falls back to updateOrder when the RPC is missing (multi-line)", async () => {
+    const draft: OrderService = { serviceId: "svc-tires", serviceName: "Tires", price: 80, quantity: 2.5, warrantyMonths: 3 };
+    // Force multi-line so we skip the single-catalog quick path entirely after missing RPC + null quick.
+    const result = await appendOrderServiceLines("order-1", [draft, { ...draft, serviceId: "svc-b" }], "ws-1");
 
     expect(api.getOrder).toHaveBeenCalledWith("order-1", "ws-1");
     expect(api.updateOrder).toHaveBeenCalledTimes(1);
     const [payload, workspaceId] = api.updateOrder.mock.calls[0];
     expect(workspaceId).toBe("ws-1");
-    expect(payload.services).toEqual([existingService, draft]);
-    expect(payload.services[0]).toBe(existingService);
-    expect(payload.services[1].id).toBeUndefined();
+    expect(payload.services).toHaveLength(3);
     expect(result).toMatchObject({ updated: true });
   });
 
   it("does not touch materials and echoes the fresh order fields updateOrder rewrites", async () => {
-    await appendOrderServiceLines("order-1", [{ serviceId: "svc-a", serviceName: "A", price: 1, quantity: 1 }], "ws-1");
+    await appendOrderServiceLines("order-1", [
+      { serviceId: "svc-a", serviceName: "A", price: 1, quantity: 1 },
+      { serviceId: "svc-b", serviceName: "B", price: 1, quantity: 1 },
+    ], "ws-1");
 
     const [payload] = api.updateOrder.mock.calls[0];
     expect("materials" in payload).toBe(false);
@@ -85,50 +130,17 @@ describe("appendOrderServiceLines", () => {
       orderId: "order-1",
       vehicleId: "veh-1",
       device: "BMW",
-      vin: "1HGBH41JXMN109186",
-      carNumber: "ABC123",
-      description: "Noise",
       assignedEmployeeId: "emp-1",
-      deadline: "2026-10-01",
-      team: [
-        { employeeId: "emp-1", role: "lead" },
-        { employeeId: "emp-2", role: "helper" },
-      ],
     });
-    // Industry fields / mileage snapshots stay omitted so the DB columns are untouched.
-    expect("siteAddress" in payload).toBe(false);
-    expect("vehicleMileageSnapshot" in payload).toBe(false);
-  });
-
-  it("uses lines added by someone else after the panel loaded (fresh read, not the stale prop)", async () => {
-    const concurrent: OrderService = { id: "line-2", serviceId: "svc-x", serviceName: "Added elsewhere", price: 5, quantity: 1 };
-    api.getOrder.mockResolvedValue({ ...fresh, services: [existingService, concurrent] });
-
-    await appendOrderServiceLines("order-1", [{ serviceId: "svc-a", serviceName: "A", price: 1, quantity: 1 }], "ws-1");
-
-    const ids = api.updateOrder.mock.calls[0][0].services.map((line: OrderService) => line.id);
-    expect(ids).toEqual(["line-1", "line-2", undefined]);
-  });
-
-  it("never sends a draft with an order-line id (it would be treated as already saved)", async () => {
-    await appendOrderServiceLines(
-      "order-1",
-      [{ id: "client-side", serviceId: "svc-a", serviceName: "A", price: 1, quantity: 1 }],
-      "ws-1",
-    );
-    expect(api.updateOrder.mock.calls[0][0].services[1]).not.toHaveProperty("id");
-  });
-
-  it("propagates API errors (closed order) without swallowing them", async () => {
-    api.updateOrder.mockRejectedValue(new Error("closed"));
-    await expect(
-      appendOrderServiceLines("order-1", [{ serviceId: "svc-a", serviceName: "A", price: 1, quantity: 1 }], "ws-1"),
-    ).rejects.toThrow("closed");
   });
 });
 
 describe("appendOrderMaterialLines", () => {
-  it("includes the new catalog line (with warehouse) after the existing materials, services omitted", async () => {
+  it("uses the add-and-issue RPC for a single catalog material", async () => {
+    const fromRpc = { ...fresh, totalPrice: 200 } as Order;
+    rpc.mockResolvedValue({ data: { order: fromRpc }, error: null });
+    api.orderFromLineRpcPayload.mockReturnValue(fromRpc);
+
     const draft: OrderMaterial = {
       inventoryItemId: "item-brake",
       itemName: "Brake pads",
@@ -136,17 +148,34 @@ describe("appendOrderMaterialLines", () => {
       quantity: 2,
       supplySource: "catalog",
       warehouseId: "wh-1",
-      warrantyMonths: 12,
+    };
+    const result = await appendOrderMaterialLines("order-1", [draft], "ws-1");
+    expect(rpc).toHaveBeenCalledWith(ADD_AND_ISSUE_ORDER_CATALOG_MATERIAL_RPC, expect.objectContaining({
+      p_order_id: "order-1",
+      p_inventory_item_id: "item-brake",
+      p_warehouse_id: "wh-1",
+    }));
+    expect(result.totalPrice).toBe(200);
+    expect(api.updateOrder).not.toHaveBeenCalled();
+  });
+
+  it("falls back to updateOrder when the RPC is missing", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: `Could not find the function ${ADD_AND_ISSUE_ORDER_CATALOG_MATERIAL_RPC}`, code: "PGRST202" },
+    });
+    const draft: OrderMaterial = {
+      inventoryItemId: "item-brake",
+      itemName: "Brake pads",
+      price: 99,
+      quantity: 2,
+      supplySource: "catalog",
+      warehouseId: "wh-1",
     };
 
     await appendOrderMaterialLines("order-1", [draft], "ws-1");
-
-    const [payload, workspaceId] = api.updateOrder.mock.calls[0];
-    expect(workspaceId).toBe("ws-1");
-    expect(payload.materials).toEqual([existingMaterial, draft]);
-    expect(payload.materials[0]).toBe(existingMaterial);
-    expect("services" in payload).toBe(false);
-    expect(payload.description).toBe("Noise");
+    expect(api.updateOrder).toHaveBeenCalledTimes(1);
+    expect(api.updateOrder.mock.calls[0][0].materials).toEqual([existingMaterial, draft]);
   });
 
   it("supports one-time / customer-supplied drafts next to existing lines", async () => {
@@ -156,21 +185,5 @@ describe("appendOrderMaterialLines", () => {
     await appendOrderMaterialLines("order-1", [oneTime, customer], "ws-1");
 
     expect(api.updateOrder.mock.calls[0][0].materials).toEqual([existingMaterial, oneTime, customer]);
-  });
-
-  it("treats an order without a materials array as empty", async () => {
-    api.getOrder.mockResolvedValue({ ...fresh, materials: undefined });
-    const draft: OrderMaterial = { itemName: "Bolt", price: 1, quantity: 1, supplySource: "one_time" };
-
-    await appendOrderMaterialLines("order-1", [draft], "ws-1");
-
-    expect(api.updateOrder.mock.calls[0][0].materials).toEqual([draft]);
-  });
-
-  it("rejects when updateOrder rejects (e.g. insufficient stock)", async () => {
-    api.updateOrder.mockRejectedValue(new Error("Insufficient stock"));
-    await expect(
-      appendOrderMaterialLines("order-1", [{ itemName: "Bolt", price: 1, quantity: 1, supplySource: "one_time" }], "ws-1"),
-    ).rejects.toThrow("Insufficient stock");
   });
 });

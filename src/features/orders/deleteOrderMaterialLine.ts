@@ -1,6 +1,6 @@
 import i18n from "../../i18n";
 import type { Order, OrderMaterial } from "../../lib/types";
-import { getOrder } from "../../services/apiOrders";
+import { getOrder, orderFromLineRpcPayload } from "../../services/apiOrders";
 import { isMissingRpcError, MissingRpcError } from "../../services/missingRpc";
 import { requireWorkspaceId } from "../../services/missingTable";
 import supabase from "../../services/supabase";
@@ -36,7 +36,8 @@ function mapDeleteMaterialRpcError(error: { message?: string; code?: string } | 
 
 /**
  * Deletes ONE material line by id via `crm_delete_order_material` (returns outstanding stock for
- * catalog lines, then deletes the row and recalculates totals). Other lines are never rewritten.
+ * catalog lines, then deletes the row and recalculates totals). Uses the returned full order when
+ * present; otherwise re-reads via getOrder.
  */
 export async function deleteOrderMaterialLine(
   orderId: string,
@@ -47,7 +48,7 @@ export async function deleteOrderMaterialLine(
   if (!id) throw new Error("Material line id is required");
   const ws = requireWorkspaceId(workspaceId);
 
-  const { error } = await supabase.rpc(DELETE_ORDER_MATERIAL_RPC, {
+  const { data, error } = await supabase.rpc(DELETE_ORDER_MATERIAL_RPC, {
     p_order_id: orderId,
     p_order_material_id: id,
   });
@@ -61,6 +62,8 @@ export async function deleteOrderMaterialLine(
     throw mapDeleteMaterialRpcError(error) ?? new Error(error.message);
   }
 
+  const fromRpc = orderFromLineRpcPayload(data);
+  if (fromRpc) return fromRpc;
   return getOrder(orderId, ws);
 }
 
