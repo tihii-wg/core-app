@@ -1,4 +1,4 @@
-import { getOrder, updateOrder } from "../../services/apiOrders";
+import { appendOrderCatalogServiceLine, getOrder, updateOrder } from "../../services/apiOrders";
 import type { Order, OrderMaterial, OrderService, UpdateOrderDetails } from "../../lib/types";
 
 /**
@@ -33,6 +33,12 @@ export async function appendOrderServiceLines(
   drafts: readonly OrderService[],
   workspaceId: string | undefined,
 ): Promise<Order> {
+  // One catalog service (the order-card search): direct insert + totals instead of the full rebuild.
+  if (drafts.length === 1 && drafts[0]?.serviceId?.trim()) {
+    const quick = await appendOrderCatalogServiceLine(orderId, drafts[0], workspaceId);
+    if (quick) return quick;
+    // Already on the order → fall through to the full path, which keeps the existing line and changes nothing.
+  }
   const fresh = await getOrder(orderId, workspaceId);
   return updateOrder(
     {

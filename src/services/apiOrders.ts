@@ -3137,6 +3137,104 @@ async function assertOrderRowContentEditable(workspaceId: string, existingOrder:
 }
 
 /**
+ * Fast path for adding ONE catalog service line from the order card search: validates the order is editable,
+ * inserts the line (client service discount stamped, warranty/technician fields kept), re-persists the totals
+ * from all stored lines and re-reads the order. ~5 round trips instead of the full `updateOrder` rebuild.
+ * Returns null when the service is already on the order (caller highlights the existing line).
+ */
+export async function appendOrderCatalogServiceLine(
+  orderId: string,
+  draft: OrderService,
+  targetWorkspaceId: string | undefined,
+): Promise<Order | null> {
+  const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  const serviceId = nullIfEmptyUuid(draft.serviceId);
+  if (!serviceId) throw new Error(i18n.t("orders.validation.serviceRequired"));
+
+  // One round trip for everything the insert needs (the closed-order guard is also enforced by the DB trigger).
+  const [orderRow, serviceRow, currentLines] = await Promise.all([
+    supabase.from("orders").select("id, client_id, status, closed_at").eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle(),
+    supabase.from("services").select("id, service_name").eq("id", serviceId).eq("workspace_id", workspaceId).maybeSingle(),
+    supabase.from("order_services").select("id, service_id").eq("order_id", orderId),
+  ]);
+  if (orderRow.error) throw new Error(orderRow.error.message);
+  if (!orderRow.data) throw new Error(orderPermissionMessage());
+  await assertOrderRowContentEditable(workspaceId, orderRow.data);
+  const clientId = typeof orderRow.data.client_id === "string" ? orderRow.data.client_id : null;
+  const clientDiscounts = clientId && orderLineDiscountSupported ? await loadClientDiscounts(workspaceId, clientId) : [];
+  if (serviceRow.error) throw new Error(serviceRow.error.message);
+  if (!serviceRow.data) throw new Error(i18n.t("orders.validation.serviceRequired"));
+  if (currentLines.error) throw new Error(currentLines.error.message);
+  if ((currentLines.data ?? []).some((line) => line.service_id === serviceId)) return null;
+
+  const [stamped] = orderLineDiscountSupported ? stampClientDiscountsOnLines([draft], [], clientDiscounts).services : [draft];
+  const newLine = {
+    order_id: orderId,
+    service_id: serviceId,
+    service_name: String(serviceRow.data.service_name ?? draft.serviceName),
+    price: roundMoney(Number(draft.price) || 0),
+    quantity: Number(draft.quantity) || 1,
+    ...(stamped && lineHasDiscount(stamped) ? { discount_type: stamped.discountType as LineDiscountType, discount_value: Number(stamped.discountValue) } : {}),
+    ...orderServiceWarrantyInsertFields(draft),
+    ...orderServiceTechnicianInsertFields(draft),
+  };
+  const insertLine = (withTechnician: boolean) =>
+    withLineDiscountColumns(() =>
+      withOrderServiceKind((columns, withKind) => {
+        const { discount_type, discount_value, technician_id, ...rest } = newLine as typeof newLine & {
+          discount_type?: LineDiscountType;
+          discount_value?: number;
+          technician_id?: string | null;
+        };
+        return supabase
+          .from("order_services")
+          .insert({
+            ...rest,
+            ...(withKind && draft.kind ? { kind: draft.kind } : {}),
+            ...(orderLineDiscountSupported && discount_type ? { discount_type, discount_value } : {}),
+            ...(withTechnician && technician_id !== undefined ? { technician_id } : {}),
+          })
+          .select(columns);
+      }),
+    );
+  let inserted = await insertLine(true);
+  if (inserted.error && isMissingOrderServiceTechnicianColumn(inserted.error)) {
+    markOrderServiceTechnicianUnsupported();
+    inserted = await insertLine(false);
+  }
+  if (inserted.error) throw mapOrderWarrantyDbError(inserted.error) ?? new Error(inserted.error.message);
+
+  const [serviceRows, materialRows] = await Promise.all([
+    withLineDiscountColumns(() =>
+      withOrderServiceKind((columns) => supabase.from("order_services").select(columns).eq("order_id", orderId)),
+    ),
+    withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId)),
+  ]);
+  if (serviceRows.error) throw new Error(serviceRows.error.message);
+  if (materialRows.error) throw new Error(materialRows.error.message);
+  const serviceLines = (serviceRows.data ?? []) as unknown as OrderServiceLine[];
+  const materialLines = mapMaterialLines((materialRows.data ?? []) as unknown as OrderMaterialLine[]);
+
+  const technicianId = typeof draft.technicianId === "string" && draft.technicianId.trim() ? draft.technicianId.trim() : null;
+  // Totals (and the team, when the new line carries a performer) are written while the order is re-read; the
+  // lines are already stored, so only total_price could lag — it is taken from the write below.
+  if (technicianId) {
+    // The re-read below must already see the performer in the team.
+    await syncOrderEmployees({
+      workspaceId,
+      orderId,
+      lineTechnicianIds: serviceLines.map((line) => (typeof line.technician_id === "string" ? line.technician_id : null)),
+    });
+  }
+  const [totalsPatch, order] = await Promise.all([
+    persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine)),
+    getOrder(orderId, workspaceId),
+  ]);
+  const totalPrice = typeof totalsPatch.total_price === "number" ? totalsPatch.total_price : order.totalPrice;
+  return { ...order, totalPrice };
+}
+
+/**
  * Fast path for click-to-edit on ONE service line: writes price/quantity straight to `order_services`
  * (the activity trigger records service_updated), re-persists the order totals from all stored lines
  * and re-reads the order. Roughly five round trips instead of the full `updateOrder` rebuild.
