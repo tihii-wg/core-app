@@ -390,9 +390,12 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       .eq("workspace_id", targetWorkspaceId)
       .maybeSingle();
     const known = numberOrNull(vehicleRow?.current_mileage) ?? numberOrNull(vehicleRow?.initial_mileage);
-    if (known != null) {
+    const vehicleUnit = vehicleRow ? parseMileageUnit(vehicleRow.mileage_unit) : null;
+    if (vehicleRow) {
+      // Always record the vehicle's unit (even without a known mileage): warranty limits on the lines are
+      // stored in the order's unit, so a miles vehicle must make the order «mi», not the default «km».
       intakeMileage = known;
-      intakeMileageUnit = parseMileageUnit(vehicleRow?.mileage_unit) ?? intakeMileageUnit ?? null;
+      intakeMileageUnit = vehicleUnit ?? intakeMileageUnit ?? null;
     }
   }
   const mileageSnapshotPatch = orderMileageSnapshotFields({
