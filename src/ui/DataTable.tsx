@@ -358,8 +358,18 @@ export function DataTable<T>({
       const column = columnById.get(id);
       if (!column || column.resizable === false) return;
       const min = column.minWidth ?? TABLE_COLUMN_MIN_WIDTH;
-      const max = column.maxWidth ?? TABLE_COLUMN_MAX_WIDTH;
-      const clamped = clampColumnWidth(nextWidth, min, max);
+      let max = column.maxWidth ?? TABLE_COLUMN_MAX_WIDTH;
+      // Columns resize independently: a column may only grow into the free space of the list (the spacer).
+      // It never pushes its right-hand neighbours out of view; narrow another column first to make room.
+      // If the table already overflows (narrow screen), the column can only shrink.
+      const visibleWidth = tableRef.current?.parentElement?.clientWidth ?? 0;
+      if (visibleWidth > 0) {
+        let others = 0;
+        for (const colId of orderedIds) if (colId !== id) others += widthsRef.current[colId] ?? 0;
+        const current = widthsRef.current[id] ?? nextWidth;
+        max = Math.min(max, Math.max(current, Math.floor(visibleWidth - others)));
+      }
+      const clamped = clampColumnWidth(nextWidth, min, Math.max(min, max));
       applyColWidth(id, clamped);
       const draft = { ...widthsRef.current, [id]: clamped };
       widthsRef.current = draft;
