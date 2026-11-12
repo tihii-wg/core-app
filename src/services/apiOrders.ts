@@ -377,9 +377,27 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   const device = nullIfEmptyText(input.device);
   const carNumber = nullIfEmptyText(input.carNumber)?.toUpperCase() ?? null;
   const industryPatch = orderIndustryColumnPatch(input);
+  // Intake mileage: when the form did not send one (e.g. a vehicle just added with only its initial mileage),
+  // take the vehicle's current mileage, else its initial mileage, in the vehicle's unit. Mileage warranties are
+  // calculated from this snapshot when the order is closed — without it they would show months only.
+  let intakeMileage = input.vehicleMileageSnapshot;
+  let intakeMileageUnit = input.vehicleMileageUnitSnapshot;
+  if (vehicleId && (intakeMileage === undefined || intakeMileage === null)) {
+    const { data: vehicleRow } = await supabase
+      .from("vehicles")
+      .select("current_mileage, initial_mileage, mileage_unit")
+      .eq("id", vehicleId)
+      .eq("workspace_id", targetWorkspaceId)
+      .maybeSingle();
+    const known = numberOrNull(vehicleRow?.current_mileage) ?? numberOrNull(vehicleRow?.initial_mileage);
+    if (known != null) {
+      intakeMileage = known;
+      intakeMileageUnit = parseMileageUnit(vehicleRow?.mileage_unit) ?? intakeMileageUnit ?? null;
+    }
+  }
   const mileageSnapshotPatch = orderMileageSnapshotFields({
-    vehicleMileageSnapshot: input.vehicleMileageSnapshot,
-    vehicleMileageUnitSnapshot: input.vehicleMileageUnitSnapshot,
+    vehicleMileageSnapshot: intakeMileage,
+    vehicleMileageUnitSnapshot: intakeMileageUnit,
   });
 
   const definitions = await getStatusDefinitions(targetWorkspaceId, "order").catch(() => []);
