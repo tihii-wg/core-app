@@ -75,6 +75,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
     },
     highlightServiceLine: (serviceId: string) => highlightExistingServiceLine(serviceId),
     incrementMaterialLine: (inventoryItemId: string) => incrementExistingMaterialLine(inventoryItemId),
+    materialAdded: (updated: Parameters<typeof onOrderUpdated>[0]) => onOrderUpdated(updated),
+    materialPending: (drafts: Parameters<typeof applyPendingMaterials>[0]) => applyPendingMaterials(drafts),
     openMaterial: (prefill: Parameters<typeof setAddMaterialPrefill>[0]) => {
       setAddMaterialPrefill(prefill);
       setAddMaterialOpen(true);
@@ -286,6 +288,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
                 onServiceAdded={h.serviceAdded}
                 onHighlightServiceLine={h.highlightServiceLine}
                 onIncrementMaterialLine={h.incrementMaterialLine}
+                onMaterialAdded={h.materialAdded}
+                onMaterialPending={h.materialPending}
                 onOpenMaterial={h.openMaterial}
                 hasServiceLines={hasServiceLines}
                 hasMaterialLines={hasMaterialLines}

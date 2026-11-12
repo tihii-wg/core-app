@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { createPortal } from "react-dom";
 import { Trans, useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import type { InventoryItem, Order, OrderService, Service } from "../../lib/types";
+import type { InventoryItem, Order, OrderMaterial, OrderService, Service } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
@@ -20,6 +20,10 @@ import {
 } from "./orderAddLinesSearchFilter";
 import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
 import { useAppendOrderLines } from "./useAppendOrderLines";
+import { catalogItemToOrderMaterial } from "../inventory/orderMaterialLine";
+import { useGetWarehouses } from "../warehouses/useGetWarehouses";
+import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
 import { useWorkspaceWarrantyDefaults } from "./useWorkspaceWarrantyDefaults";
 
@@ -33,6 +37,10 @@ type OrderAddLinesSearchProps = {
   allowServices: boolean;
   allowMaterials: boolean;
   onServiceAdded: (order: Order, meta?: { catalogServiceId: string }) => void;
+  /** Catalog material added straight from the search (1 unit from a warehouse that has it). */
+  onMaterialAdded?: (order: Order) => void;
+  /** Optimistic rows for a material being added; returns a revert used when the save fails. */
+  onMaterialPending?: (drafts: OrderMaterial[]) => () => void;
   /** Catalog service already on the order: the parent bumps that line's quantity (no duplicate line). */
   onHighlightServiceLine: (serviceId: string) => void;
   /** Catalog item already on the order: the parent bumps that line. Returns false when there is no such line. */
@@ -64,6 +72,8 @@ export default function OrderAddLinesSearch({
   onServiceAdded,
   onHighlightServiceLine,
   onIncrementMaterialLine,
+  onMaterialAdded,
+  onMaterialPending,
   onOpenMaterial,
   focusRegistration,
 }: OrderAddLinesSearchProps) {
@@ -77,6 +87,13 @@ export default function OrderAddLinesSearch({
   const { services } = useGetServices();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: appendLines, isPending } = useAppendOrderLines();
+  const { data: warehouseRows = [] } = useGetWarehouses();
+  const { data: warehouseStock = [] } = useGetWarehouseStock();
+  // Picks are queued and saved one after another, so several services / items can be added in a row
+  // without waiting (and without responses overwriting each other out of order).
+  const addQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const latestOrderRef = useRef(order);
+  latestOrderRef.current = order;
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -230,30 +247,47 @@ export default function OrderAddLinesSearch({
     });
   }, [focusRegistration]);
 
-  async function addServiceLine(draft: OrderService, pendingId: string, catalogServiceId: string) {
-    setPendingServiceId(pendingId);
-    try {
-      const updated = await appendLines({ orderId: order.id, kind: "services", drafts: [draft] });
-      clearQueryState();
-      setOpen(false);
-      // Leave the search: the parent opens the new row's price editor and focus must not come back here.
-      inputRef.current?.blur();
-      onServiceAdded(updated, { catalogServiceId });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
-    } finally {
-      setPendingServiceId(null);
-    }
+  /** After a pick: clear the text, close the list and KEEP the focus here for the next search. */
+  function readyForNextPick() {
+    clearQueryState();
+    setOpen(false);
+    suppressOpenOnFocusRef.current = true;
+    inputRef.current?.focus();
+    suppressOpenOnFocusRef.current = false;
   }
 
-  async function handleSelectService(service: Service) {
-    if (isPending || pendingServiceId) return;
+  function enqueue(task: () => Promise<void>) {
+    const next = addQueueRef.current.then(task, task);
+    addQueueRef.current = next.catch(() => undefined);
+    return next;
+  }
+
+  function addServiceLine(draft: OrderService, pendingId: string, catalogServiceId: string) {
+    readyForNextPick();
+    void enqueue(async () => {
+      // A queued pick of a service that an earlier pick in the queue already added: bump its quantity instead.
+      if (latestOrderRef.current.services.some((line) => line.serviceId === catalogServiceId)) {
+        onHighlightServiceLine(catalogServiceId);
+        return;
+      }
+      setPendingServiceId(pendingId);
+      try {
+        const updated = await appendLines({ orderId: order.id, kind: "services", drafts: [draft] });
+        latestOrderRef.current = updated;
+        onServiceAdded(updated, { catalogServiceId });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+      } finally {
+        setPendingServiceId(null);
+      }
+    });
+  }
+
+  function handleSelectService(service: Service) {
     const existing = order.services.find((line) => line.serviceId === service.id);
     if (existing) {
       // No duplicate line: the parent bumps the existing line's quantity and explains it in a toast.
-      clearQueryState();
-      setOpen(false);
-      inputRef.current?.blur();
+      readyForNextPick();
       onHighlightServiceLine(service.id);
       return;
     }
@@ -262,18 +296,56 @@ export default function OrderAddLinesSearch({
       warrantyDefaults,
       order.vehicleMileageUnitSnapshot ?? "km",
     );
-    await addServiceLine(draft, service.id, service.id);
+    addServiceLine(draft, service.id, service.id);
+  }
+
+  /** Issuable warehouse to take one unit from: the first (default) one that has the item in stock. */
+  function quickIssueWarehouseId(itemId: string): string | null {
+    for (const warehouse of issuableWarehouses(warehouseRows)) {
+      if (warehouseStockOf(warehouseStock, warehouse.id, itemId) > 0) return warehouse.id;
+    }
+    return null;
   }
 
   function handleSelectItem(item: InventoryItem) {
-    setOpen(false);
     if (onIncrementMaterialLine?.(item.id)) {
-      clearQueryState();
-      inputRef.current?.blur();
+      readyForNextPick();
       return;
     }
-    setQuery("");
-    onOpenMaterial({ kind: "catalog", item });
+    const warehouseId = onMaterialAdded ? quickIssueWarehouseId(item.id) : null;
+    if (!warehouseId) {
+      // No warehouse with stock known here (or no quick-add wiring): fall back to the material dialog.
+      setOpen(false);
+      setQuery("");
+      onOpenMaterial({ kind: "catalog", item });
+      return;
+    }
+    const draft = catalogItemToOrderMaterial(
+      item,
+      1,
+      warehouseId,
+      warrantyDefaults,
+      order.vehicleMileageUnitSnapshot ?? "km",
+    );
+    readyForNextPick();
+    void enqueue(async () => {
+      // Picked twice quickly: the first pick's line exists now → bump it instead of a second line.
+      if (
+        (latestOrderRef.current.materials ?? []).some((line) => line.id && line.inventoryItemId === item.id) &&
+        onIncrementMaterialLine?.(item.id)
+      ) {
+        return;
+      }
+      const revert = onMaterialPending?.([draft]) ?? (() => undefined);
+      try {
+        const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft] });
+        latestOrderRef.current = updated;
+        onMaterialAdded?.(updated);
+      } catch (error) {
+        revert();
+        toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+      }
+    });
   }
 
   async function handleCreateService() {
@@ -296,7 +368,7 @@ export default function OrderAddLinesSearch({
       warrantyDefaults,
       order.vehicleMileageUnitSnapshot ?? "km",
     );
-    await addServiceLine(draft, draft.serviceId, draft.serviceId);
+    addServiceLine(draft, draft.serviceId, draft.serviceId);
   }
 
   function activateOption(option: FlatOption) {
@@ -408,7 +480,8 @@ export default function OrderAddLinesSearch({
                     aria-selected={selected}
                     data-option-index={index}
                     data-testid={`order-add-lines-service-${option.service.id}`}
-                    disabled={Boolean(pendingServiceId) || isPending}
+                    // Keep the caret in the search while clicking an option.
+                    onMouseDown={(event) => event.preventDefault()}
                     className={rowClass}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => void handleSelectService(option.service)}
@@ -468,6 +541,7 @@ export default function OrderAddLinesSearch({
                       aria-selected={selected}
                       data-option-index={index}
                       data-testid={`order-add-lines-item-${option.item.id}`}
+                      onMouseDown={(event) => event.preventDefault()}
                       className={rowClass}
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => handleSelectItem(option.item)}
@@ -631,7 +705,6 @@ export default function OrderAddLinesSearch({
         aria-autocomplete="list"
         placeholder={placeholder}
         className="min-h-11 w-full"
-        disabled={Boolean(pendingServiceId)}
         onFocus={() => {
           if (!suppressOpenOnFocusRef.current) setOpen(true);
         }}

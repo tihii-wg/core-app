@@ -144,7 +144,8 @@ export function useOrderLineActions({
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = setTimeout(() => setHighlightedServiceId(null), 2400);
     scrollServiceLineIntoView(catalogServiceId);
-    setServiceLineEdit({ lineId: created.id, field: "price" });
+    // No price editor here: focus stays in the search so the next service / item can be picked right away
+    // (the price is edited by clicking it in the row).
   });
 
   const saveServiceLineField = useStableCallback(

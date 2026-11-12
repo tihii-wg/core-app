@@ -25,6 +25,8 @@ export type OrderItemsTabProps = {
   onHighlightServiceLine: (serviceId: string) => void;
   /** Catalog item already on the order: bump that line. Returns false when there is no such line. */
   onIncrementMaterialLine: (inventoryItemId: string) => boolean;
+  onMaterialAdded?: (order: Order) => void;
+  onMaterialPending?: (drafts: OrderMaterial[]) => () => void;
   onOpenMaterial: (prefill: AddOrderMaterialPrefill) => void;
   hasServiceLines: boolean;
   hasMaterialLines: boolean;
@@ -84,6 +86,8 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
     onServiceAdded,
     onHighlightServiceLine,
     onIncrementMaterialLine,
+    onMaterialAdded,
+    onMaterialPending,
     onOpenMaterial,
     hasServiceLines,
     hasMaterialLines,
@@ -107,6 +111,8 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
             onServiceAdded={onServiceAdded}
             onHighlightServiceLine={onHighlightServiceLine}
             onIncrementMaterialLine={onIncrementMaterialLine}
+            onMaterialAdded={onMaterialAdded}
+            onMaterialPending={onMaterialPending}
             onOpenMaterial={onOpenMaterial}
           />
         </div>
