@@ -26,6 +26,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import type { Order, OrderStatus } from "../../lib/types";
+import { computeOrderMoney, type LineDiscountType, type MoneyLine } from "./orderTotals";
 import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
 import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "./AddOrderMaterialDialog";
 import OrderAddLinesSearch from "./OrderAddLinesSearch";
@@ -714,17 +715,40 @@ export default function OrderDetailPanel({
     requestAnimationFrame(() => addLinesSearchFocusRef.current?.());
   }
 
+  /**
+   * Optimistic copy of the order with one line's unit price changed and the total recomputed the same
+   * way the server does (per-line discounts included). Shown at once; the server response replaces it.
+   */
+  function withOptimisticLinePrice(order: Order, kind: "service" | "material", lineId: string, price: number): Order {
+    const toMoney = (line: { price: number; quantity: number; discountType?: LineDiscountType | null; discountValue?: number | null }): MoneyLine => ({
+      price: Number(line.price) || 0,
+      qty: Number(line.quantity) || 0,
+      discountType: line.discountType ?? null,
+      discountValue: line.discountValue ?? null,
+    });
+    const services = kind === "service" ? order.services.map((line) => (line.id === lineId ? { ...line, price } : line)) : order.services;
+    const materials =
+      kind === "material" ? (order.materials ?? []).map((line) => (line.id === lineId ? { ...line, price } : line)) : (order.materials ?? []);
+    const money = computeOrderMoney({ services: services.map(toMoney), materials: materials.map(toMoney) });
+    return { ...order, services, materials, totalPrice: money.total };
+  }
+
   async function saveServiceLineField(lineId: string, field: ServiceLineInlineField, raw: string) {
     if (!selectedOrder) return;
     if (field === "price") {
       const price = parseOrderServiceLinePrice(raw);
       if (price === "invalid") throw new Error(t("orders.form.freeformPriceInvalid"));
-      const updated = await updateServiceLine.mutateAsync({
-        orderId: selectedOrder.id,
-        lineId,
-        patch: { price },
-      });
-      onOrderUpdated(updated);
+      // Show the new price and total immediately; the save continues in the background and a failure
+      // restores the previous order and reports the error.
+      const previous = selectedOrder;
+      onOrderUpdated(withOptimisticLinePrice(previous, "service", lineId, price));
+      void updateServiceLine
+        .mutateAsync({ orderId: previous.id, lineId, patch: { price } })
+        .then((updated) => onOrderUpdated(updated))
+        .catch((error: unknown) => {
+          onOrderUpdated(previous);
+          toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+        });
       return;
     }
     const updated = await updateServiceLine.mutateAsync({
@@ -744,13 +768,15 @@ export default function OrderDetailPanel({
     if (field === "price") {
       const price = parseOrderServiceLinePrice(raw);
       if (price === "invalid") throw new Error(t("orders.errors.materialPriceInvalid"));
-      const updated = await updateMaterialLine.mutateAsync({
-        orderId: selectedOrder.id,
-        lineId,
-        patch: { price },
-        warehouseName,
-      });
-      onOrderUpdated(updated);
+      const previous = selectedOrder;
+      onOrderUpdated(withOptimisticLinePrice(previous, "material", lineId, price));
+      void updateMaterialLine
+        .mutateAsync({ orderId: previous.id, lineId, patch: { price }, warehouseName })
+        .then((updated) => onOrderUpdated(updated))
+        .catch((error: unknown) => {
+          onOrderUpdated(previous);
+          toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+        });
       return;
     }
     const quantity = Number(raw);
@@ -1429,7 +1455,7 @@ export default function OrderDetailPanel({
                         className={cn(isHighlighted && "bg-primary/10 ring-1 ring-inset ring-primary/40")}
                       >
                         <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
-                          <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row">
+                          <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:justify-between">
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <p>
                                 {canOpenServiceForm && line.serviceId ? (
@@ -1489,6 +1515,7 @@ export default function OrderDetailPanel({
                             {canDeleteServiceLine && lineId ? (
                               <OrderLineDeleteButton
                                 testId={`service-line-delete-${lineId}`}
+                                className="self-end sm:-my-2.5 sm:self-start"
                                 disabled={deleteServiceLine.isPending}
                                 onClick={() => void handleDeleteServiceLine(lineId)}
                               />
@@ -1594,7 +1621,7 @@ export default function OrderDetailPanel({
                         return (
                           <tr key={line.id ?? `${line.inventoryItemId ?? "free"}-${index}`}>
                             <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
-                              <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row">
+                              <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:justify-between">
                                 <div className="min-w-0 flex-1 space-y-1">
                                   <p>
                                     {catalog && line.inventoryItemId ? (
@@ -1649,6 +1676,7 @@ export default function OrderDetailPanel({
                                 {showFieldEdit && lineId && (!catalog || canWarehouse) ? (
                                   <OrderLineDeleteButton
                                     testId={`material-line-delete-${lineId}`}
+                                className="self-end sm:-my-2.5 sm:self-start"
                                     disabled={deleteMaterialLine.isPending}
                                     onClick={() => void handleDeleteMaterialLine(lineId)}
                                   />

@@ -1,4 +1,4 @@
-import { getOrder, updateOrder } from "../../services/apiOrders";
+import { getOrder, updateOrder, updateOrderServiceLinePrice } from "../../services/apiOrders";
 import type { Order, OrderService } from "../../lib/types";
 import { parseQuantity } from "../../lib/quantity";
 import { roundMoney } from "./orderTotals";
@@ -68,6 +68,11 @@ export async function updateOrderServiceLine(
     const quantity = parseQuantity(patch.quantity);
     if (typeof quantity !== "number") throw new Error("Invalid quantity");
     patch = { ...patch, quantity };
+  }
+
+  // Price / quantity only: direct line update + totals (fast). Technician changes rewrite the team → full path.
+  if (patch.technicianId === undefined && (patch.price !== undefined || patch.quantity !== undefined)) {
+    return updateOrderServiceLinePrice(orderId, id, { price: patch.price, quantity: patch.quantity }, workspaceId);
   }
 
   const fresh = await getOrder(orderId, workspaceId);

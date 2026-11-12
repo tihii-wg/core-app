@@ -3136,6 +3136,58 @@ async function assertOrderRowContentEditable(workspaceId: string, existingOrder:
   }
 }
 
+/**
+ * Fast path for click-to-edit on ONE service line: writes price/quantity straight to `order_services`
+ * (the activity trigger records service_updated), re-persists the order totals from all stored lines
+ * and re-reads the order. Roughly five round trips instead of the full `updateOrder` rebuild.
+ * Technician changes are NOT handled here (they also rewrite the order team) — callers use `updateOrder`.
+ */
+export async function updateOrderServiceLinePrice(
+  orderId: string,
+  lineId: string,
+  patch: { price?: number; quantity?: number },
+  targetWorkspaceId: string | undefined,
+): Promise<Order> {
+  const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  const { data: existingOrder, error: existingError } = await supabase
+    .from("orders")
+    .select("id, status, closed_at")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existingOrder) throw new Error(orderPermissionMessage());
+  await assertOrderRowContentEditable(workspaceId, existingOrder);
+
+  const linePatch: Record<string, number> = {};
+  if (patch.price !== undefined) linePatch.price = roundMoney(Number(patch.price) || 0);
+  if (patch.quantity !== undefined) linePatch.quantity = Number(patch.quantity) || 1;
+  if (Object.keys(linePatch).length > 0) {
+    const { data: updatedLine, error: lineError } = await supabase
+      .from("order_services")
+      .update(linePatch)
+      .eq("id", lineId)
+      .eq("order_id", orderId)
+      .select("id");
+    if (lineError) throw mapOrderWarrantyDbError(lineError) ?? new Error(lineError.message);
+    if (!updatedLine || updatedLine.length === 0) throw new Error(orderPermissionMessage());
+  }
+
+  const [serviceRows, materialRows] = await Promise.all([
+    withLineDiscountColumns(() =>
+      withOrderServiceKind((columns) => supabase.from("order_services").select(columns).eq("order_id", orderId)),
+    ),
+    withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId)),
+  ]);
+  if (serviceRows.error) throw new Error(serviceRows.error.message);
+  if (materialRows.error) throw new Error(materialRows.error.message);
+  const serviceLines = (serviceRows.data ?? []) as unknown as OrderServiceLine[];
+  const materialLines = mapMaterialLines((materialRows.data ?? []) as unknown as OrderMaterialLine[]);
+  await persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine));
+
+  return getOrder(orderId, workspaceId);
+}
+
 export async function updateOrder(
   {
     orderId,
