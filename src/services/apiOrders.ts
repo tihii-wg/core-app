@@ -3235,6 +3235,54 @@ export async function appendOrderCatalogServiceLine(
 }
 
 /**
+ * Fast path for deleting ONE service line from the order card: deletes the row (the activity trigger records
+ * service_removed), re-persists totals from the remaining lines and re-reads the order in parallel.
+ * The order team is left as it is (same as the full save, which never removes a member on its own).
+ */
+export async function deleteOrderServiceLineDirect(
+  orderId: string,
+  lineId: string,
+  targetWorkspaceId: string | undefined,
+): Promise<Order> {
+  const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  const { data: existingOrder, error: existingError } = await supabase
+    .from("orders")
+    .select("id, status, closed_at")
+    .eq("id", orderId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existingOrder) throw new Error(orderPermissionMessage());
+  await assertOrderRowContentEditable(workspaceId, existingOrder);
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from("order_services")
+    .delete()
+    .eq("id", lineId)
+    .eq("order_id", orderId)
+    .select("id");
+  if (deleteError) throw new Error(deleteError.message);
+  if (!deleted || deleted.length === 0) throw new Error(orderPermissionMessage());
+
+  const [serviceRows, materialRows] = await Promise.all([
+    withLineDiscountColumns(() =>
+      withOrderServiceKind((columns) => supabase.from("order_services").select(columns).eq("order_id", orderId)),
+    ),
+    withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId)),
+  ]);
+  if (serviceRows.error) throw new Error(serviceRows.error.message);
+  if (materialRows.error) throw new Error(materialRows.error.message);
+  const serviceLines = (serviceRows.data ?? []) as unknown as OrderServiceLine[];
+  const materialLines = mapMaterialLines((materialRows.data ?? []) as unknown as OrderMaterialLine[]);
+  const [totalsPatch, order] = await Promise.all([
+    persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine)),
+    getOrder(orderId, workspaceId),
+  ]);
+  const totalPrice = typeof totalsPatch.total_price === "number" ? totalsPatch.total_price : order.totalPrice;
+  return { ...order, totalPrice };
+}
+
+/**
  * Fast path for click-to-edit on ONE service line: writes price/quantity straight to `order_services`
  * (the activity trigger records service_updated), re-persists the order totals from all stored lines
  * and re-reads the order. Roughly five round trips instead of the full `updateOrder` rebuild.

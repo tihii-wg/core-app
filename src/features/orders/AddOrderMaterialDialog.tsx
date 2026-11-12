@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import type { InventoryItem, Order, OrderMaterial } from "../../lib/types";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -20,13 +21,18 @@ type AddOrderMaterialDialogProps = {
   onOpenChange: (open: boolean) => void;
   order: Order;
   onAdded: (order: Order) => void;
+  /**
+   * Optional optimistic hook: called with the drafts right before the save starts; the dialog closes at once.
+   * Returns a revert function used when the save fails (the error is then shown as a toast).
+   */
+  onPending?: (drafts: OrderMaterial[]) => () => void;
   /** Optional seed from the items-tab unified search. */
   prefill?: AddOrderMaterialPrefill | null;
 };
 
 type DraftMaterialsForm = { materials: OrderMaterial[] };
 
-function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, prefill }: AddOrderMaterialDialogProps) {
+function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPending, prefill }: AddOrderMaterialDialogProps) {
   const { t } = useTranslation();
   const { workflow, industrySlug } = useIndustryWorkflow();
   const works = usesWorksAndMaterialsTabLabel(industrySlug);
@@ -52,6 +58,18 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, prefil
     const drafts = data.materials ?? [];
     if (drafts.length === 0) {
       setEmptyError(true);
+      return;
+    }
+    if (onPending) {
+      // Stock limits were already enforced in the form, so show the lines immediately and save in the background.
+      const revert = onPending(drafts);
+      onOpenChange(false);
+      try {
+        onAdded(await appendLines({ orderId: order.id, kind: "materials", drafts }));
+      } catch (error) {
+        revert();
+        toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+      }
       return;
     }
     try {

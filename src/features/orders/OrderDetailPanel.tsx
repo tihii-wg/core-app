@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { OrderStatusBadge, StatusBadge } from "../../ui/StatusBadge";
-import type { Order, OrderStatus } from "../../lib/types";
+import type { Order, OrderMaterial, OrderStatus } from "../../lib/types";
 import { computeOrderMoney, type LineDiscountType, type MoneyLine } from "./orderTotals";
 import EditOrderForm, { type EditOrderFormHandle } from "./EditOrderForm";
 import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "./AddOrderMaterialDialog";
@@ -822,15 +822,19 @@ export default function OrderDetailPanel({
     const line = selectedOrder.services.find((entry) => entry.id === lineId);
     if (!line) return;
     const snapshot = { ...line };
+    const previous = selectedOrder;
+    // Optimistic: the row disappears and the total updates at once; the delete runs in the background.
+    onOrderUpdated(withoutLine(previous, "service", lineId));
+    focusAddLinesSearch();
+    showOrderLineDeletedToast(async () => {
+      const restored = await appendOrderServiceLines(previous.id, [snapshot], workspaceId);
+      onOrderUpdated(restored);
+    });
     try {
-      const updated = await deleteServiceLine.mutateAsync({ orderId: selectedOrder.id, lineId });
+      const updated = await deleteServiceLine.mutateAsync({ orderId: previous.id, lineId });
       onOrderUpdated(updated);
-      focusAddLinesSearch();
-      showOrderLineDeletedToast(async () => {
-        const restored = await appendOrderServiceLines(selectedOrder.id, [snapshot], workspaceId);
-        onOrderUpdated(restored);
-      });
     } catch (error) {
+      onOrderUpdated(previous);
       toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
     }
   }
@@ -842,17 +846,49 @@ export default function OrderDetailPanel({
     // Catalog deletes move warehouse stock — same bar as quantity change / issue.
     if (isCatalogOrderMaterial(line) && !canWarehouse) return;
     const snapshot = materialDraftForUndo(line);
+    const previous = selectedOrder;
+    onOrderUpdated(withoutLine(previous, "material", lineId));
+    focusAddLinesSearch();
+    showOrderLineDeletedToast(async () => {
+      const restored = await appendOrderMaterialLines(previous.id, [snapshot], workspaceId);
+      onOrderUpdated(restored);
+    });
     try {
-      const updated = await deleteMaterialLine.mutateAsync({ orderId: selectedOrder.id, lineId });
+      const updated = await deleteMaterialLine.mutateAsync({ orderId: previous.id, lineId });
       onOrderUpdated(updated);
-      focusAddLinesSearch();
-      showOrderLineDeletedToast(async () => {
-        const restored = await appendOrderMaterialLines(selectedOrder.id, [snapshot], workspaceId);
-        onOrderUpdated(restored);
-      });
     } catch (error) {
+      onOrderUpdated(previous);
       toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
     }
+  }
+
+  /** Optimistic copy of the order without one line, total recomputed like the server does. */
+  function withoutLine(order: Order, kind: "service" | "material", lineId: string): Order {
+    const services = kind === "service" ? order.services.filter((line) => line.id !== lineId) : order.services;
+    const materials = kind === "material" ? (order.materials ?? []).filter((line) => line.id !== lineId) : (order.materials ?? []);
+    return { ...order, services, materials, totalPrice: orderMoneyOf(services, materials).total };
+  }
+
+  /** Optimistic copy of the order with freshly added material drafts (no ids yet → read-only rows). */
+  function withPendingMaterials(order: Order, drafts: readonly OrderMaterial[]): Order {
+    const materials = [
+      ...(order.materials ?? []),
+      ...drafts.map((draft) => ({ ...draft, id: undefined, quantityIssued: 0, quantityReturned: 0 })),
+    ];
+    return { ...order, materials, totalPrice: orderMoneyOf(order.services, materials).total };
+  }
+
+  function orderMoneyOf(
+    services: readonly { price: number; quantity: number; discountType?: LineDiscountType | null; discountValue?: number | null }[],
+    materials: readonly { price: number; quantity: number; discountType?: LineDiscountType | null; discountValue?: number | null }[],
+  ) {
+    const toMoney = (line: { price: number; quantity: number; discountType?: LineDiscountType | null; discountValue?: number | null }): MoneyLine => ({
+      price: Number(line.price) || 0,
+      qty: Number(line.quantity) || 0,
+      discountType: line.discountType ?? null,
+      discountValue: line.discountValue ?? null,
+    });
+    return computeOrderMoney({ services: services.map(toMoney), materials: materials.map(toMoney) });
   }
 
   const detailVatRate = selectedOrder
@@ -2122,6 +2158,11 @@ export default function OrderDetailPanel({
           }}
           order={selectedOrder}
           onAdded={onOrderUpdated}
+          onPending={(drafts) => {
+            const previous = selectedOrder;
+            onOrderUpdated(withPendingMaterials(previous, drafts));
+            return () => onOrderUpdated(previous);
+          }}
           prefill={addMaterialPrefill}
         />
       ) : null}

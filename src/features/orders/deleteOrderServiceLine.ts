@@ -1,4 +1,4 @@
-import { getOrder, updateOrder } from "../../services/apiOrders";
+import { deleteOrderServiceLineDirect, getOrder, updateOrder } from "../../services/apiOrders";
 import type { Order, OrderService } from "../../lib/types";
 import { preservedOrderFieldsForLineAppend } from "./appendOrderLines";
 
@@ -10,9 +10,12 @@ export async function deleteOrderServiceLine(
   orderId: string,
   lineId: string,
   workspaceId: string | undefined,
+  options?: { fullRebuild?: boolean },
 ): Promise<Order> {
   const id = lineId.trim();
   if (!id) throw new Error("Service line id is required");
+
+  if (!options?.fullRebuild) return deleteOrderServiceLineDirect(orderId, id, workspaceId);
 
   const fresh = await getOrder(orderId, workspaceId);
   const index = fresh.services.findIndex((line) => line.id === id);
