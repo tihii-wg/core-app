@@ -163,7 +163,9 @@ function OrderServiceLineRowComponent({
             <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
               <OrderLineEditButton
                 testId={`service-line-edit-${lineId}`}
-                disabled={saving || deletePending}
+                // Not tied to background saves: the dialog always opens with the current line, and the row
+                // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
+                disabled={deletePending}
                 onClick={() => onEditLine(lineId)}
               />
               {canDelete ? (
