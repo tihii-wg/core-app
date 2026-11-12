@@ -9,15 +9,19 @@ const sql = readFileSync(
 );
 
 describe("vehicle_mileage_intake SQL", () => {
-  it("is transactional with loud preflight/postflight", () => {
-    expect(sql).toMatch(/^begin;/m);
-    expect(sql).toMatch(/^commit;/m);
+  it("runs as a single DO block with loud preflight/postflight", () => {
+    expect(sql).not.toMatch(/^begin;/m);
+    expect(sql).toMatch(/^do \$intake\$/m);
+    expect(sql.match(/^do \$/gm)).toHaveLength(1);
     expect(sql).toMatch(/vehicle_mileage_intake preflight/);
     expect(sql).toMatch(/vehicle_mileage_intake postflight/);
   });
 
   it("adds orders.vehicle_mileage_confirmed default false", () => {
-    expect(sql).toMatch(/add column if not exists vehicle_mileage_confirmed boolean/);
+    // Added together with the default so closed orders are filled without firing their guard trigger.
+    expect(sql).toMatch(/add column vehicle_mileage_confirmed boolean not null default false/);
+    expect(sql).not.toMatch(/^update public\.orders/m);
+    expect(sql).toMatch(/enable trigger orders_closed_content_guard_bu/);
     expect(sql).toMatch(/alter column vehicle_mileage_confirmed set default false/);
     expect(sql).toMatch(/alter column vehicle_mileage_confirmed set not null/);
   });

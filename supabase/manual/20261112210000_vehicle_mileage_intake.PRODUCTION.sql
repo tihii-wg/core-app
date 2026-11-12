@@ -13,33 +13,12 @@
 -- One DO block for the function patch (SQL editor may split statements).
 -- =============================================================================
 
-begin;
+-- Runs as ONE DO block (one statement = one transaction): the SQL editor may run statements separately.
+-- Closed orders are protected by orders_closed_content_guard_bu, so the new column is added WITH its
+-- default (Postgres fills existing rows without firing row triggers). If an earlier partial run left the
+-- column nullable with NULLs, those rows are filled with the guard bypassed for that statement only.
 
-alter table public.orders
-  add column if not exists vehicle_mileage_confirmed boolean;
-
-update public.orders
-   set vehicle_mileage_confirmed = false
- where vehicle_mileage_confirmed is null;
-
-alter table public.orders
-  alter column vehicle_mileage_confirmed set default false;
-
-alter table public.orders
-  alter column vehicle_mileage_confirmed set not null;
-
-comment on column public.orders.vehicle_mileage_confirmed is
-  'True when the user confirmed/edited intake mileage for this visit (form or order card).';
-
--- Prefer an explicit current reading; copy initial when current was never set.
-update public.vehicles
-   set current_mileage = initial_mileage,
-       updated_at = coalesce(updated_at, now())
- where deleted_at is null
-   and current_mileage is null
-   and initial_mileage is not null;
-
-do $patch$
+do $intake$
 declare
   v_def text;
   v_old text := 'v_warranty_count := public.activate_order_warranties(p_workspace_id, p_order_id, v_closed_at);';
@@ -77,6 +56,36 @@ begin
     raise exception 'vehicle_mileage_intake preflight: public.orders missing';
   end if;
 
+  -- Safety: an earlier partial run must not leave the guard disabled.
+  execute 'alter table public.orders enable trigger orders_closed_content_guard_bu';
+
+  -- 1) orders.vehicle_mileage_confirmed
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'orders' and column_name = 'vehicle_mileage_confirmed'
+  ) then
+    execute 'alter table public.orders add column vehicle_mileage_confirmed boolean not null default false';
+  else
+    if exists (select 1 from public.orders where vehicle_mileage_confirmed is null) then
+      execute 'alter table public.orders disable trigger orders_closed_content_guard_bu';
+      update public.orders set vehicle_mileage_confirmed = false where vehicle_mileage_confirmed is null;
+      execute 'alter table public.orders enable trigger orders_closed_content_guard_bu';
+    end if;
+    execute 'alter table public.orders alter column vehicle_mileage_confirmed set default false';
+    execute 'alter table public.orders alter column vehicle_mileage_confirmed set not null';
+  end if;
+  execute $c$comment on column public.orders.vehicle_mileage_confirmed is
+    'True when the user confirmed/edited intake mileage for this visit (form or order card).'$c$;
+
+  -- 2) Prefer an explicit current reading; copy initial when current was never set.
+  update public.vehicles
+     set current_mileage = initial_mileage,
+         updated_at = coalesce(updated_at, now())
+   where deleted_at is null
+     and current_mileage is null
+     and initial_mileage is not null;
+
+  -- 3) close_order_if_settled patch
   v_def := pg_get_functiondef('public.close_order_if_settled(uuid,uuid)'::regprocedure);
   if position('20261112210000' in v_def) > 0 then
     raise notice 'vehicle_mileage_intake: close_order_if_settled already patched';
@@ -85,11 +94,8 @@ begin
   else
     execute replace(v_def, v_old, v_new);
   end if;
-end;
-$patch$;
 
-do $post$
-begin
+  -- postflight
   if to_regprocedure('public.close_order_if_settled(uuid,uuid)') is null then
     raise exception 'vehicle_mileage_intake postflight: close_order_if_settled missing';
   end if;
@@ -100,6 +106,6 @@ begin
     raise exception 'vehicle_mileage_intake postflight: vehicle_mileage_confirmed missing';
   end if;
 end;
-$post$;
+$intake$;
 
-commit;
+notify pgrst, 'reload schema';
