@@ -613,8 +613,6 @@ export function DataTable<T>({
               className={cn(
                 "h-12 text-sm text-foreground",
                 layoutEnabled && "max-w-0 overflow-hidden",
-                // Status / badge columns may wrap to two lines instead of clipping.
-                id === "status" ? "whitespace-normal" : null,
                 column.className,
                 column.stickyRight && stickyCellClassName,
               )}
