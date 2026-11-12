@@ -1034,7 +1034,7 @@ export default {
         createdAt: { label: "Created date", description: "When the order was created" },
         closedAt: { label: "Closed date", description: "Formal closure date, if any" },
         status: { label: "Status", description: "Custom status name or system status" },
-        description: { label: "Description", description: "Order description / complaint" },
+        description: { label: "Description / recommendation", description: "Text of the «Description / recommendation» field on the order card «Services and items» tab" },
         device: { label: "Device / object", description: "Device, vehicle, or object name on the order" },
         deviceSerial: { label: "Device serial", description: "Serial number of the accepted device" },
         deviceImei: { label: "Device IMEI", description: "IMEI of a phone / tablet" },

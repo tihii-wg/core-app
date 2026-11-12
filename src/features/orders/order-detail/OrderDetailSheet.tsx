@@ -268,7 +268,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
                   description || (showFieldEdit && fieldVisible("description")) ? (
                     <dl>
                       <OrderInlineField
-                        label={t("orders.detail.description")}
+                        label={fieldLabel("description", t("orders.detail.description"))}
                         value={description}
                         editValue={selectedOrder.description ?? ""}
                         kind="textarea"

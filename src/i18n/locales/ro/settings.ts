@@ -1039,7 +1039,7 @@ const settings: Messages<typeof en> = {
         createdAt: { label: "Data creării", description: "Când a fost creată comanda" },
         closedAt: { label: "Data închiderii", description: "Data închiderii formale, dacă există" },
         status: { label: "Status", description: "Numele statusului personalizat sau statusul de sistem" },
-        description: { label: "Descriere", description: "Descrierea comenzii / reclamația" },
+        description: { label: "Descriere / recomandare", description: "Textul câmpului «Descriere / recomandare» din fila «Servicii și produse» a comenzii" },
         device: { label: "Dispozitiv / obiect", description: "Numele dispozitivului, vehiculului sau obiectului pe comandă" },
         deviceSerial: { label: "Număr de serie", description: "Numărul de serie al dispozitivului acceptat" },
         deviceImei: { label: "IMEI", description: "IMEI-ul telefonului / tabletei" },

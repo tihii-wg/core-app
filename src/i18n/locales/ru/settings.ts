@@ -1040,7 +1040,7 @@ const settings: Messages<typeof en> = {
         createdAt: { label: "Дата создания", description: "Когда заказ был создан" },
         closedAt: { label: "Дата закрытия", description: "Дата формального закрытия, если есть" },
         status: { label: "Статус", description: "Название пользовательского статуса или системный статус" },
-        description: { label: "Описание", description: "Описание заказа / жалоба" },
+        description: { label: "Описание / рекомендация", description: "Текст поля «Описание / рекомендация» на вкладке «Услуги и товары» карты заказа" },
         device: { label: "Устройство / объект", description: "Название устройства, авто или объекта в заказе" },
         deviceSerial: { label: "Серийный номер", description: "Серийный номер принятого устройства" },
         deviceImei: { label: "IMEI", description: "IMEI телефона / планшета" },
