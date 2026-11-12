@@ -20,6 +20,7 @@ export type OrderServiceLineRowProps = {
   order: Order;
   isHighlighted: boolean;
   isEditingPrice: boolean;
+  isEditingQty: boolean;
   isEditingPerformer: boolean;
   showFieldEdit: boolean;
   canDelete: boolean;
@@ -45,6 +46,7 @@ function OrderServiceLineRowComponent({
   order,
   isHighlighted,
   isEditingPrice,
+  isEditingQty,
   isEditingPerformer,
   showFieldEdit,
   canDelete,
@@ -77,7 +79,9 @@ function OrderServiceLineRowComponent({
 
   const editing: ServiceLineInlineEditTarget | null = isEditingPrice
     ? { lineId, field: "price" }
-    : isEditingPerformer
+    : isEditingQty
+      ? { lineId, field: "quantity" }
+      : isEditingPerformer
       ? { lineId, field: "performer" }
       : null;
 

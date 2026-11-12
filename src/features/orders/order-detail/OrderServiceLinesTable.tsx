@@ -83,6 +83,7 @@ function OrderServiceLinesTableComponent({
                 order={order}
                 isHighlighted={Boolean(line.serviceId && highlightedServiceId === line.serviceId)}
                 isEditingPrice={Boolean(lineId && serviceLineEditLineId === lineId && serviceLineEditField === "price")}
+                isEditingQty={Boolean(lineId && serviceLineEditLineId === lineId && serviceLineEditField === "quantity")}
                 isEditingPerformer={Boolean(
                   lineId && serviceLineEditLineId === lineId && serviceLineEditField === "performer",
                 )}

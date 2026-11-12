@@ -6,6 +6,7 @@ import type { OrderService } from "../../lib/types";
 import OrderServiceLineInlineCells, {
   OrderServiceLinePerformerInline,
   type ServiceLineInlineEditTarget,
+  type ServiceLineInlineField,
 } from "./OrderServiceLineInlineCells";
 
 const line: OrderService = {
@@ -20,12 +21,12 @@ const line: OrderService = {
 function renderCells(props: {
   editable?: boolean;
   editing?: ServiceLineInlineEditTarget | null;
-  onSaveField?: (field: "price" | "performer", value: string) => Promise<void>;
+  onSaveField?: (field: ServiceLineInlineField, value: string) => Promise<void>;
   onCancel?: () => void;
   onSaved?: () => void;
   onEditorClosed?: () => void;
   onTabFromPrice?: () => void;
-  onRequestEdit?: (field: "price" | "performer") => void;
+  onRequestEdit?: (field: ServiceLineInlineField) => void;
 }) {
   const onSaveField = props.onSaveField ?? vi.fn(async () => undefined);
   const onCancel = props.onCancel ?? vi.fn();
@@ -164,12 +165,23 @@ describe("OrderServiceLineInlineCells", () => {
     expect(screen.queryByTestId("service-line-performer-line-1")).not.toBeInTheDocument();
   });
 
-  it("renders quantity as plain text (not click-to-edit)", () => {
-    renderCells({ editable: true });
+  it("makes quantity click-to-edit", async () => {
+    const onRequestEdit = vi.fn();
+    renderCells({ editable: true, onRequestEdit });
     const qty = screen.getByTestId("service-line-qty-line-1");
-    expect(qty.tagName).toBe("SPAN");
+    expect(qty.tagName).toBe("BUTTON");
     expect(qty).toHaveTextContent("1");
-    expect(screen.queryByRole("button", { name: /edit.*quantity/i })).not.toBeInTheDocument();
+    await userEvent.click(qty);
+    expect(onRequestEdit).toHaveBeenCalledWith("quantity");
+  });
+
+  it("saves a new quantity from the quantity editor", async () => {
+    const onSaveField = vi.fn(async () => undefined);
+    renderCells({ editable: true, editing: { lineId: "line-1", field: "quantity" }, onSaveField });
+    const input = screen.getByTestId("service-line-qty-editor-line-1").querySelector("input")!;
+    await userEvent.clear(input);
+    await userEvent.type(input, "2,5{Enter}");
+    await waitFor(() => expect(onSaveField).toHaveBeenCalledWith("quantity", "2.5"));
   });
 
   it("shows the add-performer placeholder when empty and editable", () => {

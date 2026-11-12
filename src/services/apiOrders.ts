@@ -3334,7 +3334,9 @@ export async function appendOrderCatalogServiceLine(
 
   const [serviceRows, materialRows] = await Promise.all([
     withLineDiscountColumns(() =>
-      withOrderServiceKind((columns) => supabase.from("order_services").select(columns).eq("order_id", orderId)),
+      withOrderServiceKind((columns) =>
+        supabase.from("order_services").select(columns).eq("order_id", orderId).order("created_at", { ascending: true }),
+      ),
     ),
     withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId)),
   ]);
@@ -3355,7 +3357,7 @@ export async function appendOrderCatalogServiceLine(
     });
   }
   const [totalsPatch, order] = await Promise.all([
-    persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine)),
+    persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine), serviceSummaryPatch(serviceLines)),
     getOrder(orderId, workspaceId),
   ]);
   const totalPrice = typeof totalsPatch.total_price === "number" ? totalsPatch.total_price : order.totalPrice;
@@ -3394,7 +3396,9 @@ export async function deleteOrderServiceLineDirect(
 
   const [serviceRows, materialRows] = await Promise.all([
     withLineDiscountColumns(() =>
-      withOrderServiceKind((columns) => supabase.from("order_services").select(columns).eq("order_id", orderId)),
+      withOrderServiceKind((columns) =>
+        supabase.from("order_services").select(columns).eq("order_id", orderId).order("created_at", { ascending: true }),
+      ),
     ),
     withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId)),
   ]);
@@ -3403,7 +3407,7 @@ export async function deleteOrderServiceLineDirect(
   const serviceLines = (serviceRows.data ?? []) as unknown as OrderServiceLine[];
   const materialLines = mapMaterialLines((materialRows.data ?? []) as unknown as OrderMaterialLine[]);
   const [totalsPatch, order] = await Promise.all([
-    persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine)),
+    persistOrderTotals(workspaceId, orderId, serviceLines.map(serviceLineToMoney), materialLines.map(materialToMoneyLine), serviceSummaryPatch(serviceLines)),
     getOrder(orderId, workspaceId),
   ]);
   const totalPrice = typeof totalsPatch.total_price === "number" ? totalsPatch.total_price : order.totalPrice;
@@ -3449,7 +3453,9 @@ export async function updateOrderServiceLinePrice(
 
   const [serviceRows, materialRows] = await Promise.all([
     withLineDiscountColumns(() =>
-      withOrderServiceKind((columns) => supabase.from("order_services").select(columns).eq("order_id", orderId)),
+      withOrderServiceKind((columns) =>
+        supabase.from("order_services").select(columns).eq("order_id", orderId).order("created_at", { ascending: true }),
+      ),
     ),
     withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId)),
   ]);
@@ -3941,6 +3947,12 @@ export async function changeOrderClient(
   }
 
   return getOrder(orderId, workspaceId);
+}
+
+/** orders.service / service_id: text summary of the service lines (list subtitle, card fallback). */
+function serviceSummaryPatch(lines: readonly OrderServiceLine[]): Record<string, unknown> {
+  const names = lines.map((line) => String(line.service_name ?? "")).join(", ");
+  return { service: names || null, service_id: lines[0]?.service_id ?? null };
 }
 
 function serviceLineToMoney(line: OrderServiceLine): MoneyLine {

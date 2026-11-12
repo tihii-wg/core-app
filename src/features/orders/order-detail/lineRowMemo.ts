@@ -55,7 +55,7 @@ function compareRowProps(prev: RowLikeProps, next: RowLikeProps, editing: (p: Ro
 
 /** React.memo comparator for service rows: a price edit re-renders only the edited row. */
 export function serviceRowPropsEqual<P extends RowLikeProps>(prev: P, next: P): boolean {
-  return compareRowProps(prev, next, (p) => Boolean(p.isEditingPrice || p.isEditingPerformer));
+  return compareRowProps(prev, next, (p) => Boolean(p.isEditingPrice || p.isEditingQty || p.isEditingPerformer));
 }
 
 /** React.memo comparator for material rows (also watches same-item siblings for the stock cap). */

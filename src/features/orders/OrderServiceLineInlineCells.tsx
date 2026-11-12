@@ -7,14 +7,14 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { OrderService } from "../../lib/types";
-import { formatQuantity } from "../../lib/quantity";
+import { formatQuantity, parseQuantity } from "../../lib/quantity";
 import { cn } from "../../lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import type { AssignableTechnician } from "./assignableTechnicians";
 import { OrderLineInlineNumberEditor as InlineNumberEditor } from "./OrderLineInlineNumberEditor";
 import { parseOrderServiceLinePrice } from "./updateOrderServiceLine";
 
-export type ServiceLineInlineField = "price" | "performer";
+export type ServiceLineInlineField = "price" | "quantity" | "performer";
 
 export type ServiceLineInlineEditTarget = {
   lineId: string;
@@ -43,7 +43,7 @@ const NONE_VALUE = "__service_line_none__";
 
 /**
  * Click-to-edit price / performer cells for one order service line.
- * Quantity is read-only on the order card (edit it in the full form).
+ * Quantity and price are click-to-edit; the performer is edited under the service name.
  * Enter or blur saves; Esc cancels; errors render under the control (no toast).
  */
 export default function OrderServiceLineInlineCells({
@@ -69,9 +69,42 @@ export default function OrderServiceLineInlineCells({
   return (
     <>
       <td className="px-2 py-2 align-top text-right tabular-nums text-muted-foreground sm:px-3">
-        <span className="block min-w-0 [overflow-wrap:anywhere]" data-testid={`service-line-qty-${line.id ?? "legacy"}`}>
-          {formatQuantity(line.quantity, locale)}
-        </span>
+        {isEditing("quantity") ? (
+          <InlineNumberEditor
+            label={t("orders.detail.quantity")}
+            initial={String(line.quantity ?? "")}
+            testId={`service-line-qty-editor-${line.id}`}
+            saving={saving}
+            selectOnFocus
+            parse={(raw) => {
+              const parsed = parseQuantity(raw);
+              if (parsed === "required") return t("orders.validation.quantityRequired");
+              if (parsed === "min") return t("orders.validation.quantityMin");
+              if (parsed === "maxDecimals") return t("orders.validation.quantityMaxDecimals");
+              if (typeof parsed !== "number") return t("orders.validation.quantityMin");
+              return { value: String(parsed) };
+            }}
+            onCancel={() => {
+              onCancel();
+              onEditorClosed();
+            }}
+            onSave={async (raw) => {
+              await onSaveField("quantity", raw);
+              onSaved();
+            }}
+            onAfterSave={() => onEditorClosed()}
+          />
+        ) : (
+          <InlineValueButton
+            editable={canEditLine}
+            label={t("orders.detail.quantity")}
+            testId={`service-line-qty-${line.id ?? "legacy"}`}
+            onClick={() => onRequestEdit("quantity")}
+            className="w-full text-right"
+          >
+            {formatQuantity(line.quantity, locale)}
+          </InlineValueButton>
+        )}
       </td>
       <td className="px-2 py-2 align-top text-right tabular-nums text-muted-foreground sm:px-3">
         {isEditing("price") ? (

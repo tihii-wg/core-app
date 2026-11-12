@@ -117,6 +117,23 @@ export function useOrderLineActions({
         });
       return;
     }
+    if (field === "quantity") {
+      const quantity = Number(raw);
+      if (!Number.isFinite(quantity) || quantity <= 0) throw new Error(t("orders.validation.quantityMin"));
+      const line = selectedOrder.services.find((entry) => entry.id === lineId);
+      const previous = selectedOrder;
+      onOrderUpdatedRef.current(
+        withOptimisticLinePrice(previous, "service", lineId, Number(line?.price) || 0, quantity),
+      );
+      void updateServiceLine
+        .mutateAsync({ orderId: previous.id, lineId, patch: { quantity } })
+        .then((updated) => onOrderUpdatedRef.current(updated))
+        .catch((error: unknown) => {
+          onOrderUpdatedRef.current(previous);
+          toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+        });
+      return;
+    }
     const updated = await updateServiceLine.mutateAsync({
       orderId: selectedOrder.id,
       lineId,
