@@ -974,6 +974,7 @@ const orders: Messages<typeof en> = {
       remainingDays_few: "{{count}} zile rămase",
       remainingDays_other: "{{count}} de zile rămase",
       remainingKm: "{{value}} {{unit}} rămași",
+      untilMileage: "până la {{value}} {{unit}}",
       untilDate: "Până la {{date}}",
       expired: "Garanție expirată",
       expiredAtKm: "{{value}} {{unit}}",

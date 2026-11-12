@@ -981,6 +981,7 @@ const orders: Messages<typeof en> = {
       remainingDays_many: "Осталось {{count}} дней",
       remainingDays_other: "Осталось {{count}} дня",
       remainingKm: "Осталось {{value}} {{unit}}",
+      untilMileage: "до {{value}} {{unit}}",
       untilDate: "До {{date}}",
       expired: "Гарантия истекла",
       expiredAtKm: "{{value}} {{unit}}",

@@ -98,6 +98,14 @@ export function OrderWarrantyIndicator({ model, className }: OrderWarrantyIndica
     // Show remaining mileage whenever known (including when both time and mileage limits apply).
     if (remainingKm) {
       secondaryParts.push(t("orders.warranty.indicator.remainingKm", { value: remainingKm, unit }));
+    } else {
+      // Current mileage unknown: still show the mileage limit as «до 106 214 ми».
+      const expiresAt = evaluation?.expiresAtMileage ?? model.primary?.expiresAtMileage ?? null;
+      if (expiresAt != null && Number.isFinite(Number(expiresAt)) && Number(expiresAt) > 0) {
+        secondaryParts.push(
+          t("orders.warranty.indicator.untilMileage", { value: formatWarrantyKm(Number(expiresAt), language), unit }),
+        );
+      }
     }
     if (model.coveredItemCount > 1) {
       secondaryParts.push(t("orders.warranty.indicator.coveredItems", { count: model.coveredItemCount }));

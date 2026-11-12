@@ -964,6 +964,7 @@ export default {
       remainingDays_one: "{{count}} day remaining",
       remainingDays_other: "{{count}} days remaining",
       remainingKm: "{{value}} {{unit}} remaining",
+      untilMileage: "until {{value}} {{unit}}",
       untilDate: "Until {{date}}",
       expired: "Warranty expired",
       expiredAtKm: "{{value}} {{unit}}",

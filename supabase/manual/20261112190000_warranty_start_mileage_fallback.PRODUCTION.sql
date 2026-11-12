@@ -46,26 +46,28 @@ begin
 end;
 $patch$;
 
--- One-time repair of already activated rows.
-alter table public.warranty_records disable trigger trg_warranty_records_snapshot_immutable;
-
-with fix as (
-  select wr.id,
-         coalesce(o.vehicle_mileage_snapshot, v.current_mileage, v.initial_mileage)::integer as start_km
-  from public.warranty_records wr
-  join public.orders o on o.id = wr.order_id
-  left join public.vehicles v on v.id = coalesce(wr.vehicle_id, o.vehicle_id)
-  where wr.mileage_limit is not null
-    and wr.mileage_limit > 0
-    and wr.start_mileage is null
-)
-update public.warranty_records wr
-   set start_mileage = fix.start_km,
-       expires_at_mileage = fix.start_km + wr.mileage_limit
-  from fix
- where fix.id = wr.id
-   and fix.start_km is not null;
-
-alter table public.warranty_records enable trigger trg_warranty_records_snapshot_immutable;
+-- One-time repair of already activated rows (one DO block = one transaction even if the editor splits statements).
+do $repair$
+begin
+  execute 'alter table public.warranty_records disable trigger trg_warranty_records_snapshot_immutable';
+  with fix as (
+    select wr.id,
+           coalesce(o.vehicle_mileage_snapshot, v.current_mileage, v.initial_mileage)::integer as start_km
+    from public.warranty_records wr
+    join public.orders o on o.id = wr.order_id
+    left join public.vehicles v on v.id = coalesce(wr.vehicle_id, o.vehicle_id)
+    where wr.mileage_limit is not null
+      and wr.mileage_limit > 0
+      and wr.start_mileage is null
+  )
+  update public.warranty_records wr
+     set start_mileage = fix.start_km,
+         expires_at_mileage = fix.start_km + wr.mileage_limit
+    from fix
+   where fix.id = wr.id
+     and fix.start_km is not null;
+  execute 'alter table public.warranty_records enable trigger trg_warranty_records_snapshot_immutable';
+end;
+$repair$;
 
 commit;
