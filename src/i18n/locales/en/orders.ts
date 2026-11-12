@@ -287,6 +287,7 @@ export default {
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Available stock",
     availableStockValue: "{{count}} {{unit}} in stock",
+    reduceReturnsToWarehouse: "The extra {{count}} will be returned to «{{warehouse}}» on save.",
     availableOnWarehouse: "Available on warehouse «{{warehouse}}»: {{count}}",
     onlyNAvailableOnWarehouse: "Only {{available}} available on warehouse «{{warehouse}}»",
     setToMaximum: "Set to maximum ({{available}})",
@@ -516,6 +517,14 @@ export default {
     undo: "Undo",
     materialRpcRequired:
       "Deleting a material line with stock return requires the database function {{rpc}}. Apply supabase/manual/20261111230000_delete_order_material.PRODUCTION.sql.",
+  },
+  lineEdit: {
+    ariaLabel: "Edit line",
+    serviceHint: "Change price, quantity, performer, kind, and warranty for this service on the order only.",
+    workHint: "Change price, quantity, performer, kind, and warranty for this work on the order only.",
+    materialHint: "Change quantity, price, warehouse, and warranty for this material on the order only.",
+    materialHintWorks: "Change quantity, price, warehouse, and warranty for this material on the order only.",
+    returnBeforeChangeWarehouse: "Return the material to the warehouse first",
   },
   changeClient: {
     changeTitle: "Change client and vehicle",

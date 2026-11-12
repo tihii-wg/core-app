@@ -295,6 +295,7 @@ const orders: Messages<typeof en> = {
     availableStock: "Stoc disponibil",
     receiveStock: "Recepționează stoc în depozit",
     availableStockValue: "{{count}} {{unit}} în stoc",
+    reduceReturnsToWarehouse: "Surplusul de {{count}} va fi returnat în depozitul «{{warehouse}}» la salvare.",
     availableOnWarehouse: "Disponibil în depozitul «{{warehouse}}»: {{count}}",
     onlyNAvailableOnWarehouse: "Doar {{available}} disponibile în depozitul «{{warehouse}}»",
     setToMaximum: "Setează la maxim ({{available}})",
@@ -523,6 +524,14 @@ const orders: Messages<typeof en> = {
     undo: "Anulează",
     materialRpcRequired:
       "Ștergerea unui material cu returnare în stoc necesită funcția de bază de date {{rpc}}. Aplicați supabase/manual/20261111230000_delete_order_material.PRODUCTION.sql.",
+  },
+  lineEdit: {
+    ariaLabel: "Modifică poziția",
+    serviceHint: "Modificați prețul, cantitatea, executantul, tipul și garanția doar pentru acest serviciu din comandă.",
+    workHint: "Modificați prețul, cantitatea, executantul, tipul și garanția doar pentru această lucrare din comandă.",
+    materialHint: "Modificați cantitatea, prețul, depozitul și garanția doar pentru acest material din comandă.",
+    materialHintWorks: "Modificați cantitatea, prețul, depozitul și garanția doar pentru acest material din comandă.",
+    returnBeforeChangeWarehouse: "Returnați mai întâi materialul în depozit",
   },
   changeClient: {
     changeTitle: "Schimbă clientul și vehiculul",

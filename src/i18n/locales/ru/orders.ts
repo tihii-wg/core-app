@@ -299,6 +299,7 @@ const orders: Messages<typeof en> = {
     availableStock: "Доступный остаток",
     receiveStock: "Оприходовать на склад",
     availableStockValue: "{{count}} {{unit}} на складе",
+    reduceReturnsToWarehouse: "Лишние {{count}} вернутся на склад «{{warehouse}}» при сохранении.",
     availableOnWarehouse: "Доступно на складе «{{warehouse}}»: {{count}}",
     onlyNAvailableOnWarehouse: "На складе «{{warehouse}}» доступно только {{available}}",
     setToMaximum: "Установить максимум ({{available}})",
@@ -527,6 +528,14 @@ const orders: Messages<typeof en> = {
     undo: "Отменить",
     materialRpcRequired:
       "Удаление материала с возвратом на склад требует функцию БД {{rpc}}. Примените supabase/manual/20261111230000_delete_order_material.PRODUCTION.sql.",
+  },
+  lineEdit: {
+    ariaLabel: "Изменить позицию",
+    serviceHint: "Измените цену, количество, исполнителя, тип и гарантию только для этой услуги в заказе.",
+    workHint: "Измените цену, количество, исполнителя, тип и гарантию только для этой работы в заказе.",
+    materialHint: "Измените количество, цену, склад и гарантию только для этого материала в заказе.",
+    materialHintWorks: "Измените количество, цену, склад и гарантию только для этого материала в заказе.",
+    returnBeforeChangeWarehouse: "Сначала верните материал на склад",
   },
   changeClient: {
     changeTitle: "Сменить клиента и автомобиль",

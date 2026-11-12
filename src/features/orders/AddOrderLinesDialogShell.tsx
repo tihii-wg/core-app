@@ -16,6 +16,10 @@ type AddOrderLinesDialogShellProps = {
   pending?: boolean;
   submitDisabled?: boolean;
   onSubmit: () => void;
+  /** Override the primary button label (default: orders.addLines.submit «Add»). */
+  submitLabel?: string;
+  /** Override the primary button test id (default: add-order-lines-submit). */
+  submitTestId?: string;
   children: ReactNode;
 };
 
@@ -32,6 +36,8 @@ export default function AddOrderLinesDialogShell({
   pending = false,
   submitDisabled = false,
   onSubmit,
+  submitLabel,
+  submitTestId = "add-order-lines-submit",
   children,
 }: AddOrderLinesDialogShellProps) {
   const { t } = useTranslation();
@@ -58,8 +64,8 @@ export default function AddOrderLinesDialogShell({
       <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
         {t("common.cancel")}
       </Button>
-      <Button type="button" onClick={onSubmit} disabled={pending || submitDisabled} data-testid="add-order-lines-submit">
-        {pending ? <Spinner className="h-4 w-4" /> : t("orders.addLines.submit")}
+      <Button type="button" onClick={onSubmit} disabled={pending || submitDisabled} data-testid={submitTestId}>
+        {pending ? <Spinner className="h-4 w-4" /> : (submitLabel ?? t("orders.addLines.submit"))}
       </Button>
     </div>
   );

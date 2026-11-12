@@ -76,6 +76,14 @@ type OrderMaterialLinesEditorProps = {
   initialFreeName?: string;
   /** Prefill catalog item selection when opening from the items-tab search. */
   initialCatalogItem?: InventoryItem | null;
+  /**
+   * Single-line edit mode (order-card «edit position» dialog): hide search, add-line and remove
+   * controls; the host passes exactly one field row prefilled from the saved line.
+   * Alias: `hideAddRemove`.
+   */
+  singleLine?: boolean;
+  /** @deprecated Prefer `singleLine` — same behaviour. */
+  hideAddRemove?: boolean;
 };
 
 function quantityValidationMessage(value: unknown, t: TFunction): true | string {
@@ -107,6 +115,8 @@ export default function OrderMaterialLinesEditor({
   initialAddMode = "catalog",
   initialFreeName = "",
   initialCatalogItem = null,
+  singleLine = false,
+  hideAddRemove = false,
 }: OrderMaterialLinesEditorProps) {
   const { t, i18n } = useTranslation();
   const qtyLocale = i18n.language;
@@ -117,6 +127,7 @@ export default function OrderMaterialLinesEditor({
   const warehouses = useMemo(() => issuableWarehouses(warehouseRows), [warehouseRows]);
   const { supported: freeformSupported, ready: freeformReady } = useOrderMaterialFreeformSupport();
   const canReceiveStock = warehouses.length > 0;
+  const hideAddUi = singleLine || hideAddRemove;
   const watched = useWatch({ control, name: "materials" });
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialName, setCreateInitialName] = useState("");
@@ -150,7 +161,7 @@ export default function OrderMaterialLinesEditor({
 
   // Seed one catalog line when opened from the items-tab search with a picked inventory item.
   useEffect(() => {
-    if (seededCatalogRef.current || !initialCatalogItem || !issueWarehouseId) return;
+    if (hideAddUi || seededCatalogRef.current || !initialCatalogItem || !issueWarehouseId) return;
     const onHand = warehouseStockOf(warehouseStock, issueWarehouseId, initialCatalogItem.id);
     if (onHand <= 0) {
       setAddStockError(
@@ -164,7 +175,7 @@ export default function OrderMaterialLinesEditor({
     seededCatalogRef.current = true;
     setAddStockError(null);
     append(catalogItemToOrderMaterial(initialCatalogItem, 1, issueWarehouseId, warrantyDefaults, orderMileageUnit));
-  }, [append, initialCatalogItem, issueWarehouseId, orderMileageUnit, t, warehouseStock, warehouses, warrantyDefaults]);
+  }, [append, hideAddUi, initialCatalogItem, issueWarehouseId, orderMileageUnit, t, warehouseStock, warehouses, warrantyDefaults]);
 
   useEffect(() => {
     setAddStockError(null);
@@ -191,7 +202,8 @@ export default function OrderMaterialLinesEditor({
     const outstandingFloor = Math.max(0, issuedFloor - returnedFloor);
     const next = roundQuantity(current + delta);
     if (!(next > 0)) return;
-    if (Number.isFinite(outstandingFloor) && outstandingFloor > 0 && next < outstandingFloor) return;
+    // Single-line edit saves through crm_update_order_material_line, which returns the surplus to the warehouse.
+    if (!singleLine && Number.isFinite(outstandingFloor) && outstandingFloor > 0 && next < outstandingFloor) return;
     const limit = lineStockLimitAt(index);
     if (limit && next > limit.max + 1e-9) return;
     setValue(`materials.${index}.quantity`, next, { shouldDirty: true, shouldValidate: true });
@@ -301,142 +313,150 @@ export default function OrderMaterialLinesEditor({
   }
 
   return (
-    <div className="space-y-1.5" data-edit-field="materials">
-      <Label htmlFor="order-material">{t("orders.form.materialsSection")}</Label>
-
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("orders.form.materialSourceAria")}>
-        {(
-          [
-            ["catalog", t("orders.form.materialSourceCatalog")],
-            ["one_time", t("orders.form.materialSourceOneTime")],
-            ["customer", copy.materialSourceCustomer],
-          ] as const
-        )
-          .filter(([mode]) => mode === "catalog" || freeformSupported)
-          .map(([mode, label]) => (
-            <Button
-              key={mode}
-              type="button"
-              size="sm"
-              variant={effectiveAddMode === mode ? "default" : "outline"}
-              disabled={disabled || (mode !== "catalog" && !freeformReady)}
-              onClick={() => {
-                setAddMode(mode);
-                setFreeError("");
-              }}
-            >
-              {label}
-            </Button>
-          ))}
-      </div>
-
-      {freeformReady && !freeformSupported ? (
-        <p className="text-xs text-muted-foreground">{t("orders.errors.freeformMaterialsUnsupported")}</p>
-      ) : null}
-
-      {effectiveAddMode === "catalog" ? (
+    <div
+      className="space-y-1.5"
+      data-edit-field="materials"
+      data-single-line={hideAddUi ? "true" : undefined}
+    >
+      {hideAddUi ? null : (
         <>
-          {warehouses.length === 0 ? (
-            <p className="text-xs text-destructive">{t("orders.warehouse.noActiveWarehouse")}</p>
+          <Label htmlFor="order-material">{t("orders.form.materialsSection")}</Label>
+
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("orders.form.materialSourceAria")}>
+            {(
+              [
+                ["catalog", t("orders.form.materialSourceCatalog")],
+                ["one_time", t("orders.form.materialSourceOneTime")],
+                ["customer", copy.materialSourceCustomer],
+              ] as const
+            )
+              .filter(([mode]) => mode === "catalog" || freeformSupported)
+              .map(([mode, label]) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  size="sm"
+                  variant={effectiveAddMode === mode ? "default" : "outline"}
+                  disabled={disabled || (mode !== "catalog" && !freeformReady)}
+                  onClick={() => {
+                    setAddMode(mode);
+                    setFreeError("");
+                  }}
+                >
+                  {label}
+                </Button>
+              ))}
+          </div>
+
+          {freeformReady && !freeformSupported ? (
+            <p className="text-xs text-muted-foreground">{t("orders.errors.freeformMaterialsUnsupported")}</p>
+          ) : null}
+
+          {effectiveAddMode === "catalog" ? (
+            <>
+              {warehouses.length === 0 ? (
+                <p className="text-xs text-destructive">{t("orders.warehouse.noActiveWarehouse")}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="order-material-issue-warehouse">{t("orders.form.issueWarehouseLabel")}</Label>
+                  <Select
+                    value={issueWarehouseId}
+                    onValueChange={setIssueWarehouseId}
+                    disabled={disabled}
+                  >
+                    <SelectTrigger id="order-material-issue-warehouse" aria-label={t("orders.form.issueWarehouseLabel")}>
+                      <SelectValue placeholder={t("orders.warehouse.warehousePlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((warehouse) => (
+                        <SelectItem key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("orders.form.immediateIssueHint")}</p>
+                </div>
+              )}
+              <InventoryItemCombobox
+                items={inventoryItems}
+                onSelect={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelect}
+                onSelectOutOfStock={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelectOutOfStock}
+                onCreateRequest={disabled || warehouses.length === 0 ? undefined : handleCreateRequest}
+                onAddOneTimeRequest={disabled || !freeformSupported ? undefined : handleAddOneTimeRequest}
+                searchPlaceholder={copy.materialSearchPlaceholder}
+                errors={!!errors?.root || Boolean(addStockError)}
+                warehouseStockByItemId={warehouseStockByItemId}
+              />
+              {addStockError ? (
+                <p className="text-xs text-destructive" role="alert" data-testid="material-add-stock-error">
+                  {addStockError}
+                </p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">{t("orders.form.materialsImmediateHint")}</p>
+              <AddInventoryItemDialog
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                initialName={createInitialName}
+                onCreated={handleCreated}
+              />
+            </>
           ) : (
-            <div className="space-y-1.5">
-              <Label htmlFor="order-material-issue-warehouse">{t("orders.form.issueWarehouseLabel")}</Label>
-              <Select
-                value={issueWarehouseId}
-                onValueChange={setIssueWarehouseId}
-                disabled={disabled}
-              >
-                <SelectTrigger id="order-material-issue-warehouse" aria-label={t("orders.form.issueWarehouseLabel")}>
-                  <SelectValue placeholder={t("orders.warehouse.warehousePlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {warehouses.map((warehouse) => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">{t("orders.form.immediateIssueHint")}</p>
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">
+                {effectiveAddMode === "customer" ? copy.customerPartHint : t("orders.form.oneTimePartHint")}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="free-material-name">{t("orders.form.freeformName")}</Label>
+                  <Input
+                    id="free-material-name"
+                    value={freeName}
+                    disabled={disabled}
+                    onChange={(event) => setFreeName(event.target.value)}
+                    placeholder={t("orders.form.freeformNamePlaceholder")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="free-material-qty">{t("orders.form.quantityLabel")}</Label>
+                  <Input
+                    id="free-material-qty"
+                    type="text"
+                    inputMode="decimal"
+                    value={freeQty}
+                    disabled={disabled}
+                    onChange={(event) => setFreeQty(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="free-material-price">
+                    {effectiveAddMode === "customer" ? t("orders.form.customerPartPrice") : t("orders.form.oneTimePartPrice")}
+                  </Label>
+                  <Input
+                    id="free-material-price"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={freePrice}
+                    disabled={disabled}
+                    onChange={(event) => setFreePrice(event.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => addFreeformLine(effectiveAddMode === "customer" ? "customer" : "one_time")}
+                  >
+                    {t("orders.form.addFreeformLine")}
+                  </Button>
+                </div>
+              </div>
+              {freeError ? <p className="text-xs text-destructive">{freeError}</p> : null}
             </div>
           )}
-          <InventoryItemCombobox
-            items={inventoryItems}
-            onSelect={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelect}
-            onSelectOutOfStock={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelectOutOfStock}
-            onCreateRequest={disabled || warehouses.length === 0 ? undefined : handleCreateRequest}
-            onAddOneTimeRequest={disabled || !freeformSupported ? undefined : handleAddOneTimeRequest}
-            searchPlaceholder={copy.materialSearchPlaceholder}
-            errors={!!errors?.root || Boolean(addStockError)}
-            warehouseStockByItemId={warehouseStockByItemId}
-          />
-          {addStockError ? (
-            <p className="text-xs text-destructive" role="alert" data-testid="material-add-stock-error">
-              {addStockError}
-            </p>
-          ) : null}
-          <p className="text-xs text-muted-foreground">{t("orders.form.materialsImmediateHint")}</p>
-          <AddInventoryItemDialog
-            open={createOpen}
-            onOpenChange={setCreateOpen}
-            initialName={createInitialName}
-            onCreated={handleCreated}
-          />
         </>
-      ) : (
-        <div className="space-y-2 rounded-md border p-3">
-          <p className="text-xs text-muted-foreground">
-            {effectiveAddMode === "customer" ? copy.customerPartHint : t("orders.form.oneTimePartHint")}
-          </p>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="free-material-name">{t("orders.form.freeformName")}</Label>
-              <Input
-                id="free-material-name"
-                value={freeName}
-                disabled={disabled}
-                onChange={(event) => setFreeName(event.target.value)}
-                placeholder={t("orders.form.freeformNamePlaceholder")}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="free-material-qty">{t("orders.form.quantityLabel")}</Label>
-              <Input
-                id="free-material-qty"
-                type="text"
-                inputMode="decimal"
-                value={freeQty}
-                disabled={disabled}
-                onChange={(event) => setFreeQty(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
-              <Label htmlFor="free-material-price">
-                {effectiveAddMode === "customer" ? t("orders.form.customerPartPrice") : t("orders.form.oneTimePartPrice")}
-              </Label>
-              <Input
-                id="free-material-price"
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                value={freePrice}
-                disabled={disabled}
-                onChange={(event) => setFreePrice(event.target.value)}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                type="button"
-                disabled={disabled}
-                onClick={() => addFreeformLine(effectiveAddMode === "customer" ? "customer" : "one_time")}
-              >
-                {t("orders.form.addFreeformLine")}
-              </Button>
-            </div>
-          </div>
-          {freeError ? <p className="text-xs text-destructive">{freeError}</p> : null}
-        </div>
       )}
 
       {errors?.root?.message && <p className="text-xs text-destructive">{errors.root.message}</p>}
@@ -454,8 +474,10 @@ export default function OrderMaterialLinesEditor({
             const outstanding = Math.max(0, issuedQty - returnedQty);
             const hasWarehouseHistory = issuedQty > 0 || returnedQty > 0;
             const freeformIdentityLocked = !catalog && hasWarehouseHistory;
-            const minQuantity =
-              outstanding > 0 ? outstanding : issuedQty > 0 ? issuedQty : 0;
+            /** Single-line edit: item name / supply source stay read-only; price remains editable. */
+            const itemNameReadOnly = catalog || freeformIdentityLocked || hideAddUi;
+            // Full form: issued stock must be returned first. Single-line edit: reducing returns it automatically.
+            const minQuantity = singleLine ? 0 : outstanding > 0 ? outstanding : issuedQty > 0 ? issuedQty : 0;
             const lineWarehouseId = String(line?.warehouseId ?? field.warehouseId ?? issueWarehouseId ?? "");
             const itemId = String(line?.inventoryItemId ?? field.inventoryItemId ?? "");
             const catalogItem = itemId ? inventoryItems.find((item) => item.id === itemId) : undefined;
@@ -498,10 +520,13 @@ export default function OrderMaterialLinesEditor({
             const showRestartHint = Boolean(restartKey && restartWarrantyHints?.has(restartKey));
 
             return (
-              <div key={field.id} className="space-y-2 rounded-md border p-3">
+              <div
+                key={field.id}
+                className={hideAddUi ? "space-y-2" : "space-y-2 rounded-md border p-3"}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1 space-y-1">
-                    {catalog || freeformIdentityLocked ? (
+                    {itemNameReadOnly ? (
                       <p className="font-medium [overflow-wrap:anywhere]">{line?.itemName ?? field.itemName}</p>
                     ) : (
                       <Controller
@@ -642,13 +667,20 @@ export default function OrderMaterialLinesEditor({
                           </p>
                         ) : null}
                         {hasWarehouseHistory ? (
-                          <p className="text-[12px] text-muted-foreground">
-                            {t("orders.form.issuedSummary", {
-                              issued: formatQuantity(issuedQty, qtyLocale),
-                              returned: formatQuantity(returnedQty, qtyLocale),
-                              outstanding: formatQuantity(outstanding, qtyLocale),
-                            })}
-                          </p>
+                          <>
+                            <p className="text-[12px] text-muted-foreground">
+                              {t("orders.form.issuedSummary", {
+                                issued: formatQuantity(issuedQty, qtyLocale),
+                                returned: formatQuantity(returnedQty, qtyLocale),
+                                outstanding: formatQuantity(outstanding, qtyLocale),
+                              })}
+                            </p>
+                            {hideAddUi ? (
+                              <p className="text-[12px] text-muted-foreground" data-testid="material-warehouse-locked-hint">
+                                {t("orders.lineEdit.returnBeforeChangeWarehouse")}
+                              </p>
+                            ) : null}
+                          </>
                         ) : (
                           <p className="text-[12px] text-muted-foreground">{t("orders.form.willDeductOnSave")}</p>
                         )}
@@ -672,17 +704,19 @@ export default function OrderMaterialLinesEditor({
                       </Button>
                     ) : null}
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={disabled || outstanding > 0}
-                    title={outstanding > 0 ? (t("orders.form.returnBeforeRemove") as string) : undefined}
-                    onClick={() => remove(index)}
-                    aria-label={t("orders.form.removeMaterial", { name: line?.itemName ?? field.itemName })}
-                  >
-                    {t("orders.form.remove")}
-                  </Button>
+                  {hideAddUi ? null : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={disabled || outstanding > 0}
+                      title={outstanding > 0 ? (t("orders.form.returnBeforeRemove") as string) : undefined}
+                      onClick={() => remove(index)}
+                      aria-label={t("orders.form.removeMaterial", { name: line?.itemName ?? field.itemName })}
+                    >
+                      {t("orders.form.remove")}
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -823,7 +857,16 @@ export default function OrderMaterialLinesEditor({
                   </div>
                 ) : null}
                 {catalog && outstanding > 0 && parsedQty != null && parsedQty < outstanding ? (
-                  <p className="text-xs text-destructive">{t("orders.errors.returnBeforeReduce")}</p>
+                  singleLine ? (
+                    <p className="text-xs text-muted-foreground" data-testid={`material-line-auto-return-${index}`}>
+                      {t("orders.form.reduceReturnsToWarehouse", {
+                        count: formatQuantity(roundQuantity(outstanding - parsedQty), qtyLocale),
+                        warehouse: warehouseName ?? lineWarehouseId,
+                      })}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-destructive">{t("orders.errors.returnBeforeReduce")}</p>
+                  )
                 ) : null}
                 <OrderLineWarrantyFields
                   idPrefix={`edit-material-${index}`}

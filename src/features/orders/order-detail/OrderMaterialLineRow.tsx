@@ -21,6 +21,7 @@ import {
 import { orderLineAmount } from "../../services/orderServiceLine";
 import { resolveCatalogLineStockLimit } from "../catalogMaterialStockLimit";
 import { OrderLineDeleteButton } from "../OrderLineDeleteButton";
+import { OrderLineEditButton } from "../OrderLineEditButton";
 import { OrderLineWarrantyBadge } from "../OrderLineWarrantyBadge";
 import OrderMaterialLineInlineCells, {
   type MaterialLineInlineEditTarget,
@@ -50,6 +51,8 @@ export type OrderMaterialLineRowProps = {
   onSavedEdit: () => void;
   onSaveField: (lineId: string, field: MaterialLineInlineField, raw: string) => Promise<void>;
   onDelete: (lineId: string) => void;
+  /** Opens the single-line edit dialog (pencil). Stable callback; only the line id is passed. */
+  onEditLine: (lineId: string) => void;
   onEditorClosed: () => void;
 };
 
@@ -76,6 +79,7 @@ function OrderMaterialLineRowComponent({
   onSavedEdit,
   onSaveField,
   onDelete,
+  onEditLine,
   onEditorClosed,
 }: OrderMaterialLineRowProps) {
   const { t } = useTranslation();
@@ -176,12 +180,18 @@ function OrderMaterialLineRowComponent({
             )}
           </div>
           {showFieldEdit && lineId && (!catalog || canWarehouse) ? (
-            <OrderLineDeleteButton
-              testId={`material-line-delete-${lineId}`}
-              className="self-end sm:-my-2.5 sm:self-start"
-              disabled={deletePending}
-              onClick={() => void onDelete(lineId)}
-            />
+            <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
+              <OrderLineEditButton
+                testId={`material-line-edit-${lineId}`}
+                disabled={saving || deletePending}
+                onClick={() => onEditLine(lineId)}
+              />
+              <OrderLineDeleteButton
+                testId={`material-line-delete-${lineId}`}
+                disabled={deletePending}
+                onClick={() => void onDelete(lineId)}
+              />
+            </div>
           ) : null}
         </div>
       </td>

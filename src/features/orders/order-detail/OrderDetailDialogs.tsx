@@ -16,6 +16,8 @@ import { recordableOrderBalance } from "../minPaidStatusGuard";
 import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "../AddOrderMaterialDialog";
 import ChangeOrderClientDialog from "../ChangeOrderClientDialog";
 import { CloseOrderDialog } from "../CloseOrderDialog";
+import EditOrderMaterialLineDialog from "../EditOrderMaterialLineDialog";
+import EditOrderServiceLineDialog from "../EditOrderServiceLineDialog";
 import { OrderCancelChainDialog } from "../OrderCancelChainDialog";
 import { OrderCatalogLinkDialogs } from "../OrderCatalogLinkDialogs";
 
@@ -52,6 +54,12 @@ export type OrderDetailDialogsProps = {
   catalogInventoryId: string | null;
   onCloseService: () => void;
   onCloseInventory: () => void;
+  /** order_services.id of the line opened in the single-line edit dialog; null when closed. */
+  editServiceLineId: string | null;
+  setEditServiceLineId: (lineId: string | null) => void;
+  /** order_materials.id of the line opened in the single-line edit dialog; null when closed. */
+  editMaterialLineId: string | null;
+  setEditMaterialLineId: (lineId: string | null) => void;
 };
 
 export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
@@ -89,7 +97,20 @@ export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
     catalogInventoryId,
     onCloseService,
     onCloseInventory,
+    editServiceLineId,
+    setEditServiceLineId,
+    editMaterialLineId,
+    setEditMaterialLineId,
   } = props;
+
+  const editServiceLine =
+    selectedOrder && editServiceLineId
+      ? (selectedOrder.services.find((line) => line.id === editServiceLineId) ?? null)
+      : null;
+  const editMaterialLine =
+    selectedOrder && editMaterialLineId
+      ? ((selectedOrder.materials ?? []).find((line) => line.id === editMaterialLineId) ?? null)
+      : null;
 
   return (
     <>
@@ -217,6 +238,30 @@ export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
         onCloseService={onCloseService}
         onCloseInventory={onCloseInventory}
       />
+
+      {selectedOrder && editServiceLine ? (
+        <EditOrderServiceLineDialog
+          open={Boolean(editServiceLineId)}
+          onOpenChange={(open) => {
+            if (!open) setEditServiceLineId(null);
+          }}
+          order={selectedOrder}
+          line={editServiceLine}
+          onSaved={onOrderUpdated}
+        />
+      ) : null}
+
+      {selectedOrder && editMaterialLine ? (
+        <EditOrderMaterialLineDialog
+          open={Boolean(editMaterialLineId)}
+          onOpenChange={(open) => {
+            if (!open) setEditMaterialLineId(null);
+          }}
+          order={selectedOrder}
+          line={editMaterialLine}
+          onSaved={onOrderUpdated}
+        />
+      ) : null}
     </>
   );
 }

@@ -131,6 +131,10 @@ export function useOrderDetailModel({
   /** Catalog windows opened by tapping a service / material name in the order card. */
   const [catalogServiceId, setCatalogServiceId] = useState<string | null>(null);
   const [catalogInventoryId, setCatalogInventoryId] = useState<string | null>(null);
+  /** order_services.id opened in the single-line edit dialog (pencil on the items tab). */
+  const [editServiceLineId, setEditServiceLineId] = useState<string | null>(null);
+  /** order_materials.id opened in the single-line edit dialog (pencil on the items tab). */
+  const [editMaterialLineId, setEditMaterialLineId] = useState<string | null>(null);
   const canEditOrder = subscriptionAllowsWrite;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: updateOrder, isPending: isAssigneeUpdating } = useUpdateOrder();
@@ -212,6 +216,7 @@ export function useOrderDetailModel({
     setAddMaterialOpen(false);
     setAddMaterialPrefill(null);
     setServiceLineEdit(null);
+    setEditServiceLineId(null);
   }
 
   function stopEditing() {
@@ -409,6 +414,10 @@ export function useOrderDetailModel({
     setCatalogServiceId,
     catalogInventoryId,
     setCatalogInventoryId,
+    editServiceLineId,
+    setEditServiceLineId,
+    editMaterialLineId,
+    setEditMaterialLineId,
     settleInlineEdit,
   });
 }

@@ -7,6 +7,7 @@ import { StatusBadge } from "../../../ui/StatusBadge";
 import { vatIncludedAmount } from "../../finance/vat";
 import type { AssignableTechnician } from "../assignableTechnicians";
 import { OrderLineDeleteButton } from "../OrderLineDeleteButton";
+import { OrderLineEditButton } from "../OrderLineEditButton";
 import { OrderLineWarrantyBadge } from "../OrderLineWarrantyBadge";
 import OrderServiceLineInlineCells, {
   OrderServiceLinePerformerInline,
@@ -38,6 +39,8 @@ export type OrderServiceLineRowProps = {
   onSavedEdit: () => void;
   onSaveField: (lineId: string, field: ServiceLineInlineField, raw: string) => Promise<void>;
   onDelete: (lineId: string) => void;
+  /** Opens the single-line edit dialog (pencil). Stable callback; only the line id is passed. */
+  onEditLine: (lineId: string) => void;
   onEditorClosed: () => void;
 };
 
@@ -64,6 +67,7 @@ function OrderServiceLineRowComponent({
   onSavedEdit,
   onSaveField,
   onDelete,
+  onEditLine,
   onEditorClosed,
 }: OrderServiceLineRowProps) {
   const { t } = useTranslation();
@@ -155,7 +159,22 @@ function OrderServiceLineRowComponent({
               }}
             />
           </div>
-          {canDelete && lineId ? (
+          {showFieldEdit && lineId ? (
+            <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
+              <OrderLineEditButton
+                testId={`service-line-edit-${lineId}`}
+                disabled={saving || deletePending}
+                onClick={() => onEditLine(lineId)}
+              />
+              {canDelete ? (
+                <OrderLineDeleteButton
+                  testId={`service-line-delete-${lineId}`}
+                  disabled={deletePending}
+                  onClick={() => void onDelete(lineId)}
+                />
+              ) : null}
+            </div>
+          ) : canDelete && lineId ? (
             <OrderLineDeleteButton
               testId={`service-line-delete-${lineId}`}
               className="self-end sm:-my-2.5 sm:self-start"

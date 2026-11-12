@@ -20,6 +20,7 @@ vi.mock("../../services/supabase", () => ({
 
 import {
   applyOrderServiceLinePatch,
+  diffOrderServiceLinePatch,
   parseOrderServiceLinePrice,
   patchServicesForLineUpdate,
   UPDATE_ORDER_SERVICE_LINE_RPC,
@@ -86,6 +87,49 @@ describe("patchServicesForLineUpdate", () => {
     expect(next.technicianId).toBeNull();
     expect(next.technicianName).toBe("");
   });
+
+  it("can clear warranty and kind on a line", () => {
+    const withWarranty = {
+      ...lineA,
+      warrantyMonths: 12,
+      warrantyDays: 5,
+      warrantyKm: 20000,
+      kind: "labor" as const,
+    };
+    const next = applyOrderServiceLinePatch(withWarranty, {
+      warrantyMonths: null,
+      warrantyDays: null,
+      warrantyKm: null,
+      kind: null,
+    });
+    expect(next).toMatchObject({
+      warrantyMonths: null,
+      warrantyDays: null,
+      warrantyKm: null,
+      kind: null,
+      price: 40,
+    });
+  });
+});
+
+describe("diffOrderServiceLinePatch", () => {
+  it("returns only changed keys and clears warranty explicitly", () => {
+    const original = {
+      ...lineA,
+      warrantyMonths: 6,
+      warrantyDays: null,
+      warrantyKm: 10000,
+    };
+    expect(diffOrderServiceLinePatch(original, { ...original, price: 50 })).toEqual({ price: 50 });
+    expect(
+      diffOrderServiceLinePatch(original, {
+        ...original,
+        warrantyMonths: null,
+        warrantyDays: null,
+        warrantyKm: null,
+      }),
+    ).toEqual({ warrantyMonths: null, warrantyDays: null, warrantyKm: null });
+  });
 });
 
 describe("updateOrderServiceLine", () => {
@@ -138,6 +182,59 @@ describe("updateOrderServiceLine", () => {
     expect(getOrder).toHaveBeenCalledWith("order-1", "ws-1");
     expect(updateOrder).toHaveBeenCalledTimes(1);
     expect(updateOrder.mock.calls[0][0].services[0]).toMatchObject({ id: "line-a", technicianId: "emp-9" });
+  });
+
+  it("falls back to updateOrder for warranty clears when the RPC is missing", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: `Could not find the function ${UPDATE_ORDER_SERVICE_LINE_RPC}`, code: "PGRST202" },
+    });
+    getOrder.mockResolvedValue({
+      ...order,
+      services: [{ ...lineA, warrantyMonths: 12, warrantyKm: 5000 }, lineB],
+    });
+
+    await updateOrderServiceLine(
+      "order-1",
+      "line-a",
+      { warrantyMonths: null, warrantyDays: null, warrantyKm: null },
+      "ws-1",
+    );
+    expect(updateOrder).toHaveBeenCalledTimes(1);
+    expect(updateOrder.mock.calls[0][0].services[0]).toMatchObject({
+      id: "line-a",
+      warrantyMonths: null,
+      warrantyDays: null,
+      warrantyKm: null,
+    });
+    expect(updateOrder.mock.calls[0][0].services[1]).toEqual(lineB);
+  });
+
+  it("sends p_set_warranty with cleared values when the RPC accepts the extended signature", async () => {
+    const fromRpc = { ...order, totalPrice: 40 } as Order;
+    rpc.mockResolvedValue({ data: { order: fromRpc }, error: null });
+    orderFromLineRpcPayload.mockReturnValue(fromRpc);
+    getOrder.mockResolvedValue({
+      ...order,
+      services: [{ ...lineA, warrantyMonths: 12, warrantyKm: 5000 }, lineB],
+    });
+
+    await updateOrderServiceLine(
+      "order-1",
+      "line-a",
+      { warrantyMonths: null, warrantyDays: null, warrantyKm: null },
+      "ws-1",
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      UPDATE_ORDER_SERVICE_LINE_RPC,
+      expect.objectContaining({
+        p_set_warranty: true,
+        p_warranty_months: null,
+        p_warranty_days: null,
+        p_warranty_km: null,
+      }),
+    );
+    expect(updateOrder).not.toHaveBeenCalled();
   });
 
   it("rejects unknown line ids on the fallback path", async () => {

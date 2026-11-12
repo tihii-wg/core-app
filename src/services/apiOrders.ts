@@ -3716,6 +3716,8 @@ export async function updateOrder(
       quantity_issued: line.quantityIssued,
       quantity_returned: line.quantityReturned,
       supply_source: line.supplySource ?? null,
+      // Keep the issuing warehouse: stock caps, the warehouse name and the edit dialog depend on it.
+      warehouse_id: line.warehouseId ?? null,
       discount_type: line.discountType ?? null,
       discount_value: line.discountValue ?? null,
       warranty_months: line.warrantyMonths ?? null,

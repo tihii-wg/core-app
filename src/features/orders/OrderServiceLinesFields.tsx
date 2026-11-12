@@ -61,6 +61,11 @@ type OrderServiceLinesFieldsProps = {
   restartHintForLine?: (line: OrderService) => boolean;
   /** Hide the line kind select (it is also hidden by itself until `order_services.kind` exists). */
   showKind?: boolean;
+  /**
+   * Single-line edit mode (order-card «edit position» dialog): hide the catalog combobox and
+   * add/remove controls; the host passes exactly one field row prefilled from the saved line.
+   */
+  singleLine?: boolean;
 };
 
 function quantityMessage(value: unknown, t: TFunction): true | string {
@@ -103,6 +108,7 @@ export default function OrderServiceLinesFields({
   errors,
   restartHintForLine,
   showKind = true,
+  singleLine = false,
 }: OrderServiceLinesFieldsProps) {
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
@@ -118,26 +124,30 @@ export default function OrderServiceLinesFields({
   }
 
   return (
-    <div className="space-y-1.5" data-edit-field="services">
-      <Label htmlFor="service">{label}</Label>
-      <ServiceCombobox
-        services={catalogServices ?? []}
-        allowCreate={allowCreate}
-        errors={!!errors?.root}
-        onSelect={(service) => {
-          if (hasService(service.id, service.service_name)) return;
-          const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
-          append(line);
-          onPerformerChosen?.(line.technicianId);
-          onLineAdded?.();
-        }}
-        onCreate={(serviceName, price) => {
-          if (hasService(null, serviceName)) return;
-          append(newServiceToOrderLine(serviceName, price, warrantyDefaults, orderMileageUnit));
-          onLineAdded?.();
-        }}
-      />
-      {errors?.root?.message && <p className="text-xs text-destructive">{errors.root.message}</p>}
+    <div className="space-y-1.5" data-edit-field="services" data-single-line={singleLine ? "true" : undefined}>
+      {singleLine ? null : (
+        <>
+          <Label htmlFor="service">{label}</Label>
+          <ServiceCombobox
+            services={catalogServices ?? []}
+            allowCreate={allowCreate}
+            errors={!!errors?.root}
+            onSelect={(service) => {
+              if (hasService(service.id, service.service_name)) return;
+              const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
+              append(line);
+              onPerformerChosen?.(line.technicianId);
+              onLineAdded?.();
+            }}
+            onCreate={(serviceName, price) => {
+              if (hasService(null, serviceName)) return;
+              append(newServiceToOrderLine(serviceName, price, warrantyDefaults, orderMileageUnit));
+              onLineAdded?.();
+            }}
+          />
+          {errors?.root?.message && <p className="text-xs text-destructive">{errors.root.message}</p>}
+        </>
+      )}
       {fields.length > 0 && (
         <div className="space-y-2">
           {fields.map((field, index) => {
@@ -146,7 +156,10 @@ export default function OrderServiceLinesFields({
             const quantityError = errors?.[index]?.quantity?.message;
             const showRestartHint = Boolean(restartHintForLine?.(line ?? (field as unknown as OrderService)));
             return (
-              <div key={field.fieldKey ?? field.id ?? index} className="space-y-2 rounded-md border p-3">
+              <div
+                key={field.fieldKey ?? field.id ?? index}
+                className={singleLine ? "space-y-2" : "space-y-2 rounded-md border p-3"}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="font-medium [overflow-wrap:anywhere]">{field.serviceName}</p>
@@ -160,16 +173,18 @@ export default function OrderServiceLinesFields({
                         onChange={(kind) => setValue(`services.${index}.kind`, kind, { shouldDirty: true })}
                       />
                     ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onRemove(index)}
-                      disabled={disabled}
-                      aria-label={t("orders.form.removeService", { name })}
-                    >
-                      {t("orders.form.remove")}
-                    </Button>
+                    {singleLine ? null : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onRemove(index)}
+                        disabled={disabled}
+                        aria-label={t("orders.form.removeService", { name })}
+                      >
+                        {t("orders.form.remove")}
+                      </Button>
+                    )}
                   </div>
                 </div>
                 {showRestartHint ? (

@@ -28,6 +28,7 @@ export type OrderMaterialLinesTableProps = {
   onSavedEdit: () => void;
   onSaveField: (lineId: string, field: MaterialLineInlineField, raw: string) => Promise<void>;
   onDelete: (lineId: string) => void;
+  onEditLine: (lineId: string) => void;
   onEditorClosed: () => void;
 };
 
@@ -54,6 +55,7 @@ function OrderMaterialLinesTableComponent({
   onSavedEdit,
   onSaveField,
   onDelete,
+  onEditLine,
   onEditorClosed,
 }: OrderMaterialLinesTableProps) {
   const { t } = useTranslation();
@@ -115,6 +117,7 @@ function OrderMaterialLinesTableComponent({
                 onSavedEdit={onSavedEdit}
                 onSaveField={onSaveField}
                 onDelete={onDelete}
+                onEditLine={onEditLine}
                 onEditorClosed={onEditorClosed}
               />
             );

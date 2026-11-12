@@ -52,7 +52,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
     closeSheet, confirmDeleteOpen, setConfirmDeleteOpen, linkedPaymentCount, onDeleted, hasInvoice,
     closeOpen, setCloseOpen, cancelOpen, recordPaymentOpen, setRecordPaymentOpen, addMaterialOpen,
     addMaterialPrefill, applyPendingMaterials, catalogServiceId, catalogInventoryId, i18nLanguage,
-    editFocusField, deleteOrderMutateAsync,
+    editFocusField, deleteOrderMutateAsync, editServiceLineId, setEditServiceLineId,
+    editMaterialLineId, setEditMaterialLineId,
   } = p;
 
   // Stable event handlers: memoized children (header, tabs, line tables/rows, footer) only re-render when
@@ -86,6 +87,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
     saveMaterialField: (lineId: string, field: string, raw: string) => saveMaterialLineField(lineId, field, raw),
     deleteService: (lineId: string) => void handleDeleteServiceLine(lineId),
     deleteMaterial: (lineId: string) => void handleDeleteMaterialLine(lineId),
+    editServiceLine: (lineId: string) => setEditServiceLineId(lineId),
+    editMaterialLine: (lineId: string) => setEditMaterialLineId(lineId),
     editorClosed: () => focusAddLinesSearch(),
     beforeRecord: async () => {
       const prepared = await prepareOrderForCloseOrPayment({ order: selectedOrder, confirm, t });
@@ -111,7 +114,16 @@ export function OrderDetailSheet(p: Record<string, any>) {
         className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]"
         onEscapeKeyDown={(event) => {
           // Esc while a field / service line / change-client dialog is active must not close the sheet.
-          if (editingField || serviceLineEdit || materialLineEdit || changeClientOpen) event.preventDefault();
+          if (
+            editingField ||
+            serviceLineEdit ||
+            materialLineEdit ||
+            changeClientOpen ||
+            editServiceLineId ||
+            editMaterialLineId
+          ) {
+            event.preventDefault();
+          }
         }}
         onInteractOutside={(event) => {
           // Toasts (e.g. «Deleted · Undo») live outside the sheet; clicking them must not close the order.
@@ -297,6 +309,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
                 onSaveMaterialField={h.saveMaterialField}
                 onDeleteService={h.deleteService}
                 onDeleteMaterial={h.deleteMaterial}
+                onEditServiceLine={h.editServiceLine}
+                onEditMaterialLine={h.editMaterialLine}
                 onEditorClosed={h.editorClosed}
                 onOrderUpdated={h.orderUpdated}
               />
@@ -399,6 +413,10 @@ export function OrderDetailSheet(p: Record<string, any>) {
         catalogInventoryId={catalogInventoryId}
         onCloseService={() => setCatalogServiceId(null)}
         onCloseInventory={() => setCatalogInventoryId(null)}
+        editServiceLineId={editServiceLineId}
+        setEditServiceLineId={setEditServiceLineId}
+        editMaterialLineId={editMaterialLineId}
+        setEditMaterialLineId={setEditMaterialLineId}
       />
     </Sheet>
   

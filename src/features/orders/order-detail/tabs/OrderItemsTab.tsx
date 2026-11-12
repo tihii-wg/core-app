@@ -62,6 +62,8 @@ export type OrderItemsTabProps = {
   onSaveMaterialField: (lineId: string, field: MaterialLineInlineField, raw: string) => Promise<void>;
   onDeleteService: (lineId: string) => void;
   onDeleteMaterial: (lineId: string) => void;
+  onEditServiceLine: (lineId: string) => void;
+  onEditMaterialLine: (lineId: string) => void;
   onEditorClosed: () => void;
   onOrderUpdated: (order: Order) => void;
 };
@@ -131,6 +133,7 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
           onSavedEdit={props.onSavedServiceEdit}
           onSaveField={props.onSaveServiceField}
           onDelete={props.onDeleteService}
+          onEditLine={props.onEditServiceLine}
           onEditorClosed={props.onEditorClosed}
         />
       ) : fallbackService ? (
@@ -162,6 +165,7 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
             onSavedEdit={props.onSavedMaterialEdit}
             onSaveField={props.onSaveMaterialField}
             onDelete={props.onDeleteMaterial}
+            onEditLine={props.onEditMaterialLine}
             onEditorClosed={props.onEditorClosed}
           />
           <OrderWarehouseActions

@@ -27,6 +27,7 @@ export type OrderServiceLinesTableProps = {
   onSavedEdit: () => void;
   onSaveField: (lineId: string, field: ServiceLineInlineField, raw: string) => Promise<void>;
   onDelete: (lineId: string) => void;
+  onEditLine: (lineId: string) => void;
   onEditorClosed: () => void;
 };
 
@@ -52,6 +53,7 @@ function OrderServiceLinesTableComponent({
   onSavedEdit,
   onSaveField,
   onDelete,
+  onEditLine,
   onEditorClosed,
 }: OrderServiceLinesTableProps) {
   const { t } = useTranslation();
@@ -103,6 +105,7 @@ function OrderServiceLinesTableComponent({
                 onSavedEdit={onSavedEdit}
                 onSaveField={onSaveField}
                 onDelete={onDelete}
+                onEditLine={onEditLine}
                 onEditorClosed={onEditorClosed}
               />
             );

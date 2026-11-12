@@ -42,5 +42,6 @@ export function useUpdateOrderMaterialLine() {
       applyOrderLineMutationCache(queryClient, workspaceId, order, { stockMoved });
       toast.success(i18n.t("orders.toast.fieldSaved"), { id: ORDER_FIELD_SAVED_TOAST_ID });
     },
+
   });
 }
