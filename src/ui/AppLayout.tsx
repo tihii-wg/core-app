@@ -69,8 +69,10 @@ export function AppLayout() {
       <AppSidebar />
       <div className="flex min-w-0 flex-1 flex-col print:block">
         <AppTopbar />
-        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7 print:overflow-visible print:p-0">
-          <div className="mx-auto w-full max-w-[1440px] min-w-0 print:max-w-none">
+        {/* Full width on every screen: the content fills the space between the sidebar and the right edge,
+            so wide monitors show more columns / rows instead of empty side margins. */}
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-5 lg:px-6 lg:py-6 print:overflow-visible print:p-0">
+          <div className="w-full min-w-0">
             <Outlet />
           </div>
         </main>
