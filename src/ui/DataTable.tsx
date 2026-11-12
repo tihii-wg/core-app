@@ -73,7 +73,7 @@ export interface Column<T> {
   resizable?: boolean;
   /** When false, the column cannot be reordered (default true if table `reorderable`). */
   reorderable?: boolean;
-  /** Absorbs leftover width when the table is wider than the sum of column widths. */
+  /** @deprecated Leftover width now goes to an empty spacer column; data columns keep their set width. */
   flexible?: boolean;
 }
 
@@ -97,7 +97,7 @@ interface DataTableProps<T> {
   layoutStorageKey?: string;
   /** Bump to re-read layout from storage (e.g. after «reset layout»). */
   layoutEpoch?: number;
-  /** Column id that expands when the table is wider than the sum of widths. */
+  /** @deprecated Leftover width now goes to an empty spacer column; data columns keep their set width. */
   flexibleColumnId?: string;
   /** Column ids forced to stay at the end (not draggable). */
   pinnedEndColumnIds?: readonly string[];
@@ -217,7 +217,7 @@ export function DataTable<T>({
   reorderable = false,
   layoutStorageKey,
   layoutEpoch = 0,
-  flexibleColumnId,
+  flexibleColumnId: _flexibleColumnId,
   pinnedEndColumnIds = [],
 }: DataTableProps<T>) {
   const { t, i18n } = useTranslation();
@@ -246,7 +246,6 @@ export function DataTable<T>({
     return map;
   }, [columns]);
 
-  const flexId = flexibleColumnId ?? columns.find((column) => column.flexible)?.id ?? columns.find((column) => column.flexible)?.key;
 
   const [layout, setLayout] = useState<TableColumnLayout>(() => {
     if (!layoutEnabled) {
@@ -318,34 +317,23 @@ export function DataTable<T>({
 
   const colRefs = useRef(new Map<string, HTMLTableColElement>());
   const tableRef = useRef<HTMLTableElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const widthsRef = useRef(layout.widths);
   widthsRef.current = layout.widths;
 
-  const [containerWidth, setContainerWidth] = useState(0);
-  useEffect(() => {
-    const node = containerRef.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      setContainerWidth(width);
-    });
-    ro.observe(node);
-    setContainerWidth(node.clientWidth);
-    return () => ro.disconnect();
-  }, [layoutEnabled]);
 
-  const displayWidths = useMemo(() => {
-    const widths = { ...layout.widths };
-    if (!layoutEnabled || !flexId || !(flexId in widths)) return widths;
-    let sum = 0;
-    for (const id of orderedIds) sum += widths[id] ?? 0;
-    if (containerWidth > sum + 1) {
-      const others = sum - (widths[flexId] ?? 0);
-      widths[flexId] = Math.max(widths[flexId] ?? 0, Math.floor(containerWidth - others));
-    }
-    return widths;
-  }, [layout.widths, layoutEnabled, flexId, orderedIds, containerWidth]);
+  // Every column keeps exactly the width the user set. Leftover width on a wide screen goes to an empty
+  // spacer column (see `spacerIndex`), never to a data column — stretching one column (e.g. «Клиент») made
+  // it impossible to narrow and it kept "growing" whenever another column was resized.
+  const displayWidths = layout.widths;
+
+  /** The spacer sits right before the pinned end columns (actions stay at the right edge), else last. */
+  const spacerIndex = useMemo(() => {
+    if (!layoutEnabled) return -1;
+    const firstPinned = orderedIds.findIndex((id) => pinnedEndColumnIds.includes(id));
+    return firstPinned >= 0 ? firstPinned : orderedIds.length;
+  }, [layoutEnabled, orderedIds, pinnedEndColumnIds]);
+  const withSpacer = <N,>(nodes: N[], spacer: N): N[] =>
+    spacerIndex < 0 ? nodes : [...nodes.slice(0, spacerIndex), spacer, ...nodes.slice(spacerIndex)];
 
   const tableMinWidth = useMemo(() => {
     let sum = 0;
@@ -563,27 +551,36 @@ export function DataTable<T>({
   const colgroup =
     layoutEnabled ? (
       <colgroup>
-        {orderedColumns.map((column) => {
-          const id = columnIdOf(column);
-          return (
-            <col
-              key={id}
-              data-col-id={id}
-              ref={(el) => {
-                if (el) colRefs.current.set(id, el);
-                else colRefs.current.delete(id);
-              }}
-              style={{ width: displayWidths[id] ?? layout.widths[id] }}
-            />
-          );
-        })}
+        {withSpacer(
+          orderedColumns.map((column) => {
+            const id = columnIdOf(column);
+            return (
+              <col
+                key={id}
+                data-col-id={id}
+                ref={(el) => {
+                  if (el) colRefs.current.set(id, el);
+                  else colRefs.current.delete(id);
+                }}
+                style={{ width: displayWidths[id] ?? layout.widths[id] }}
+              />
+            );
+          }),
+          // No width: in a fixed-layout table at width 100% it takes exactly the leftover space (0 when none).
+          <col key="__spacer" data-table-spacer="" />,
+        )}
       </colgroup>
     ) : null;
 
   const headerRow = (
     <TableHeader>
       <TableRow className="hover:bg-transparent">
-        {orderedColumns.map((column) => renderHeaderCell(column))}
+        {layoutEnabled
+          ? withSpacer(
+              orderedColumns.map((column) => renderHeaderCell(column)),
+              <TableHead key="__spacer" aria-hidden="true" data-table-spacer="" className="sticky top-0 z-[15] bg-muted p-0" />,
+            )
+          : orderedColumns.map((column) => renderHeaderCell(column))}
       </TableRow>
     </TableHeader>
   );
@@ -604,7 +601,7 @@ export function DataTable<T>({
         }}
         className={cn(rowClassName?.(item), onRowClick && "cursor-pointer hover:bg-accent/60")}
       >
-        {cols.map((column) => {
+        {withSpacer(cols.map((column) => {
           const content = column.cell(item);
           return (
             <TableCell
@@ -619,7 +616,7 @@ export function DataTable<T>({
               {content}
             </TableCell>
           );
-        })}
+        }), <TableCell key="__spacer" aria-hidden="true" data-table-spacer="" className="p-0" />)}
       </TableRow>
     ));
 
@@ -627,21 +624,24 @@ export function DataTable<T>({
     <TableBody>
       {Array.from({ length: 6 }).map((_, i) => (
         <TableRow key={i} className="hover:bg-transparent">
-          {orderedColumns.map((column, c) => (
-            <TableCell
-              key={column.key}
-              className={cn("h-12", column.className, column.stickyRight && stickyCellClassName)}
-            >
-              <Skeleton className={cn("h-3.5", skeletonWidths[(i + c) % skeletonWidths.length])} />
-            </TableCell>
-          ))}
+          {withSpacer(
+            orderedColumns.map((column, c) => (
+              <TableCell
+                key={column.key}
+                className={cn("h-12", column.className, column.stickyRight && stickyCellClassName)}
+              >
+                <Skeleton className={cn("h-3.5", skeletonWidths[(i + c) % skeletonWidths.length])} />
+              </TableCell>
+            )),
+            <TableCell key="__spacer" aria-hidden="true" data-table-spacer="" className="p-0" />,
+          )}
         </TableRow>
       ))}
     </TableBody>
   );
 
   const tableInner = (body: ReactNode) => (
-    <div ref={containerRef} className="min-w-0">
+    <div className="min-w-0">
       <Table ref={tableRef} className={tableClassName} style={tableStyle}>
         {colgroup}
         {headerRow}

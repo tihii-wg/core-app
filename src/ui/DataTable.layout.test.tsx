@@ -98,7 +98,7 @@ describe("DataTable column layout", () => {
       widths: { city: 200, ghost: 50, name: 120, actions: 80 },
     });
     renderTable();
-    const ids = [...document.querySelectorAll("thead th")].map((node) => node.getAttribute("data-col-id"));
+    const ids = [...document.querySelectorAll("thead th[data-col-id]")].map((node) => node.getAttribute("data-col-id"));
     expect(ids).toEqual(["city", "name", "actions"]);
   });
 
@@ -118,7 +118,7 @@ describe("DataTable column layout", () => {
       widths: { name: 120, city: 140, actions: 80 },
     });
     renderTable();
-    const ids = [...document.querySelectorAll("thead th")].map((node) => node.getAttribute("data-col-id"));
+    const ids = [...document.querySelectorAll("thead th[data-col-id]")].map((node) => node.getAttribute("data-col-id"));
     expect(ids).toEqual(["city", "name", "actions"]);
     expect(readTableColumnLayout(STORAGE_KEY)?.order).toEqual(["city", "name", "actions"]);
   });
@@ -151,8 +151,11 @@ describe("DataTable column layout", () => {
     expect(Number.parseInt((document.querySelector('col[data-col-id="name"]') as HTMLTableColElement).style.width, 10)).toBe(
       120,
     );
-    const ids = [...document.querySelectorAll("thead th")].map((node) => node.getAttribute("data-col-id"));
-    expect(ids).toEqual(["name", "city", "actions"]);
+    const ids = [...document.querySelectorAll("thead th")].map(
+      (node) => node.getAttribute("data-col-id") ?? (node.hasAttribute("data-table-spacer") ? "spacer" : null),
+    );
+    // The empty spacer takes leftover width right before the pinned actions column.
+    expect(ids).toEqual(["name", "city", "spacer", "actions"]);
   });
 });
 
