@@ -2281,6 +2281,15 @@ function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<R
 
 /** Optional until supabase/manual/20261112220000_order_line_comments.PRODUCTION.sql is applied. */
 let orderLineCommentsSupported = true;
+/** When the table was found missing. Re-checked after a minute, so applying the SQL needs no page reload. */
+let orderLineCommentsMissingAt = 0;
+const LINE_COMMENTS_RECHECK_MS = 60_000;
+
+function refreshOrderLineCommentsSupport() {
+  if (!orderLineCommentsSupported && Date.now() - orderLineCommentsMissingAt > LINE_COMMENTS_RECHECK_MS) {
+    orderLineCommentsSupported = true;
+  }
+}
 
 /** Test hook: reset cached order_line_comments table support. */
 export function resetOrderLineCommentsSupport() {
@@ -2288,6 +2297,7 @@ export function resetOrderLineCommentsSupport() {
 }
 
 export function isOrderLineCommentsSupported() {
+  refreshOrderLineCommentsSupport();
   return orderLineCommentsSupported;
 }
 
@@ -2299,6 +2309,7 @@ function isMissingOrderLineCommentsRelation(error: { code?: string; message?: st
 
 /** One query per order; merges onto services/materials by line id. Missing table → order unchanged. */
 export async function attachOrderLineComments(order: Order, workspaceId: string | undefined): Promise<Order> {
+  refreshOrderLineCommentsSupport();
   if (!orderLineCommentsSupported) return order;
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId ?? order.workspace_id);
   const { data, error } = await supabase
@@ -2309,6 +2320,7 @@ export async function attachOrderLineComments(order: Order, workspaceId: string 
   if (error) {
     if (isMissingOrderLineCommentsRelation(error)) {
       orderLineCommentsSupported = false;
+      orderLineCommentsMissingAt = Date.now();
       return order;
     }
     throw new Error(error.message);
@@ -2374,6 +2386,7 @@ export async function setOrderLineComment(
   if (error) {
     if (isMissingRpcError(error, SET_ORDER_LINE_COMMENT_RPC) || isMissingOrderLineCommentsRelation(error)) {
       orderLineCommentsSupported = false;
+      orderLineCommentsMissingAt = Date.now();
       throw new MissingRpcError(SET_ORDER_LINE_COMMENT_RPC, i18n.t("orders.lineComments.errors.rpcRequired"));
     }
     const closed = mapOrderWarrantyDbError(error);

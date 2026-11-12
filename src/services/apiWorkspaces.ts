@@ -113,6 +113,13 @@ function isMissingLineCommentsVisibilityColumn(error: { code?: string; message?:
 
 /** False once a read showed the column is missing (SQL not applied) — the line-comments UI stays hidden. */
 let lineCommentsVisibilityColumnSupported = true;
+/** When the column was found missing; re-checked after a minute so applying the SQL needs no page reload. */
+let lineCommentsVisibilityMissingAt = 0;
+function refreshLineCommentsVisibilitySupport() {
+  if (!lineCommentsVisibilityColumnSupported && Date.now() - lineCommentsVisibilityMissingAt > 60_000) {
+    lineCommentsVisibilityColumnSupported = true;
+  }
+}
 export function isLineCommentsVisibilityColumnSupported() {
   return lineCommentsVisibilityColumnSupported;
 }
@@ -212,6 +219,7 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let subscription = true;
   let general = true;
   let attachmentStorage = true;
+  refreshLineCommentsVisibilitySupport();
   let lineComments = lineCommentsVisibilityColumnSupported;
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
@@ -222,6 +230,7 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
     if (lineComments && isMissingLineCommentsVisibilityColumn(error)) {
       lineComments = false;
       lineCommentsVisibilityColumnSupported = false;
+      lineCommentsVisibilityMissingAt = Date.now();
       continue;
     }
     if (attachmentStorage && isMissingAttachmentStorageColumn(error)) {
