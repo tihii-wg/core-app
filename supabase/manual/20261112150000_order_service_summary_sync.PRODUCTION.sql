@@ -82,7 +82,7 @@ begin
   update public.orders
      set total_price = v_total,
          service = nullif(v_service_summary, ''),
-         service_id = v_first_service_id,
+         service_id = v_first_service_id::text,
          updated_at = now()
    where id = p_order_id;
   if v_has_discount_total then
@@ -105,12 +105,12 @@ with summary as (
 )
 update public.orders o
    set service = nullif(summary.names, ''),
-       service_id = summary.first_id
+       service_id = summary.first_id::text
   from summary
  where summary.order_id = o.id
    and o.closed_at is null
    and o.status not in ('closed', 'cancelled')
-   and (o.service is distinct from nullif(summary.names, '') or o.service_id is distinct from summary.first_id);
+   and (o.service is distinct from nullif(summary.names, '') or o.service_id::text is distinct from summary.first_id::text);
 
 update public.orders o
    set service = null,
