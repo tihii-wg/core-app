@@ -383,6 +383,59 @@ export function DataTable<T>({
     [applyColWidth, columnById, commitWidths, orderedIds],
   );
 
+  /** Column right of `id` whose width the shared border also moves (null → `id` grows into free space). */
+  const resizeNeighbourOf = useCallback(
+    (id: string): string | null => {
+      const index = orderedIds.indexOf(id);
+      const next = index >= 0 ? orderedIds[index + 1] : undefined;
+      if (!next) return null;
+      const column = columnById.get(next);
+      if (!column || column.resizable === false) return null;
+      return next;
+    },
+    [columnById, orderedIds],
+  );
+
+  /**
+   * Dragging the border between two columns moves only that border: the left column changes by `delta` and
+   * the right neighbour by `-delta`, so every other column keeps its place and the table never gets wider.
+   * Either column can be squeezed down to its minimum (content is then partly hidden).
+   */
+  const resizeBorder = useCallback(
+    (id: string, neighbourId: string, startLeft: number, startRight: number, delta: number, commit: boolean) => {
+      const left = columnById.get(id);
+      const right = columnById.get(neighbourId);
+      if (!left || !right) return;
+      const leftMin = left.minWidth ?? TABLE_COLUMN_MIN_WIDTH;
+      const leftMax = left.maxWidth ?? TABLE_COLUMN_MAX_WIDTH;
+      const rightMin = right.minWidth ?? TABLE_COLUMN_MIN_WIDTH;
+      const rightMax = right.maxWidth ?? TABLE_COLUMN_MAX_WIDTH;
+      const total = startLeft + startRight;
+      let nextLeft = clampColumnWidth(startLeft + delta, leftMin, leftMax);
+      let nextRight = total - nextLeft;
+      if (nextRight < rightMin) {
+        nextRight = rightMin;
+        nextLeft = total - rightMin;
+      } else if (nextRight > rightMax) {
+        nextRight = rightMax;
+        nextLeft = total - rightMax;
+      }
+      nextLeft = Math.max(leftMin, Math.round(nextLeft));
+      nextRight = Math.max(rightMin, Math.round(nextRight));
+      applyColWidth(id, nextLeft);
+      applyColWidth(neighbourId, nextRight);
+      const draft = { ...widthsRef.current, [id]: nextLeft, [neighbourId]: nextRight };
+      widthsRef.current = draft;
+      if (tableRef.current) {
+        let sum = 0;
+        for (const colId of orderedIds) sum += draft[colId] ?? 0;
+        tableRef.current.style.minWidth = `${sum}px`;
+      }
+      if (commit) commitWidths(draft);
+    },
+    [applyColWidth, columnById, commitWidths, orderedIds],
+  );
+
   const onResizePointerDown = useCallback(
     (id: string, event: ReactPointerEvent<HTMLButtonElement>) => {
       if (!resizable) return;
@@ -391,38 +444,41 @@ export function DataTable<T>({
       handle.setPointerCapture(event.pointerId);
       const startX = event.clientX;
       const startWidth = widthsRef.current[id] ?? defaultWidths.get(id) ?? 120;
-
-      const onMove = (moveEvent: PointerEvent) => {
-        const delta = moveEvent.clientX - startX;
-        resizeColumn(id, startWidth + delta, false);
+      const neighbourId = resizeNeighbourOf(id);
+      const startNeighbour = neighbourId ? (widthsRef.current[neighbourId] ?? defaultWidths.get(neighbourId) ?? 120) : 0;
+      const apply = (clientX: number, commit: boolean) => {
+        const delta = clientX - startX;
+        if (neighbourId) resizeBorder(id, neighbourId, startWidth, startNeighbour, delta, commit);
+        else resizeColumn(id, startWidth + delta, commit);
       };
+
+      const onMove = (moveEvent: PointerEvent) => apply(moveEvent.clientX, false);
       const onUp = (upEvent: PointerEvent) => {
         handle.releasePointerCapture(upEvent.pointerId);
         handle.removeEventListener("pointermove", onMove);
         handle.removeEventListener("pointerup", onUp);
         handle.removeEventListener("pointercancel", onUp);
-        const delta = upEvent.clientX - startX;
-        resizeColumn(id, startWidth + delta, true);
+        apply(upEvent.clientX, true);
       };
       handle.addEventListener("pointermove", onMove);
       handle.addEventListener("pointerup", onUp);
       handle.addEventListener("pointercancel", onUp);
     },
-    [defaultWidths, resizable, resizeColumn],
+    [defaultWidths, resizable, resizeBorder, resizeColumn, resizeNeighbourOf],
   );
 
   const onResizeKeyDown = useCallback(
     (id: string, event: ReactKeyboardEvent<HTMLButtonElement>) => {
       const step = event.shiftKey ? TABLE_COLUMN_WIDTH_STEP_LARGE : TABLE_COLUMN_WIDTH_STEP;
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        resizeColumn(id, (widthsRef.current[id] ?? 120) - step, true);
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault();
-        resizeColumn(id, (widthsRef.current[id] ?? 120) + step, true);
-      }
+      const delta = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+      if (!delta) return;
+      event.preventDefault();
+      const current = widthsRef.current[id] ?? 120;
+      const neighbourId = resizeNeighbourOf(id);
+      if (neighbourId) resizeBorder(id, neighbourId, current, widthsRef.current[neighbourId] ?? 120, delta, true);
+      else resizeColumn(id, current + delta, true);
     },
-    [resizeColumn],
+    [resizeBorder, resizeColumn, resizeNeighbourOf],
   );
 
   const resetColumnWidth = useCallback(

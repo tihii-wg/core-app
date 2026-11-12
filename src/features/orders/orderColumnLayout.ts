@@ -8,7 +8,6 @@ import {
 export const ORDER_COLUMN_LAYOUT_STORAGE_KEY = "coreapp.orders.columnLayout";
 export const DASHBOARD_ORDER_COLUMN_LAYOUT_STORAGE_KEY = "coreapp.dashboard.orders.columnLayout";
 
-/** Default pixel widths for built-in order list columns. */
 /**
  * Default pixel widths for built-in order list columns. The default set adds up to ~1130 px so that on a
  * 1440 px screen (with the sidebar) every column — including «Итого» — is visible without scrolling.
@@ -26,16 +25,17 @@ export const ORDER_COLUMN_DEFAULT_WIDTHS: Record<string, number> = {
   actions: 64,
 };
 
+/** Columns can be squeezed until their text is mostly hidden (cells clip, never wrap). */
 export const ORDER_COLUMN_MIN_WIDTHS: Record<string, number> = {
-  orderNumber: 72,
-  client: 120,
-  device: 96,
-  status: 100,
-  createdBy: 96,
-  employee: 88,
-  team: 72,
-  deadline: 88,
-  total: 80,
+  orderNumber: 40,
+  client: 40,
+  device: 40,
+  status: 40,
+  createdBy: 40,
+  employee: 40,
+  team: 40,
+  deadline: 40,
+  total: 40,
   actions: 64,
 };
 
@@ -63,5 +63,5 @@ export function defaultWidthForOrderColumn(columnId: string): number {
 }
 
 export function minWidthForOrderColumn(columnId: string): number {
-  return ORDER_COLUMN_MIN_WIDTHS[columnId] ?? 64;
+  return ORDER_COLUMN_MIN_WIDTHS[columnId] ?? 40;
 }

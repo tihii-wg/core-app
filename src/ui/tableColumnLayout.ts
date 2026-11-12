@@ -5,7 +5,7 @@ export type TableColumnLayout = {
   widths: Record<string, number>;
 };
 
-export const TABLE_COLUMN_MIN_WIDTH = 64;
+export const TABLE_COLUMN_MIN_WIDTH = 40;
 export const TABLE_COLUMN_MAX_WIDTH = 640;
 export const TABLE_COLUMN_WIDTH_STEP = 16;
 export const TABLE_COLUMN_WIDTH_STEP_LARGE = 48;
