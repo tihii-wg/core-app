@@ -74,6 +74,11 @@ export default {
       warrantyPartsKm: "Parts — mileage",
       commentsVisibility: "Default comment visibility",
       filesVisibility: "Default file visibility",
+      lineCommentsVisibility: "Line item comments",
+      lineCommentsPrivate: "Private — visible only to the owner on the order",
+      lineCommentsPublic: "Public — visible to staff and included on printouts",
+      lineCommentsHint:
+        "Private: service and material line comments are visible only to the workspace owner on the order card — they never appear for staff or on printouts. Public: all workspace members can see them, and comments can be included in printed documents.",
       visibilityHint: "UI defaults only. Access still follows workspace roles and storage policies. Comment/file attachments are not modeled yet.",
       preventDuplicateDevice: "Prevent the same vehicle/device on multiple open orders",
       preventDuplicateDeviceHint: "When enabled, open orders (new, in progress, waiting for parts) cannot share the same VIN. Free-text device names alone are not treated as unique identifiers.",
@@ -688,6 +693,7 @@ export default {
       statusClosed: "Closed",
       serviceDiagnostics: "Diagnostics",
       serviceOilChange: "Oil and filter change",
+      lineCommentSample: "Customer asked for an OEM filter",
       serviceBrakes: "Front brake pad replacement",
       materialOilFilter: "Oil filter",
       materialEngineOil: "Engine oil 5W-40",
@@ -869,6 +875,7 @@ export default {
       sum: "Sum",
       warranty: "Warranty",
       performer: "Performer",
+      comment: "Comment",
     },
     sources: {
       services: "Services",

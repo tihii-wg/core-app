@@ -109,6 +109,7 @@ const TABLE_KEYS = new Set([
   "sum",
   "warranty",
   "performer",
+  "comment",
 ]);
 
 const TOTALS_KEYS = new Set([

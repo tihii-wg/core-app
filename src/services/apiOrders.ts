@@ -74,6 +74,12 @@ import { recordActivity } from "./apiActivityLog";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
 import { searchTerm } from "./searchTerm";
+import {
+  indexOrderLineComments,
+  mergeOrderLineComments,
+  normalizeOrderLineCommentBody,
+  type OrderLineCommentRow,
+} from "../features/orders/orderLineComments";
 
 export const ORDERS_PAGE_SIZES = [25, 50, 100] as const;
 export type OrdersPageSize = (typeof ORDERS_PAGE_SIZES)[number];
@@ -2273,6 +2279,43 @@ function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<R
   return { amount, count };
 }
 
+/** Optional until supabase/manual/20261112220000_order_line_comments.PRODUCTION.sql is applied. */
+let orderLineCommentsSupported = true;
+
+/** Test hook: reset cached order_line_comments table support. */
+export function resetOrderLineCommentsSupport() {
+  orderLineCommentsSupported = true;
+}
+
+export function isOrderLineCommentsSupported() {
+  return orderLineCommentsSupported;
+}
+
+function isMissingOrderLineCommentsRelation(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  if (error.code === "PGRST205" || error.code === "42P01") return true;
+  return /order_line_comments/i.test(error.message ?? "") && /does not exist|schema cache|relation/i.test(error.message ?? "");
+}
+
+/** One query per order; merges onto services/materials by line id. Missing table → order unchanged. */
+export async function attachOrderLineComments(order: Order, workspaceId: string | undefined): Promise<Order> {
+  if (!orderLineCommentsSupported) return order;
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId ?? order.workspace_id);
+  const { data, error } = await supabase
+    .from("order_line_comments")
+    .select("order_service_id, order_material_id, body")
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("order_id", order.id);
+  if (error) {
+    if (isMissingOrderLineCommentsRelation(error)) {
+      orderLineCommentsSupported = false;
+      return order;
+    }
+    throw new Error(error.message);
+  }
+  return mergeOrderLineComments(order, indexOrderLineComments((data ?? []) as OrderLineCommentRow[]));
+}
+
 export async function getOrder(orderId: string, workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
@@ -2285,7 +2328,7 @@ export async function getOrder(orderId: string, workspaceId: string | undefined)
         if (mapped.workspace_id && mapped.workspace_id !== resolvedWorkspaceId) {
           throw new Error(orderPermissionMessage());
         }
-        return mapped;
+        return attachOrderLineComments(mapped, resolvedWorkspaceId);
       } catch {
         // Fall through to the multi-query path when the payload shape is unexpected.
       }
@@ -2304,7 +2347,55 @@ export async function getOrder(orderId: string, workspaceId: string | undefined)
   if (error) throw new Error(error.message);
   const [order] = await hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
   if (!order) throw new Error(orderPermissionMessage());
-  return order;
+  return attachOrderLineComments(order, resolvedWorkspaceId);
+}
+
+const SET_ORDER_LINE_COMMENT_RPC = "crm_set_order_line_comment";
+
+export type SetOrderLineCommentResult =
+  | { deleted: true; lineKind: "service" | "material"; lineId: string }
+  | { id: string; lineKind: "service" | "material"; lineId: string; body: string };
+
+export async function setOrderLineComment(
+  orderId: string,
+  kind: "service" | "material",
+  lineId: string,
+  body: string | null | undefined,
+  workspaceId: string | undefined,
+): Promise<SetOrderLineCommentResult> {
+  requireWorkspaceId(workspaceId);
+  const normalized = normalizeOrderLineCommentBody(body);
+  const { data, error } = await supabase.rpc(SET_ORDER_LINE_COMMENT_RPC, {
+    p_order_id: orderId,
+    p_line_kind: kind,
+    p_line_id: lineId,
+    p_body: normalized,
+  });
+  if (error) {
+    if (isMissingRpcError(error, SET_ORDER_LINE_COMMENT_RPC) || isMissingOrderLineCommentsRelation(error)) {
+      orderLineCommentsSupported = false;
+      throw new MissingRpcError(SET_ORDER_LINE_COMMENT_RPC, i18n.t("orders.lineComments.errors.rpcRequired"));
+    }
+    const closed = mapOrderWarrantyDbError(error);
+    if (closed) throw closed;
+    if (/set_order_line_comment:forbidden|set_order_line_comment:not_authenticated/i.test(error.message ?? "")) {
+      throw new Error(orderPermissionMessage());
+    }
+    if (/set_order_line_comment:body_too_long/i.test(error.message ?? "")) {
+      throw new Error(i18n.t("orders.lineComments.errors.tooLong"));
+    }
+    throw new Error(error.message);
+  }
+  const row = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+  if (row?.deleted === true) {
+    return { deleted: true, lineKind: kind, lineId };
+  }
+  return {
+    id: String(row?.id ?? ""),
+    lineKind: kind,
+    lineId,
+    body: typeof row?.body === "string" ? row.body : normalized ?? "",
+  };
 }
 
 /** String helper used by tests; same trim rules as `taxInvoiceNumberPresent`. */

@@ -19,6 +19,8 @@ export type CanvasLineRow = {
   sum: number;
   warranty: string;
   performer: string;
+  /** Per-order line comment; empty for invoices and when print stripped private comments. */
+  comment: string;
 };
 
 function serviceRows(order: Order | null): CanvasLineRow[] {
@@ -37,6 +39,7 @@ function serviceRows(order: Order | null): CanvasLineRow[] {
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
     performer: line.technicianName?.trim() || "",
+    comment: line.comment?.trim() || "",
   }));
 }
 
@@ -56,6 +59,7 @@ function materialRows(order: Order | null): CanvasLineRow[] {
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
     performer: "",
+    comment: line.comment?.trim() || "",
   }));
 }
 
@@ -70,6 +74,7 @@ function invoiceItemRows(items: InvoiceItem[]): CanvasLineRow[] {
     sum: lineTotal(item),
     warranty: "",
     performer: "",
+    comment: "",
   }));
 }
 
@@ -115,6 +120,7 @@ function paymentLineRow(ctx: PrintContext, kind: "prepayment" | "balance"): Canv
       sum: amount,
       warranty: "",
       performer: "",
+      comment: "",
     },
   ];
 }

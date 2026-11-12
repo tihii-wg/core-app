@@ -34,6 +34,8 @@ export type WorkspaceOrderSettings = {
   warrantyPartsKm: number | null;
   defaultCommentsVisibility: VisibilityDefault;
   defaultFilesVisibility: VisibilityDefault;
+  /** private = owner-only on the order card; public = members + print. */
+  lineCommentsVisibility: VisibilityDefault;
   preventDuplicateDeviceOrders: boolean;
 };
 
@@ -73,6 +75,7 @@ export const orderSettingsDefaults: WorkspaceOrderSettings = {
   warrantyPartsKm: null,
   defaultCommentsVisibility: "private",
   defaultFilesVisibility: "private",
+  lineCommentsVisibility: "private",
   preventDuplicateDeviceOrders: false,
 };
 

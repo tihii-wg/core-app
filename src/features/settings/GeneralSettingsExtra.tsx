@@ -1,3 +1,4 @@
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -23,7 +24,7 @@ import { useIndustryProfile } from "../industries/useIndustryProfile";
 import { industryPaymentStageTemplate } from "../industries/industryProfile";
 import { PaymentStageTemplateEditor, validatePaymentStageTemplate } from "../finance/PaymentStageTemplateEditor";
 import type { PaymentStageTemplateItem } from "../finance/paymentStages";
-import { getWorkspaceInvoiceNextNumber, type WorkspaceDetails } from "../../services/apiWorkspaces";
+import { getWorkspaceInvoiceNextNumber, type WorkspaceDetails, isLineCommentsVisibilityColumnSupported } from "../../services/apiWorkspaces";
 import {
   isValidInvoiceNumberTemplate,
   normalizeInvoiceDueDays,
@@ -62,6 +63,10 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
   const [partsKm, setPartsKm] = useState(workspace.warrantyPartsKm?.toString() ?? "");
   const [comments, setComments] = useState<VisibilityDefault>(normalizeVisibility(workspace.defaultCommentsVisibility));
   const [files, setFiles] = useState<VisibilityDefault>(normalizeVisibility(workspace.defaultFilesVisibility));
+  const isOwner = useIsWorkspaceOwnerId();
+  const [lineComments, setLineComments] = useState<VisibilityDefault>(
+    normalizeVisibility(workspace.lineCommentsVisibility),
+  );
   const [preventDevice, setPreventDevice] = useState(workspace.preventDuplicateDeviceOrders);
 
   function parseOptional(value: string) {
@@ -84,6 +89,7 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
         warrantyPartsKm: parseOptional(partsKm),
         defaultCommentsVisibility: comments,
         defaultFilesVisibility: files,
+        lineCommentsVisibility: lineComments,
         preventDuplicateDeviceOrders: preventDevice,
       });
       toast.success(t("settings.general.orders.toast.saved"), { id: "orders-settings" });
@@ -201,6 +207,26 @@ function OrdersSettingsCard({ workspace }: { workspace: WorkspaceDetails }) {
               </SelectContent>
             </Select>
           </div>
+          {isLineCommentsVisibilityColumnSupported() ? (
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="line-comments-visibility">{t("settings.general.orders.lineCommentsVisibility")}</Label>
+            <Select
+              value={lineComments}
+              onValueChange={(v) => setLineComments(normalizeVisibility(v))}
+              // Owner only: switching to «public» would expose the owner's private comments to everyone.
+              disabled={!canEdit || !isOwner || isPending}
+            >
+              <SelectTrigger id="line-comments-visibility" className="w-full md:max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="private">{t("settings.general.orders.lineCommentsPrivate")}</SelectItem>
+                <SelectItem value="public">{t("settings.general.orders.lineCommentsPublic")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("settings.general.orders.lineCommentsHint")}</p>
+          </div>
+          ) : null}
         </div>
         <p className="text-xs text-muted-foreground">{t("settings.general.orders.visibilityHint")}</p>
 

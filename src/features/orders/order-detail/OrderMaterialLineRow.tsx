@@ -27,6 +27,7 @@ import OrderMaterialLineInlineCells, {
   type MaterialLineInlineEditTarget,
   type MaterialLineInlineField,
 } from "../OrderMaterialLineInlineCells";
+import { OrderLineCommentCell } from "../OrderLineCommentCell";
 
 export type OrderMaterialLineRowProps = {
   line: OrderMaterial;
@@ -45,6 +46,10 @@ export type OrderMaterialLineRowProps = {
   warehouseStock: Parameters<typeof resolveCatalogLineStockLimit>[0]["stock"];
   saving: boolean;
   deletePending: boolean;
+  commentsVisible: boolean;
+  commentsEditable: boolean;
+  commentSaving?: boolean;
+  onSaveComment: (lineId: string, body: string | null) => Promise<void>;
   onOpenCatalog: (inventoryItemId: string) => void;
   onRequestEdit: (lineId: string, field: MaterialLineInlineField) => void;
   onCancelEdit: () => void;
@@ -73,6 +78,10 @@ function OrderMaterialLineRowComponent({
   warehouseStock,
   saving,
   deletePending,
+  commentsVisible,
+  commentsEditable,
+  commentSaving = false,
+  onSaveComment,
   onOpenCatalog,
   onRequestEdit,
   onCancelEdit,
@@ -130,7 +139,7 @@ function OrderMaterialLineRowComponent({
   );
 
   return (
-    <tr data-order-material-line-row={line.id || undefined} className="transition-colors">
+    <tr data-order-material-line-row={line.id || undefined} className="group/line transition-colors">
       <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
         <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:justify-between">
           <div className="min-w-0 flex-1 space-y-1">
@@ -148,6 +157,13 @@ function OrderMaterialLineRowComponent({
                 line.itemName
               )}
             </p>
+            <OrderLineCommentCell
+              comment={line.comment}
+              visible={commentsVisible}
+              editable={commentsEditable}
+              saving={commentSaving}
+              onSave={(body) => onSaveComment(lineId, body)}
+            />
             <OrderLineWarrantyBadge
               activated={Boolean(order.closedAt)}
               status={order.closedAt && order.status !== "closed" ? "paused" : undefined}

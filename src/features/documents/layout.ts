@@ -73,7 +73,8 @@ export type TableColumnKey =
   | "vat"
   | "sum"
   | "warranty"
-  | "performer";
+  | "performer"
+  | "comment";
 export type TableColumn = { key: TableColumnKey; label: string; enabled: boolean; widthPercent?: number };
 export type TableSource =
   | "services"
@@ -211,6 +212,7 @@ const TABLE_KEYS = new Set<TableColumnKey>([
   "sum",
   "warranty",
   "performer",
+  "comment",
 ]);
 const TOTAL_KEYS = new Set<TotalsRowKey>([
   "servicesSum",
@@ -535,6 +537,7 @@ type LineRow = {
   sum: number;
   warranty: string;
   performer: string;
+  comment: string;
 };
 
 function serviceRows(order: Order | null): LineRow[] {
@@ -553,6 +556,7 @@ function serviceRows(order: Order | null): LineRow[] {
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
     performer: line.technicianName?.trim() || "",
+    comment: line.comment?.trim() || "",
   }));
 }
 
@@ -572,6 +576,7 @@ function materialRows(order: Order | null): LineRow[] {
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
     performer: "",
+    comment: line.comment?.trim() || "",
   }));
 }
 
@@ -586,6 +591,7 @@ function invoiceItemRows(items: InvoiceItem[]): LineRow[] {
     sum: lineTotal(item),
     warranty: "",
     performer: "",
+    comment: "",
   }));
 }
 
@@ -648,7 +654,11 @@ function renderTable(block: TableBlock, ctx: PrintContext, env: RenderEnv) {
     html += `<tr${rowBg ? ` style="${rowBg}"` : ""}>`;
     for (const column of columns) {
       const align =
-        column.key === "name" || column.key === "sku" || column.key === "warranty" || column.key === "performer"
+        column.key === "name" ||
+        column.key === "sku" ||
+        column.key === "warranty" ||
+        column.key === "performer" ||
+        column.key === "comment"
           ? "left"
           : "right";
       let value = "";
@@ -687,6 +697,9 @@ function renderTable(block: TableBlock, ctx: PrintContext, env: RenderEnv) {
           break;
         case "performer":
           value = escapeHtmlText(row.performer);
+          break;
+        case "comment":
+          value = escapeHtmlText(row.comment);
           break;
       }
       html += `<td style="${cellBorder};padding:4px 6px;text-align:${align}">${value}</td>`;

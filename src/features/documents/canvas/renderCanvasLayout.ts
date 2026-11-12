@@ -222,7 +222,11 @@ function renderTableHtml(
     for (const column of columns) {
       const align =
         column.align ??
-        (column.key === "name" || column.key === "sku" || column.key === "warranty" || column.key === "performer"
+        (column.key === "name" ||
+        column.key === "sku" ||
+        column.key === "warranty" ||
+        column.key === "performer" ||
+        column.key === "comment"
           ? "left"
           : "right");
       let value = "";
@@ -263,6 +267,9 @@ function renderTableHtml(
           break;
         case "performer":
           value = escapeHtmlText(row.performer);
+          break;
+        case "comment":
+          value = escapeHtmlText(row.comment);
           break;
       }
       html += `<td style="${cellBorder};padding:1.5mm;text-align:${align}">${value}</td>`;

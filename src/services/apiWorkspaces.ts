@@ -103,6 +103,20 @@ const generalSettingsColumns = [
   "payment_stage_template",
 ] as const;
 
+/** Optional on its own (20261112220000_order_line_comments): its absence must not drop the other general settings. */
+function isMissingLineCommentsVisibilityColumn(error: { code?: string; message?: string }) {
+  return (
+    (error.code === "42703" || error.code === "PGRST204" || /does not exist|schema cache/i.test(error.message ?? "")) &&
+    error.message?.includes("line_comments_visibility") === true
+  );
+}
+
+/** False once a read showed the column is missing (SQL not applied) — the line-comments UI stays hidden. */
+let lineCommentsVisibilityColumnSupported = true;
+export function isLineCommentsVisibilityColumnSupported() {
+  return lineCommentsVisibilityColumnSupported;
+}
+
 function mentionsAttachmentStorageColumn(message?: string) {
   return message?.includes("attachment_storage") === true;
 }
@@ -127,6 +141,7 @@ function membershipSelect(options: {
   subscription: boolean;
   general: boolean;
   attachmentStorage: boolean;
+  lineComments?: boolean;
 }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
@@ -135,6 +150,7 @@ function membershipSelect(options: {
   if (options.subscription) fields.push(...subscriptionColumns);
   if (options.general) fields.push(...generalSettingsColumns);
   if (options.attachmentStorage) fields.push("attachment_storage");
+  if (options.lineComments) fields.push("line_comments_visibility");
   const industry = options.industry
     ? `,
     industry:industries (
@@ -196,12 +212,18 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let subscription = true;
   let general = true;
   let attachmentStorage = true;
+  let lineComments = lineCommentsVisibilityColumnSupported;
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
     const { data, error } = await run(
-      membershipSelect({ industry, avatar, markup, preferences, subscription, general, attachmentStorage }),
+      membershipSelect({ industry, avatar, markup, preferences, subscription, general, attachmentStorage, lineComments }),
     );
     if (!error) return data;
+    if (lineComments && isMissingLineCommentsVisibilityColumn(error)) {
+      lineComments = false;
+      lineCommentsVisibilityColumnSupported = false;
+      continue;
+    }
     if (attachmentStorage && isMissingAttachmentStorageColumn(error)) {
       attachmentStorage = false;
       continue;
@@ -269,6 +291,7 @@ export type WorkspaceDetails = {
   warrantyPartsKm: number | null;
   defaultCommentsVisibility: string;
   defaultFilesVisibility: string;
+  lineCommentsVisibility: string;
   preventDuplicateDeviceOrders: boolean;
   showClientMiddleName: boolean;
   defaultPhoneConsent: boolean;
@@ -393,6 +416,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     warrantyPartsMonths: normalizeOptionalPositiveInt(record.warranty_parts_months),
     warrantyPartsKm: normalizeOptionalPositiveInt(record.warranty_parts_km),
     defaultCommentsVisibility: normalizeVisibility(readString(record.default_comments_visibility)),
+    lineCommentsVisibility: normalizeVisibility(readString(record.line_comments_visibility)),
     defaultFilesVisibility: normalizeVisibility(readString(record.default_files_visibility)),
     preventDuplicateDeviceOrders: readBool(record.prevent_duplicate_device_orders, orderSettingsDefaults.preventDuplicateDeviceOrders),
     showClientMiddleName: readBool(record.show_client_middle_name, contactSettingsDefaults.showClientMiddleName),
@@ -847,6 +871,10 @@ export async function updateWorkspaceOrderSettings(workspaceId: string, input: W
     warranty_parts_km: normalizeOptionalPositiveInt(input.warrantyPartsKm),
     default_comments_visibility: normalizeVisibility(input.defaultCommentsVisibility),
     default_files_visibility: normalizeVisibility(input.defaultFilesVisibility),
+    // Written only once the column exists (SQL 20261112220000 applied); otherwise the whole save would fail.
+    ...(lineCommentsVisibilityColumnSupported
+      ? { line_comments_visibility: normalizeVisibility(input.lineCommentsVisibility) }
+      : {}),
     prevent_duplicate_device_orders: Boolean(input.preventDuplicateDeviceOrders),
   });
 }

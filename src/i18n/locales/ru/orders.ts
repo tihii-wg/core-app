@@ -1039,6 +1039,16 @@ const orders: Messages<typeof en> = {
       hasClaims: "По гарантии этой позиции уже создан гарантийный заказ. Удалить позицию нельзя.",
     },
   },
+  lineComments: {
+    add: "+ Добавить комментарий",
+    edit: "Редактировать комментарий",
+    placeholder: "Комментарий к позиции…",
+    charsLeft: "Осталось {{count}} символов",
+    errors: {
+      tooLong: "Комментарий не длиннее 500 символов.",
+      rpcRequired: "Сначала примените SQL комментариев к позициям на MAIN.",
+    },
+  },
 };
 
 export default orders;

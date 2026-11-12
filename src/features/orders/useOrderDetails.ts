@@ -1,3 +1,4 @@
+import { preserveOrderLineComments } from "./applyOrderLineMutationCache";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -56,9 +57,14 @@ export function useOrderDetails() {
   const syncOrder = (order: Order) =>
     setSelectedOrder((current) => {
       if (current?.id !== order.id) return current;
-      // Never let a refetch/partial payload wipe a known saved tax invoice number.
-      return resolveOrderForTaxGate(order, current);
+      // Never let a refetch/partial payload wipe a known saved tax invoice number (nor line comments,
+      // which line RPC payloads do not carry).
+      return resolveOrderForTaxGate(preserveOrderLineComments(current, order), current);
     });
+
+  // Card updates (line RPC results) keep the line comments already shown.
+  const updateSelectedOrder = (order: Order) =>
+    setSelectedOrder((current) => (current?.id === order.id ? preserveOrderLineComments(current, order) : order));
 
   const clearOrder = (orderId: string) => {
     setSelectedOrder((current) => {
@@ -133,7 +139,7 @@ export function useOrderDetails() {
       selectedOrder,
       detailPanelOpen,
       setDetailPanelOpen,
-      onOrderUpdated: setSelectedOrder,
+      onOrderUpdated: updateSelectedOrder,
       onStatusChange: handleStatusChange,
       isStatusUpdating,
     },

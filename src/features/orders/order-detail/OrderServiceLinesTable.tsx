@@ -21,6 +21,10 @@ export type OrderServiceLinesTableProps = {
   performerOptions: AssignableTechnician[];
   saving: boolean;
   deletePending: boolean;
+  commentsVisible: boolean;
+  commentsEditable: boolean;
+  commentSaving?: boolean;
+  onSaveComment: (lineId: string, body: string | null) => Promise<void>;
   onOpenCatalog: (serviceId: string) => void;
   onRequestEdit: (lineId: string, field: ServiceLineInlineField) => void;
   onCancelEdit: () => void;
@@ -47,6 +51,10 @@ function OrderServiceLinesTableComponent({
   performerOptions,
   saving,
   deletePending,
+  commentsVisible,
+  commentsEditable,
+  commentSaving = false,
+  onSaveComment,
   onOpenCatalog,
   onRequestEdit,
   onCancelEdit,
@@ -99,6 +107,10 @@ function OrderServiceLinesTableComponent({
                 performerOptions={performerOptions}
                 saving={saving}
                 deletePending={deletePending}
+                commentsVisible={commentsVisible}
+                commentsEditable={commentsEditable}
+                commentSaving={commentSaving}
+                onSaveComment={onSaveComment}
                 onOpenCatalog={onOpenCatalog}
                 onRequestEdit={onRequestEdit}
                 onCancelEdit={onCancelEdit}

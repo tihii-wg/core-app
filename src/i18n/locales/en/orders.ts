@@ -1017,4 +1017,14 @@ export default {
       hasClaims: "A warranty claim order already references this line's warranty. The line cannot be removed.",
     },
   },
+  lineComments: {
+    add: "+ Add comment",
+    edit: "Edit comment",
+    placeholder: "Line comment…",
+    charsLeft: "{{count}} characters left",
+    errors: {
+      tooLong: "Comment must be at most 500 characters.",
+      rpcRequired: "Apply the order line comments SQL on MAIN before using line comments.",
+    },
+  },
 };

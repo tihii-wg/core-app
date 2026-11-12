@@ -27,6 +27,7 @@ import { requireWorkspaceId } from "./missingTable";
 import { industryProfile } from "../features/industries/industryProfile";
 import { industryWorkflow } from "../features/industries/industryWorkflow";
 import { mergeOrderFieldConfig } from "../features/orders/orderFieldConfig";
+import { stripOrderLineComments } from "../features/orders/orderLineComments";
 
 async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
   try {
@@ -34,6 +35,12 @@ async function soft<T>(promise: Promise<T>, fallback: T): Promise<T> {
   } catch {
     return fallback;
   }
+}
+
+/** Private line comments must never reach a printed document, even for the owner. */
+function orderForPrint(order: Order, workspace: WorkspaceDetails | null | undefined): Order {
+  if (workspace?.lineCommentsVisibility === "public") return order;
+  return stripOrderLineComments(order);
 }
 
 /** Loads order stages (soft: missing table / errors → null) and allocates the net paid amount across them. */
@@ -91,19 +98,20 @@ export async function buildOrderPrintContext(
   documentKind: DocumentTemplateType = "work_order",
 ): Promise<PrintContext> {
   const resolved = requireWorkspaceId(workspaceId);
-  const order = await getOrder(orderId, resolved);
+  const loadedOrder = await getOrder(orderId, resolved);
 
   const [base, client, vehicle, payments, warrantyRecords, workspaceVatRate, definitions, customValues] = await Promise.all([
     workspacePrintBase(resolved),
-    order.clientId ? soft(getClient(resolved, order.clientId), null) : Promise.resolve(null as Client | null),
-    order.vehicleId ? soft(getVehicle(resolved, order.vehicleId), null) : Promise.resolve(null as Vehicle | null),
-    soft(getPayments(resolved, { orderId: order.id }), []),
-    soft(getWarrantyRecordsForOrder(resolved, order.id), []),
+    loadedOrder.clientId ? soft(getClient(resolved, loadedOrder.clientId), null) : Promise.resolve(null as Client | null),
+    loadedOrder.vehicleId ? soft(getVehicle(resolved, loadedOrder.vehicleId), null) : Promise.resolve(null as Vehicle | null),
+    soft(getPayments(resolved, { orderId: loadedOrder.id }), []),
+    soft(getWarrantyRecordsForOrder(resolved, loadedOrder.id), []),
     soft(getWorkspaceVatRate(resolved), null),
     soft(getOrderFieldDefinitions(resolved), []),
-    soft(getCustomFieldValuesForEntity(resolved, order.id), []),
+    soft(getCustomFieldValuesForEntity(resolved, loadedOrder.id), []),
   ]);
 
+  const order = orderForPrint(loadedOrder, base.workspace);
   const paymentBalance = orderPaymentBalance(order, payments);
   const paymentStages = await loadAllocatedStages(order.id, resolved, order.totalPrice, paymentBalance.netPaid);
 
@@ -154,7 +162,7 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
   const resolved = requireWorkspaceId(workspaceId);
   const invoice = await getInvoice(invoiceId, resolved);
 
-  const [base, client, order, payments, workspaceVatRate, invoiceTaxTotal] = await Promise.all([
+  const [base, client, loadedOrder, payments, workspaceVatRate, invoiceTaxTotal] = await Promise.all([
     workspacePrintBase(resolved),
     invoice.clientId ? soft(getClient(resolved, invoice.clientId), null) : Promise.resolve(null as Client | null),
     invoice.orderId ? soft(getOrder(invoice.orderId, resolved), null) : Promise.resolve(null as Order | null),
@@ -163,6 +171,7 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
     soft(getInvoiceTaxTotal(invoice.id, resolved), null),
   ]);
 
+  const order = loadedOrder ? orderForPrint(loadedOrder, base.workspace) : null;
   const vehicle =
     order?.vehicleId != null
       ? await soft(getVehicle(resolved, order.vehicleId), null)

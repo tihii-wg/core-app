@@ -667,6 +667,8 @@ export type OrderService = {
   technicianId?: string | null;
   /** Resolved employee display name for `technicianId`. */
   technicianName?: string;
+  /** Per-order line comment (order_line_comments). Null/absent when unset or table missing. */
+  comment?: string | null;
 };
 
 /** How an order material line is sourced. Catalog lines link to inventory_items; others are order-only snapshots. */
@@ -704,6 +706,8 @@ export type OrderMaterial = {
   warrantyDays?: number | null;
   /** Mileage allowance from warranty start. Null/absent = no mileage limit (or column missing). */
   warrantyKm?: number | null;
+  /** Per-order line comment (order_line_comments). Null/absent when unset or table missing. */
+  comment?: string | null;
 };
 
 export type InventoryMovementType = "issue" | "return" | "adjustment";

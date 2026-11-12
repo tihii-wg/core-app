@@ -1029,6 +1029,16 @@ const orders: Messages<typeof en> = {
       hasClaims: "Pe garanția acestei poziții există deja o comandă de garanție. Poziția nu poate fi eliminată.",
     },
   },
+  lineComments: {
+    add: "+ Adaugă comentariu",
+    edit: "Editează comentariul",
+    placeholder: "Comentariu la poziție…",
+    charsLeft: "{{count}} caractere rămase",
+    errors: {
+      tooLong: "Comentariul poate avea cel mult 500 de caractere.",
+      rpcRequired: "Aplicați SQL-ul comentariilor pe poziții pe MAIN înainte de utilizare.",
+    },
+  },
 };
 
 export default orders;

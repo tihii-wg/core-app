@@ -155,6 +155,7 @@ const COLUMN_KEYS: TableColumnKey[] = [
   "sum",
   "warranty",
   "performer",
+  "comment",
 ];
 const TOTAL_KEYS: TotalsRowKey[] = [
   "servicesSum",

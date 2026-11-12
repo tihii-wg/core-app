@@ -77,6 +77,11 @@ const settings: Messages<typeof en> = {
       warrantyPartsKm: "Piese — kilometraj",
       commentsVisibility: "Vizibilitatea implicită a comentariilor",
       filesVisibility: "Vizibilitatea implicită a fișierelor",
+      lineCommentsVisibility: "Comentarii la poziții",
+      lineCommentsPrivate: "Privat — vizibil doar proprietarului în comandă",
+      lineCommentsPublic: "Public — vizibil angajaților și apare la tipărire",
+      lineCommentsHint:
+        "Privat: comentariile la servicii și materiale sunt vizibile doar proprietarului spațiului în cardul comenzii — nu apar pentru angajați și nu se tipăresc. Public: toți membrii spațiului le văd, iar comentariile pot fi incluse în documentele tipărite.",
       visibilityHint: "Doar valori implicite în UI. Accesul respectă rolurile și politicile de stocare. Atașamentele comentarii/fișiere nu sunt modelate încă.",
       preventDuplicateDevice: "Previne același vehicul/dispozitiv pe mai multe comenzi deschise",
       preventDuplicateDeviceHint: "Când este activ, comenzile deschise (nou, în lucru, așteaptă piese) nu pot partaja același VIN. Numele libere ale dispozitivului nu sunt tratate ca identificatori unici.",
@@ -693,6 +698,7 @@ const settings: Messages<typeof en> = {
       statusClosed: "Închis",
       serviceDiagnostics: "Diagnosticare",
       serviceOilChange: "Schimb ulei și filtru",
+      lineCommentSample: "Clientul a cerut filtru original",
       serviceBrakes: "Înlocuire plăcuțe față",
       materialOilFilter: "Filtru de ulei",
       materialEngineOil: "Ulei motor 5W-40",
@@ -874,6 +880,7 @@ const settings: Messages<typeof en> = {
       sum: "Sumă",
       warranty: "Garanție",
       performer: "Executant",
+      comment: "Comentariu",
     },
     sources: {
       services: "Servicii",

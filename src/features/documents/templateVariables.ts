@@ -313,6 +313,14 @@ function cell(value: string, align: "left" | "right" = "left") {
   return `<td style="border:1px solid #ccc;padding:4px 6px;text-align:${align}">${value}</td>`;
 }
 
+/** Name cell with optional muted comment line underneath (HTML-escaped). */
+function nameWithCommentHtml(name: string, comment: string | null | undefined) {
+  const nameHtml = escapeHtmlText(name);
+  const trimmed = comment?.trim() || "";
+  if (!trimmed) return nameHtml;
+  return `${nameHtml}<div style="font-size:0.85em;color:#666;margin-top:2px">${escapeHtmlText(trimmed)}</div>`;
+}
+
 function buildServicesTable(ctx: PrintContext) {
   const services = ctx.order?.services ?? [];
   if (services.length === 0) return "";
@@ -320,7 +328,7 @@ function buildServicesTable(ctx: PrintContext) {
   let html = tableStart(["№", "Name", "Qty", "Price", "Discount", "Sum"]);
   services.forEach((line, index) => {
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(index + 1))}${cell(escapeHtmlText(line.serviceName))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(escapeHtmlText(formatDiscountLabel(line)), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(index + 1))}${cell(nameWithCommentHtml(line.serviceName, line.comment))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(escapeHtmlText(formatDiscountLabel(line)), "right")}${cell(String(sum), "right")}</tr>`;
   });
   return html + tableEnd();
 }
@@ -332,7 +340,7 @@ function buildMaterialsTable(ctx: PrintContext) {
   let html = tableStart(["№", "Name", "Article", "Qty", "Price", "Sum"]);
   materials.forEach((line, index) => {
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(index + 1))}${cell(escapeHtmlText(line.itemName))}${cell("")}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(index + 1))}${cell(nameWithCommentHtml(line.itemName, line.comment))}${cell("")}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
   });
   return html + tableEnd();
 }
@@ -347,12 +355,12 @@ function buildCombinedTable(ctx: PrintContext) {
   for (const line of services) {
     n += 1;
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(n))}${cell("Service")}${cell(escapeHtmlText(line.serviceName))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(n))}${cell("Service")}${cell(nameWithCommentHtml(line.serviceName, line.comment))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
   }
   for (const line of materials) {
     n += 1;
     const sum = lineNet(line.price, line.quantity, line.discountType, line.discountValue);
-    html += `<tr>${cell(String(n))}${cell("Material")}${cell(escapeHtmlText(line.itemName))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
+    html += `<tr>${cell(String(n))}${cell("Material")}${cell(nameWithCommentHtml(line.itemName, line.comment))}${cell(formatQuantity(line.quantity, locale), "right")}${cell(String(line.price), "right")}${cell(String(sum), "right")}</tr>`;
   }
   return html + tableEnd();
 }

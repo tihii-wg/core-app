@@ -7,9 +7,14 @@ import OrderWarehouseActions from "../../OrderWarehouseActions";
 import type { AddOrderMaterialPrefill } from "../../AddOrderMaterialDialog";
 import type { MaterialLineInlineField } from "../../OrderMaterialLineInlineCells";
 import type { ServiceLineInlineField } from "../../OrderServiceLineInlineCells";
+import { canAccessOrderLineComments } from "../../lineCommentsVisibility";
+import { useSetOrderLineComment } from "../../useSetOrderLineComment";
+import { useGetWorkspace } from "../../../workspaces/useGetWorkspace";
+import { useIsWorkspaceOwnerId } from "../../../workspaces/useIsWorkspaceOwnerId";
 import { DetailItem } from "../detailHelpers";
 import { OrderMaterialLinesTable } from "../OrderMaterialLinesTable";
 import { OrderServiceLinesTable } from "../OrderServiceLinesTable";
+import { useStableCallback } from "../useStableCallback";
 import type { resolveCatalogLineStockLimit } from "../../catalogMaterialStockLimit";
 
 export type OrderItemsTabProps = {
@@ -96,6 +101,33 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
     fallbackService,
   } = props;
 
+  const { data: workspace } = useGetWorkspace();
+  const isOwner = useIsWorkspaceOwnerId();
+  const commentsVisible = canAccessOrderLineComments({
+    visibility: workspace?.lineCommentsVisibility,
+    isOwner,
+  });
+  const commentsEditable = commentsVisible && props.showFieldEdit;
+  const setComment = useSetOrderLineComment(props.onOrderUpdated);
+  const onSaveServiceComment = useStableCallback(async (lineId: string, body: string | null) => {
+    await setComment.mutateAsync({
+      orderId: order.id,
+      kind: "service",
+      lineId,
+      body,
+      order,
+    });
+  });
+  const onSaveMaterialComment = useStableCallback(async (lineId: string, body: string | null) => {
+    await setComment.mutateAsync({
+      orderId: order.id,
+      kind: "material",
+      lineId,
+      body,
+      order,
+    });
+  });
+
   return (
     <>
       {showAddLinesSearch ? (
@@ -140,6 +172,10 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
           performerOptions={props.performerOptions}
           saving={props.updateServicePending}
           deletePending={props.deleteServicePending}
+          commentsVisible={commentsVisible}
+          commentsEditable={commentsEditable}
+          commentSaving={setComment.isPending}
+          onSaveComment={onSaveServiceComment}
           onOpenCatalog={props.onOpenServiceCatalog}
           onRequestEdit={props.onRequestServiceEdit}
           onCancelEdit={props.onCancelServiceEdit}
@@ -172,6 +208,10 @@ function OrderItemsTabComponent(props: OrderItemsTabProps) {
             warehouseStock={props.warehouseStock}
             saving={props.updateMaterialPending}
             deletePending={props.deleteMaterialPending}
+            commentsVisible={commentsVisible}
+            commentsEditable={commentsEditable}
+            commentSaving={setComment.isPending}
+            onSaveComment={onSaveMaterialComment}
             onOpenCatalog={props.onOpenMaterialCatalog}
             onRequestEdit={props.onRequestMaterialEdit}
             onCancelEdit={props.onCancelMaterialEdit}

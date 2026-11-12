@@ -22,6 +22,10 @@ export type OrderMaterialLinesTableProps = {
   warehouseStock: Parameters<typeof resolveCatalogLineStockLimit>[0]["stock"];
   saving: boolean;
   deletePending: boolean;
+  commentsVisible: boolean;
+  commentsEditable: boolean;
+  commentSaving?: boolean;
+  onSaveComment: (lineId: string, body: string | null) => Promise<void>;
   onOpenCatalog: (inventoryItemId: string) => void;
   onRequestEdit: (lineId: string, field: MaterialLineInlineField) => void;
   onCancelEdit: () => void;
@@ -49,6 +53,10 @@ function OrderMaterialLinesTableComponent({
   warehouseStock,
   saving,
   deletePending,
+  commentsVisible,
+  commentsEditable,
+  commentSaving = false,
+  onSaveComment,
   onOpenCatalog,
   onRequestEdit,
   onCancelEdit,
@@ -111,6 +119,10 @@ function OrderMaterialLinesTableComponent({
                 warehouseStock={warehouseStock}
                 saving={saving}
                 deletePending={deletePending}
+                commentsVisible={commentsVisible}
+                commentsEditable={commentsEditable}
+                commentSaving={commentSaving}
+                onSaveComment={onSaveComment}
                 onOpenCatalog={onOpenCatalog}
                 onRequestEdit={onRequestEdit}
                 onCancelEdit={onCancelEdit}

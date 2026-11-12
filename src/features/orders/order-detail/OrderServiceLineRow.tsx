@@ -14,6 +14,7 @@ import OrderServiceLineInlineCells, {
   type ServiceLineInlineEditTarget,
   type ServiceLineInlineField,
 } from "../OrderServiceLineInlineCells";
+import { OrderLineCommentCell } from "../OrderLineCommentCell";
 import { orderLineAmount } from "../../services/orderServiceLine";
 
 export type OrderServiceLineRowProps = {
@@ -33,6 +34,10 @@ export type OrderServiceLineRowProps = {
   performerOptions: AssignableTechnician[];
   saving: boolean;
   deletePending: boolean;
+  commentsVisible: boolean;
+  commentsEditable: boolean;
+  commentSaving?: boolean;
+  onSaveComment: (lineId: string, body: string | null) => Promise<void>;
   onOpenCatalog: (serviceId: string) => void;
   onRequestEdit: (lineId: string, field: ServiceLineInlineField) => void;
   onCancelEdit: () => void;
@@ -61,6 +66,10 @@ function OrderServiceLineRowComponent({
   performerOptions,
   saving,
   deletePending,
+  commentsVisible,
+  commentsEditable,
+  commentSaving = false,
+  onSaveComment,
   onOpenCatalog,
   onRequestEdit,
   onCancelEdit,
@@ -104,7 +113,10 @@ function OrderServiceLineRowComponent({
     <tr
       data-order-service-line-id={line.serviceId || undefined}
       data-order-service-line-row={lineId || undefined}
-      className={cn(isHighlighted && "bg-primary/10 ring-1 ring-inset ring-primary/40")}
+      className={cn(
+        "group/line",
+        isHighlighted && "bg-primary/10 ring-1 ring-inset ring-primary/40",
+      )}
     >
       <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
         <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:justify-between">
@@ -128,6 +140,13 @@ function OrderServiceLineRowComponent({
                 </StatusBadge>
               ) : null}
             </p>
+            <OrderLineCommentCell
+              comment={line.comment}
+              visible={commentsVisible}
+              editable={commentsEditable}
+              saving={commentSaving}
+              onSave={(body) => onSaveComment(lineId, body)}
+            />
             <OrderServiceLinePerformerInline
               line={line}
               editable={showFieldEdit}
