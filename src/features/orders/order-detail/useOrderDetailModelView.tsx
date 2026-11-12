@@ -11,6 +11,7 @@ import { assertMinPaidOrExplain, orderNetPaidForMinPaid } from "../minPaidStatus
 import { showMinPaidBlockedToast } from "../showMinPaidBlockedToast";
 import { useOrderAttachments } from "../useOrderAttachments";
 import { prepareOrderForCloseOrPayment } from "../requestCloseOrder";
+import { useConfirmOrderMileageBeforeClose } from "../useConfirmOrderMileageBeforeClose";
 import type { OrderStaticContextValue, OrderEditingContextValue } from "./OrderDetailContext";
 import { useOrderLineActions } from "./useOrderLineActions";
 import { buildOrderDetailTabs } from "./buildOrderDetailTabs";
@@ -19,6 +20,7 @@ import { updateOrderAssignee, updateOrderTeam } from "./orderAssigneeUpdates";
 /** Completes the order-detail view model after permissions / inline editors are ready. */
 export function useOrderDetailModelView(ctx: Record<string, any>) {
   const { t, i18n } = useTranslation();
+  const mileageConfirm = useConfirmOrderMileageBeforeClose();
   const {
     selectedOrder,
     detailPanelOpen,
@@ -94,6 +96,9 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
       onOrderUpdated(prepared);
       stopEditing();
     }
+    const afterMileage = await mileageConfirm.ensureConfirmed(prepared);
+    if (!afterMileage) return;
+    if (afterMileage !== prepared) onOrderUpdated(afterMileage);
     setCloseOpen(true);
   }
 
@@ -316,9 +321,14 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
 
   async function handleStatusSelect(value: string) {
     if (!selectedOrder || !value || value === currentUnifiedStatus?.id) return;
+    const option = statusOptions.find((item: { id: string; semanticAction?: string | null; systemStatus?: string }) => item.id === value);
+    if (option?.semanticAction === "close" || option?.systemStatus === "closed") {
+      if (!(await settleInlineEdit())) return;
+      await requestClose();
+      return;
+    }
     const result = await changeOrderStatus(value);
     if (result.ok) return;
-    const option = statusOptions.find((item: { id: string }) => item.id === value);
     const minPaidBlock = assertMinPaidOrExplain({
       order: selectedOrder,
       targetDefinition: option?.definition,
@@ -342,6 +352,7 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
 
   return {
     ...ctx,
+    mileageConfirmDialogProps: mileageConfirm.dialogProps,
     handleStatusSelect,
     detailTabs,
     showOrderColumn,

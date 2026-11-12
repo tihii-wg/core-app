@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { Order } from "../../../../lib/types";
+import type { Order, Vehicle } from "../../../../lib/types";
 import type { IndustryWorkflow } from "../../../industries/industryWorkflow";
 import { OrderClientCard } from "../../OrderClientCard";
 import { OrderLinkedVehicleDetails } from "../../OrderLinkedVehicleDetails";
@@ -11,6 +11,11 @@ import type { AssignableTechnician } from "../../assignableTechnicians";
 import { OrderInlineField } from "../../OrderInlineField";
 import type { OrderFieldConfigItem } from "../../orderFieldConfig";
 import type { OrderEditField } from "../../orderEditFields";
+import {
+  intakeMileageBelowKnownMessage,
+  isIntakeMileageBelowKnown,
+  parseVisitMileage,
+} from "../../orderVehicleMileage";
 import WarrantyOrderSection from "../../WarrantyOrderSection";
 import { OrderWarrantyCoverageSection } from "../../OrderWarrantyCoverageSection";
 import { isLegalEntityCustomer } from "../../taxInvoice";
@@ -65,6 +70,7 @@ export type OrderInfoTabProps = {
   onTeamChange: (team: OrderTeamMemberInput[]) => void;
   customInlineKind: (type: string) => "text" | "textarea" | "number" | "date" | "select" | "checkbox" | "datetime-local";
   customEditFieldKey: (key: string) => OrderEditField;
+  linkedVehicle?: Vehicle | null;
 };
 
 function OrderInfoTabComponent(props: OrderInfoTabProps) {
@@ -77,7 +83,7 @@ function OrderInfoTabComponent(props: OrderInfoTabProps) {
     editingField, inlineCommon, renderTextField, renderDateTimeField,
     technicianOptions, teamOptions, isAssigneeUpdating, isStatusUpdating,
     assigneeErrorMessage, assigneeEmptyHint, onAssigneeChange, onTeamChange,
-    customInlineKind, customEditFieldKey,
+    customInlineKind, customEditFieldKey, linkedVehicle = null,
   } = props;
 
   return (
@@ -135,6 +141,29 @@ function OrderInfoTabComponent(props: OrderInfoTabProps) {
                             value={snapshot == null ? "" : row.value}
                             editValue={snapshot}
                             kind="number"
+                            getSoftWarning={
+                              linkedVehicle
+                                ? (draft) => {
+                                    let reading: number | null = null;
+                                    try {
+                                      reading = parseVisitMileage(draft);
+                                    } catch {
+                                      return null;
+                                    }
+                                    if (
+                                      !isIntakeMileageBelowKnown({
+                                        reading,
+                                        readingUnit:
+                                          order.vehicleMileageUnitSnapshot ?? linkedVehicle.mileageUnit,
+                                        vehicle: linkedVehicle,
+                                      })
+                                    ) {
+                                      return null;
+                                    }
+                                    return intakeMileageBelowKnownMessage(linkedVehicle, t);
+                                  }
+                                : undefined
+                            }
                             {...inlineCommon("vehicleCurrentMileage")}
                           />
                         );

@@ -132,7 +132,7 @@ export default function AddNewOrderForm({
     getValues,
     clearErrors,
     trigger,
-    formState: { errors, isSubmitting, isSubmitted },
+    formState: { errors, isSubmitting, isSubmitted, dirtyFields },
   } = useForm<addNewOrderFormData>({
     defaultValues: {
       clientId: initialClientId,
@@ -293,6 +293,7 @@ export default function AddNewOrderForm({
             )
           : undefined;
       const mileageSnapshot = buildOrderMileageSnapshot(data.currentMileage, selectedVehicleForSnapshot);
+      const mileageConfirmed = Boolean(dirtyFields.currentMileage);
       const industryFields = orderIndustryFieldsToApi(data);
       if (isInstallationBeforeMeasurement(industryFields.measurementAt, industryFields.installationAt)) {
         toast.error(t("orders.validation.installationBeforeMeasurement"));
@@ -325,6 +326,7 @@ export default function AddNewOrderForm({
             : "",
         ...industryFields,
         ...(mileageSnapshot ?? {}),
+        ...(mileageSnapshot ? { vehicleMileageConfirmed: mileageConfirmed } : {}),
         description: data.description,
         services: data.services ?? [],
         materials: data.materials,
@@ -434,7 +436,7 @@ export default function AddNewOrderForm({
             errors={errors}
             clientId={selectedClientId}
             disabled={isSubmitting}
-            mileageMode="empty"
+            mileageMode="vehicle"
             fieldConfig={orderFieldMap}
           />
         ) : null}

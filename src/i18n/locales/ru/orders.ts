@@ -834,6 +834,14 @@ const orders: Messages<typeof en> = {
     cancelDeleteHint: "Заказ можно удалить только после отмены",
     closeTitle: "Закрытие заказа",
     closeDescription: "Формально закрыть заказ {{number}}. Будет записана дата закрытия для гарантии.",
+    confirmMileageTitle: "Подтвердите пробег при приёме",
+    confirmMileageDescription:
+      "Гарантия по пробегу будет считаться от {{value}} {{unit}} — это последний известный пробег машины. Если сегодня пробег другой — укажите его.",
+    confirmMileageMissingDescription:
+      "Пробег не указан — гарантия будет действовать только по времени",
+    confirmMileageSaveAndClose: "Сохранить пробег и закрыть",
+    confirmMileageCloseWithoutChanges: "Закрыть без изменений",
+    confirmMileageSaveFailed: "Не удалось сохранить пробег. Попробуйте ещё раз.",
     cancelTitle: "Отмена заказа",
     cancelDescription: "Отменить заказ {{number}}. Это не создаёт возвраты, не меняет склад и не ставит дату закрытия.",
     confirmClose: "Закрыть заказ",

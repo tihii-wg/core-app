@@ -57,7 +57,9 @@ import {
 } from "./closedOrderPermissions";
 import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import { ConfirmOrderMileageDialog } from "./ConfirmOrderMileageDialog";
 import { prepareOrderForCloseOrPayment } from "./requestCloseOrder";
+import { useConfirmOrderMileageBeforeClose } from "./useConfirmOrderMileageBeforeClose";
 
 type OrderActionsMenuProps = {
   order: Order;
@@ -103,6 +105,7 @@ export function OrderActionsMenu({
 }: OrderActionsMenuProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
+  const mileageConfirm = useConfirmOrderMileageBeforeClose();
   const { workflow } = useIndustryWorkflow();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
   // Paid unlock uses membership owner role; closed-order cancel/delete uses owner_id.
@@ -146,6 +149,9 @@ export function OrderActionsMenu({
     const prepared = await prepareOrderForCloseOrPayment({ order, confirm, t });
     if (!prepared) return;
     if (prepared !== order) onOrderUpdated?.(prepared);
+    const afterMileage = await mileageConfirm.ensureConfirmed(prepared);
+    if (!afterMileage) return;
+    if (afterMileage !== prepared) onOrderUpdated?.(afterMileage);
     setCloseOpen(true);
   }
   const statusLockedForMenu = order.status === "cancelled" ? !isOwnerByOwnerId : formallyClosed;
@@ -469,6 +475,8 @@ export function OrderActionsMenu({
           />
         </span>
       ) : null}
+
+      <ConfirmOrderMileageDialog {...mileageConfirm.dialogProps} />
 
       <CloseOrderDialog
         order={order}

@@ -824,6 +824,14 @@ export default {
     cancelDeleteHint: "The order can only be deleted after cancellation",
     closeTitle: "Close order",
     closeDescription: "Formally close order {{number}}. This sets the closure timestamp used for warranty.",
+    confirmMileageTitle: "Confirm mileage at intake",
+    confirmMileageDescription:
+      "Mileage warranty will start from {{value}} {{unit}} — the last known vehicle reading. If today's mileage is different, enter it.",
+    confirmMileageMissingDescription:
+      "Mileage is not set — the warranty will apply by time only.",
+    confirmMileageSaveAndClose: "Save mileage and close",
+    confirmMileageCloseWithoutChanges: "Close without changes",
+    confirmMileageSaveFailed: "Could not save the mileage. Please try again.",
     cancelTitle: "Cancel order",
     cancelDescription: "Cancel order {{number}}. This does not refund payments, change inventory, or set a closure date.",
     confirmClose: "Close order",

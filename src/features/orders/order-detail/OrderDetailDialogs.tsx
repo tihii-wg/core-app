@@ -16,10 +16,12 @@ import { recordableOrderBalance } from "../minPaidStatusGuard";
 import AddOrderMaterialDialog, { type AddOrderMaterialPrefill } from "../AddOrderMaterialDialog";
 import ChangeOrderClientDialog from "../ChangeOrderClientDialog";
 import { CloseOrderDialog } from "../CloseOrderDialog";
+import { ConfirmOrderMileageDialog } from "../ConfirmOrderMileageDialog";
 import EditOrderMaterialLineDialog from "../EditOrderMaterialLineDialog";
 import EditOrderServiceLineDialog from "../EditOrderServiceLineDialog";
 import { OrderCancelChainDialog } from "../OrderCancelChainDialog";
 import { OrderCatalogLinkDialogs } from "../OrderCatalogLinkDialogs";
+import type { useConfirmOrderMileageBeforeClose } from "../useConfirmOrderMileageBeforeClose";
 
 export type OrderDetailDialogsProps = {
   selectedOrder: Order | null;
@@ -60,6 +62,7 @@ export type OrderDetailDialogsProps = {
   /** order_materials.id of the line opened in the single-line edit dialog; null when closed. */
   editMaterialLineId: string | null;
   setEditMaterialLineId: (lineId: string | null) => void;
+  mileageConfirmDialogProps?: ReturnType<typeof useConfirmOrderMileageBeforeClose>["dialogProps"];
 };
 
 export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
@@ -101,6 +104,7 @@ export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
     setEditServiceLineId,
     editMaterialLineId,
     setEditMaterialLineId,
+    mileageConfirmDialogProps,
   } = props;
 
   const editServiceLine =
@@ -179,6 +183,8 @@ export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
         portalContainer={sheetContentRef.current}
         onChanged={onOrderUpdated}
       />
+
+      {mileageConfirmDialogProps ? <ConfirmOrderMileageDialog {...mileageConfirmDialogProps} /> : null}
 
       <CloseOrderDialog
         order={selectedOrder}

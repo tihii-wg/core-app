@@ -75,7 +75,7 @@ function Harness({
   initialCarNumber = "",
   initialVin = "",
   initialCurrentMileage = "",
-  mileageMode = "empty",
+  mileageMode = "vehicle",
   preserveInitialMileage = false,
   preserveInitialAssetSnapshot = false,
   onParentSubmit,
@@ -233,7 +233,8 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Honda Civic 2020",
         carNumber: "XYZ999",
         vin: "2HGES16575H123456",
-        currentMileage: "",
+        // Create dialog writes one mileage into initial=current; snapshot is filled from the created row.
+        currentMileage: expect.stringMatching(/45[\s,]?000/),
       });
     });
   });
@@ -318,28 +319,29 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Toyota Corolla 2018",
         carNumber: "ABC123",
         vin: "1HGBH41JXMN109186",
-        currentMileage: "",
+        currentMileage: expect.stringMatching(/45[\s,]?000/),
       });
     });
-    expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i)).toHaveValue("45,000");
   });
 
-  it("keeps current mileage empty on new orders even when the vehicle has stored mileage", async () => {
+  it("prefills intake mileage from the vehicle on new orders", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<Harness mileageMode="empty" />);
+    renderWithQuery(<Harness mileageMode="vehicle" />);
 
     await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
 
-    await vi.waitFor(() => expect(readSnapshot().currentMileage).toBe(""));
-    expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("");
+    await vi.waitFor(() => expect(readSnapshot().currentMileage).toMatch(/45[\s,]?000/));
+    expect(screen.getByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i)).toHaveValue("45,000");
+    expect(screen.getByTestId("order-intake-mileage-last-known")).toBeInTheDocument();
   });
 
   it("prefills current mileage from the vehicle when editing an order", async () => {
     renderWithQuery(<Harness initialVehicleId="veh-1" mileageMode="vehicle" />);
 
     await vi.waitFor(() => {
-      expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("45,000");
+      expect(screen.getByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i)).toHaveValue("45,000");
     });
     expect(readSnapshot().currentMileage).toMatch(/45[\s,]?000/);
   });
@@ -348,7 +350,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness initialVehicleId="veh-1" />);
 
-    const mileage = await screen.findByLabelText(/Current odometer reading/i);
+    const mileage = await screen.findByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i);
     await user.type(mileage, "-5");
     await user.click(screen.getByRole("button", { name: /Save harness/i }));
     expect(await screen.findByText(/whole number|Mileage must be|целым|întreg/i)).toBeInTheDocument();
@@ -389,7 +391,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
     });
   });
 
-  it("resets new-order mileage when the selected vehicle changes", async () => {
+  it("prefills intake mileage from the newly selected vehicle", async () => {
     const user = userEvent.setup();
     vehiclesState.vehicles = [
       sampleVehicle,
@@ -404,13 +406,14 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         currentMileage: 12000,
       },
     ];
-    renderWithQuery(<Harness mileageMode="empty" />);
+    renderWithQuery(<Harness mileageMode="vehicle" />);
 
     await user.click(screen.getByRole("combobox", { name: tVehicleSelect }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
     await vi.waitFor(() => expect(readSnapshot().vehicleId).toBe("veh-1"));
 
-    const mileage = screen.getByLabelText(/Current odometer reading/i);
+    const mileage = screen.getByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i);
+    await user.clear(mileage);
     await user.type(mileage, "99999");
     expect(mileage).toHaveValue("99999");
 
@@ -423,10 +426,10 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Honda Civic 2020",
         carNumber: "XYZ999",
         vin: "2HGES16575H123456",
-        currentMileage: "",
+        currentMileage: expect.stringMatching(/12[\s,]?000/),
       });
     });
-    expect(screen.getByLabelText(/Current odometer reading/i)).toHaveValue("");
+    expect(screen.getByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i)).toHaveValue("12,000");
   });
 
   it("preserves existing order snapshot fields until the vehicle association changes", async () => {
@@ -476,6 +479,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Honda Civic",
         carNumber: "XYZ999",
         vin: "",
+        // veh-2 has neither current nor initial mileage.
         currentMileage: "",
       });
     });
@@ -490,7 +494,7 @@ describe("OrderVehicleFields without duplicate asset fields", () => {
         device: "Toyota Corolla 2018",
         carNumber: "ABC123",
         vin: "1HGBH41JXMN109186",
-        currentMileage: "",
+        currentMileage: expect.stringMatching(/45[\s,]?000/),
       });
     });
   });

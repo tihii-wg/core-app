@@ -77,7 +77,7 @@ export function VehicleFieldsGrid({
   const mileageUnit = useOrderSnapshot ? (orderMileageSnapshot.unit ?? vehicle.mileageUnit) : vehicle.mileageUnit;
   const currentMileage = useOrderSnapshot ? orderMileageSnapshot.value : vehicle.currentMileage;
   const defaultCurrentMileageLabel = useOrderSnapshot
-    ? t("vehicles.fields.orderCurrentMileage")
+    ? t("vehicles.fields.intakeMileage")
     : t("vehicles.fields.currentMileage");
 
   const baseRows: Array<Omit<VehicleGridRow, "sortOrder"> & { defaultSort: number }> = [

@@ -835,8 +835,9 @@ describe("AddNewOrderForm client validation", () => {
     await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
 
-    const mileage = await screen.findByLabelText(/Current odometer reading/i);
-    expect(mileage).toHaveValue("");
+    const mileage = await screen.findByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i);
+    expect(mileage).toHaveValue("45,000");
+    await user.clear(mileage);
     await user.type(mileage, "46010");
     await user.click(saveDraftButton());
 
@@ -851,12 +852,13 @@ describe("AddNewOrderForm client validation", () => {
       expect.objectContaining({
         vehicleMileageSnapshot: 46010,
         vehicleMileageUnitSnapshot: "mi",
+        vehicleMileageConfirmed: true,
       }),
     );
     expect(persistMileageMock.mock.invocationCallOrder[0]).toBeLessThan(createOrderMock.mock.invocationCallOrder[0]);
   });
 
-  it("does not persist stored mileage when the new-order field is left empty", async () => {
+  it("saves the prefilled intake mileage as the snapshot when the user does not change it", async () => {
     const user = userEvent.setup();
     vehiclesState.vehicles = [
       {
@@ -870,7 +872,7 @@ describe("AddNewOrderForm client validation", () => {
         licensePlate: "ABC123",
         initialMileage: null,
         currentMileage: 45000,
-        mileageUnit: null,
+        mileageUnit: "km",
         engineDisplacement: null,
         fuelType: null,
         createdAt: "",
@@ -884,12 +886,19 @@ describe("AddNewOrderForm client validation", () => {
 
     await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
-    expect(await screen.findByLabelText(/Current odometer reading/i)).toHaveValue("");
+    expect(await screen.findByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i)).toHaveValue(
+      "45,000",
+    );
     await user.click(saveDraftButton());
 
     await vi.waitFor(() => expect(createOrderMock).toHaveBeenCalled());
-    expect(persistMileageMock).toHaveBeenCalledWith(expect.objectContaining({ formMileage: "" }));
-    expect(createOrderMock.mock.calls[0]?.[0]).not.toHaveProperty("vehicleMileageSnapshot");
+    expect(createOrderMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vehicleMileageSnapshot: 45000,
+        vehicleMileageUnitSnapshot: "km",
+        vehicleMileageConfirmed: false,
+      }),
+    );
   });
 
   it("does not create the order when mileage persistence fails", async () => {
@@ -922,7 +931,7 @@ describe("AddNewOrderForm client validation", () => {
 
     await user.click(screen.getByRole("combobox", { name: /^Vehicle$/i }));
     await user.click(await screen.findByRole("option", { name: /Toyota Corolla/i }));
-    await user.type(screen.getByLabelText(/Current odometer reading/i), "100");
+    await user.type(screen.getByLabelText(/Mileage at intake|Пробег при приёме|Kilometraj la recepție/i), "100");
     await user.click(saveDraftButton());
 
     await vi.waitFor(() => expect(persistMileageMock).toHaveBeenCalled());

@@ -26,7 +26,7 @@ const sampleVehicle: Vehicle = {
   deletedAt: null,
 };
 
-function Harness({ initial }: { initial?: Vehicle | null }) {
+function Harness({ initial, mode }: { initial?: Vehicle | null; mode?: "create" | "edit" }) {
   const {
     register,
     setValue,
@@ -36,11 +36,20 @@ function Harness({ initial }: { initial?: Vehicle | null }) {
     defaultValues: initial ? vehicleToFormValues(initial) : emptyVehicleFormValues(),
   });
   const mileageUnit = watch("mileageUnit");
+  const fieldsMode = mode ?? (initial ? "edit" : "create");
 
   return (
     <div>
-      <VehicleFields register={register} setValue={setValue} watch={watch} errors={errors} />
+      <VehicleFields
+        register={register}
+        setValue={setValue}
+        watch={watch}
+        errors={errors}
+        mode={fieldsMode}
+      />
       <pre data-testid="mileage-unit-value">{mileageUnit || ""}</pre>
+      <pre data-testid="initial-mileage-value">{watch("initialMileage")}</pre>
+      <pre data-testid="current-mileage-value">{watch("currentMileage")}</pre>
     </div>
   );
 }
@@ -99,5 +108,24 @@ describe("VehicleFields mileage unit selector", () => {
     expect(screen.getByTestId("mileage-unit-value")).toHaveTextContent("");
     expect(screen.getByRole("combobox", { name: /Mileage unit/i })).toHaveTextContent(/Select unit/i);
     expect(screen.queryByText(/unit\?/i)).not.toBeInTheDocument();
+  });
+
+  it("create mode shows one mileage field that mirrors into current", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<Harness mode="create" />);
+
+    expect(screen.getByTestId("vehicle-create-mileage")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Initial mileage/i)).not.toBeInTheDocument();
+    await user.type(screen.getByTestId("vehicle-create-mileage"), "46010");
+    expect(screen.getByTestId("initial-mileage-value")).toHaveTextContent("46010");
+    expect(screen.getByTestId("current-mileage-value")).toHaveTextContent("46010");
+  });
+
+  it("edit mode keeps both mileage fields with hints", () => {
+    renderWithQuery(<Harness initial={sampleVehicle} mode="edit" />);
+    expect(screen.getByLabelText(/Initial mileage/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Current odometer reading/i)).toBeInTheDocument();
+    expect(screen.getByText(/Initial — at first visit|Начальный — при первом визите/i)).toBeInTheDocument();
+    expect(screen.getByText(/Current — last known|Текущий — последний известный/i)).toBeInTheDocument();
   });
 });

@@ -35,6 +35,15 @@ describe("vehicleForm mileage parsing", () => {
     expect(input.currentMileage).toBe(100_000);
   });
 
+  it("mirrors a single create mileage into both initial and current", () => {
+    const values = emptyVehicleFormValues();
+    values.initialMileage = "46010";
+    values.currentMileage = "";
+    const input = vehicleFormValuesToInput(values);
+    expect(input.initialMileage).toBe(46010);
+    expect(input.currentMileage).toBe(46010);
+  });
+
   it("rejects decimal mileage with the shared invalid message", () => {
     const values = emptyVehicleFormValues();
     values.currentMileage = "120 500,5";

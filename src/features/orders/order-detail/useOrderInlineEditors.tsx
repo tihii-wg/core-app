@@ -124,11 +124,12 @@ export function useOrderInlineEditors({
           formMileage: text,
           queryClient,
         });
-        patch = buildOrderMileageSnapshot(text, linkedVehicle) ?? {};
-        if (Object.keys(patch).length === 0) {
+        const snapshot = buildOrderMileageSnapshot(text, linkedVehicle);
+        if (!snapshot) {
           closeInlineEditor();
           return;
         }
+        patch = { ...snapshot, vehicleMileageConfirmed: true };
         break;
       }
       case "description":

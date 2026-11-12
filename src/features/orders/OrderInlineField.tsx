@@ -46,6 +46,10 @@ export type OrderInlineFieldProps = {
   onDirtyChange?: (dirty: boolean) => void;
   saving?: boolean;
   errorMessage?: string | null;
+  /** Soft (non-blocking) warning under the editor, e.g. lower-than-known mileage. */
+  softWarning?: string | null;
+  /** Dynamic soft warning from the current draft (preferred for live checks). */
+  getSoftWarning?: (draft: string) => string | null;
   className?: string;
   /** Extra classes for the displayed value (e.g. `font-normal` for long descriptions). */
   valueClassName?: string;
@@ -83,6 +87,8 @@ export const OrderInlineField = forwardRef<OrderInlineFieldHandle, OrderInlineFi
   onDirtyChange,
   saving = false,
   errorMessage = null,
+  softWarning = null,
+  getSoftWarning,
   className,
   valueClassName: valueClassNameOverride,
 }, ref) {
@@ -123,6 +129,8 @@ export const OrderInlineField = forwardRef<OrderInlineFieldHandle, OrderInlineFi
             initial={toDraft(kind, editValue)}
             saving={saving}
             externalError={errorMessage}
+            softWarning={softWarning}
+            getSoftWarning={getSoftWarning}
             onCancel={onCancel}
             onSave={onSave}
             onDirtyChange={onDirtyChange}
@@ -184,6 +192,8 @@ type InlineEditorProps = {
   initial: OrderInlineFieldValue;
   saving: boolean;
   externalError: string | null;
+  softWarning?: string | null;
+  getSoftWarning?: (draft: string) => string | null;
   onCancel: () => void;
   onSave: (next: OrderInlineFieldValue) => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
@@ -198,6 +208,8 @@ const InlineEditor = forwardRef<OrderInlineFieldHandle, InlineEditorProps>(funct
   initial,
   saving,
   externalError,
+  softWarning = null,
+  getSoftWarning,
   onCancel,
   onSave,
   onDirtyChange,
@@ -364,6 +376,16 @@ const InlineEditor = forwardRef<OrderInlineFieldHandle, InlineEditorProps>(funct
           {error}
         </p>
       ) : null}
+
+      {(() => {
+        const live =
+          getSoftWarning?.(typeof draft === "string" ? draft : String(draft ?? "")) ?? softWarning;
+        return live ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400 [overflow-wrap:anywhere]" data-testid="inline-soft-warning">
+            {live}
+          </p>
+        ) : null;
+      })()}
 
       <div className="flex items-center gap-2">
         <Button type="button" size="sm" loading={saving} onClick={() => void submit()}>

@@ -3,13 +3,19 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Vehicle } from "../../lib/types";
 import {
   buildOrderMileageSnapshot,
+  isIntakeMileageBelowKnown,
+  knownVehicleMileage,
   mileageFormValueFromOrder,
+  mileageFormValueFromVehicle,
   parseVisitMileage,
   persistOrderVehicleMileage,
+  resolveCloseMileagePrefill,
   resolveVehicleMileageUpdate,
+  shouldConfirmMileageBeforeClose,
   vehicleInputWithCurrentMileage,
   visitMileageValidate,
 } from "./orderVehicleMileage";
+import type { Order } from "../../lib/types";
 
 const updateVehicleMock = vi.hoisted(() => vi.fn());
 
@@ -175,5 +181,73 @@ describe("orderVehicleMileage", () => {
       update: true,
       currentMileage: 120_500,
     });
+  });
+
+  it("prefills from current ?? initial and compares below-known with unit conversion", () => {
+    expect(knownVehicleMileage({ currentMileage: null, initialMileage: 9000 })).toBe(9000);
+    expect(mileageFormValueFromVehicle({ ...vehicle, currentMileage: null, initialMileage: 9000 })).toMatch(
+      /9[\s,]?000/,
+    );
+    // 12_000 mi ≈ 19_312 km — not below a 19_000 km known reading? use 18_000 known → below.
+    expect(
+      isIntakeMileageBelowKnown({
+        reading: 12_000,
+        readingUnit: "mi",
+        vehicle: { ...vehicle, currentMileage: 19_000, mileageUnit: "km" },
+      }),
+    ).toBe(false);
+    // 10_000 mi ≈ 16_093 km which is below a 50_000 km known reading.
+    expect(
+      isIntakeMileageBelowKnown({
+        reading: 10_000,
+        readingUnit: "mi",
+        vehicle: { ...vehicle, currentMileage: 50_000, mileageUnit: "km" },
+      }),
+    ).toBe(true);
+  });
+
+  it("gates the soft close dialog only for vehicle industries with mileage warranties", () => {
+    const base = {
+      id: "o1",
+      clientId: "c1",
+      clientName: "A",
+      orderNumber: "1",
+      device: "",
+      vin: "",
+      carNumber: "",
+      service: "",
+      services: [{ id: "s1", serviceName: "Oil", price: 1, quantity: 1, warrantyKm: 10000 }],
+      materials: [],
+      description: "",
+      status: "in-progress",
+      totalPrice: 1,
+      isPaid: false,
+      createdAt: "",
+      vehicleId: "veh-1",
+      vehicleMileageConfirmed: false,
+    } as unknown as Order;
+
+    expect(shouldConfirmMileageBeforeClose(base, { clientVehicles: true })).toBe(true);
+    expect(shouldConfirmMileageBeforeClose(base, { clientVehicles: false })).toBe(false);
+    expect(
+      shouldConfirmMileageBeforeClose({ ...base, vehicleMileageConfirmed: true }, { clientVehicles: true }),
+    ).toBe(false);
+    expect(shouldConfirmMileageBeforeClose({ ...base, vehicleId: null }, { clientVehicles: true })).toBe(false);
+    expect(
+      shouldConfirmMileageBeforeClose(
+        {
+          ...base,
+          services: [{ id: "s1", serviceName: "Oil", price: 1, quantity: 1, warrantyKm: null }] as Order["services"],
+        },
+        { clientVehicles: true },
+      ),
+    ).toBe(false);
+
+    expect(
+      resolveCloseMileagePrefill({
+        order: { vehicleMileageSnapshot: null, vehicleMileageUnitSnapshot: null },
+        vehicle: { currentMileage: null, initialMileage: 12000, mileageUnit: "mi" },
+      }),
+    ).toEqual({ value: 12000, unit: "mi" });
   });
 });

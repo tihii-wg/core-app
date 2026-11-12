@@ -17,9 +17,21 @@ type VehicleFormDialogProps = {
   initial?: Vehicle | null;
   submitting?: boolean;
   onSubmit: (input: VehicleInput) => Promise<void>;
+  /** Defaults to create when `initial` is absent, edit when present. */
+  mode?: "create" | "edit";
 };
 
-export function VehicleFormDialog({ open, onOpenChange, title, description, initial, submitting, onSubmit }: VehicleFormDialogProps) {
+export function VehicleFormDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  initial,
+  submitting,
+  onSubmit,
+  mode,
+}: VehicleFormDialogProps) {
+  const fieldsMode = mode ?? (initial ? "edit" : "create");
   const { t } = useTranslation();
   const {
     register,
@@ -78,7 +90,14 @@ export function VehicleFormDialog({ open, onOpenChange, title, description, init
             if (!busy) void save();
           }}
         >
-          <VehicleFields register={register} setValue={setValue} watch={watch} errors={errors} disabled={busy} />
+          <VehicleFields
+            register={register}
+            setValue={setValue}
+            watch={watch}
+            errors={errors}
+            disabled={busy}
+            mode={fieldsMode}
+          />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>

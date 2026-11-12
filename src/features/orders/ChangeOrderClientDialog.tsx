@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { MissingRpcError } from "../../services/missingRpc";
 import type { Client, Order, Vehicle } from "../../lib/types";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { updateOrderFields } from "../../services/apiOrders";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Label } from "../../ui/Label";
@@ -16,11 +18,16 @@ import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
 import { useGetClients } from "../clients/useGetClients";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { vehicleDisplayLabel } from "../../services/apiVehicles";
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
 import { useSearchVehiclesByRegistration } from "../vehicles/useSearchVehiclesByRegistration";
 import { fieldConfigMap, useOrderFieldConfig } from "./useOrderFieldConfig";
 import { OrderVehicleFields } from "./OrderVehicleFields";
+import {
+  buildOrderMileageSnapshot,
+  persistOrderVehicleMileage,
+} from "./orderVehicleMileage";
 import { useChangeOrderClient } from "./useChangeOrderClient";
 
 type FormValues = {
@@ -74,6 +81,8 @@ export default function ChangeOrderClientDialog({
   const { workflow } = useIndustryWorkflow();
   const showVehicles = industrySupportsClientVehicles(workflow);
   const changeClient = useChangeOrderClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const queryClient = useQueryClient();
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const orderFieldMap = useMemo(() => fieldConfigMap(orderFieldConfig), [orderFieldConfig]);
 
@@ -96,6 +105,7 @@ export default function ChangeOrderClientDialog({
     },
   });
   const { control, setValue, register, formState, reset, getValues } = form;
+  const { dirtyFields } = formState;
   const selectedClientId = useWatch({ control, name: "clientId" }) || "";
   const selectedVehicleId = useWatch({ control, name: "vehicleId" }) || "";
 
@@ -177,7 +187,7 @@ export default function ChangeOrderClientDialog({
     setError(null);
     try {
       const values = getValues();
-      const updated = await changeClient.mutateAsync({
+      let updated = await changeClient.mutateAsync({
         orderId: order.id,
         previousClientId: order.clientId,
         patch: {
@@ -186,6 +196,30 @@ export default function ChangeOrderClientDialog({
           confirmInvoice: hasInvoice ? confirmInvoice : undefined,
         },
       });
+      const selectedVehicleId = showVehicles ? values.vehicleId?.trim() || "" : "";
+      const selectedVehicle = selectedVehicleId
+        ? selectedClientVehicles.find((vehicle) => vehicle.id === selectedVehicleId)
+        : undefined;
+      const mileageSnapshot = selectedVehicle
+        ? buildOrderMileageSnapshot(values.currentMileage, selectedVehicle)
+        : null;
+      if (selectedVehicle && mileageSnapshot) {
+        await persistOrderVehicleMileage({
+          workspaceId,
+          clientId: selectedVehicle.clientId,
+          vehicle: selectedVehicle,
+          formMileage: values.currentMileage,
+          queryClient,
+        });
+        updated = await updateOrderFields(
+          order.id,
+          {
+            ...mileageSnapshot,
+            vehicleMileageConfirmed: Boolean(dirtyFields.currentMileage),
+          },
+          workspaceId,
+        );
+      }
       onChanged?.(updated);
       onOpenChange(false);
     } catch (err) {
@@ -271,7 +305,7 @@ export default function ChangeOrderClientDialog({
             errors={formState.errors}
             clientId={selectedClientId}
             disabled={pending}
-            mileageMode="empty"
+            mileageMode="vehicle"
             fieldConfig={orderFieldMap}
           />
         </section>

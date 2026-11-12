@@ -17,9 +17,22 @@ type VehicleFieldsProps = {
   watch: UseFormWatch<VehicleFormValues>;
   errors: FieldErrors<VehicleFormValues>;
   disabled?: boolean;
+  /**
+   * `create` — one «Mileage» field written to both initial and current on save.
+   * `edit` — both fields (initial historical, current editable) with short hints.
+   */
+  mode?: "create" | "edit";
 };
 
-export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch, errors, disabled }: VehicleFieldsProps) {
+export function VehicleFields({
+  idPrefix = "vehicle",
+  register,
+  setValue,
+  watch,
+  errors,
+  disabled,
+  mode = "edit",
+}: VehicleFieldsProps) {
   const { t } = useTranslation();
   const fuelType = watch("fuelType");
   const mileageUnit = watch("mileageUnit");
@@ -29,6 +42,7 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
   // Only show a unit abbreviation next to mileage inputs when a real unit is selected.
   // Never show "ед.?" / "unit?" as if it were a disabled control.
   const unitAbbr = mileageUnitAbbreviation(mileageUnit || null, t);
+  const isCreate = mode === "create";
 
   return (
     <div className="space-y-4">
@@ -126,38 +140,63 @@ export function VehicleFields({ idPrefix = "vehicle", register, setValue, watch,
         <p className="text-xs text-muted-foreground">{t("vehicles.mileage.unitHint")}</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {isCreate ? (
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-initial-mileage`}>
-            {t("vehicles.fields.initialMileage")}
+          <Label htmlFor={`${idPrefix}-mileage`}>
+            {t("vehicles.fields.mileage")}
             {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
           </Label>
           <MileageInput
-            id={`${idPrefix}-initial-mileage`}
+            id={`${idPrefix}-mileage`}
             {...register("initialMileage", {
               validate: (value) => mileageValidate(value, t),
+              onChange: (event) => {
+                const next = event.target.value;
+                setValue("currentMileage", next, { shouldDirty: true, shouldValidate: false });
+              },
             })}
-            placeholder={t("vehicles.placeholders.initialMileage")}
+            placeholder={t("vehicles.placeholders.mileage")}
             disabled={disabled}
+            data-testid="vehicle-create-mileage"
           />
           {errors.initialMileage && <p className="text-xs text-destructive">{errors.initialMileage.message}</p>}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-current-mileage`}>
-            {t("vehicles.fields.currentMileage")}
-            {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
-          </Label>
-          <MileageInput
-            id={`${idPrefix}-current-mileage`}
-            {...register("currentMileage", {
-              validate: (value) => mileageValidate(value, t),
-            })}
-            placeholder={t("vehicles.placeholders.currentMileage")}
-            disabled={disabled}
-          />
-          {errors.currentMileage && <p className="text-xs text-destructive">{errors.currentMileage.message}</p>}
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-initial-mileage`}>
+              {t("vehicles.fields.initialMileage")}
+              {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
+            </Label>
+            <MileageInput
+              id={`${idPrefix}-initial-mileage`}
+              {...register("initialMileage", {
+                validate: (value) => mileageValidate(value, t),
+              })}
+              placeholder={t("vehicles.placeholders.initialMileage")}
+              disabled={disabled}
+            />
+            <p className="text-xs text-muted-foreground">{t("vehicles.mileage.initialHint")}</p>
+            {errors.initialMileage && <p className="text-xs text-destructive">{errors.initialMileage.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-current-mileage`}>
+              {t("vehicles.fields.currentMileage")}
+              {unitAbbr ? <span className="ml-1 font-normal text-muted-foreground">({unitAbbr})</span> : null}
+            </Label>
+            <MileageInput
+              id={`${idPrefix}-current-mileage`}
+              {...register("currentMileage", {
+                validate: (value) => mileageValidate(value, t),
+              })}
+              placeholder={t("vehicles.placeholders.currentMileage")}
+              disabled={disabled}
+            />
+            <p className="text-xs text-muted-foreground">{t("vehicles.mileage.currentHint")}</p>
+            {errors.currentMileage && <p className="text-xs text-destructive">{errors.currentMileage.message}</p>}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">

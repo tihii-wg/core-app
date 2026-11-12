@@ -150,6 +150,13 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
         if (isCurrent) {
           return { ...option, disabled: false, disabledReason: null };
         }
+        // Close options stay selectable so the UI can open the Close order flow (mileage confirm + CloseOrderDialog).
+        if (
+          !lifecycleStatusLocked &&
+          (option.semanticAction === "close" || option.systemStatus === "closed")
+        ) {
+          return { ...option, disabled: false, disabledReason: null };
+        }
         if (lifecycleStatusLocked) {
           return {
             ...option,

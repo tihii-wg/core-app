@@ -17,7 +17,13 @@ import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
 import { mileageUnitAbbreviation, mileageUnitLabel } from "../vehicles/vehicleMileage";
 import type { OrderFieldConfigItem } from "./orderFieldConfig";
 import { VehicleFieldsGrid } from "./VehicleFieldsGrid";
-import { mileageFormValueFromVehicle } from "./orderVehicleMileage";
+import {
+  intakeMileageBelowKnownMessage,
+  isIntakeMileageBelowKnown,
+  lastKnownMileageHint,
+  mileageFormValueFromVehicle,
+  parseVisitMileage,
+} from "./orderVehicleMileage";
 
 const NONE = "__none__";
 
@@ -29,9 +35,9 @@ type OrderVehicleFieldsProps<T extends FieldValues> = {
   clientId: string;
   disabled?: boolean;
   /**
-   * How to initialize Current mileage when the selected vehicle changes.
-   * - `empty` (new orders): never carry over stored mileage; user enters visit mileage explicitly.
-   * - `vehicle` (edit orders): prefill from `vehicles.current_mileage` when the vehicle changes.
+   * How to initialize intake mileage when the selected vehicle changes.
+   * - `empty`: clear the field (legacy / rare).
+   * - `vehicle` (new + change-client + edit after vehicle change): prefill current ?? initial.
    */
   mileageMode?: "empty" | "vehicle";
   /**
@@ -75,14 +81,15 @@ export function OrderVehicleFields<T extends FieldValues>({
   errors,
   clientId,
   disabled,
-  mileageMode = "empty",
+  mileageMode = "vehicle",
   preserveInitialMileage = false,
   preserveInitialAssetSnapshot = false,
   fieldConfig,
 }: OrderVehicleFieldsProps<T>) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const vehicleIdPath = "vehicleId" as Path<T>;
   const selectedVehicleId = useWatch({ control, name: vehicleIdPath }) as string | undefined;
+  const intakeMileageRaw = useWatch({ control, name: "currentMileage" as Path<T> }) as string | undefined;
   const { vehicles, isLoading, isFetched, isError } = useGetClientVehicles(clientId || null);
   const createVehicle = useCreateVehicle(clientId);
   const [createOpen, setCreateOpen] = useState(false);
@@ -172,10 +179,9 @@ export function OrderVehicleFields<T extends FieldValues>({
     applyOrderAssetSnapshot(setValue, selectedVehicle);
   }, [isLoading, selectedVehicle, selectedVehicleId, setValue]);
 
-  // Sync visit mileage when the selected vehicle changes.
-  // Create (`empty`): clear the field so stored mileage is never carried into a new visit.
-  // Edit (`vehicle`): prefill from vehicles.current_mileage after the user changes vehicle.
-  // With `preserveInitialMileage`, keep the order snapshot seed until the vehicle id changes.
+  // Sync intake mileage when the selected vehicle changes.
+  // `vehicle`: prefill current ?? initial. `empty`: clear. With `preserveInitialMileage`,
+  // keep the order snapshot seed until the vehicle id changes.
   useEffect(() => {
     if (isLoading) return;
 
@@ -207,12 +213,39 @@ export function OrderVehicleFields<T extends FieldValues>({
   const vehicleRequired = Boolean(vehicleCfg?.required);
   const mileageRequired = Boolean(mileageCfg?.required);
   const mileageVisible = mileageCfg?.visible !== false;
-  // Form entry uses "current odometer reading" unless a stored override renamed the field.
+  // Intake label unless a stored override renamed the field.
   const mileageLabel =
     mileageCfg?.definitionId && mileageCfg.label.trim()
       ? mileageCfg.label
-      : t("vehicles.fields.currentMileage");
+      : t("vehicles.fields.intakeMileage");
   const vehicleLabel = vehicleCfg?.label ?? t("vehicles.selectLabel");
+
+  let intakeReading: number | null = null;
+  try {
+    intakeReading = parseVisitMileage(intakeMileageRaw);
+  } catch {
+    intakeReading = null;
+  }
+  const showBelowKnownWarning =
+    Boolean(selectedVehicle) &&
+    isIntakeMileageBelowKnown({
+      reading: intakeReading,
+      readingUnit: selectedVehicle?.mileageUnit,
+      vehicle: selectedVehicle,
+    });
+  const lastKnownHint = selectedVehicle
+    ? lastKnownMileageHint(selectedVehicle, t, {
+        formatDate: (iso) => {
+          try {
+            return new Intl.DateTimeFormat(i18n.language || undefined, {
+              dateStyle: "medium",
+            }).format(new Date(iso));
+          } catch {
+            return iso;
+          }
+        },
+      })
+    : null;
 
   return (
     <div className="space-y-2" data-edit-field="vehicle">
@@ -271,7 +304,14 @@ export function OrderVehicleFields<T extends FieldValues>({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">{t("vehicles.selectedSummary")}</p>
             <p className="text-sm font-medium text-foreground [overflow-wrap:anywhere]">{summary?.title}</p>
-            <VehicleFieldsGrid vehicle={selectedVehicle} empty={t("common.noValue")} fieldConfig={fieldConfig} />
+            <VehicleFieldsGrid
+              vehicle={selectedVehicle}
+              empty={t("common.noValue")}
+              fieldConfig={fieldConfig}
+              // The «Пробег при приёме» input below is the only mileage entered here; showing the vehicle's
+              // stored mileage again (often empty) next to it was confusing.
+              hideKeys={["currentMileage"]}
+            />
             <p className="text-xs text-muted-foreground">{t("vehicles.selectedSummaryHint")}</p>
           </div>
 
@@ -287,8 +327,9 @@ export function OrderVehicleFields<T extends FieldValues>({
               <MileageInput
                 id="order-vehicle-current-mileage"
                 unitSuffix={mileageUnitAbbr || undefined}
-                placeholder={t("vehicles.placeholders.currentMileage")}
+                placeholder={t("vehicles.placeholders.intakeMileage")}
                 disabled={disabled}
+                data-testid="order-intake-mileage"
                 {...register("currentMileage" as Path<T>, {
                   validate: (value) => {
                     const text = String(value ?? "").trim();
@@ -298,6 +339,16 @@ export function OrderVehicleFields<T extends FieldValues>({
                 })}
               />
               {mileageError?.message ? <p className="text-xs text-destructive">{mileageError.message}</p> : null}
+              {lastKnownHint ? (
+                <p className="text-xs text-muted-foreground" data-testid="order-intake-mileage-last-known">
+                  {lastKnownHint}
+                </p>
+              ) : null}
+              {showBelowKnownWarning && selectedVehicle ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="order-intake-mileage-below-warning">
+                  {intakeMileageBelowKnownMessage(selectedVehicle, t)}
+                </p>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 {t("vehicles.mileage.readingUnit", {
                   unit: mileageUnitLabel(selectedVehicle.mileageUnit, t),
@@ -318,6 +369,7 @@ export function OrderVehicleFields<T extends FieldValues>({
         title={t("vehicles.addTitle")}
         description={t("vehicles.addFromOrderDescription")}
         submitting={createVehicle.isPending}
+        mode="create"
         onSubmit={async (input) => {
           const created = await createVehicle.mutateAsync(input);
           pendingCreatedVehicleId.current = created.id;
@@ -331,11 +383,8 @@ export function OrderVehicleFields<T extends FieldValues>({
           syncedMileageVehicleId.current = created.id;
           skipInitialAssetSync.current = false;
           applyOrderAssetSnapshot(setValue, created);
-          applyVisitMileage(
-            setValue,
-            mileageMode === "vehicle" ? mileageFormValueFromVehicle(created) : "",
-            { shouldDirty: false },
-          );
+          // Explicit snapshot from the create form value (initial = current on create).
+          applyVisitMileage(setValue, mileageFormValueFromVehicle(created), { shouldDirty: true });
         }}
       />
     </div>

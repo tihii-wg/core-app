@@ -66,11 +66,17 @@ function parseMileageField(raw: string): number | null {
   }
 }
 
-/** Convert form strings to a VehicleInput; throws localized errors for invalid numbers/VIN. */
+/**
+ * Convert form strings to a VehicleInput; throws localized errors for invalid numbers/VIN.
+ * Create forms mirror the single mileage field into both initial and current when current is empty.
+ */
 export function vehicleFormValuesToInput(values: VehicleFormValues): VehicleInput {
   const year = parseOptionalVehicleNumber(values.year);
   const initialMileage = parseMileageField(values.initialMileage);
-  const currentMileage = parseMileageField(values.currentMileage);
+  const currentMileageRaw = parseMileageField(values.currentMileage);
+  // Create UI writes one field into initialMileage and mirrors via onChange; if mirroring was skipped,
+  // still treat a lone initial value as both initial and current.
+  const currentMileage = currentMileageRaw ?? initialMileage;
   const engineDisplacement = parseOptionalVehicleNumber(values.engineDisplacement);
   const mileageUnit: MileageUnit | null = values.mileageUnit === "" ? null : values.mileageUnit;
 

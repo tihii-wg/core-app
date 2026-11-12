@@ -127,6 +127,11 @@ export interface Order {
    * Null = unknown legacy; never inferred from the vehicle's current unit.
    */
   vehicleMileageUnitSnapshot?: MileageUnit | null;
+  /**
+   * True when the user confirmed/edited intake mileage for this visit (form or order card).
+   * Absent/false until the optional DB column is applied or the user confirms.
+   */
+  vehicleMileageConfirmed?: boolean;
   device: string;
   vin: string;
   carNumber: string;
@@ -287,6 +292,8 @@ export type CreateOrderInput = {
   vehicleMileageSnapshot?: number | null;
   /** Unit captured with the visit mileage; null = unknown. */
   vehicleMileageUnitSnapshot?: MileageUnit | null;
+  /** True when the user typed/confirmed intake mileage on create. */
+  vehicleMileageConfirmed?: boolean;
   description?: string;
   /** Empty array is allowed for draft orders. */
   services: OrderService[];
@@ -372,6 +379,7 @@ export type UpdateOrderDetails = Omit<
    */
   vehicleMileageSnapshot?: number | null;
   vehicleMileageUnitSnapshot?: MileageUnit | null;
+  vehicleMileageConfirmed?: boolean;
   /** ISO timestamptz or null; form date/time parts are combined before save. */
   measurementAt?: string | null;
   installationAt?: string | null;

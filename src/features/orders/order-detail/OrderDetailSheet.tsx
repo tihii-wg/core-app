@@ -54,7 +54,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
     closeOpen, setCloseOpen, cancelOpen, recordPaymentOpen, setRecordPaymentOpen, addMaterialOpen,
     addMaterialPrefill, applyPendingMaterials, catalogServiceId, catalogInventoryId, i18nLanguage,
     editFocusField, deleteOrderMutateAsync, editServiceLineId, setEditServiceLineId,
-    editMaterialLineId, setEditMaterialLineId,
+    editMaterialLineId, setEditMaterialLineId, mileageConfirmDialogProps, linkedVehicle,
   } = p;
 
   // Stable event handlers: memoized children (header, tabs, line tables/rows, footer) only re-render when
@@ -256,6 +256,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
                 onTeamChange={h.teamChange}
                 customInlineKind={customInlineKind}
                 customEditFieldKey={customEditFieldKey}
+                linkedVehicle={linkedVehicle}
               />
             ) : null}
 
@@ -432,6 +433,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
         setEditServiceLineId={setEditServiceLineId}
         editMaterialLineId={editMaterialLineId}
         setEditMaterialLineId={setEditMaterialLineId}
+        mileageConfirmDialogProps={mileageConfirmDialogProps}
       />
     </Sheet>
   

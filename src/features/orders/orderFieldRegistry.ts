@@ -222,7 +222,7 @@ export const BUILTIN_ORDER_FIELDS: readonly BuiltinOrderFieldMeta[] = [
     canRequire: true,
     canRename: true,
     appliesTo: vehiclesOnly,
-    defaultLabel: () => i18n.t("vehicles.fields.orderCurrentMileage"),
+    defaultLabel: () => i18n.t("vehicles.fields.intakeMileage"),
     defaultRequired: () => false,
     defaultSortOrder: 27,
   },

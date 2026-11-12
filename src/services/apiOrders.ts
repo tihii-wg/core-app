@@ -402,6 +402,9 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     vehicleMileageSnapshot: intakeMileage,
     vehicleMileageUnitSnapshot: intakeMileageUnit,
   });
+  const mileageConfirmedPatch = orderMileageConfirmedFields({
+    vehicleMileageConfirmed: input.vehicleMileageConfirmed,
+  });
 
   const definitions = await getStatusDefinitions(targetWorkspaceId, "order").catch(() => []);
   const defaultStatus = findDefaultOrderStatus(definitions);
@@ -410,7 +413,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       ? (defaultStatus.systemStatus as OrderStatus)
       : "new";
 
-  const insertOrderRow = (includeMileageSnapshot: boolean) =>
+  const insertOrderRow = (includeMileageSnapshot: boolean, includeMileageConfirmed: boolean) =>
     supabase
       .from("orders")
       .insert({
@@ -436,17 +439,30 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
         service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
         ...industryPatch,
         ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
+        ...(includeMileageConfirmed ? mileageConfirmedPatch : {}),
       } as Record<string, unknown>)
       .select()
       .single();
 
   let { data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
-    insertOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length)),
+    insertOrderRow(
+      Boolean(Object.keys(mileageSnapshotPatch).length),
+      Boolean(Object.keys(mileageConfirmedPatch).length),
+    ),
   );
+
+  if (orderError && isMissingOrderMileageConfirmedColumn(orderError)) {
+    orderMileageConfirmedSupported = false;
+    ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+      insertOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length), false),
+    ));
+  }
 
   if (orderError && isMissingOrderMileageSnapshotColumn(orderError)) {
     orderMileageSnapshotSupported = false;
-    ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() => insertOrderRow(false)));
+    ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+      insertOrderRow(false, Boolean(Object.keys(mileageConfirmedPatch).length) && orderMileageConfirmedSupported),
+    ));
   }
 
   if (orderError) {
@@ -797,19 +813,41 @@ const orderServiceBaseColumns = "id, order_id, service_id, service_name, price, 
  */
 let orderMileageSnapshotSupported = true;
 
+/**
+ * Optional until supabase/manual/20261112210000_vehicle_mileage_intake.PRODUCTION.sql is applied.
+ * When false, create/update omit vehicle_mileage_confirmed and mapped orders treat it as false.
+ */
+let orderMileageConfirmedSupported = true;
+
 /** Test hook: reset cached order mileage snapshot column support. */
 export function resetOrderMileageSnapshotSupport() {
   orderMileageSnapshotSupported = true;
+}
+
+/** Test hook: reset cached order mileage confirmed column support. */
+export function resetOrderMileageConfirmedSupport() {
+  orderMileageConfirmedSupported = true;
 }
 
 export function isOrderMileageSnapshotSupported() {
   return orderMileageSnapshotSupported;
 }
 
+export function isOrderMileageConfirmedSupported() {
+  return orderMileageConfirmedSupported;
+}
+
 function isMissingOrderMileageSnapshotColumn(error: { code?: string; message?: string } | null | undefined) {
   if (!error) return false;
   const message = error.message ?? "";
   if (!/\bvehicle_mileage(_unit)?_snapshot\b/i.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
+}
+
+function isMissingOrderMileageConfirmedColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/\bvehicle_mileage_confirmed\b/i.test(message)) return false;
   return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
 }
 
@@ -825,10 +863,12 @@ function numberOrNull(value: unknown): number | null {
 function readOrderMileageSnapshot(row: Record<string, unknown>): {
   vehicleMileageSnapshot: number | null;
   vehicleMileageUnitSnapshot: MileageUnit | null;
+  vehicleMileageConfirmed: boolean;
 } {
   return {
     vehicleMileageSnapshot: numberOrNull(row.vehicle_mileage_snapshot),
     vehicleMileageUnitSnapshot: parseMileageUnit(row.vehicle_mileage_unit_snapshot),
+    vehicleMileageConfirmed: row.vehicle_mileage_confirmed === true,
   };
 }
 
@@ -850,6 +890,15 @@ export function orderMileageSnapshotFields(input: {
     vehicle_mileage_snapshot: snapshot,
     vehicle_mileage_unit_snapshot: input.vehicleMileageUnitSnapshot ?? null,
   };
+}
+
+/** Payload field for create/update when vehicle_mileage_confirmed exists. */
+export function orderMileageConfirmedFields(input: {
+  vehicleMileageConfirmed?: boolean;
+}): Record<string, unknown> {
+  if (!orderMileageConfirmedSupported) return {};
+  if (input.vehicleMileageConfirmed === undefined) return {};
+  return { vehicle_mileage_confirmed: Boolean(input.vehicleMileageConfirmed) };
 }
 
 // `order_services.kind` ('labor' | 'service') comes from crm_ro_v1 or 20261101050000_order_line_kind.PRODUCTION.sql.
@@ -3504,6 +3553,7 @@ export async function updateOrder(
     materials,
     vehicleMileageSnapshot,
     vehicleMileageUnitSnapshot,
+    vehicleMileageConfirmed,
     deviceSerial,
     deviceImei,
     deviceCondition,
@@ -3545,6 +3595,9 @@ export async function updateOrder(
     vehicleMileageSnapshot,
     vehicleMileageUnitSnapshot,
   });
+  const mileageConfirmedPatch = orderMileageConfirmedFields({
+    vehicleMileageConfirmed,
+  });
   const industryPatch = orderIndustryColumnPatch({
     deviceSerial,
     deviceImei,
@@ -3557,7 +3610,7 @@ export async function updateOrder(
     installationAt,
   });
 
-  const updateOrderRow = (includeMileageSnapshot: boolean) =>
+  const updateOrderRow = (includeMileageSnapshot: boolean, includeMileageConfirmed: boolean) =>
     supabase
       .from("orders")
       .update({
@@ -3570,19 +3623,31 @@ export async function updateOrder(
         vin: normalizedVin,
         ...industryPatch,
         ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
+        ...(includeMileageConfirmed ? mileageConfirmedPatch : {}),
       } as Record<string, unknown>)
       .eq("id", orderId)
       .eq("workspace_id", workspaceId)
       .select(orderColumns)
       .maybeSingle();
 
-  let { data, error } = await updateOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length));
+  let { data, error } = await updateOrderRow(
+    Boolean(Object.keys(mileageSnapshotPatch).length),
+    Boolean(Object.keys(mileageConfirmedPatch).length),
+  );
+
+  if (error && isMissingOrderMileageConfirmedColumn(error)) {
+    orderMileageConfirmedSupported = false;
+    ({ data, error } = await updateOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length), false));
+  }
 
   if (error && isMissingOrderMileageSnapshotColumn(error)) {
     orderMileageSnapshotSupported = false;
     if (vehicleMileageSnapshot !== undefined) {
       // Snapshot was requested but columns are absent — continue without them rather than failing the whole save.
-      ({ data, error } = await updateOrderRow(false));
+      ({ data, error } = await updateOrderRow(
+        false,
+        Boolean(Object.keys(mileageConfirmedPatch).length) && orderMileageConfirmedSupported,
+      ));
     }
   }
 
@@ -3770,6 +3835,7 @@ export type UpdateOrderFieldsPatch = Partial<{
   installationAt: string | null;
   vehicleMileageSnapshot: number | null;
   vehicleMileageUnitSnapshot: MileageUnit | null;
+  vehicleMileageConfirmed: boolean;
 }>;
 
 function trimmedTimestampOrNull(value: string | null | undefined): string | null {
@@ -3817,6 +3883,9 @@ export async function updateOrderFields(
   });
   // Snapshot value without a unit must not wipe the stored unit.
   if (patch.vehicleMileageUnitSnapshot === undefined) delete mileageSnapshotPatch.vehicle_mileage_unit_snapshot;
+  const mileageConfirmedPatch = orderMileageConfirmedFields({
+    vehicleMileageConfirmed: patch.vehicleMileageConfirmed,
+  });
 
   const { data: existingOrder, error: existingError } = await supabase
     .from("orders")
@@ -3828,8 +3897,12 @@ export async function updateOrderFields(
   if (!existingOrder) throw new Error(orderPermissionMessage());
   await assertOrderRowContentEditable(workspaceId, existingOrder);
 
-  const runUpdate = (includeMileageSnapshot: boolean) => {
-    const payload = { ...columns, ...(includeMileageSnapshot ? mileageSnapshotPatch : {}) };
+  const runUpdate = (includeMileageSnapshot: boolean, includeMileageConfirmed: boolean) => {
+    const payload = {
+      ...columns,
+      ...(includeMileageSnapshot ? mileageSnapshotPatch : {}),
+      ...(includeMileageConfirmed ? mileageConfirmedPatch : {}),
+    };
     if (Object.keys(payload).length === 0) return null;
     return supabase
       .from("orders")
@@ -3840,13 +3913,22 @@ export async function updateOrderFields(
       .maybeSingle();
   };
 
-  let request = runUpdate(true);
+  let request = runUpdate(true, true);
   if (request) {
     let { data, error } = await request;
+    if (error && isMissingOrderMileageConfirmedColumn(error)) {
+      orderMileageConfirmedSupported = false;
+      request = runUpdate(true, false);
+      if (request) ({ data, error } = await request);
+      else {
+        data = { id: orderId };
+        error = null;
+      }
+    }
     if (error && isMissingOrderMileageSnapshotColumn(error)) {
       orderMileageSnapshotSupported = false;
       // Snapshot columns are absent — continue without them rather than failing the whole save.
-      request = runUpdate(false);
+      request = runUpdate(false, orderMileageConfirmedSupported && Object.keys(mileageConfirmedPatch).length > 0);
       if (request) ({ data, error } = await request);
       else {
         data = { id: orderId };
