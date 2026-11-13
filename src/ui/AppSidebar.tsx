@@ -9,6 +9,8 @@ import { industryModuleLabel } from "../features/industries/industryWorkflow";
 import { useIndustryWorkflow } from "../features/industries/useIndustryWorkflow";
 import { useNavCounts } from "../features/nav/useNavCounts";
 import type { NavCountModule } from "../services/apiNavCounts";
+import { useIsWorkspaceOwnerId } from "../features/workspaces/useIsWorkspaceOwnerId";
+import { useGoogleCalendarStatus } from "../features/calendar/useGoogleCalendar";
 import { LogoMark } from "./Logo";
 
 interface NavItem {
@@ -66,6 +68,13 @@ export function AppSidebar() {
   const currentWorkspaceId = location.pathname.split("/")[2];
   const { workflow } = useIndustryWorkflow();
   const { counts } = useNavCounts();
+  const isOwner = useIsWorkspaceOwnerId();
+  const calendarStatus = useGoogleCalendarStatus(Boolean(currentWorkspaceId));
+  const hideCalendarNav =
+    !isOwner &&
+    Boolean(calendarStatus.data?.connected) &&
+    !calendarStatus.data?.teamAccess &&
+    !calendarStatus.data?.canAccess;
 
   const currentNavItem = location.pathname.split("/")[3];
 
@@ -179,7 +188,11 @@ export function AppSidebar() {
                 ) : (
                   <p className="mb-1 px-2.5 text-[11px] font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t(group.labelKey)}</p>
                 ))}
-              <ul className="space-y-0.5">{group.items.map(renderItem)}</ul>
+              <ul className="space-y-0.5">
+                {group.items
+                  .filter((item) => !(hideCalendarNav && item.module === "calendar"))
+                  .map(renderItem)}
+              </ul>
             </div>
           ))}
         </nav>

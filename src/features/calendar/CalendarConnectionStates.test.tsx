@@ -59,6 +59,20 @@ vi.mock("./useGoogleCalendar", () => ({
   useUpdateGoogleCalendarEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteGoogleCalendarEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useRefreshGoogleCalendar: () => async () => undefined,
+  useUpdateGoogleCalendarSettings: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock("../orders/useOrderDetails", () => ({
+  useOrderDetails: () => ({
+    openOrder: vi.fn(),
+    panelProps: { selectedOrder: null },
+  }),
+}));
+
+vi.mock("../orders/OrderDetailPanel", () => ({ default: () => null }));
+
+vi.mock("../../services/apiOrders", () => ({
+  getOrder: vi.fn(),
 }));
 
 import { CalendarPage } from "./CalendarPage";

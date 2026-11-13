@@ -20,6 +20,8 @@ function ev(partial: Partial<GoogleCalendarEvent> & Pick<GoogleCalendarEvent, "i
     etag: null,
     authorUserId: null,
     authorUserName: null,
+    coreAppOrderId: null,
+    coreAppField: null,
     ...partial,
   };
 }

@@ -16,6 +16,10 @@ export default {
   confirmSelect: "Use this calendar",
   addEvent: "+ Event",
   showOrders: "Show orders",
+  ownerOnly: {
+    title: "Calendar is available to the owner only",
+    description: "Ask the workspace owner to allow team access in calendar settings.",
+  },
   views: {
     day: "Day",
     week: "Week",
@@ -53,6 +57,7 @@ export default {
     connected: "Google Calendar connected",
     disconnected: "Google Calendar disconnected",
     calendarSelected: "Shared calendar updated",
+    settingsSaved: "Calendar settings saved",
     saved: "Event saved",
     deleted: "Event deleted",
     oauthError: "Could not connect Google Calendar ({{code}})",
@@ -77,5 +82,13 @@ export default {
     openCalendar: "Open calendar",
     statusConnected: "Connected as {{email}} · {{calendar}}",
     statusDisconnected: "Not connected",
+    visibilityHint:
+      "By default only you see the calendar (it may be your personal Google calendar). Turn on team access when you want colleagues to view and edit it in the app.",
+    teamAccess: "Team can see the calendar",
+    syncOrders: "Add order deadlines to Google Calendar",
+    syncMeasurement: "Add measurements",
+    syncInstallation: "Add installations",
+    syncError: "Sync error: {{error}}",
+    pendingSync: "Pending sync: {{count}}",
   },
 };

@@ -5,6 +5,7 @@ import { deleteOrder } from "../../services/apiOrders";
 import { invalidatePaymentViews } from "../finance/usePayments";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 
 export function useDeleteOrder() {
   const queryClient = useQueryClient();
@@ -35,6 +36,7 @@ export function useDeleteOrder() {
       void queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
       invalidatePaymentViews(queryClient, workspaceId);
+      notifyOrderCalendarChanged(queryClient, workspaceId);
       const returned = result.materialsReturned?.length ?? 0;
       toast.success(
         returned > 0

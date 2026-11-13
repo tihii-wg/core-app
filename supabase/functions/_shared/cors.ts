@@ -4,7 +4,8 @@ export function corsHeaders(appUrl: string | undefined): HeadersInit {
   const origin = (appUrl ?? "").replace(/\/$/, "") || "*";
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-backup-cron-token",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-backup-cron-token, x-gcal-cron-token",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",

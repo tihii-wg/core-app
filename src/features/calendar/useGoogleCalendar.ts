@@ -11,6 +11,7 @@ import {
   selectGoogleCalendar,
   startGoogleCalendarOAuth,
   updateGoogleCalendarEvent,
+  updateGoogleCalendarSettings,
   type UpsertGoogleCalendarEventInput,
 } from "../../services/apiGoogleCalendar";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -117,6 +118,27 @@ export function useSelectGoogleCalendar() {
     },
     onError: (error: Error) => {
       toast.error(error.message || t("calendar.errors.selectFailed"));
+    },
+  });
+}
+
+export function useUpdateGoogleCalendarSettings() {
+  const { t } = useTranslation();
+  const { workspaceId } = useActiveWorkspaceId();
+  const refresh = useRefreshGoogleCalendar();
+  return useMutation({
+    mutationFn: (input: {
+      teamAccess?: boolean;
+      syncOrders?: boolean;
+      syncMeasurement?: boolean;
+      syncInstallation?: boolean;
+    }) => updateGoogleCalendarSettings(workspaceId, input),
+    onSuccess: async () => {
+      await refresh();
+      toast.success(t("calendar.toast.settingsSaved"));
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t("calendar.errors.saveFailed"));
     },
   });
 }

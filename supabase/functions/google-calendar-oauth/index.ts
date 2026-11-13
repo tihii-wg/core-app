@@ -277,6 +277,10 @@ async function handleDisconnect(req: Request, workspaceId: string, appUrl: strin
     console.error("[google-calendar-oauth] revoke", error instanceof Error ? error.message : error);
   }
 
+  // Clear sync links/queue before credentials (no Google calls — tokens are revoked).
+  await admin.from("gcal_order_event_links").delete().eq("workspace_id", workspaceId);
+  await admin.from("gcal_sync_queue").delete().eq("workspace_id", workspaceId);
+
   const { error: clearError } = await admin.rpc("crm_gcal_clear_credential", { p_workspace_id: workspaceId });
   if (clearError) {
     return errorResponse("provider_error", clearError.message || "Failed to disconnect", 500, appUrl);

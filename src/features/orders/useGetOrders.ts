@@ -15,6 +15,7 @@ import type { Order, OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { patchOrderInLists } from "./orderCache";
+import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 
 /** Patches taxInvoiceNumber on every cached orders list/page for this workspace. */
 export function patchOrderTaxInvoiceInCache(
@@ -205,6 +206,7 @@ export function useUpdateOrderStatus() {
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
+      notifyOrderCalendarChanged(queryClient, workspaceId);
     },
   });
 }

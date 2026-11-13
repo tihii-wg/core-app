@@ -35,7 +35,7 @@ async function route(req: Request, appUrl: string): Promise<Response> {
 
   const auth = await requireMember(req, workspaceId, appUrl);
   if (auth instanceof Response) return auth;
-  const { user, jwtUserId, displayName } = auth;
+  const { user, jwtUserId, displayName, isOwner } = auth;
 
   const admin = serviceClient();
   const clientId = requireEnv("GOOGLE_CLIENT_ID");
@@ -43,20 +43,41 @@ async function route(req: Request, appUrl: string): Promise<Response> {
 
   // Owner: GET calendars
   if (path.endsWith("/calendars") && req.method === "GET") {
-    const ownerGate = await requireOwner(user, workspaceId, appUrl);
-    if (ownerGate) return ownerGate;
+    if (!isOwner) {
+      return errorResponse("owner_only", "Only the workspace owner can manage the shared calendar connection", 403, appUrl);
+    }
     return await listCalendars(admin, workspaceId, clientId, clientSecret, appUrl);
   }
 
   // Owner: POST select-calendar
   if (path.endsWith("/select-calendar") && req.method === "POST") {
-    const ownerGate = await requireOwner(user, workspaceId, appUrl);
-    if (ownerGate) return ownerGate;
+    if (!isOwner) {
+      return errorResponse("owner_only", "Only the workspace owner can manage the shared calendar connection", 403, appUrl);
+    }
     const body = (await req.json()) as { calendarId?: string };
     return await selectCalendar(admin, workspaceId, body.calendarId ?? "", clientId, clientSecret, appUrl);
   }
 
-  // Members: events CRUD
+  // Owner: POST settings (team access + sync toggles)
+  if (path.endsWith("/settings") && req.method === "POST") {
+    if (!isOwner) {
+      return errorResponse("owner_only", "Only the workspace owner can change calendar settings", 403, appUrl);
+    }
+    const body = (await req.json()) as {
+      teamAccess?: boolean;
+      syncOrders?: boolean;
+      syncMeasurement?: boolean;
+      syncInstallation?: boolean;
+    };
+    return await updateSettings(admin, workspaceId, body, appUrl);
+  }
+
+  // Members: events CRUD (gated by team_access for non-owners)
+  if (path.includes("/events")) {
+    const accessGate = await requireTeamCalendarAccess(admin, workspaceId, isOwner, appUrl);
+    if (accessGate) return accessGate;
+  }
+
   if (path.endsWith("/events") && req.method === "GET") {
     const from = url.searchParams.get("from")?.trim() ?? "";
     const to = url.searchParams.get("to")?.trim() ?? "";
@@ -82,7 +103,7 @@ async function route(req: Request, appUrl: string): Promise<Response> {
 
   // Status (connection metadata for UI)
   if (path.endsWith("/status") && req.method === "GET") {
-    return await connectionStatus(admin, workspaceId, appUrl);
+    return await connectionStatus(admin, workspaceId, isOwner, appUrl);
   }
 
   return errorResponse("not_found", "Unknown route", 404, appUrl);
@@ -92,7 +113,9 @@ async function requireMember(
   req: Request,
   workspaceId: string,
   appUrl: string,
-): Promise<Response | { user: ReturnType<typeof userClient>; jwtUserId: string; displayName: string }> {
+): Promise<
+  Response | { user: ReturnType<typeof userClient>; jwtUserId: string; displayName: string; isOwner: boolean }
+> {
   if (!workspaceId) return errorResponse("invalid_args", "workspaceId required", 400, appUrl);
   const jwt = bearerToken(req);
   if (!jwt) return errorResponse("unauthorized", "Missing bearer token", 401, appUrl);
@@ -106,6 +129,9 @@ async function requireMember(
     return errorResponse("forbidden", "Not a workspace member", 403, appUrl);
   }
 
+  const { data: isOwnerRaw } = await user.rpc("crm_is_workspace_owner_id", { p_workspace_id: workspaceId });
+  const isOwner = isOwnerRaw === true;
+
   const meta = userData.user.user_metadata as Record<string, unknown> | undefined;
   const displayName =
     (typeof meta?.full_name === "string" && meta.full_name.trim()) ||
@@ -113,40 +139,130 @@ async function requireMember(
     userData.user.email?.split("@")[0] ||
     "User";
 
-  return { user, jwtUserId: userData.user.id, displayName };
+  return { user, jwtUserId: userData.user.id, displayName, isOwner };
 }
 
-async function requireOwner(
-  user: ReturnType<typeof userClient>,
+async function requireTeamCalendarAccess(
+  admin: ReturnType<typeof serviceClient>,
   workspaceId: string,
+  isOwner: boolean,
   appUrl: string,
 ): Promise<Response | null> {
-  const { data: isOwner } = await user.rpc("crm_is_workspace_owner_id", { p_workspace_id: workspaceId });
-  if (isOwner !== true) {
-    return errorResponse("owner_only", "Only the workspace owner can manage the shared calendar connection", 403, appUrl);
+  if (isOwner) return null;
+  const { data } = await admin
+    .from("workspace_google_calendar")
+    .select("team_access, calendar_id")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!data?.calendar_id) {
+    return errorResponse("not_connected", "Google Calendar is not connected", 409, appUrl);
+  }
+  if (data.team_access !== true) {
+    return errorResponse("owner_only_calendar", "Calendar is available to the owner only", 403, appUrl);
   }
   return null;
 }
 
-async function connectionStatus(admin: ReturnType<typeof serviceClient>, workspaceId: string, appUrl: string) {
+async function connectionStatus(
+  admin: ReturnType<typeof serviceClient>,
+  workspaceId: string,
+  isOwner: boolean,
+  appUrl: string,
+) {
   const { data, error } = await admin
     .from("workspace_google_calendar")
-    .select("google_email, calendar_id, calendar_summary, calendar_time_zone, connected_at, last_error, updated_at")
+    .select(
+      "google_email, calendar_id, calendar_summary, calendar_time_zone, connected_at, last_error, updated_at, team_access, sync_orders, sync_measurement, sync_installation, last_sync_error",
+    )
     .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (error) return errorResponse("provider_error", error.message, 500, appUrl);
   const connected = Boolean(data?.calendar_id);
+  const teamAccess = data?.team_access === true;
+  const payload: Record<string, unknown> = {
+    connected,
+    googleEmail: data?.google_email ?? null,
+    calendarId: data?.calendar_id ?? null,
+    calendarSummary: data?.calendar_summary ?? null,
+    calendarTimeZone: data?.calendar_time_zone ?? null,
+    connectedAt: data?.connected_at ?? null,
+    lastError: data?.last_error ?? null,
+    reconnectRequired: Boolean(data?.last_error && !data?.calendar_id),
+    teamAccess,
+    syncOrders: data?.sync_orders === true,
+    syncMeasurement: data?.sync_measurement === true,
+    syncInstallation: data?.sync_installation === true,
+    canAccess: isOwner || teamAccess,
+  };
+  if (isOwner) {
+    const { count } = await admin
+      .from("gcal_sync_queue")
+      .select("order_id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId);
+    payload.pendingSyncCount = count ?? 0;
+    payload.lastSyncError = data?.last_sync_error ?? null;
+  }
+  return jsonResponse(payload, 200, appUrl);
+}
+
+async function updateSettings(
+  admin: ReturnType<typeof serviceClient>,
+  workspaceId: string,
+  body: {
+    teamAccess?: boolean;
+    syncOrders?: boolean;
+    syncMeasurement?: boolean;
+    syncInstallation?: boolean;
+  },
+  appUrl: string,
+) {
+  const { data: current, error: loadError } = await admin
+    .from("workspace_google_calendar")
+    .select("calendar_id, sync_orders, team_access, sync_measurement, sync_installation")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (loadError) return errorResponse("provider_error", loadError.message, 500, appUrl);
+  if (!current?.calendar_id) {
+    return errorResponse("not_connected", "Google Calendar is not connected", 409, appUrl);
+  }
+
+  const prevSync = current.sync_orders === true;
+  const nextSync = typeof body.syncOrders === "boolean" ? body.syncOrders : prevSync;
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof body.teamAccess === "boolean") patch.team_access = body.teamAccess;
+  if (typeof body.syncOrders === "boolean") patch.sync_orders = body.syncOrders;
+  if (typeof body.syncMeasurement === "boolean") patch.sync_measurement = body.syncMeasurement;
+  if (typeof body.syncInstallation === "boolean") patch.sync_installation = body.syncInstallation;
+
+  const { error: updError } = await admin
+    .from("workspace_google_calendar")
+    .update(patch)
+    .eq("workspace_id", workspaceId);
+  if (updError) return errorResponse("provider_error", updError.message, 500, appUrl);
+
+  const fieldToggled =
+    (typeof body.syncMeasurement === "boolean" && body.syncMeasurement !== (current.sync_measurement === true)) ||
+    (typeof body.syncInstallation === "boolean" && body.syncInstallation !== (current.sync_installation === true));
+
+  if (!prevSync && nextSync) {
+    await admin.rpc("crm_gcal_enqueue_backfill", { p_workspace_id: workspaceId });
+  } else if (prevSync && !nextSync) {
+    await admin.rpc("crm_gcal_enqueue_linked_orders", { p_workspace_id: workspaceId });
+  } else if (nextSync && fieldToggled) {
+    // Measurement / installation switched while sync is on: add new events and remove ones no longer wanted.
+    await admin.rpc("crm_gcal_enqueue_backfill", { p_workspace_id: workspaceId });
+    await admin.rpc("crm_gcal_enqueue_linked_orders", { p_workspace_id: workspaceId });
+  }
+
   return jsonResponse(
     {
-      connected,
-      googleEmail: data?.google_email ?? null,
-      calendarId: data?.calendar_id ?? null,
-      calendarSummary: data?.calendar_summary ?? null,
-      calendarTimeZone: data?.calendar_time_zone ?? null,
-      connectedAt: data?.connected_at ?? null,
-      lastError: data?.last_error ?? null,
-      // Credential was cleared after an auth failure: calendar_id is null but last_error is kept.
-      reconnectRequired: Boolean(data?.last_error && !data?.calendar_id),
+      ok: true,
+      teamAccess: typeof body.teamAccess === "boolean" ? body.teamAccess : current.team_access === true,
+      syncOrders: nextSync,
+      syncMeasurement:
+        typeof body.syncMeasurement === "boolean" ? body.syncMeasurement : current.sync_measurement === true,
+      syncInstallation:
+        typeof body.syncInstallation === "boolean" ? body.syncInstallation : current.sync_installation === true,
     },
     200,
     appUrl,

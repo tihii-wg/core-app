@@ -10,6 +10,7 @@ import { invalidatePaymentStageViews } from "../finance/useOrderPaymentStages";
 import { industryPaymentStageTemplate, industryProfile } from "../industries/industryProfile";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 
 /** Auto-apply workspace/industry template only when it has more than one stage. */
 async function maybeApplyPaymentStageTemplate(
@@ -75,6 +76,7 @@ export function useCreateOrder() {
       if (order?.id) {
         void queryClient.invalidateQueries({ queryKey: ["order-payment-stages", workspaceId, "order", order.id] });
       }
+      notifyOrderCalendarChanged(queryClient, workspaceId);
       toast.success(
         i18n.t(input.kind === "estimate" ? "orders.estimates.created" : "orders.toast.created"),
         { id: "create-order" },

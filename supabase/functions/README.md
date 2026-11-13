@@ -22,7 +22,8 @@
 | Function | Purpose |
 | --- | --- |
 | `google-calendar-oauth` | Owner OAuth start / callback / disconnect; refresh token in Vault (`crm_gcal_*`); metadata in `workspace_google_calendar`. |
-| `google-calendar` | Member JSON API: list/select calendars (owner), CRUD events; JWT + `is_workspace_member`; tokens never leave the Edge Function. |
+| `google-calendar` | Member JSON API: list/select calendars (owner), settings, CRUD events; JWT + `is_workspace_member`; tokens never leave the Edge Function. |
+| `google-calendar-sync` | Cron / client poke: one-way order dates → Google events (`gcal_sync_queue`); auth via `x-gcal-cron-token` or member JWT. |
 
 Scopes: `calendar.events`, `calendar.calendarlist.readonly`, `email`. Reuses `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `APP_URL`.
 
@@ -38,6 +39,7 @@ supabase functions deploy order-attachment-remote --project-ref pundggjzzaqzbvyk
 supabase functions deploy order-attachment-drive --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
 supabase functions deploy google-calendar-oauth --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
 supabase functions deploy google-calendar --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
+supabase functions deploy google-calendar-sync --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
 ```
 
 Shared modules under `supabase/functions/_shared` are bundled automatically.
@@ -55,6 +57,7 @@ Shared modules under `supabase/functions/_shared` are bundled automatically.
 | `GOOGLE_CLIENT_ID` | for Drive / Calendar | Google Cloud OAuth client (backups + order photos + calendar) |
 | `GOOGLE_CLIENT_SECRET` | for Drive / Calendar | |
 | `APP_URL` | yes | App origin, e.g. `https://app.example.com` (CORS + redirects) |
+| `GCAL_CRON_TOKEN` | for calendar sync | Same value as Vault secret `gcal_sync_cron_token` |
 | `BACKUP_MAX_FILES_MB` | no | Default `150` — skip remaining storage files beyond this |
 
 SQL (applied by owner, not by the agent):
@@ -62,6 +65,7 @@ SQL (applied by owner, not by the agent):
 1. `supabase/manual/20261109090000_order_photos_google_drive.PRODUCTION.sql`
 2. `supabase/manual/20261109100000_order_photos_nas.PRODUCTION.sql`
 3. `supabase/manual/20261113100000_google_calendar.PRODUCTION.sql` (shared calendar — do not apply until authorized)
+4. `supabase/manual/20261114090000_google_calendar_order_sync.PRODUCTION.sql` (visibility + order sync — create Vault secrets first; see script header)
 
 ### Google OAuth redirect URIs
 

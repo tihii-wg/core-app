@@ -15,6 +15,7 @@ import {
   useGoogleCalendarStatus,
   useRefreshGoogleCalendar,
 } from "./useGoogleCalendar";
+import { CalendarVisibilitySettings } from "./CalendarVisibilitySettings";
 
 /** Owner connect / status / disconnect block for Settings → Storage. */
 export function GoogleCalendarSettingsCard() {
@@ -109,6 +110,7 @@ export function GoogleCalendarSettingsCard() {
             )
           ) : null}
         </div>
+        {isOwner && connected ? <CalendarVisibilitySettings /> : null}
       </CardContent>
     </Card>
   );

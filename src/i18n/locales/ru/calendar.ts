@@ -19,6 +19,10 @@ const calendar: Messages<typeof en> = {
   confirmSelect: "Использовать этот календарь",
   addEvent: "+ Событие",
   showOrders: "Показать заказы",
+  ownerOnly: {
+    title: "Календарь доступен только владельцу",
+    description: "Попросите владельца включить доступ для сотрудников в настройках календаря.",
+  },
   views: {
     day: "День",
     week: "Неделя",
@@ -56,6 +60,7 @@ const calendar: Messages<typeof en> = {
     connected: "Google Календарь подключён",
     disconnected: "Google Календарь отключён",
     calendarSelected: "Общий календарь обновлён",
+    settingsSaved: "Настройки календаря сохранены",
     saved: "Событие сохранено",
     deleted: "Событие удалено",
     oauthError: "Не удалось подключить Google Календарь ({{code}})",
@@ -80,6 +85,14 @@ const calendar: Messages<typeof en> = {
     openCalendar: "Открыть календарь",
     statusConnected: "Подключено: {{email}} · {{calendar}}",
     statusDisconnected: "Не подключено",
+    visibilityHint:
+      "По умолчанию календарь видите только вы (это может быть ваш личный Google Календарь). Включите доступ для сотрудников, когда коллеги должны видеть и править его в приложении.",
+    teamAccess: "Сотрудники видят календарь",
+    syncOrders: "Добавлять сроки заказов в Google Календарь",
+    syncMeasurement: "Добавлять замеры",
+    syncInstallation: "Добавлять монтажи",
+    syncError: "Ошибка синхронизации: {{error}}",
+    pendingSync: "В очереди синхронизации: {{count}}",
   },
 };
 

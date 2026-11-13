@@ -18,6 +18,8 @@ export type GCalEventDto = {
   etag: string | null;
   authorUserId: string | null;
   authorUserName: string | null;
+  coreAppOrderId: string | null;
+  coreAppField: string | null;
 };
 
 export type GCalCalendarListItem = {
@@ -67,6 +69,8 @@ export function mapGoogleCalendarEvent(raw: GoogleEventRaw): GCalEventDto | null
     etag: raw.etag?.trim() || null,
     authorUserId: priv.core_app_user_id?.trim() || null,
     authorUserName: priv.core_app_user_name?.trim() || null,
+    coreAppOrderId: priv.core_app_order_id?.trim() || null,
+    coreAppField: priv.core_app_field?.trim() || null,
   };
 }
 
@@ -80,6 +84,9 @@ export function buildGoogleEventBody(input: {
   timeZone?: string | null;
   authorUserId?: string | null;
   authorUserName?: string | null;
+  coreAppOrderId?: string | null;
+  coreAppField?: string | null;
+  coreAppWorkspaceId?: string | null;
 }): Record<string, unknown> {
   const timeZone = input.timeZone?.trim() || undefined;
   const start = input.allDay
@@ -95,13 +102,14 @@ export function buildGoogleEventBody(input: {
   };
   if (input.description != null) body.description = input.description;
   if (input.location != null) body.location = input.location;
-  if (input.authorUserId || input.authorUserName) {
-    body.extendedProperties = {
-      private: {
-        ...(input.authorUserId ? { core_app_user_id: input.authorUserId } : {}),
-        ...(input.authorUserName ? { core_app_user_name: input.authorUserName } : {}),
-      },
-    };
+  const priv: Record<string, string> = {};
+  if (input.authorUserId) priv.core_app_user_id = input.authorUserId;
+  if (input.authorUserName) priv.core_app_user_name = input.authorUserName;
+  if (input.coreAppOrderId) priv.core_app_order_id = input.coreAppOrderId;
+  if (input.coreAppField) priv.core_app_field = input.coreAppField;
+  if (input.coreAppWorkspaceId) priv.core_app_workspace_id = input.coreAppWorkspaceId;
+  if (Object.keys(priv).length) {
+    body.extendedProperties = { private: priv };
   }
   return body;
 }

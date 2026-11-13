@@ -5,6 +5,7 @@ import { updateOrder } from "../../services/apiOrders";
 import type { UpdateOrderDetails } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 
 /** Query keys refreshed after any order write that can change lines, totals, stock or warranties. */
 export function invalidateOrderCaches(queryClient: QueryClient, workspaceId: string | undefined, orderId: string) {
@@ -22,6 +23,7 @@ export function invalidateOrderCaches(queryClient: QueryClient, workspaceId: str
   queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
   queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
   queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
+  notifyOrderCalendarChanged(queryClient, workspaceId);
 }
 
 export function useUpdateOrder() {

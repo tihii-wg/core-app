@@ -12,7 +12,7 @@ import enGbLocale from "@fullcalendar/core/locales/en-gb";
 import { CalendarDays, CloudOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../pages/PageHeader";
 import { Spinner } from "../../ui/Spinner";
 import { Button } from "../../ui/Button";
@@ -20,12 +20,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Switch } from "../../ui/Switch";
 import { Label } from "../../ui/Label";
 import { useConfirm } from "../../ui/ConfirmProvider";
-import { languageFromPath } from "../../i18n/languages";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { useGetOrders } from "../orders/useGetOrders";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
+import { useOrderDetails } from "../orders/useOrderDetails";
+import OrderDetailPanel from "../orders/OrderDetailPanel";
+import { findCachedOrder } from "../orders/useGetOrders";
+import { getOrder } from "../../services/apiOrders";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useConnectGoogleCalendar,
   useCreateGoogleCalendarEvent,
@@ -39,6 +43,7 @@ import {
   useUpdateGoogleCalendarEvent,
 } from "./useGoogleCalendar";
 import { CalendarEventDialog, type CalendarEventDraft } from "./CalendarEventDialog";
+import { CalendarVisibilitySettings } from "./CalendarVisibilitySettings";
 import { fullCalendarDateToGoogle, mapGoogleEventsToFc, mapOrdersToFcOverlay } from "./calendarEventMapping";
 import type { GoogleCalendarEvent } from "../../services/apiGoogleCalendar";
 
@@ -55,12 +60,13 @@ function rangeIso(start: Date, end: Date) {
 export function CalendarPage() {
   const { t, i18n } = useTranslation();
   const confirm = useConfirm();
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const isOwner = useIsWorkspaceOwnerId();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { profile } = useIndustryWorkflow();
+  const orderDetails = useOrderDetails();
   const statusQuery = useGoogleCalendarStatus();
   const connect = useConnectGoogleCalendar();
   const disconnect = useDisconnectGoogleCalendar();
@@ -72,7 +78,12 @@ export function CalendarPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const calendarsQuery = useGoogleCalendarList(pickerOpen && isOwner);
   const [showOrders, setShowOrders] = useState(false);
-  const { orders } = useGetOrders("", { enabled: showOrders });
+  const status = statusQuery.data;
+  const connected = Boolean(status?.connected);
+  const canAccess = Boolean(isOwner || status?.canAccess || status?.teamAccess);
+  const syncOrdersOn = Boolean(status?.syncOrders);
+  const showOverlayToggle = connected && canAccess && !syncOrdersOn;
+  const { orders } = useGetOrders("", { enabled: showOverlayToggle && showOrders });
   const [range, setRange] = useState(() => {
     const start = new Date();
     start.setDate(1);
@@ -81,7 +92,11 @@ export function CalendarPage() {
     end.setMonth(end.getMonth() + 1);
     return rangeIso(start, end);
   });
-  const eventsQuery = useGoogleCalendarEvents(range.from, range.to, Boolean(statusQuery.data?.connected));
+  const eventsQuery = useGoogleCalendarEvents(
+    range.from,
+    range.to,
+    Boolean(connected && canAccess),
+  );
   const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const calendarRef = useRef<InstanceType<typeof FullCalendar> | null>(null);
@@ -91,8 +106,6 @@ export function CalendarPage() {
     typeof window.matchMedia === "function" &&
     window.matchMedia("(max-width: 639px)").matches;
 
-  const status = statusQuery.data;
-  const connected = Boolean(status?.connected);
   const reconnectRequired = Boolean(status?.reconnectRequired);
   const timeZone = workspace?.timezone?.trim() || status?.calendarTimeZone || undefined;
 
@@ -126,12 +139,12 @@ export function CalendarPage() {
     [eventsQuery.data, t],
   );
   const orderEvents = useMemo(() => {
-    if (!showOrders || !orders.length) return [];
+    if (!showOverlayToggle || !showOrders || !orders.length) return [];
     return mapOrdersToFcOverlay(orders, {
       measurementAt: Boolean(profile?.orderFieldBlocks?.measurementAt),
       installationAt: Boolean(profile?.orderFieldBlocks?.installationAt),
     });
-  }, [showOrders, orders, profile]);
+  }, [showOverlayToggle, showOrders, orders, profile]);
 
   const fcEvents = useMemo(() => [...gcalEvents, ...orderEvents], [gcalEvents, orderEvents]);
 
@@ -179,21 +192,42 @@ export function CalendarPage() {
     arg.view.calendar.unselect();
   }
 
+  async function openOrderById(orderId: string) {
+    const cached = findCachedOrder(queryClient, workspaceId, orderId);
+    if (cached) {
+      orderDetails.openOrder(cached);
+      return;
+    }
+    try {
+      const order = await getOrder(orderId, workspaceId);
+      if (order) orderDetails.openOrder(order);
+    } catch {
+      // ignore — order may have been deleted
+    }
+  }
+
   function onEventClick(arg: EventClickArg) {
     const kind = arg.event.extendedProps.kind;
-    if (kind === "order") {
-      const orderId = arg.event.extendedProps.orderId as string;
-      const locale = languageFromPath(window.location.pathname);
-      navigate(`/${locale}/${workspaceId}/orders`, { state: { openOrderId: orderId } });
+    if (kind === "order" || kind === "order_sync") {
+      const orderId = (arg.event.extendedProps.orderId || arg.event.extendedProps.coreAppOrderId) as string;
+      if (orderId) void openOrderById(orderId);
       return;
     }
     const ev = eventById.get(arg.event.id);
+    if (ev?.coreAppOrderId) {
+      void openOrderById(ev.coreAppOrderId);
+      return;
+    }
     if (ev) openEdit(ev);
   }
 
   async function onEventDrop(arg: EventDropArg) {
+    if (arg.event.extendedProps.kind === "order" || arg.event.extendedProps.kind === "order_sync") {
+      arg.revert();
+      return;
+    }
     const ev = eventById.get(arg.event.id);
-    if (!ev?.etag) {
+    if (!ev?.etag || ev.coreAppOrderId) {
       arg.revert();
       return;
     }
@@ -218,8 +252,12 @@ export function CalendarPage() {
   }
 
   async function onEventResize(arg: EventResizeDoneArg) {
+    if (arg.event.extendedProps.kind === "order" || arg.event.extendedProps.kind === "order_sync") {
+      arg.revert();
+      return;
+    }
     const ev = eventById.get(arg.event.id);
-    if (!ev?.etag) {
+    if (!ev?.etag || ev.coreAppOrderId) {
       arg.revert();
       return;
     }
@@ -299,6 +337,13 @@ export function CalendarPage() {
             </CardContent>
           ) : null}
         </Card>
+      ) : !canAccess ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("calendar.ownerOnly.title")}</CardTitle>
+            <CardDescription>{t("calendar.ownerOnly.description")}</CardDescription>
+          </CardHeader>
+        </Card>
       ) : (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -309,10 +354,12 @@ export function CalendarPage() {
               <div className="text-muted-foreground truncate">{status?.googleEmail}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 pr-2">
-                <Switch id="gcal-orders" checked={showOrders} onCheckedChange={setShowOrders} />
-                <Label htmlFor="gcal-orders">{t("calendar.showOrders")}</Label>
-              </div>
+              {showOverlayToggle ? (
+                <div className="flex items-center gap-2 pr-2">
+                  <Switch id="gcal-orders" checked={showOrders} onCheckedChange={setShowOrders} />
+                  <Label htmlFor="gcal-orders">{t("calendar.showOrders")}</Label>
+                </div>
+              ) : null}
               <Button size="sm" variant="outline" onClick={() => openCreate(new Date().toISOString(), new Date(Date.now() + 3600000).toISOString(), false)}>
                 {t("calendar.addEvent")}
               </Button>
@@ -328,6 +375,8 @@ export function CalendarPage() {
               ) : null}
             </div>
           </div>
+
+          {isOwner ? <CalendarVisibilitySettings /> : null}
 
           {pickerOpen && isOwner ? (
             <Card>
@@ -395,11 +444,16 @@ export function CalendarPage() {
               eventClick={onEventClick}
               eventDrop={(arg) => void onEventDrop(arg)}
               eventResize={(arg) => void onEventResize(arg)}
-              eventAllow={(_span, moving) => moving?.extendedProps?.kind !== "order"}
+              eventAllow={(_span, moving) => {
+                const kind = moving?.extendedProps?.kind;
+                return kind !== "order" && kind !== "order_sync";
+              }}
             />
           </div>
         </>
       )}
+
+      {orderDetails.panelProps.selectedOrder ? <OrderDetailPanel {...orderDetails.panelProps} /> : null}
 
       <CalendarEventDialog
         open={dialogOpen}

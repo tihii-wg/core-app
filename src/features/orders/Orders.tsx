@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import { Banknote, Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
@@ -10,13 +10,16 @@ import { ListPagination } from "../../ui/ListPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { EmptyState, ErrorState, NoOrders } from "../../ui/EmptyState";
 import { Skeleton } from "../../ui/Skeleton";
-import { useOrdersAwaitingPayment, useOrdersPage } from "./useGetOrders";
+import { findCachedOrder, useOrdersAwaitingPayment, useOrdersPage } from "./useGetOrders";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useQueryClient } from "@tanstack/react-query";
 import { statIconVariants } from "../../ui/statCardStyles";
 import type { Order } from "../../lib/types";
 import { useDebounce } from "../../hooks/useDebounce";
 import {
   DEFAULT_ORDERS_PAGE_SIZE,
   ORDERS_PAGE_SIZES,
+  getOrder,
   type OrdersPageSize,
 } from "../../services/apiOrders";
 import { industryOrderStatusLabel } from "../industries/industryWorkflow";
@@ -74,6 +77,10 @@ export function Orders() {
   const isEstimatesView = typeFilter === "estimate";
   const [createKind, setCreateKind] = useState<OrderKind>("order");
   const { workflow, copy } = useIndustryWorkflow();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const openedDeepLink = useRef<string | null>(null);
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const deviceColumnLabel =
     orderFieldConfig.find((field) => field.key === "vehicleLicensePlate")?.label ??
@@ -93,6 +100,33 @@ export function Orders() {
     orderDetails.panelProps.setDetailPanelOpen(false);
     void clientDetails.openClient(clientId);
   }
+
+  // Deep link: ?open={orderId} or navigation state.openOrderId → open order sheet once, then clear.
+  useEffect(() => {
+    const fromQuery = searchParams.get("open")?.trim() || "";
+    const fromState =
+      location.state && typeof location.state === "object" && "openOrderId" in location.state
+        ? String((location.state as { openOrderId?: string }).openOrderId ?? "").trim()
+        : "";
+    const orderId = fromQuery || fromState;
+    if (!orderId || !workspaceId) return;
+    if (openedDeepLink.current === orderId) return;
+    openedDeepLink.current = orderId;
+
+    void (async () => {
+      const cached = findCachedOrder(queryClient, workspaceId, orderId);
+      const order = cached ?? (await getOrder(orderId, workspaceId).catch(() => null));
+      if (order) orderDetails.openOrder(order);
+      if (fromQuery) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("open");
+        setSearchParams(next, { replace: true, state: null });
+      } else if (fromState) {
+        window.history.replaceState({ ...(window.history.state ?? {}), openOrderId: undefined }, "");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, location.state, workspaceId]);
 
   // Filters / pagination (server-side via getOrdersPage)
   const [searchQuery, setSearchQuery] = useState("");

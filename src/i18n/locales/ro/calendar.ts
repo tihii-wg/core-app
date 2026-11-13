@@ -19,6 +19,10 @@ const calendar: Messages<typeof en> = {
   confirmSelect: "Folosește acest calendar",
   addEvent: "+ Eveniment",
   showOrders: "Arată comenzile",
+  ownerOnly: {
+    title: "Calendarul este disponibil doar proprietarului",
+    description: "Rugați proprietarul să permită accesul echipei în setările calendarului.",
+  },
   views: {
     day: "Zi",
     week: "Săptămână",
@@ -56,6 +60,7 @@ const calendar: Messages<typeof en> = {
     connected: "Google Calendar conectat",
     disconnected: "Google Calendar deconectat",
     calendarSelected: "Calendarul partajat a fost actualizat",
+    settingsSaved: "Setările calendarului au fost salvate",
     saved: "Eveniment salvat",
     deleted: "Eveniment șters",
     oauthError: "Nu s-a putut conecta Google Calendar ({{code}})",
@@ -80,6 +85,14 @@ const calendar: Messages<typeof en> = {
     openCalendar: "Deschide calendarul",
     statusConnected: "Conectat ca {{email}} · {{calendar}}",
     statusDisconnected: "Neconectat",
+    visibilityHint:
+      "Implicit doar dvs. vedeți calendarul (poate fi calendarul personal Google). Activați accesul echipei când colegii trebuie să îl vadă și să îl editeze în aplicație.",
+    teamAccess: "Echipa vede calendarul",
+    syncOrders: "Adaugă termenele comenzilor în Google Calendar",
+    syncMeasurement: "Adaugă măsurători",
+    syncInstallation: "Adaugă montaje",
+    syncError: "Eroare de sincronizare: {{error}}",
+    pendingSync: "În coadă: {{count}}",
   },
 };
 
