@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -25,15 +25,34 @@ export default function AppTopbarNotifications() {
   const { locale = "en", workspaceId: routeWorkspaceId } = useParams();
   const { workspaceId } = useActiveWorkspaceId();
   const waitingForWorkspace = !workspaceId;
-  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
+  const orderDetails = useOrderDetails();
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Defer heavy orders/inventory until the menu opens or the main route has had a chance to load.
+  const [idleReady, setIdleReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const enable = () => {
+      if (!cancelled) setIdleReady(true);
+    };
+    const ric =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? window.requestIdleCallback(enable, { timeout: 4000 })
+        : null;
+    const fallback = ric == null ? window.setTimeout(enable, 2500) : null;
+    return () => {
+      cancelled = true;
+      if (ric != null && "cancelIdleCallback" in window) window.cancelIdleCallback(ric);
+      if (fallback != null) window.clearTimeout(fallback);
+    };
+  }, []);
+  const loadAlerts = menuOpen || idleReady;
+  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders("", { enabled: loadAlerts });
   const {
     items: inventoryItems,
     isLoading: inventoryLoading,
     isError: inventoryError,
-  } = useGetInventoryItems("", "all", { field: "quantity", ascending: true });
-  const orderDetails = useOrderDetails();
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => new Set());
-  const [menuOpen, setMenuOpen] = useState(false);
+  } = useGetInventoryItems("", "all", { field: "quantity", ascending: true }, { enabled: loadAlerts });
 
   const orderAlerts = useMemo(() => buildOrderAlerts(orders, localDateKey(new Date())), [orders]);
   const inventoryAlerts = useMemo(() => buildInventoryAlerts(inventoryItems), [inventoryItems]);

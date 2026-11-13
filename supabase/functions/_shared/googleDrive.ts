@@ -2,11 +2,18 @@ import { selectBackupFilesToDelete, backupNameTimestampMs, type RetentionFile } 
 
 export type GoogleCredential = { type: "google"; refresh_token: string };
 
-export async function googleAccessToken(
+export type GoogleAccessTokenResult = {
+  accessToken: string;
+  /** Seconds until expiry from Google (`expires_in`), typically ~3600. */
+  expiresIn: number;
+};
+
+/** Exchange a refresh token for an access token (always hits Google). */
+export async function exchangeGoogleAccessToken(
   refreshToken: string,
   clientId: string,
   clientSecret: string,
-): Promise<string> {
+): Promise<GoogleAccessTokenResult> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -17,11 +24,25 @@ export async function googleAccessToken(
       grant_type: "refresh_token",
     }),
   });
-  const json = (await res.json()) as { access_token?: string; error?: string };
+  const json = (await res.json()) as { access_token?: string; expires_in?: number; error?: string };
   if (!res.ok || !json.access_token) {
     throw new Error(json.error || "google_token_exchange_failed");
   }
-  return json.access_token;
+  const expiresIn =
+    typeof json.expires_in === "number" && Number.isFinite(json.expires_in) && json.expires_in > 0
+      ? Math.floor(json.expires_in)
+      : 3600;
+  return { accessToken: json.access_token, expiresIn };
+}
+
+/** Backward-compatible wrapper — prefer `exchangeGoogleAccessToken` when expiry is needed. */
+export async function googleAccessToken(
+  refreshToken: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<string> {
+  const { accessToken } = await exchangeGoogleAccessToken(refreshToken, clientId, clientSecret);
+  return accessToken;
 }
 
 async function driveJson<T>(accessToken: string, path: string, init?: RequestInit): Promise<T> {

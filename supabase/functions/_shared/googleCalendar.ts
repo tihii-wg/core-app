@@ -1,4 +1,4 @@
-import { googleAccessToken, isGoogleAuthError, type GoogleCredential } from "./googleDrive.ts";
+import { exchangeGoogleAccessToken, isGoogleAuthError, type GoogleCredential } from "./googleDrive.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { resolveEventCalendarColor } from "./gcalMulti.ts";
 
@@ -219,6 +219,7 @@ export async function clearCalendarCredentialOnAuthFailure(
   workspaceId: string,
   lastError: string,
 ): Promise<void> {
+  invalidateWorkspaceCalendarAccessTokenCache(workspaceId);
   await admin.rpc("crm_gcal_clear_credential", { p_workspace_id: workspaceId });
   await admin
     .from("workspace_google_calendar")
@@ -229,40 +230,117 @@ export async function clearCalendarCredentialOnAuthFailure(
     .eq("workspace_id", workspaceId);
 }
 
+/** Per-isolate access-token cache keyed by workspace_id (+ refresh-token fingerprint). Never log tokens. */
+type CachedWorkspaceAccessToken = {
+  token: string;
+  expiresAt: number;
+  refreshTokenHash: string;
+};
+
+const accessTokenCache = new Map<string, CachedWorkspaceAccessToken>();
+const accessTokenInflight = new Map<
+  string,
+  Promise<{ accessToken: string } | { error: GCalHttpError }>
+>();
+
+/** Non-cryptographic fingerprint so reconnect/disconnect invalidates stale cache entries. */
+export function fingerprintRefreshToken(refreshToken: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < refreshToken.length; i++) {
+    hash ^= refreshToken.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${refreshToken.length}:${hash >>> 0}`;
+}
+
+export function invalidateWorkspaceCalendarAccessTokenCache(workspaceId: string): void {
+  accessTokenCache.delete(workspaceId);
+  accessTokenInflight.delete(workspaceId);
+}
+
+/** Test-only: clear all cached / in-flight tokens in this isolate. */
+export function resetWorkspaceCalendarAccessTokenCacheForTests(): void {
+  accessTokenCache.clear();
+  accessTokenInflight.clear();
+}
+
 export async function workspaceCalendarAccessToken(
   admin: SupabaseClient,
   workspaceId: string,
   clientId: string,
   clientSecret: string,
+  opts?: { forceRefresh?: boolean },
 ): Promise<{ accessToken: string } | { error: GCalHttpError }> {
   const cred = await loadWorkspaceCalendarCredential(admin, workspaceId);
   if ("reconnect" in cred) {
+    invalidateWorkspaceCalendarAccessTokenCache(workspaceId);
     return {
       error: { code: "reconnect_required", message: "Connect Google Calendar again", status: 409 },
     };
   }
-  try {
-    const accessToken = await googleAccessToken(cred.refreshToken, clientId, clientSecret);
-    return { accessToken };
-  } catch (error) {
-    if (isGoogleAuthError(error)) {
-      await clearCalendarCredentialOnAuthFailure(
-        admin,
-        workspaceId,
-        error instanceof Error ? error.message : "invalid_grant",
-      );
-      return {
-        error: { code: "reconnect_required", message: "Connect Google Calendar again", status: 409 },
-      };
+
+  const refreshTokenHash = fingerprintRefreshToken(cred.refreshToken);
+  const forceRefresh = opts?.forceRefresh === true;
+
+  if (forceRefresh) {
+    accessTokenCache.delete(workspaceId);
+    accessTokenInflight.delete(workspaceId);
+  } else {
+    const cached = accessTokenCache.get(workspaceId);
+    if (
+      cached &&
+      cached.refreshTokenHash === refreshTokenHash &&
+      cached.expiresAt - 60_000 > Date.now()
+    ) {
+      return { accessToken: cached.token };
     }
-    return {
-      error: {
-        code: "provider_error",
-        message: error instanceof Error ? error.message : "token_failed",
-        status: 502,
-      },
-    };
+    // Refresh token changed (reconnect) — drop stale entry for this workspace only.
+    if (cached && cached.refreshTokenHash !== refreshTokenHash) {
+      accessTokenCache.delete(workspaceId);
+    }
+    const inflight = accessTokenInflight.get(workspaceId);
+    if (inflight) return inflight;
   }
+
+  const exchange = (async (): Promise<{ accessToken: string } | { error: GCalHttpError }> => {
+    try {
+      const { accessToken, expiresIn } = await exchangeGoogleAccessToken(
+        cred.refreshToken,
+        clientId,
+        clientSecret,
+      );
+      accessTokenCache.set(workspaceId, {
+        token: accessToken,
+        expiresAt: Date.now() + expiresIn * 1000,
+        refreshTokenHash,
+      });
+      return { accessToken };
+    } catch (error) {
+      invalidateWorkspaceCalendarAccessTokenCache(workspaceId);
+      if (isGoogleAuthError(error)) {
+        await clearCalendarCredentialOnAuthFailure(
+          admin,
+          workspaceId,
+          error instanceof Error ? error.message : "invalid_grant",
+        );
+        return {
+          error: { code: "reconnect_required", message: "Connect Google Calendar again", status: 409 },
+        };
+      }
+      return {
+        error: {
+          code: "provider_error",
+          message: error instanceof Error ? error.message : "token_failed",
+          status: 502,
+        },
+      };
+    } finally {
+      accessTokenInflight.delete(workspaceId);
+    }
+  })();
+
+  accessTokenInflight.set(workspaceId, exchange);
+  return exchange;
 }
 
 /** In-memory GET events cache (per isolate, 30s). */

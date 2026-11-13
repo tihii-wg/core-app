@@ -11,6 +11,7 @@ import {
   getCachedEvents,
   googleCalendarFetch,
   invalidateEventsCache,
+  invalidateWorkspaceCalendarAccessTokenCache,
   mapGoogleCalendarEvent,
   mapGoogleCalendarHttpError,
   setCachedEvents,
@@ -251,13 +252,13 @@ async function connectionStatus(
   };
 
   if (connected && data?.calendar_id) {
+    const token = await workspaceCalendarAccessToken(admin, workspaceId, clientId, clientSecret);
+    const accessToken = "error" in token ? null : token.accessToken;
     payload.mainCalendar = await resolveMainCalendarMeta(
-      admin,
       workspaceId,
       data.calendar_id,
       data.calendar_summary ?? data.calendar_id,
-      clientId,
-      clientSecret,
+      accessToken,
     );
   }
 
@@ -273,12 +274,10 @@ async function connectionStatus(
 }
 
 async function resolveMainCalendarMeta(
-  admin: ReturnType<typeof serviceClient>,
   workspaceId: string,
   calendarId: string,
   summary: string,
-  clientId: string,
-  clientSecret: string,
+  accessToken: string | null,
 ): Promise<{ id: string; summary: string; backgroundColor: string | null }> {
   const cached = mainCalendarMetaCache.get(workspaceId);
   if (cached && cached.id === calendarId && Date.now() - cached.at < MAIN_META_TTL_MS) {
@@ -287,11 +286,10 @@ async function resolveMainCalendarMeta(
 
   let backgroundColor: string | null = null;
   let resolvedSummary = summary;
-  try {
-    const token = await workspaceCalendarAccessToken(admin, workspaceId, clientId, clientSecret);
-    if (!("error" in token)) {
+  if (accessToken) {
+    try {
       const res = await googleCalendarFetch(
-        token.accessToken,
+        accessToken,
         `/users/me/calendarList/${encodeURIComponent(calendarId)}?fields=id,summary,backgroundColor`,
       );
       if (res.ok) {
@@ -299,9 +297,9 @@ async function resolveMainCalendarMeta(
         if (json.summary?.trim()) resolvedSummary = json.summary.trim();
         if (json.backgroundColor?.trim()) backgroundColor = json.backgroundColor.trim();
       }
+    } catch {
+      // keep defaults
     }
-  } catch {
-    // keep defaults
   }
 
   const meta = { id: calendarId, summary: resolvedSummary, backgroundColor, at: Date.now() };
@@ -378,6 +376,7 @@ async function withAccess(
   clientId: string,
   clientSecret: string,
   appUrl: string,
+  opts?: { forceRefresh?: boolean },
 ): Promise<
   | {
       accessToken: string;
@@ -397,7 +396,7 @@ async function withAccess(
     return errorResponse("not_connected", "Google Calendar is not connected", 409, appUrl);
   }
 
-  const token = await workspaceCalendarAccessToken(admin, workspaceId, clientId, clientSecret);
+  const token = await workspaceCalendarAccessToken(admin, workspaceId, clientId, clientSecret, opts);
   if ("error" in token) {
     return errorResponse(token.error.code, token.error.message, token.error.status, appUrl);
   }
@@ -728,16 +727,29 @@ async function listEvents(
     return errorResponse("invalid_args", "from/to must be valid ISO dates within 400 days", 400, appUrl);
   }
 
-  const access = await withAccess(admin, workspaceId, clientId, clientSecret, appUrl);
+  return listEventsOnce(admin, workspaceId, from, to, clientId, clientSecret, appUrl, false);
+}
+
+async function listEventsOnce(
+  admin: ReturnType<typeof serviceClient>,
+  workspaceId: string,
+  from: string,
+  to: string,
+  clientId: string,
+  clientSecret: string,
+  appUrl: string,
+  retried: boolean,
+): Promise<Response> {
+  const access = await withAccess(admin, workspaceId, clientId, clientSecret, appUrl, {
+    forceRefresh: retried,
+  });
   if (access instanceof Response) return access;
 
   const mainMeta = await resolveMainCalendarMeta(
-    admin,
     workspaceId,
     access.calendarId,
     access.calendarId,
-    clientId,
-    clientSecret,
+    access.accessToken,
   );
 
   const targets = buildAllowedCalendars(
@@ -777,6 +789,14 @@ async function listEvents(
     events.push(...result.value.events);
   }
 
+  // Stale cached access token → invalidate and retry once with a fresh exchange.
+  const authFail = calendarErrors.some((err) => err.code === "reconnect_required");
+  if (authFail && !retried) {
+    invalidateWorkspaceCalendarAccessTokenCache(workspaceId);
+    invalidateEventsCache(workspaceId);
+    return listEventsOnce(admin, workspaceId, from, to, clientId, clientSecret, appUrl, true);
+  }
+
   return jsonResponse({ events, calendarErrors }, 200, appUrl);
 }
 
@@ -799,12 +819,10 @@ async function resolveWritableTarget(
   if (access instanceof Response) return access;
 
   const mainMeta = await resolveMainCalendarMeta(
-    admin,
     workspaceId,
     access.calendarId,
     access.calendarId,
-    clientId,
-    clientSecret,
+    access.accessToken,
   );
   const allowed = buildAllowedCalendars(
     access.calendarId,

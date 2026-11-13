@@ -364,7 +364,11 @@ export async function disconnectGoogleCalendar(workspaceId: string | undefined):
 export async function listGoogleCalendars(workspaceId: string | undefined): Promise<GoogleCalendarListItem[]> {
   const id = requireWorkspaceId(workspaceId);
   const { res, json } = await calendarFetch("/google-calendar/calendars", { workspaceId: id });
-  if (!res.ok) throw mapError(json, i18n.t("calendar.errors.loadFailed"));
+  if (!res.ok) {
+    const code = json.error?.code;
+    if (code === "not_connected" || code === "reconnect_required") return [];
+    throw mapError(json, i18n.t("calendar.errors.loadFailed"));
+  }
   return (json.calendars ?? []).map((c) => ({
     ...c,
     backgroundColor: c.backgroundColor ?? null,
@@ -407,7 +411,14 @@ export async function listGoogleCalendarEvents(
     `/google-calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     { workspaceId: id },
   );
-  if (!res.ok) throw mapError(json, i18n.t("calendar.errors.loadFailed"));
+  // Optimistic parallel fetch with status may hit 409 before connect UI settles — no toast.
+  if (!res.ok) {
+    const code = json.error?.code;
+    if (code === "not_connected" || code === "reconnect_required") {
+      return { events: [], calendarErrors: [] };
+    }
+    throw mapError(json, i18n.t("calendar.errors.loadFailed"));
+  }
   return {
     events: (json.events ?? []).map(normalizeEvent),
     calendarErrors: Array.isArray(json.calendarErrors) ? json.calendarErrors : [],

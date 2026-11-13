@@ -55,6 +55,7 @@ import {
   useUpdateGoogleCalendarEvent,
 } from "./useGoogleCalendar";
 import { peekAdjacentActiveRange } from "./calendarPrefetch";
+import { initialVisibleRange, rangeIso } from "./calendarVisibleRange";
 import { CalendarEventDialog, type CalendarEventDraft } from "./CalendarEventDialog";
 import {
   buildMemberLegendItems,
@@ -86,10 +87,6 @@ function fcLocale(lang: string) {
   return enGbLocale;
 }
 
-function rangeIso(start: Date, end: Date) {
-  return { from: start.toISOString(), to: end.toISOString() };
-}
-
 export function CalendarPage() {
   const { t, i18n } = useTranslation();
   const confirm = useConfirm();
@@ -117,22 +114,22 @@ export function CalendarPage() {
   const isMobile = useMediaQuery("(max-width: 639px)");
   const isCoarsePointer = useMediaQuery("(pointer: coarse)");
   const status = statusQuery.data;
+  const statusSettled = statusQuery.isFetched || statusQuery.isError;
   const connected = Boolean(status?.connected);
   const canAccess = Boolean(isOwner || status?.canAccess || status?.teamAccess);
-  const calendarsQuery = useGoogleCalendarList(Boolean(connected && canAccess && isOwner));
+  const reconnectRequired = Boolean(status?.reconnectRequired);
+  // Start events/calendars in parallel with status; hide results if status says disconnected.
+  const connectionOk = connected && canAccess && !reconnectRequired;
+  const eventsEnabled = Boolean(workspaceId) && (!statusSettled || connectionOk);
+  const calendarsQuery = useGoogleCalendarList(
+    Boolean(workspaceId) && isOwner && (!statusSettled || connectionOk),
+  );
   const [showOrders, setShowOrders] = useState(false);
   const syncOrdersOn = Boolean(status?.syncOrders);
-  const showOverlayToggle = connected && canAccess && !syncOrdersOn;
+  const showOverlayToggle = connectionOk && !syncOrdersOn;
   const { orders } = useGetOrders("", { enabled: showOverlayToggle && showOrders });
-  const [range, setRange] = useState(() => {
-    const start = new Date();
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setMonth(end.getMonth() + 1);
-    return rangeIso(start, end);
-  });
-  const eventsEnabled = Boolean(connected && canAccess);
+  const [activeView, setActiveView] = useState<GcalViewId>(() => readStoredGcalView(false));
+  const [range, setRange] = useState(() => initialVisibleRange(readStoredGcalView(false)));
   const eventsQuery = useGoogleCalendarEvents(range.from, range.to, eventsEnabled);
   const prefetchEvents = usePrefetchGoogleCalendarEvents();
   const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
@@ -150,7 +147,6 @@ export function CalendarPage() {
   const swipeLatestRef = useRef<SwipePointerSample | null>(null);
   const peekingRangeRef = useRef(false);
   const activePointersRef = useRef(new Set<number>());
-  const [activeView, setActiveView] = useState<GcalViewId>(() => readStoredGcalView(false));
   const initialViewApplied = useRef(false);
   const overlayOpenRef = useRef(false);
 
@@ -162,20 +158,21 @@ export function CalendarPage() {
     setActiveView(stored);
   }, [isMobile]);
 
-  const reconnectRequired = Boolean(status?.reconnectRequired);
   const timeZone = workspace?.timezone?.trim() || status?.calendarTimeZone || undefined;
-  const eventsPayload = eventsQuery.data;
+  // Discard optimistic event results when status says not connected / no access.
+  const eventsPayload = connectionOk ? eventsQuery.data : undefined;
   const gcalRaw = eventsPayload?.events ?? [];
   const calendarErrors = eventsPayload?.calendarErrors ?? [];
   // Lightweight in-grid hint only while showing a previous range or first load — never block swipe.
   const eventsLoading = Boolean(
-    eventsEnabled && (eventsQuery.isPending || eventsQuery.isPlaceholderData),
+    connectionOk && (eventsQuery.isPending || eventsQuery.isPlaceholderData),
   );
   overlayOpenRef.current = dialogOpen || settingsOpen || calendarsSheetOpen || pickerOpen;
 
-  // Prefetch neighbouring periods so the next swipe usually hits React Query cache.
+  // Prefetch neighbouring periods only after the visible range has resolved (not competing with first paint).
+  const visibleEventsReady = connectionOk && eventsQuery.isFetched && !eventsQuery.isPending;
   useEffect(() => {
-    if (!eventsEnabled) return;
+    if (!visibleEventsReady) return;
     const api = calendarRef.current?.getApi();
     if (!api) return;
     peekingRangeRef.current = true;
@@ -187,7 +184,7 @@ export function CalendarPage() {
     } finally {
       peekingRangeRef.current = false;
     }
-  }, [eventsEnabled, range.from, range.to, prefetchEvents, activeView]);
+  }, [visibleEventsReady, range.from, range.to, prefetchEvents, activeView]);
 
   useEffect(() => {
     const gcal = searchParams.get("gcal");
@@ -754,7 +751,7 @@ export function CalendarPage() {
         <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
       )}
 
-      {!statusQuery.data && !statusQuery.isError ? (
+      {!status && !statusQuery.isError && statusQuery.isPending ? (
         <div className="flex justify-center py-16">
           <Spinner />
         </div>

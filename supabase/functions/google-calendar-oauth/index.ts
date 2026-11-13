@@ -2,6 +2,7 @@ import { corsHeaders, corsOriginFor, errorResponse, jsonResponse, resolveAllowed
 import { oauthStateExpiresAt, peekOAuthState, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import { buildCalendarOAuthRedirect } from "../_shared/calendarOAuthRedirect.ts";
 import { type GoogleCredential, googleAccessToken } from "../_shared/googleDrive.ts";
+import { invalidateWorkspaceCalendarAccessTokenCache } from "../_shared/googleCalendar.ts";
 import { oauthStateSecret } from "../_shared/oauthStateSecret.ts";
 import { bearerToken, requireEnv, serviceClient, userClient } from "../_shared/supabase.ts";
 
@@ -176,6 +177,7 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
     }
 
     const admin = serviceClient();
+    invalidateWorkspaceCalendarAccessTokenCache(payload.workspaceId);
     const credential: GoogleCredential = { type: "google", refresh_token: tokenJson.refresh_token };
     const { error: setError } = await admin.rpc("crm_gcal_set_credential", {
       p_workspace_id: payload.workspaceId,
@@ -263,6 +265,7 @@ async function handleDisconnect(req: Request, workspaceId: string, appUrl: strin
   }
 
   const admin = serviceClient();
+  invalidateWorkspaceCalendarAccessTokenCache(workspaceId);
 
   try {
     const { data: secret } = await admin.rpc("crm_gcal_get_credential", { p_workspace_id: workspaceId });

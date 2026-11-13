@@ -31,17 +31,21 @@ export function googleCalendarListKey(workspaceId: string | undefined) {
   return ["google-calendar-list", workspaceId] as const;
 }
 
+const STATUS_STALE_MS = 5 * 60_000;
+const EVENTS_STALE_MS = 60_000;
+
 export function useGoogleCalendarStatus(enabled = true) {
   const { workspaceId } = useActiveWorkspaceId();
   return useQuery({
     queryKey: googleCalendarStatusKey(workspaceId),
     queryFn: () => getGoogleCalendarStatus(workspaceId),
     enabled: Boolean(workspaceId) && enabled,
+    staleTime: STATUS_STALE_MS,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 }
-
-const EVENTS_STALE_MS = 60_000;
 
 export function useGoogleCalendarEvents(from: string, to: string, enabled = true) {
   const { workspaceId } = useActiveWorkspaceId();

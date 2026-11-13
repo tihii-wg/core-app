@@ -104,12 +104,14 @@ export function profileUpdateFields(input: UpdateProfileInput) {
 }
 
 async function currentUserId() {
+  // Profile reads on app start — use local session to avoid an extra /auth/v1/user hop.
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-  if (userError) throw new Error(userError.message);
+  if (sessionError) throw new Error(sessionError.message);
+  const user = session?.user;
   if (!user) throw new Error(i18n.t("settings.profile.errors.notAuthenticated"));
 
   return user.id;

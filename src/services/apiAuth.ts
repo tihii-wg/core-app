@@ -249,18 +249,11 @@ export async function signUp(data: SignUpProps): Promise<SignUpResult> {
 }
 
 export async function getCurrentUser() {
+  // Local session only — avoids /auth/v1/user on every mount. AuthSession keeps
+  // ["user"] in sync on SIGNED_IN / TOKEN_REFRESHED / USER_UPDATED. Sensitive
+  // mutations still call supabase.auth.getUser() where a server check is required.
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-  if (sessionError || !sessionData.session) return null;
-
-  const { data, error } = await supabase.auth.getUser();
-  if (!error && data.user) return data.user;
-
-  if (error && isInvalidSessionError(error)) {
-    await supabase.auth.signOut();
-    return null;
-  }
-
+  if (sessionError || !sessionData.session?.user) return null;
   return sessionData.session.user;
 }
 
