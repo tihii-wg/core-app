@@ -101,7 +101,7 @@ async function requireMember(
   const { data: userData, error: userError } = await user.auth.getUser(jwt);
   if (userError || !userData.user) return errorResponse("unauthorized", "Invalid session", 401, appUrl);
 
-  const { data: isMember } = await user.rpc("is_workspace_member", { p_workspace_id: workspaceId });
+  const { data: isMember } = await user.rpc("is_workspace_member", { target_workspace_id: workspaceId });
   if (isMember !== true) {
     return errorResponse("forbidden", "Not a workspace member", 403, appUrl);
   }
