@@ -463,6 +463,10 @@ export function Orders() {
         searchQuery={orderForClient ? "" : searchQuery}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
         initialVehicleId={orderForVehicleId}
+        // Started from the client card (client or one of its vehicles) → close that card once the order exists.
+        onCreated={() => {
+          if (orderForClient) clientDetails.setDetailPanelOpen(false);
+        }}
       />
 
       <ClientDetailsHost

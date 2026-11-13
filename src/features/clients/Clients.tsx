@@ -327,6 +327,8 @@ export function Clients() {
         }}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
         initialVehicleId={orderForVehicleId}
+        // Order created from the client card (client or one of its vehicles) → close that card too.
+        onCreated={() => setDetailPanelOpen(false)}
       />
 
       <Dialog

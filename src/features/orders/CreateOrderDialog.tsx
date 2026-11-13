@@ -10,6 +10,8 @@ type CreateOrderDialogProps = {
   initialClient?: { id: string; name: string } | null;
   /** Prefill `orders.vehicle_id` for a vehicle that belongs to `initialClient`. */
   initialVehicleId?: string | null;
+  /** The order was saved (not cancelled) — e.g. close the client card the order was started from. */
+  onCreated?: () => void;
 };
 
 export function CreateOrderDialog({
@@ -18,6 +20,7 @@ export function CreateOrderDialog({
   searchQuery = "",
   initialClient = null,
   initialVehicleId = null,
+  onCreated,
 }: CreateOrderDialogProps) {
   const { t } = useTranslation();
   const formSearch = searchQuery || initialClient?.name || "";
@@ -43,6 +46,7 @@ export function CreateOrderDialog({
               initialClientId={initialClient?.id}
               initialClientName={initialClient?.name}
               initialVehicleId={initialVehicleId ?? undefined}
+              onCreated={onCreated}
             />
           ) : null}
         </div>

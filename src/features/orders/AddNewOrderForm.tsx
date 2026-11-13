@@ -58,12 +58,15 @@ export default function AddNewOrderForm({
   initialClientId = "",
   initialClientName = "",
   initialVehicleId = "",
+  onCreated,
 }: CreateMadalProps & {
   searchQuery: string;
   initialClientId?: string;
   initialClientName?: string;
   /** Prefill the vehicle selector; must belong to `initialClientId` when both are set. */
   initialVehicleId?: string;
+  /** Called once the order was saved (not on cancel) — e.g. to close the client card it was started from. */
+  onCreated?: () => void;
 }) {
   const { t } = useTranslation();
   const { services } = useGetServices();
@@ -351,6 +354,7 @@ export default function AddNewOrderForm({
       return;
     }
 
+    onCreated?.();
     setCreateModalOpen(false);
   };
 
