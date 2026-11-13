@@ -36,6 +36,12 @@ const team: Messages<typeof en> = {
     invalidEmail: "Introduceți o adresă de e-mail validă",
     adding: "Se adaugă...",
     submit: "Adăugați membrul",
+    notRegistered: "Această persoană nu este încă înregistrată în Core App.",
+    registerLinkHint: "Trimiteți linkul de înregistrare. După înregistrare, adăugați persoana aici după e-mail.",
+    copyLink: "Copiază linkul",
+    linkCopied: "Link copiat",
+    shareLink: "Distribuie",
+    registerLinkShareText: "Înregistrează-te în Core App pentru a te alătura echipei noastre ({{email}}):",
   },
   toast: {
     adding: "Se adaugă membrul echipei...",

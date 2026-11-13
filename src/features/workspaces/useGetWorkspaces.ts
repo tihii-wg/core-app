@@ -6,11 +6,12 @@ export function useGetWorkspaces() {
     data: workspaces,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["workspaces"],
     queryFn: getUserWorkspaces,
   });
-  return { workspaces, isLoading, error };
+  return { workspaces, isLoading, error, refetch };
 }
 
 export function listedWorkspaceIds(memberships: ListedWorkspaceMembership[] | undefined) {

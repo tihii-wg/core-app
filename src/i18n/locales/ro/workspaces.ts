@@ -23,6 +23,16 @@ const workspaces: Messages<typeof en> = {
   },
   redirect: {
     noWorkspaces: "Încă nu sunteți membru al niciunei companii.",
+    waitingTitle: "Așteptați invitația",
+    waitingDescription:
+      "Trimiteți emailul proprietarului spațiului de lucru ca să vă adauge în echipă în Core App.",
+    yourEmail: "Emailul dvs.",
+    copyEmail: "Copiază",
+    copied: "Copiat",
+    share: "Distribuie",
+    shareEmailText: "Emailul meu din Core App: {{email}}",
+    waitingHint: "Această pagină se actualizează automat când sunteți adăugat într-un spațiu de lucru.",
+    createOwnWorkspace: "Creează-mi propriul spațiu de lucru",
   },
   errors: {
     noAccess: "Nu aveți acces la această companie",

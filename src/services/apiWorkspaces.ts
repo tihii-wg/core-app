@@ -571,6 +571,21 @@ function teamMemberError(error: { code?: string; message?: string }, permissionM
   return new Error(error.message ?? permissionMessage);
 }
 
+export const ACCOUNT_NOT_FOUND_CODE = "ACCOUNT_NOT_FOUND" as const;
+
+export function isAccountNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return (error as { code?: string }).code === ACCOUNT_NOT_FOUND_CODE;
+}
+
+export function accountNotFoundError() {
+  const error = new Error(i18n.t("team.errors.accountNotFound")) as Error & {
+    code: typeof ACCOUNT_NOT_FOUND_CODE;
+  };
+  error.code = ACCOUNT_NOT_FOUND_CODE;
+  return error;
+}
+
 export function assignableTeamRole(role: string) {
   const value = role.trim().toLowerCase();
   if (value !== "admin" && value !== "manager" && value !== "member") throw new Error(i18n.t("team.errors.invalidRole"));
@@ -642,7 +657,7 @@ export async function addWorkspaceMember(workspaceId: string, input: { email: st
 
   const { data: userId, error: lookupError } = await supabase.rpc("workspace_member_find_user", { target_workspace: workspaceId, member_email: email });
   if (lookupError) throw teamMemberError(lookupError, i18n.t("team.errors.noAddPermission"));
-  if (!userId) throw new Error(i18n.t("team.errors.accountNotFound"));
+  if (!userId) throw accountNotFoundError();
   if (userId === user.id) throw new Error(i18n.t("team.errors.alreadyMemberSelf"));
 
   const { data: existingRows, error: existingError } = await supabase.from("workspace_members").select("user_id, role, deleted_at").eq("workspace_id", workspaceId).eq("user_id", userId);

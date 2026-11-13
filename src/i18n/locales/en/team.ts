@@ -33,6 +33,12 @@ export default {
     invalidEmail: "Enter a valid email address",
     adding: "Adding...",
     submit: "Add member",
+    notRegistered: "This person is not registered in Core App yet.",
+    registerLinkHint: "Send them this registration link. After they sign up, add them here by email.",
+    copyLink: "Copy link",
+    linkCopied: "Link copied",
+    shareLink: "Share",
+    registerLinkShareText: "Register in Core App to join our team ({{email}}):",
   },
   toast: {
     adding: "Adding team member...",

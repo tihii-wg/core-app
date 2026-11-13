@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
-import { Users } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Check, Copy, Share2, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
 import i18n from "../../i18n";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Avatar, AvatarFallback } from "../../ui/Avatar";
@@ -18,7 +19,8 @@ import { assignableWorkspaceRoles, canManageWorkspaceMember, workspaceRoleLabel,
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
-import type { WorkspaceTeamMember } from "../../services/apiWorkspaces";
+import { joinTeamRegisterUrl } from "../../services/apiAuth";
+import { isAccountNotFoundError, type WorkspaceTeamMember } from "../../services/apiWorkspaces";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -188,16 +190,27 @@ type AddTeamMemberDialogProps = {
 
 function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: AddTeamMemberDialogProps) {
   const { t } = useTranslation();
+  const { locale = "en" } = useParams();
   const roles = assignableWorkspaceRoles(currentRole);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<WorkspaceRole>("member");
   const [formError, setFormError] = useState("");
+  const [missingAccountEmail, setMissingAccountEmail] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const { mutateAsync: addMember, isPending } = useAddWorkspaceMember();
+
+  useEffect(() => {
+    if (!linkCopied) return;
+    const timer = window.setTimeout(() => setLinkCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [linkCopied]);
 
   function close() {
     setEmail("");
     setRole("member");
     setFormError("");
+    setMissingAccountEmail(null);
+    setLinkCopied(false);
     onOpenChange(false);
   }
 
@@ -206,15 +219,53 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
     const value = email.trim();
     if (!emailPattern.test(value)) {
       setFormError(t("team.invite.invalidEmail"));
+      setMissingAccountEmail(null);
       return;
     }
     setFormError("");
+    setMissingAccountEmail(null);
     try {
       await addMember({ workspaceId, email: value, role });
       close();
     } catch (error) {
+      if (isAccountNotFoundError(error)) {
+        setMissingAccountEmail(value.toLowerCase());
+        setFormError("");
+        return;
+      }
       setFormError(error instanceof Error ? error.message : t("team.toast.addFailed"));
     }
+  }
+
+  const registerLink = missingAccountEmail ? joinTeamRegisterUrl(locale, missingAccountEmail) : "";
+
+  async function copyRegisterLink() {
+    if (!registerLink) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(registerLink);
+        setLinkCopied(true);
+      }
+    } catch {
+      setLinkCopied(false);
+    }
+  }
+
+  async function shareRegisterLink() {
+    if (!registerLink) return;
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: t("common.appName"),
+          text: t("team.invite.registerLinkShareText", { email: missingAccountEmail }),
+          url: registerLink,
+        });
+        return;
+      } catch {
+        // Fall through to copy.
+      }
+    }
+    await copyRegisterLink();
   }
 
   return (
@@ -227,7 +278,18 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
         <form onSubmit={(event) => void onSubmit(event)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="team-member-email">{t("team.invite.emailLabel")}</Label>
-            <Input id="team-member-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t("team.invite.emailPlaceholder")} disabled={isPending} autoFocus />
+            <Input
+              id="team-member-email"
+              type="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setMissingAccountEmail(null);
+              }}
+              placeholder={t("team.invite.emailPlaceholder")}
+              disabled={isPending}
+              autoFocus
+            />
           </div>
           <div className="space-y-2">
             <Label>{t("team.invite.roleLabel")}</Label>
@@ -244,6 +306,25 @@ function AddTeamMemberDialog({ workspaceId, currentRole, open, onOpenChange }: A
               </SelectContent>
             </Select>
           </div>
+          {missingAccountEmail ? (
+            <div className="space-y-3 rounded-md border border-border bg-muted/40 p-3" data-testid="team-invite-register-link">
+              <p className="text-sm text-foreground">{t("team.invite.notRegistered")}</p>
+              <p className="text-[13px] text-muted-foreground">{t("team.invite.registerLinkHint")}</p>
+              <div className="break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground">
+                {registerLink}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void copyRegisterLink()}>
+                  {linkCopied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+                  {linkCopied ? t("team.invite.linkCopied") : t("team.invite.copyLink")}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void shareRegisterLink()}>
+                  <Share2 className="size-4" aria-hidden="true" />
+                  {t("team.invite.shareLink")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {formError && <p className="text-sm text-destructive">{formError}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close} disabled={isPending}>

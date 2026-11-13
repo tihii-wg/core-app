@@ -55,6 +55,12 @@ export function AppLayout() {
   // The route mirrors profiles.active_workspace_id; DashboardRedirect repairs a stale active workspace.
   if (setupWorkspaceId) return <Navigate to={`/${locale}/onboarding`} replace />;
 
+  // No memberships (join-mode / removed from every team): waiting screen only — no sidebar chrome.
+  if (workspaceContextReady && memberWorkspaceIds.length === 0) {
+    if (workspaceId) return <Navigate to={`/${locale}/dashboard`} replace />;
+    return <Outlet />;
+  }
+
   if (workspaceContextReady && workspaceId && !canUseWorkspace) {
     if (activeWorkspaceId && activeIsMember) {
       const segments = location.pathname.split("/");

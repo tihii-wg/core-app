@@ -36,6 +36,12 @@ const team: Messages<typeof en> = {
     invalidEmail: "Введите корректный адрес электронной почты",
     adding: "Добавление...",
     submit: "Добавить участника",
+    notRegistered: "Этот человек ещё не зарегистрирован в Core App.",
+    registerLinkHint: "Отправьте ссылку на регистрацию. После регистрации добавьте участника здесь по email.",
+    copyLink: "Копировать ссылку",
+    linkCopied: "Ссылка скопирована",
+    shareLink: "Поделиться",
+    registerLinkShareText: "Зарегистрируйтесь в Core App, чтобы присоединиться к нашей команде ({{email}}):",
   },
   toast: {
     adding: "Добавление участника команды...",

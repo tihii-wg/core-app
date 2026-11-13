@@ -23,6 +23,16 @@ const workspaces: Messages<typeof en> = {
   },
   redirect: {
     noWorkspaces: "Вы пока не состоите ни в одной компании.",
+    waitingTitle: "Ожидание приглашения",
+    waitingDescription:
+      "Передайте владельцу рабочего пространства ваш email, чтобы он добавил вас в команду.",
+    yourEmail: "Ваш email",
+    copyEmail: "Копировать",
+    copied: "Скопировано",
+    share: "Поделиться",
+    shareEmailText: "Мой email в Core App: {{email}}",
+    waitingHint: "Эта страница обновится автоматически, когда вас добавят в рабочее пространство.",
+    createOwnWorkspace: "Создать своё рабочее пространство",
   },
   errors: {
     noAccess: "У вас нет доступа к этой компании",

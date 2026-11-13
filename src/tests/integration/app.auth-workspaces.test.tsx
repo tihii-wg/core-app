@@ -91,6 +91,8 @@ describe("login", () => {
     await user.click(await screen.findByRole("button", { name: "Create account" }));
     await waitFor(() => expect(location.pathname).toBe("/en/register"));
 
+    expect(screen.getByText("How will you use Core App?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Create my own workspace/i }));
     expect(screen.getByLabelText("Company Name")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "What type of business do you run?" })).not.toBeInTheDocument();
     expect(fake.uid).toBeNull();
@@ -165,7 +167,8 @@ describe("workspace routing and switching", () => {
   it("tells a user without workspaces that they have none", async () => {
     fake.signInAs(USERS.newbie.id);
     renderApp("/en/dashboard");
-    expect(await screen.findByText("You are not a member of any workspace yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Waiting for an invitation")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Create my own workspace/i })).toBeInTheDocument();
   });
 
   it("switches workspace from the company selector and shows only the new workspace's data on every page", async () => {

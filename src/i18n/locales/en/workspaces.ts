@@ -20,6 +20,16 @@ export default {
   },
   redirect: {
     noWorkspaces: "You are not a member of any workspace yet.",
+    waitingTitle: "Waiting for an invitation",
+    waitingDescription:
+      "Share your email with the workspace owner so they can add you to their team in Core App.",
+    yourEmail: "Your email",
+    copyEmail: "Copy",
+    copied: "Copied",
+    share: "Share",
+    shareEmailText: "My Core App email: {{email}}",
+    waitingHint: "This page refreshes automatically when you are added to a workspace.",
+    createOwnWorkspace: "Create my own workspace",
   },
   errors: {
     noAccess: "You do not have access to this workspace",

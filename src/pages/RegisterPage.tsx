@@ -29,7 +29,7 @@ export function RegisterPage() {
 
       {/* Register form */}
       <div className="flex-1 flex items-center justify-center px-4 pb-16">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           {/* Logo */}
           <div className="text-center mb-8">
             <Logo />

@@ -12,6 +12,12 @@ export function useSignUp() {
     onSuccess: (result) => {
       if (result.needsEmailConfirmation) return;
       queryClient.setQueryData(["user"], result.user);
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      if (result.mode === "join") {
+        navigate(`/${language}/dashboard`, { replace: true });
+        return;
+      }
       navigate(`/${language}/onboarding`, { replace: true });
     },
   });

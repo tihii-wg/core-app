@@ -1,6 +1,6 @@
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import type { User } from "@supabase/supabase-js";
-import { login as logInApi } from "../../services/apiAuth";
+import { ensureSignupBootstrap, login as logInApi } from "../../services/apiAuth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../../services/apiProfiles";
 import { languageFromPath } from "../../i18n/languages";
@@ -19,6 +19,18 @@ export function useLogin() {
     queryClient.clear();
     queryClient.setQueryData(["user"], user);
     await queryClient.prefetchQuery({ queryKey: ["profiles"], queryFn: getProfile, retry: false });
+
+    // Post email-confirmation: profile row may still be missing.
+    if (queryClient.getQueryData(["profiles"]) == null) {
+      try {
+        await ensureSignupBootstrap(user);
+        await queryClient.invalidateQueries({ queryKey: ["profiles"] });
+        await queryClient.prefetchQuery({ queryKey: ["profiles"], queryFn: getProfile, retry: false });
+      } catch {
+        // Waiting screen / onboarding handle incomplete signup state.
+      }
+    }
+
     navigate(`/${language}/dashboard`, { replace: true });
   }
 

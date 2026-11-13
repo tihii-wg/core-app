@@ -14,6 +14,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export { passwordResetPath, passwordResetRedirectUrl } from "../features/auth/passwordRecovery";
 
+export type SignUpMode = "create" | "join";
+
 export function isInvalidSessionError(error: unknown) {
   if (!error || typeof error !== "object") return false;
 
@@ -24,8 +26,9 @@ export function isInvalidSessionError(error: unknown) {
   return mentionsCredential;
 }
 
-type signUpProps = {
-  companyName: string;
+export type SignUpProps = {
+  mode?: SignUpMode;
+  companyName?: string;
   ownerName: string;
   email: string;
   phone?: string;
@@ -36,6 +39,7 @@ export type SignUpResult = {
   user: User;
   workspace: { id: string } | null;
   needsEmailConfirmation: boolean;
+  mode: SignUpMode;
 };
 
 type loginProps = {
@@ -43,16 +47,181 @@ type loginProps = {
   password: string;
 };
 
-export async function signUp(data: signUpProps): Promise<SignUpResult> {
-  // 1.AUTH USER
+function normalizeSignUpMode(value: unknown): SignUpMode {
+  return value === "join" ? "join" : "create";
+}
+
+function metaString(meta: Record<string, unknown> | undefined, key: string): string {
+  const value = meta?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isUniqueViolation(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  return error.code === "23505" || /duplicate key|already exists/i.test(error.message ?? "");
+}
+
+async function insertProfileForUser(user: User, meta: Record<string, unknown>) {
+  const fullName = metaString(meta, "ownerName") || metaString(meta, "full_name") || user.email || "";
+  const phone = metaString(meta, "phone") || null;
+  const { error } = await supabase.from("profiles").insert([
+    {
+      id: user.id,
+      full_name: fullName || null,
+      email: user.email,
+      phone,
+      active_workspace_id: null,
+    },
+  ]);
+  if (error && !isUniqueViolation(error)) throw new Error(error.message);
+}
+
+async function createOwnedWorkspaceForUser(user: User, companyName: string) {
+  const name = companyName.trim();
+  if (!name) throw new Error(i18n.t("auth.register.companyNameRequired"));
+
+  const { data: existingOwned, error: ownedError } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("owner_id", user.id)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (ownedError) throw new Error(ownedError.message);
+  if (existingOwned?.id) {
+    await ensureOwnerMembership(user.id, existingOwned.id);
+    await supabase.from("profiles").update({ active_workspace_id: existingOwned.id }).eq("id", user.id);
+    return { id: String(existingOwned.id) };
+  }
+
+  const { data: workspace, error: workspaceError } = await supabase
+    .from("workspaces")
+    .insert([
+      {
+        name,
+        owner_id: user.id,
+        industry_id: null,
+        language: normalizeWorkspaceLanguage(currentLanguage()),
+        date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
+      },
+    ])
+    .select("id")
+    .single();
+
+  if (workspaceError) throw new Error(workspaceError.message);
+
+  await ensureOwnerMembership(user.id, workspace.id);
+
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({ active_workspace_id: workspace.id })
+    .eq("id", user.id);
+  if (profileError) throw new Error(profileError.message);
+
+  return { id: String(workspace.id) };
+}
+
+async function ensureOwnerMembership(userId: string, workspaceId: string) {
+  const { data: existing, error: existingError } = await supabase
+    .from("workspace_members")
+    .select("user_id, deleted_at")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+
+  if (existing && !existing.deleted_at) return;
+  if (existing?.deleted_at) {
+    const { error } = await supabase
+      .from("workspace_members")
+      .update({ role: "owner", deleted_at: null })
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { error } = await supabase.from("workspace_members").insert([
+    {
+      workspace_id: workspaceId,
+      user_id: userId,
+      role: "owner",
+    },
+  ]);
+  if (error && !isUniqueViolation(error)) throw new Error(error.message);
+}
+
+/**
+ * After email confirmation (or any first login without a profile row), create the
+ * profile from auth metadata. Own-workspace mode also creates the workspace +
+ * owner membership. Join mode never auto-creates a workspace. Idempotent.
+ */
+export async function ensureSignupBootstrap(user: User): Promise<{ workspace: { id: string } | null; mode: SignUpMode }> {
+  const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const mode = normalizeSignUpMode(meta.signup_mode);
+
+  const { data: profile, error: profileReadError } = await supabase
+    .from("profiles")
+    .select("id, active_workspace_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileReadError) throw new Error(profileReadError.message);
+
+  if (!profile) {
+    await insertProfileForUser(user, meta);
+  }
+
+  if (mode === "join") {
+    return { workspace: null, mode };
+  }
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (membershipError) throw new Error(membershipError.message);
+  if (membership?.workspace_id) {
+    if (!profile?.active_workspace_id) {
+      await supabase.from("profiles").update({ active_workspace_id: membership.workspace_id }).eq("id", user.id);
+    }
+    return { workspace: { id: String(membership.workspace_id) }, mode };
+  }
+
+  // Only the very first bootstrap (profile row did not exist yet) may create a workspace.
+  // Never recreate a workspace for an existing user who deleted it or left every team.
+  if (profile) {
+    return { workspace: null, mode };
+  }
+
+  const companyName = metaString(meta, "companyName");
+  if (!companyName) {
+    // Legacy / incomplete metadata: do not invent a workspace.
+    return { workspace: null, mode };
+  }
+
+  const workspace = await createOwnedWorkspaceForUser(user, companyName);
+  return { workspace, mode };
+}
+
+export async function signUp(data: SignUpProps): Promise<SignUpResult> {
+  const mode = data.mode === "join" ? "join" : "create";
+  const companyName = (data.companyName ?? "").trim();
+  if (mode === "create" && !companyName) {
+    throw new Error(i18n.t("auth.register.companyNameRequired"));
+  }
+
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: data.email,
     password: data.password,
     options: {
       data: {
-        phone: data.phone,
-        companyName: data.companyName,
-        ownerName: data.ownerName,
+        phone: data.phone?.trim() || "",
+        companyName: mode === "create" ? companyName : "",
+        ownerName: data.ownerName.trim(),
+        signup_mode: mode,
       },
     },
   });
@@ -66,59 +235,17 @@ export async function signUp(data: signUpProps): Promise<SignUpResult> {
   if (!user) throw new Error(i18n.t("auth.errors.userNotFound"));
 
   // Email confirmation is on: there is no session yet, so profile and workspace writes are rejected.
-  if (!authData.session) return { user, workspace: null, needsEmailConfirmation: true };
+  if (!authData.session) {
+    return { user, workspace: null, needsEmailConfirmation: true, mode };
+  }
 
-  const { ownerName, phone, companyName } = user.user_metadata ?? {};
-
-  // 2.PROFILE
-  const { error: profileError } = await supabase.from("profiles").insert([
-    {
-      id: user.id,
-      full_name: ownerName,
-      email: user.email,
-      phone: phone,
-      active_workspace_id: null,
-    },
-  ]);
-
-  if (profileError) throw new Error(profileError.message);
-
-  // 3.WORKSPACE
-  const { data: workspace, error: workspaceError } = await supabase
-    .from("workspaces")
-    .insert([
-      {
-        name: companyName,
-        owner_id: user.id,
-        industry_id: null,
-        language: normalizeWorkspaceLanguage(currentLanguage()),
-        date_format: normalizeWorkspaceDateFormat("DD.MM.YYYY"),
-      },
-    ])
-    .select()
-    .single();
-
-  if (workspaceError) throw new Error(workspaceError.message);
-
-  // 4.WORKSPACE MEMBER
-
-  const { error: memberError } = await supabase.from("workspace_members").insert([
-    {
-      workspace_id: workspace.id,
-      user_id: user.id,
-      role: "owner",
-    },
-  ]);
-
-  if (memberError) throw new Error(memberError.message);
-
-  //5 set active workspace
-
-  const { error: profilersError } = await supabase.from("profiles").update({ active_workspace_id: workspace.id }).eq("id", user.id).select();
-
-  if (profilersError) throw new Error(profilersError.message);
-
-  return { user, workspace, needsEmailConfirmation: false };
+  const bootstrapped = await ensureSignupBootstrap(user);
+  return {
+    user,
+    workspace: bootstrapped.workspace,
+    needsEmailConfirmation: false,
+    mode: bootstrapped.mode,
+  };
 }
 
 export async function getCurrentUser() {
@@ -224,4 +351,15 @@ export async function login({ email, password }: loginProps) {
   }
 
   return { user: data.user, mfaRequired: true, factorId };
+}
+
+/** Registration URL for people invited to join an existing workspace (no own company). */
+export function joinTeamRegisterUrl(locale: string, email: string, origin?: string) {
+  const base =
+    origin ??
+    (typeof window !== "undefined" && window.location?.origin ? window.location.origin : "");
+  const params = new URLSearchParams({ mode: "join" });
+  const trimmed = email.trim();
+  if (trimmed) params.set("email", trimmed);
+  return `${base}/${locale}/register?${params.toString()}`;
 }
