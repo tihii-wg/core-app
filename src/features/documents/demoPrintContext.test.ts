@@ -58,7 +58,9 @@ describe("demoPrintContext", () => {
     expect(html).toContain("Иван Петров");
     expect(html).toContain("Toyota");
     expect(html).toContain("<table");
-    expect(html).not.toMatch(/#[А-ЯA-Z0-9-]+/);
+    // Ignore CSS colours inside style="" (e.g. line-comment colour #666) — only unresolved #TOKENS matter.
+    const withoutStyles = html.replace(/style="[^"]*"/g, "");
+    expect(withoutStyles).not.toMatch(/#[А-ЯA-Z0-9-]+/);
   });
 
   it("furniture demo has no vehicle data and no mileage in warranty", () => {
