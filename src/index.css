@@ -187,6 +187,129 @@
 .gcal-fullcalendar .fc {
   max-width: 100%;
 }
+
+/* FullCalendar → app theme tokens (light + dark). FC defaults (grey borders, slate buttons,
+   yellow "today", white popovers/list headers) clash with the dark theme. */
+.gcal-fullcalendar .fc {
+  --fc-page-bg-color: var(--card);
+  --fc-neutral-bg-color: var(--muted);
+  --fc-neutral-text-color: var(--muted-foreground);
+  --fc-border-color: var(--border);
+  --fc-button-text-color: var(--foreground);
+  --fc-button-bg-color: var(--card);
+  --fc-button-border-color: var(--border);
+  --fc-button-hover-bg-color: var(--muted);
+  --fc-button-hover-border-color: var(--border);
+  --fc-button-active-bg-color: var(--accent);
+  --fc-button-active-border-color: var(--border);
+  --fc-event-bg-color: var(--primary);
+  --fc-event-border-color: var(--primary);
+  --fc-event-text-color: #ffffff;
+  --fc-more-link-bg-color: transparent;
+  --fc-more-link-text-color: var(--primary);
+  --fc-today-bg-color: rgba(25, 115, 225, 0.06);
+  --fc-highlight-color: rgba(25, 115, 225, 0.14);
+  --fc-non-business-color: rgba(0, 0, 0, 0.03);
+  --fc-now-indicator-color: var(--destructive);
+  --fc-list-event-hover-bg-color: var(--muted);
+  color: var(--card-foreground);
+}
+.dark .gcal-fullcalendar .fc {
+  --fc-today-bg-color: rgba(96, 165, 250, 0.1);
+  --fc-highlight-color: rgba(96, 165, 250, 0.2);
+  --fc-non-business-color: rgba(255, 255, 255, 0.025);
+}
+/* Toolbar */
+.gcal-fullcalendar .fc .fc-toolbar-title {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.gcal-fullcalendar .fc .fc-button {
+  box-shadow: none;
+  font-weight: 500;
+  text-transform: none;
+}
+.gcal-fullcalendar .fc .fc-button-primary:not(:disabled):active,
+.gcal-fullcalendar .fc .fc-button-primary:not(:disabled).fc-button-active {
+  color: var(--accent-foreground);
+}
+.gcal-fullcalendar .fc .fc-button-primary:disabled {
+  opacity: 0.5;
+  color: var(--muted-foreground);
+}
+.gcal-fullcalendar .fc .fc-button:focus,
+.gcal-fullcalendar .fc .fc-button-primary:not(:disabled):active:focus {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+/* Grid text */
+.gcal-fullcalendar .fc .fc-col-header-cell-cushion,
+.gcal-fullcalendar .fc .fc-daygrid-day-number,
+.gcal-fullcalendar .fc .fc-list-day-text,
+.gcal-fullcalendar .fc .fc-list-day-side-text {
+  color: var(--foreground);
+  text-decoration: none;
+}
+.gcal-fullcalendar .fc .fc-timegrid-slot-label-cushion,
+.gcal-fullcalendar .fc .fc-timegrid-axis-cushion,
+.gcal-fullcalendar .fc .fc-day-other .fc-daygrid-day-number {
+  color: var(--muted-foreground);
+}
+.gcal-fullcalendar .fc .fc-col-header-cell {
+  background: var(--card);
+}
+/* Today: tinted column + highlighted day number */
+.gcal-fullcalendar .fc .fc-day-today .fc-daygrid-day-number,
+.gcal-fullcalendar .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+  color: var(--primary);
+  font-weight: 600;
+}
+.dark .gcal-fullcalendar .fc .fc-day-today .fc-daygrid-day-number,
+.dark .gcal-fullcalendar .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+  color: var(--accent-foreground);
+}
+/* "+N more" popover */
+.gcal-fullcalendar .fc .fc-popover {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border-color: var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.gcal-fullcalendar .fc .fc-popover-header {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.gcal-fullcalendar .fc .fc-more-link:hover {
+  background: var(--muted);
+}
+/* List view */
+.gcal-fullcalendar .fc .fc-list,
+.gcal-fullcalendar .fc .fc-list-table td {
+  border-color: var(--border);
+}
+.gcal-fullcalendar .fc .fc-list-empty {
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+/* Events: softer edges, readable on dark */
+.gcal-fullcalendar .fc .fc-timegrid-event,
+.gcal-fullcalendar .fc .fc-daygrid-block-event {
+  border-radius: 6px;
+}
+.dark .gcal-fullcalendar .fc .fc-timegrid-event-harness-inset .fc-timegrid-event,
+.dark .gcal-fullcalendar .fc .fc-timegrid-event.fc-event-mirror,
+.dark .gcal-fullcalendar .fc .fc-timegrid-more-link {
+  box-shadow: 0 0 0 1px var(--card);
+}
+.gcal-fullcalendar .fc .fc-daygrid-dot-event:hover,
+.gcal-fullcalendar .fc .fc-daygrid-dot-event.fc-event-mirror {
+  background: var(--muted);
+}
+.gcal-fullcalendar .fc .fc-daygrid-dot-event .fc-event-title,
+.gcal-fullcalendar .fc .fc-daygrid-dot-event .fc-event-time {
+  color: var(--card-foreground);
+}
 .gcal-events-loading {
   pointer-events: none;
   position: absolute;
