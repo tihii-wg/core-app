@@ -14,6 +14,7 @@ import {
 import type { Order, OrderStatus } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { useRealtimeHotQueryOptions } from "../realtime/useRealtimeHotQueryOptions";
 import { patchOrderInLists } from "./orderCache";
 import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 
@@ -68,10 +69,12 @@ export function findCachedOrder(
 /** Unpaginated orders (dashboard, notifications, global search). */
 export function useGetOrders(search = "", { enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
+  const hot = useRealtimeHotQueryOptions();
   const { data: orders, isLoading, error, refetch } = useQuery({
     queryKey: search ? ["orders", workspaceId, search] : ["orders", workspaceId],
     queryFn: () => getOrders(workspaceId, search),
     enabled: Boolean(workspaceId) && enabled,
+    ...hot,
   });
 
   return { orders: orders ?? [], isLoading, error, refetch };
@@ -96,6 +99,7 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
     pageSize,
   } as const;
 
+  const hot = useRealtimeHotQueryOptions();
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["orders", workspaceId, "page", listKey],
     queryFn: () =>
@@ -113,6 +117,7 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
       }),
     enabled: Boolean(workspaceId) && enabled,
     placeholderData: (previous: OrdersPageResult | undefined) => previous,
+    ...hot,
   });
 
   return {

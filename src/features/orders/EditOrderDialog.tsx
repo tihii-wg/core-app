@@ -31,6 +31,7 @@ export function EditOrderDialog({ order, onClose, onUpdated }: EditOrderDialogPr
             key={order.id}
             order={order}
             onCancel={onClose}
+            onOrderSynced={(updated) => onUpdated?.(updated)}
             onUpdated={(updated) => {
               onUpdated?.(updated);
               onClose();

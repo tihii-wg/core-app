@@ -459,6 +459,10 @@ export default {
     addPerformer: "+ Add performer",
     saveAndClose: "Save & close",
     closeWindow: "Close window",
+    remoteChanged: "Order changed on another device — refresh?",
+    remoteChangedRefresh: "Refresh",
+    remoteChangedDismiss: "Keep editing",
+    remoteChangedFailed: "Could not reload the order",
     srDescription: "View and edit this order's VIN, services, device, assignment, and deadline.",
     tabs: {
       itemsEmpty: "No services or items yet",

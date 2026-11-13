@@ -28,6 +28,7 @@ import {
 import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
 import { useWorkspaceMoney } from "../features/workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
+import { useRealtimeHotQueryOptions } from "../features/realtime/useRealtimeHotQueryOptions";
 import { CreateOrderDialog } from "../features/orders/CreateOrderDialog";
 import { EditOrderDialog } from "../features/orders/EditOrderDialog";
 import { OrdersListView } from "../features/orders/OrdersListView";
@@ -128,6 +129,7 @@ export default function Dashboard() {
     onOpenChange: (open: boolean) => setOpenDialog(open ? dialog : null),
   });
   const { formatMoney } = useWorkspaceMoney();
+  const hot = useRealtimeHotQueryOptions();
   const {
     data: workspaceOrders = [],
     isLoading: ordersLoading,
@@ -138,6 +140,7 @@ export default function Dashboard() {
     queryKey: ["orders", workspaceId],
     queryFn: () => getOrders(workspaceId),
     enabled: Boolean(workspaceId),
+    ...hot,
   });
   const {
     data: workspaceClients = [],

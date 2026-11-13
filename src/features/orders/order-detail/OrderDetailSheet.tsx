@@ -209,6 +209,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
                     order={selectedOrder}
                     initialFocusField={editFocusField ?? undefined}
                     onCancel={stopEditing}
+                    onOrderSynced={onOrderUpdated}
                     onUpdated={(order) => {
                       onOrderUpdated(order);
                       stopEditing();

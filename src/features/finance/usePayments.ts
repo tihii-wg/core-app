@@ -13,6 +13,7 @@ import {
 import type { PaymentListFilters, RecordPaymentInput, RecordRefundInput } from "./paymentTypes";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { useRealtimeHotQueryOptions } from "../realtime/useRealtimeHotQueryOptions";
 
 export function paymentsQueryKey(workspaceId: string | undefined, filters: PaymentListFilters = {}) {
   return ["payments", workspaceId, filters] as const;
@@ -20,13 +21,13 @@ export function paymentsQueryKey(workspaceId: string | undefined, filters: Payme
 
 export function useGetPayments(filters: PaymentListFilters = {}) {
   const { workspaceId } = useActiveWorkspaceId();
+  const hot = useRealtimeHotQueryOptions();
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: paymentsQueryKey(workspaceId, filters),
     queryFn: () => getPayments(workspaceId, filters),
     enabled: Boolean(workspaceId),
-    // Keep focus refetch for the open ledger even though QueryClient defaults turn it off.
-    refetchOnWindowFocus: true,
     staleTime: 0,
+    ...hot,
     retry: (failureCount, queryError) => !(queryError instanceof PaymentsUnavailableError) && failureCount < 3,
   });
 

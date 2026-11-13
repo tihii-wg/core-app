@@ -11,6 +11,7 @@ import type { Order, OrderKind } from "../../lib/types";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useRealtimeHotQueryOptions } from "../realtime/useRealtimeHotQueryOptions";
 import { getOrders } from "../../services/apiOrders";
 import { useQuery } from "@tanstack/react-query";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
@@ -63,6 +64,7 @@ export function OrdersBoard({
   const { t } = useTranslation();
   const { canWrite: subscriptionWrite } = useWorkspaceSubscription();
   const { workspaceId } = useActiveWorkspaceId();
+  const hot = useRealtimeHotQueryOptions();
   const isEstimates = kind === "estimate";
   // Estimate board is view/open only — status changes happen on the card (accept converts).
   const canWrite = subscriptionWrite && !isEstimates;
@@ -75,6 +77,7 @@ export function OrdersBoard({
     queryKey: ["orders", workspaceId, search, kind],
     queryFn: () => getOrders(workspaceId, search, kind),
     enabled: Boolean(workspaceId),
+    ...hot,
   });
   const { data: definitions = [], isLoading: definitionsLoading } = useGetStatusDefinitions(
     isEstimates ? "estimate" : "order",

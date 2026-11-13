@@ -11,6 +11,7 @@ import type { Order } from "../../lib/types";
 import type { OrderListKind } from "../../services/apiOrders";
 import { getOrders } from "../../services/apiOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useRealtimeHotQueryOptions } from "../realtime/useRealtimeHotQueryOptions";
 import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -60,6 +61,7 @@ export function OrdersCalendar({
   const { profile, industrySlug } = useIndustryWorkflow();
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const { workspaceId } = useActiveWorkspaceId();
+  const hot = useRealtimeHotQueryOptions();
   const isEstimates = kind === "estimate";
   const {
     data: orders = [],
@@ -70,6 +72,7 @@ export function OrdersCalendar({
     queryKey: ["orders", workspaceId, search, kind],
     queryFn: () => getOrders(workspaceId, search, kind),
     enabled: Boolean(workspaceId),
+    ...hot,
   });
   const [scale, setScale] = useState<OrderCalendarScale>(() => readOrderCalendarScale());
   const [anchor, setAnchor] = useState(() => dateFromKey(today) ?? new Date());

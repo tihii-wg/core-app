@@ -466,6 +466,10 @@ const orders: Messages<typeof en> = {
     addPerformer: "+ Adaugă executant",
     saveAndClose: "Salvează și închide",
     closeWindow: "Închide fereastra",
+    remoteChanged: "Comanda a fost modificată pe alt dispozitiv — reîncarci?",
+    remoteChangedRefresh: "Reîncarcă",
+    remoteChangedDismiss: "Continuă editarea",
+    remoteChangedFailed: "Nu s-a putut reîncărca comanda",
     srDescription: "Vizualizați și editați VIN-ul, serviciile, automobilul, responsabilul și termenul acestei comenzi.",
     tabs: {
       itemsEmpty: "Încă nu există servicii sau produse",

@@ -470,6 +470,10 @@ const orders: Messages<typeof en> = {
     addPerformer: "+ Добавить исполнителя",
     saveAndClose: "Сохранить и закрыть",
     closeWindow: "Закрыть окно",
+    remoteChanged: "Заказ изменён на другом устройстве — обновить?",
+    remoteChangedRefresh: "Обновить",
+    remoteChangedDismiss: "Продолжить редактирование",
+    remoteChangedFailed: "Не удалось перезагрузить заказ",
     srDescription: "Просмотр и редактирование VIN, услуг, автомобиля, ответственного и срока этого заказа.",
     tabs: {
       itemsEmpty: "Услуг и товаров пока нет",

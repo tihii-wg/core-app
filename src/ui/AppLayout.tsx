@@ -10,6 +10,7 @@ import { replaceLocale } from "../features/settings/settingsTab";
 import { normalizeWorkspaceLanguage } from "../services/apiWorkspaces";
 import { ownedWorkspaceNeedingSetup } from "../features/onboarding/businessSetup";
 import { SessionIdleGuard } from "../features/auth/SessionIdleGuard";
+import { WorkspaceRealtimeProvider } from "../features/realtime/WorkspaceRealtimeProvider";
 
 export function AppLayout() {
   const { workspaceId, locale = "en" } = useParams();
@@ -72,19 +73,21 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background print:block print:min-h-0 print:bg-white">
-      <SessionIdleGuard />
-      <AppSidebar />
-      <div className="flex min-w-0 flex-1 flex-col print:block">
-        <AppTopbar />
-        {/* Full width on every screen: the content fills the space between the sidebar and the right edge,
-            so wide monitors show more columns / rows instead of empty side margins. */}
-        <main className="min-w-0 flex-1 px-4 py-5 sm:px-5 lg:px-6 lg:py-6 print:overflow-visible print:p-0">
-          <div className="w-full min-w-0">
-            <Outlet />
-          </div>
-        </main>
+    <WorkspaceRealtimeProvider>
+      <div className="flex min-h-screen bg-background print:block print:min-h-0 print:bg-white">
+        <SessionIdleGuard />
+        <AppSidebar />
+        <div className="flex min-w-0 flex-1 flex-col print:block">
+          <AppTopbar />
+          {/* Full width on every screen: the content fills the space between the sidebar and the right edge,
+              so wide monitors show more columns / rows instead of empty side margins. */}
+          <main className="min-w-0 flex-1 px-4 py-5 sm:px-5 lg:px-6 lg:py-6 print:overflow-visible print:p-0">
+            <div className="w-full min-w-0">
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </WorkspaceRealtimeProvider>
   );
 }

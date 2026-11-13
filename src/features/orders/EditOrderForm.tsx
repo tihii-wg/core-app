@@ -67,16 +67,42 @@ import OrderServiceLinesFields from "./OrderServiceLinesFields";
 import { useOrderMileageUnitSync } from "./useOrderMileageUnit";
 import { registerOrderUnsavedEdits } from "./orderUnsavedEdits";
 import { focusOrderEditField, type OrderEditField } from "./orderEditFields";
+import { getOrder } from "../../services/apiOrders";
+import { RemoteOrderEditNotice } from "../realtime/RemoteOrderEditNotice";
+import { useRemoteOrderEditNotice } from "../realtime/useRemoteOrderEditNotice";
 
 type EditOrderFormProps = {
   order: Order;
   onCancel: () => void;
   onUpdated: (order: Order) => void;
+  /**
+   * Soft sync after a remote reload (keep the edit form open). Defaults to onUpdated
+   * only when the caller does not close the panel on save.
+   */
+  onOrderSynced?: (order: Order) => void;
   /** When set, scroll/focus the matching `[data-edit-field]` after mount. */
   initialFocusField?: OrderEditField;
   /** Mirrors the form's submitting state (lets the panel footer show a spinner for the same save). */
   onSubmittingChange?: (submitting: boolean) => void;
 };
+
+function editFormDefaultsFromOrder(order: Order): EditOrderFormData {
+  return {
+    vehicleId: order.vehicleId ?? "",
+    device: order.device,
+    carNumber: order.carNumber,
+    vin: order.vin,
+    ...emptyOrderIndustryFormFields(),
+    ...orderIndustryFormFieldsFromOrder(order),
+    currentMileage: mileageFormValueFromOrder(order),
+    description: order.description,
+    assignedEmployeeId: order.assignedEmployeeId,
+    team: (order.team ?? []).map((member) => ({ employeeId: member.employeeId, role: member.role })),
+    deadline: order.deadline,
+    services: order.services,
+    materials: order.materials ?? [],
+  };
+}
 
 /**
  * Imperative handle for external save buttons (the order panel footer).
@@ -128,7 +154,7 @@ function findMaterialWarrantyRecord(
 }
 
 const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(function EditOrderForm(
-  { order, onCancel, onUpdated, initialFocusField, onSubmittingChange },
+  { order, onCancel, onUpdated, onOrderSynced, initialFocusField, onSubmittingChange },
   ref,
 ) {
   const { t } = useTranslation();
@@ -213,24 +239,30 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
     getValues,
     clearErrors,
     trigger,
+    reset,
     formState: { errors, isSubmitting, isSubmitted, dirtyFields, isDirty },
   } = useForm<EditOrderFormData>({
-    defaultValues: {
-      vehicleId: order.vehicleId ?? "",
-      device: order.device,
-      carNumber: order.carNumber,
-      vin: order.vin,
-      ...emptyOrderIndustryFormFields(),
-      ...orderIndustryFormFieldsFromOrder(order),
-      currentMileage: mileageFormValueFromOrder(order),
-      description: order.description,
-      assignedEmployeeId: order.assignedEmployeeId,
-      team: (order.team ?? []).map((member) => ({ employeeId: member.employeeId, role: member.role })),
-      deadline: order.deadline,
-      services: order.services,
-      materials: order.materials ?? [],
-    },
+    defaultValues: editFormDefaultsFromOrder(order),
   });
+
+  const { showNotice: showRemoteNotice, dismiss: dismissRemoteNotice, acknowledgeReload } =
+    useRemoteOrderEditNotice(order.id, isDirty);
+  const [remoteRefreshing, setRemoteRefreshing] = useState(false);
+
+  const reloadFromRemote = async () => {
+    if (!workspaceId || remoteRefreshing) return;
+    setRemoteRefreshing(true);
+    try {
+      const fresh = await getOrder(order.id, workspaceId);
+      reset(editFormDefaultsFromOrder(fresh));
+      acknowledgeReload();
+      (onOrderSynced ?? onUpdated)(fresh);
+    } catch {
+      toast.error(t("orders.detail.remoteChangedFailed"));
+    } finally {
+      setRemoteRefreshing(false);
+    }
+  };
 
   /** Adds a line performer to the team chips as a helper when not already present. */
   function addPerformerToTeam(employeeId: string | null | undefined) {
@@ -514,6 +546,13 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
 
   return (
     <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {showRemoteNotice ? (
+        <RemoteOrderEditNotice
+          onRefresh={() => void reloadFromRemote()}
+          onDismiss={dismissRemoteNotice}
+          refreshing={remoteRefreshing}
+        />
+      ) : null}
       {showVehicles && order.clientId ? (
         <OrderVehicleFields
           control={control}
