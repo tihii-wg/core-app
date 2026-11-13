@@ -23,6 +23,8 @@ import {
   unifiedStatusOptions,
   type UnifiedStatusOption,
 } from "./unifiedOrderStatus";
+import { isEstimateOrder } from "./orderEstimates";
+import { useSetEstimateStatus } from "./useEstimateMutations";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { useUpdateOrderStatus } from "./useGetOrders";
 
@@ -77,7 +79,8 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
   const { workflow } = useIndustryWorkflow();
   const { workspaceId } = useActiveWorkspaceId();
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
+  const estimate = isEstimateOrder(order);
+  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions(estimate ? "estimate" : "order");
   const paymentsQuery = useGetPayments();
   const payments = opts.payments ?? paymentsQuery.payments;
   const paymentsLoading = opts.paymentsLoading ?? paymentsQuery.isLoading;
@@ -87,23 +90,44 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const { mutateAsync: moveOnBoard, isPending: isMoving } = useMoveOrderOnBoard();
   const { mutateAsync: updateStatus, isPending: isUpdatingStatus } = useUpdateOrderStatus();
+  const { mutateAsync: setEstimateStatusAsync, isPending: isSettingEstimateStatus } = useSetEstimateStatus();
 
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
-  const paidStatusLocked = order != null && isOrderPaidLocked(order, isWorkspaceOwner);
+  const paidStatusLocked = !estimate && order != null && isOrderPaidLocked(order, isWorkspaceOwner);
   const lifecycleStatusLocked =
-    order != null && (order.status === "cancelled" ? !isOwnerByOwnerId : isOrderFormallyClosed(order));
+    !estimate &&
+    order != null &&
+    (order.status === "cancelled" ? !isOwnerByOwnerId : isOrderFormallyClosed(order));
   const paidStatusBlocked =
-    order != null && isPaidStatusOptionBlocked(order, taxInvoiceRequired) && order.status !== "paid";
+    !estimate && order != null && isPaidStatusOptionBlocked(order, taxInvoiceRequired) && order.status !== "paid";
 
-  const baseOptions = useMemo(
-    () => unifiedStatusOptions(orderStatusDefinitions, (status) => industryOrderStatusLabel(workflow, status)),
-    [orderStatusDefinitions, workflow],
-  );
+  const baseOptions = useMemo(() => {
+    if (estimate) {
+      return orderStatusDefinitions
+        .filter((definition) => definition.isActive)
+        .map((definition) => ({
+          kind: "definition" as const,
+          id: definition.id,
+          name: definition.name,
+          color: definition.color,
+          systemStatus: null as OrderStatus | null,
+          semanticAction: definition.semanticAction,
+          definition,
+        }));
+    }
+    return unifiedStatusOptions(orderStatusDefinitions, (status) => industryOrderStatusLabel(workflow, status));
+  }, [estimate, orderStatusDefinitions, workflow]);
 
-  const current = useMemo(
-    () => (order ? resolveCurrentUnifiedStatus(order, baseOptions) : null),
-    [order, baseOptions],
-  );
+  const current = useMemo(() => {
+    if (!order) return null;
+    if (estimate) {
+      if (order.estimateStatusId) {
+        return baseOptions.find((option) => option.id === order.estimateStatusId) ?? null;
+      }
+      return baseOptions[0] ?? null;
+    }
+    return resolveCurrentUnifiedStatus(order, baseOptions);
+  }, [order, estimate, baseOptions]);
 
   const netPaid = useMemo(() => {
     if (!order) return 0;
@@ -115,6 +139,9 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
 
   const options: OrderStatusChangeOption[] = useMemo(() => {
     if (!order) return [];
+    if (estimate) {
+      return baseOptions.map((option) => ({ ...option, disabled: false, disabledReason: null }));
+    }
     const paidLockReason = t("orders.errors.paidStatusLocked");
     const taxReason = t("orders.taxInvoice.requiredHint");
     const cancelledReason = t("orders.lifecycle.errors.orderAlreadyCancelled");
@@ -202,6 +229,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stabilize Select item identity across parent re-renders
   }, [
     order,
+    estimate,
     baseOptions,
     paidStatusLocked,
     paidStatusBlocked,
@@ -219,7 +247,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
     !lifecycleStatusLocked &&
     !paidStatusLocked;
 
-  const isPending = isMoving || isUpdatingStatus;
+  const isPending = isMoving || isUpdatingStatus || isSettingEstimateStatus;
 
   const onOrderUpdated = opts.onOrderUpdated;
   const onLegacyStatusChange = opts.onLegacyStatusChange;
@@ -232,6 +260,22 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
       if (!subscriptionAllowsWrite) {
         return { ok: false, reason: t("orders.errors.statusChangeUnavailable") };
       }
+
+      if (isEstimateOrder(order)) {
+        if (order.estimateStatusId === optionId) return { ok: true, order };
+        try {
+          const next = await setEstimateStatusAsync({ orderId: order.id, statusId: optionId });
+          onOrderUpdated?.(next);
+          return { ok: true, order: next };
+        } catch (error) {
+          const reason =
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : t("orders.toast.statusUpdateFailed");
+          return { ok: false, reason };
+        }
+      }
+
       if (isOrderPaidLocked(order, isWorkspaceOwner)) {
         return { ok: false, reason: t("orders.errors.paidStatusLocked") };
       }
@@ -322,6 +366,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
       t,
       moveOnBoard,
       updateStatus,
+      setEstimateStatusAsync,
       onOrderUpdated,
       onLegacyStatusChange,
     ],

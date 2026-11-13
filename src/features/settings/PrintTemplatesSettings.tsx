@@ -52,7 +52,7 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useCanEditWorkspaceSettings, useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
-const DOCUMENT_TYPES: DocumentTemplateType[] = ["work_order", "act", "invoice"];
+const DOCUMENT_TYPES: DocumentTemplateType[] = ["work_order", "act", "invoice", "estimate"];
 
 /** Inserts `text` at the current selection; exported for unit tests / legacy HTML editor helpers. */
 export function insertTextAtCursor(textarea: Pick<HTMLTextAreaElement, "selectionStart" | "selectionEnd" | "value">, text: string) {

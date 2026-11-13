@@ -4,13 +4,15 @@ import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { ReactNode } from "react";
 import type { Order, OrderStatus } from "../../lib/types";
 import type { Column } from "../../ui/DataTable";
-import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
+import { EntityStatusBadge, OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
 import OrderTeamAvatars from "./OrderTeamAvatars";
+import { isEstimateOrder } from "./orderEstimates";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import { OrderEstimateMark } from "./OrderEstimateMark";
 import { isOrderOverdue } from "./orderVisibility";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
 import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
@@ -45,6 +47,8 @@ export type BuildOrderColumnsArgs = {
   }>;
   formatMoney: (value: number) => string;
   today: string;
+  /** Estimates list: estimate status only, no payment badge. */
+  hidePayments?: boolean;
   warrantyByOrderId: Map<string, OrderWarrantyIndicatorModel | null | undefined>;
   paymentStatusByOrder: Map<string, PaymentBalanceStatus>;
   invoiceNumberByOrder: Map<string, string>;
@@ -74,6 +78,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
           <span className="font-medium text-primary tabular-nums" title={order.orderNumber}>
             {order.orderNumber}
           </span>
+          <OrderEstimateMark order={order} className="mt-0.5 block w-fit" />
           <OrderWarrantyIndicator model={args.warrantyByOrderId.get(order.id)} className="mt-0.5" />
         </div>
       ),
@@ -131,14 +136,25 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
     },
     {
       key: "status",
-      header: args.columnLabels?.status ?? args.t("orders.table.statusPayment"),
+      header: args.hidePayments
+        ? args.t("common.status")
+        : (args.columnLabels?.status ?? args.t("orders.table.statusPayment")),
       ...colSize("status"),
-      cell: (order) => (
-        <div className="flex min-w-0 flex-col flex-wrap items-start gap-1">
-          <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
-          <PaymentStatusBadge status={args.paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
-        </div>
-      ),
+      cell: (order) => {
+        if (args.hidePayments || isEstimateOrder(order)) {
+          return order.estimateStatus ? (
+            <EntityStatusBadge name={order.estimateStatus.name} color={order.estimateStatus.color} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          );
+        }
+        return (
+          <div className="flex min-w-0 flex-col flex-wrap items-start gap-1">
+            <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
+            <PaymentStatusBadge status={args.paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
+          </div>
+        );
+      },
     },
   ];
 

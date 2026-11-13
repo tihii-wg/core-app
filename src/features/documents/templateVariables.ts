@@ -22,7 +22,7 @@ import {
 import { amountInWords, normalizeAmountInWordsLocale } from "./amountInWords";
 
 /** Mirrors layout.DocumentTemplateType — kept local to avoid import cycles. */
-export type PrintDocumentKind = "work_order" | "act" | "invoice";
+export type PrintDocumentKind = "work_order" | "act" | "invoice" | "estimate";
 
 export type VariableGroup =
   | "order"
@@ -147,6 +147,7 @@ function documentTitleLabel(kind: PrintDocumentKind | null, locale: string): str
   const t = i18n.getFixedT(lng);
   if (kind === "invoice") return t("settings.printTemplates.docTitleInvoice");
   if (kind === "act") return t("settings.printTemplates.docTitleAct");
+  if (kind === "estimate") return t("settings.printTemplates.docTitleEstimate");
   return t("settings.printTemplates.docTitleWorkOrder");
 }
 

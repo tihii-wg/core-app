@@ -5,11 +5,14 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "../../ui/Button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/DropdownMenu";
 import { Input } from "../../ui/Input";
-import { OrderStatusBadge } from "../../ui/StatusBadge";
+import { EntityStatusBadge, OrderStatusBadge } from "../../ui/StatusBadge";
 import { Skeleton } from "../../ui/Skeleton";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/Tabs";
 import ClientTypeBadge from "./ClientTypeBadge";
 import type { Client, Order, OrderStatus } from "../../lib/types";
+import { canUseOrderEstimates } from "../orders/orderEstimates";
+import { isOrderEstimatesSupported } from "../../services/apiOrders";
+import { useClientEstimates } from "./useClientEstimates";
 import {
   industryClientCopy,
   industryOrderStatusLabel,
@@ -31,7 +34,7 @@ import { ClientDocumentsTab } from "./ClientDocumentsTab";
 import { ClientPaymentsTab } from "./ClientPaymentsTab";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
-import { clientOrderHistoryLine, type ClientOrderSummary } from "./clientOrders";
+import { clientOrderHistoryLine, clientOrderSummaries, type ClientOrderSummary } from "./clientOrders";
 import { useClientOrdersCount } from "./useClientOrdersCount";
 import { filterClientCardSearch, highlightMatch, type ClientSearchableOrder } from "./clientSearch";
 import {
@@ -67,6 +70,8 @@ type ClientDetailPanelProps = {
   onOpenOrder?: (orderId: string) => void;
   /** Second arg is set when creating from a specific vehicle row on this card. */
   onCreateOrder?: (client: Client, vehicleId?: string) => void;
+  /** Create estimate (same form as order) from the client card. */
+  onCreateEstimate?: (client: Client, vehicleId?: string) => void;
 };
 
 /** Without search, the Orders tab shows up to this many rows (same cap as an active search). */
@@ -116,6 +121,7 @@ export default function ClientDetailPanel({
   ordersError = false,
   onOpenOrder,
   onCreateOrder,
+  onCreateEstimate,
 }: ClientDetailPanelProps) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
@@ -323,6 +329,16 @@ export default function ClientDetailPanel({
   }
 
   const canCreateOrder = Boolean(onCreateOrder) && canMutateClients;
+  const estimatesEnabled = canUseOrderEstimates(isOrderEstimatesSupported());
+  const canCreateEstimate = Boolean(onCreateEstimate) && canMutateClients && estimatesEnabled;
+  const { estimates: clientEstimateOrders, isLoading: estimatesLoading } = useClientEstimates(
+    selectedClient?.id,
+    { enabled: detailPanelOpen && estimatesEnabled && activeTab === "orders" },
+  );
+  const estimateSummaries = useMemo(
+    () => (selectedClient ? clientOrderSummaries(clientEstimateOrders, selectedClient.id, "estimate") : []),
+    [clientEstimateOrders, selectedClient],
+  );
   const showMoreMenu = canMutateClients;
 
   return (
@@ -536,12 +552,25 @@ export default function ClientDetailPanel({
                               ? t("clients.detail.orderHistory")
                               : t("clients.detail.orderHistoryWithCount", { count: totalOrdersCount })}
                           </h3>
-                          {canCreateOrder ? (
-                            <Button type="button" variant="outline" size="sm" onClick={() => onCreateOrder?.(selectedClient)}>
-                              <Plus />
-                              {t("clients.detail.createOrder")}
-                            </Button>
-                          ) : null}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {canCreateOrder ? (
+                              <Button type="button" variant="outline" size="sm" onClick={() => onCreateOrder?.(selectedClient)}>
+                                <Plus />
+                                {t("clients.detail.createOrder")}
+                              </Button>
+                            ) : null}
+                            {canCreateEstimate ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onCreateEstimate?.(selectedClient)}
+                              >
+                                <Plus />
+                                {t("clients.detail.createEstimate")}
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
 
                         {ordersLoading ? (
@@ -591,6 +620,93 @@ export default function ClientDetailPanel({
                                 </>
                               );
 
+                              return (
+                                <li key={order.id}>
+                                  {onOpenOrder ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenOrder(order.id)}
+                                      className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+                                    >
+                                      {content}
+                                    </button>
+                                  ) : (
+                                    <div className="flex items-start justify-between gap-3 px-3 py-2.5">{content}</div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {estimatesEnabled && !searchEmpty ? (
+                      <div className="mt-6">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <h3 className="text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">
+                            {t("clients.detail.estimateHistoryWithCount", { count: estimateSummaries.length })}
+                          </h3>
+                          {canCreateEstimate ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onCreateEstimate?.(selectedClient)}
+                            >
+                              <Plus />
+                              {t("clients.detail.createEstimate")}
+                            </Button>
+                          ) : null}
+                        </div>
+                        {estimatesLoading ? (
+                          <div className="space-y-2">
+                            <Skeleton className="h-12 w-full" />
+                          </div>
+                        ) : estimateSummaries.length === 0 ? (
+                          <div className="rounded-md border border-dashed border-border px-4 py-6 text-center">
+                            <p className="text-[13px] font-medium text-foreground">{t("clients.detail.noEstimates")}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{t("clients.detail.noEstimatesHint")}</p>
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                            {estimateSummaries.slice(0, ORDER_LIST_LIMIT).map((order) => {
+                              const historyLine = clientOrderHistoryLine(
+                                order,
+                                shouldShowOrderAssetValue(workflow.orderFields.device, order.device, "device"),
+                                shouldShowOrderAssetValue(workflow.orderFields.carNumber, order.carNumber, "carNumber"),
+                                shouldShowOrderAssetValue(workflow.orderFields.vin, order.vin, "vin"),
+                              );
+                              const content = (
+                                <>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                      <span className="text-sm font-medium text-primary tabular-nums">
+                                        {order.orderNumber}
+                                      </span>
+                                      {order.estimateStatus ? (
+                                        <EntityStatusBadge
+                                          name={order.estimateStatus.name}
+                                          color={order.estimateStatus.color}
+                                        />
+                                      ) : null}
+                                    </span>
+                                    {order.createdAt ? (
+                                      <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">
+                                        {order.createdAt}
+                                      </span>
+                                    ) : null}
+                                    {historyLine ? (
+                                      <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                        {historyLine}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <span className="shrink-0 text-sm font-medium text-foreground tabular-nums">
+                                    {formatMoney(order.totalPrice)}
+                                  </span>
+                                </>
+                              );
                               return (
                                 <li key={order.id}>
                                   {onOpenOrder ? (

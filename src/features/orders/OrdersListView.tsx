@@ -68,6 +68,8 @@ export type OrdersListViewProps = {
   cardExtra?: (order: Order) => ReactNode;
   /** Open client details from the client name cell. */
   onOpenClient?: (clientId: string) => void;
+  /** Estimates view: hide payment column/totals. */
+  hidePayments?: boolean;
   className?: string;
 };
 
@@ -101,6 +103,7 @@ export function OrdersListView({
   onResetLayout,
   cardExtra,
   onOpenClient,
+  hidePayments = false,
   className,
 }: OrdersListViewProps) {
   const { t } = useTranslation();
@@ -249,6 +252,7 @@ export function OrdersListView({
       columnLabels,
       formatMoney,
       today,
+      hidePayments,
       warrantyByOrderId,
       paymentStatusByOrder,
       invoiceNumberByOrder,
@@ -280,6 +284,7 @@ export function OrdersListView({
     orderFieldBlocks,
     formatMoney,
     today,
+    hidePayments,
     warrantyByOrderId,
     paymentStatusByOrder,
     invoiceNumberByOrder,
@@ -357,6 +362,7 @@ export function OrdersListView({
                   isStatusUpdating={orderDetails.isStatusUpdating}
                   requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
                   paymentStatus={paymentStatusByOrder.get(order.id)}
+                  hidePayments={hidePayments}
                   warrantyIndicator={warrantyByOrderId.get(order.id)}
                   formatMoney={formatMoney}
                   onView={orderDetails.openOrder}

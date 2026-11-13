@@ -2,6 +2,7 @@ import type { Client, Order } from "../../lib/types";
 import { useGetOrders } from "../orders/useGetOrders";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { clientOrderSummaries } from "./clientOrders";
+import { useClientEstimates } from "./useClientEstimates";
 
 type ClientDetailsHostProps = {
   selectedClient: Client | null;
@@ -11,6 +12,7 @@ type ClientDetailsHostProps = {
   onClientDeleted?: (clientId: string) => void;
   onOpenOrder?: (order: Order) => void;
   onCreateOrder?: (client: Client, vehicleId?: string) => void;
+  onCreateEstimate?: (client: Client, vehicleId?: string) => void;
 };
 
 /** Wires the existing Client Details sheet to workspace orders. */
@@ -22,8 +24,12 @@ export function ClientDetailsHost({
   onClientDeleted,
   onOpenOrder,
   onCreateOrder,
+  onCreateEstimate,
 }: ClientDetailsHostProps) {
   const { orders, isLoading, error } = useGetOrders("", { enabled: Boolean(selectedClient) && detailPanelOpen });
+  const { estimates } = useClientEstimates(selectedClient?.id, {
+    enabled: Boolean(selectedClient) && detailPanelOpen,
+  });
 
   return (
     <ClientDetailPanel
@@ -39,12 +45,13 @@ export function ClientDetailsHost({
       onOpenOrder={
         onOpenOrder
           ? (orderId) => {
-              const order = orders.find((item) => item.id === orderId);
+              const order = orders.find((item) => item.id === orderId) ?? estimates.find((item) => item.id === orderId);
               if (order) onOpenOrder(order);
             }
           : undefined
       }
       onCreateOrder={onCreateOrder}
+      onCreateEstimate={onCreateEstimate}
     />
   );
 }

@@ -4,7 +4,8 @@ import { Pencil } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import type { Order, PaymentStatus } from "../../../lib/types";
 import { SheetDescription, SheetHeader, SheetTitle } from "../../../ui/Sheet";
-import { OrderStatusBadge, StatusBadge } from "../../../ui/StatusBadge";
+import { EntityStatusBadge, OrderStatusBadge, StatusBadge } from "../../../ui/StatusBadge";
+import { estimateCardVisibility, isEstimateOrder } from "../orderEstimates";
 import { OrderDetailHeaderTotal } from "../OrderDetailHeaderTotal";
 import { OrderDetailWarrantyUnderNumber } from "./detailHelpers";
 
@@ -37,6 +38,8 @@ function OrderDetailHeaderComponent({
   onStartEdit,
 }: OrderDetailHeaderProps) {
   const { t } = useTranslation();
+  const visibility = estimateCardVisibility(selectedOrder);
+  const estimate = isEstimateOrder(selectedOrder);
 
   return (
     <SheetHeader
@@ -51,23 +54,35 @@ function OrderDetailHeaderComponent({
         <SheetTitle className="min-w-0 flex-1">
           <span className="flex min-w-0 flex-wrap items-center gap-2 tabular-nums [overflow-wrap:anywhere]">
             {selectedOrder.orderNumber}
-            {!isEditing && (
-              <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
-            )}
-            {selectedOrder.warrantySourceOrderId && !isEditing ? (
+            {visibility.showEstimateBadge && !isEditing ? (
+              <StatusBadge variant="info">{t("orders.estimates.badge")}</StatusBadge>
+            ) : null}
+            {!isEditing &&
+              (estimate ? (
+                selectedOrder.estimateStatus ? (
+                  <EntityStatusBadge
+                    name={selectedOrder.estimateStatus.name}
+                    color={selectedOrder.estimateStatus.color}
+                  />
+                ) : null
+              ) : (
+                <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
+              ))}
+            {visibility.showWarranty && selectedOrder.warrantySourceOrderId && !isEditing ? (
               <StatusBadge variant="warning">{t("orders.warranty.badge")}</StatusBadge>
             ) : null}
           </span>
-          {!isEditing ? <OrderDetailWarrantyUnderNumber order={selectedOrder} /> : null}
+          {!isEditing && visibility.showWarranty ? <OrderDetailWarrantyUnderNumber order={selectedOrder} /> : null}
         </SheetTitle>
         {!isEditing ? (
           <OrderDetailHeaderTotal
             order={selectedOrder}
             formatMoney={formatMoney}
-            paymentStatus={paymentStatus}
+            paymentStatus={visibility.showPayments ? paymentStatus : "unpaid"}
             workspaceVatRate={workspaceVatRate}
             worksLabel={worksLabel}
             materialsLabel={materialsLabel}
+            hidePaymentBadge={!visibility.showPayments}
             className="w-full sm:w-auto sm:max-w-[14rem]"
           />
         ) : null}

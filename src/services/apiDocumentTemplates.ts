@@ -102,7 +102,7 @@ export function toDocumentTemplate(row: Record<string, unknown>): DocumentTempla
 }
 
 export function isBuilderDocumentType(value: string): value is DocumentTemplateType {
-  return value === "work_order" || value === "act" || value === "invoice";
+  return value === "work_order" || value === "act" || value === "invoice" || value === "estimate";
 }
 
 export function isDocumentStyleType(value: string): boolean {

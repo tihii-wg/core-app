@@ -85,8 +85,11 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
   const listKey = {
     search: params.search ?? "",
     status: params.status ?? "all",
+    customStatusId: params.customStatusId ?? "all",
+    customStatusFallbackSystem: params.customStatusFallbackSystem ?? null,
     deadline: params.deadline ?? "all",
     employeeId: params.employeeId ?? "all",
+    kind: params.kind ?? "order",
     today: params.today,
     page: params.page,
     pageSize,
@@ -98,8 +101,11 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
       getOrdersPage(workspaceId, {
         search: listKey.search,
         status: listKey.status,
+        customStatusId: listKey.customStatusId,
+        customStatusFallbackSystem: listKey.customStatusFallbackSystem,
         deadline: listKey.deadline,
         employeeId: listKey.employeeId,
+        kind: listKey.kind,
         today: listKey.today,
         page: listKey.page,
         pageSize: listKey.pageSize,

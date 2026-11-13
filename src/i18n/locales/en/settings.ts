@@ -459,7 +459,11 @@ export default {
       normal: "Ordinary status",
       close: "Close action",
       cancel: "Cancel action",
+      accept: "Accepted — converts to order",
     },
+    assignAccept: "Assign Accept action",
+    assignReject: "Assign Rejected action",
+    lastAcceptRequired: "Keep at least one active “Accepted” status for estimates.",
     entities: {
       order: "Orders",
       estimate: "Estimates",
@@ -842,11 +846,13 @@ export default {
     docTitleInvoice: "Payment invoice",
     docTitleAct: "Act of completed works",
     docTitleWorkOrder: "Work order",
+    docTitleEstimate: "Estimate",
     unmappedTokens: "Unmapped variables: {{list}}",
     documentTypes: {
       work_order: "Work order",
       act: "Act of completed works",
       invoice: "Invoice",
+      estimate: "Estimate",
     },
     blockKinds: {
       companyHeader: "Company header",
@@ -978,6 +984,7 @@ export default {
         prepaymentLine: "Prepayment for order No. {{number}}",
         balanceLine: "Balance payment for order No. {{number}}",
         workOrder: "WORK ORDER",
+        estimate: "ESTIMATE",
         act: "ACT OF COMPLETED WORKS",
         invoice: "INVOICE",
         pageNumberFormat: "Page {n} of {m}",

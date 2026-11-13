@@ -23,6 +23,7 @@ import { useAppendOrderLines } from "./useAppendOrderLines";
 import { catalogItemToOrderMaterial } from "../inventory/orderMaterialLine";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { isEstimateOrder } from "./orderEstimates";
 import { issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
 import { useWorkspaceWarrantyDefaults } from "./useWorkspaceWarrantyDefaults";
@@ -310,6 +311,36 @@ export default function OrderAddLinesSearch({
   function handleSelectItem(item: InventoryItem) {
     if (onIncrementMaterialLine?.(item.id)) {
       readyForNextPick();
+      return;
+    }
+    // Estimates never issue stock now, but keep the warehouse that has the item: on acceptance the
+    // conversion issues each line from its warehouse (a line without one would stay «К выдаче»).
+    if (isEstimateOrder(order)) {
+      const draft = catalogItemToOrderMaterial(
+        item,
+        1,
+        quickIssueWarehouseId(item.id) ?? issuableWarehouses(warehouseRows)[0]?.id ?? undefined,
+        warrantyDefaults,
+        order.vehicleMileageUnitSnapshot ?? "km",
+      );
+      readyForNextPick();
+      void enqueue(async () => {
+        if (
+          (latestOrderRef.current.materials ?? []).some((line) => line.id && line.inventoryItemId === item.id) &&
+          onIncrementMaterialLine?.(item.id)
+        ) {
+          return;
+        }
+        const revert = onMaterialPending?.([draft]) ?? (() => undefined);
+        try {
+          const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft] });
+          latestOrderRef.current = updated;
+          onMaterialAdded?.(updated);
+        } catch (error) {
+          revert();
+          toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+        }
+      });
       return;
     }
     const warehouseId = onMaterialAdded ? quickIssueWarehouseId(item.id) : null;

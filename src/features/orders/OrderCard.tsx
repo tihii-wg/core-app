@@ -2,11 +2,13 @@ import { useTranslation } from "react-i18next";
 import { isRowClickIgnored } from "../../ui/DataTable";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { Order, OrderStatus, PaymentStatus } from "../../lib/types";
-import { OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
+import { EntityStatusBadge, OrderStatusBadge, PaymentStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
 import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
+import { isEstimateOrder } from "./orderEstimates";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import { OrderEstimateMark } from "./OrderEstimateMark";
 import OrderTeamAvatars from "./OrderTeamAvatars";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
 import { industryProfile } from "../industries/industryProfile";
@@ -23,6 +25,7 @@ type OrderCardProps = {
   requireTaxInvoiceNumber?: boolean;
   /** Ledger-derived payment status when available; falls back to order.paymentStatus. */
   paymentStatus?: PaymentStatus;
+  hidePayments?: boolean;
   /** Batched warranty indicator for this card (from useOrdersWarrantyIndicators). */
   warrantyIndicator?: OrderWarrantyIndicatorModel | null;
   formatMoney: (value: number) => string;
@@ -49,6 +52,7 @@ export function OrderCard({
   isStatusUpdating = false,
   requireTaxInvoiceNumber = false,
   paymentStatus,
+  hidePayments = false,
   warrantyIndicator,
   formatMoney,
   onView,
@@ -76,6 +80,7 @@ export function OrderCard({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="break-all font-semibold text-primary tabular-nums">{order.orderNumber}</p>
+          <OrderEstimateMark order={order} className="mt-0.5" />
           <OrderWarrantyIndicator model={warrantyIndicator} className="mt-0.5" />
           <p className="mt-0.5 truncate font-medium text-foreground">
             {onOpenClient ? (
@@ -120,8 +125,16 @@ export function OrderCard({
 
       <div className="mt-2.5 flex min-w-0 items-end gap-3 overflow-hidden border-t border-border pt-2.5">
         <div className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
-          <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
-          <PaymentStatusBadge status={resolvedPaymentStatus} />
+          {hidePayments || isEstimateOrder(order) ? (
+            order.estimateStatus ? (
+              <EntityStatusBadge name={order.estimateStatus.name} color={order.estimateStatus.color} />
+            ) : null
+          ) : (
+            <>
+              <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
+              <PaymentStatusBadge status={resolvedPaymentStatus} />
+            </>
+          )}
           {order.team && order.team.length > 0 ? <OrderTeamAvatars team={order.team} /> : null}
         </div>
         <span className={cn("shrink-0 text-right")}>

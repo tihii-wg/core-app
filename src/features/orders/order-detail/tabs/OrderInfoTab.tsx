@@ -18,6 +18,7 @@ import {
 } from "../../orderVehicleMileage";
 import WarrantyOrderSection from "../../WarrantyOrderSection";
 import { OrderWarrantyCoverageSection } from "../../OrderWarrantyCoverageSection";
+import { estimateCardVisibility } from "../../orderEstimates";
 import { isLegalEntityCustomer } from "../../taxInvoice";
 import { TaxInvoiceNumberField } from "../TaxInvoiceNumberField";
 import type { useIndustryWorkflow } from "../../../industries/useIndustryWorkflow";
@@ -96,19 +97,24 @@ function OrderInfoTabComponent(props: OrderInfoTabProps) {
               </div>
             ) : null}
 
-            <WarrantyOrderSection
-              order={order}
-              currentMileage={order.vehicleMileageSnapshot ?? null}
-              disabled={!canEditOrder || closedContentLocked}
-              onChanged={() => {
-                void onOrderUpdated(order);
-              }}
-            />
+            {/* Estimates carry no warranty: no claim link, no coverage section. */}
+            {estimateCardVisibility(order).showWarranty ? (
+              <>
+                <WarrantyOrderSection
+                  order={order}
+                  currentMileage={order.vehicleMileageSnapshot ?? null}
+                  disabled={!canEditOrder || closedContentLocked}
+                  onChanged={() => {
+                    void onOrderUpdated(order);
+                  }}
+                />
 
-            <OrderWarrantyCoverageSection
-              order={order}
-              currentMileage={order.vehicleMileageSnapshot ?? null}
-            />
+                <OrderWarrantyCoverageSection
+                  order={order}
+                  currentMileage={order.vehicleMileageSnapshot ?? null}
+                />
+              </>
+            ) : null}
 
             <OrderClientCard
               order={order}

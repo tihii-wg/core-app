@@ -391,6 +391,9 @@ export async function createInvoiceFromOrder(orderId: string, workspaceId: strin
 
   if (orderError) throw new Error(orderError.message);
   if (!order) throw new Error(i18n.t("invoices.errors.orderNotFound"));
+  if ((order as { kind?: string }).kind === "estimate") {
+    throw new Error(i18n.t("orders.estimates.errors.noInvoice"));
+  }
 
   const [{ data: lines, error: linesError }, { data: materialLines, error: materialsError }] = await Promise.all([
     supabase.from("order_services").select("service_id, service_name, price, quantity").eq("order_id", orderId).order("created_at", { ascending: true }),

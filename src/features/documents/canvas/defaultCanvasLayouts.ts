@@ -341,8 +341,24 @@ export function defaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout 
   };
 }
 
+export function defaultCanvasEstimateLayout(t?: Translate): CanvasDocumentLayout {
+  const translate = tDefault(t);
+  const base = defaultCanvasWorkOrderLayout(t);
+  return {
+    ...base,
+    elements: base.elements.map((el) => {
+      // The work-order header title («Заказ-наряд\n#ЗАКАЗ-НОМЕР») becomes «Расчёт\n#ЗАКАЗ-НОМЕР».
+      if (el.type === "text" && el.content.includes("#ЗАКАЗ-НОМЕР") && el.content.includes(L(translate, "workOrder"))) {
+        return { ...el, content: `${L(translate, "estimate")}\n#ЗАКАЗ-НОМЕР` };
+      }
+      return el;
+    }),
+  };
+}
+
 export function defaultCanvasLayoutForType(documentType: DocumentTemplateType, t?: Translate): CanvasDocumentLayout {
   if (documentType === "act") return defaultCanvasActLayout(t);
   if (documentType === "invoice") return defaultCanvasInvoiceLayout(t);
+  if (documentType === "estimate") return defaultCanvasEstimateLayout(t);
   return defaultCanvasWorkOrderLayout(t);
 }

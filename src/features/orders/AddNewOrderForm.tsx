@@ -6,7 +6,7 @@ import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
-import type { addNewOrderFormData, Client, CreateMadalProps, Vehicle } from "../../lib/types";
+import type { addNewOrderFormData, Client, CreateMadalProps, OrderKind, Vehicle } from "../../lib/types";
 import useGetServices from "../services/useGetServices";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { AddClientDialog } from "../clients/AddClientDialog";
@@ -58,6 +58,7 @@ export default function AddNewOrderForm({
   initialClientId = "",
   initialClientName = "",
   initialVehicleId = "",
+  kind = "order",
   onCreated,
 }: CreateMadalProps & {
   searchQuery: string;
@@ -65,10 +66,13 @@ export default function AddNewOrderForm({
   initialClientName?: string;
   /** Prefill the vehicle selector; must belong to `initialClientId` when both are set. */
   initialVehicleId?: string;
+  /** Create as estimate (no warehouse issue). */
+  kind?: OrderKind;
   /** Called once the order was saved (not on cancel) — e.g. to close the client card it was started from. */
   onCreated?: () => void;
 }) {
   const { t } = useTranslation();
+  const isEstimate = kind === "estimate";
   const { services } = useGetServices();
   const [clientName, setClientName] = useState(initialClientName);
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
@@ -336,6 +340,7 @@ export default function AddNewOrderForm({
         assignedEmployeeId: data.assignedEmployeeId || undefined,
         team: data.team ?? [],
         deadline: data.deadline,
+        ...(isEstimate ? { kind: "estimate" as const } : {}),
       });
 
       const customPayload = collectCustomFieldPayload(orderFieldConfig, customValues);
@@ -503,6 +508,7 @@ export default function AddNewOrderForm({
 
         {materialsCfg?.visible !== false ? (
           <OrderMaterialLinesEditor
+            estimate={isEstimate}
             control={control as never}
             fields={materialFields}
             append={materialAppend}
@@ -609,7 +615,13 @@ export default function AddNewOrderForm({
           {t("common.cancel")}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Spinner className="h-4 w-4" /> : t("orders.form.saveDraft")}
+          {isSubmitting ? (
+            <Spinner className="h-4 w-4" />
+          ) : isEstimate ? (
+            t("orders.estimates.createSubmit")
+          ) : (
+            t("orders.form.saveDraft")
+          )}
         </Button>
       </div>
 

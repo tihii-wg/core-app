@@ -446,11 +446,16 @@ export const DEFAULT_INVOICE_SECTION_ORDER = [
 export function defaultLayoutForType(documentType: DocumentTemplateType): DocumentLayout {
   if (documentType === "act") return defaultActLayout();
   if (documentType === "invoice") return defaultInvoiceLayout();
+  if (documentType === "estimate") {
+    // Same structure as the work order; title differs via template name / variables.
+    return defaultWorkOrderLayout();
+  }
   return defaultWorkOrderLayout();
 }
 
 export function defaultTemplateName(documentType: DocumentTemplateType): string {
   if (documentType === "act") return "Акт выполненных работ";
   if (documentType === "invoice") return "Standard invoice";
+  if (documentType === "estimate") return "Расчёт";
   return "Заказ-наряд";
 }

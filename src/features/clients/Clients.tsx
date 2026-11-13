@@ -61,6 +61,7 @@ export function Clients() {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
   const [orderForVehicleId, setOrderForVehicleId] = useState<string | null>(null);
+  const [createKind, setCreateKind] = useState<"order" | "estimate">("order");
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -323,10 +324,12 @@ export function Clients() {
           if (!open) {
             setOrderForClient(null);
             setOrderForVehicleId(null);
+            setCreateKind("order");
           }
         }}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
         initialVehicleId={orderForVehicleId}
+        kind={createKind}
         // Order created from the client card (client or one of its vehicles) → close that card too.
         onCreated={() => setDetailPanelOpen(false)}
       />
@@ -373,6 +376,16 @@ export function Clients() {
         onCreateOrder={
           canMutateClients
             ? (client, vehicleId) => {
+                setCreateKind("order");
+                setOrderForClient(client);
+                setOrderForVehicleId(vehicleId ?? null);
+              }
+            : undefined
+        }
+        onCreateEstimate={
+          canMutateClients
+            ? (client, vehicleId) => {
+                setCreateKind("estimate");
                 setOrderForClient(client);
                 setOrderForVehicleId(vehicleId ?? null);
               }

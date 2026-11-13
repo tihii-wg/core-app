@@ -7,10 +7,12 @@ import { ErrorState } from "../../ui/EmptyState";
 import { Skeleton } from "../../ui/Skeleton";
 import { EntityStatusBadge, OrderStatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
-import type { Order } from "../../lib/types";
+import type { Order, OrderKind } from "../../lib/types";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
-import { useGetOrders } from "./useGetOrders";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { getOrders } from "../../services/apiOrders";
+import { useQuery } from "@tanstack/react-query";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { buildOrderBoardColumns, resolveBoardMove, type OrderBoardColumn } from "./orderBoard";
 import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
@@ -39,6 +41,7 @@ type OrdersBoardProps = {
   onOpenOrder: (order: Order) => void;
   /** Ledger payments for the min-paid pre-check before a drop; when omitted only the DB guard applies. */
   payments?: LedgerPayment[];
+  kind?: OrderKind;
 };
 
 /**
@@ -55,11 +58,27 @@ export function OrdersBoard({
   formatMoney,
   onOpenOrder,
   payments,
+  kind = "order",
 }: OrdersBoardProps) {
   const { t } = useTranslation();
-  const { canWrite } = useWorkspaceSubscription();
-  const { orders, isLoading, error, refetch } = useGetOrders(search);
-  const { data: definitions = [], isLoading: definitionsLoading } = useGetStatusDefinitions("order");
+  const { canWrite: subscriptionWrite } = useWorkspaceSubscription();
+  const { workspaceId } = useActiveWorkspaceId();
+  const isEstimates = kind === "estimate";
+  // Estimate board is view/open only — status changes happen on the card (accept converts).
+  const canWrite = subscriptionWrite && !isEstimates;
+  const {
+    data: orders = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["orders", workspaceId, search, kind],
+    queryFn: () => getOrders(workspaceId, search, kind),
+    enabled: Boolean(workspaceId),
+  });
+  const { data: definitions = [], isLoading: definitionsLoading } = useGetStatusDefinitions(
+    isEstimates ? "estimate" : "order",
+  );
   const move = useMoveOrderOnBoard();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
@@ -70,9 +89,9 @@ export function OrdersBoard({
       orders.filter(
         (order) =>
           (employeeFilter === "all" || order.assignedEmployeeId === employeeFilter) &&
-          matchesDeadlineFilter(order, deadlineFilter, today),
+          (isEstimates || matchesDeadlineFilter(order, deadlineFilter, today)),
       ),
-    [orders, employeeFilter, deadlineFilter, today],
+    [orders, employeeFilter, deadlineFilter, today, isEstimates],
   );
 
   const { workflow: boardWorkflow } = useIndustryWorkflow();

@@ -59,10 +59,11 @@ export function useCreateOrder() {
       await maybeApplyPaymentStageTemplate(order, workspaceId);
       return order;
     },
-    onMutate: () => {
-      toast.loading(i18n.t("orders.toast.creating"), { id: "create-order" });
+    onMutate: (input) => {
+      const estimate = input.kind === "estimate";
+      toast.loading(i18n.t(estimate ? "orders.estimates.creating" : "orders.toast.creating"), { id: "create-order" });
     },
-    onSuccess: (order) => {
+    onSuccess: (order, input) => {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
@@ -74,7 +75,10 @@ export function useCreateOrder() {
       if (order?.id) {
         void queryClient.invalidateQueries({ queryKey: ["order-payment-stages", workspaceId, "order", order.id] });
       }
-      toast.success(i18n.t("orders.toast.created"), { id: "create-order" });
+      toast.success(
+        i18n.t(input.kind === "estimate" ? "orders.estimates.created" : "orders.toast.created"),
+        { id: "create-order" },
+      );
     },
     onError: (error) => {
       toast.error(error.message || i18n.t("common.somethingWentWrong"), { id: "create-order" });

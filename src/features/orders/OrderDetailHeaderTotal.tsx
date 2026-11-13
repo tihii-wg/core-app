@@ -13,6 +13,8 @@ type OrderDetailHeaderTotalProps = {
   workspaceVatRate: number | null | undefined;
   worksLabel: string;
   materialsLabel: string;
+  /** Estimates have no payment lifecycle — hide the badge. */
+  hidePaymentBadge?: boolean;
   className?: string;
 };
 
@@ -27,6 +29,7 @@ export function OrderDetailHeaderTotal({
   workspaceVatRate,
   worksLabel,
   materialsLabel,
+  hidePaymentBadge = false,
   className,
 }: OrderDetailHeaderTotalProps) {
   const { t } = useTranslation();
@@ -66,9 +69,11 @@ export function OrderDetailHeaderTotal({
           </p>
         ) : null}
       </div>
-      <div className="shrink-0 self-center sm:self-end">
-        <PaymentStatusBadge status={paymentStatus} />
-      </div>
+      {hidePaymentBadge ? null : (
+        <div className="shrink-0 self-center sm:self-end">
+          <PaymentStatusBadge status={paymentStatus} />
+        </div>
+      )}
     </div>
   );
 }

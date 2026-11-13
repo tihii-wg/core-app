@@ -24,6 +24,13 @@ const TABLE_SOURCE_MAP: Record<DocumentTemplateType, Partial<Record<TableSource,
     prepaymentLine: "allLines",
     balanceLine: "allLines",
   },
+  estimate: {
+    invoiceWorks: "services",
+    invoiceMaterials: "materials",
+    invoiceLines: "allLines",
+    prepaymentLine: "allLines",
+    balanceLine: "allLines",
+  },
 };
 
 /** Token remaps when converting between invoice ↔ order documents. */

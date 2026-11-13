@@ -11,6 +11,8 @@ export type OrderDetailFooterProps = {
   showCancelAction: boolean;
   showFooterDeleteAction: boolean;
   showOpenLifecycleActions: boolean;
+  showConvertEstimate?: boolean;
+  convertEstimatePending?: boolean;
   canSaveAndClose: boolean;
   lifecycleBusy: boolean;
   footerSavePending: boolean;
@@ -19,6 +21,7 @@ export type OrderDetailFooterProps = {
   onCancel: () => void;
   onDelete: () => void;
   onCloseOrder: () => void;
+  onConvertEstimate?: () => void;
   onSaveAndClose: () => void;
   onCloseWindow: () => void;
 };
@@ -29,6 +32,8 @@ function OrderDetailFooterComponent({
   showCancelAction,
   showFooterDeleteAction,
   showOpenLifecycleActions,
+  showConvertEstimate = false,
+  convertEstimatePending = false,
   canSaveAndClose,
   lifecycleBusy,
   footerSavePending,
@@ -37,6 +42,7 @@ function OrderDetailFooterComponent({
   onCancel,
   onDelete,
   onCloseOrder,
+  onConvertEstimate,
   onSaveAndClose,
   onCloseWindow,
 }: OrderDetailFooterProps) {
@@ -84,12 +90,29 @@ function OrderDetailFooterComponent({
                         onClick={onDelete}
                       >
                         <Trash2 className="size-4 shrink-0" />
-                        <span className="truncate">{t("orders.actions.delete")}</span>
+                        <span className="truncate">{t(showConvertEstimate ? "orders.estimates.delete" : "orders.actions.delete")}</span>
                       </Button>
                       {deleteBlockedReason ? (
                         <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{deleteBlockedReason}</p>
                       ) : null}
                     </div>
+                  ) : null}
+
+                  {showConvertEstimate && !isEditing && onConvertEstimate ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={cn(
+                        "min-h-11",
+                        !isDesktopFeedLayout && "w-full min-w-0",
+                        !isDesktopFeedLayout && !showCancelAction && !showFooterDeleteAction && "col-span-2",
+                      )}
+                      onClick={() => onConvertEstimate()}
+                      disabled={lifecycleBusy || footerSavePending || convertEstimatePending}
+                      loading={convertEstimatePending}
+                    >
+                      <span className="truncate">{t("orders.estimates.convertButton")}</span>
+                    </Button>
                   ) : null}
 
                   {showOpenLifecycleActions && !isEditing ? (
@@ -164,7 +187,7 @@ function OrderDetailFooterComponent({
                               }}
                             >
                               <Trash2 />
-                              {t("orders.actions.delete")}
+                              {t(showConvertEstimate ? "orders.estimates.delete" : "orders.actions.delete")}
                             </DropdownMenuItem>
                           ) : null}
                         </DropdownMenuContent>

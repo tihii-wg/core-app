@@ -97,9 +97,23 @@ export type OrderTeamMember = OrderTeamMemberInput & {
   name: string;
 };
 
+/** Normal work order vs in-place estimate (quote) that converts without a new number. */
+export type OrderKind = "order" | "estimate";
+
 export interface Order {
   id: string;
   workspace_id?: string;
+  /**
+   * `order` (default) or `estimate`. Absent/undefined when the estimates SQL is not applied —
+   * treat as `order`.
+   */
+  kind?: OrderKind;
+  /** status_definitions.id for entity=estimate; null for normal orders. */
+  estimateStatusId?: string | null;
+  /** Resolved estimate status badge (name/color). */
+  estimateStatus?: { name: string; color: string | null; semanticAction?: string | null } | null;
+  /** Set when the estimate was accepted / converted. */
+  estimateAcceptedAt?: string | null;
   /** Empty string when client_id is NULL (draft without client). */
   clientId: string;
   clientName: string;
@@ -303,6 +317,8 @@ export type CreateOrderInput = {
   /** Extra team members (lead/helper). Line technicians and the assignee are merged on save. */
   team?: OrderTeamMemberInput[];
   deadline?: string;
+  /** Create as estimate (no stock issue). Requires estimates SQL. */
+  kind?: OrderKind;
 };
 
 export type UpdateOrderInput = CreateOrderInput & {
@@ -601,6 +617,7 @@ export type AppModule =
   | "invoices"
   | "finance"
   | "reports"
+  | "calendar"
   | "settings";
 
 export type Workspace = {

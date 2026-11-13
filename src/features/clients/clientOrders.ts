@@ -1,4 +1,4 @@
-import type { Order, OrderStatus } from "../../lib/types";
+import type { Order, OrderKind, OrderStatus } from "../../lib/types";
 
 export type ClientOrderSummary = {
   id: string;
@@ -10,14 +10,24 @@ export type ClientOrderSummary = {
   totalPrice: number;
   status: OrderStatus;
   customStatus?: { name: string; color: string | null } | null;
+  estimateStatus?: { name: string; color: string | null } | null;
+  kind?: OrderKind;
   isPaid: boolean;
   createdAt: string;
 };
 
-/** Orders for a client, newest first. */
-export function clientOrderSummaries(orders: Order[], clientId: string): ClientOrderSummary[] {
+/** Orders for a client, newest first. Defaults to real orders (excludes estimates). */
+export function clientOrderSummaries(
+  orders: Order[],
+  clientId: string,
+  kind: OrderKind = "order",
+): ClientOrderSummary[] {
   return orders
-    .filter((order) => order.clientId === clientId)
+    .filter((order) => {
+      if (order.clientId !== clientId) return false;
+      const orderKind = order.kind === "estimate" ? "estimate" : "order";
+      return orderKind === kind;
+    })
     .map((order) => ({
       id: order.id,
       orderNumber: order.orderNumber,
@@ -27,7 +37,11 @@ export function clientOrderSummaries(orders: Order[], clientId: string): ClientO
       service: order.service,
       totalPrice: order.totalPrice,
       status: order.status,
+      kind: order.kind === "estimate" ? ("estimate" as const) : ("order" as const),
       ...(order.customStatus ? { customStatus: order.customStatus } : {}),
+      ...(order.estimateStatus
+        ? { estimateStatus: { name: order.estimateStatus.name, color: order.estimateStatus.color } }
+        : {}),
       isPaid: Boolean(order.isPaid),
       createdAt: order.createdAt,
     }))

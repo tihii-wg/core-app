@@ -2,6 +2,7 @@ import type {
   CreateOrderInput,
   MileageUnit,
   Order,
+  OrderKind,
   OrderMaterial,
   OrderService,
   OrderServiceKind,
@@ -102,7 +103,15 @@ export type OrdersListQuery = {
   today: string;
   page: number;
   pageSize: OrdersPageSize;
+  /**
+   * `order` (default) | `estimate` | `all` (orders and estimates in one list). When estimates SQL is missing,
+   * `estimate` returns empty and `order` / `all` are unfiltered (all rows are orders).
+   */
+  kind?: OrderListKind;
 };
+
+/** List scope: only orders, only estimates, or both in one list (estimates carry an «Расчёт» mark). */
+export type OrderListKind = OrderKind | "all";
 
 export type OrdersPageResult = {
   orders: Order[];
@@ -412,14 +421,25 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     vehicleMileageConfirmed: input.vehicleMileageConfirmed,
   });
 
-  const definitions = await getStatusDefinitions(targetWorkspaceId, "order").catch(() => []);
-  const defaultStatus = findDefaultOrderStatus(definitions);
+  const createAsEstimate = input.kind === "estimate" && isOrderEstimatesSupported();
+  const definitions = await getStatusDefinitions(targetWorkspaceId, createAsEstimate ? "estimate" : "order").catch(
+    () => [],
+  );
+  // Estimates start in the workspace's default estimate status (findDefaultOrderStatus only looks at orders).
+  const defaultStatus = createAsEstimate
+    ? (() => {
+        const active = definitions.filter((d) => d.entity === "estimate" && d.isActive && d.semanticAction === "normal");
+        return active.find((d) => d.isDefault) ?? active[0] ?? null;
+      })()
+    : findDefaultOrderStatus(definitions);
   const initialSystemStatus: OrderStatus =
-    defaultStatus && orderStatuses.has(defaultStatus.systemStatus as OrderStatus)
-      ? (defaultStatus.systemStatus as OrderStatus)
-      : "new";
+    createAsEstimate
+      ? "new"
+      : defaultStatus && orderStatuses.has(defaultStatus.systemStatus as OrderStatus)
+        ? (defaultStatus.systemStatus as OrderStatus)
+        : "new";
 
-  const insertOrderRow = (includeMileageSnapshot: boolean, includeMileageConfirmed: boolean) =>
+  const insertOrderRow = (includeMileageSnapshot: boolean, includeMileageConfirmed: boolean, includeEstimate: boolean) =>
     supabase
       .from("orders")
       .insert({
@@ -437,7 +457,17 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
         total_price: expectedMoney.total,
         ...orderDiscountFields(expectedMoney, uniformPercentOf([...stampedLines, ...stampedServices.materials])),
         status: initialSystemStatus,
-        ...(defaultStatus ? { custom_status_id: defaultStatus.id } : {}),
+        ...(createAsEstimate
+          ? {}
+          : defaultStatus
+            ? { custom_status_id: defaultStatus.id }
+            : {}),
+        ...(includeEstimate && createAsEstimate
+          ? {
+              kind: "estimate",
+              ...(defaultStatus ? { estimate_status_id: defaultStatus.id } : {}),
+            }
+          : {}),
         is_paid: false,
         number: `ORD-PENDING-${crypto.randomUUID()}`,
         vin: normalizedVin,
@@ -454,20 +484,39 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     insertOrderRow(
       Boolean(Object.keys(mileageSnapshotPatch).length),
       Boolean(Object.keys(mileageConfirmedPatch).length),
+      createAsEstimate,
     ),
   );
+
+  if (orderError && isMissingOrderEstimatesColumn(orderError)) {
+    markOrderEstimatesUnsupported();
+    if (input.kind === "estimate") {
+      throw new Error(i18n.t("orders.estimates.errors.schemaRequired"));
+    }
+    ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+      insertOrderRow(
+        Boolean(Object.keys(mileageSnapshotPatch).length),
+        Boolean(Object.keys(mileageConfirmedPatch).length),
+        false,
+      ),
+    ));
+  }
 
   if (orderError && isMissingOrderMileageConfirmedColumn(orderError)) {
     orderMileageConfirmedSupported = false;
     ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
-      insertOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length), false),
+      insertOrderRow(Boolean(Object.keys(mileageSnapshotPatch).length), false, createAsEstimate && isOrderEstimatesSupported()),
     ));
   }
 
   if (orderError && isMissingOrderMileageSnapshotColumn(orderError)) {
     orderMileageSnapshotSupported = false;
     ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
-      insertOrderRow(false, Boolean(Object.keys(mileageConfirmedPatch).length) && orderMileageConfirmedSupported),
+      insertOrderRow(
+        false,
+        Boolean(Object.keys(mileageConfirmedPatch).length) && orderMileageConfirmedSupported,
+        createAsEstimate && isOrderEstimatesSupported(),
+      ),
     ));
   }
 
@@ -628,35 +677,48 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     const orderId = String(order.id);
     let issuedForCompensation: Awaited<ReturnType<typeof applyCatalogImmediateIssue>>["issuedForCompensation"] = [];
     try {
-      assertCatalogWarehousesSelected(materials);
       const freeform = freeformMaterialsOnly(materials);
       const hasCatalog = materials.some(isCatalogOrderMaterial);
 
-      // Catalog: atomic add+issue per line (RPC contract). Freeform: sync_order_materials only.
-      // Warranty columns are never written by add/issue — always persist via apply_order_material_warranties.
-      if (hasCatalog) {
-        const applied = await applyCatalogImmediateIssue({ orderId, desired: materials, existing: [] });
-        issuedForCompensation = applied.issuedForCompensation;
-        if (freeform.length > 0) {
-          // Include catalog lines so sync does not delete just-issued rows.
-          // Re-apply warranties from the original form `materials` — merge/RPC round-trips can drop them.
-          const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
-          const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, synced);
-          const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
-        } else {
-          const withWarranty = await persistOrderMaterialWarranties(
-            orderId,
-            targetWorkspaceId,
-            materials,
-            applied.catalog,
-          );
-          const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
-        }
+      // Estimates never touch stock: persist catalog lines via sync with quantity_issued = 0.
+      if (createAsEstimate) {
+        const syncedMaterials = await persistEstimateMaterialWarehouses(
+          orderId,
+          materials,
+          await syncOrderMaterialsRpc(orderId, materials, targetWorkspaceId),
+        );
+        const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, syncedMaterials);
+        const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+        writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
       } else {
-        const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
-        writtenMaterialLines = await stampMaterialLineDiscounts(orderId, syncedMaterials, productPercent ?? 0, new Set());
+        assertCatalogWarehousesSelected(materials);
+
+        // Catalog: atomic add+issue per line (RPC contract). Freeform: sync_order_materials only.
+        // Warranty columns are never written by add/issue — always persist via apply_order_material_warranties.
+        if (hasCatalog) {
+          const applied = await applyCatalogImmediateIssue({ orderId, desired: materials, existing: [] });
+          issuedForCompensation = applied.issuedForCompensation;
+          if (freeform.length > 0) {
+            // Include catalog lines so sync does not delete just-issued rows.
+            // Re-apply warranties from the original form `materials` — merge/RPC round-trips can drop them.
+            const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
+            const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, synced);
+            const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+            writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
+          } else {
+            const withWarranty = await persistOrderMaterialWarranties(
+              orderId,
+              targetWorkspaceId,
+              materials,
+              applied.catalog,
+            );
+            const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+            writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
+          }
+        } else {
+          const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, syncedMaterials, productPercent ?? 0, new Set());
+        }
       }
     } catch (error) {
       await compensateIssuedCatalogMaterials(orderId, issuedForCompensation);
@@ -1529,6 +1591,44 @@ async function persistOrderMaterialWarranties(
   return mapped;
 }
 
+/**
+ * sync_order_materials does not carry warehouse_id. Estimate catalog lines still need the warehouse chosen in
+ * the form, so acceptance can issue them from it: write it onto lines that have none (nothing is issued yet).
+ */
+async function persistEstimateMaterialWarehouses(
+  orderId: string,
+  desired: readonly OrderMaterial[],
+  lines: OrderMaterial[],
+): Promise<OrderMaterial[]> {
+  const wanted = new Map<string, string>();
+  for (const line of desired) {
+    const itemId = line.inventoryItemId?.trim();
+    const warehouseId = line.warehouseId?.trim();
+    if (itemId && warehouseId && !wanted.has(itemId)) wanted.set(itemId, warehouseId);
+  }
+  if (wanted.size === 0) return lines;
+  const next = [...lines];
+  for (let index = 0; index < next.length; index += 1) {
+    const line = next[index]!;
+    const itemId = line.inventoryItemId?.trim();
+    const warehouseId = itemId ? wanted.get(itemId) : undefined;
+    if (!line.id || !warehouseId || line.warehouseId) continue;
+    // order_materials is not directly writable (RLS); the line-edit RPC may set the warehouse while nothing is issued.
+    const { error } = await supabase.rpc("crm_update_order_material_line", {
+      p_order_id: orderId,
+      p_line_id: line.id,
+      p_warehouse_id: warehouseId,
+      p_set_warehouse: true,
+    });
+    if (error) {
+      if (isMissingRpcError(error, "crm_update_order_material_line")) return next;
+      throw new Error(error.message);
+    }
+    next[index] = { ...line, warehouseId };
+  }
+  return next;
+}
+
 async function syncOrderMaterialsRpc(orderId: string, materials: OrderMaterial[], workspaceId?: string) {
   const consolidated = consolidateOrderMaterials(materials);
   const hasFreeform = consolidated.some((line) => !line.inventoryItemId?.trim());
@@ -1659,6 +1759,16 @@ export function toOrder(
     services,
     materials,
     description: typeof row.description === "string" ? row.description : "",
+    kind: row.kind === "estimate" ? "estimate" : "order",
+    estimateStatusId: typeof row.estimate_status_id === "string" ? row.estimate_status_id : null,
+    estimateStatus:
+      typeof row.estimate_status_id === "string" && row.estimate_status_id
+        ? customStatuses.get(row.estimate_status_id) ?? null
+        : null,
+    estimateAcceptedAt:
+      typeof row.estimate_accepted_at === "string" && row.estimate_accepted_at.trim()
+        ? row.estimate_accepted_at
+        : null,
     status,
     customStatusId,
     customStatus,
@@ -1880,9 +1990,10 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     .map((row) => (typeof row.assigned_to === "string" ? row.assigned_to.trim() : ""))
     .filter(Boolean);
   const createdByIds = rows.map((row) => (typeof row.created_by === "string" ? row.created_by.trim() : "")).filter(Boolean);
-  const customStatusIds = rows
-    .map((row) => (typeof row.custom_status_id === "string" ? row.custom_status_id.trim() : ""))
-    .filter(Boolean);
+  const customStatusIds = [
+    ...rows.map((row) => (typeof row.custom_status_id === "string" ? row.custom_status_id.trim() : "")),
+    ...rows.map((row) => (typeof row.estimate_status_id === "string" ? row.estimate_status_id.trim() : "")),
+  ].filter(Boolean);
 
   // Independent lookups run in parallel (previously sequential round trips).
   const [{ data: employees, error: employeesError }, memberNames, statusDefinitions] = await Promise.all([
@@ -1958,6 +2069,7 @@ type OrdersFilterInput = {
   deadline?: DeadlineFilter;
   employeeId?: string | "all";
   today: string;
+  kind?: OrderListKind;
 };
 
 /** Statuses to send to PostgREST for the combined status + deadline filters. Empty = no matches. */
@@ -1988,25 +2100,41 @@ async function applyOrdersListFilters(
     deadline = "all",
     employeeId = "all",
     today,
+    kind = "order",
   }: OrdersFilterInput,
 ): Promise<{ query: typeof query } | null> {
+  refreshOrderEstimatesSupport();
+  if (isOrderEstimatesSupported()) {
+    if (kind === "estimate") {
+      query = query.eq("kind", "estimate");
+    } else if (kind === "order") {
+      // Include legacy nulls as orders when column exists with default.
+      query = query.or("kind.eq.order,kind.is.null");
+    }
+    // kind === "all": orders and estimates together.
+  } else if (kind === "estimate") {
+    return null;
+  }
+
   const definitionId = customStatusId === "all" ? "" : customStatusId.trim();
   if (definitionId) {
-    // Match the workspace status column, including legacy rows that only have system status.
-    if (customStatusFallbackSystem) {
+    if (kind === "estimate" && isOrderEstimatesSupported()) {
+      query = query.eq("estimate_status_id", definitionId);
+    } else if (customStatusFallbackSystem) {
+      // Match the workspace status column, including legacy rows that only have system status.
       query = query.or(
         `custom_status_id.eq.${definitionId},and(custom_status_id.is.null,status.eq.${customStatusFallbackSystem})`,
       );
     } else {
       query = query.eq("custom_status_id", definitionId);
     }
-    // Deadline filters still only apply to open lifecycle buckets.
-    if (deadline !== "all") {
+    // Deadline filters still only apply to open lifecycle buckets (orders view).
+    if (deadline !== "all" && kind !== "estimate") {
       const open = statusesForOrdersFilter("all", deadline);
       if (open && open.length === 0) return null;
       if (open) query = query.in("status", open);
     }
-  } else {
+  } else if (kind !== "estimate") {
     const statuses = statusesForOrdersFilter(status, deadline);
     if (statuses && statuses.length === 0) return null;
     if (statuses) query = query.in("status", statuses);
@@ -2103,17 +2231,30 @@ async function applyOrdersEmployeeFilter(
 }
 
 /** Full workspace order list (dashboard, notifications, search). Prefer getOrdersPage for the Orders table. */
-export async function getOrders(workspaceId: string | undefined, search = "") {
+export async function getOrders(workspaceId: string | undefined, search = "", kind: OrderListKind = "order") {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
   let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
+  refreshOrderEstimatesSupport();
+  if (isOrderEstimatesSupported() && kind !== "all") {
+    query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
+  } else if (kind === "estimate") {
+    return [] as Order[];
+  }
 
   const term = searchTerm(search);
   if (term) query = query.or(await orderSearchFilter(resolvedWorkspaceId, term));
 
   const { data, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      if (kind === "estimate") return [] as Order[];
+      return getOrders(workspaceId, search, "order");
+    }
+    throw new Error(error.message);
+  }
 
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
 }
@@ -2122,36 +2263,105 @@ export async function getOrders(workspaceId: string | undefined, search = "") {
  * Exact order count for one client in the active workspace (`orders.client_id`).
  * Includes every status; head-only — no row payload. Orders are hard-deleted (no soft-delete filter).
  */
-export async function countClientOrders(workspaceId: string | undefined, clientId: string): Promise<number> {
+export async function countClientOrders(
+  workspaceId: string | undefined,
+  clientId: string,
+  kind: OrderKind = "order",
+): Promise<number> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const id = clientId.trim();
   if (!id) return 0;
 
-  const { count, error } = await supabase
+  refreshOrderEstimatesSupport();
+  if (!isOrderEstimatesSupported() && kind === "estimate") return 0;
+
+  let query = supabase
     .from("orders")
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", resolvedWorkspaceId)
     .eq("client_id", id);
+  if (isOrderEstimatesSupported()) {
+    query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
+  }
 
-  if (error) throw new Error(error.message);
+  const { count, error } = await query;
+
+  if (error) {
+    if (isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      return kind === "estimate" ? 0 : countClientOrders(workspaceId, clientId, "order");
+    }
+    throw new Error(error.message);
+  }
   return typeof count === "number" && count >= 0 ? count : 0;
 }
 
+/** Orders linked through `orders.client_id`, newest first. Workspace-scoped. */
+export async function getClientOrders(
+  workspaceId: string | undefined,
+  clientId: string,
+  kind: OrderKind = "order",
+): Promise<Order[]> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const id = clientId.trim();
+  if (!id) return [] as Order[];
+
+  refreshOrderEstimatesSupport();
+  if (!isOrderEstimatesSupported() && kind === "estimate") return [] as Order[];
+
+  let query = supabase
+    .from("orders")
+    .select(orderColumns)
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("client_id", id);
+  if (isOrderEstimatesSupported()) {
+    query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false });
+
+  if (error) {
+    if (isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      return kind === "estimate" ? ([] as Order[]) : getClientOrders(workspaceId, clientId, "order");
+    }
+    throw new Error(error.message);
+  }
+
+  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+}
+
 /** Orders linked through `orders.vehicle_id`, newest first. Workspace-scoped. */
-export async function getVehicleOrders(workspaceId: string | undefined, vehicleId: string) {
+export async function getVehicleOrders(
+  workspaceId: string | undefined,
+  vehicleId: string,
+  kind: OrderKind = "order",
+): Promise<Order[]> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const id = vehicleId.trim();
   if (!id) return [] as Order[];
 
-  const { data, error } = await supabase
+  refreshOrderEstimatesSupport();
+  if (!isOrderEstimatesSupported() && kind === "estimate") return [] as Order[];
+
+  let query = supabase
     .from("orders")
     .select(orderColumns)
     .eq("workspace_id", resolvedWorkspaceId)
-    .eq("vehicle_id", id)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false });
+    .eq("vehicle_id", id);
+  if (isOrderEstimatesSupported()) {
+    query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
+  }
 
-  if (error) throw new Error(error.message);
+  const { data, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false });
+
+  if (error) {
+    if (isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      return kind === "estimate" ? ([] as Order[]) : getVehicleOrders(workspaceId, vehicleId, "order");
+    }
+    throw new Error(error.message);
+  }
 
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
 }
@@ -2191,6 +2401,11 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
+    if (isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      if ((input.kind ?? "order") === "estimate") return empty();
+      return getOrdersPage(workspaceId, { ...input, kind: "order" });
+    }
     // Computed field absent: remember and retry once with the legacy id-list filter.
     if (triedComputedEmployeeFilter && isMissingTeamEmployeeIdsField(error)) {
       orderTeamEmployeeIdsSupported = false;
@@ -2233,37 +2448,55 @@ export type OrdersAwaitingPayment = {
  */
 export async function getOrdersAwaitingPayment(workspaceId: string | undefined): Promise<OrdersAwaitingPayment> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  refreshOrderEstimatesSupport();
+  const includeKind = isOrderEstimatesSupported();
+  const baseSelect = includeKind
+    ? "id, total_price, is_paid, status, closed_at, kind"
+    : "id, total_price, is_paid, status, closed_at";
+
+  const run = async (select: string, withClosedAt: boolean) => {
+    let query = supabase.from("orders").select(select).eq("workspace_id", resolvedWorkspaceId).neq("status", "cancelled");
+    if (withClosedAt) query = query.is("closed_at", null);
+    if (includeKind && select.includes("kind")) {
+      query = query.or("kind.eq.order,kind.is.null");
+    }
+    return query;
+  };
+
   const [{ data, error }, payments] = await Promise.all([
-    supabase
-      .from("orders")
-      .select("id, total_price, is_paid, status, closed_at")
-      .eq("workspace_id", resolvedWorkspaceId)
-      .neq("status", "cancelled")
-      .is("closed_at", null),
+    run(baseSelect, true),
     getPayments(resolvedWorkspaceId, {}).catch(() => []),
   ]);
 
   if (error) {
+    if (includeKind && isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      return getOrdersAwaitingPayment(workspaceId);
+    }
     // closed_at may be absent on very old DBs — fall back without that filter.
     if (/closed_at/i.test(error.message)) {
-      const legacy = await supabase
-        .from("orders")
-        .select("id, total_price, is_paid, status")
-        .eq("workspace_id", resolvedWorkspaceId)
-        .neq("status", "cancelled");
-      if (legacy.error) throw new Error(legacy.error.message);
-      return sumAwaitingPayment((legacy.data ?? []) as Record<string, unknown>[], payments);
+      const legacySelect = includeKind ? "id, total_price, is_paid, status, kind" : "id, total_price, is_paid, status";
+      const legacy = await run(legacySelect, false);
+      if (legacy.error) {
+        if (includeKind && isMissingOrderEstimatesColumn(legacy.error)) {
+          markOrderEstimatesUnsupported();
+          return getOrdersAwaitingPayment(workspaceId);
+        }
+        throw new Error(legacy.error.message);
+      }
+      return sumAwaitingPayment((legacy.data ?? []) as unknown as Record<string, unknown>[], payments);
     }
     throw new Error(error.message);
   }
 
-  return sumAwaitingPayment((data ?? []) as Record<string, unknown>[], payments);
+  return sumAwaitingPayment((data ?? []) as unknown as Record<string, unknown>[], payments);
 }
 
 function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<ReturnType<typeof getPayments>>) {
   let amount = 0;
   let count = 0;
   for (const row of rows) {
+    if (row.kind === "estimate") continue;
     const statusRaw = typeof row.status === "string" ? row.status : "new";
     const status = orderStatuses.has(statusRaw as OrderStatus) ? (statusRaw as OrderStatus) : "new";
     const order = {
@@ -2289,6 +2522,39 @@ function refreshOrderLineCommentsSupport() {
   if (!orderLineCommentsSupported && Date.now() - orderLineCommentsMissingAt > LINE_COMMENTS_RECHECK_MS) {
     orderLineCommentsSupported = true;
   }
+}
+
+/** Optional until supabase/manual/20261113090000_order_estimates.PRODUCTION.sql is applied. */
+let orderEstimatesSupported = true;
+let orderEstimatesMissingAt = 0;
+const ORDER_ESTIMATES_RECHECK_MS = 60_000;
+
+function refreshOrderEstimatesSupport() {
+  if (!orderEstimatesSupported && Date.now() - orderEstimatesMissingAt > ORDER_ESTIMATES_RECHECK_MS) {
+    orderEstimatesSupported = true;
+  }
+}
+
+/** Test hook: reset cached orders.kind / estimate columns support. */
+export function resetOrderEstimatesSupport() {
+  orderEstimatesSupported = true;
+  orderEstimatesMissingAt = 0;
+}
+
+export function isOrderEstimatesSupported() {
+  refreshOrderEstimatesSupport();
+  return orderEstimatesSupported;
+}
+
+function markOrderEstimatesUnsupported() {
+  orderEstimatesSupported = false;
+  orderEstimatesMissingAt = Date.now();
+}
+
+function isMissingOrderEstimatesColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  if (error.code !== "42703" && error.code !== "PGRST204") return false;
+  return /\b(kind|estimate_status_id|estimate_accepted_at|estimate_accepted_by)\b/i.test(error.message ?? "");
 }
 
 /** Test hook: reset cached order_line_comments table support. */
@@ -2409,6 +2675,66 @@ export async function setOrderLineComment(
     lineId,
     body: typeof row?.body === "string" ? row.body : normalized ?? "",
   };
+}
+
+const CONVERT_ESTIMATE_RPC = "crm_convert_estimate_to_order";
+const SET_ESTIMATE_STATUS_RPC = "crm_set_estimate_status";
+
+/** Convert an estimate row into a normal order (same id/number). Issues stock up to available. */
+export async function convertEstimateToOrder(orderId: string, workspaceId: string | undefined): Promise<Order> {
+  const resolved = requireWorkspaceId(workspaceId);
+  if (!isOrderEstimatesSupported()) {
+    throw new MissingRpcError(CONVERT_ESTIMATE_RPC, i18n.t("orders.estimates.errors.schemaRequired"));
+  }
+  const { data, error } = await supabase.rpc(CONVERT_ESTIMATE_RPC, { p_order_id: orderId });
+  if (error) {
+    if (isMissingRpcError(error, CONVERT_ESTIMATE_RPC) || isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      throw new MissingRpcError(CONVERT_ESTIMATE_RPC, i18n.t("orders.estimates.errors.schemaRequired"));
+    }
+    throw new Error(error.message);
+  }
+  try {
+    const mapped = orderFromFullRpc(data);
+    if (mapped.workspace_id && mapped.workspace_id !== resolved) {
+      throw new Error(orderPermissionMessage());
+    }
+    return attachOrderLineComments(mapped, resolved);
+  } catch {
+    return getOrder(orderId, resolved);
+  }
+}
+
+/** Change estimate_status_id; accept semantic converts via RPC. */
+export async function setEstimateStatus(
+  orderId: string,
+  statusId: string,
+  workspaceId: string | undefined,
+): Promise<Order> {
+  const resolved = requireWorkspaceId(workspaceId);
+  if (!isOrderEstimatesSupported()) {
+    throw new MissingRpcError(SET_ESTIMATE_STATUS_RPC, i18n.t("orders.estimates.errors.schemaRequired"));
+  }
+  const { data, error } = await supabase.rpc(SET_ESTIMATE_STATUS_RPC, {
+    p_order_id: orderId,
+    p_status_id: statusId,
+  });
+  if (error) {
+    if (isMissingRpcError(error, SET_ESTIMATE_STATUS_RPC) || isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      throw new MissingRpcError(SET_ESTIMATE_STATUS_RPC, i18n.t("orders.estimates.errors.schemaRequired"));
+    }
+    throw new Error(error.message);
+  }
+  try {
+    const mapped = orderFromFullRpc(data);
+    if (mapped.workspace_id && mapped.workspace_id !== resolved) {
+      throw new Error(orderPermissionMessage());
+    }
+    return attachOrderLineComments(mapped, resolved);
+  } catch {
+    return getOrder(orderId, resolved);
+  }
 }
 
 /** String helper used by tests; same trim rules as `taxInvoiceNumberPresent`. */
@@ -3677,16 +4003,38 @@ export async function updateOrder(
   const employeeId = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = assertValidOptionalVin(vin, "orders.validation.vinLength");
 
-  const { data: existingOrder, error: existingError } = await supabase
-    .from("orders")
-    .select("client_id, status, closed_at")
-    .eq("id", orderId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (existingError) throw new Error(existingError.message);
+  let existingOrder: Record<string, unknown> | null = null;
+  {
+    const withKind = isOrderEstimatesSupported();
+    const { data, error: existingError } = await supabase
+      .from("orders")
+      .select(withKind ? "client_id, status, closed_at, kind" : "client_id, status, closed_at")
+      .eq("id", orderId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (existingError) {
+      if (withKind && isMissingOrderEstimatesColumn(existingError)) {
+        markOrderEstimatesUnsupported();
+        const retry = await supabase
+          .from("orders")
+          .select("client_id, status, closed_at")
+          .eq("id", orderId)
+          .eq("workspace_id", workspaceId)
+          .maybeSingle();
+        if (retry.error) throw new Error(retry.error.message);
+        existingOrder = (retry.data as Record<string, unknown> | null) ?? null;
+      } else {
+        throw new Error(existingError.message);
+      }
+    } else {
+      existingOrder = (data as Record<string, unknown> | null) ?? null;
+    }
+  }
   if (!existingOrder) throw new Error(orderPermissionMessage());
 
   await assertOrderRowContentEditable(workspaceId, existingOrder);
+  const updatingEstimate =
+    isOrderEstimatesSupported() && existingOrder.kind === "estimate";
 
   const clientId = typeof existingOrder.client_id === "string" ? existingOrder.client_id : null;
   // Omit vehicleId from the payload to leave orders.vehicle_id unchanged (assignee-only updates).
@@ -3808,14 +4156,23 @@ export async function updateOrder(
         materialsRpcRan = true;
       }
     } else if (desiredMaterials.length > 0) {
-      assertCatalogWarehousesSelected(desiredMaterials);
+      if (!updatingEstimate) assertCatalogWarehousesSelected(desiredMaterials);
       const percent = clientDiscountPercent(clientDiscounts, "product_order");
       const productPercent = percent > 0 && orderLineDiscountSupported ? percent : null;
       const existingMaterialIds = productPercent !== null ? new Set(existingRows.map((line) => String(line.id))) : new Set<string>();
       const hasCatalog = desiredMaterials.some(isCatalogOrderMaterial);
       const freeform = freeformMaterialsOnly(desiredMaterials);
 
-      if (hasCatalog) {
+      if (updatingEstimate) {
+        // Estimates never touch stock: sync lines with quantity_issued = 0.
+        const synced = await persistEstimateMaterialWarehouses(
+          orderId,
+          desiredMaterials,
+          await syncOrderMaterialsRpc(orderId, desiredMaterials, workspaceId),
+        );
+        materialLines = await persistOrderMaterialWarranties(orderId, workspaceId, desiredMaterials, synced);
+        materialLines = await applyCustomCatalogMaterialPrices(orderId, desiredMaterials, materialLines);
+      } else if (hasCatalog) {
         // Issue new / increased catalog qty first (atomic per line). Then sync full set for freeform + qty decreases.
         const applied = await applyCatalogImmediateIssue({
           orderId,

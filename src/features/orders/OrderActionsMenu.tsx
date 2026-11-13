@@ -34,6 +34,8 @@ import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
 import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useDeleteOrder } from "./useDeleteOrder";
+import { estimateCardVisibility, isEstimateOrder } from "./orderEstimates";
+import { useSetEstimateStatus } from "./useEstimateMutations";
 import { isOrderFormallyClosed } from "./orderLifecycle";
 import { OrderCancelChainDialog } from "./OrderCancelChainDialog";
 import { CloseOrderDialog } from "./CloseOrderDialog";
@@ -118,11 +120,15 @@ export function OrderActionsMenu({
   const deleteOrder = useDeleteOrder();
   const printOrder = usePrintOrderDocument();
   const { data: templates = [] } = useGetDocumentTemplates();
+  const estimate = isEstimateOrder(order);
+  const visibility = estimateCardVisibility(order);
   const printTemplates = templates
     .filter(
       (template) =>
         template.isActive &&
-        (template.documentType === "work_order" || template.documentType === "act") &&
+        (estimate
+          ? template.documentType === "estimate" || template.documentType === "work_order"
+          : template.documentType === "work_order" || template.documentType === "act") &&
         (Boolean(template.layout) || Boolean(template.bodyHtml.trim())),
     )
     .slice()
@@ -143,7 +149,9 @@ export function OrderActionsMenu({
   });
   // Same gate as PaymentHistorySection + closed-content lock (no recording on locked closed orders).
   const canRecordPayment =
-    withSubscriptionWriteAccess(Boolean(workspaceRole), canWrite) && canMutateContent;
+    visibility.showPayments &&
+    withSubscriptionWriteAccess(Boolean(workspaceRole), canWrite) &&
+    canMutateContent;
 
   async function requestClose() {
     const prepared = await prepareOrderForCloseOrPayment({ order, confirm, t });
@@ -154,17 +162,34 @@ export function OrderActionsMenu({
     if (afterMileage !== prepared) onOrderUpdated?.(afterMileage);
     setCloseOpen(true);
   }
-  const statusLockedForMenu = order.status === "cancelled" ? !isOwnerByOwnerId : formallyClosed;
-  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
+  const statusLockedForMenu = estimate
+    ? false
+    : order.status === "cancelled"
+      ? !isOwnerByOwnerId
+      : formallyClosed;
+  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions(estimate ? "estimate" : "order");
   const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
-  const statusOptions = unifiedStatusOptions(orderStatusDefinitions, (status) =>
-    industryOrderStatusLabel(workflow, status),
-  );
-  const currentUnifiedStatus = resolveCurrentUnifiedStatus(order, statusOptions);
-  const statusBusy = isStatusUpdating || isUnifiedStatusUpdating;
+  const { mutate: setEstimateStatus, isPending: isEstimateStatusUpdating } = useSetEstimateStatus();
+  const statusOptions = estimate
+    ? orderStatusDefinitions
+        .filter((definition) => definition.isActive)
+        .map((definition) => ({
+          kind: "definition" as const,
+          id: definition.id,
+          name: definition.name,
+          color: definition.color,
+          systemStatus: null as OrderStatus | null,
+          semanticAction: definition.semanticAction,
+          definition,
+        }))
+    : unifiedStatusOptions(orderStatusDefinitions, (status) => industryOrderStatusLabel(workflow, status));
+  const currentUnifiedStatus = estimate
+    ? statusOptions.find((option) => option.id === order.estimateStatusId) ?? statusOptions[0] ?? null
+    : resolveCurrentUnifiedStatus(order, statusOptions);
+  const statusBusy = isStatusUpdating || isUnifiedStatusUpdating || isEstimateStatusUpdating;
   const hasInvoice = Boolean(invoiceNumber);
   const paymentCount = Math.max(0, linkedPaymentCount);
-  const isCancelledForDelete = orderHasCancelSemantic(order, orderStatusDefinitions);
+  const isCancelledForDelete = estimate ? true : orderHasCancelSemantic(order, orderStatusDefinitions);
   const activePaymentsBlockingDelete = activePaymentsBlockingOrderDelete(payments, order.id);
   const deleteBlockedReason = hasInvoice
     ? t("orders.errors.cannotDeleteWithInvoice")
@@ -172,7 +197,8 @@ export function OrderActionsMenu({
       ? t("orders.delete.requireCancelled")
       : activePaymentsBlockingDelete.length > 0
         ? t("orders.errors.cannotDeleteWithActivePayments")
-        : !canOfferDeleteClosedOrderAction({
+        : !estimate &&
+            !canOfferDeleteClosedOrderAction({
               order,
               workspaceRole: closedOrderPerms.role,
               grants: closedOrderPerms.grants,
@@ -181,15 +207,19 @@ export function OrderActionsMenu({
             })
           ? t("orders.errors.deleteClosedForbidden")
           : null;
-  const showOpenLifecycleActions = canWrite && !formallyClosed && order.status !== "cancelled";
-  const showCancelClosedAction = canOfferCancelOrderAction({
-    order,
-    canWrite,
-    workspaceRole: closedOrderPerms.role,
-    grants: closedOrderPerms.grants,
-    isOwnerByOwnerId,
-    ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
-  }) && formallyClosed;
+  const showOpenLifecycleActions =
+    visibility.showCloseCancel && canWrite && !formallyClosed && order.status !== "cancelled";
+  const showCancelClosedAction =
+    visibility.showCloseCancel &&
+    canOfferCancelOrderAction({
+      order,
+      canWrite,
+      workspaceRole: closedOrderPerms.role,
+      grants: closedOrderPerms.grants,
+      isOwnerByOwnerId,
+      ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+    }) &&
+    formallyClosed;
 
   async function copyPublicStatusLink() {
     if (copyingPublicLink) return;
@@ -262,6 +292,13 @@ export function OrderActionsMenu({
                   }
                   onSelect={() => {
                     if (locked) return;
+                    if (estimate) {
+                      setEstimateStatus(
+                        { orderId: order.id, statusId: option.id },
+                        { onSuccess: (updated) => onOrderUpdated?.(updated) },
+                      );
+                      return;
+                    }
                     const move = resolveUnifiedStatusSelection(order, option, {
                       allowReopenCancelled: isOwnerByOwnerId,
                     });
@@ -353,22 +390,24 @@ export function OrderActionsMenu({
               {t("common.edit")}
             </DropdownMenuItem>
           ) : null}
-          {invoiceNumber ? (
-            <DropdownMenuItem disabled>
-              <FileCheck2 />
-              <span className="truncate">{t("orders.actions.invoiceAlreadyCreated", { number: invoiceNumber })}</span>
-            </DropdownMenuItem>
-          ) : invoicesUnavailable ? (
-            <DropdownMenuItem disabled>
-              <FileX2 />
-              {t("orders.actions.invoicesNotSetUp")}
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem disabled={isCreatingInvoice} onSelect={() => onCreateInvoice(order)}>
-              <FilePlus2 />
-              {isCreatingInvoice ? t("orders.actions.creatingInvoice") : t("orders.actions.createInvoice")}
-            </DropdownMenuItem>
-          )}
+          {visibility.showInvoice ? (
+            invoiceNumber ? (
+              <DropdownMenuItem disabled>
+                <FileCheck2 />
+                <span className="truncate">{t("orders.actions.invoiceAlreadyCreated", { number: invoiceNumber })}</span>
+              </DropdownMenuItem>
+            ) : invoicesUnavailable ? (
+              <DropdownMenuItem disabled>
+                <FileX2 />
+                {t("orders.actions.invoicesNotSetUp")}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled={isCreatingInvoice} onSelect={() => onCreateInvoice(order)}>
+                <FilePlus2 />
+                {isCreatingInvoice ? t("orders.actions.creatingInvoice") : t("orders.actions.createInvoice")}
+              </DropdownMenuItem>
+            )
+          ) : null}
 
           <DropdownMenuSeparator />
           {printTemplates.length === 0 ? (
@@ -388,7 +427,7 @@ export function OrderActionsMenu({
               </DropdownMenuItem>
             ))
           )}
-          {canWrite ? (
+          {visibility.showPublicLink && canWrite ? (
             <DropdownMenuItem disabled={copyingPublicLink} onSelect={() => void copyPublicStatusLink()}>
               <Link2 />
               {t("orders.actions.copyPublicLink")}
@@ -408,7 +447,7 @@ export function OrderActionsMenu({
                 }}
               >
                 <Trash2 />
-                {t("orders.actions.delete")}
+                {t(estimate ? "orders.estimates.delete" : "orders.actions.delete")}
               </DropdownMenuItem>
             </>
           ) : null}
@@ -456,7 +495,7 @@ export function OrderActionsMenu({
                 ? t("common.deleting")
                 : paymentCount > 0
                   ? t("orders.delete.confirmWithPayments", { count: paymentCount })
-                  : t("orders.actions.delete")}
+                  : t(estimate ? "orders.estimates.delete" : "orders.actions.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

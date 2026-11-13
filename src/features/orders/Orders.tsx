@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 import { Banknote, Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
@@ -53,9 +54,25 @@ import { useOpenClientDetails } from "../clients/useOpenClientDetails";
 import type { Client } from "../../lib/types";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { hasConfigurableOrderStatuses, unifiedStatusFilterOptions } from "./unifiedOrderStatus";
+import { canUseOrderEstimates } from "./orderEstimates";
+import { isOrderEstimatesSupported } from "../../services/apiOrders";
+import type { OrderKind } from "../../lib/types";
+import type { OrderListKind } from "../../services/apiOrders";
 
 export function Orders() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const estimatesEnabled = canUseOrderEstimates(isOrderEstimatesSupported());
+  // One list for orders and estimates (estimates carry a «Расчёт» mark). The «Тип» filter narrows it to
+  // only orders or only estimates (kept in the URL: ?type=order|estimate).
+  const typeParam = searchParams.get("type");
+  const typeFilter: OrderListKind = !estimatesEnabled
+    ? "order"
+    : typeParam === "estimate" || typeParam === "order"
+      ? typeParam
+      : "all";
+  const isEstimatesView = typeFilter === "estimate";
+  const [createKind, setCreateKind] = useState<OrderKind>("order");
   const { workflow, copy } = useIndustryWorkflow();
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const deviceColumnLabel =
@@ -69,6 +86,7 @@ export function Orders() {
   const clientDetails = useOpenClientDetails();
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
   const [orderForVehicleId, setOrderForVehicleId] = useState<string | null>(null);
+  const [createFromClientKind, setCreateFromClientKind] = useState<OrderKind>("order");
   const today = localDateKey(new Date());
 
   function openClientFromOrder(clientId: string) {
@@ -115,10 +133,20 @@ export function Orders() {
 
   const { employees } = useGetEmployees();
   const assigneeOptions = assignableTechnicians(employees);
-  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
+  const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions(isEstimatesView ? "estimate" : "order");
   const unifiedFilterOptions = useMemo(
-    () => unifiedStatusFilterOptions(orderStatusDefinitions, (status) => industryOrderStatusLabel(workflow, status)),
-    [orderStatusDefinitions, workflow],
+    () =>
+      isEstimatesView
+        ? orderStatusDefinitions
+            .filter((d) => d.isActive)
+            .map((d) => ({
+              id: d.id,
+              name: d.name,
+              systemStatus: null as null,
+              color: d.color,
+            }))
+        : unifiedStatusFilterOptions(orderStatusDefinitions, (status) => industryOrderStatusLabel(workflow, status)),
+    [isEstimatesView, orderStatusDefinitions, workflow],
   );
   const usesDefinitionFilter = hasConfigurableOrderStatuses(orderStatusDefinitions);
   const selectedFilterOption = statusFilter === "all" ? null : unifiedFilterOptions.find((option) => option.id === statusFilter) ?? null;
@@ -136,7 +164,15 @@ export function Orders() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter, deadlineFilter, employeeFilter, awaitingPaymentFilter, pageSize]);
+  }, [debouncedSearch, statusFilter, deadlineFilter, employeeFilter, awaitingPaymentFilter, pageSize, typeFilter]);
+
+  // Order statuses / «awaiting payment» only make sense for orders: then the mixed list shows orders only.
+  const listKind: OrderListKind =
+    typeFilter === "all" && (statusFilter !== "all" || awaitingPaymentFilter) ? "order" : typeFilter;
+
+  useEffect(() => {
+    if (isEstimatesView && awaitingPaymentFilter) setAwaitingPaymentFilter(false);
+  }, [isEstimatesView, awaitingPaymentFilter]);
 
   const {
     orders,
@@ -149,14 +185,15 @@ export function Orders() {
   } = useOrdersPage({
     search: debouncedSearch,
     status: (() => {
-      if (usesDefinitionFilter || statusFilter === "all") return "all";
+      if (isEstimatesView || usesDefinitionFilter || statusFilter === "all") return "all";
       const raw = statusFilter.startsWith("system:") ? statusFilter.slice("system:".length) : statusFilter;
       return isOrderStatus(raw) ? raw : "all";
     })(),
     customStatusId: usesDefinitionFilter && statusFilter !== "all" ? statusFilter : "all",
-    customStatusFallbackSystem: usesDefinitionFilter ? selectedFilterOption?.systemStatus ?? null : null,
-    deadline: deadlineFilter,
+    customStatusFallbackSystem: usesDefinitionFilter && !isEstimatesView ? selectedFilterOption?.systemStatus ?? null : null,
+    deadline: isEstimatesView ? "all" : deadlineFilter,
     employeeId: employeeFilter,
+    kind: listKind,
     today,
     page,
     pageSize,
@@ -246,7 +283,9 @@ export function Orders() {
 
   const headerDescription = hasActiveFilters
     ? t("orders.matchingCount", { count: displayedTotal })
-    : t("orders.totalCount", { count: displayedTotal });
+    : isEstimatesView
+      ? t("orders.estimates.totalCount", { count: displayedTotal })
+      : t("orders.totalCount", { count: displayedTotal });
 
   const listTotal = awaitingPaymentFilter ? displayedOrders.length : total;
   const listRangeFrom = listTotal === 0 ? 0 : awaitingPaymentFilter ? (displayedOrders.length === 0 ? 0 : 1) : rangeFrom;
@@ -264,9 +303,33 @@ export function Orders() {
     <ErrorState title={t("orders.empty.loadFailed")} description={ordersError.message} onRetry={() => refetchOrders()} />
   ) : hasActiveFilters ? (
     emptyFilterState()
+  ) : isEstimatesView ? (
+    <EmptyState
+      title={t("orders.estimates.emptyTitle")}
+      description={t("orders.estimates.emptyDescription")}
+      action={canCreateOrders ? { label: t("orders.estimates.createEstimate"), onClick: () => {
+              setCreateKind("estimate");
+              setCreateModalOpen(true);
+            } } : undefined}
+    />
   ) : (
     <NoOrders onCreateOrder={canCreateOrders ? () => setCreateModalOpen(true) : undefined} />
   );
+
+  function setTypeFilter(next: OrderListKind) {
+    setStatusFilter("all");
+    setPage(1);
+    setSearchParams(
+      (prev) => {
+        const nextParams = new URLSearchParams(prev);
+        nextParams.delete("view");
+        if (next === "all") nextParams.delete("type");
+        else nextParams.set("type", next);
+        return nextParams;
+      },
+      { replace: true },
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -274,6 +337,7 @@ export function Orders() {
         title={t("orders.title")}
         description={isBoard || isCalendar ? undefined : headerDescription}
         aside={
+          isEstimatesView ? null : (
           <button
             type="button"
             aria-pressed={awaitingPaymentFilter}
@@ -313,13 +377,33 @@ export function Orders() {
               </p>
             </div>
           </button>
+          )
         }
         actions={
           canCreateOrders ? (
-            <Button onClick={() => setCreateModalOpen(true)}>
-              <Plus />
-              {t("orders.createOrder")}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {estimatesEnabled ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCreateKind("estimate");
+                    setCreateModalOpen(true);
+                  }}
+                >
+                  <Plus />
+                  {t("orders.estimates.createEstimate")}
+                </Button>
+              ) : null}
+              <Button
+                onClick={() => {
+                  setCreateKind("order");
+                  setCreateModalOpen(true);
+                }}
+              >
+                <Plus />
+                {t("orders.createOrder")}
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -333,6 +417,24 @@ export function Orders() {
           onSearchChange={setSearchQuery}
           searchPlaceholder={t("orders.searchPlaceholder")}
           filters={[
+            ...(estimatesEnabled
+              ? [
+                  {
+                    key: "type",
+                    label: t("orders.estimates.typeFilter"),
+                    options: [
+                      { value: "all", label: t("orders.estimates.typeAll") },
+                      { value: "order", label: t("orders.estimates.typeOrders") },
+                      { value: "estimate", label: t("orders.estimates.typeEstimates") },
+                    ],
+                    value: typeFilter,
+                    onChange: (value: string) => {
+                      deactivateAwaitingPaymentFilter();
+                      setTypeFilter(value as OrderListKind);
+                    },
+                  },
+                ]
+              : []),
             // Board columns already are the statuses (and the calendar lists every status), so the status filter is table-only.
             ...(isBoard || isCalendar
               ? []
@@ -348,16 +450,20 @@ export function Orders() {
                     },
                   },
                 ]),
-            {
-              key: "deadline",
-              label: t("orders.filters.deadline"),
-              options: deadlineOptions,
-              value: deadlineFilter,
-              onChange: (value) => {
-                deactivateAwaitingPaymentFilter();
-                setDeadlineFilter(value as DeadlineFilter);
-              },
-            },
+            ...(isEstimatesView
+              ? []
+              : [
+                  {
+                    key: "deadline",
+                    label: t("orders.filters.deadline"),
+                    options: deadlineOptions,
+                    value: deadlineFilter,
+                    onChange: (value: string) => {
+                      deactivateAwaitingPaymentFilter();
+                      setDeadlineFilter(value as DeadlineFilter);
+                    },
+                  },
+                ]),
             {
               key: "employee",
               label: t("orders.filters.employee"),
@@ -389,22 +495,25 @@ export function Orders() {
         <OrdersBoard
           search={debouncedSearch}
           employeeFilter={employeeFilter}
-          deadlineFilter={deadlineFilter}
+          deadlineFilter={isEstimatesView ? "all" : deadlineFilter}
           today={today}
           isWorkspaceOwner={orderDetails.isWorkspaceOwner}
           requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
           formatMoney={formatMoney}
           onOpenOrder={orderDetails.openOrder}
           payments={paymentsLoading || paymentsError ? undefined : payments}
+          // Board columns are order statuses: estimates appear there only when filtered to estimates.
+          kind={isEstimatesView ? "estimate" : "order"}
         />
       ) : isCalendar ? (
         <OrdersCalendar
           search={debouncedSearch}
           employeeFilter={employeeFilter}
-          deadlineFilter={deadlineFilter}
+          deadlineFilter={isEstimatesView ? "all" : deadlineFilter}
           today={today}
           formatMoney={formatMoney}
           onOpenOrder={orderDetails.openOrder}
+          kind={listKind}
         />
       ) : (
         <OrdersListView
@@ -421,6 +530,7 @@ export function Orders() {
           onVisibleColumnsChange={handleVisibleColumnsChange}
           layoutEpoch={layoutEpoch}
           onOpenClient={openClientFromOrder}
+          hidePayments={isEstimatesView}
         />
       )}
 
@@ -458,11 +568,14 @@ export function Orders() {
             setCreateModalOpen(false);
             setOrderForClient(null);
             setOrderForVehicleId(null);
+            setCreateFromClientKind("order");
+            setCreateKind("order");
           }
         }}
         searchQuery={orderForClient ? "" : searchQuery}
         initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
         initialVehicleId={orderForVehicleId}
+        kind={orderForClient ? createFromClientKind : createKind}
         // Started from the client card (client or one of its vehicles) → close that card once the order exists.
         onCreated={() => {
           if (orderForClient) clientDetails.setDetailPanelOpen(false);
@@ -480,6 +593,12 @@ export function Orders() {
           orderDetails.openOrder(order);
         }}
         onCreateOrder={(client, vehicleId) => {
+          setCreateFromClientKind("order");
+          setOrderForClient(client);
+          setOrderForVehicleId(vehicleId ?? null);
+        }}
+        onCreateEstimate={(client, vehicleId) => {
+          setCreateFromClientKind("estimate");
           setOrderForClient(client);
           setOrderForVehicleId(vehicleId ?? null);
         }}

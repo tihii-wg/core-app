@@ -163,7 +163,7 @@ export type DocumentLayout = {
   useStyle?: boolean;
 };
 
-export type DocumentTemplateType = "work_order" | "act" | "invoice";
+export type DocumentTemplateType = "work_order" | "act" | "invoice" | "estimate";
 
 /** Optional shared style applied while rendering a layout. */
 export type LayoutRenderStyle = {

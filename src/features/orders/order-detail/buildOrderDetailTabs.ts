@@ -15,6 +15,8 @@ export function buildOrderDetailTabs(args: {
   attachmentCount: number;
   isDesktopFeedLayout: boolean;
   feedItemCount: number | null;
+  /** Hide payments tab for estimates. */
+  showPayments?: boolean;
 }): { value: OrderDetailTab; label: string }[] {
   const {
     t,
@@ -26,6 +28,7 @@ export function buildOrderDetailTabs(args: {
     attachmentCount,
     isDesktopFeedLayout,
     feedItemCount,
+    showPayments = true,
   } = args;
   const itemsCount = orderDetailItemsCount(serviceLineCount, materialLineCount);
   return [
@@ -36,13 +39,17 @@ export function buildOrderDetailTabs(args: {
         count: itemsCount,
       }),
     },
-    {
-      value: "payments",
-      label:
-        linkedPaymentCount > 0
-          ? t("orders.detail.tabs.paymentsWithCount", { count: linkedPaymentCount })
-          : t("orders.detail.tabs.payments"),
-    },
+    ...(showPayments
+      ? [
+          {
+            value: "payments" as const,
+            label:
+              linkedPaymentCount > 0
+                ? t("orders.detail.tabs.paymentsWithCount", { count: linkedPaymentCount })
+                : t("orders.detail.tabs.payments"),
+          },
+        ]
+      : []),
     {
       value: "files",
       label:

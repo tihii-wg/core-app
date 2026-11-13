@@ -48,7 +48,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
     setCatalogServiceId, setCatalogInventoryId, setServiceLineEdit, setMaterialLineEdit, saveServiceLineField,
     saveMaterialLineField, handleDeleteServiceLine, handleDeleteMaterialLine, focusAddLinesSearch,
     paymentsLoading, filesTabActive, showFooter, showCancelAction, showFooterDeleteAction,
-    showOpenLifecycleActions, canSaveAndClose, lifecycleBusy, footerSavePending, deleteBlockedReason,
+    showOpenLifecycleActions, showConvertEstimate, convertEstimatePending, handleConvertEstimate,
+    canSaveAndClose, lifecycleBusy, footerSavePending, deleteBlockedReason,
     deleteOrderPending, setCancelOpen, openDeleteConfirm, handleCloseOrderClick, handleSaveAndClose,
     closeSheet, confirmDeleteOpen, setConfirmDeleteOpen, linkedPaymentCount, onDeleted, hasInvoice,
     closeOpen, setCloseOpen, cancelOpen, recordPaymentOpen, setRecordPaymentOpen, addMaterialOpen,
@@ -106,6 +107,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
     footerCancel: () => setCancelOpen(true),
     footerDelete: () => openDeleteConfirm(),
     footerCloseOrder: () => void handleCloseOrderClick(),
+    footerConvertEstimate: () => void handleConvertEstimate(),
     footerSaveAndClose: () => void handleSaveAndClose(),
     footerCloseWindow: () => closeSheet(),
   });
@@ -368,6 +370,8 @@ export function OrderDetailSheet(p: Record<string, any>) {
                   showCancelAction={showCancelAction}
                   showFooterDeleteAction={showFooterDeleteAction}
                   showOpenLifecycleActions={showOpenLifecycleActions}
+                  showConvertEstimate={showConvertEstimate}
+                  convertEstimatePending={convertEstimatePending}
                   canSaveAndClose={canSaveAndClose}
                   lifecycleBusy={lifecycleBusy}
                   footerSavePending={footerSavePending}
@@ -376,6 +380,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
                   onCancel={h.footerCancel}
                   onDelete={h.footerDelete}
                   onCloseOrder={h.footerCloseOrder}
+                  onConvertEstimate={h.footerConvertEstimate}
                   onSaveAndClose={h.footerSaveAndClose}
                   onCloseWindow={h.footerCloseWindow}
                 />

@@ -6,8 +6,11 @@ import { Button } from "../../ui/Button";
 import { ErrorState } from "../../ui/EmptyState";
 import { Skeleton } from "../../ui/Skeleton";
 import { cn } from "../../lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import type { Order } from "../../lib/types";
-import { useGetOrders } from "./useGetOrders";
+import type { OrderListKind } from "../../services/apiOrders";
+import { getOrders } from "../../services/apiOrders";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./orderVisibility";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -35,6 +38,7 @@ type OrdersCalendarProps = {
   today: string;
   formatMoney: (amount: number) => string;
   onOpenOrder: (order: Order) => void;
+  kind?: OrderListKind;
 };
 
 const MONTH_CELL_LIMIT = 3;
@@ -43,11 +47,30 @@ const MONTH_CELL_LIMIT = 3;
  * Orders calendar: a plain CSS grid (month or week) listing each order on its deadline,
  * falling back to its creation date when it has no deadline. Clicking an order opens the detail panel.
  */
-export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, formatMoney, onOpenOrder }: OrdersCalendarProps) {
+export function OrdersCalendar({
+  search,
+  employeeFilter,
+  deadlineFilter,
+  today,
+  formatMoney,
+  onOpenOrder,
+  kind = "order",
+}: OrdersCalendarProps) {
   const { t, i18n } = useTranslation();
   const { profile, industrySlug } = useIndustryWorkflow();
   const industryBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
-  const { orders, isLoading, error, refetch } = useGetOrders(search);
+  const { workspaceId } = useActiveWorkspaceId();
+  const isEstimates = kind === "estimate";
+  const {
+    data: orders = [],
+    isLoading,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["orders", workspaceId, search, kind],
+    queryFn: () => getOrders(workspaceId, search, kind),
+    enabled: Boolean(workspaceId),
+  });
   const [scale, setScale] = useState<OrderCalendarScale>(() => readOrderCalendarScale());
   const [anchor, setAnchor] = useState(() => dateFromKey(today) ?? new Date());
   const [expandedDays, setExpandedDays] = useState<ReadonlySet<string>>(() => new Set());
@@ -57,9 +80,9 @@ export function OrdersCalendar({ search, employeeFilter, deadlineFilter, today, 
       orders.filter(
         (order) =>
           (employeeFilter === "all" || order.assignedEmployeeId === employeeFilter) &&
-          matchesDeadlineFilter(order, deadlineFilter, today),
+          (isEstimates || matchesDeadlineFilter(order, deadlineFilter, today)),
       ),
-    [orders, employeeFilter, deadlineFilter, today],
+    [orders, employeeFilter, deadlineFilter, today, isEstimates],
   );
 
   const buckets = useMemo(

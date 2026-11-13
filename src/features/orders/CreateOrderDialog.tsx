@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import type { OrderKind } from "../../lib/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import AddNewOrderForm from "./AddNewOrderForm";
 
@@ -10,6 +11,8 @@ type CreateOrderDialogProps = {
   initialClient?: { id: string; name: string } | null;
   /** Prefill `orders.vehicle_id` for a vehicle that belongs to `initialClient`. */
   initialVehicleId?: string | null;
+  /** Create an estimate (same form; no stock issue). */
+  kind?: OrderKind;
   /** The order was saved (not cancelled) — e.g. close the client card the order was started from. */
   onCreated?: () => void;
 };
@@ -20,11 +23,13 @@ export function CreateOrderDialog({
   searchQuery = "",
   initialClient = null,
   initialVehicleId = null,
+  kind = "order",
   onCreated,
 }: CreateOrderDialogProps) {
   const { t } = useTranslation();
+  const isEstimate = kind === "estimate";
   const formSearch = searchQuery || initialClient?.name || "";
-  const formKey = `${initialClient?.id ?? "new"}:${initialVehicleId ?? ""}:${formSearch || "new-order"}`;
+  const formKey = `${kind}:${initialClient?.id ?? "new"}:${initialVehicleId ?? ""}:${formSearch || "new-order"}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -34,8 +39,12 @@ export function CreateOrderDialog({
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>{t("orders.createDialog.title")}</DialogTitle>
-          <DialogDescription>{t("orders.createDialog.description")}</DialogDescription>
+          <DialogTitle>
+            {isEstimate ? t("orders.estimates.createDialog.title") : t("orders.createDialog.title")}
+          </DialogTitle>
+          <DialogDescription>
+            {isEstimate ? t("orders.estimates.createDialog.description") : t("orders.createDialog.description")}
+          </DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto pr-2">
           {open ? (
@@ -46,6 +55,7 @@ export function CreateOrderDialog({
               initialClientId={initialClient?.id}
               initialClientName={initialClient?.name}
               initialVehicleId={initialVehicleId ?? undefined}
+              kind={kind}
               onCreated={onCreated}
             />
           ) : null}

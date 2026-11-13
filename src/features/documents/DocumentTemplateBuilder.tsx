@@ -501,7 +501,7 @@ function fieldWith(field: FieldRef, patch: Partial<Pick<FieldRef, "label" | "ena
 }
 
 function isBuilderType(value: string): value is DocumentTemplateType {
-  return value === "work_order" || value === "act" || value === "invoice";
+  return value === "work_order" || value === "act" || value === "invoice" || value === "estimate";
 }
 
 function insertTextAtCursor(

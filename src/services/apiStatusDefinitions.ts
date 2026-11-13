@@ -11,7 +11,7 @@ import supabase from "./supabase";
 
 export type StatusEntity = "order" | "estimate" | "lead" | "invoice" | "transfer" | "task";
 
-export type StatusSemanticAction = "normal" | "close" | "cancel";
+export type StatusSemanticAction = "normal" | "close" | "cancel" | "accept";
 
 export type StatusDefinition = {
   id: string;
@@ -99,7 +99,8 @@ function normalizeMinPaidPercent(value: number | null | undefined): number | nul
 }
 
 function toSemanticAction(value: unknown): StatusSemanticAction {
-  return value === "close" || value === "cancel" ? value : "normal";
+  if (value === "close" || value === "cancel" || value === "accept") return value;
+  return "normal";
 }
 
 export function toStatusDefinition(row: Record<string, unknown>): StatusDefinition {
@@ -296,6 +297,8 @@ export type UpdateStatusDefinitionInput = {
   isActive?: boolean;
   /** Set or clear (null / 0) the minimum paid percent requirement. */
   minPaidPercent?: number | null;
+  /** Estimate statuses may use `accept` / `cancel` / `normal`. */
+  semanticAction?: StatusSemanticAction;
 };
 
 /** Creates a status definition (defaults to the `order` entity). Always semantic normal. */
@@ -409,10 +412,34 @@ export async function updateStatusDefinition(input: UpdateStatusDefinitionInput,
   if (input.statusGroup !== undefined) patch.status_group = input.statusGroup;
   if (input.sortOrder !== undefined) patch.sort_order = Math.trunc(input.sortOrder);
   if (input.isActive !== undefined) {
+    if (
+      input.isActive === false &&
+      existing.entity === "estimate" &&
+      existing.semanticAction === "accept" &&
+      existing.isActive
+    ) {
+      await assertNotLastActiveAccept(resolved, existing.id);
+    }
     patch.is_active = input.isActive;
     if (!input.isActive) patch.is_default = false;
   }
   if (input.minPaidPercent !== undefined) patch.min_paid_percent = normalizeMinPaidPercent(input.minPaidPercent);
+  if (input.semanticAction !== undefined) {
+    if (input.semanticAction === "accept" && existing.entity !== "estimate") {
+      throw new Error(i18n.t("settings.statuses.errors.acceptEstimateOnly", {
+        defaultValue: "“Accepted” is only valid for estimate statuses.",
+      }));
+    }
+    if (
+      existing.entity === "estimate" &&
+      existing.semanticAction === "accept" &&
+      input.semanticAction !== "accept" &&
+      existing.isActive
+    ) {
+      await assertNotLastActiveAccept(resolved, existing.id);
+    }
+    patch.semantic_action = input.semanticAction;
+  }
 
   const { data, error } = await withStatusColumns((columns) =>
     supabase
@@ -452,7 +479,8 @@ export async function setDefaultStatusDefinition(statusId: string, workspaceId: 
     .maybeSingle();
   if (loadError) throw new Error(loadError.message);
   if (!target) throw new Error(i18n.t("settings.statuses.errors.notFound"));
-  if ((target as { entity?: string }).entity !== "order") {
+  const targetEntity = (target as { entity?: string }).entity;
+  if (targetEntity !== "order" && targetEntity !== "estimate") {
     throw new Error(i18n.t("settings.statuses.errors.orderOnly"));
   }
   if ((target as { is_active?: boolean }).is_active === false) {
@@ -466,7 +494,7 @@ export async function setDefaultStatusDefinition(statusId: string, workspaceId: 
     .from("status_definitions")
     .update({ is_default: false, updated_at: new Date().toISOString() })
     .eq("workspace_id", resolved)
-    .eq("entity", "order")
+    .eq("entity", targetEntity)
     .is("deleted_at", null)
     .eq("is_default", true);
   if (clearError) throw new Error(clearError.message);
@@ -526,13 +554,17 @@ export async function deleteStatusDefinition(statusId: string, workspaceId: stri
   }
   const action = (row as { semantic_action?: string }).semantic_action;
   const systemStatus = (row as { system_status?: string | null }).system_status;
+  const entity = (row as { entity?: string }).entity;
   if (
     action === "close" ||
-    action === "cancel" ||
+    (action === "cancel" && entity !== "estimate") ||
     systemStatus === "closed" ||
     systemStatus === "cancelled"
   ) {
     throw new Error(i18n.t("settings.statuses.errors.cannotDeleteProtected"));
+  }
+  if (entity === "estimate" && action === "accept") {
+    await assertNotLastActiveAccept(resolved, statusId);
   }
 
   const { error } = await supabase
@@ -541,6 +573,24 @@ export async function deleteStatusDefinition(statusId: string, workspaceId: stri
     .eq("id", statusId)
     .eq("workspace_id", resolved);
   if (error) throw new Error(error.message);
+}
+
+/** Blocks deactivating/deleting the last active estimate «accept» status. */
+async function assertNotLastActiveAccept(workspaceId: string, exceptStatusId: string) {
+  const { data, error } = await supabase
+    .from("status_definitions")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("entity", "estimate")
+    .eq("semantic_action", "accept")
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .neq("id", exceptStatusId)
+    .limit(1);
+  if (error) throw new Error(error.message);
+  if (!data?.length) {
+    throw new Error(i18n.t("settings.statuses.lastAcceptRequired"));
+  }
 }
 
 export async function setOrderLifecycleSemantic(

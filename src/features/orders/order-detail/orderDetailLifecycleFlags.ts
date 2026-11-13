@@ -5,6 +5,7 @@ import {
   canOfferCancelOrderAction,
   canOfferDeleteClosedOrderAction,
 } from "../closedOrderPermissions";
+import { isEstimateOrder } from "../orderEstimates";
 import { isOrderFormallyClosed } from "../orderLifecycle";
 
 export function computeOrderDetailLifecycleFlags(args: {
@@ -36,9 +37,12 @@ export function computeOrderDetailLifecycleFlags(args: {
     t,
   } = args;
 
+  const estimate = isEstimateOrder(selectedOrder);
   const hasInvoice = Boolean(invoiceNumber);
   const isCancelledForDelete = selectedOrder
-    ? orderHasCancelSemantic(selectedOrder, orderStatusDefinitions)
+    ? estimate
+      ? true
+      : orderHasCancelSemantic(selectedOrder, orderStatusDefinitions)
     : false;
   const activePaymentsBlockingDelete = selectedOrder
     ? activePaymentsBlockingOrderDelete(payments, selectedOrder.id)
@@ -51,7 +55,8 @@ export function computeOrderDetailLifecycleFlags(args: {
         ? t("orders.delete.requireCancelled")
         : activePaymentsBlockingDelete.length > 0
           ? t("orders.errors.cannotDeleteWithActivePayments")
-          : !canOfferDeleteClosedOrderAction({
+          : !estimate &&
+              !canOfferDeleteClosedOrderAction({
                 order: selectedOrder,
                 workspaceRole,
                 grants: closedOrderPerms.grants,
@@ -61,8 +66,13 @@ export function computeOrderDetailLifecycleFlags(args: {
             ? t("orders.errors.deleteClosedForbidden")
             : null;
   const showOpenLifecycleActions =
-    canEditOrder && selectedOrder != null && !isOrderFormallyClosed(selectedOrder) && selectedOrder.status !== "cancelled";
+    !estimate &&
+    canEditOrder &&
+    selectedOrder != null &&
+    !isOrderFormallyClosed(selectedOrder) &&
+    selectedOrder.status !== "cancelled";
   const showCancelClosedAction =
+    !estimate &&
     selectedOrder != null &&
     canOfferCancelOrderAction({
       order: selectedOrder,

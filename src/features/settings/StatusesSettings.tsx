@@ -57,6 +57,7 @@ const entities: StatusEntity[] = ["order", "estimate", "lead", "invoice", "trans
 function semanticLabelKey(action: StatusSemanticAction) {
   if (action === "close") return "settings.statuses.semantic.close";
   if (action === "cancel") return "settings.statuses.semantic.cancel";
+  if (action === "accept") return "settings.statuses.semantic.accept";
   return "settings.statuses.semantic.normal";
 }
 
@@ -134,7 +135,7 @@ export function StatusesSettings() {
     }
     createStatus.mutate(
       {
-        entity: "order",
+        entity,
         name: form.name,
         color: form.color,
         statusGroup: form.statusGroup,
@@ -254,6 +255,11 @@ export function StatusesSettings() {
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <EntityStatusBadge name={status.name} color={status.color} />
+                            {item === "estimate" && status.semanticAction !== "normal" ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground">
+                                {t(semanticLabelKey(status.semanticAction))}
+                              </span>
+                            ) : null}
                             {status.isDefault ? (
                               <span className="text-xs text-muted-foreground">{t("settings.statuses.default")}</span>
                             ) : null}
@@ -280,7 +286,7 @@ export function StatusesSettings() {
                             </p>
                           ) : null}
                         </div>
-                        {canEdit && item === "order" ? (
+                        {canEdit && (item === "order" || item === "estimate") ? (
                           <div className="flex flex-wrap gap-1">
                             <Button
                               type="button"
@@ -328,25 +334,64 @@ export function StatusesSettings() {
                             >
                               {status.isActive ? t("settings.statuses.deactivate") : t("settings.statuses.activate")}
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSemantic.mutate({ statusId: status.id, action: "close" })}
-                            >
-                              {t("settings.statuses.assignClose")}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSemantic.mutate({ statusId: status.id, action: "cancel" })}
-                            >
-                              {t("settings.statuses.assignCancel")}
-                            </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => setReplaceFrom(status)}>
-                              {t("settings.statuses.replace")}
-                            </Button>
+                            {item === "order" ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSemantic.mutate({ statusId: status.id, action: "close" })}
+                                >
+                                  {t("settings.statuses.assignClose")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSemantic.mutate({ statusId: status.id, action: "cancel" })}
+                                >
+                                  {t("settings.statuses.assignCancel")}
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    updateStatus.mutate({ id: status.id, semanticAction: "normal" })
+                                  }
+                                >
+                                  {t("settings.statuses.semantic.normal")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    updateStatus.mutate({ id: status.id, semanticAction: "accept" })
+                                  }
+                                >
+                                  {t("settings.statuses.assignAccept")}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    updateStatus.mutate({ id: status.id, semanticAction: "cancel" })
+                                  }
+                                >
+                                  {t("settings.statuses.assignReject")}
+                                </Button>
+                              </>
+                            )}
+                            {item === "order" ? (
+                              <Button type="button" size="sm" variant="outline" onClick={() => setReplaceFrom(status)}>
+                                {t("settings.statuses.replace")}
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               size="icon-sm"

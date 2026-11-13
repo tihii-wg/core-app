@@ -145,11 +145,12 @@ export async function appendOrderMaterialLines(
   drafts: readonly OrderMaterial[],
   workspaceId: string | undefined,
 ): Promise<Order> {
-  if (drafts.length === 1 && isCatalogOrderMaterial(drafts[0]!)) {
+  const fresh = await getOrder(orderId, workspaceId);
+  // Estimates never issue stock — skip add-and-issue RPC (warehouse optional).
+  if (fresh.kind !== "estimate" && drafts.length === 1 && isCatalogOrderMaterial(drafts[0]!)) {
     const viaRpc = await addCatalogMaterialViaRpc(orderId, drafts[0]!);
     if (viaRpc) return viaRpc;
   }
-  const fresh = await getOrder(orderId, workspaceId);
   return updateOrder(
     {
       orderId,

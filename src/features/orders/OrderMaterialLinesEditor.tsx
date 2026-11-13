@@ -85,6 +85,8 @@ type OrderMaterialLinesEditorProps = {
   singleLine?: boolean;
   /** @deprecated Prefer `singleLine` — same behaviour. */
   hideAddRemove?: boolean;
+  /** Estimate form: nothing is written off now — the warehouse is only where acceptance will issue from. */
+  estimate?: boolean;
 };
 
 function quantityValidationMessage(value: unknown, t: TFunction): true | string {
@@ -118,6 +120,7 @@ export default function OrderMaterialLinesEditor({
   initialCatalogItem = null,
   singleLine = false,
   hideAddRemove = false,
+  estimate = false,
 }: OrderMaterialLinesEditorProps) {
   const { t, i18n } = useTranslation();
   const qtyLocale = i18n.language;
@@ -379,7 +382,9 @@ export default function OrderMaterialLinesEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{t("orders.form.immediateIssueHint")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(estimate ? "orders.estimates.warehouseHint" : "orders.form.immediateIssueHint")}
+                  </p>
                 </div>
               )}
               <InventoryItemCombobox
@@ -397,7 +402,9 @@ export default function OrderMaterialLinesEditor({
                   {addStockError}
                 </p>
               ) : null}
-              <p className="text-xs text-muted-foreground">{t("orders.form.materialsImmediateHint")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t(estimate ? "orders.estimates.materialsHint" : "orders.form.materialsImmediateHint")}
+              </p>
               <AddInventoryItemDialog
                 open={createOpen}
                 onOpenChange={setCreateOpen}

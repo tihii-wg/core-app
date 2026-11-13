@@ -14,6 +14,8 @@ import { prepareOrderForCloseOrPayment } from "../requestCloseOrder";
 import { useConfirmOrderMileageBeforeClose } from "../useConfirmOrderMileageBeforeClose";
 import type { OrderStaticContextValue, OrderEditingContextValue } from "./OrderDetailContext";
 import { useOrderLineActions } from "./useOrderLineActions";
+import { estimateCardVisibility, isEstimateOrder } from "../orderEstimates";
+import { useConvertEstimateToOrder } from "../useEstimateMutations";
 import { buildOrderDetailTabs } from "./buildOrderDetailTabs";
 import { updateOrderAssignee, updateOrderTeam } from "./orderAssigneeUpdates";
 
@@ -21,6 +23,7 @@ import { updateOrderAssignee, updateOrderTeam } from "./orderAssigneeUpdates";
 export function useOrderDetailModelView(ctx: Record<string, any>) {
   const { t, i18n } = useTranslation();
   const mileageConfirm = useConfirmOrderMileageBeforeClose();
+  const convertEstimate = useConvertEstimateToOrder();
   const {
     selectedOrder,
     detailPanelOpen,
@@ -304,6 +307,7 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
   const serviceLineCount = serviceLines.length;
   const materialLineCount = materialLines.length;
   const attachmentCount = orderAttachments.length;
+  const cardVisibility = estimateCardVisibility(selectedOrder);
   const detailTabs = useMemo(
     () =>
       buildOrderDetailTabs({
@@ -316,20 +320,57 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
         attachmentCount,
         isDesktopFeedLayout,
         feedItemCount,
+        showPayments: cardVisibility.showPayments,
       }),
-    [t, industrySlug, serviceLineCount, materialLineCount, linkedPaymentCount, attachmentsFetched, attachmentCount, isDesktopFeedLayout, feedItemCount],
+    [
+      t,
+      industrySlug,
+      serviceLineCount,
+      materialLineCount,
+      linkedPaymentCount,
+      attachmentsFetched,
+      attachmentCount,
+      isDesktopFeedLayout,
+      feedItemCount,
+      cardVisibility.showPayments,
+    ],
   );
+
+  async function confirmConvertEstimate(): Promise<boolean> {
+    return confirm({
+      title: t("orders.estimates.convertConfirmTitle"),
+      description: t("orders.estimates.convertConfirmBody"),
+      confirmLabel: t("orders.estimates.convertConfirmAction"),
+    });
+  }
+
+  async function handleConvertEstimate() {
+    if (!selectedOrder || !isEstimateOrder(selectedOrder)) return;
+    if (!(await confirmConvertEstimate())) return;
+    try {
+      const next = await convertEstimate.mutateAsync(selectedOrder.id);
+      onOrderUpdated(next);
+    } catch {
+      // toast from mutation
+    }
+  }
 
   async function handleStatusSelect(value: string) {
     if (!selectedOrder || !value || value === currentUnifiedStatus?.id) return;
     const option = statusOptions.find((item: { id: string; semanticAction?: string | null; systemStatus?: string }) => item.id === value);
+    if (isEstimateOrder(selectedOrder) && option?.semanticAction === "accept") {
+      if (!(await confirmConvertEstimate())) return;
+    }
     if (option?.semanticAction === "close" || option?.systemStatus === "closed") {
       if (!(await settleInlineEdit())) return;
       await requestClose();
       return;
     }
     const result = await changeOrderStatus(value);
-    if (result.ok) return;
+    if (result.ok) {
+      if (result.order) onOrderUpdated(result.order);
+      return;
+    }
     const minPaidBlock = assertMinPaidOrExplain({
       order: selectedOrder,
       targetDefinition: option?.definition,
@@ -395,6 +436,9 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
     showFooter,
     showCancelAction,
     showFooterDeleteAction,
+    showConvertEstimate: Boolean(cardVisibility.showConvertButton && canEditOrder),
+    convertEstimatePending: convertEstimate.isPending,
+    handleConvertEstimate,
     canSaveAndClose,
     lifecycleBusy,
     footerSavePending,
