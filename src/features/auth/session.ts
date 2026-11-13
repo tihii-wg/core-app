@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { NavigateFunction } from "react-router-dom";
 import { resetProfileTheme, type ProfileRecord } from "../../services/apiProfiles";
 import { clearPasswordRecoveryFlag } from "./passwordRecovery";
+import { clearSessionIdleActivity } from "./sessionIdleTimeout";
 
 const publicAuthPath = /\/(login|register|forgot-password|reset-password)\/?$/;
 
@@ -11,6 +12,7 @@ export function isPublicAuthPath(pathname: string) {
 
 export function finishSignOut(queryClient: QueryClient, navigate: NavigateFunction) {
   clearPasswordRecoveryFlag();
+  clearSessionIdleActivity();
   queryClient.clear();
   resetProfileTheme();
 

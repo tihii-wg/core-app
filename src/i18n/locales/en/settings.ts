@@ -1629,6 +1629,38 @@ export default {
       verifying: "Verifying...",
       verify: "Verify and enable",
     },
+    idleTimeout: {
+      title: "Automatic logout on inactivity",
+      description:
+        "Sign out this device after a period with no mouse, keyboard, or touch activity. The strictest timeout among all workspaces you belong to applies.",
+      label: "Idle timeout",
+      hint: "Recommended: 12 hours. Turning this off cancels any pending warning on this device after the next workspace refresh.",
+      recommended: "recommended",
+      memberNote: "Only the workspace owner or admin can change this setting.",
+      schemaRequiredTitle: "Database update required",
+      schemaRequiredDescription:
+        "Apply supabase/manual/20261115100000_workspace_session_idle_timeout.PRODUCTION.sql on MAIN, then reload this page.",
+      devMinuteNote: "1 minute is a DEV-only override stored in this browser (not saved to the database).",
+      options: {
+        off: "Off",
+        minutes_one: "{{count}} min",
+        minutes_other: "{{count}} min",
+        hours_one: "{{count}} h",
+        hours_other: "{{count}} h",
+      },
+      toast: {
+        saving: "Saving idle timeout...",
+        saved: "Idle timeout saved",
+        failed: "Could not save idle timeout",
+      },
+      errors: {
+        schemaRequired:
+          "Idle timeout needs the latest database update (supabase/manual/20261115100000_workspace_session_idle_timeout.PRODUCTION.sql).",
+        invalidValue: "Choose a valid idle timeout.",
+        ownerAdminOnly: "Only the workspace owner or admin can change idle timeout.",
+        devMinuteNotPersisted: "The 1-minute option is for local testing only and is not saved to the database.",
+      },
+    },
   },
   import: {
     title: "Import Data",

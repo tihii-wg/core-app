@@ -1,6 +1,7 @@
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import type { User } from "@supabase/supabase-js";
 import { ensureSignupBootstrap, login as logInApi } from "../../services/apiAuth";
+import { rememberSessionIdleActivity } from "./sessionIdleTimeout";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../../services/apiProfiles";
 import { languageFromPath } from "../../i18n/languages";
@@ -16,6 +17,7 @@ export function useLogin() {
   const language = languageFromPath(useLocation().pathname);
 
   async function finishLogin(user: User) {
+    rememberSessionIdleActivity(user.id);
     queryClient.clear();
     queryClient.setQueryData(["user"], user);
     await queryClient.prefetchQuery({ queryKey: ["profiles"], queryFn: getProfile, retry: false });

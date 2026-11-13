@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import LoginForm from "../features/auth/LoginForm";
+import { SESSION_IDLE_LOGOUT_NOTICE_KEY } from "../features/auth/sessionIdleTimeout";
 import Logo from "../ui/Logo";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/Select";
 import { isAppLanguage, languageFromPath, languageNames, supportedLanguages } from "../i18n/languages";
@@ -12,6 +14,18 @@ export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const language = languageFromPath(useLocation().pathname);
+  const [idleNotice, setIdleNotice] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SESSION_IDLE_LOGOUT_NOTICE_KEY) === "1") {
+        sessionStorage.removeItem(SESSION_IDLE_LOGOUT_NOTICE_KEY);
+        setIdleNotice(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   function onSwitchToRegister() {
     navigate(`/${language}/register`);
@@ -55,8 +69,14 @@ export function LoginPage() {
 
           {/* Form */}
           <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-
-            
+            {idleNotice ? (
+              <p
+                role="status"
+                className="mb-4 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground"
+              >
+                {t("auth.idleTimeout.loginNotice")}
+              </p>
+            ) : null}
             <LoginForm />
 
             <div className="mt-4 text-center">

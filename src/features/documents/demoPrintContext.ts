@@ -208,6 +208,7 @@ function buildWorkspace(input: DemoPrintContextInput, t: (key: string) => string
     id: "demo-workspace",
     name,
     ownerId: "demo-owner",
+    sessionIdleTimeoutMinutes: null,
     industryId: null,
     industryName: null,
     industrySlug: input.industrySlug?.trim() || "auto_repair",

@@ -131,6 +131,15 @@ export default {
       changeFailed: "Unable to change password. Please try again.",
     },
   },
+  idleTimeout: {
+    warningTitle: "Still there?",
+    warningBody_one: "You will be signed out in {{count}} second due to inactivity.",
+    warningBody_other: "You will be signed out in {{count}} seconds due to inactivity.",
+    secondsUnit: "s",
+    continue: "Continue working",
+    signOut: "Sign out",
+    loginNotice: "You were signed out due to inactivity.",
+  },
   errors: {
     invalidCredentials: "Invalid login or password",
     userNotFound: "User not found",

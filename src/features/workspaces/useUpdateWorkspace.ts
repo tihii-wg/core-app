@@ -9,6 +9,7 @@ import {
   updateWorkspaceOrderSettings,
   updateWorkspacePaymentStageTemplate,
   updateWorkspacePreferences,
+  updateWorkspaceSessionIdleTimeout,
   updateWorkspaceTaxInvoiceSettings,
   type WorkspacePreferencesInput,
 } from "../../services/apiWorkspaces";
@@ -138,6 +139,21 @@ export function useUpdateWorkspaceInvoiceSettings() {
     },
     onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
+    },
+  });
+}
+
+/** Owner or admin — idle auto-logout minutes (null = off). */
+export function useUpdateWorkspaceSessionIdleTimeout() {
+  const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
+  return useMutation({
+    mutationFn: ({ workspaceId, minutes }: { workspaceId: string; minutes: number | null }) => {
+      guardWrite();
+      return updateWorkspaceSessionIdleTimeout(workspaceId, minutes);
+    },
+    onSuccess(workspace, { workspaceId }) {
+      invalidateWorkspace(queryClient, workspaceId, workspace);
     },
   });
 }

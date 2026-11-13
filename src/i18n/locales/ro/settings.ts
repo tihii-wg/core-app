@@ -1636,6 +1636,40 @@ const settings: Messages<typeof en> = {
       verifying: "Se verifică...",
       verify: "Verificați și activați",
     },
+    idleTimeout: {
+      title: "Deconectare automată la inactivitate",
+      description:
+        "Deconectați acest dispozitiv după o perioadă fără activitate de mouse, tastatură sau atingere. Se aplică cel mai strict timeout dintre toate spațiile de lucru în care sunteți membru.",
+      label: "Timeout de inactivitate",
+      hint: "Recomandat: 12 h. Dezactivarea anulează avertismentul pe acest dispozitiv după următoarea reîncărcare a spațiilor de lucru.",
+      recommended: "recomandat",
+      memberNote: "Doar proprietarul sau administratorul spațiului de lucru poate modifica această setare.",
+      schemaRequiredTitle: "Este necesară o actualizare a bazei de date",
+      schemaRequiredDescription:
+        "Aplicați supabase/manual/20261115100000_workspace_session_idle_timeout.PRODUCTION.sql pe MAIN, apoi reîncărcați pagina.",
+      devMinuteNote: "1 minut este o suprascriere doar pentru DEV în acest browser (nu se salvează în baza de date).",
+      options: {
+        off: "Dezactivat",
+        minutes_one: "{{count}} min",
+        minutes_few: "{{count}} min",
+        minutes_other: "{{count}} min",
+        hours_one: "{{count}} h",
+        hours_few: "{{count}} h",
+        hours_other: "{{count}} h",
+      },
+      toast: {
+        saving: "Se salvează timeout-ul...",
+        saved: "Timeout-ul de inactivitate a fost salvat",
+        failed: "Timeout-ul nu a putut fi salvat",
+      },
+      errors: {
+        schemaRequired:
+          "Timeout-ul de inactivitate necesită actualizarea bazei de date (supabase/manual/20261115100000_workspace_session_idle_timeout.PRODUCTION.sql).",
+        invalidValue: "Alegeți o valoare validă pentru timeout.",
+        ownerAdminOnly: "Doar proprietarul sau administratorul poate modifica timeout-ul.",
+        devMinuteNotPersisted: "Opțiunea de 1 minut este doar pentru testare locală și nu se salvează în baza de date.",
+      },
+    },
   },
   import: {
     title: "Import date",

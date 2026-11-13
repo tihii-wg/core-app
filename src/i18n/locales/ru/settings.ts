@@ -1639,6 +1639,42 @@ const settings: Messages<typeof en> = {
       verifying: "Проверка...",
       verify: "Подтвердить и включить",
     },
+    idleTimeout: {
+      title: "Автоматический выход при бездействии",
+      description:
+        "Выход с этого устройства после периода без действий мышью, клавиатурой или касаниями. Действует самый строгий таймаут среди всех рабочих пространств, в которых вы состоите.",
+      label: "Таймаут бездействия",
+      hint: "Рекомендуется: 12 ч. Выключение отменяет предупреждение на этом устройстве после следующего обновления списка пространств.",
+      recommended: "рекомендуется",
+      memberNote: "Изменять этот параметр может только владелец или администратор рабочего пространства.",
+      schemaRequiredTitle: "Требуется обновление базы данных",
+      schemaRequiredDescription:
+        "Примените supabase/manual/20261115100000_workspace_session_idle_timeout.PRODUCTION.sql на MAIN, затем обновите страницу.",
+      devMinuteNote: "1 минута — только DEV-переопределение в этом браузере (в базу не сохраняется).",
+      options: {
+        off: "Выключено",
+        minutes_one: "{{count}} мин",
+        minutes_few: "{{count}} мин",
+        minutes_many: "{{count}} мин",
+        minutes_other: "{{count}} мин",
+        hours_one: "{{count}} ч",
+        hours_few: "{{count}} ч",
+        hours_many: "{{count}} ч",
+        hours_other: "{{count}} ч",
+      },
+      toast: {
+        saving: "Сохранение таймаута...",
+        saved: "Таймаут бездействия сохранён",
+        failed: "Не удалось сохранить таймаут",
+      },
+      errors: {
+        schemaRequired:
+          "Для таймаута бездействия нужно обновление БД (supabase/manual/20261115100000_workspace_session_idle_timeout.PRODUCTION.sql).",
+        invalidValue: "Выберите допустимое значение таймаута.",
+        ownerAdminOnly: "Изменять таймаут могут только владелец или администратор.",
+        devMinuteNotPersisted: "Вариант «1 минута» только для локальной проверки и не сохраняется в базу.",
+      },
+    },
   },
   import: {
     title: "Импорт данных",

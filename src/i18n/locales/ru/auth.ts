@@ -138,6 +138,17 @@ const auth: Messages<typeof en> = {
       changeFailed: "Не удалось изменить пароль. Попробуйте ещё раз.",
     },
   },
+  idleTimeout: {
+    warningTitle: "Вы ещё здесь?",
+    warningBody_one: "Вы будете выведены через {{count}} с из-за бездействия.",
+    warningBody_few: "Вы будете выведены через {{count}} с из-за бездействия.",
+    warningBody_many: "Вы будете выведены через {{count}} с из-за бездействия.",
+    warningBody_other: "Вы будете выведены через {{count}} с из-за бездействия.",
+    secondsUnit: "с",
+    continue: "Продолжить работу",
+    signOut: "Выйти",
+    loginNotice: "Вы вышли из аккаунта из-за бездействия.",
+  },
   errors: {
     invalidCredentials: "Неверный логин или пароль",
     userNotFound: "Пользователь не найден",

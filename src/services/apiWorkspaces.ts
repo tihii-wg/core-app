@@ -39,6 +39,7 @@ type ListedWorkspace = {
   avatar_path?: string | null;
   owner_id?: string | null;
   industry_id?: string | null;
+  session_idle_timeout_minutes?: number | null;
 };
 
 export type ListedWorkspaceMembership = {
@@ -124,6 +125,30 @@ export function isLineCommentsVisibilityColumnSupported() {
   return lineCommentsVisibilityColumnSupported;
 }
 
+function isMissingSessionIdleTimeoutColumn(error: { code?: string; message?: string }) {
+  return (
+    (error.code === "42703" || error.code === "PGRST204" || /does not exist|schema cache/i.test(error.message ?? "")) &&
+    error.message?.includes("session_idle_timeout_minutes") === true
+  );
+}
+
+/** False once a read showed the column is missing (SQL 20261115100000 not applied). */
+let sessionIdleTimeoutColumnSupported = true;
+let sessionIdleTimeoutMissingAt = 0;
+function refreshSessionIdleTimeoutSupport() {
+  if (!sessionIdleTimeoutColumnSupported && Date.now() - sessionIdleTimeoutMissingAt > 60_000) {
+    sessionIdleTimeoutColumnSupported = true;
+  }
+}
+export function isSessionIdleTimeoutColumnSupported() {
+  return sessionIdleTimeoutColumnSupported;
+}
+/** Test hook: forget cached missing-column state. */
+export function resetSessionIdleTimeoutColumnSupportForTests() {
+  sessionIdleTimeoutColumnSupported = true;
+  sessionIdleTimeoutMissingAt = 0;
+}
+
 function mentionsAttachmentStorageColumn(message?: string) {
   return message?.includes("attachment_storage") === true;
 }
@@ -149,6 +174,7 @@ function membershipSelect(options: {
   general: boolean;
   attachmentStorage: boolean;
   lineComments?: boolean;
+  sessionIdle?: boolean;
 }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
@@ -158,6 +184,7 @@ function membershipSelect(options: {
   if (options.general) fields.push(...generalSettingsColumns);
   if (options.attachmentStorage) fields.push("attachment_storage");
   if (options.lineComments) fields.push("line_comments_visibility");
+  if (options.sessionIdle) fields.push("session_idle_timeout_minutes");
   const industry = options.industry
     ? `,
     industry:industries (
@@ -181,6 +208,8 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
   if (
     error.message?.includes("avatar_path") ||
     error.message?.includes("inventory_markup") ||
+    error.message?.includes("session_idle_timeout_minutes") ||
+    error.message?.includes("line_comments_visibility") ||
     mentionsPreferenceColumn(error.message) ||
     mentionsSubscriptionColumn(error.message) ||
     mentionsGeneralSettingsColumn(error.message) ||
@@ -221,12 +250,30 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let attachmentStorage = true;
   refreshLineCommentsVisibilitySupport();
   let lineComments = lineCommentsVisibilityColumnSupported;
+  refreshSessionIdleTimeoutSupport();
+  let sessionIdle = sessionIdleTimeoutColumnSupported;
 
-  for (let attempt = 0; attempt < 16; attempt += 1) {
+  for (let attempt = 0; attempt < 18; attempt += 1) {
     const { data, error } = await run(
-      membershipSelect({ industry, avatar, markup, preferences, subscription, general, attachmentStorage, lineComments }),
+      membershipSelect({
+        industry,
+        avatar,
+        markup,
+        preferences,
+        subscription,
+        general,
+        attachmentStorage,
+        lineComments,
+        sessionIdle,
+      }),
     );
     if (!error) return data;
+    if (sessionIdle && isMissingSessionIdleTimeoutColumn(error)) {
+      sessionIdle = false;
+      sessionIdleTimeoutColumnSupported = false;
+      sessionIdleTimeoutMissingAt = Date.now();
+      continue;
+    }
     if (lineComments && isMissingLineCommentsVisibilityColumn(error)) {
       lineComments = false;
       lineCommentsVisibilityColumnSupported = false;
@@ -324,6 +371,11 @@ export type WorkspaceDetails = {
   subscriptionUpdatedAt: string | null;
   /** workspaces.attachment_storage — where new order photos are stored. Defaults to 'app'. */
   attachmentStorage: "app" | "google_drive" | "nas";
+  /**
+   * Client-enforced idle logout (minutes). null = off / column missing.
+   * Allowed: 30, 60, 120, 240, 480, 720, 1440.
+   */
+  sessionIdleTimeoutMinutes: number | null;
 };
 
 function firstRecord(value: unknown) {
@@ -450,6 +502,14 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
       record.attachment_storage === "google_drive" || record.attachment_storage === "nas"
         ? record.attachment_storage
         : "app",
+    sessionIdleTimeoutMinutes: (() => {
+      const raw = record.session_idle_timeout_minutes;
+      if (raw == null || raw === "") return null;
+      const n = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isInteger(n)) return null;
+      if (![30, 60, 120, 240, 480, 720, 1440].includes(n) && !(import.meta.env.DEV && n === 1)) return null;
+      return n;
+    })(),
   };
 }
 
@@ -822,6 +882,87 @@ export async function updateWorkspaceTaxInvoiceSettings(workspaceId: string, req
   return updateWorkspaceColumns(workspaceId, {
     require_tax_invoice_number: Boolean(requireTaxInvoiceNumber),
   });
+}
+
+export const SESSION_IDLE_DEV_OVERRIDE_KEY = "core-app:session-idle:dev-override-minutes";
+
+/** DEV-only local override (1 minute) — not persisted to the database CHECK. */
+export function readSessionIdleDevOverrideMinutes(): number | null {
+  if (!import.meta.env.DEV) return null;
+  try {
+    const raw = localStorage.getItem(SESSION_IDLE_DEV_OVERRIDE_KEY);
+    return raw === "1" ? 1 : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionIdleDevOverrideMinutes(minutes: number | null) {
+  if (!import.meta.env.DEV) return;
+  try {
+    if (minutes === 1) localStorage.setItem(SESSION_IDLE_DEV_OVERRIDE_KEY, "1");
+    else localStorage.removeItem(SESSION_IDLE_DEV_OVERRIDE_KEY);
+  } catch {
+    // private mode
+  }
+}
+
+/**
+ * Persist idle-timeout minutes via RPC (owner or admin). Pass null to turn off.
+ * In DEV, selecting 1 minute uses a localStorage override (DB CHECK does not allow 1).
+ */
+export async function updateWorkspaceSessionIdleTimeout(
+  workspaceId: string,
+  minutes: number | null,
+): Promise<WorkspaceDetails> {
+  if (!sessionIdleTimeoutColumnSupported) {
+    throw new Error(i18n.t("settings.security.idleTimeout.errors.schemaRequired"));
+  }
+
+  if (import.meta.env.DEV && minutes === 1) {
+    writeSessionIdleDevOverrideMinutes(1);
+    const workspace = await getWorkspace(workspaceId);
+    if (!workspace) throw new Error(ownerOnlyWorkspaceMessage());
+    return { ...workspace, sessionIdleTimeoutMinutes: 1 };
+  }
+
+  writeSessionIdleDevOverrideMinutes(null);
+
+  const normalized =
+    minutes == null || minutes === 0
+      ? null
+      : [30, 60, 120, 240, 480, 720, 1440].includes(minutes)
+        ? minutes
+        : null;
+  if (minutes != null && normalized == null) {
+    throw new Error(i18n.t("settings.security.idleTimeout.errors.invalidValue"));
+  }
+
+  const user = await currentUser();
+  await requireWorkspaceMembership(user.id, workspaceId);
+
+  const { error } = await supabase.rpc("crm_set_workspace_session_idle_timeout", {
+    p_workspace_id: workspaceId,
+    p_minutes: normalized,
+  });
+  if (error) {
+    if (
+      /session_idle_timeout_minutes|crm_set_workspace_session_idle_timeout/i.test(error.message) &&
+      (error.code === "42703" || error.code === "PGRST204" || error.code === "PGRST202" || error.code === "42883")
+    ) {
+      sessionIdleTimeoutColumnSupported = false;
+      sessionIdleTimeoutMissingAt = Date.now();
+      throw new Error(i18n.t("settings.security.idleTimeout.errors.schemaRequired"));
+    }
+    if (/owner or admin only|42501/i.test(error.message)) {
+      throw new Error(i18n.t("settings.security.idleTimeout.errors.ownerAdminOnly"));
+    }
+    throw new Error(error.message);
+  }
+
+  const workspace = await getWorkspace(workspaceId);
+  if (!workspace) throw new Error(ownerOnlyWorkspaceMessage());
+  return workspace;
 }
 
 /** Persist the workspace default payment-stage template; pass null to fall back to the industry default. */

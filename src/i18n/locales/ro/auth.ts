@@ -136,6 +136,16 @@ const auth: Messages<typeof en> = {
       changeFailed: "Nu s-a putut schimba parola. Vă rugăm să încercați din nou.",
     },
   },
+  idleTimeout: {
+    warningTitle: "Mai sunteți aici?",
+    warningBody_one: "Veți fi deconectat în {{count}} s din cauza inactivității.",
+    warningBody_few: "Veți fi deconectat în {{count}} s din cauza inactivității.",
+    warningBody_other: "Veți fi deconectat în {{count}} s din cauza inactivității.",
+    secondsUnit: "s",
+    continue: "Continuați lucrul",
+    signOut: "Deconectare",
+    loginNotice: "Ați fost deconectat din cauza inactivității.",
+  },
   errors: {
     invalidCredentials: "Email sau parolă incorectă",
     userNotFound: "Utilizatorul nu a fost găsit",
