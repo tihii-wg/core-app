@@ -164,6 +164,8 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
     order,
     isOwnerByOwnerId: closedOrderPerms.isOwnerByOwnerId,
     ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+    workspaceRole: closedOrderPerms.role,
+    grants: closedOrderPerms.grants,
   });
   const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? order.clientId || null : null);
   const { client: orderClient } = useGetClient(industryBlocks.siteAddress ? order.clientId || null : null);

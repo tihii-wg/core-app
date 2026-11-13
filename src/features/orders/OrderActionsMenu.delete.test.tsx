@@ -44,13 +44,21 @@ vi.mock("./useCloseOrder", () => ({
 vi.mock("./useClosedOrderPermissions", () => ({
   useClosedOrderActionPermissions: () => ({
     role: "owner",
-    grants: { cancelClosed: [], deleteClosed: [] },
+    grants: { cancelClosed: [], deleteClosed: [], closedFullAccess: [] },
     isLoading: false,
     isError: false,
     canCancelClosed: true,
     canDeleteClosed: true,
+    isOwnerByOwnerId: true,
+    ownerCanManageClosedOrders: true,
+    hasClosedFullAccess: false,
+    actsAsOwnerForClosedOrders: true,
+    canManageClosedContent: false,
   }),
-  useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
+  useClosedOrderPermissionGrants: () => ({
+    data: { cancelClosed: [], deleteClosed: [], closedFullAccess: [] },
+    isLoading: false,
+  }),
 }));
 
 vi.mock("../finance/usePayments", () => ({

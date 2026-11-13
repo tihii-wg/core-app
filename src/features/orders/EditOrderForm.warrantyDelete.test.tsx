@@ -54,6 +54,10 @@ vi.mock("./useClosedOrderPermissions", () => ({
     isOwnerByOwnerId: true,
     ownerCanManageClosedOrders: true,
     canManageClosedContent: false,
+    role: "owner",
+    grants: { cancelClosed: [], deleteClosed: [], closedFullAccess: [] },
+    hasClosedFullAccess: false,
+    actsAsOwnerForClosedOrders: true,
   }),
 }));
 vi.mock("../profiles/useGetProfile", () => ({

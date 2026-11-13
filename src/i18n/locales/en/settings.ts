@@ -216,9 +216,10 @@ export default {
   },
   closedOrderPermissions: {
     title: "Closed Order Permissions",
-    description: "Decide which workspace roles may cancel or delete orders after they are formally closed. These two permissions are independent.",
+    description:
+      "Decide which workspace roles may cancel, delete, or fully manage orders after they are formally closed. Cancel and delete grants are independent; full access includes both and more.",
     ownerAlways:
-      "Admin, Manager, and Member cancel/delete grants are independent of the owner manage-closed setting. The owner needs that setting enabled to cancel or delete closed orders.",
+      "Admin, Manager, and Member cancel/delete grants are independent of the owner manage-closed setting. The owner needs that setting enabled to cancel or delete closed orders. Full access for a role does not need that setting.",
     manageTitle: "Owner cancel/delete of closed orders",
     manageLabel: "Allow the owner to cancel and delete closed orders",
     manageDescription:
@@ -228,10 +229,15 @@ export default {
       saved: "Owner closed-order setting saved",
       failed: "Could not save owner closed-order setting",
     },
+    fullAccessTitle: "Full access (same as owner)",
+    fullAccessDescription:
+      "Selected roles get the same control as the workspace owner over closed and cancelled orders: cancel, delete (with the same invoice/warranty/payment safeguards), edit cancelled orders, reopen, and unlink warranty. This does not grant other owner powers (settings, team, billing, integrations).",
     cancelTitle: "Cancel closed orders",
-    cancelDescription: "Allow selected roles to cancel an order that is already closed. Cancellation keeps the order and its history; it does not delete warranty or financial records.",
+    cancelDescription:
+      "Allow selected roles to cancel an order that is already closed. Cancellation keeps the order and its history; it does not delete warranty or financial records. Roles with full access already include this.",
     deleteTitle: "Delete closed orders",
-    deleteDescription: "Allow selected roles to permanently delete a closed order. Existing warranty, invoice, payment, and inventory safeguards still block unsafe deletes.",
+    deleteDescription:
+      "Allow selected roles to permanently delete a closed order. Existing warranty, invoice, payment, and inventory safeguards still block unsafe deletes. Roles with full access already include this.",
     save: "Save closed order permissions",
     loadFailed: "Closed order permissions could not be loaded",
     toast: {
@@ -240,9 +246,12 @@ export default {
       failed: "Could not save closed order permissions",
     },
     errors: {
-      schemaRequired: "Closed order permissions require the reviewed database script. Apply supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql on MAIN after review.",
+      schemaRequired:
+        "Closed order permissions require the reviewed database script. Apply supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql on MAIN after review.",
       manageSchemaRequired:
         "Owner closed-order management requires the reviewed database script. Apply supabase/manual/20261105170000_owner_manage_closed_orders.PRODUCTION.sql on MAIN after review.",
+      fullAccessSchemaRequired:
+        "Full access to closed orders requires the reviewed database script. Apply supabase/manual/20261114200000_closed_order_full_access.PRODUCTION.sql on MAIN after review.",
     },
   },
   notifications: {

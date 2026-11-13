@@ -146,7 +146,10 @@ export function OrderActionsMenu({
     order,
     isOwnerByOwnerId,
     ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+    workspaceRole: closedOrderPerms.role,
+    grants: closedOrderPerms.grants,
   });
+  const actsAsOwnerForClosed = closedOrderPerms.actsAsOwnerForClosedOrders;
   // Same gate as PaymentHistorySection + closed-content lock (no recording on locked closed orders).
   const canRecordPayment =
     visibility.showPayments &&
@@ -165,7 +168,7 @@ export function OrderActionsMenu({
   const statusLockedForMenu = estimate
     ? false
     : order.status === "cancelled"
-      ? !isOwnerByOwnerId
+      ? !actsAsOwnerForClosed
       : formallyClosed;
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions(estimate ? "estimate" : "order");
   const { mutate: moveOnBoard, isPending: isUnifiedStatusUpdating } = useMoveOrderOnBoard();
@@ -300,7 +303,7 @@ export function OrderActionsMenu({
                       return;
                     }
                     const move = resolveUnifiedStatusSelection(order, option, {
-                      allowReopenCancelled: isOwnerByOwnerId,
+                      allowReopenCancelled: actsAsOwnerForClosed,
                     });
                     if (!move) return;
                     const minPaidBlock = assertMinPaidOrExplain({

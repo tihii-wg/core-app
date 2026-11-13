@@ -210,7 +210,7 @@ const closedOrderPermState = vi.hoisted(() => ({
 vi.mock("./useClosedOrderPermissions", () => ({
   useClosedOrderActionPermissions: () => ({
     role: "owner",
-    grants: { cancelClosed: [], deleteClosed: [] },
+    grants: { cancelClosed: [], deleteClosed: [], closedFullAccess: [] },
     isLoading: false,
     isError: false,
     canCancelClosed: closedOrderPermState.canCancelClosed,
@@ -218,8 +218,13 @@ vi.mock("./useClosedOrderPermissions", () => ({
     canManageClosedContent: false,
     isOwnerByOwnerId: ownerIdState.isOwner,
     ownerCanManageClosedOrders: closedOrderPermState.ownerCanManageClosedOrders,
+    hasClosedFullAccess: false,
+    actsAsOwnerForClosedOrders: ownerIdState.isOwner,
   }),
-  useClosedOrderPermissionGrants: () => ({ data: { cancelClosed: [], deleteClosed: [] }, isLoading: false }),
+  useClosedOrderPermissionGrants: () => ({
+    data: { cancelClosed: [], deleteClosed: [], closedFullAccess: [] },
+    isLoading: false,
+  }),
 }));
 
 vi.mock("../services/useGetServices", () => ({

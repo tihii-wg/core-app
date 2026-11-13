@@ -11,8 +11,10 @@ import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import {
+  actsAsOwnerForClosedOrders,
   canCancelClosedOrder,
   canDeleteClosedOrder,
+  hasClosedOrderFullAccess,
   ownerMayManageClosedOrders,
 } from "./closedOrderPermissions";
 
@@ -44,6 +46,12 @@ export function useClosedOrderActionPermissions() {
     isOwnerByOwnerId,
     ownerCanManageClosedOrders,
   });
+  const fullAccess = hasClosedOrderFullAccess(role, safeGrants);
+  const actsAsOwner = actsAsOwnerForClosedOrders({
+    isOwnerByOwnerId,
+    workspaceRole: role,
+    grants: safeGrants,
+  });
   return {
     role,
     grants: safeGrants,
@@ -51,10 +59,12 @@ export function useClosedOrderActionPermissions() {
     isError,
     isOwnerByOwnerId,
     ownerCanManageClosedOrders,
+    hasClosedFullAccess: fullAccess,
+    actsAsOwnerForClosedOrders: actsAsOwner,
     /** Always false — closed content is immutable until cancelled. */
     canManageClosedContent: false as const,
-    canCancelClosed: ownerMayManageClosed || canCancelClosedOrder(role, safeGrants),
-    canDeleteClosed: ownerMayManageClosed || canDeleteClosedOrder(role, safeGrants),
+    canCancelClosed: ownerMayManageClosed || fullAccess || canCancelClosedOrder(role, safeGrants),
+    canDeleteClosed: ownerMayManageClosed || fullAccess || canDeleteClosedOrder(role, safeGrants),
   };
 }
 
@@ -64,9 +74,10 @@ export function useSaveClosedOrderPermissionGrants() {
   return useMutation({
     mutationFn: (grants: ClosedOrderPermissionGrants) => saveClosedOrderPermissionGrants(workspaceId, grants),
     onSuccess: (saved) => {
-      if (workspaceId) {
-        queryClient.setQueryData(closedOrderPermissionsQueryKey(workspaceId), saved);
-      }
+      if (!workspaceId) return;
+      queryClient.setQueryData(closedOrderPermissionsQueryKey(workspaceId), saved);
+      queryClient.invalidateQueries({ queryKey: closedOrderPermissionsQueryKey(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
 }

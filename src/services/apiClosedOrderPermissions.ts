@@ -4,6 +4,7 @@ import supabase from "./supabase";
 export const CLOSED_ORDER_PERMISSIONS = {
   cancelClosed: "orders.cancel_closed",
   deleteClosed: "orders.delete_closed",
+  closedFullAccess: "orders.closed_full_access",
 } as const;
 
 export type ClosedOrderPermission =
@@ -15,17 +16,32 @@ export type ClosedOrderGrantableRole = (typeof CLOSED_ORDER_GRANTABLE_ROLES)[num
 export type ClosedOrderPermissionGrants = {
   cancelClosed: ReadonlyArray<ClosedOrderGrantableRole>;
   deleteClosed: ReadonlyArray<ClosedOrderGrantableRole>;
+  closedFullAccess: ReadonlyArray<ClosedOrderGrantableRole>;
 };
 
-const EMPTY_GRANTS: ClosedOrderPermissionGrants = { cancelClosed: [], deleteClosed: [] };
+const EMPTY_GRANTS: ClosedOrderPermissionGrants = {
+  cancelClosed: [],
+  deleteClosed: [],
+  closedFullAccess: [],
+};
+
+const ALL_PERMISSION_KEYS = [
+  CLOSED_ORDER_PERMISSIONS.cancelClosed,
+  CLOSED_ORDER_PERMISSIONS.deleteClosed,
+  CLOSED_ORDER_PERMISSIONS.closedFullAccess,
+] as const;
 
 function requireWorkspaceId(workspaceId: string | undefined) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
   return workspaceId;
 }
 
-function isMissingRelationError(error: { code?: string } | null | undefined) {
-  return error?.code === "PGRST205" || error?.code === "42P01";
+function isMissingRelationError(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  if (error.code === "PGRST205" || error.code === "42P01") return true;
+  // Constraint / unknown permission key before SQL applied.
+  if (error.code === "23514") return true;
+  return /closed_full_access|permission_check|does not exist|schema cache/i.test(error.message ?? "");
 }
 
 /**
@@ -40,7 +56,13 @@ export function roleHasClosedOrderPermission(
 ): boolean {
   if (!grants) return false;
   if (workspaceRole !== "admin" && workspaceRole !== "manager" && workspaceRole !== "member") return false;
-  const list = permission === CLOSED_ORDER_PERMISSIONS.cancelClosed ? grants.cancelClosed : grants.deleteClosed;
+  if (permission === CLOSED_ORDER_PERMISSIONS.closedFullAccess) {
+    return grants.closedFullAccess.includes(workspaceRole);
+  }
+  // Full access implies cancel + delete.
+  if (grants.closedFullAccess.includes(workspaceRole)) return true;
+  const list =
+    permission === CLOSED_ORDER_PERMISSIONS.cancelClosed ? grants.cancelClosed : grants.deleteClosed;
   return list.includes(workspaceRole);
 }
 
@@ -60,18 +82,20 @@ export async function getClosedOrderPermissionGrants(
 
   const cancelClosed: ClosedOrderGrantableRole[] = [];
   const deleteClosed: ClosedOrderGrantableRole[] = [];
+  const closedFullAccess: ClosedOrderGrantableRole[] = [];
   for (const row of data ?? []) {
     const role = String(row.workspace_role ?? "") as ClosedOrderGrantableRole;
     if (!CLOSED_ORDER_GRANTABLE_ROLES.includes(role)) continue;
     if (row.permission === CLOSED_ORDER_PERMISSIONS.cancelClosed) cancelClosed.push(role);
     if (row.permission === CLOSED_ORDER_PERMISSIONS.deleteClosed) deleteClosed.push(role);
+    if (row.permission === CLOSED_ORDER_PERMISSIONS.closedFullAccess) closedFullAccess.push(role);
   }
-  return { cancelClosed, deleteClosed };
+  return { cancelClosed, deleteClosed, closedFullAccess };
 }
 
 /**
- * Replace grants for both permissions atomically from the owner's perspective.
- * Owner-only via RLS; never stores owner (owner is always allowed in SQL).
+ * Replace grants for all closed-order permissions atomically from the owner's perspective.
+ * Owner-only via RLS; never stores owner (owner is always allowed in SQL via owner_id).
  */
 export async function saveClosedOrderPermissionGrants(
   workspaceId: string | undefined,
@@ -83,16 +107,27 @@ export async function saveClosedOrderPermissionGrants(
     .from("workspace_role_permission_grants")
     .delete()
     .eq("workspace_id", targetWorkspaceId)
-    .in("permission", [CLOSED_ORDER_PERMISSIONS.cancelClosed, CLOSED_ORDER_PERMISSIONS.deleteClosed]);
+    .in("permission", [...ALL_PERMISSION_KEYS]);
 
   if (deleteError) {
-    if (isMissingRelationError(deleteError)) throw new Error(i18n.t("settings.closedOrderPermissions.errors.schemaRequired"));
+    if (isMissingRelationError(deleteError)) {
+      throw new Error(i18n.t("settings.closedOrderPermissions.errors.fullAccessSchemaRequired"));
+    }
     throw new Error(deleteError.message);
   }
 
   const rows: { workspace_id: string; permission: string; workspace_role: string }[] = [];
-  for (const role of grants.cancelClosed) {
+  for (const role of grants.closedFullAccess) {
     if (CLOSED_ORDER_GRANTABLE_ROLES.includes(role)) {
+      rows.push({
+        workspace_id: targetWorkspaceId,
+        permission: CLOSED_ORDER_PERMISSIONS.closedFullAccess,
+        workspace_role: role,
+      });
+    }
+  }
+  for (const role of grants.cancelClosed) {
+    if (CLOSED_ORDER_GRANTABLE_ROLES.includes(role) && !grants.closedFullAccess.includes(role)) {
       rows.push({
         workspace_id: targetWorkspaceId,
         permission: CLOSED_ORDER_PERMISSIONS.cancelClosed,
@@ -101,7 +136,7 @@ export async function saveClosedOrderPermissionGrants(
     }
   }
   for (const role of grants.deleteClosed) {
-    if (CLOSED_ORDER_GRANTABLE_ROLES.includes(role)) {
+    if (CLOSED_ORDER_GRANTABLE_ROLES.includes(role) && !grants.closedFullAccess.includes(role)) {
       rows.push({
         workspace_id: targetWorkspaceId,
         permission: CLOSED_ORDER_PERMISSIONS.deleteClosed,
@@ -112,12 +147,17 @@ export async function saveClosedOrderPermissionGrants(
 
   if (rows.length > 0) {
     const { error: insertError } = await supabase.from("workspace_role_permission_grants").insert(rows);
-    if (insertError) throw new Error(insertError.message);
+    if (insertError) {
+      if (isMissingRelationError(insertError)) {
+        throw new Error(i18n.t("settings.closedOrderPermissions.errors.fullAccessSchemaRequired"));
+      }
+      throw new Error(insertError.message);
+    }
   }
 
   return getClosedOrderPermissionGrants(targetWorkspaceId);
 }
 
 export function emptyClosedOrderGrants(): ClosedOrderPermissionGrants {
-  return { ...EMPTY_GRANTS };
+  return { cancelClosed: [], deleteClosed: [], closedFullAccess: [] };
 }

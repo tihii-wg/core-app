@@ -23,8 +23,33 @@ export function ownerMayManageClosedOrders(opts: {
   return Boolean(opts.isOwnerByOwnerId && opts.ownerCanManageClosedOrders);
 }
 
+/** True when the membership role has orders.closed_full_access in this workspace. */
+export function hasClosedOrderFullAccess(
+  workspaceRole: string | null | undefined,
+  grants: ClosedOrderPermissionGrants | null | undefined,
+): boolean {
+  return roleHasClosedOrderPermission(
+    workspaceRole,
+    CLOSED_ORDER_PERMISSIONS.closedFullAccess,
+    grants,
+  );
+}
+
 /**
- * True when the order is open, or cancelled and the caller is the workspace owner.
+ * Owner_id OR role with orders.closed_full_access — equal to owner for
+ * closed/cancelled order lifecycle only (not workspace settings / billing / etc.).
+ */
+export function actsAsOwnerForClosedOrders(opts: {
+  isOwnerByOwnerId: boolean;
+  workspaceRole?: string | null;
+  grants?: ClosedOrderPermissionGrants | null;
+}): boolean {
+  if (opts.isOwnerByOwnerId) return true;
+  return hasClosedOrderFullAccess(opts.workspaceRole, opts.grants);
+}
+
+/**
+ * True when the order is open, or cancelled and the caller acts as owner for closed orders.
  * Formally closed (non-cancelled) orders are immutable for everyone — cancel first.
  * `ownerCanManageClosedOrders` only gates cancel/delete, not content mutation.
  */
@@ -32,9 +57,20 @@ export function canMutateOrderContent(opts: {
   order: Pick<Order, "closedAt" | "status">;
   isOwnerByOwnerId: boolean;
   ownerCanManageClosedOrders?: boolean;
+  workspaceRole?: string | null;
+  grants?: ClosedOrderPermissionGrants | null;
 }): boolean {
   if (!isOrderFormallyClosed(opts.order)) return true;
-  if (opts.order.status === "cancelled" && opts.isOwnerByOwnerId) return true;
+  if (
+    opts.order.status === "cancelled" &&
+    actsAsOwnerForClosedOrders({
+      isOwnerByOwnerId: opts.isOwnerByOwnerId,
+      workspaceRole: opts.workspaceRole,
+      grants: opts.grants,
+    })
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -70,7 +106,9 @@ export function canOfferCancelOrderAction(opts: {
       ownerMayManageClosedOrders({
         isOwnerByOwnerId: Boolean(opts.isOwnerByOwnerId),
         ownerCanManageClosedOrders: Boolean(opts.ownerCanManageClosedOrders),
-      }) || canCancelClosedOrder(opts.workspaceRole, opts.grants)
+      }) ||
+      hasClosedOrderFullAccess(opts.workspaceRole, opts.grants) ||
+      canCancelClosedOrder(opts.workspaceRole, opts.grants)
     );
   }
   return true;
@@ -78,7 +116,7 @@ export function canOfferCancelOrderAction(opts: {
 
 /**
  * Closed orders still require cancel-before-delete.
- * After cancel, deletion of a closed order needs owner-manage setting or orders.delete_closed.
+ * After cancel, deletion of a closed order needs owner-manage setting, full access, or orders.delete_closed.
  */
 export function canOfferDeleteClosedOrderAction(opts: {
   order: Pick<Order, "closedAt" | "status">;
@@ -92,6 +130,8 @@ export function canOfferDeleteClosedOrderAction(opts: {
     ownerMayManageClosedOrders({
       isOwnerByOwnerId: Boolean(opts.isOwnerByOwnerId),
       ownerCanManageClosedOrders: Boolean(opts.ownerCanManageClosedOrders),
-    }) || canDeleteClosedOrder(opts.workspaceRole, opts.grants)
+    }) ||
+    hasClosedOrderFullAccess(opts.workspaceRole, opts.grants) ||
+    canDeleteClosedOrder(opts.workspaceRole, opts.grants)
   );
 }

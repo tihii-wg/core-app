@@ -149,6 +149,8 @@ export function useOrderDetailModel({
       order: selectedOrder,
       isOwnerByOwnerId,
       ownerCanManageClosedOrders: closedOrderPerms.ownerCanManageClosedOrders,
+      workspaceRole: closedOrderPerms.role,
+      grants: closedOrderPerms.grants,
     });
   const closedContentLocked = selectedOrder != null && !canMutateContent;
   const assignedEmployeeId = selectedOrder?.assignedEmployeeId;

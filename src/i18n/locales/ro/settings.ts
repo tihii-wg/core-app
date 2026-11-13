@@ -219,9 +219,10 @@ const settings: Messages<typeof en> = {
   },
   closedOrderPermissions: {
     title: "Permisiuni pentru comenzi închise",
-    description: "Decideți ce roluri pot anula sau șterge comenzile după închiderea formală. Aceste două permisiuni sunt independente.",
+    description:
+      "Decideți ce roluri pot anula, șterge sau gestiona complet comenzile după închiderea formală. Anularea și ștergerea sunt independente; accesul complet le include pe ambele și mai mult.",
     ownerAlways:
-      "Permisiunile de anulare/ștergere pentru Admin, Manager și Membru sunt independente de setarea proprietarului pentru gestionarea comenzilor închise. Proprietarul are nevoie ca acea setare să fie activă pentru a anula sau șterge comenzile închise.",
+      "Permisiunile de anulare/ștergere pentru Admin, Manager și Membru sunt independente de setarea proprietarului pentru gestionarea comenzilor închise. Proprietarul are nevoie ca acea setare să fie activă pentru a anula sau șterge comenzile închise. Accesul complet al unui rol nu depinde de acea setare.",
     manageTitle: "Anularea și ștergerea comenzilor închise de către proprietar",
     manageLabel: "Permite proprietarului să anuleze și să șteargă comenzile închise",
     manageDescription:
@@ -231,10 +232,15 @@ const settings: Messages<typeof en> = {
       saved: "Setarea proprietarului a fost salvată",
       failed: "Nu s-a putut salva setarea proprietarului",
     },
+    fullAccessTitle: "Acces complet (ca proprietarul)",
+    fullAccessDescription:
+      "Rolurile selectate primesc același control ca proprietarul asupra comenzilor închise și anulate: anulare, ștergere (cu aceleași protecții pentru facturi/garanții/plăți), editarea comenzilor anulate, redeschidere și deconectarea garanției. Nu acordă alte puteri de proprietar (setări, echipă, facturare, integrări).",
     cancelTitle: "Anulare comenzi închise",
-    cancelDescription: "Permite rolurilor selectate să anuleze o comandă deja închisă. Anularea păstrează comanda și istoricul; nu șterge garanțiile sau înregistrările financiare.",
+    cancelDescription:
+      "Permite rolurilor selectate să anuleze o comandă deja închisă. Anularea păstrează comanda și istoricul; nu șterge garanțiile sau înregistrările financiare. Rolurile cu acces complet includ deja acest drept.",
     deleteTitle: "Ștergere comenzi închise",
-    deleteDescription: "Permite rolurilor selectate să șteargă definitiv o comandă închisă. Protecțiile existente pentru garanții, facturi, plăți și inventar blochează în continuare ștergerile nesigure.",
+    deleteDescription:
+      "Permite rolurilor selectate să șteargă definitiv o comandă închisă. Protecțiile existente pentru garanții, facturi, plăți și inventar blochează în continuare ștergerile nesigure. Rolurile cu acces complet includ deja acest drept.",
     save: "Salvați permisiunile pentru comenzi închise",
     loadFailed: "Permisiunile pentru comenzi închise nu au putut fi încărcate",
     toast: {
@@ -243,9 +249,12 @@ const settings: Messages<typeof en> = {
       failed: "Nu s-au putut salva permisiunile pentru comenzi închise",
     },
     errors: {
-      schemaRequired: "Permisiunile pentru comenzi închise necesită scriptul SQL revizuit. Aplicați supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql pe MAIN după revizuire.",
+      schemaRequired:
+        "Permisiunile pentru comenzi închise necesită scriptul SQL revizuit. Aplicați supabase/manual/20261104270000_closed_order_role_permissions.PRODUCTION.sql pe MAIN după revizuire.",
       manageSchemaRequired:
         "Gestionarea comenzilor închise de către proprietar necesită scriptul SQL revizuit. Aplicați supabase/manual/20261105170000_owner_manage_closed_orders.PRODUCTION.sql pe MAIN după revizuire.",
+      fullAccessSchemaRequired:
+        "Accesul complet la comenzile închise necesită scriptul SQL revizuit. Aplicați supabase/manual/20261114200000_closed_order_full_access.PRODUCTION.sql pe MAIN după revizuire.",
     },
   },
   notifications: {

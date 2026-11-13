@@ -36,12 +36,15 @@ function RoleGrantGroup({
   description,
   roles,
   disabled,
+  impliedRoles,
   onChange,
 }: {
   title: string;
   description: string;
   roles: ReadonlyArray<ClosedOrderGrantableRole>;
   disabled: boolean;
+  /** Roles that appear checked+disabled because full access already covers them. */
+  impliedRoles?: ReadonlyArray<ClosedOrderGrantableRole>;
   onChange: (role: ClosedOrderGrantableRole, enabled: boolean) => void;
 }) {
   return (
@@ -53,7 +56,8 @@ function RoleGrantGroup({
       <div className="flex flex-col gap-3">
         {CLOSED_ORDER_GRANTABLE_ROLES.map((role) => {
           const id = `${title}-${role}`;
-          const checked = roles.includes(role);
+          const implied = Boolean(impliedRoles?.includes(role));
+          const checked = implied || roles.includes(role);
           return (
             <div key={role} className="flex items-center justify-between gap-3">
               <Label htmlFor={id} className="font-normal">
@@ -62,7 +66,7 @@ function RoleGrantGroup({
               <Switch
                 id={id}
                 checked={checked}
-                disabled={disabled}
+                disabled={disabled || implied}
                 onCheckedChange={(value) => onChange(role, value)}
                 aria-label={workspaceRoleLabel(role)}
               />
@@ -133,13 +137,16 @@ function ClosedOrderPermissionsForm({ workspace }: { workspace: WorkspaceDetails
     setDraft({
       cancelClosed: [...data.cancelClosed],
       deleteClosed: [...data.deleteClosed],
+      closedFullAccess: [...(data.closedFullAccess ?? [])],
     });
     setHydrated(true);
   }, [data]);
 
   const dirty =
     hydrated &&
-    (JSON.stringify([...draft.cancelClosed].sort()) !== JSON.stringify([...(data?.cancelClosed ?? [])].sort()) ||
+    (JSON.stringify([...(draft.closedFullAccess ?? [])].sort()) !==
+      JSON.stringify([...(data?.closedFullAccess ?? [])].sort()) ||
+      JSON.stringify([...draft.cancelClosed].sort()) !== JSON.stringify([...(data?.cancelClosed ?? [])].sort()) ||
       JSON.stringify([...draft.deleteClosed].sort()) !== JSON.stringify([...(data?.deleteClosed ?? [])].sort()));
 
   async function onSave() {
@@ -188,6 +195,8 @@ function ClosedOrderPermissionsForm({ workspace }: { workspace: WorkspaceDetails
     );
   }
 
+  const fullAccessRoles = draft.closedFullAccess ?? [];
+
   return (
     <Card>
       <CardHeader>
@@ -206,9 +215,23 @@ function ClosedOrderPermissionsForm({ workspace }: { workspace: WorkspaceDetails
         </div>
 
         <RoleGrantGroup
+          title={t("settings.closedOrderPermissions.fullAccessTitle")}
+          description={t("settings.closedOrderPermissions.fullAccessDescription")}
+          roles={fullAccessRoles}
+          disabled={save.isPending}
+          onChange={(role, enabled) =>
+            setDraft((prev) => ({
+              ...prev,
+              closedFullAccess: toggleRole(prev.closedFullAccess ?? [], role, enabled),
+            }))
+          }
+        />
+
+        <RoleGrantGroup
           title={t("settings.closedOrderPermissions.cancelTitle")}
           description={t("settings.closedOrderPermissions.cancelDescription")}
           roles={draft.cancelClosed}
+          impliedRoles={fullAccessRoles}
           disabled={save.isPending}
           onChange={(role, enabled) =>
             setDraft((prev) => ({ ...prev, cancelClosed: toggleRole(prev.cancelClosed, role, enabled) }))
@@ -219,6 +242,7 @@ function ClosedOrderPermissionsForm({ workspace }: { workspace: WorkspaceDetails
           title={t("settings.closedOrderPermissions.deleteTitle")}
           description={t("settings.closedOrderPermissions.deleteDescription")}
           roles={draft.deleteClosed}
+          impliedRoles={fullAccessRoles}
           disabled={save.isPending}
           onChange={(role, enabled) =>
             setDraft((prev) => ({ ...prev, deleteClosed: toggleRole(prev.deleteClosed, role, enabled) }))

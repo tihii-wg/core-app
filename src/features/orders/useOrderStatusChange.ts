@@ -8,7 +8,6 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetStatusDefinitions } from "../statuses/useGetStatusDefinitions";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { canManageWorkspace } from "../workspaces/workspaceRoles";
@@ -27,6 +26,7 @@ import { isEstimateOrder } from "./orderEstimates";
 import { useSetEstimateStatus } from "./useEstimateMutations";
 import { useMoveOrderOnBoard } from "./useMoveOrderOnBoard";
 import { useUpdateOrderStatus } from "./useGetOrders";
+import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 
 export type OrderStatusChangeOption = UnifiedStatusOption & {
   disabled: boolean;
@@ -87,7 +87,8 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
   const workspaceRole = useActiveWorkspaceRole();
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
-  const isOwnerByOwnerId = useIsWorkspaceOwnerId();
+  const closedOrderPerms = useClosedOrderActionPermissions();
+  const actsAsOwnerForClosed = closedOrderPerms.actsAsOwnerForClosedOrders;
   const { mutateAsync: moveOnBoard, isPending: isMoving } = useMoveOrderOnBoard();
   const { mutateAsync: updateStatus, isPending: isUpdatingStatus } = useUpdateOrderStatus();
   const { mutateAsync: setEstimateStatusAsync, isPending: isSettingEstimateStatus } = useSetEstimateStatus();
@@ -97,7 +98,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
   const lifecycleStatusLocked =
     !estimate &&
     order != null &&
-    (order.status === "cancelled" ? !isOwnerByOwnerId : isOrderFormallyClosed(order));
+    (order.status === "cancelled" ? !actsAsOwnerForClosed : isOrderFormallyClosed(order));
   const paidStatusBlocked =
     !estimate && order != null && isPaidStatusOptionBlocked(order, taxInvoiceRequired) && order.status !== "paid";
 
@@ -166,7 +167,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
       }
 
       const move = resolveUnifiedStatusSelection(order, option, {
-        allowReopenCancelled: isOwnerByOwnerId,
+        allowReopenCancelled: actsAsOwnerForClosed,
       });
       if (!move) {
         // Current status is a no-op, not a hard block — leave enabled for display.
@@ -233,7 +234,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
     baseOptions,
     paidStatusLocked,
     paidStatusBlocked,
-    isOwnerByOwnerId,
+    actsAsOwnerForClosed,
     current,
     lifecycleStatusLocked,
     taxInvoiceRequired,
@@ -289,7 +290,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
       }
 
       const move = resolveUnifiedStatusSelection(order, option, {
-        allowReopenCancelled: isOwnerByOwnerId,
+        allowReopenCancelled: actsAsOwnerForClosed,
       });
       if (!move) {
         // Same status / no-op — treat as success without a server call.
@@ -358,7 +359,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
       subscriptionAllowsWrite,
       isWorkspaceOwner,
       options,
-      isOwnerByOwnerId,
+      actsAsOwnerForClosed,
       taxInvoiceRequired,
       paymentsLoading,
       netPaid,

@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  actsAsOwnerForClosedOrders,
   canCancelClosedOrder,
   canDeleteClosedOrder,
   canMutateOrderContent,
   canOfferCancelOrderAction,
   canOfferDeleteClosedOrderAction,
+  hasClosedOrderFullAccess,
   ownerMayManageClosedOrders,
 } from "./closedOrderPermissions";
 
+const emptyGrants = { cancelClosed: [] as const, deleteClosed: [] as const, closedFullAccess: [] as const };
+
 describe("closed order UI permission helpers", () => {
   it("owner without manage setting cannot cancel or delete closed orders", () => {
-    const empty = { cancelClosed: [], deleteClosed: [] };
+    const empty = emptyGrants;
     const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
     expect(canCancelClosedOrder("owner", empty)).toBe(false);
     expect(canDeleteClosedOrder("owner", empty)).toBe(false);
@@ -36,7 +40,7 @@ describe("closed order UI permission helpers", () => {
   });
 
   it("owner with manage setting can cancel and delete closed orders", () => {
-    const empty = { cancelClosed: [], deleteClosed: [] };
+    const empty = emptyGrants;
     const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
     expect(
       canOfferCancelOrderAction({
@@ -60,26 +64,26 @@ describe("closed order UI permission helpers", () => {
   });
 
   it("admin can cancel but not delete when only cancellation is granted", () => {
-    const grants = { cancelClosed: ["admin"] as const, deleteClosed: [] as const };
+    const grants = { ...emptyGrants, cancelClosed: ["admin"] as const };
     expect(canCancelClosedOrder("admin", grants)).toBe(true);
     expect(canDeleteClosedOrder("admin", grants)).toBe(false);
   });
 
   it("manager can delete but not cancel when only deletion is granted", () => {
-    const grants = { cancelClosed: [] as const, deleteClosed: ["manager"] as const };
+    const grants = { ...emptyGrants, deleteClosed: ["manager"] as const };
     expect(canCancelClosedOrder("manager", grants)).toBe(false);
     expect(canDeleteClosedOrder("manager", grants)).toBe(true);
   });
 
   it("member permissions work independently", () => {
     expect(
-      canCancelClosedOrder("member", { cancelClosed: ["member"], deleteClosed: [] }),
+      canCancelClosedOrder("member", { ...emptyGrants, cancelClosed: ["member"] }),
     ).toBe(true);
     expect(
-      canDeleteClosedOrder("member", { cancelClosed: ["member"], deleteClosed: [] }),
+      canDeleteClosedOrder("member", { ...emptyGrants, cancelClosed: ["member"] }),
     ).toBe(false);
     expect(
-      canDeleteClosedOrder("member", { cancelClosed: [], deleteClosed: ["member"] }),
+      canDeleteClosedOrder("member", { ...emptyGrants, deleteClosed: ["member"] }),
     ).toBe(true);
   });
 
@@ -89,7 +93,7 @@ describe("closed order UI permission helpers", () => {
         order: { status: "in-progress", closedAt: null },
         canWrite: true,
         workspaceRole: "member",
-        grants: { cancelClosed: [], deleteClosed: [] },
+        grants: emptyGrants,
       }),
     ).toBe(true);
   });
@@ -101,7 +105,7 @@ describe("closed order UI permission helpers", () => {
         order: closed,
         canWrite: true,
         workspaceRole: "admin",
-        grants: { cancelClosed: [], deleteClosed: ["admin"] },
+        grants: { ...emptyGrants, deleteClosed: ["admin"] },
       }),
     ).toBe(false);
     expect(
@@ -109,7 +113,7 @@ describe("closed order UI permission helpers", () => {
         order: closed,
         canWrite: true,
         workspaceRole: "admin",
-        grants: { cancelClosed: ["admin"], deleteClosed: [] },
+        grants: { ...emptyGrants, cancelClosed: ["admin"] },
       }),
     ).toBe(true);
   });
@@ -123,27 +127,27 @@ describe("closed order UI permission helpers", () => {
       canOfferDeleteClosedOrderAction({
         order: closedCancelled,
         workspaceRole: "admin",
-        grants: { cancelClosed: ["admin"], deleteClosed: [] },
+        grants: { ...emptyGrants, cancelClosed: ["admin"] },
       }),
     ).toBe(false);
     expect(
       canOfferDeleteClosedOrderAction({
         order: closedCancelled,
         workspaceRole: "admin",
-        grants: { cancelClosed: [], deleteClosed: ["admin"] },
+        grants: { ...emptyGrants, deleteClosed: ["admin"] },
       }),
     ).toBe(true);
     expect(
       canOfferDeleteClosedOrderAction({
         order: { status: "cancelled", closedAt: null },
         workspaceRole: "member",
-        grants: { cancelClosed: [], deleteClosed: [] },
+        grants: emptyGrants,
       }),
     ).toBe(true);
   });
 
   it("admin/manager/member never get owner-manage override even when setting is on", () => {
-    const empty = { cancelClosed: [], deleteClosed: [] };
+    const empty = emptyGrants;
     const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
     for (const role of ["admin", "manager", "member"] as const) {
       expect(
@@ -243,9 +247,62 @@ describe("closed order UI permission helpers", () => {
     ).toBe(false);
   });
 
+  it("full access role acts like owner for cancelled content and closed cancel/delete without owner toggle", () => {
+    const full = { ...emptyGrants, closedFullAccess: ["admin"] as const };
+    const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+    const cancelled = { status: "cancelled" as const, closedAt: "2026-01-01T00:00:00.000Z" };
+
+    expect(hasClosedOrderFullAccess("admin", full)).toBe(true);
+    expect(actsAsOwnerForClosedOrders({ isOwnerByOwnerId: false, workspaceRole: "admin", grants: full })).toBe(true);
+    expect(actsAsOwnerForClosedOrders({ isOwnerByOwnerId: false, workspaceRole: "member", grants: full })).toBe(false);
+
+    expect(
+      canMutateOrderContent({
+        order: cancelled,
+        isOwnerByOwnerId: false,
+        workspaceRole: "admin",
+        grants: full,
+      }),
+    ).toBe(true);
+    expect(
+      canMutateOrderContent({
+        order: closed,
+        isOwnerByOwnerId: false,
+        workspaceRole: "admin",
+        grants: full,
+      }),
+    ).toBe(false);
+
+    expect(
+      canOfferCancelOrderAction({
+        order: closed,
+        canWrite: true,
+        workspaceRole: "admin",
+        grants: full,
+        isOwnerByOwnerId: false,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(true);
+    expect(
+      canOfferDeleteClosedOrderAction({
+        order: cancelled,
+        workspaceRole: "admin",
+        grants: full,
+        isOwnerByOwnerId: false,
+        ownerCanManageClosedOrders: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("membership role named owner without owner_id does not get full access", () => {
+    const full = { ...emptyGrants, closedFullAccess: ["admin"] as const };
+    expect(hasClosedOrderFullAccess("owner", full)).toBe(false);
+    expect(actsAsOwnerForClosedOrders({ isOwnerByOwnerId: false, workspaceRole: "owner", grants: full })).toBe(false);
+  });
+
   it("owner manage-closed setting only unlocks cancel/delete of closed orders", () => {
     const closed = { status: "closed" as const, closedAt: "2026-01-01T00:00:00.000Z" };
-    const empty = { cancelClosed: [], deleteClosed: [] };
+    const empty = emptyGrants;
     expect(
       canMutateOrderContent({
         order: closed,

@@ -16,7 +16,7 @@ import { OrderLineWarrantyBadge } from "./OrderLineWarrantyBadge";
  */
 describe("closed-order owner override authorization", () => {
   const closed = { status: "closed" as const, closedAt: "2026-11-01T00:00:00.000Z" };
-  const emptyGrants = { cancelClosed: [] as const, deleteClosed: [] as const };
+  const emptyGrants = { cancelClosed: [] as const, deleteClosed: [] as const, closedFullAccess: [] as const };
 
   it("actual owner + setting ON: content immutable; cancel/delete allowed", () => {
     expect(ownerMayManageClosedOrders({ isOwnerByOwnerId: true, ownerCanManageClosedOrders: true })).toBe(true);
