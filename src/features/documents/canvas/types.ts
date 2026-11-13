@@ -1,4 +1,8 @@
-/** Version-3 canvas (WYSIWYG) document layout model. Coordinates are millimetres from the page top-left. */
+/**
+ * Version-3 canvas (WYSIWYG) document layout model.
+ * Coordinates (xMm/yMm) are millimetres from the content-box top-left (inside page margins),
+ * matching print placement inside `@page` margin + `.canvas-page`.
+ */
 
 import type { ColorRef } from "../colorRef";
 import type {
@@ -83,6 +87,8 @@ export type TableCanvasElement = CanvasElementBase & {
   totalsRowBackground?: ColorRef;
   totalsRowTextColor?: ColorRef;
   borders: "all" | "horizontal" | "none";
+  /** Optional radius for header row top corners (mm); outer box still uses style.radiusMm. */
+  headerRadiusMm?: number;
 };
 
 export type TotalsCanvasElement = CanvasElementBase & {
@@ -92,6 +98,8 @@ export type TotalsCanvasElement = CanvasElementBase & {
   textColor?: ColorRef;
   grandTotalBackground?: ColorRef;
   grandTotalTextColor?: ColorRef;
+  /** Optional radius for the grand-total row background (mm). */
+  grandTotalRadiusMm?: number;
 };
 
 export type RectCanvasElement = CanvasElementBase & {

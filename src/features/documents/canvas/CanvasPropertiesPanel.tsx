@@ -1,6 +1,6 @@
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { StyleColorPalette } from "../colorRef";
-import { visibleTemplateVariables } from "../templateVariables";
 import { ColorPicker } from "./ColorPicker";
 import type { CanvasDocumentLayout, CanvasElement, Fill } from "./types";
 import { Input } from "../../../ui/Input";
@@ -8,6 +8,7 @@ import { Label } from "../../../ui/Label";
 import { Button } from "../../../ui/Button";
 import { Switch } from "../../../ui/Switch";
 import type { ColorRef } from "../colorRef";
+import { groupedVisibleVariables, resolveVariableLabel } from "./variableDisplay";
 
 type Props = {
   layout: CanvasDocumentLayout;
@@ -39,6 +40,27 @@ export function CanvasPropertiesPanel({
   const { t } = useTranslation();
   const ids = new Set(selected.map((el) => el.id));
   const single = selected.length === 1 ? selected[0] : null;
+  const [variableSearch, setVariableSearch] = useState("");
+  const [advancedToken, setAdvancedToken] = useState(false);
+  const variableGroups = useMemo(() => groupedVisibleVariables(), []);
+  const filteredVariableGroups = useMemo(() => {
+    const q = variableSearch.trim().toLowerCase();
+    if (!q) return variableGroups;
+    return variableGroups
+      .map((entry) => ({
+        ...entry,
+        variables: entry.variables.filter((variable) => {
+          const label = String(t(variable.labelKey as never)).toLowerCase();
+          return label.includes(q) || variable.token.toLowerCase().includes(q);
+        }),
+      }))
+      .filter((entry) => entry.variables.length > 0);
+  }, [variableGroups, variableSearch, t]);
+
+  function clampRadius(value: number) {
+    if (!Number.isFinite(value)) return 0;
+    return Math.min(10, Math.max(0, Math.round(value * 2) / 2));
+  }
 
   function patchAll(patch: (el: CanvasElement) => CanvasElement) {
     onChangeElements((elements) => updateSelected(elements, ids, patch));
@@ -162,7 +184,7 @@ export function CanvasPropertiesPanel({
             onChange={(event) => patchAll((el) => (el.type === "text" ? { ...el, content: event.target.value } : el))}
           />
           <div className="flex flex-wrap gap-1">
-            {visibleTemplateVariables().slice(0, 8).map((variable) => (
+            {variableGroups[0]?.variables.slice(0, 8).map((variable) => (
               <Button
                 key={variable.token}
                 type="button"
@@ -175,7 +197,7 @@ export function CanvasPropertiesPanel({
                   )
                 }
               >
-                {variable.token}
+                {String(t(variable.labelKey as never))}
               </Button>
             ))}
           </div>
@@ -185,17 +207,63 @@ export function CanvasPropertiesPanel({
       {single?.type === "variable" ? (
         <div className="space-y-2">
           <div className="space-y-1">
-            <Label className="text-xs">Token</Label>
+            <Label className="text-xs">{t("settings.printTemplates.canvas.variableField")}</Label>
             <Input
+              value={variableSearch}
               disabled={disabled}
-              value={single.token}
-              onChange={(event) =>
-                patchAll((el) => (el.type === "variable" ? { ...el, token: event.target.value } : el))
-              }
+              placeholder={t("settings.printTemplates.variables.search")}
+              onChange={(event) => setVariableSearch(event.target.value)}
             />
+            <div className="max-h-48 space-y-2 overflow-auto rounded-md border border-border p-2">
+              {filteredVariableGroups.map((entry) => (
+                <div key={entry.group} className="space-y-1">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t(`settings.printTemplates.variables.groups.${entry.group}`)}
+                  </p>
+                  {entry.variables.map((variable) => {
+                    const active = single.token === variable.token;
+                    return (
+                      <button
+                        key={variable.token}
+                        type="button"
+                        disabled={disabled}
+                        className={`flex w-full flex-col rounded-md px-2 py-1.5 text-left text-sm ${
+                          active ? "bg-sky-100 text-sky-950" : "hover:bg-muted"
+                        }`}
+                        onClick={() =>
+                          patchAll((el) => (el.type === "variable" ? { ...el, token: variable.token } : el))
+                        }
+                      >
+                        <span className="font-medium">{String(t(variable.labelKey as never))}</span>
+                        <span className="text-[11px] text-muted-foreground">{variable.token}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {resolveVariableLabel(single.token, t).label}
+            </p>
           </div>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">{t("settings.printTemplates.canvas.advancedToken")}</Label>
+            <Switch checked={advancedToken} onCheckedChange={setAdvancedToken} disabled={disabled} />
+          </div>
+          {advancedToken ? (
+            <div className="space-y-1">
+              <Label className="text-xs">{t("settings.printTemplates.canvas.rawToken")}</Label>
+              <Input
+                disabled={disabled}
+                value={single.token}
+                onChange={(event) =>
+                  patchAll((el) => (el.type === "variable" ? { ...el, token: event.target.value } : el))
+                }
+              />
+            </div>
+          ) : null}
           <div className="space-y-1">
-            <Label className="text-xs">Label</Label>
+            <Label className="text-xs">{t("settings.printTemplates.canvas.fieldLabel")}</Label>
             <Input
               disabled={disabled}
               value={single.label ?? ""}
@@ -253,6 +321,92 @@ export function CanvasPropertiesPanel({
             U
           </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">{t("settings.printTemplates.canvas.align")}</Label>
+          <div className="flex gap-1">
+            {(
+              [
+                ["left", "alignLeft"],
+                ["center", "alignCenter"],
+                ["right", "alignRight"],
+              ] as const
+            ).map(([align, key]) => (
+              <Button
+                key={align}
+                type="button"
+                size="sm"
+                variant={selected.every((el) => el.style.align === align) ? "default" : "outline"}
+                disabled={disabled}
+                onClick={() => patchAll((el) => ({ ...el, style: { ...el.style, align } }))}
+              >
+                {t(`settings.printTemplates.canvas.${key}`)}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">{t("settings.printTemplates.canvas.verticalAlign")}</Label>
+          <div className="flex gap-1">
+            {(
+              [
+                ["top", "verticalTop"],
+                ["middle", "verticalMiddle"],
+                ["bottom", "verticalBottom"],
+              ] as const
+            ).map(([verticalAlign, key]) => (
+              <Button
+                key={verticalAlign}
+                type="button"
+                size="sm"
+                variant={
+                  selected.every((el) => (el.style.verticalAlign ?? "top") === verticalAlign)
+                    ? "default"
+                    : "outline"
+                }
+                disabled={disabled}
+                onClick={() =>
+                  patchAll((el) => ({
+                    ...el,
+                    style: {
+                      ...el.style,
+                      verticalAlign: verticalAlign === "top" ? undefined : verticalAlign,
+                    },
+                  }))
+                }
+              >
+                {t(`settings.printTemplates.canvas.${key}`)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">{t("settings.printTemplates.canvas.cornerRadius")}</Label>
+        <Input
+          type="number"
+          min={0}
+          max={10}
+          step={0.5}
+          disabled={disabled}
+          value={
+            single?.type === "rect"
+              ? (single.radiusMm ?? single.style.radiusMm ?? 0)
+              : (single?.style.radiusMm ?? selected[0]?.style.radiusMm ?? 0)
+          }
+          onChange={(event) => {
+            const radiusMm = clampRadius(Number(event.target.value));
+            patchAll((el) => {
+              if (el.type === "rect") {
+                return { ...el, radiusMm, style: { ...el.style, radiusMm } };
+              }
+              return { ...el, style: { ...el.style, radiusMm: radiusMm || undefined } };
+            });
+          }}
+        />
       </div>
 
       <ColorPicker
@@ -357,6 +511,25 @@ export function CanvasPropertiesPanel({
               )
             }
           />
+          <div className="space-y-1">
+            <Label className="text-xs">{t("settings.printTemplates.canvas.headerRadius")}</Label>
+            <Input
+              type="number"
+              min={0}
+              max={10}
+              step={0.5}
+              disabled={disabled}
+              value={single.headerRadiusMm ?? 0}
+              onChange={(event) => {
+                const headerRadiusMm = clampRadius(Number(event.target.value));
+                patchAll((el) =>
+                  el.type === "table"
+                    ? { ...el, headerRadiusMm: headerRadiusMm || undefined }
+                    : el,
+                );
+              }}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -377,6 +550,25 @@ export function CanvasPropertiesPanel({
               )
             }
           />
+          <div className="space-y-1">
+            <Label className="text-xs">{t("settings.printTemplates.canvas.grandTotalRadius")}</Label>
+            <Input
+              type="number"
+              min={0}
+              max={10}
+              step={0.5}
+              disabled={disabled}
+              value={single.grandTotalRadiusMm ?? 0}
+              onChange={(event) => {
+                const grandTotalRadiusMm = clampRadius(Number(event.target.value));
+                patchAll((el) =>
+                  el.type === "totals"
+                    ? { ...el, grandTotalRadiusMm: grandTotalRadiusMm || undefined }
+                    : el,
+                );
+              }}
+            />
+          </div>
         </div>
       ) : null}
 

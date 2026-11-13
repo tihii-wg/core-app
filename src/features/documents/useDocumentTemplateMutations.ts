@@ -106,6 +106,7 @@ export function useSetDefaultDocumentTemplate() {
 }
 
 export function useSaveDocumentTemplateLayout() {
+  const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const invalidate = useInvalidateTemplates();
@@ -114,7 +115,24 @@ export function useSaveDocumentTemplateLayout() {
       guardWrite();
       return saveDocumentTemplateLayout({ ...input, workspaceId });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // Keep the open designer / list in sync immediately (avoid stale layout after Save → reopen).
+      queryClient.setQueryData(
+        ["document-templates", workspaceId],
+        (previous: Array<{ id: string; layout?: unknown; name?: string; bodyHtml?: string }> | undefined) => {
+          if (!previous) return previous;
+          return previous.map((template) =>
+            template.id === variables.templateId
+              ? {
+                  ...template,
+                  layout: variables.layout,
+                  bodyHtml: variables.bodyHtml,
+                  ...(typeof variables.name === "string" ? { name: variables.name } : {}),
+                }
+              : template,
+          );
+        },
+      );
       invalidate();
       toast.success(i18n.t("settings.printTemplates.toast.saved"));
     },

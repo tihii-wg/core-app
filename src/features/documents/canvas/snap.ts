@@ -15,6 +15,7 @@ export function snapBox(
   others: CanvasElement[],
   gridMm: number,
   snapGrid: boolean,
+  contentSize?: { contentWidthMm: number; contentHeightMm: number } | null,
 ): { xMm: number; yMm: number; guides: Guide[] } {
   let x = snapGrid ? snapValue(box.xMm, gridMm, true) : box.xMm;
   let y = snapGrid ? snapValue(box.yMm, gridMm, true) : box.yMm;
@@ -22,6 +23,10 @@ export function snapBox(
 
   const targetsX: number[] = [];
   const targetsY: number[] = [];
+  if (contentSize) {
+    targetsX.push(0, contentSize.contentWidthMm / 2, contentSize.contentWidthMm);
+    targetsY.push(0, contentSize.contentHeightMm / 2, contentSize.contentHeightMm);
+  }
   for (const el of others) {
     targetsX.push(el.xMm, el.xMm + el.wMm / 2, el.xMm + el.wMm);
     targetsY.push(el.yMm, el.yMm + el.hMm / 2, el.yMm + el.hMm);

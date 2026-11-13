@@ -16,7 +16,7 @@ import { buildInvoicePrintContext, buildOrderPrintContext, listRecentInvoicesFor
 import { useActiveWorkspaceId } from "../../profiles/useGetProfile";
 import { useGetDocumentStyle } from "../useGetDocumentStyle";
 import { useSaveDocumentTemplateLayout } from "../useDocumentTemplateMutations";
-import { buildPrintDocument } from "../printTemplate";
+import { applyTemplateVariables, buildPrintDocument } from "../printTemplate";
 import type { DocumentTemplateType } from "../layout";
 import { Button } from "../../../ui/Button";
 import { Dialog, DialogContent, DialogTitle } from "../../../ui/Dialog";
@@ -50,8 +50,10 @@ import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "../demoPrintContext";
 import { isDemoPrintSource } from "../templatePreviewHtml";
 import { findUnknownTokensInCanvasLayout } from "../templateTokenScan";
 import { emptyPrintContext } from "../templateVariables";
-import { resolveColorRef } from "../colorRef";
 import { fillToCss } from "./fill";
+import { buildCanvasBoxStyle, rectElementReactStyle } from "./canvasElementStyle";
+import { clampBoxToContent, contentBoxMm, contentMmFromSheetClient } from "./contentBox";
+import { resolveVariableLabel, segmentTextWithVariables } from "./variableDisplay";
 
 type SidePanel = "palette" | "properties" | null;
 type MarqueeState = { originX: number; originY: number; x: number; y: number; additive: boolean };
@@ -93,6 +95,21 @@ function layoutsEqual(a: CanvasDocumentLayout, b: CanvasDocumentLayout): boolean
 type ResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 const MM_TO_PX = CANVAS_MM_TO_PX;
+
+function VariableChip({ label, known }: { label: string; known: boolean }) {
+  return (
+    <span
+      className={
+        known
+          ? "mx-0.5 inline-flex rounded bg-sky-100 px-1.5 py-0.5 text-[0.85em] font-medium text-sky-900"
+          : "mx-0.5 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[0.85em] font-medium text-amber-900"
+      }
+      title={known ? undefined : label}
+    >
+      {label}
+    </span>
+  );
+}
 
 export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOpenSimpleMode }: Props) {
   const { t, i18n } = useTranslation();
@@ -141,6 +158,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const [tabletPanel, setTabletPanel] = useState<"palette" | "properties">("palette");
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const sheetViewportRef = useRef<HTMLDivElement | null>(null);
   /** State mirror of the viewport node so the fit-width effect re-runs once the (portal) dialog content mounts. */
   const [sheetViewportEl, setSheetViewportEl] = useState<HTMLDivElement | null>(null);
@@ -161,6 +179,10 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const themeColors = documentStyleQuery.data?.colors ?? null;
   const selected = layout.elements.filter((el) => selectedIds.includes(el.id));
   const { widthMm, heightMm } = pageSizeMm(layout.page.size, layout.page.orientation);
+  const content = useMemo(
+    () => contentBoxMm(widthMm, heightMm, layout.page.marginsMm),
+    [widthMm, heightMm, layout.page.marginsMm],
+  );
   const scale = zoom / 100;
   const unknownTokenHits = useMemo(() => findUnknownTokensInCanvasLayout(layout), [layout]);
 
@@ -226,28 +248,28 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     const sheet = sheetRef.current;
     if (!sheet) return null;
     const rect = sheet.getBoundingClientRect();
-    const xMm = (clientX - rect.left) / (MM_TO_PX * scale);
-    const yMm = (clientY - rect.top) / (MM_TO_PX * scale);
-    return { xMm, yMm };
+    return contentMmFromSheetClient(clientX, clientY, rect, MM_TO_PX, scale, content.marginsMm);
   }
 
   function handleDragEnd(event: DragEndEvent) {
     const payload = (event.active.data.current ?? dragPayloadRef.current) as PaletteDragPayload | null;
     dragPayloadRef.current = null;
     if (!payload || !canEdit) return;
-    const overPoint = event.activatorEvent as PointerEvent | undefined;
-    const clientX = "clientX" in (event.activatorEvent as object) ? (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0) : 0;
-    const clientY = overPoint && "clientY" in overPoint ? overPoint.clientY + (event.delta?.y ?? 0) : 0;
-    // Prefer translated pointer from delta
     const endX = (event.activatorEvent as PointerEvent).clientX + event.delta.x;
     const endY = (event.activatorEvent as PointerEvent).clientY + event.delta.y;
-    void clientX;
-    void clientY;
     const point = mmFromClient(endX, endY);
     if (!point) return;
-    const xMm = snapValue(Math.max(0, point.xMm), layout.gridMm, true);
-    const yMm = snapValue(Math.max(0, point.yMm), layout.gridMm, true);
-    const created = createCanvasElementFromPalette(payload, xMm, yMm);
+    const snapped = clampBoxToContent(
+      {
+        xMm: snapValue(point.xMm, layout.gridMm, true),
+        yMm: snapValue(point.yMm, layout.gridMm, true),
+        wMm: 40,
+        hMm: 10,
+      },
+      content.contentWidthMm,
+      content.contentHeightMm,
+    );
+    const created = createCanvasElementFromPalette(payload, snapped.xMm, snapped.yMm);
     commit({ ...layout, elements: [...layout.elements, created] });
     setSelectedIds([created.id]);
   }
@@ -305,9 +327,15 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
           others,
           layout.gridMm,
           true,
+          content,
         );
         guidesNext = snapped.guides;
-        return { ...el, xMm: Math.max(0, snapped.xMm), yMm: Math.max(0, snapped.yMm) };
+        const clamped = clampBoxToContent(
+          { xMm: snapped.xMm, yMm: snapped.yMm, wMm: el.wMm, hMm: el.hMm },
+          content.contentWidthMm,
+          content.contentHeightMm,
+        );
+        return { ...el, xMm: clamped.xMm, yMm: clamped.yMm };
       });
       setGuides(guidesNext);
       setHistory((prev) => ({ ...prev, present: { ...prev.present, elements: nextElements } }));
@@ -332,21 +360,21 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
       const ratio = o.wMm / o.hMm;
       hMm = wMm / ratio;
     }
+    const clamped = clampBoxToContent(
+      {
+        xMm: snapValue(xMm, layout.gridMm, true),
+        yMm: snapValue(yMm, layout.gridMm, true),
+        wMm: snapValue(wMm, layout.gridMm, true),
+        hMm: snapValue(hMm, layout.gridMm, true),
+      },
+      content.contentWidthMm,
+      content.contentHeightMm,
+    );
     setHistory((prev) => ({
       ...prev,
       present: {
         ...prev.present,
-        elements: prev.present.elements.map((el) =>
-          el.id === o.id
-            ? {
-                ...el,
-                xMm: snapValue(xMm, layout.gridMm, true),
-                yMm: snapValue(yMm, layout.gridMm, true),
-                wMm: snapValue(wMm, layout.gridMm, true),
-                hMm: snapValue(hMm, layout.gridMm, true),
-              }
-            : el,
-        ),
+        elements: prev.present.elements.map((el) => (el.id === o.id ? { ...el, ...clamped } : el)),
       },
     }));
   }
@@ -419,11 +447,18 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
         const step = event.shiftKey ? layout.gridMm : 1;
         const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
         const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        const box = contentBoxMm(widthMm, heightMm, layout.page.marginsMm);
         commit({
           ...layout,
-          elements: layout.elements.map((el) =>
-            selectedIds.includes(el.id) && !el.locked ? { ...el, xMm: el.xMm + dx, yMm: el.yMm + dy } : el,
-          ),
+          elements: layout.elements.map((el) => {
+            if (!selectedIds.includes(el.id) || el.locked) return el;
+            const clamped = clampBoxToContent(
+              { xMm: el.xMm + dx, yMm: el.yMm + dy, wMm: el.wMm, hMm: el.hMm },
+              box.contentWidthMm,
+              box.contentHeightMm,
+            );
+            return { ...el, xMm: clamped.xMm, yMm: clamped.yMm };
+          }),
         });
       }
     }
@@ -446,7 +481,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
         bodyHtml,
       });
       baseline.current = cloneLayout(layout);
-      toast.success(t("settings.printTemplates.toast.saved"));
+      // Toast comes from the mutation onSuccess (also updates React Query cache).
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
     }
@@ -493,12 +528,6 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   }
 
   const pageBg = fillToCss(layout.page.background, themeColors);
-  const previewShowData = showData
-    ? renderCanvasLayoutToHtmlSync(layout, previewCtx ?? emptyPrintContext({ documentKind: documentType }), {
-        colors: themeColors,
-        showTokens: false,
-      })
-    : null;
 
   const handles: ResizeHandle[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
   const handleSize = isMobile ? 24 : 8;
@@ -526,10 +555,11 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     };
   }, [widthMm, sheetViewportEl]);
 
-  function sheetPointFromClient(clientX: number, clientY: number): { x: number; y: number } | null {
-    const sheet = sheetRef.current;
-    if (!sheet) return null;
-    const rect = sheet.getBoundingClientRect();
+  /** Content-box CSS px (unscaled), matching element left/top inside the content container. */
+  function contentPointFromClient(clientX: number, clientY: number): { x: number; y: number } | null {
+    const contentEl = contentRef.current;
+    if (!contentEl) return null;
+    const rect = contentEl.getBoundingClientRect();
     return {
       x: (clientX - rect.left) / scale,
       y: (clientY - rect.top) / scale,
@@ -558,8 +588,16 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   }
 
   function onSheetPointerDown(event: React.PointerEvent) {
-    if (event.target !== sheetRef.current) return;
-    const point = sheetPointFromClient(event.clientX, event.clientY);
+    // Click in the margin gutter clears selection; rubber-band starts on the content box.
+    if (event.target === sheetRef.current) {
+      if (!event.shiftKey) setSelectedIds([]);
+      return;
+    }
+  }
+
+  function onContentPointerDown(event: React.PointerEvent) {
+    if (event.target !== contentRef.current) return;
+    const point = contentPointFromClient(event.clientX, event.clientY);
     if (!point) return;
     setMarquee({
       originX: point.x,
@@ -573,7 +611,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
   function onSheetPointerMove(event: React.PointerEvent) {
     if (marquee) {
-      const point = sheetPointFromClient(event.clientX, event.clientY);
+      const point = contentPointFromClient(event.clientX, event.clientY);
       if (!point) return;
       setMarquee((current) => (current ? { ...current, x: point.x, y: point.y } : null));
       return;
@@ -593,8 +631,8 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
   function addPaletteElement(payload: PaletteDragPayload) {
     if (!canEdit) return;
-    const centerX = widthMm / 2 - 20;
-    const centerY = heightMm / 2 - 10;
+    const centerX = content.contentWidthMm / 2 - 20;
+    const centerY = content.contentHeightMm / 2 - 10;
     const created = createCanvasElementFromPalette(
       payload,
       snapValue(Math.max(0, centerX), layout.gridMm, true),
@@ -622,6 +660,48 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     />
   );
 
+  function renderElementPreview(el: CanvasElement) {
+    const demoOpts = {
+      showCents: template.showCents,
+      currency: previewCtx.currency,
+      locale: previewCtx.locale || i18n.language || "en",
+    };
+    if (el.type === "text") {
+      if (showData) {
+        return applyTemplateVariables(el.content, previewCtx, demoOpts).replace(/<[^>]*>/g, "");
+      }
+      return segmentTextWithVariables(el.content, t).map((segment, index) =>
+        segment.kind === "text" ? (
+          <span key={index}>{segment.text}</span>
+        ) : (
+          <VariableChip key={`${segment.token}-${index}`} label={segment.label} known={segment.known} />
+        ),
+      );
+    }
+    if (el.type === "variable") {
+      if (showData) {
+        const value = applyTemplateVariables(el.token, previewCtx, demoOpts).replace(/<[^>]*>/g, "");
+        return `${el.label ? `${el.label}: ` : ""}${value || "—"}`;
+      }
+      const resolved = resolveVariableLabel(el.token, t);
+      return (
+        <>
+          {el.label ? <span className="mr-1 opacity-70">{el.label}:</span> : null}
+          <VariableChip label={resolved.label} known={resolved.known} />
+        </>
+      );
+    }
+    if (el.type === "table") return t("settings.printTemplates.canvas.table");
+    if (el.type === "totals") return t("settings.printTemplates.canvas.totals");
+    if (el.type === "image") return t("settings.printTemplates.canvas.image");
+    if (el.type === "signatures") return t("settings.printTemplates.canvas.signatures");
+    if (el.type === "qr") return t("settings.printTemplates.canvas.qr");
+    if (el.type === "pageNumber") return el.format ?? "N/M";
+    if (el.type === "line") return null;
+    if (el.type === "rect") return null;
+    return null;
+  }
+
   const sheetSurface = (
     <div
       className="mx-auto origin-top shadow-lg"
@@ -641,136 +721,139 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
           transform: `scale(${scale})`,
           transformOrigin: "top left",
           background: pageBg ?? "#ffffff",
-          backgroundImage: showGrid
-            ? `linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)`
-            : undefined,
-          backgroundSize: showGrid ? `${layout.gridMm * MM_TO_PX}px ${layout.gridMm * MM_TO_PX}px` : undefined,
         }}
         onPointerDown={onSheetPointerDown}
         onPointerMove={onSheetPointerMove}
         onPointerUp={onSheetPointerUp}
       >
         <div
-          className="pointer-events-none absolute border border-dashed border-sky-400/50"
+          ref={contentRef}
+          className="absolute box-border overflow-hidden border border-dashed border-sky-400/50"
           style={{
-            left: layout.page.marginsMm * MM_TO_PX,
-            top: layout.page.marginsMm * MM_TO_PX,
-            width: (widthMm - layout.page.marginsMm * 2) * MM_TO_PX,
-            height: (heightMm - layout.page.marginsMm * 2) * MM_TO_PX,
+            left: content.marginsMm * MM_TO_PX,
+            top: content.marginsMm * MM_TO_PX,
+            width: content.contentWidthMm * MM_TO_PX,
+            height: content.contentHeightMm * MM_TO_PX,
+            backgroundImage: showGrid
+              ? `linear-gradient(to right, rgba(0,0,0,0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.06) 1px, transparent 1px)`
+              : undefined,
+            backgroundSize: showGrid ? `${layout.gridMm * MM_TO_PX}px ${layout.gridMm * MM_TO_PX}px` : undefined,
           }}
-        />
+          onPointerDown={onContentPointerDown}
+        >
+          {layout.elements
+            .slice()
+            .sort((a, b) => a.zIndex - b.zIndex)
+            .map((el) => {
+              const isSelected = selectedIds.includes(el.id);
+              const box =
+                el.type === "rect"
+                  ? {
+                      reactStyle: rectElementReactStyle({
+                        fill: el.fill ?? el.style.background,
+                        border: el.border ?? el.style.border,
+                        radiusMm: el.radiusMm ?? el.style.radiusMm,
+                        colors: themeColors,
+                      }),
+                      wrapForAlign: false,
+                      align: el.style.align,
+                    }
+                  : buildCanvasBoxStyle(el.style, themeColors, {
+                      overflow: el.type === "totals" ? "visible" : "hidden",
+                    });
+              const preview = renderElementPreview(el);
+              const inner = box.wrapForAlign ? (
+                <div style={{ width: "100%", textAlign: box.align }}>{preview}</div>
+              ) : (
+                preview
+              );
+              return (
+                <div
+                  key={el.id}
+                  className={`absolute ${isSelected ? "ring-2 ring-sky-500" : "hover:ring-1 hover:ring-sky-300"}`}
+                  style={{
+                    left: el.xMm * MM_TO_PX,
+                    top: el.yMm * MM_TO_PX,
+                    width: el.wMm * MM_TO_PX,
+                    height: el.hMm * MM_TO_PX,
+                    zIndex: el.zIndex,
+                    cursor: el.locked ? "default" : "move",
+                    ...box.reactStyle,
+                    ...(el.type === "line"
+                      ? {
+                          borderTop:
+                            el.orientation === "horizontal"
+                              ? `${el.thicknessPt}pt solid ${fillToCss({ color: el.color }, themeColors) ?? "#000"}`
+                              : undefined,
+                          borderLeft:
+                            el.orientation === "vertical"
+                              ? `${el.thicknessPt}pt solid ${fillToCss({ color: el.color }, themeColors) ?? "#000"}`
+                              : undefined,
+                        }
+                      : {}),
+                  }}
+                  onPointerDown={(event) => onElementPointerDown(event, el)}
+                >
+                  {inner}
 
-        {layout.elements
-          .slice()
-          .sort((a, b) => a.zIndex - b.zIndex)
-          .map((el) => {
-            const isSelected = selectedIds.includes(el.id);
-            const bg =
-              el.type === "rect" ? fillToCss(el.fill, themeColors) : fillToCss(el.style.background, themeColors);
-            const color = resolveColorRef(
-              el.style.color,
-              themeColors ?? {
-                primary: "#1a6de0",
-                primaryDark: "#1e3a8a",
-                tint: "#eff6ff",
-                muted: "#64748b",
-                text: "#1f2933",
-                border: "#e5e7eb",
-              },
-            );
-            return (
-              <div
-                key={el.id}
-                className={`absolute box-border ${isSelected ? "ring-2 ring-sky-500" : "hover:ring-1 hover:ring-sky-300"}`}
-                style={{
-                  left: el.xMm * MM_TO_PX,
-                  top: el.yMm * MM_TO_PX,
-                  width: el.wMm * MM_TO_PX,
-                  height: el.hMm * MM_TO_PX,
-                  zIndex: el.zIndex,
-                  background: bg,
-                  color,
-                  fontSize: el.style.fontSizePt,
-                  fontWeight: el.style.bold ? 700 : 400,
-                  fontStyle: el.style.italic ? "italic" : "normal",
-                  textDecoration: el.style.underline ? "underline" : "none",
-                  textAlign: el.style.align,
-                  padding: el.style.paddingMm * MM_TO_PX,
-                  overflow: "hidden",
-                  cursor: el.locked ? "default" : "move",
-                }}
-                onPointerDown={(event) => onElementPointerDown(event, el)}
-              >
-                {el.type === "text" ? el.content : null}
-                {el.type === "variable" ? `${el.label ? `${el.label}: ` : ""}${el.token}` : null}
-                {el.type === "table" ? t("settings.printTemplates.canvas.table") : null}
-                {el.type === "totals" ? t("settings.printTemplates.canvas.totals") : null}
-                {el.type === "image" ? t("settings.printTemplates.canvas.image") : null}
-                {el.type === "signatures" ? t("settings.printTemplates.canvas.signatures") : null}
-                {el.type === "qr" ? t("settings.printTemplates.canvas.qr") : null}
-                {el.type === "pageNumber" ? el.format ?? "N/M" : null}
+                  {isSelected && !el.locked
+                    ? handles.map((handle) => (
+                        <div
+                          key={handle}
+                          className="absolute bg-sky-500"
+                          style={{
+                            width: handleSize,
+                            height: handleSize,
+                            left: handle.includes("w")
+                              ? -handleOffset
+                              : handle.includes("e")
+                                ? `calc(100% - ${handleOffset}px)`
+                                : `calc(50% - ${handleOffset}px)`,
+                            top: handle.includes("n")
+                              ? -handleOffset
+                              : handle.includes("s")
+                                ? `calc(100% - ${handleOffset}px)`
+                                : `calc(50% - ${handleOffset}px)`,
+                            cursor: `${handle}-resize`,
+                          }}
+                          onPointerDown={(event) => onResizePointerDown(event, el, handle)}
+                        />
+                      ))
+                    : null}
+                </div>
+              );
+            })}
 
-                {isSelected && !el.locked
-                  ? handles.map((handle) => (
-                      <div
-                        key={handle}
-                        className="absolute bg-sky-500"
-                        style={{
-                          width: handleSize,
-                          height: handleSize,
-                          left: handle.includes("w")
-                            ? -handleOffset
-                            : handle.includes("e")
-                              ? `calc(100% - ${handleOffset}px)`
-                              : `calc(50% - ${handleOffset}px)`,
-                          top: handle.includes("n")
-                            ? -handleOffset
-                            : handle.includes("s")
-                              ? `calc(100% - ${handleOffset}px)`
-                              : `calc(50% - ${handleOffset}px)`,
-                          cursor: `${handle}-resize`,
-                        }}
-                        onPointerDown={(event) => onResizePointerDown(event, el, handle)}
-                      />
-                    ))
-                  : null}
-              </div>
-            );
-          })}
+          {guides.map((guide, index) => (
+            <div
+              key={`${guide.orientation}-${guide.positionMm}-${index}`}
+              className="pointer-events-none absolute bg-fuchsia-500"
+              style={
+                guide.orientation === "v"
+                  ? { left: guide.positionMm * MM_TO_PX, top: 0, width: 1, height: "100%" }
+                  : { top: guide.positionMm * MM_TO_PX, left: 0, height: 1, width: "100%" }
+              }
+            />
+          ))}
 
-        {guides.map((guide, index) => (
-          <div
-            key={`${guide.orientation}-${guide.positionMm}-${index}`}
-            className="pointer-events-none absolute bg-fuchsia-500"
-            style={
-              guide.orientation === "v"
-                ? { left: guide.positionMm * MM_TO_PX, top: 0, width: 1, height: "100%" }
-                : { top: guide.positionMm * MM_TO_PX, left: 0, height: 1, width: "100%" }
-            }
-          />
-        ))}
+          {marquee ? (
+            <div
+              className="pointer-events-none absolute border border-sky-500 bg-sky-500/10"
+              style={{
+                left: Math.min(marquee.originX, marquee.x),
+                top: Math.min(marquee.originY, marquee.y),
+                width: Math.abs(marquee.x - marquee.originX),
+                height: Math.abs(marquee.y - marquee.originY),
+              }}
+            />
+          ) : null}
 
-        {marquee ? (
-          <div
-            className="pointer-events-none absolute border border-sky-500 bg-sky-500/10"
-            style={{
-              left: Math.min(marquee.originX, marquee.x),
-              top: Math.min(marquee.originY, marquee.y),
-              width: Math.abs(marquee.x - marquee.originX),
-              height: Math.abs(marquee.y - marquee.originY),
-            }}
-          />
-        ) : null}
-
-        {layout.elements.length === 0 ? (
-          <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-            {t("settings.printTemplates.canvas.dropHere")}
-          </p>
-        ) : null}
-
-        {showData && previewShowData ? (
-          <div className="pointer-events-none absolute inset-0 opacity-40" dangerouslySetInnerHTML={{ __html: "" }} />
-        ) : null}
+          {layout.elements.length === 0 ? (
+            <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+              {t("settings.printTemplates.canvas.dropHere")}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -828,7 +911,11 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 </Button>
               </div>
               <div className="hidden items-center gap-2 md:flex">
-                <Label className="text-xs">{t("settings.printTemplates.canvas.showData")}</Label>
+                <Label className="text-xs">
+                  {showData
+                    ? t("settings.printTemplates.canvas.showData")
+                    : t("settings.printTemplates.canvas.showFieldNames")}
+                </Label>
                 <Switch checked={showData} onCheckedChange={setShowData} />
                 <Button type="button" size="sm" variant="outline" onClick={bringForward} disabled={!canEdit || !selectedIds.length}>
                   {t("settings.printTemplates.canvas.bringForward")}

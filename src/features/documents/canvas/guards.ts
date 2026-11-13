@@ -61,7 +61,7 @@ function parseElementStyle(value: unknown): CanvasElementStyle | null {
   }
   if (value.fontFamily != null && typeof value.fontFamily !== "string") return null;
   if (value.lineHeight != null && (!isFiniteNumber(value.lineHeight) || value.lineHeight <= 0)) return null;
-  if (value.radiusMm != null && (!isFiniteNumber(value.radiusMm) || value.radiusMm < 0)) return null;
+  if (value.radiusMm != null && (!isFiniteNumber(value.radiusMm) || value.radiusMm < 0 || value.radiusMm > 10)) return null;
   if (value.bold != null && typeof value.bold !== "boolean") return null;
   if (value.italic != null && typeof value.italic !== "boolean") return null;
   if (value.underline != null && typeof value.underline !== "boolean") return null;
@@ -229,6 +229,9 @@ function parseElement(value: unknown): CanvasElement | null {
       if (value.zebraBackground != null && !isCanvasColorRef(value.zebraBackground)) return null;
       if (value.totalsRowBackground != null && !isCanvasColorRef(value.totalsRowBackground)) return null;
       if (value.totalsRowTextColor != null && !isCanvasColorRef(value.totalsRowTextColor)) return null;
+      if (value.headerRadiusMm != null && (!isFiniteNumber(value.headerRadiusMm) || value.headerRadiusMm < 0 || value.headerRadiusMm > 10)) {
+        return null;
+      }
       return {
         ...base,
         type: "table",
@@ -245,6 +248,7 @@ function parseElement(value: unknown): CanvasElement | null {
           ? { totalsRowBackground: String(value.totalsRowBackground).trim() }
           : {}),
         ...(isCanvasColorRef(value.totalsRowTextColor) ? { totalsRowTextColor: String(value.totalsRowTextColor).trim() } : {}),
+        ...(isFiniteNumber(value.headerRadiusMm) ? { headerRadiusMm: value.headerRadiusMm } : {}),
       } satisfies TableCanvasElement;
     }
     case "totals": {
@@ -254,6 +258,12 @@ function parseElement(value: unknown): CanvasElement | null {
       if (value.textColor != null && !isCanvasColorRef(value.textColor)) return null;
       if (value.grandTotalBackground != null && !isCanvasColorRef(value.grandTotalBackground)) return null;
       if (value.grandTotalTextColor != null && !isCanvasColorRef(value.grandTotalTextColor)) return null;
+      if (
+        value.grandTotalRadiusMm != null &&
+        (!isFiniteNumber(value.grandTotalRadiusMm) || value.grandTotalRadiusMm < 0 || value.grandTotalRadiusMm > 10)
+      ) {
+        return null;
+      }
       return {
         ...base,
         type: "totals",
@@ -266,6 +276,7 @@ function parseElement(value: unknown): CanvasElement | null {
         ...(isCanvasColorRef(value.grandTotalTextColor)
           ? { grandTotalTextColor: String(value.grandTotalTextColor).trim() }
           : {}),
+        ...(isFiniteNumber(value.grandTotalRadiusMm) ? { grandTotalRadiusMm: value.grandTotalRadiusMm } : {}),
       } satisfies TotalsCanvasElement;
     }
     case "rect": {
@@ -273,7 +284,7 @@ function parseElement(value: unknown): CanvasElement | null {
       if (value.fill !== undefined && !fill) return null;
       const border = value.border === undefined ? undefined : parseBorder(value.border);
       if (value.border !== undefined && !border) return null;
-      if (value.radiusMm != null && (!isFiniteNumber(value.radiusMm) || value.radiusMm < 0)) return null;
+      if (value.radiusMm != null && (!isFiniteNumber(value.radiusMm) || value.radiusMm < 0 || value.radiusMm > 10)) return null;
       return {
         ...base,
         type: "rect",

@@ -201,6 +201,66 @@ describe("defaults and convert", () => {
   });
 });
 
+describe("save/reopen round trip", () => {
+  it("keeps content-relative positions through parse and print HTML", () => {
+    const layout = defaultCanvasWorkOrderLayout();
+    const corners: CanvasDocumentLayout = {
+      ...layout,
+      elements: [
+        {
+          id: "tl",
+          type: "rect",
+          xMm: 0,
+          yMm: 0,
+          wMm: 20,
+          hMm: 10,
+          zIndex: 1,
+          fill: { color: "#111111" },
+          radiusMm: 2,
+          style: { fontSizePt: 10, color: "#111111", align: "left", paddingMm: 0, radiusMm: 2 },
+        },
+        {
+          id: "center",
+          type: "text",
+          xMm: 70,
+          yMm: 120,
+          wMm: 50,
+          hMm: 12,
+          zIndex: 2,
+          content: "Center",
+          style: {
+            fontSizePt: 14,
+            color: "#111111",
+            align: "center",
+            verticalAlign: "middle",
+            paddingMm: 1,
+            radiusMm: 1.5,
+          },
+        },
+      ],
+    };
+
+    const parsed = parseCanvasDocumentLayout(JSON.parse(JSON.stringify(corners)));
+    expect(parsed).not.toBeNull();
+    expect(parsed?.elements.find((el) => el.id === "tl")).toMatchObject({ xMm: 0, yMm: 0, radiusMm: 2 });
+    expect(parsed?.elements.find((el) => el.id === "center")).toMatchObject({
+      xMm: 70,
+      yMm: 120,
+      style: expect.objectContaining({ fontSizePt: 14, verticalAlign: "middle", radiusMm: 1.5 }),
+    });
+
+    const html = renderCanvasLayoutToHtmlSync(parsed!, emptyPrintContext({ locale: "en" }));
+    expect(html).toMatch(/data-el="tl"[^>]*left:0mm/);
+    expect(html).toMatch(/data-el="tl"[^>]*top:0mm/);
+    expect(html).toMatch(/data-el="center"[^>]*left:70mm/);
+    expect(html).toMatch(/data-el="center"[^>]*top:120mm/);
+    expect(html).toContain("font-size:14pt");
+    expect(html).toContain("border-radius:2mm");
+    expect(html).toContain("justify-content:center");
+    expect(html).toContain('text-align:center');
+  });
+});
+
 describe("designer helpers", () => {
   it("creates an element at the drop position from the palette", () => {
     const el = createCanvasElementFromPalette({ kind: "variable", token: "#АВТО-VIN", label: "VIN" }, 12, 34);

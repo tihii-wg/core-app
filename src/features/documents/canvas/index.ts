@@ -5,5 +5,7 @@ export { convertBlocksLayoutToCanvas } from "./convertToCanvas";
 export { CanvasDesigner, templateIsCanvas } from "./CanvasDesigner";
 export { createCanvasElementFromPalette } from "./createElement";
 export { isCanvasHexColor, isCanvasColorRef, parseFill, fillToCss } from "./fill";
+export { buildCanvasBoxStyle, canvasAlignWrapperHtml } from "./canvasElementStyle";
+export { contentBoxMm, clampBoxToContent, contentMmFromSheetClient } from "./contentBox";
 export type { CanvasDocumentLayout, CanvasElement, Fill, CanvasElementType } from "./types";
 export { pageSizeMm, newCanvasElementId } from "./types";

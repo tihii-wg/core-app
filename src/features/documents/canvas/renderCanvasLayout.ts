@@ -6,6 +6,11 @@ import { formatQuantity } from "../../../lib/quantity";
 import { vatIncludedAmount } from "../../finance/vat";
 import { applyTemplateVariables } from "../printTemplate";
 import { escapeHtmlText, printContextVatBreakdown, type PrintContext } from "../templateVariables";
+import {
+  buildCanvasBoxStyle,
+  canvasAlignWrapperHtml,
+  rectElementCss,
+} from "./canvasElementStyle";
 import { fillToCss, resolveCanvasColor } from "./fill";
 import {
   canvasRowsForSource,
@@ -20,7 +25,6 @@ import {
   pageSizeMm,
   type CanvasDocumentLayout,
   type CanvasElement,
-  type CanvasElementStyle,
   type TableCanvasElement,
   type TotalsCanvasElement,
 } from "./types";
@@ -126,38 +130,12 @@ function paginate(
   return pages;
 }
 
-function styleFontCss(style: CanvasElementStyle, colors: StyleColorPalette | null | undefined): string {
-  const parts: string[] = [
-    `font-size:${style.fontSizePt}pt`,
-    `text-align:${style.align}`,
-    `padding:${style.paddingMm}mm`,
-    `box-sizing:border-box`,
-    `overflow:hidden`,
-  ];
-  const color = resolveCanvasColor(style.color, colors);
-  if (color) parts.push(`color:${color}`);
-  if (style.bold) parts.push("font-weight:700");
-  if (style.italic) parts.push("font-style:italic");
-  if (style.underline) parts.push("text-decoration:underline");
-  if (style.fontFamily) parts.push(`font-family:${escapeHtmlText(style.fontFamily)}`);
-  if (style.lineHeight) parts.push(`line-height:${style.lineHeight}`);
-  if (style.verticalAlign === "middle") parts.push("display:flex;align-items:center");
-  else if (style.verticalAlign === "bottom") parts.push("display:flex;align-items:flex-end");
-  const bg = fillToCss(style.background, colors);
-  if (bg) parts.push(`background:${bg}`);
-  if (style.radiusMm) parts.push(`border-radius:${style.radiusMm}mm`);
-  if (style.border) {
-    const borderColor = resolveCanvasColor(style.border.color, colors) ?? "#000000";
-    const width = `${style.border.widthPt}pt`;
-    const bstyle = style.border.style;
-    const sides = style.border.sides?.length
-      ? style.border.sides
-      : (["top", "right", "bottom", "left"] as const);
-    for (const side of sides) {
-      parts.push(`border-${side}:${width} ${bstyle} ${borderColor}`);
-    }
-  }
-  return parts.join(";");
+/** @deprecated Prefer buildCanvasBoxStyle — kept as a thin alias for older tests. */
+export function styleFontCss(
+  style: import("./types").CanvasElementStyle,
+  colors: StyleColorPalette | null | undefined,
+): string {
+  return buildCanvasBoxStyle(style, colors).outerCss;
 }
 
 function applyText(text: string, ctx: PrintContext, showCents: boolean, showTokens: boolean): string {
@@ -196,15 +174,28 @@ function renderTableHtml(
   const totalsBg = resolveCanvasColor(el.totalsRowBackground, colors);
   const totalsFg = resolveCanvasColor(el.totalsRowTextColor, colors);
   const cellBorder = cellBorderCss(el.borders, borderColor);
+  const outerRadius = el.style.radiusMm ?? 0;
+  const headerRadius = el.headerRadiusMm ?? outerRadius;
+  const tableRadiusCss = outerRadius
+    ? `border-collapse:separate;border-spacing:0;overflow:hidden;border-radius:${outerRadius}mm`
+    : "border-collapse:collapse";
 
-  let html = `<table style="width:100%;border-collapse:collapse;height:100%">`;
+  let html = `<table style="width:100%;height:100%;${tableRadiusCss}">`;
   if (includeHeader) {
     html += "<thead><tr>";
-    for (const column of columns) {
+    columns.forEach((column, colIndex) => {
       const width = column.widthPercent ? `width:${column.widthPercent}%` : "";
       const align = column.align ?? "left";
-      html += `<th style="${cellBorder};padding:2mm 1.5mm;text-align:${align};background:${headerBg};color:${headerFg};${width}">${escapeHtmlText(column.label)}</th>`;
-    }
+      const corner =
+        headerRadius > 0
+          ? colIndex === 0
+            ? `border-top-left-radius:${headerRadius}mm;`
+            : colIndex === columns.length - 1
+              ? `border-top-right-radius:${headerRadius}mm;`
+              : ""
+          : "";
+      html += `<th style="${cellBorder};padding:2mm 1.5mm;text-align:${align};background:${headerBg};color:${headerFg};${corner}${width}">${escapeHtmlText(column.label)}</th>`;
+    });
     html += "</tr></thead>";
   }
   html += "<tbody>";
@@ -325,7 +316,12 @@ function renderTotalsHtml(
   const grandKey = moneyRows[moneyRows.length - 1]?.key;
   const textColor = resolveCanvasColor(el.textColor ?? el.style.color, colors) ?? "#111111";
   const bg = resolveCanvasColor(el.background, colors);
-  let html = `<table style="width:100%;border-collapse:collapse${bg ? `;background:${bg}` : ""}">`;
+  const blockRadius = el.style.radiusMm ?? 0;
+  const grandRadius = el.grandTotalRadiusMm ?? blockRadius;
+  const tableCss = `width:100%;border-collapse:separate;border-spacing:0${bg ? `;background:${bg}` : ""}${
+    blockRadius ? `;overflow:hidden;border-radius:${blockRadius}mm` : ""
+  }`;
+  let html = `<table style="${tableCss}">`;
   for (const row of rows) {
     const isGrand = grandKey != null && row.key === grandKey;
     const rowBg = isGrand ? resolveCanvasColor(el.grandTotalBackground, colors) : undefined;
@@ -335,9 +331,15 @@ function renderTotalsHtml(
       ? escapeHtmlText(row.label)
       : applyText(row.label, ctx, showCents, false).replace(/\s*\(\s*\)/g, "");
     const value = showTokens ? `«${row.key}»` : canvasTotalsValue(row.key, ctx, showCents);
-    html += `<tr style="${rowBg ? `background:${rowBg};` : ""}${rowFg ? `color:${rowFg};` : ""}${isGrand ? "font-weight:700;" : ""}">`;
-    html += `<td style="padding:1.5mm;text-align:right">${label}</td>`;
-    html += `<td style="padding:1.5mm;text-align:right;font-weight:600">${value}</td></tr>`;
+    // border-radius on <tr> is ignored by browsers — round the outer corners of the cells instead,
+    // and paint the background on the cells so the rounded corners are visible.
+    const rounded = isGrand && grandRadius > 0;
+    const cellBg = rounded && rowBg ? `background:${rowBg};` : "";
+    const leftRadius = rounded ? `border-top-left-radius:${grandRadius}mm;border-bottom-left-radius:${grandRadius}mm;` : "";
+    const rightRadius = rounded ? `border-top-right-radius:${grandRadius}mm;border-bottom-right-radius:${grandRadius}mm;` : "";
+    html += `<tr style="${rowBg && !rounded ? `background:${rowBg};` : ""}${rowFg ? `color:${rowFg};` : ""}${isGrand ? "font-weight:700;" : ""}">`;
+    html += `<td style="padding:1.5mm;text-align:right;${cellBg}${leftRadius}">${label}</td>`;
+    html += `<td style="padding:1.5mm;text-align:right;font-weight:600;${cellBg}${rightRadius}">${value}</td></tr>`;
   }
   html += "</table>";
   return html;
@@ -458,11 +460,15 @@ async function renderPlaced(
 ): Promise<string> {
   const y = item.element.repeatOnEveryPage ? item.yMm : item.yMm - pageOffsetY;
   const inner = await renderElementInner(item.element, ctx, colors, showCents, showTokens, pageIndex, pageCount);
-  const styleCss = styleFontCss(item.element.style, colors);
 
   if (item.element.type === "rect") {
-    const fill = fillToCss(item.element.fill ?? item.element.style.background, colors);
-    const border = item.element.border ?? item.element.style.border;
+    const radiusMm = item.element.radiusMm ?? item.element.style.radiusMm;
+    const rectCss = rectElementCss({
+      fill: item.element.fill ?? item.element.style.background,
+      border: item.element.border ?? item.element.style.border,
+      radiusMm,
+      colors,
+    });
     const parts = [
       `position:absolute`,
       `left:${item.xMm}mm`,
@@ -470,21 +476,18 @@ async function renderPlaced(
       `width:${item.wMm}mm`,
       `height:${item.hMm}mm`,
       `z-index:${item.element.zIndex}`,
-      `box-sizing:border-box`,
       `-webkit-print-color-adjust:exact`,
       `print-color-adjust:exact`,
+      rectCss,
     ];
-    if (fill) parts.push(`background:${fill}`);
-    if (item.element.radiusMm ?? item.element.style.radiusMm) {
-      parts.push(`border-radius:${item.element.radiusMm ?? item.element.style.radiusMm}mm`);
-    }
-    if (border) {
-      const borderColor = resolveCanvasColor(border.color, colors) ?? "#000000";
-      parts.push(`border:${border.widthPt}pt ${border.style} ${borderColor}`);
-    }
     return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}"></div>`;
   }
 
+  // Totals grow with row count; keep visible so long "in words" lines are never clipped.
+  const box = buildCanvasBoxStyle(item.element.style, colors, {
+    overflow: item.element.type === "totals" ? "visible" : "hidden",
+  });
+  const wrapped = box.wrapForAlign ? canvasAlignWrapperHtml(inner, box.align) : inner;
   const parts = [
     `position:absolute`,
     `left:${item.xMm}mm`,
@@ -494,11 +497,9 @@ async function renderPlaced(
     `z-index:${item.element.zIndex}`,
     `-webkit-print-color-adjust:exact`,
     `print-color-adjust:exact`,
-    styleCss,
+    box.outerCss,
   ];
-  // Totals grow with row count; keep visible so long "in words" lines are never clipped.
-  if (item.element.type === "totals") parts.push("overflow:visible");
-  return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}">${inner}</div>`;
+  return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}">${wrapped}</div>`;
 }
 
 export function canvasPageCss(layout: CanvasDocumentLayout, fontFamilyCss?: string): string {
@@ -616,11 +617,20 @@ export function renderCanvasLayoutToHtmlSync(
           }
 
           if (item.element.type === "rect") {
-            const fill = fillToCss(item.element.fill ?? item.element.style.background, colors);
-            return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${fill ? `background:${fill};` : ""}-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
+            const radiusMm = item.element.radiusMm ?? item.element.style.radiusMm;
+            const rectCss = rectElementCss({
+              fill: item.element.fill ?? item.element.style.background,
+              border: item.element.border ?? item.element.style.border,
+              radiusMm,
+              colors,
+            });
+            return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${rectCss};-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
           }
-          const overflow = item.element.type === "totals" ? "overflow:visible;" : "";
-          return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${styleFontCss(item.element.style, colors)};${overflow}-webkit-print-color-adjust:exact;print-color-adjust:exact">${inner}</div>`;
+          const box = buildCanvasBoxStyle(item.element.style, colors, {
+            overflow: item.element.type === "totals" ? "visible" : "hidden",
+          });
+          const wrapped = box.wrapForAlign ? canvasAlignWrapperHtml(inner, box.align) : inner;
+          return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${box.outerCss};-webkit-print-color-adjust:exact;print-color-adjust:exact">${wrapped}</div>`;
         })
         .join("");
       const bgStyle = pageBg ? `background:${pageBg};` : "";
