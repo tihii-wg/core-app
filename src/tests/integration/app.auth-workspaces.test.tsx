@@ -30,8 +30,9 @@ describe("login", () => {
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
     await waitFor(() => expect(location.pathname).toBe(`/en/${WS.A}/dashboard`));
-    expect(await screen.findByText("Alpha Garage car")).toBeInTheDocument();
-    expect(screen.queryByText("Beta Service car")).not.toBeInTheDocument();
+    // Dashboard lists orders by client name (device is no longer shown there).
+    expect(await screen.findByText("Ada Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Bob Beta")).not.toBeInTheDocument();
   });
 
   it("shows an error for wrong credentials and stays on the login page", async () => {
