@@ -174,3 +174,70 @@
   font-size: 0.8rem;
   line-height: 1.25;
 }
+
+/* Phone calendar: no horizontal page overflow; compact events; vertical scroll only. */
+.gcal-page {
+  max-width: 100%;
+}
+.gcal-fullcalendar {
+  max-width: 100%;
+}
+.gcal-fullcalendar .fc {
+  max-width: 100%;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc-toolbar-title {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc-toolbar {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc-toolbar-chunk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc-col-header-cell-cushion,
+.gcal-fullcalendar[data-mobile="true"] .fc-daygrid-day-number {
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc-timegrid-event .fc-event-main,
+.gcal-fullcalendar[data-mobile="true"] .fc-daygrid-event {
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc-list-event-title,
+.gcal-fullcalendar[data-mobile="true"] .fc-list-event-time {
+  font-size: 0.875rem;
+}
+.gcal-fullcalendar .fc-scroller,
+.gcal-fullcalendar .fc-scroller-liquid-absolute {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+.gcal-fullcalendar .fc-view-harness {
+  transition: transform 150ms ease;
+}
+.gcal-fullcalendar .fc-view-harness.gcal-swipe-next {
+  transform: translateX(-10px);
+}
+.gcal-fullcalendar .fc-view-harness.gcal-swipe-prev {
+  transform: translateX(10px);
+}
+.gcal-view-switcher {
+  scrollbar-width: none;
+}
+.gcal-view-switcher::-webkit-scrollbar {
+  display: none;
+}
+.gcal-fab {
+  /* above bottom nav / home indicator */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.gcal-event-sheet input,
+.gcal-event-sheet select,
+.gcal-event-sheet textarea {
+  font-size: 16px !important;
+}

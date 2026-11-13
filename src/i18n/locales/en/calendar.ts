@@ -18,6 +18,8 @@ export default {
   showOrders: "Show orders",
   myCalendars: "My calendars",
   calendarsButton: "Calendars",
+  settingsSheet: "Calendar settings",
+  moreEvents: "more {{count}}",
   busy: "Busy",
   mainBadge: "main",
   calendarErrors: "{{count}} calendar(s) could not be loaded — uncheck them if they were removed in Google",
@@ -27,9 +29,11 @@ export default {
   },
   views: {
     day: "Day",
+    threeDays: "3 days",
     week: "Week",
     month: "Month",
     list: "List",
+    switcher: "Calendar views",
   },
   event: {
     title: "Title",

@@ -21,6 +21,8 @@ const calendar: Messages<typeof en> = {
   showOrders: "Arată comenzile",
   myCalendars: "Calendarele mele",
   calendarsButton: "Calendare",
+  settingsSheet: "Setări calendar",
+  moreEvents: "încă {{count}}",
   busy: "Ocupat",
   mainBadge: "principal",
   calendarErrors: "{{count}} calendar(e) nu au putut fi încărcate — debifați-le dacă au fost eliminate din Google",
@@ -30,9 +32,11 @@ const calendar: Messages<typeof en> = {
   },
   views: {
     day: "Zi",
+    threeDays: "3 zile",
     week: "Săptămână",
     month: "Lună",
     list: "Listă",
+    switcher: "Vizualizări calendar",
   },
   event: {
     title: "Titlu",

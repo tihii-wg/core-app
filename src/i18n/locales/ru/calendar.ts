@@ -21,6 +21,8 @@ const calendar: Messages<typeof en> = {
   showOrders: "Показать заказы",
   myCalendars: "Мои календари",
   calendarsButton: "Календари",
+  settingsSheet: "Настройки календаря",
+  moreEvents: "ещё {{count}}",
   busy: "Занят",
   mainBadge: "основной",
   calendarErrors: "{{count}} календарь(ей) не удалось загрузить — снимите галочку, если календарь удалён в Google",
@@ -30,9 +32,11 @@ const calendar: Messages<typeof en> = {
   },
   views: {
     day: "День",
+    threeDays: "3 дня",
     week: "Неделя",
     month: "Месяц",
     list: "Список",
+    switcher: "Виды календаря",
   },
   event: {
     title: "Название",

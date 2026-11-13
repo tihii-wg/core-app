@@ -4,12 +4,18 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
-import type { DateSelectArg, EventClickArg, EventDropArg, DatesSetArg } from "@fullcalendar/core";
-import type { EventResizeDoneArg } from "@fullcalendar/interaction";
+import type {
+  DateSelectArg,
+  EventClickArg,
+  EventDropArg,
+  DatesSetArg,
+  EventMountArg,
+} from "@fullcalendar/core";
+import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction";
 import ruLocale from "@fullcalendar/core/locales/ru";
 import roLocale from "@fullcalendar/core/locales/ro";
 import enGbLocale from "@fullcalendar/core/locales/en-gb";
-import { CalendarDays, CloudOff } from "lucide-react";
+import { CalendarDays, CloudOff, Plus, Settings2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -19,6 +25,7 @@ import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Switch } from "../../ui/Switch";
 import { Label } from "../../ui/Label";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/Sheet";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -49,11 +56,25 @@ import { CalendarEventDialog, type CalendarEventDraft } from "./CalendarEventDia
 import {
   buildMemberLegendItems,
   buildOwnerCalendarItems,
+  CalendarColorDots,
   CalendarMyCalendarsPanel,
 } from "./CalendarMyCalendars";
 import { CalendarVisibilitySettings } from "./CalendarVisibilitySettings";
+import { CalendarViewSwitcher } from "./CalendarViewSwitcher";
+import { draftFromDateClick } from "./calendarDateClick";
+import {
+  decideCalendarSwipe,
+  isEventTargetElement,
+  isFullCalendarBusy,
+  type SwipePointerSample,
+} from "./calendarSwipe";
 import { composeFullCalendarEventId } from "./gcalColors";
 import { fullCalendarDateToGoogle, mapGoogleEventsToFc, mapOrdersToFcOverlay } from "./calendarEventMapping";
+import {
+  readStoredGcalView,
+  writeStoredGcalView,
+  type GcalViewId,
+} from "./calendarViewStorage";
 import type { GoogleCalendarEvent } from "../../services/apiGoogleCalendar";
 
 function fcLocale(lang: string) {
@@ -87,8 +108,11 @@ export function CalendarPage() {
   const moveEvent = useMoveGoogleCalendarEvent();
   const refresh = useRefreshGoogleCalendar();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [calendarsSheetOpen, setCalendarsSheetOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery("(max-width: 639px)");
+  const isCoarsePointer = useMediaQuery("(pointer: coarse)");
   const status = statusQuery.data;
   const connected = Boolean(status?.connected);
   const canAccess = Boolean(isOwner || status?.canAccess || status?.teamAccess);
@@ -113,7 +137,22 @@ export function CalendarPage() {
   const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const calendarRef = useRef<InstanceType<typeof FullCalendar> | null>(null);
+  const calendarShellRef = useRef<HTMLDivElement | null>(null);
   const handledOauth = useRef<string | null>(null);
+  const swipeStartRef = useRef<(SwipePointerSample & { startedOnEvent: boolean; pointerId: number }) | null>(
+    null,
+  );
+  const activePointersRef = useRef(new Set<number>());
+  const [activeView, setActiveView] = useState<GcalViewId>(() => readStoredGcalView(false));
+  const initialViewApplied = useRef(false);
+
+  // Sync default/stored view once we know the breakpoint.
+  useEffect(() => {
+    if (initialViewApplied.current) return;
+    initialViewApplied.current = true;
+    const stored = readStoredGcalView(isMobile);
+    setActiveView(stored);
+  }, [isMobile]);
 
   const reconnectRequired = Boolean(status?.reconnectRequired);
   const timeZone = workspace?.timezone?.trim() || status?.calendarTimeZone || undefined;
@@ -194,8 +233,20 @@ export function CalendarPage() {
     return map;
   }, [myCalendarItems]);
 
+  const changeView = useCallback((view: GcalViewId) => {
+    const api = calendarRef.current?.getApi();
+    if (api) api.changeView(view);
+    setActiveView(view);
+    writeStoredGcalView(view);
+  }, []);
+
   const onDatesSet = useCallback((arg: DatesSetArg) => {
     setRange(rangeIso(arg.start, arg.end));
+    const type = arg.view.type;
+    if (type) {
+      setActiveView(type as GcalViewId);
+      writeStoredGcalView(type);
+    }
   }, []);
 
   function openCreate(start: string, end: string, allDay: boolean) {
@@ -233,6 +284,34 @@ export function CalendarPage() {
     const mapped = fullCalendarDateToGoogle(arg.start, arg.end, arg.allDay);
     openCreate(mapped.start, mapped.end, mapped.allDay);
     arg.view.calendar.unselect();
+  }
+
+  function onDateClick(arg: DateClickArg) {
+    if (!connected) return;
+    // Touch taps use dateClick (select needs long-press). Mouse create stays on select/drag.
+    if (!isCoarsePointer && !isMobile) return;
+    const draftRange = draftFromDateClick({
+      date: arg.date,
+      allDay: arg.allDay,
+      viewType: arg.view.type,
+    });
+    openCreate(draftRange.start, draftRange.end, draftRange.allDay);
+  }
+
+  function onMoreLinkClick(arg: { date: Date; allDay: boolean }) {
+    const api = calendarRef.current?.getApi();
+    if (!api) return;
+    api.changeView("timeGridDay", arg.date);
+    setActiveView("timeGridDay");
+    writeStoredGcalView("timeGridDay");
+  }
+
+  function onEventDidMount(info: EventMountArg) {
+    if (info.event.allDay || !info.event.start || !info.event.end) return;
+    const mins = (info.event.end.getTime() - info.event.start.getTime()) / 60_000;
+    if (mins >= 45) return;
+    const timeEl = info.el.querySelector(".fc-event-time");
+    if (timeEl instanceof HTMLElement) timeEl.style.display = "none";
   }
 
   async function openOrderById(orderId: string) {
@@ -326,6 +405,59 @@ export function CalendarPage() {
     }
   }
 
+  function playSwipeHint(direction: "prev" | "next") {
+    const harness = calendarShellRef.current?.querySelector(".fc-view-harness");
+    if (!(harness instanceof HTMLElement)) return;
+    harness.classList.remove("gcal-swipe-prev", "gcal-swipe-next");
+    // force reflow so animation can re-run
+    void harness.offsetWidth;
+    harness.classList.add(direction === "prev" ? "gcal-swipe-prev" : "gcal-swipe-next");
+    window.setTimeout(() => {
+      harness.classList.remove("gcal-swipe-prev", "gcal-swipe-next");
+    }, 160);
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    activePointersRef.current.add(e.pointerId);
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (!e.isPrimary) return;
+    swipeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      t: Date.now(),
+      pointerId: e.pointerId,
+      startedOnEvent: isEventTargetElement(e.target),
+    };
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const pointerCount = activePointersRef.current.size;
+    activePointersRef.current.delete(e.pointerId);
+    const start = swipeStartRef.current;
+    if (!start || start.pointerId !== e.pointerId) return;
+    swipeStartRef.current = null;
+    const decision = decideCalendarSwipe(
+      start,
+      { x: e.clientX, y: e.clientY, t: Date.now() },
+      {
+        startedOnEvent: start.startedOnEvent,
+        pointerCount,
+        fcBusy: isFullCalendarBusy(calendarShellRef.current),
+      },
+    );
+    if (!decision) return;
+    const api = calendarRef.current?.getApi();
+    if (!api) return;
+    playSwipeHint(decision);
+    if (decision === "next") api.next();
+    else api.prev();
+  }
+
+  function onPointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+    activePointersRef.current.delete(e.pointerId);
+    if (swipeStartRef.current?.pointerId === e.pointerId) swipeStartRef.current = null;
+  }
+
   async function onDisconnect() {
     const ok = await confirm({
       title: t("calendar.confirmDisconnect.title"),
@@ -336,6 +468,7 @@ export function CalendarPage() {
     });
     if (!ok) return;
     disconnect.mutate();
+    setSettingsOpen(false);
   }
 
   const busy =
@@ -348,6 +481,18 @@ export function CalendarPage() {
     deleteEvent.isPending ||
     moveEvent.isPending;
 
+  const onToggleExtra = useCallback(
+    (ids: string[]) => {
+      setVisible.mutate(ids, {
+        onError: () => {
+          void calendarsQuery.refetch();
+          void refresh();
+        },
+      });
+    },
+    [setVisible, calendarsQuery, refresh],
+  );
+
   const myCalendarsPanel = connected && canAccess ? (
     <CalendarMyCalendarsPanel
       items={myCalendarItems}
@@ -355,20 +500,134 @@ export function CalendarPage() {
       calendarErrors={calendarErrors}
       disabled={busy || setVisible.isPending}
       isDesktop={isDesktop}
-      onToggleExtra={(ids) => {
-        setVisible.mutate(ids, {
-          onError: () => {
-            void calendarsQuery.refetch();
-            void refresh();
-          },
-        });
-      }}
+      sheetOpen={calendarsSheetOpen}
+      onSheetOpenChange={setCalendarsSheetOpen}
+      hideTrigger={isMobile}
+      onToggleExtra={onToggleExtra}
     />
   ) : null;
 
+  const phoneViews = useMemo(
+    () => ({
+      timeGrid3Day: {
+        type: "timeGrid" as const,
+        duration: { days: 3 },
+        buttonText: t("calendar.views.threeDays"),
+        dayHeaderFormat: { weekday: "short" as const, day: "numeric" as const },
+        slotLabelFormat: { hour: "numeric" as const },
+      },
+      timeGridWeek: {
+        dayHeaderFormat: { weekday: "narrow" as const, day: "numeric" as const },
+        slotLabelFormat: { hour: "numeric" as const },
+      },
+      timeGridDay: {
+        dayHeaderFormat: { weekday: "short" as const, day: "numeric" as const },
+        slotLabelFormat: { hour: "numeric" as const },
+      },
+      dayGridMonth: {
+        dayMaxEvents: 2,
+        fixedWeekCount: false,
+      },
+    }),
+    [t],
+  );
+
+  const desktopViews = useMemo(
+    () => ({
+      timeGrid3Day: {
+        type: "timeGrid" as const,
+        duration: { days: 3 },
+        buttonText: t("calendar.views.threeDays"),
+      },
+    }),
+    [t],
+  );
+
+  const calendarBlock =
+    connected && canAccess ? (
+      <div
+        ref={calendarShellRef}
+        className="bg-card gcal-fullcalendar min-w-0 flex-1 overflow-hidden rounded-lg border p-2 sm:p-3"
+        data-mobile={isMobile ? "true" : "false"}
+        data-coarse={isCoarsePointer ? "true" : "false"}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+      >
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
+          initialView={activeView}
+          headerToolbar={
+            isMobile
+              ? { left: "prev,next", center: "title", right: "today" }
+              : { left: "prev,next today", center: "title", right: "" }
+          }
+          views={isMobile ? phoneViews : desktopViews}
+          locale={fcLocale(i18n.language || "en")}
+          firstDay={1}
+          timeZone="local"
+          nowIndicator
+          scrollTime="08:00:00"
+          selectable
+          editable
+          eventStartEditable
+          eventDurationEditable
+          selectMirror
+          slotEventOverlap={false}
+          longPressDelay={350}
+          eventLongPressDelay={350}
+          selectLongPressDelay={350}
+          dayMaxEvents={isMobile ? 2 : true}
+          fixedWeekCount={false}
+          moreLinkClick={(arg) => {
+            onMoreLinkClick({ date: arg.date, allDay: true });
+            return "timeGridDay";
+          }}
+          moreLinkContent={
+            isMobile
+              ? (arg) => `+ ${t("calendar.moreEvents", { count: arg.num })}`
+              : undefined
+          }
+          height={
+            isMobile
+              ? "max(480px, calc(100dvh - 210px - env(safe-area-inset-bottom, 0px)))"
+              : "max(640px, calc(100vh - 180px))"
+          }
+          events={fcEvents}
+          datesSet={onDatesSet}
+          dateClick={onDateClick}
+          select={onSelect}
+          eventClick={onEventClick}
+          eventDidMount={onEventDidMount}
+          eventDrop={(arg) => void onEventDrop(arg)}
+          eventResize={(arg) => void onEventResize(arg)}
+          eventAllow={(_span, moving) => {
+            const kind = moving?.extendedProps?.kind;
+            if (kind === "order" || kind === "order_sync") return false;
+            if (moving?.extendedProps?.readOnly || moving?.extendedProps?.busyOnly) return false;
+            return true;
+          }}
+        />
+      </div>
+    ) : null;
+
   return (
-    <div className="space-y-4">
-      <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
+    <div className="gcal-page min-w-0 space-y-3 overflow-x-hidden sm:space-y-4">
+      {isMobile ? (
+        <div className="min-w-0 space-y-1">
+          <h1 className="text-foreground text-xl font-semibold tracking-tight">{t("calendar.title")}</h1>
+          {connected && canAccess ? (
+            <p className="text-muted-foreground truncate text-xs">
+              {status?.googleEmail || status?.calendarSummary}
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-sm">{t("calendar.description")}</p>
+          )}
+        </div>
+      ) : (
+        <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
+      )}
 
       {!statusQuery.data && !statusQuery.isError ? (
         <div className="flex justify-center py-16">
@@ -391,10 +650,7 @@ export function CalendarPage() {
           </CardHeader>
           {isOwner ? (
             <CardContent>
-              <Button
-                disabled={busy}
-                onClick={() => connect.mutate(i18n.language || "en")}
-              >
+              <Button disabled={busy} onClick={() => connect.mutate(i18n.language || "en")}>
                 <CalendarDays className="size-4" />
                 {reconnectRequired ? t("calendar.reconnect") : t("calendar.connect")}
               </Button>
@@ -410,38 +666,78 @@ export function CalendarPage() {
         </Card>
       ) : (
         <>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 text-sm">
-              <div className="text-foreground truncate font-medium">
-                {status?.calendarSummary || t("calendar.title")}
+          {!isMobile ? (
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 text-sm">
+                <div className="text-foreground truncate font-medium">
+                  {status?.calendarSummary || t("calendar.title")}
+                </div>
+                <div className="text-muted-foreground truncate">{status?.googleEmail}</div>
               </div>
-              <div className="text-muted-foreground truncate">{status?.googleEmail}</div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {showOverlayToggle ? (
+                  <div className="flex items-center gap-2 pr-2">
+                    <Switch id="gcal-orders" checked={showOrders} onCheckedChange={setShowOrders} />
+                    <Label htmlFor="gcal-orders">{t("calendar.showOrders")}</Label>
+                  </div>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    openCreate(
+                      new Date().toISOString(),
+                      new Date(Date.now() + 3600000).toISOString(),
+                      false,
+                    )
+                  }
+                >
+                  {t("calendar.addEvent")}
+                </Button>
+                {isOwner ? (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => setPickerOpen((v) => !v)}>
+                      {t("calendar.changeCalendar")}
+                    </Button>
+                    <Button size="sm" variant="destructive" disabled={busy} onClick={() => void onDisconnect()}>
+                      {t("calendar.disconnect")}
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {!isDesktop ? myCalendarsPanel : null}
+          ) : (
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                className="min-w-0"
+                onClick={() => setCalendarsSheetOpen(true)}
+              >
+                <CalendarColorDots items={myCalendarItems} />
+                <span className="truncate">{t("calendar.calendarsButton")}</span>
+              </Button>
               {showOverlayToggle ? (
-                <div className="flex items-center gap-2 pr-2">
-                  <Switch id="gcal-orders" checked={showOrders} onCheckedChange={setShowOrders} />
-                  <Label htmlFor="gcal-orders">{t("calendar.showOrders")}</Label>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Switch id="gcal-orders-m" checked={showOrders} onCheckedChange={setShowOrders} />
+                  <Label htmlFor="gcal-orders-m" className="truncate text-xs">
+                    {t("calendar.showOrders")}
+                  </Label>
                 </div>
               ) : null}
-              <Button size="sm" variant="outline" onClick={() => openCreate(new Date().toISOString(), new Date(Date.now() + 3600000).toISOString(), false)}>
-                {t("calendar.addEvent")}
-              </Button>
               {isOwner ? (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => setPickerOpen((v) => !v)}>
-                    {t("calendar.changeCalendar")}
-                  </Button>
-                  <Button size="sm" variant="destructive" disabled={busy} onClick={() => void onDisconnect()}>
-                    {t("calendar.disconnect")}
-                  </Button>
-                </>
+                <Button size="sm" variant="outline" type="button" onClick={() => setSettingsOpen(true)}>
+                  <Settings2 className="size-4" />
+                  <span className="sr-only sm:not-sr-only sm:inline">{t("calendar.settingsSheet")}</span>
+                </Button>
               ) : null}
             </div>
-          </div>
+          )}
 
-          {pickerOpen && isOwner ? (
+          <CalendarViewSwitcher activeView={activeView} isMobile={isMobile} onChange={changeView} />
+
+          {pickerOpen && isOwner && !isMobile ? (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">{t("calendar.selectCalendar")}</CardTitle>
@@ -460,12 +756,12 @@ export function CalendarPage() {
                         selectCalendar.mutate(c.id, { onSuccess: () => setPickerOpen(false) });
                       }}
                     >
-                      <span>
+                      <span className="min-w-0 truncate">
                         {c.summary}
                         {c.primary ? " ★" : ""}
                       </span>
                       {c.id === status?.calendarId ? (
-                        <span className="text-muted-foreground text-xs">{t("calendar.confirmSelect")}</span>
+                        <span className="text-muted-foreground shrink-0 text-xs">{t("calendar.confirmSelect")}</span>
                       ) : null}
                     </button>
                   ))}
@@ -473,53 +769,85 @@ export function CalendarPage() {
             </Card>
           ) : null}
 
-          <div className={isDesktop ? "flex items-start gap-0" : undefined}>
-            {isDesktop ? myCalendarsPanel : null}
-            <div className="bg-card gcal-fullcalendar min-w-0 flex-1 overflow-hidden rounded-lg border p-2 sm:p-3">
-              <FullCalendar
-                ref={calendarRef}
-                plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
-                initialView={isMobile ? "timeGridDay" : "timeGridWeek"}
-                headerToolbar={{
-                  left: "prev,next today",
-                  center: "title",
-                  right: isMobile ? "timeGridDay,listWeek" : "dayGridMonth,timeGridWeek,timeGridDay",
-                }}
-                buttonText={{
-                  month: t("calendar.views.month"),
-                  week: t("calendar.views.week"),
-                  day: t("calendar.views.day"),
-                  list: t("calendar.views.list"),
-                }}
-                locale={fcLocale(i18n.language || "en")}
-                firstDay={1}
-                timeZone="local"
-                nowIndicator
-                scrollTime="08:00:00"
-                selectable
-                editable
-                eventStartEditable
-                eventDurationEditable
-                selectMirror
-                slotEventOverlap={false}
-                height={isMobile ? "max(520px, calc(100dvh - 120px))" : "max(640px, calc(100vh - 150px))"}
-                events={fcEvents}
-                datesSet={onDatesSet}
-                select={onSelect}
-                eventClick={onEventClick}
-                eventDrop={(arg) => void onEventDrop(arg)}
-                eventResize={(arg) => void onEventResize(arg)}
-                eventAllow={(_span, moving) => {
-                  const kind = moving?.extendedProps?.kind;
-                  if (kind === "order" || kind === "order_sync") return false;
-                  if (moving?.extendedProps?.readOnly || moving?.extendedProps?.busyOnly) return false;
-                  return true;
-                }}
-              />
-            </div>
+          <div className={isDesktop ? "flex items-start gap-0" : "min-w-0"}>
+            {myCalendarsPanel}
+            {calendarBlock}
           </div>
 
-          {isOwner ? <CalendarVisibilitySettings /> : null}
+          {isOwner && !isMobile ? <CalendarVisibilitySettings /> : null}
+
+          {isMobile ? (
+            <Button
+              type="button"
+              size="icon"
+              className="gcal-fab fixed z-40 size-14 rounded-full shadow-lg"
+              style={{
+                right: "max(1rem, env(safe-area-inset-right))",
+                bottom: "max(1rem, env(safe-area-inset-bottom))",
+              }}
+              aria-label={t("calendar.addEvent")}
+              onClick={() =>
+                openCreate(new Date().toISOString(), new Date(Date.now() + 3600000).toISOString(), false)
+              }
+            >
+              <Plus className="size-6" />
+            </Button>
+          ) : null}
+
+          {isOwner ? (
+            <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+              <SheetContent
+                side="bottom"
+                className="max-h-[90dvh] w-full overflow-y-auto rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-none"
+              >
+                <SheetHeader>
+                  <SheetTitle>{t("calendar.settingsSheet")}</SheetTitle>
+                </SheetHeader>
+                <div className="space-y-4 px-5 pb-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">{t("calendar.selectCalendar")}</p>
+                    <p className="text-muted-foreground text-xs">{t("calendar.selectCalendarHint")}</p>
+                    <div className="space-y-2">
+                      {(calendarsQuery.data ?? [])
+                        .filter((c) => c.accessRole === "owner" || c.accessRole === "writer")
+                        .map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="hover:bg-muted flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm"
+                            disabled={busy || c.id === status?.calendarId}
+                            onClick={() => {
+                              selectCalendar.mutate(c.id, {
+                                onSuccess: () => setSettingsOpen(false),
+                              });
+                            }}
+                          >
+                            <span className="min-w-0 truncate">
+                              {c.summary}
+                              {c.primary ? " ★" : ""}
+                            </span>
+                            {c.id === status?.calendarId ? (
+                              <span className="text-muted-foreground shrink-0 text-xs">
+                                {t("calendar.confirmSelect")}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                  <CalendarVisibilitySettings />
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => void onDisconnect()}
+                  >
+                    {t("calendar.disconnect")}
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
+          ) : null}
         </>
       )}
 

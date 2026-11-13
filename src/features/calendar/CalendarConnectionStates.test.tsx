@@ -64,6 +64,13 @@ vi.mock("./useGoogleCalendar", () => ({
   useUpdateGoogleCalendarSettings: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock("../../hooks/useMediaQuery", () => ({
+  useMediaQuery: (query: string) => {
+    if (query.includes("min-width: 1024")) return true;
+    return false;
+  },
+}));
+
 vi.mock("../orders/useOrderDetails", () => ({
   useOrderDetails: () => ({
     openOrder: vi.fn(),

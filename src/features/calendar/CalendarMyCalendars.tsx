@@ -135,25 +135,18 @@ export function CalendarMyCalendarsList({ items, editable, calendarErrors, onTog
   );
 }
 
-type PanelProps = {
-  items: CalendarLegendItem[];
-  editable: boolean;
-  calendarErrors?: GoogleCalendarErrorEntry[];
+type ToggleableListProps = ListProps & {
   onToggleExtra: (nextExtraIds: string[]) => void;
-  disabled?: boolean;
-  isDesktop: boolean;
 };
 
-export function CalendarMyCalendarsPanel({
+/** Debounced checkbox list used by sidebar / sheets. */
+export function CalendarMyCalendarsToggleList({
   items,
   editable,
   calendarErrors,
-  onToggleExtra,
   disabled,
-  isDesktop,
-}: PanelProps) {
-  const { t } = useTranslation();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  onToggleExtra,
+}: ToggleableListProps) {
   const [localItems, setLocalItems] = useState(items);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevIdsRef = useRef<string>(JSON.stringify(selectedExtraIds(items)));
@@ -169,31 +162,90 @@ export function CalendarMyCalendarsPanel({
     };
   }, []);
 
+  return (
+    <CalendarMyCalendarsList
+      items={localItems}
+      editable={editable}
+      calendarErrors={calendarErrors}
+      disabled={disabled}
+      onToggle={(calendarId, nextSelected) => {
+        setLocalItems((prev) => {
+          const next = prev.map((it) => (it.id === calendarId ? { ...it, selected: nextSelected } : it));
+          const nextIds = selectedExtraIds(next);
+          const serialized = JSON.stringify(nextIds);
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            if (serialized !== prevIdsRef.current) {
+              prevIdsRef.current = serialized;
+              onToggleExtra(nextIds);
+            }
+          }, 400);
+          return next;
+        });
+      }}
+    />
+  );
+}
+
+type PanelProps = {
+  items: CalendarLegendItem[];
+  editable: boolean;
+  calendarErrors?: GoogleCalendarErrorEntry[];
+  onToggleExtra: (nextExtraIds: string[]) => void;
+  disabled?: boolean;
+  isDesktop: boolean;
+  /** Controlled sheet open (phone). When provided, the built-in trigger is hidden. */
+  sheetOpen?: boolean;
+  onSheetOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+};
+
+export function CalendarColorDots({ items, max = 4 }: { items: CalendarLegendItem[]; max?: number }) {
+  const selected = items.filter((i) => i.selected).slice(0, max);
+  if (!selected.length) return null;
+  return (
+    <span className="inline-flex items-center" aria-hidden>
+      {selected.map((item, idx) => (
+        <span
+          key={item.id}
+          className="size-2.5 rounded-full border border-white/80"
+          style={{
+            backgroundColor: item.backgroundColor || "#7986cb",
+            marginLeft: idx === 0 ? 0 : -4,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+export function CalendarMyCalendarsPanel({
+  items,
+  editable,
+  calendarErrors,
+  onToggleExtra,
+  disabled,
+  isDesktop,
+  sheetOpen,
+  onSheetOpenChange,
+  hideTrigger,
+}: PanelProps) {
+  const { t } = useTranslation();
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = sheetOpen ?? internalOpen;
+  const setOpen = onSheetOpenChange ?? setInternalOpen;
+
   const list = useMemo(
     () => (
-      <CalendarMyCalendarsList
-        items={localItems}
+      <CalendarMyCalendarsToggleList
+        items={items}
         editable={editable}
         calendarErrors={calendarErrors}
         disabled={disabled}
-        onToggle={(calendarId, nextSelected) => {
-          setLocalItems((prev) => {
-            const next = prev.map((it) => (it.id === calendarId ? { ...it, selected: nextSelected } : it));
-            const nextIds = selectedExtraIds(next);
-            const serialized = JSON.stringify(nextIds);
-            if (debounceRef.current) clearTimeout(debounceRef.current);
-            debounceRef.current = setTimeout(() => {
-              if (serialized !== prevIdsRef.current) {
-                prevIdsRef.current = serialized;
-                onToggleExtra(nextIds);
-              }
-            }, 400);
-            return next;
-          });
-        }}
+        onToggleExtra={onToggleExtra}
       />
     ),
-    [localItems, editable, calendarErrors, disabled, onToggleExtra],
+    [items, editable, calendarErrors, disabled, onToggleExtra],
   );
 
   if (isDesktop) {
@@ -202,16 +254,22 @@ export function CalendarMyCalendarsPanel({
 
   return (
     <>
-      <Button size="sm" variant="outline" type="button" onClick={() => setSheetOpen(true)}>
-        <CalendarRange className="size-4" />
-        {t("calendar.calendarsButton")}
-      </Button>
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="left" className="w-[min(100%,320px)] sm:max-w-sm">
+      {!hideTrigger ? (
+        <Button size="sm" variant="outline" type="button" onClick={() => setOpen(true)} className="min-w-0">
+          <CalendarRange className="size-4 shrink-0" />
+          <CalendarColorDots items={items} />
+          <span className="truncate">{t("calendar.calendarsButton")}</span>
+        </Button>
+      ) : null}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] w-full rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))] sm:max-w-none"
+        >
           <SheetHeader>
             <SheetTitle>{t("calendar.myCalendars")}</SheetTitle>
           </SheetHeader>
-          <div className="mt-4 px-1">{list}</div>
+          <div className="overflow-y-auto px-5 pb-4">{list}</div>
         </SheetContent>
       </Sheet>
     </>

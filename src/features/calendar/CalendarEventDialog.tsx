@@ -4,10 +4,13 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Label } from "../../ui/Label";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "../../ui/Sheet";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import type { GoogleCalendarEvent } from "../../services/apiGoogleCalendar";
 import type { UpsertGoogleCalendarEventInput } from "../../services/apiGoogleCalendar";
 import { isWritableAccessRole } from "./gcalColors";
+import { cn } from "../../lib/utils";
 
 export type CalendarSelectOption = {
   id: string;
@@ -56,6 +59,9 @@ function fromLocalInputValue(value: string, allDay: boolean): string {
   return Number.isNaN(d.getTime()) ? value : d.toISOString();
 }
 
+const inputClass =
+  "border-input bg-background flex h-10 w-full rounded-md border px-3 text-base outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 sm:h-9 sm:text-sm";
+
 export function CalendarEventDialog({
   open,
   draft,
@@ -68,6 +74,7 @@ export function CalendarEventDialog({
 }: Props) {
   const { t } = useTranslation();
   const confirm = useConfirm();
+  const isMobile = useMediaQuery("(max-width: 639px)");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
@@ -109,6 +116,12 @@ export function CalendarEventDialog({
     draft.event?.calendarId ||
     "";
 
+  const heading = isView
+    ? t("calendar.event.viewTitle")
+    : isEdit
+      ? t("calendar.event.editTitle")
+      : t("calendar.event.newTitle");
+
   async function handleDelete() {
     if (!onDelete) return;
     const ok = await confirm({
@@ -144,146 +157,177 @@ export function CalendarEventDialog({
     );
   }
 
+  const fields = (
+    <>
+      {isView ? (
+        <div className="space-y-1.5">
+          <Label>{t("calendar.event.calendar")}</Label>
+          <p className="text-sm">{viewCalendarName || "—"}</p>
+        </div>
+      ) : writableOptions.length > 0 ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="gcal-calendar">{t("calendar.event.calendar")}</Label>
+          <select
+            id="gcal-calendar"
+            className={inputClass}
+            value={calendarId}
+            onChange={(e) => setCalendarId(e.target.value)}
+          >
+            {writableOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.summary}
+                {c.isMain ? ` (${t("calendar.mainBadge")})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      <div className="space-y-1.5">
+        <Label htmlFor="gcal-title">{t("calendar.event.title")}</Label>
+        <input
+          id="gcal-title"
+          className={cn(inputClass, "placeholder:text-muted-foreground")}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={t("calendar.event.titlePlaceholder")}
+          required
+          disabled={isView}
+          readOnly={isView}
+        />
+      </div>
+      <label className="flex items-center gap-2 text-base sm:text-sm">
+        <input
+          type="checkbox"
+          className="size-4"
+          checked={allDay}
+          onChange={(e) => setAllDay(e.target.checked)}
+          disabled={isView}
+        />
+        {t("calendar.event.allDay")}
+      </label>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="gcal-start">{t("calendar.event.start")}</Label>
+          <input
+            id="gcal-start"
+            type={allDay ? "date" : "datetime-local"}
+            className={inputClass}
+            value={startLocal}
+            onChange={(e) => setStartLocal(e.target.value)}
+            required
+            disabled={isView}
+            readOnly={isView}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="gcal-end">{t("calendar.event.end")}</Label>
+          <input
+            id="gcal-end"
+            type={allDay ? "date" : "datetime-local"}
+            className={inputClass}
+            value={endLocal}
+            onChange={(e) => setEndLocal(e.target.value)}
+            required
+            disabled={isView}
+            readOnly={isView}
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="gcal-location">{t("calendar.event.location")}</Label>
+        <input
+          id="gcal-location"
+          className={inputClass}
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          disabled={isView}
+          readOnly={isView}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="gcal-desc">{t("calendar.event.description")}</Label>
+        <textarea
+          id="gcal-desc"
+          className={cn(inputClass, "min-h-[88px] py-2")}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={isView}
+          readOnly={isView}
+        />
+      </div>
+      {draft.event?.authorUserName ? (
+        <p className="text-muted-foreground text-xs">
+          {t("calendar.event.author", { name: draft.event.authorUserName })}
+        </p>
+      ) : null}
+    </>
+  );
+
+  const actions = (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {(isEdit || isView) && draft.event?.htmlLink ? (
+          <Button type="button" variant="outline" size="sm" asChild>
+            <a href={draft.event.htmlLink} target="_blank" rel="noreferrer">
+              <ExternalLink className="size-3.5" />
+              {t("calendar.event.openInGoogle")}
+            </a>
+          </Button>
+        ) : null}
+        {isEdit && onDelete ? (
+          <Button type="button" variant="destructive" size="sm" disabled={busy} onClick={() => void handleDelete()}>
+            {t("calendar.event.delete")}
+          </Button>
+        ) : null}
+      </div>
+      {isView ? (
+        <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>
+          {t("calendar.event.close")}
+        </Button>
+      ) : (
+        <Button type="submit" size="sm" disabled={busy || !title.trim()}>
+          {isEdit ? t("calendar.event.save") : t("calendar.event.create")}
+        </Button>
+      )}
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="bottom"
+          className="gcal-event-sheet flex h-[100dvh] max-h-[100dvh] w-full flex-col gap-0 rounded-none border-0 p-0 pb-[env(safe-area-inset-bottom)] sm:max-w-none"
+        >
+          <SheetHeader className="shrink-0">
+            <SheetTitle>{heading}</SheetTitle>
+            {isRecurring && !isView ? (
+              <SheetDescription>{t("calendar.event.recurringHint")}</SheetDescription>
+            ) : null}
+          </SheetHeader>
+          <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3">{fields}</div>
+            <SheetFooter className="bg-elevated sticky bottom-0 shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-t">
+              {actions}
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isView
-              ? t("calendar.event.viewTitle")
-              : isEdit
-                ? t("calendar.event.editTitle")
-                : t("calendar.event.newTitle")}
-          </DialogTitle>
+          <DialogTitle>{heading}</DialogTitle>
           {isRecurring && !isView ? (
             <DialogDescription>{t("calendar.event.recurringHint")}</DialogDescription>
           ) : null}
         </DialogHeader>
         <form className="space-y-3" onSubmit={handleSubmit}>
-          {isView ? (
-            <div className="space-y-1.5">
-              <Label>{t("calendar.event.calendar")}</Label>
-              <p className="text-sm">{viewCalendarName || "—"}</p>
-            </div>
-          ) : writableOptions.length > 0 ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="gcal-calendar">{t("calendar.event.calendar")}</Label>
-              <select
-                id="gcal-calendar"
-                className="border-input bg-background flex h-9 w-full rounded-md border px-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-                value={calendarId}
-                onChange={(e) => setCalendarId(e.target.value)}
-              >
-                {writableOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.summary}
-                    {c.isMain ? ` (${t("calendar.mainBadge")})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-          <div className="space-y-1.5">
-            <Label htmlFor="gcal-title">{t("calendar.event.title")}</Label>
-            <input
-              id="gcal-title"
-              className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("calendar.event.titlePlaceholder")}
-              required
-              disabled={isView}
-              readOnly={isView}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={allDay}
-              onChange={(e) => setAllDay(e.target.checked)}
-              disabled={isView}
-            />
-            {t("calendar.event.allDay")}
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="gcal-start">{t("calendar.event.start")}</Label>
-              <input
-                id="gcal-start"
-                type={allDay ? "date" : "datetime-local"}
-                className="border-input bg-background flex h-9 w-full rounded-md border px-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-                value={startLocal}
-                onChange={(e) => setStartLocal(e.target.value)}
-                required
-                disabled={isView}
-                readOnly={isView}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="gcal-end">{t("calendar.event.end")}</Label>
-              <input
-                id="gcal-end"
-                type={allDay ? "date" : "datetime-local"}
-                className="border-input bg-background flex h-9 w-full rounded-md border px-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-                value={endLocal}
-                onChange={(e) => setEndLocal(e.target.value)}
-                required
-                disabled={isView}
-                readOnly={isView}
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="gcal-location">{t("calendar.event.location")}</Label>
-            <input
-              id="gcal-location"
-              className="border-input bg-background flex h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              disabled={isView}
-              readOnly={isView}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="gcal-desc">{t("calendar.event.description")}</Label>
-            <textarea
-              id="gcal-desc"
-              className="border-input bg-background flex min-h-[72px] w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isView}
-              readOnly={isView}
-            />
-          </div>
-          {draft.event?.authorUserName ? (
-            <p className="text-muted-foreground text-xs">{t("calendar.event.author", { name: draft.event.authorUserName })}</p>
-          ) : null}
-          <DialogFooter className="gap-2 sm:justify-between">
-            <div className="flex flex-wrap gap-2">
-              {(isEdit || isView) && draft.event?.htmlLink ? (
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <a href={draft.event.htmlLink} target="_blank" rel="noreferrer">
-                    <ExternalLink className="size-3.5" />
-                    {t("calendar.event.openInGoogle")}
-                  </a>
-                </Button>
-              ) : null}
-              {isEdit && onDelete ? (
-                <Button type="button" variant="destructive" size="sm" disabled={busy} onClick={() => void handleDelete()}>
-                  {t("calendar.event.delete")}
-                </Button>
-              ) : null}
-            </div>
-            {isView ? (
-              <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>
-                {t("calendar.event.close")}
-              </Button>
-            ) : (
-              <Button type="submit" size="sm" disabled={busy || !title.trim()}>
-                {isEdit ? t("calendar.event.save") : t("calendar.event.create")}
-              </Button>
-            )}
-          </DialogFooter>
+          {fields}
+          <DialogFooter className="gap-2 sm:justify-between">{actions}</DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
