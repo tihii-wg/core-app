@@ -376,8 +376,6 @@ export function CalendarPage() {
             </div>
           </div>
 
-          {isOwner ? <CalendarVisibilitySettings /> : null}
-
           {pickerOpen && isOwner ? (
             <Card>
               <CardHeader>
@@ -436,8 +434,8 @@ export function CalendarPage() {
               eventStartEditable
               eventDurationEditable
               selectMirror
-              // Desktop: fixed height so the grid scrolls internally and opens at scrollTime (08:00).
-              height={isMobile ? "auto" : "max(560px, calc(100vh - 240px))"}
+              // Fills the screen; the grid scrolls inside and opens at scrollTime (08:00). Taller slots: index.css.
+              height={isMobile ? "max(520px, calc(100dvh - 120px))" : "max(640px, calc(100vh - 150px))"}
               events={fcEvents}
               datesSet={onDatesSet}
               select={onSelect}
@@ -450,6 +448,8 @@ export function CalendarPage() {
               }}
             />
           </div>
+
+          {isOwner ? <CalendarVisibilitySettings /> : null}
         </>
       )}
 

@@ -165,3 +165,12 @@
     display: table-row-group;
   }
 }
+
+/* Shared Google Calendar page: taller time slots (default ~1.5em is too cramped to read). */
+.gcal-fullcalendar .fc-timegrid-slot {
+  height: 2.5rem;
+}
+.gcal-fullcalendar .fc-timegrid-event .fc-event-main {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
