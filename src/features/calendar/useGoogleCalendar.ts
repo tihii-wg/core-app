@@ -8,7 +8,9 @@ import {
   getGoogleCalendarStatus,
   listGoogleCalendarEvents,
   listGoogleCalendars,
+  moveGoogleCalendarEvent,
   selectGoogleCalendar,
+  setVisibleGoogleCalendars,
   startGoogleCalendarOAuth,
   updateGoogleCalendarEvent,
   updateGoogleCalendarSettings,
@@ -122,6 +124,26 @@ export function useSelectGoogleCalendar() {
   });
 }
 
+export function useSetVisibleGoogleCalendars() {
+  const { t } = useTranslation();
+  const { workspaceId } = useActiveWorkspaceId();
+  const queryClient = useQueryClient();
+  const refresh = useRefreshGoogleCalendar();
+  return useMutation({
+    mutationFn: (calendarIds: string[]) => setVisibleGoogleCalendars(workspaceId, calendarIds),
+    onSuccess: async (visibleCalendars) => {
+      queryClient.setQueryData(googleCalendarStatusKey(workspaceId), (prev: unknown) => {
+        if (!prev || typeof prev !== "object") return prev;
+        return { ...(prev as object), visibleCalendars };
+      });
+      await refresh();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || t("calendar.errors.visibleFailed"));
+    },
+  });
+}
+
 export function useUpdateGoogleCalendarSettings() {
   const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
@@ -158,6 +180,10 @@ export function useCreateGoogleCalendarEvent() {
         toast.error(t("calendar.errors.reconnectRequired"));
         return;
       }
+      if (error.code === "calendar_read_only") {
+        toast.error(t("calendar.errors.calendarReadOnly"));
+        return;
+      }
       toast.error(error.message || t("calendar.errors.saveFailed"));
     },
   });
@@ -168,8 +194,13 @@ export function useUpdateGoogleCalendarEvent() {
   const { workspaceId } = useActiveWorkspaceId();
   const refresh = useRefreshGoogleCalendar();
   return useMutation({
-    mutationFn: ({ eventId, input }: { eventId: string; input: UpsertGoogleCalendarEventInput & { etag: string } }) =>
-      updateGoogleCalendarEvent(workspaceId, eventId, input),
+    mutationFn: ({
+      eventId,
+      input,
+    }: {
+      eventId: string;
+      input: UpsertGoogleCalendarEventInput & { etag: string; calendarId: string };
+    }) => updateGoogleCalendarEvent(workspaceId, eventId, input),
     onSuccess: async () => {
       await refresh();
     },
@@ -183,6 +214,10 @@ export function useUpdateGoogleCalendarEvent() {
         toast.error(t("calendar.errors.reconnectRequired"));
         return;
       }
+      if (error.code === "calendar_read_only") {
+        toast.error(t("calendar.errors.calendarReadOnly"));
+        return;
+      }
       toast.error(error.message || t("calendar.errors.saveFailed"));
     },
   });
@@ -193,7 +228,8 @@ export function useDeleteGoogleCalendarEvent() {
   const { workspaceId } = useActiveWorkspaceId();
   const refresh = useRefreshGoogleCalendar();
   return useMutation({
-    mutationFn: (eventId: string) => deleteGoogleCalendarEvent(workspaceId, eventId),
+    mutationFn: ({ eventId, calendarId }: { eventId: string; calendarId: string }) =>
+      deleteGoogleCalendarEvent(workspaceId, eventId, calendarId),
     onSuccess: async () => {
       await refresh();
       toast.success(t("calendar.toast.deleted"));
@@ -204,6 +240,37 @@ export function useDeleteGoogleCalendarEvent() {
         return;
       }
       toast.error(error.message || t("calendar.errors.deleteFailed"));
+    },
+  });
+}
+
+export function useMoveGoogleCalendarEvent() {
+  const { t } = useTranslation();
+  const { workspaceId } = useActiveWorkspaceId();
+  const refresh = useRefreshGoogleCalendar();
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      fromCalendarId,
+      toCalendarId,
+    }: {
+      eventId: string;
+      fromCalendarId: string;
+      toCalendarId: string;
+    }) => moveGoogleCalendarEvent(workspaceId, eventId, fromCalendarId, toCalendarId),
+    onSuccess: async () => {
+      await refresh();
+    },
+    onError: (error: Error & { code?: string }) => {
+      if (error.code === "order_event_locked") {
+        toast.error(t("calendar.errors.orderEventLocked"));
+        return;
+      }
+      if (error.code === "calendar_read_only") {
+        toast.error(t("calendar.errors.calendarReadOnly"));
+        return;
+      }
+      toast.error(error.message || t("calendar.errors.moveFailed"));
     },
   });
 }

@@ -1,5 +1,24 @@
 import i18n from "../i18n";
+import {
+  composeFullCalendarEventId,
+  contrastingTextColor,
+  isWritableAccessRole,
+} from "../features/calendar/gcalColors";
 import supabase from "./supabase";
+
+export type GoogleVisibleCalendar = {
+  id: string;
+  summary: string;
+  backgroundColor: string | null;
+  foregroundColor: string | null;
+  accessRole: string;
+};
+
+export type GoogleMainCalendar = {
+  id: string;
+  summary: string;
+  backgroundColor: string | null;
+};
 
 export type GoogleCalendarConnection = {
   connected: boolean;
@@ -18,6 +37,8 @@ export type GoogleCalendarConnection = {
   canAccess: boolean;
   pendingSyncCount?: number;
   lastSyncError?: string | null;
+  visibleCalendars: GoogleVisibleCalendar[];
+  mainCalendar: GoogleMainCalendar | null;
 };
 
 export type GoogleCalendarListItem = {
@@ -26,6 +47,9 @@ export type GoogleCalendarListItem = {
   primary: boolean;
   accessRole: string;
   timeZone: string | null;
+  backgroundColor: string | null;
+  foregroundColor: string | null;
+  selected: boolean;
 };
 
 export type GoogleCalendarEvent = {
@@ -45,6 +69,15 @@ export type GoogleCalendarEvent = {
   authorUserName: string | null;
   coreAppOrderId: string | null;
   coreAppField: string | null;
+  calendarId: string | null;
+  calendarColor: string | null;
+  readOnly: boolean;
+  busyOnly: boolean;
+};
+
+export type GoogleCalendarErrorEntry = {
+  calendarId: string;
+  code: string;
 };
 
 export type GoogleCalendarApiError = Error & { code?: string };
@@ -74,7 +107,10 @@ type FunctionErrorBody = {
   ok?: boolean;
   event?: GoogleCalendarEvent;
   events?: GoogleCalendarEvent[];
+  calendarErrors?: GoogleCalendarErrorEntry[];
   calendars?: GoogleCalendarListItem[];
+  visibleCalendars?: GoogleVisibleCalendar[];
+  mainCalendar?: GoogleMainCalendar | null;
   connected?: boolean;
   googleEmail?: string | null;
   calendarId?: string | null;
@@ -107,7 +143,38 @@ const emptyConnection = (): GoogleCalendarConnection => ({
   syncMeasurement: false,
   syncInstallation: false,
   canAccess: false,
+  visibleCalendars: [],
+  mainCalendar: null,
 });
+
+function parseVisible(raw: unknown): GoogleVisibleCalendar[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GoogleVisibleCalendar[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const id = typeof row.id === "string" ? row.id.trim() : "";
+    if (!id) continue;
+    out.push({
+      id,
+      summary: typeof row.summary === "string" && row.summary.trim() ? row.summary.trim() : id,
+      backgroundColor: typeof row.backgroundColor === "string" ? row.backgroundColor : null,
+      foregroundColor: typeof row.foregroundColor === "string" ? row.foregroundColor : null,
+      accessRole: typeof row.accessRole === "string" ? row.accessRole : "reader",
+    });
+  }
+  return out;
+}
+
+function normalizeEvent(raw: GoogleCalendarEvent): GoogleCalendarEvent {
+  return {
+    ...raw,
+    calendarId: raw.calendarId ?? null,
+    calendarColor: raw.calendarColor ?? null,
+    readOnly: Boolean(raw.readOnly) || Boolean(raw.busyOnly),
+    busyOnly: Boolean(raw.busyOnly),
+  };
+}
 
 async function readJson(res: Response): Promise<FunctionErrorBody> {
   try {
@@ -167,6 +234,20 @@ export async function getGoogleCalendarStatus(workspaceId: string | undefined): 
         canAccess: Boolean(json.canAccess),
         pendingSyncCount: typeof json.pendingSyncCount === "number" ? json.pendingSyncCount : undefined,
         lastSyncError: json.lastSyncError ?? null,
+        visibleCalendars: parseVisible(json.visibleCalendars),
+        mainCalendar: json.mainCalendar
+          ? {
+              id: json.mainCalendar.id,
+              summary: json.mainCalendar.summary,
+              backgroundColor: json.mainCalendar.backgroundColor ?? null,
+            }
+          : json.calendarId
+            ? {
+                id: json.calendarId,
+                summary: json.calendarSummary ?? json.calendarId,
+                backgroundColor: null,
+              }
+            : null,
       };
     }
   } catch {
@@ -176,7 +257,7 @@ export async function getGoogleCalendarStatus(workspaceId: string | undefined): 
   const { data, error } = await supabase
     .from("workspace_google_calendar")
     .select(
-      "google_email, calendar_id, calendar_summary, calendar_time_zone, connected_at, last_error, team_access, sync_orders, sync_measurement, sync_installation, last_sync_error",
+      "google_email, calendar_id, calendar_summary, calendar_time_zone, connected_at, last_error, team_access, sync_orders, sync_measurement, sync_installation, last_sync_error, visible_calendars",
     )
     .eq("workspace_id", id)
     .maybeSingle();
@@ -191,6 +272,7 @@ export async function getGoogleCalendarStatus(workspaceId: string | undefined): 
   const connected = Boolean(data?.calendar_id);
   const lastError = typeof data?.last_error === "string" ? data.last_error : null;
   const teamAccess = data?.team_access === true;
+  const visibleCalendars = parseVisible((data as { visible_calendars?: unknown } | null)?.visible_calendars);
   return {
     connected,
     googleEmail: typeof data?.google_email === "string" ? data.google_email : null,
@@ -206,6 +288,14 @@ export async function getGoogleCalendarStatus(workspaceId: string | undefined): 
     syncInstallation: data?.sync_installation === true,
     canAccess: connected ? teamAccess : true,
     lastSyncError: typeof data?.last_sync_error === "string" ? data.last_sync_error : null,
+    visibleCalendars,
+    mainCalendar: data?.calendar_id
+      ? {
+          id: data.calendar_id,
+          summary: (typeof data.calendar_summary === "string" && data.calendar_summary) || data.calendar_id,
+          backgroundColor: null,
+        }
+      : null,
   };
 }
 
@@ -275,7 +365,12 @@ export async function listGoogleCalendars(workspaceId: string | undefined): Prom
   const id = requireWorkspaceId(workspaceId);
   const { res, json } = await calendarFetch("/google-calendar/calendars", { workspaceId: id });
   if (!res.ok) throw mapError(json, i18n.t("calendar.errors.loadFailed"));
-  return json.calendars ?? [];
+  return (json.calendars ?? []).map((c) => ({
+    ...c,
+    backgroundColor: c.backgroundColor ?? null,
+    foregroundColor: c.foregroundColor ?? null,
+    selected: Boolean(c.selected),
+  }));
 }
 
 export async function selectGoogleCalendar(workspaceId: string | undefined, calendarId: string): Promise<void> {
@@ -288,18 +383,35 @@ export async function selectGoogleCalendar(workspaceId: string | undefined, cale
   if (!res.ok) throw mapError(json, i18n.t("calendar.errors.selectFailed"));
 }
 
+export async function setVisibleGoogleCalendars(
+  workspaceId: string | undefined,
+  calendarIds: string[],
+): Promise<GoogleVisibleCalendar[]> {
+  const id = requireWorkspaceId(workspaceId);
+  const { res, json } = await calendarFetch("/google-calendar/visible-calendars", {
+    method: "POST",
+    workspaceId: id,
+    body: JSON.stringify({ calendarIds }),
+  });
+  if (!res.ok) throw mapError(json, i18n.t("calendar.errors.visibleFailed"));
+  return parseVisible(json.visibleCalendars);
+}
+
 export async function listGoogleCalendarEvents(
   workspaceId: string | undefined,
   from: string,
   to: string,
-): Promise<GoogleCalendarEvent[]> {
+): Promise<{ events: GoogleCalendarEvent[]; calendarErrors: GoogleCalendarErrorEntry[] }> {
   const id = requireWorkspaceId(workspaceId);
   const { res, json } = await calendarFetch(
     `/google-calendar/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     { workspaceId: id },
   );
   if (!res.ok) throw mapError(json, i18n.t("calendar.errors.loadFailed"));
-  return json.events ?? [];
+  return {
+    events: (json.events ?? []).map(normalizeEvent),
+    calendarErrors: Array.isArray(json.calendarErrors) ? json.calendarErrors : [],
+  };
 }
 
 export type UpsertGoogleCalendarEventInput = {
@@ -311,6 +423,7 @@ export type UpsertGoogleCalendarEventInput = {
   allDay: boolean;
   timeZone?: string | null;
   etag?: string;
+  calendarId?: string | null;
 };
 
 export async function createGoogleCalendarEvent(
@@ -324,13 +437,13 @@ export async function createGoogleCalendarEvent(
     body: JSON.stringify(input),
   });
   if (!res.ok || !json.event) throw mapError(json, i18n.t("calendar.errors.saveFailed"));
-  return json.event;
+  return normalizeEvent(json.event);
 }
 
 export async function updateGoogleCalendarEvent(
   workspaceId: string | undefined,
   eventId: string,
-  input: UpsertGoogleCalendarEventInput & { etag: string },
+  input: UpsertGoogleCalendarEventInput & { etag: string; calendarId: string },
 ): Promise<GoogleCalendarEvent> {
   const id = requireWorkspaceId(workspaceId);
   const { res, json } = await calendarFetch(`/google-calendar/events/${encodeURIComponent(eventId)}`, {
@@ -339,39 +452,79 @@ export async function updateGoogleCalendarEvent(
     body: JSON.stringify(input),
   });
   if (!res.ok || !json.event) throw mapError(json, i18n.t("calendar.errors.saveFailed"));
-  return json.event;
+  return normalizeEvent(json.event);
 }
 
-export async function deleteGoogleCalendarEvent(workspaceId: string | undefined, eventId: string): Promise<void> {
+export async function deleteGoogleCalendarEvent(
+  workspaceId: string | undefined,
+  eventId: string,
+  calendarId: string,
+): Promise<void> {
   const id = requireWorkspaceId(workspaceId);
-  const { res, json } = await calendarFetch(`/google-calendar/events/${encodeURIComponent(eventId)}`, {
-    method: "DELETE",
-    workspaceId: id,
-  });
+  const { res, json } = await calendarFetch(
+    `/google-calendar/events/${encodeURIComponent(eventId)}?calendarId=${encodeURIComponent(calendarId)}`,
+    {
+      method: "DELETE",
+      workspaceId: id,
+      body: JSON.stringify({ calendarId }),
+    },
+  );
   if (!res.ok) throw mapError(json, i18n.t("calendar.errors.deleteFailed"));
 }
 
+export async function moveGoogleCalendarEvent(
+  workspaceId: string | undefined,
+  eventId: string,
+  fromCalendarId: string,
+  toCalendarId: string,
+): Promise<GoogleCalendarEvent> {
+  const id = requireWorkspaceId(workspaceId);
+  const { res, json } = await calendarFetch(`/google-calendar/events/${encodeURIComponent(eventId)}/move`, {
+    method: "POST",
+    workspaceId: id,
+    body: JSON.stringify({ fromCalendarId, toCalendarId }),
+  });
+  if (!res.ok || !json.event) throw mapError(json, i18n.t("calendar.errors.moveFailed"));
+  return normalizeEvent(json.event);
+}
+
 /** Pure helpers — used by unit tests and FullCalendar adapters. */
-export function googleEventToFullCalendar(event: GoogleCalendarEvent) {
+export function googleEventToFullCalendar(event: GoogleCalendarEvent, busyTitle = "Busy") {
   const isOrderSync = Boolean(event.coreAppOrderId);
+  const readOnly = Boolean(event.readOnly) || Boolean(event.busyOnly) || isOrderSync;
+  const calendarId = event.calendarId?.trim() || "";
+  const fcId = calendarId ? composeFullCalendarEventId(calendarId, event.id) : event.id;
+  const bg = event.calendarColor?.trim() || undefined;
+  const text = bg ? contrastingTextColor(bg) : undefined;
   return {
-    id: event.id,
-    title: event.title,
+    id: fcId,
+    title: event.busyOnly ? busyTitle : event.title,
     start: event.start,
     end: event.end,
     allDay: event.allDay,
-    editable: !isOrderSync,
-    startEditable: !isOrderSync,
-    durationEditable: !isOrderSync,
-    ...(isOrderSync
+    editable: !readOnly,
+    startEditable: !readOnly,
+    durationEditable: !readOnly,
+    ...(bg
       ? {
-          backgroundColor: "var(--color-info)",
-          borderColor: "var(--color-info)",
-          textColor: "var(--color-info-foreground, #fff)",
+          backgroundColor: bg,
+          borderColor: bg,
+          textColor: text,
         }
-      : {}),
+      : isOrderSync
+        ? {
+            backgroundColor: "var(--color-info)",
+            borderColor: "var(--color-info)",
+            textColor: "var(--color-info-foreground, #fff)",
+          }
+        : {}),
     extendedProps: {
       kind: isOrderSync ? ("order_sync" as const) : ("gcal" as const),
+      googleEventId: event.id,
+      calendarId: event.calendarId,
+      calendarColor: event.calendarColor,
+      readOnly: Boolean(event.readOnly) || Boolean(event.busyOnly),
+      busyOnly: Boolean(event.busyOnly),
       description: event.description,
       location: event.location,
       htmlLink: event.htmlLink,
@@ -389,3 +542,5 @@ export function googleEventToFullCalendar(event: GoogleCalendarEvent) {
 export function isAllDayGoogleRange(start: string, end: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end);
 }
+
+export { isWritableAccessRole, composeFullCalendarEventId };

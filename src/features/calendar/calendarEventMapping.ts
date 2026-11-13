@@ -57,8 +57,11 @@ export type CalendarFcEvent = ReturnType<typeof googleEventToFullCalendar> | {
   };
 };
 
-export function mapGoogleEventsToFc(events: readonly GoogleCalendarEvent[]): CalendarFcEvent[] {
-  return events.map(googleEventToFullCalendar);
+export function mapGoogleEventsToFc(
+  events: readonly GoogleCalendarEvent[],
+  busyTitle = "Busy",
+): CalendarFcEvent[] {
+  return events.map((ev) => googleEventToFullCalendar(ev, busyTitle));
 }
 
 /** Read-only order deadline overlays for the shared calendar. */

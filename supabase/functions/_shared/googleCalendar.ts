@@ -1,5 +1,6 @@
 import { googleAccessToken, isGoogleAuthError, type GoogleCredential } from "./googleDrive.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { resolveEventCalendarColor } from "./gcalMulti.ts";
 
 export type { GoogleCredential };
 
@@ -20,6 +21,10 @@ export type GCalEventDto = {
   authorUserName: string | null;
   coreAppOrderId: string | null;
   coreAppField: string | null;
+  calendarId: string | null;
+  calendarColor: string | null;
+  readOnly: boolean;
+  busyOnly: boolean;
 };
 
 export type GCalCalendarListItem = {
@@ -28,6 +33,9 @@ export type GCalCalendarListItem = {
   primary: boolean;
   accessRole: string;
   timeZone: string | null;
+  backgroundColor: string | null;
+  foregroundColor: string | null;
+  selected: boolean;
 };
 
 type GoogleEventRaw = {
@@ -45,8 +53,15 @@ type GoogleEventRaw = {
   extendedProperties?: { private?: Record<string, string> };
 };
 
+export type MapGoogleEventOpts = {
+  calendarId?: string | null;
+  calendarBackground?: string | null;
+  readOnly?: boolean;
+  busyOnly?: boolean;
+};
+
 /** Map a Google Calendar API event to the app DTO (all-day uses date-only strings). */
-export function mapGoogleCalendarEvent(raw: GoogleEventRaw): GCalEventDto | null {
+export function mapGoogleCalendarEvent(raw: GoogleEventRaw, opts: MapGoogleEventOpts = {}): GCalEventDto | null {
   const id = raw.id?.trim();
   if (!id) return null;
   const allDay = Boolean(raw.start?.date && !raw.start?.dateTime);
@@ -54,16 +69,18 @@ export function mapGoogleCalendarEvent(raw: GoogleEventRaw): GCalEventDto | null
   const end = allDay ? (raw.end?.date ?? "") : (raw.end?.dateTime ?? "");
   if (!start || !end) return null;
   const priv = raw.extendedProperties?.private ?? {};
+  const busyOnly = Boolean(opts.busyOnly);
+  const colorId = raw.colorId?.trim() || null;
   return {
     id,
-    title: (raw.summary ?? "").trim() || "(no title)",
-    description: raw.description?.trim() || null,
-    location: raw.location?.trim() || null,
+    title: busyOnly ? "" : (raw.summary ?? "").trim() || "(no title)",
+    description: busyOnly ? null : raw.description?.trim() || null,
+    location: busyOnly ? null : raw.location?.trim() || null,
     start,
     end,
     allDay,
-    colorId: raw.colorId?.trim() || null,
-    htmlLink: raw.htmlLink?.trim() || null,
+    colorId,
+    htmlLink: busyOnly ? null : raw.htmlLink?.trim() || null,
     recurringEventId: raw.recurringEventId?.trim() || null,
     updated: raw.updated?.trim() || null,
     etag: raw.etag?.trim() || null,
@@ -71,6 +88,10 @@ export function mapGoogleCalendarEvent(raw: GoogleEventRaw): GCalEventDto | null
     authorUserName: priv.core_app_user_name?.trim() || null,
     coreAppOrderId: priv.core_app_order_id?.trim() || null,
     coreAppField: priv.core_app_field?.trim() || null,
+    calendarId: opts.calendarId?.trim() || null,
+    calendarColor: resolveEventCalendarColor(opts.calendarBackground, colorId),
+    readOnly: Boolean(opts.readOnly) || busyOnly,
+    busyOnly,
   };
 }
 
@@ -261,9 +282,12 @@ export function setCachedEvents(key: string, payload: unknown, ttlMs = 30_000) {
   eventsCache.set(key, { expiresAt: Date.now() + ttlMs, payload });
 }
 
-export function invalidateEventsCache(workspaceId: string) {
+export function invalidateEventsCache(workspaceId: string, calendarId?: string) {
+  const prefix = calendarId ? `${workspaceId}:${calendarId}:` : `${workspaceId}:`;
   for (const key of eventsCache.keys()) {
-    if (key.startsWith(`${workspaceId}:`)) eventsCache.delete(key);
+    if (key.startsWith(prefix) || (!calendarId && key.startsWith(`${workspaceId}:`))) {
+      eventsCache.delete(key);
+    }
   }
 }
 

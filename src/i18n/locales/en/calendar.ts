@@ -16,6 +16,11 @@ export default {
   confirmSelect: "Use this calendar",
   addEvent: "+ Event",
   showOrders: "Show orders",
+  myCalendars: "My calendars",
+  calendarsButton: "Calendars",
+  busy: "Busy",
+  mainBadge: "main",
+  calendarErrors: "{{count}} calendar(s) could not be loaded — uncheck them if they were removed in Google",
   ownerOnly: {
     title: "Calendar is available to the owner only",
     description: "Ask the workspace owner to allow team access in calendar settings.",
@@ -42,6 +47,9 @@ export default {
     recurringHint: "This is one occurrence of a recurring event. Only this instance will be changed or deleted.",
     newTitle: "New event",
     editTitle: "Edit event",
+    viewTitle: "Event",
+    calendar: "Calendar",
+    close: "Close",
   },
   confirmDisconnect: {
     title: "Disconnect Google Calendar?",
@@ -75,6 +83,10 @@ export default {
     deleteFailed: "Could not delete the event",
     reconnectRequired: "Connect Google Calendar again",
     conflict: "Event was changed in Google — refreshed",
+    visibleFailed: "Could not update visible calendars",
+    calendarReadOnly: "This calendar is read-only",
+    moveFailed: "Could not move the event",
+    orderEventLocked: "Order-synced events cannot be moved",
   },
   settings: {
     title: "Google Calendar",

@@ -49,15 +49,17 @@ const mockIsOwner = vi.fn(() => true);
 const mockStatus = vi.fn();
 
 vi.mock("./useGoogleCalendar", () => ({
-  useGoogleCalendarStatus: () => ({ data: mockStatus(), isLoading: false }),
-  useGoogleCalendarEvents: () => ({ data: [] }),
-  useGoogleCalendarList: () => ({ data: [] }),
+  useGoogleCalendarStatus: () => ({ data: mockStatus(), isLoading: false, isError: false }),
+  useGoogleCalendarEvents: () => ({ data: { events: [], calendarErrors: [] } }),
+  useGoogleCalendarList: () => ({ data: [], refetch: vi.fn() }),
   useConnectGoogleCalendar: () => ({ mutate: vi.fn(), isPending: false }),
   useDisconnectGoogleCalendar: () => ({ mutate: vi.fn(), isPending: false }),
   useSelectGoogleCalendar: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetVisibleGoogleCalendars: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateGoogleCalendarEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateGoogleCalendarEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteGoogleCalendarEvent: () => ({ mutate: vi.fn(), isPending: false }),
+  useMoveGoogleCalendarEvent: () => ({ mutate: vi.fn(), isPending: false }),
   useRefreshGoogleCalendar: () => async () => undefined,
   useUpdateGoogleCalendarSettings: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -118,6 +120,9 @@ describe("CalendarPage connection states", () => {
       googleEmail: "owner@example.com",
       calendarSummary: "Workshop",
       calendarId: "cal-1",
+      canAccess: true,
+      visibleCalendars: [],
+      mainCalendar: { id: "cal-1", summary: "Workshop", backgroundColor: "#039be5" },
       reconnectRequired: false,
     });
     renderPage();

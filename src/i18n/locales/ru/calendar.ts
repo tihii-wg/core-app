@@ -19,6 +19,11 @@ const calendar: Messages<typeof en> = {
   confirmSelect: "Использовать этот календарь",
   addEvent: "+ Событие",
   showOrders: "Показать заказы",
+  myCalendars: "Мои календари",
+  calendarsButton: "Календари",
+  busy: "Занят",
+  mainBadge: "основной",
+  calendarErrors: "{{count}} календарь(ей) не удалось загрузить — снимите галочку, если календарь удалён в Google",
   ownerOnly: {
     title: "Календарь доступен только владельцу",
     description: "Попросите владельца включить доступ для сотрудников в настройках календаря.",
@@ -45,6 +50,9 @@ const calendar: Messages<typeof en> = {
     recurringHint: "Это одно вхождение повторяющегося события. Будет изменено или удалено только оно.",
     newTitle: "Новое событие",
     editTitle: "Редактировать событие",
+    viewTitle: "Событие",
+    calendar: "Календарь",
+    close: "Закрыть",
   },
   confirmDisconnect: {
     title: "Отключить Google Календарь?",
@@ -78,6 +86,10 @@ const calendar: Messages<typeof en> = {
     deleteFailed: "Не удалось удалить событие",
     reconnectRequired: "Подключите Google Календарь заново",
     conflict: "Событие изменили в Google — обновлено",
+    visibleFailed: "Не удалось обновить список календарей",
+    calendarReadOnly: "Этот календарь только для чтения",
+    moveFailed: "Не удалось переместить событие",
+    orderEventLocked: "События синхронизации заказов нельзя перемещать",
   },
   settings: {
     title: "Google Календарь",

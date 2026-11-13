@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Switch } from "../../ui/Switch";
 import { Label } from "../../ui/Label";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
@@ -38,12 +39,20 @@ import {
   useGoogleCalendarEvents,
   useGoogleCalendarList,
   useGoogleCalendarStatus,
+  useMoveGoogleCalendarEvent,
   useRefreshGoogleCalendar,
   useSelectGoogleCalendar,
+  useSetVisibleGoogleCalendars,
   useUpdateGoogleCalendarEvent,
 } from "./useGoogleCalendar";
 import { CalendarEventDialog, type CalendarEventDraft } from "./CalendarEventDialog";
+import {
+  buildMemberLegendItems,
+  buildOwnerCalendarItems,
+  CalendarMyCalendarsPanel,
+} from "./CalendarMyCalendars";
 import { CalendarVisibilitySettings } from "./CalendarVisibilitySettings";
+import { composeFullCalendarEventId } from "./gcalColors";
 import { fullCalendarDateToGoogle, mapGoogleEventsToFc, mapOrdersToFcOverlay } from "./calendarEventMapping";
 import type { GoogleCalendarEvent } from "../../services/apiGoogleCalendar";
 
@@ -71,16 +80,20 @@ export function CalendarPage() {
   const connect = useConnectGoogleCalendar();
   const disconnect = useDisconnectGoogleCalendar();
   const selectCalendar = useSelectGoogleCalendar();
+  const setVisible = useSetVisibleGoogleCalendars();
   const createEvent = useCreateGoogleCalendarEvent();
   const updateEvent = useUpdateGoogleCalendarEvent();
   const deleteEvent = useDeleteGoogleCalendarEvent();
+  const moveEvent = useMoveGoogleCalendarEvent();
   const refresh = useRefreshGoogleCalendar();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const calendarsQuery = useGoogleCalendarList(pickerOpen && isOwner);
-  const [showOrders, setShowOrders] = useState(false);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const isMobile = useMediaQuery("(max-width: 639px)");
   const status = statusQuery.data;
   const connected = Boolean(status?.connected);
   const canAccess = Boolean(isOwner || status?.canAccess || status?.teamAccess);
+  const calendarsQuery = useGoogleCalendarList(Boolean(connected && canAccess && isOwner));
+  const [showOrders, setShowOrders] = useState(false);
   const syncOrdersOn = Boolean(status?.syncOrders);
   const showOverlayToggle = connected && canAccess && !syncOrdersOn;
   const { orders } = useGetOrders("", { enabled: showOverlayToggle && showOrders });
@@ -101,13 +114,12 @@ export function CalendarPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const calendarRef = useRef<InstanceType<typeof FullCalendar> | null>(null);
   const handledOauth = useRef<string | null>(null);
-  const isMobile =
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(max-width: 639px)").matches;
 
   const reconnectRequired = Boolean(status?.reconnectRequired);
   const timeZone = workspace?.timezone?.trim() || status?.calendarTimeZone || undefined;
+  const eventsPayload = eventsQuery.data;
+  const gcalRaw = eventsPayload?.events ?? [];
+  const calendarErrors = eventsPayload?.calendarErrors ?? [];
 
   useEffect(() => {
     const gcal = searchParams.get("gcal");
@@ -133,10 +145,10 @@ export function CalendarPage() {
 
   const gcalEvents = useMemo(
     () =>
-      mapGoogleEventsToFc(eventsQuery.data ?? []).map((ev) =>
+      mapGoogleEventsToFc(gcalRaw, t("calendar.busy")).map((ev) =>
         ev.title === "(no title)" ? { ...ev, title: t("calendar.untitled") } : ev,
       ),
-    [eventsQuery.data, t],
+    [gcalRaw, t],
   );
   const orderEvents = useMemo(() => {
     if (!showOverlayToggle || !showOrders || !orders.length) return [];
@@ -148,11 +160,39 @@ export function CalendarPage() {
 
   const fcEvents = useMemo(() => [...gcalEvents, ...orderEvents], [gcalEvents, orderEvents]);
 
-  const eventById = useMemo(() => {
+  const eventByFcId = useMemo(() => {
     const map = new Map<string, GoogleCalendarEvent>();
-    for (const ev of eventsQuery.data ?? []) map.set(ev.id, ev);
+    for (const ev of gcalRaw) {
+      const calId = ev.calendarId?.trim() || "";
+      const key = calId ? composeFullCalendarEventId(calId, ev.id) : ev.id;
+      map.set(key, ev);
+    }
     return map;
-  }, [eventsQuery.data]);
+  }, [gcalRaw]);
+
+  const myCalendarItems = useMemo(() => {
+    if (isOwner && calendarsQuery.data) {
+      return buildOwnerCalendarItems(calendarsQuery.data, status?.calendarId);
+    }
+    return buildMemberLegendItems(status?.mainCalendar, status?.visibleCalendars ?? []);
+  }, [isOwner, calendarsQuery.data, status?.calendarId, status?.mainCalendar, status?.visibleCalendars]);
+
+  const calendarOptions = useMemo(
+    () =>
+      myCalendarItems.map((c) => ({
+        id: c.id,
+        summary: c.summary,
+        accessRole: c.accessRole,
+        isMain: c.isMain,
+      })),
+    [myCalendarItems],
+  );
+
+  const calendarNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of myCalendarItems) map[c.id] = c.summary;
+    return map;
+  }, [myCalendarItems]);
 
   const onDatesSet = useCallback((arg: DatesSetArg) => {
     setRange(rangeIso(arg.start, arg.end));
@@ -167,20 +207,23 @@ export function CalendarPage() {
       start,
       end,
       allDay,
+      calendarId: status?.calendarId ?? null,
     });
     setDialogOpen(true);
   }
 
   function openEdit(event: GoogleCalendarEvent) {
+    const viewOnly = Boolean(event.readOnly || event.busyOnly);
     setDraft({
-      mode: "edit",
+      mode: viewOnly ? "view" : "edit",
       event,
-      title: event.title,
+      title: event.busyOnly ? t("calendar.busy") : event.title,
       description: event.description ?? "",
       location: event.location ?? "",
       start: event.start,
       end: event.end,
       allDay: event.allDay,
+      calendarId: event.calendarId,
     });
     setDialogOpen(true);
   }
@@ -213,7 +256,7 @@ export function CalendarPage() {
       if (orderId) void openOrderById(orderId);
       return;
     }
-    const ev = eventById.get(arg.event.id);
+    const ev = eventByFcId.get(arg.event.id);
     if (ev?.coreAppOrderId) {
       void openOrderById(ev.coreAppOrderId);
       return;
@@ -226,8 +269,8 @@ export function CalendarPage() {
       arg.revert();
       return;
     }
-    const ev = eventById.get(arg.event.id);
-    if (!ev?.etag || ev.coreAppOrderId) {
+    const ev = eventByFcId.get(arg.event.id);
+    if (!ev?.etag || !ev.calendarId || ev.coreAppOrderId || ev.readOnly || ev.busyOnly) {
       arg.revert();
       return;
     }
@@ -244,6 +287,7 @@ export function CalendarPage() {
           allDay: mapped.allDay,
           timeZone,
           etag: ev.etag,
+          calendarId: ev.calendarId,
         },
       });
     } catch {
@@ -256,8 +300,8 @@ export function CalendarPage() {
       arg.revert();
       return;
     }
-    const ev = eventById.get(arg.event.id);
-    if (!ev?.etag || ev.coreAppOrderId) {
+    const ev = eventByFcId.get(arg.event.id);
+    if (!ev?.etag || !ev.calendarId || ev.coreAppOrderId || ev.readOnly || ev.busyOnly) {
       arg.revert();
       return;
     }
@@ -274,6 +318,7 @@ export function CalendarPage() {
           allDay: mapped.allDay,
           timeZone,
           etag: ev.etag,
+          calendarId: ev.calendarId,
         },
       });
     } catch {
@@ -297,15 +342,34 @@ export function CalendarPage() {
     connect.isPending ||
     disconnect.isPending ||
     selectCalendar.isPending ||
+    setVisible.isPending ||
     createEvent.isPending ||
     updateEvent.isPending ||
-    deleteEvent.isPending;
+    deleteEvent.isPending ||
+    moveEvent.isPending;
+
+  const myCalendarsPanel = connected && canAccess ? (
+    <CalendarMyCalendarsPanel
+      items={myCalendarItems}
+      editable={isOwner}
+      calendarErrors={calendarErrors}
+      disabled={busy || setVisible.isPending}
+      isDesktop={isDesktop}
+      onToggleExtra={(ids) => {
+        setVisible.mutate(ids, {
+          onError: () => {
+            void calendarsQuery.refetch();
+            void refresh();
+          },
+        });
+      }}
+    />
+  ) : null;
 
   return (
     <div className="space-y-4">
       <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
 
-      {/* Status not known yet (workspace or status still loading): no "not connected" flash. */}
       {!statusQuery.data && !statusQuery.isError ? (
         <div className="flex justify-center py-16">
           <Spinner />
@@ -354,6 +418,7 @@ export function CalendarPage() {
               <div className="text-muted-foreground truncate">{status?.googleEmail}</div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {!isDesktop ? myCalendarsPanel : null}
               {showOverlayToggle ? (
                 <div className="flex items-center gap-2 pr-2">
                   <Switch id="gcal-orders" checked={showOrders} onCheckedChange={setShowOrders} />
@@ -408,45 +473,50 @@ export function CalendarPage() {
             </Card>
           ) : null}
 
-          <div className="bg-card gcal-fullcalendar overflow-hidden rounded-lg border p-2 sm:p-3">
-            <FullCalendar
-              ref={calendarRef}
-              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
-              initialView={isMobile ? "timeGridDay" : "timeGridWeek"}
-              headerToolbar={{
-                left: "prev,next today",
-                center: "title",
-                right: isMobile ? "timeGridDay,listWeek" : "dayGridMonth,timeGridWeek,timeGridDay",
-              }}
-              buttonText={{
-                month: t("calendar.views.month"),
-                week: t("calendar.views.week"),
-                day: t("calendar.views.day"),
-                list: t("calendar.views.list"),
-              }}
-              locale={fcLocale(i18n.language || "en")}
-              firstDay={1}
-              timeZone="local"
-              nowIndicator
-              scrollTime="08:00:00"
-              selectable
-              editable
-              eventStartEditable
-              eventDurationEditable
-              selectMirror
-              // Fills the screen; the grid scrolls inside and opens at scrollTime (08:00). Taller slots: index.css.
-              height={isMobile ? "max(520px, calc(100dvh - 120px))" : "max(640px, calc(100vh - 150px))"}
-              events={fcEvents}
-              datesSet={onDatesSet}
-              select={onSelect}
-              eventClick={onEventClick}
-              eventDrop={(arg) => void onEventDrop(arg)}
-              eventResize={(arg) => void onEventResize(arg)}
-              eventAllow={(_span, moving) => {
-                const kind = moving?.extendedProps?.kind;
-                return kind !== "order" && kind !== "order_sync";
-              }}
-            />
+          <div className={isDesktop ? "flex items-start gap-0" : undefined}>
+            {isDesktop ? myCalendarsPanel : null}
+            <div className="bg-card gcal-fullcalendar min-w-0 flex-1 overflow-hidden rounded-lg border p-2 sm:p-3">
+              <FullCalendar
+                ref={calendarRef}
+                plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
+                initialView={isMobile ? "timeGridDay" : "timeGridWeek"}
+                headerToolbar={{
+                  left: "prev,next today",
+                  center: "title",
+                  right: isMobile ? "timeGridDay,listWeek" : "dayGridMonth,timeGridWeek,timeGridDay",
+                }}
+                buttonText={{
+                  month: t("calendar.views.month"),
+                  week: t("calendar.views.week"),
+                  day: t("calendar.views.day"),
+                  list: t("calendar.views.list"),
+                }}
+                locale={fcLocale(i18n.language || "en")}
+                firstDay={1}
+                timeZone="local"
+                nowIndicator
+                scrollTime="08:00:00"
+                selectable
+                editable
+                eventStartEditable
+                eventDurationEditable
+                selectMirror
+                slotEventOverlap={false}
+                height={isMobile ? "max(520px, calc(100dvh - 120px))" : "max(640px, calc(100vh - 150px))"}
+                events={fcEvents}
+                datesSet={onDatesSet}
+                select={onSelect}
+                eventClick={onEventClick}
+                eventDrop={(arg) => void onEventDrop(arg)}
+                eventResize={(arg) => void onEventResize(arg)}
+                eventAllow={(_span, moving) => {
+                  const kind = moving?.extendedProps?.kind;
+                  if (kind === "order" || kind === "order_sync") return false;
+                  if (moving?.extendedProps?.readOnly || moving?.extendedProps?.busyOnly) return false;
+                  return true;
+                }}
+              />
+            </div>
           </div>
 
           {isOwner ? <CalendarVisibilitySettings /> : null}
@@ -459,14 +529,38 @@ export function CalendarPage() {
         open={dialogOpen}
         draft={draft}
         busy={busy}
+        calendarOptions={calendarOptions}
+        calendarNameById={calendarNameById}
         onOpenChange={setDialogOpen}
-        onSave={(input) => {
+        onSave={(input, meta) => {
+          if (draft?.mode === "view") return;
           if (draft?.mode === "edit" && draft.event) {
-            if (!input.etag) return;
+            if (!input.etag || !input.calendarId) return;
+            const fromCal = input.calendarId;
             updateEvent.mutate(
-              { eventId: draft.event.id, input: { ...input, etag: input.etag } },
+              {
+                eventId: draft.event.id,
+                input: { ...input, etag: input.etag, calendarId: fromCal },
+              },
               {
                 onSuccess: () => {
+                  const moveTo = meta?.moveToCalendarId;
+                  if (moveTo && moveTo !== fromCal) {
+                    moveEvent.mutate(
+                      {
+                        eventId: draft.event!.id,
+                        fromCalendarId: fromCal,
+                        toCalendarId: moveTo,
+                      },
+                      {
+                        onSuccess: () => {
+                          setDialogOpen(false);
+                          toast.success(t("calendar.toast.saved"));
+                        },
+                      },
+                    );
+                    return;
+                  }
                   setDialogOpen(false);
                   toast.success(t("calendar.toast.saved"));
                 },
@@ -477,9 +571,12 @@ export function CalendarPage() {
           }
         }}
         onDelete={
-          draft?.mode === "edit" && draft.event
+          draft?.mode === "edit" && draft.event?.calendarId
             ? () => {
-                deleteEvent.mutate(draft.event!.id, { onSuccess: () => setDialogOpen(false) });
+                deleteEvent.mutate(
+                  { eventId: draft.event!.id, calendarId: draft.event!.calendarId! },
+                  { onSuccess: () => setDialogOpen(false) },
+                );
               }
             : undefined
         }

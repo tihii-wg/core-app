@@ -22,6 +22,10 @@ function ev(partial: Partial<GoogleCalendarEvent> & Pick<GoogleCalendarEvent, "i
     authorUserName: null,
     coreAppOrderId: null,
     coreAppField: null,
+    calendarId: "primary",
+    calendarColor: null,
+    readOnly: false,
+    busyOnly: false,
     ...partial,
   };
 }

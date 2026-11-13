@@ -19,6 +19,11 @@ const calendar: Messages<typeof en> = {
   confirmSelect: "Folosește acest calendar",
   addEvent: "+ Eveniment",
   showOrders: "Arată comenzile",
+  myCalendars: "Calendarele mele",
+  calendarsButton: "Calendare",
+  busy: "Ocupat",
+  mainBadge: "principal",
+  calendarErrors: "{{count}} calendar(e) nu au putut fi încărcate — debifați-le dacă au fost eliminate din Google",
   ownerOnly: {
     title: "Calendarul este disponibil doar proprietarului",
     description: "Rugați proprietarul să permită accesul echipei în setările calendarului.",
@@ -45,6 +50,9 @@ const calendar: Messages<typeof en> = {
     recurringHint: "Aceasta este o apariție a unui eveniment recurent. Se modifică sau se șterge doar această apariție.",
     newTitle: "Eveniment nou",
     editTitle: "Editează evenimentul",
+    viewTitle: "Eveniment",
+    calendar: "Calendar",
+    close: "Închide",
   },
   confirmDisconnect: {
     title: "Deconectezi Google Calendar?",
@@ -78,6 +86,10 @@ const calendar: Messages<typeof en> = {
     deleteFailed: "Nu s-a putut șterge evenimentul",
     reconnectRequired: "Conectați din nou Google Calendar",
     conflict: "Evenimentul a fost modificat în Google — actualizat",
+    visibleFailed: "Nu s-au putut actualiza calendarele vizibile",
+    calendarReadOnly: "Acest calendar este doar pentru citire",
+    moveFailed: "Nu s-a putut muta evenimentul",
+    orderEventLocked: "Evenimentele sincronizate din comenzi nu pot fi mutate",
   },
   settings: {
     title: "Google Calendar",

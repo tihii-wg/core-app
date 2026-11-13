@@ -195,6 +195,8 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
     }
 
     let calendarSummary: string | null = "Primary";
+    // Store the primary calendar's real id (the account email): calendarList uses it, never the alias "primary".
+    let calendarRealId = "primary";
     let calendarTimeZone: string | null = null;
     try {
       const accessToken = await googleAccessToken(
@@ -207,7 +209,8 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
       if (calRes.ok) {
-        const cal = (await calRes.json()) as { summary?: string; timeZone?: string };
+        const cal = (await calRes.json()) as { id?: string; summary?: string; timeZone?: string };
+        if (cal.id?.trim()) calendarRealId = cal.id.trim();
         calendarSummary = cal.summary?.trim() || "Primary";
         calendarTimeZone = cal.timeZone?.trim() || null;
       }
@@ -219,7 +222,7 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
       {
         workspace_id: payload.workspaceId,
         google_email: email,
-        calendar_id: "primary",
+        calendar_id: calendarRealId,
         calendar_summary: calendarSummary,
         calendar_time_zone: calendarTimeZone,
         connected_by: payload.userId,
@@ -285,6 +288,11 @@ async function handleDisconnect(req: Request, workspaceId: string, appUrl: strin
   if (clearError) {
     return errorResponse("provider_error", clearError.message || "Failed to disconnect", 500, appUrl);
   }
+  // crm_gcal_clear_credential leaves the row — clear multi-calendar overlay before removing the row.
+  await admin
+    .from("workspace_google_calendar")
+    .update({ visible_calendars: [], updated_at: new Date().toISOString() })
+    .eq("workspace_id", workspaceId);
   await admin.from("workspace_google_calendar").delete().eq("workspace_id", workspaceId);
 
   return jsonResponse({ ok: true }, 200, appUrl);
