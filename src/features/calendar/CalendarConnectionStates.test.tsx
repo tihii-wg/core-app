@@ -50,7 +50,13 @@ const mockStatus = vi.fn();
 
 vi.mock("./useGoogleCalendar", () => ({
   useGoogleCalendarStatus: () => ({ data: mockStatus(), isLoading: false, isError: false }),
-  useGoogleCalendarEvents: () => ({ data: { events: [], calendarErrors: [] } }),
+  useGoogleCalendarEvents: () => ({
+    data: { events: [], calendarErrors: [] },
+    isPending: false,
+    isPlaceholderData: false,
+    isFetching: false,
+  }),
+  usePrefetchGoogleCalendarEvents: () => vi.fn(),
   useGoogleCalendarList: () => ({ data: [], refetch: vi.fn() }),
   useConnectGoogleCalendar: () => ({ mutate: vi.fn(), isPending: false }),
   useDisconnectGoogleCalendar: () => ({ mutate: vi.fn(), isPending: false }),

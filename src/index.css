@@ -181,9 +181,35 @@
 }
 .gcal-fullcalendar {
   max-width: 100%;
+  /* Let the browser keep vertical scrolling; we own horizontal swipes. */
+  touch-action: pan-y;
 }
 .gcal-fullcalendar .fc {
   max-width: 100%;
+}
+.gcal-events-loading {
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: 5;
+  height: 2px;
+  overflow: hidden;
+}
+.gcal-events-loading-bar {
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: var(--color-primary, #2563eb);
+  animation: gcal-events-loading-slide 0.9s ease-in-out infinite;
+}
+@keyframes gcal-events-loading-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 .gcal-fullcalendar[data-mobile="true"] .fc-toolbar-title {
   font-size: 1rem;

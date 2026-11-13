@@ -23,6 +23,7 @@ const calendar: Messages<typeof en> = {
   calendarsButton: "Календари",
   settingsSheet: "Настройки календаря",
   moreEvents: "ещё {{count}}",
+  loadingEvents: "Загрузка событий…",
   busy: "Занят",
   mainBadge: "основной",
   calendarErrors: "{{count}} календарь(ей) не удалось загрузить — снимите галочку, если календарь удалён в Google",

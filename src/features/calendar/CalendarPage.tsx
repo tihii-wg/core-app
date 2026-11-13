@@ -47,11 +47,13 @@ import {
   useGoogleCalendarList,
   useGoogleCalendarStatus,
   useMoveGoogleCalendarEvent,
+  usePrefetchGoogleCalendarEvents,
   useRefreshGoogleCalendar,
   useSelectGoogleCalendar,
   useSetVisibleGoogleCalendars,
   useUpdateGoogleCalendarEvent,
 } from "./useGoogleCalendar";
+import { peekAdjacentActiveRange } from "./calendarPrefetch";
 import { CalendarEventDialog, type CalendarEventDraft } from "./CalendarEventDialog";
 import {
   buildMemberLegendItems,
@@ -129,11 +131,9 @@ export function CalendarPage() {
     end.setMonth(end.getMonth() + 1);
     return rangeIso(start, end);
   });
-  const eventsQuery = useGoogleCalendarEvents(
-    range.from,
-    range.to,
-    Boolean(connected && canAccess),
-  );
+  const eventsEnabled = Boolean(connected && canAccess);
+  const eventsQuery = useGoogleCalendarEvents(range.from, range.to, eventsEnabled);
+  const prefetchEvents = usePrefetchGoogleCalendarEvents();
   const [draft, setDraft] = useState<CalendarEventDraft | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const calendarRef = useRef<InstanceType<typeof FullCalendar> | null>(null);
@@ -142,9 +142,14 @@ export function CalendarPage() {
   const swipeStartRef = useRef<(SwipePointerSample & { startedOnEvent: boolean; pointerId: number }) | null>(
     null,
   );
+  const swipeCommittedRef = useRef(false);
+  const swipeRafRef = useRef<number | null>(null);
+  const swipeLatestRef = useRef<SwipePointerSample | null>(null);
+  const peekingRangeRef = useRef(false);
   const activePointersRef = useRef(new Set<number>());
   const [activeView, setActiveView] = useState<GcalViewId>(() => readStoredGcalView(false));
   const initialViewApplied = useRef(false);
+  const overlayOpenRef = useRef(false);
 
   // Sync default/stored view once we know the breakpoint.
   useEffect(() => {
@@ -159,6 +164,27 @@ export function CalendarPage() {
   const eventsPayload = eventsQuery.data;
   const gcalRaw = eventsPayload?.events ?? [];
   const calendarErrors = eventsPayload?.calendarErrors ?? [];
+  // Lightweight in-grid hint only while showing a previous range or first load — never block swipe.
+  const eventsLoading = Boolean(
+    eventsEnabled && (eventsQuery.isPending || eventsQuery.isPlaceholderData),
+  );
+  overlayOpenRef.current = dialogOpen || settingsOpen || calendarsSheetOpen || pickerOpen;
+
+  // Prefetch neighbouring periods so the next swipe usually hits React Query cache.
+  useEffect(() => {
+    if (!eventsEnabled) return;
+    const api = calendarRef.current?.getApi();
+    if (!api) return;
+    peekingRangeRef.current = true;
+    try {
+      const prev = peekAdjacentActiveRange(api, "prev");
+      const next = peekAdjacentActiveRange(api, "next");
+      if (prev) prefetchEvents(prev.from, prev.to);
+      if (next) prefetchEvents(next.from, next.to);
+    } finally {
+      peekingRangeRef.current = false;
+    }
+  }, [eventsEnabled, range.from, range.to, prefetchEvents, activeView]);
 
   useEffect(() => {
     const gcal = searchParams.get("gcal");
@@ -241,11 +267,21 @@ export function CalendarPage() {
   }, []);
 
   const onDatesSet = useCallback((arg: DatesSetArg) => {
-    setRange(rangeIso(arg.start, arg.end));
+    // Ignore synthetic prev/next used only to peek adjacent ranges for prefetch.
+    if (peekingRangeRef.current) return;
+    // Update range immediately so the grid period changes without waiting on fetch.
+    setRange((prev) => {
+      const next = rangeIso(arg.start, arg.end);
+      if (prev.from === next.from && prev.to === next.to) return prev;
+      return next;
+    });
     const type = arg.view.type;
     if (type) {
-      setActiveView(type as GcalViewId);
-      writeStoredGcalView(type);
+      setActiveView((prev) => {
+        if (prev === type) return prev;
+        writeStoredGcalView(type);
+        return type as GcalViewId;
+      });
     }
   }, []);
 
@@ -406,21 +442,58 @@ export function CalendarPage() {
   }
 
   function playSwipeHint(direction: "prev" | "next") {
+    // Non-blocking CSS hint — never await this before navigating.
     const harness = calendarShellRef.current?.querySelector(".fc-view-harness");
     if (!(harness instanceof HTMLElement)) return;
+    const cls = direction === "prev" ? "gcal-swipe-prev" : "gcal-swipe-next";
     harness.classList.remove("gcal-swipe-prev", "gcal-swipe-next");
-    // force reflow so animation can re-run
-    void harness.offsetWidth;
-    harness.classList.add(direction === "prev" ? "gcal-swipe-prev" : "gcal-swipe-next");
-    window.setTimeout(() => {
-      harness.classList.remove("gcal-swipe-prev", "gcal-swipe-next");
-    }, 160);
+    // Double-rAF restarts the transition without a synchronous layout read.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        harness.classList.add(cls);
+        window.setTimeout(() => harness.classList.remove(cls), 160);
+      });
+    });
   }
 
+  const navigateBySwipe = useCallback((decision: "prev" | "next") => {
+    const api = calendarRef.current?.getApi();
+    if (!api) return;
+    // Optimistic: change the visible period immediately; events load via React Query.
+    if (decision === "next") api.next();
+    else api.prev();
+    playSwipeHint(decision);
+  }, []);
+
+  const tryCommitSwipe = useCallback(
+    (end: SwipePointerSample, pointerCount: number) => {
+      if (swipeCommittedRef.current) return;
+      const start = swipeStartRef.current;
+      if (!start) return;
+      const decision = decideCalendarSwipe(start, end, {
+        startedOnEvent: start.startedOnEvent,
+        pointerCount,
+        fcBusy: isFullCalendarBusy(calendarShellRef.current),
+        blocked: overlayOpenRef.current,
+      });
+      if (!decision) return;
+      swipeCommittedRef.current = true;
+      swipeStartRef.current = null;
+      navigateBySwipe(decision);
+    },
+    [navigateBySwipe],
+  );
+
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    // Desktop mouse drag-select / resize must not trigger period swipes.
+    if (e.pointerType === "mouse") return;
     activePointersRef.current.add(e.pointerId);
-    if (e.pointerType === "mouse" && e.button !== 0) return;
     if (!e.isPrimary) return;
+    if (swipeRafRef.current != null) {
+      cancelAnimationFrame(swipeRafRef.current);
+      swipeRafRef.current = null;
+    }
+    swipeCommittedRef.current = false;
     swipeStartRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -430,32 +503,50 @@ export function CalendarPage() {
     };
   }
 
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") return;
+    const start = swipeStartRef.current;
+    if (!start || start.pointerId !== e.pointerId || swipeCommittedRef.current) return;
+    swipeLatestRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    // Cheap: at most one decide per animation frame — no React state per pixel.
+    if (swipeRafRef.current != null) return;
+    swipeRafRef.current = requestAnimationFrame(() => {
+      swipeRafRef.current = null;
+      const sample = swipeLatestRef.current;
+      if (!sample) return;
+      tryCommitSwipe(sample, activePointersRef.current.size);
+    });
+  }
+
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") return;
     const pointerCount = activePointersRef.current.size;
     activePointersRef.current.delete(e.pointerId);
+    if (swipeRafRef.current != null) {
+      cancelAnimationFrame(swipeRafRef.current);
+      swipeRafRef.current = null;
+    }
     const start = swipeStartRef.current;
-    if (!start || start.pointerId !== e.pointerId) return;
+    if (!start || start.pointerId !== e.pointerId) {
+      if (swipeCommittedRef.current && start?.pointerId === e.pointerId) {
+        swipeCommittedRef.current = false;
+      }
+      return;
+    }
+    tryCommitSwipe({ x: e.clientX, y: e.clientY, t: Date.now() }, pointerCount);
     swipeStartRef.current = null;
-    const decision = decideCalendarSwipe(
-      start,
-      { x: e.clientX, y: e.clientY, t: Date.now() },
-      {
-        startedOnEvent: start.startedOnEvent,
-        pointerCount,
-        fcBusy: isFullCalendarBusy(calendarShellRef.current),
-      },
-    );
-    if (!decision) return;
-    const api = calendarRef.current?.getApi();
-    if (!api) return;
-    playSwipeHint(decision);
-    if (decision === "next") api.next();
-    else api.prev();
+    swipeCommittedRef.current = false;
   }
 
   function onPointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") return;
     activePointersRef.current.delete(e.pointerId);
+    if (swipeRafRef.current != null) {
+      cancelAnimationFrame(swipeRafRef.current);
+      swipeRafRef.current = null;
+    }
     if (swipeStartRef.current?.pointerId === e.pointerId) swipeStartRef.current = null;
+    swipeCommittedRef.current = false;
   }
 
   async function onDisconnect() {
@@ -547,13 +638,20 @@ export function CalendarPage() {
     connected && canAccess ? (
       <div
         ref={calendarShellRef}
-        className="bg-card gcal-fullcalendar min-w-0 flex-1 overflow-hidden rounded-lg border p-2 sm:p-3"
+        className="bg-card gcal-fullcalendar relative min-w-0 flex-1 overflow-hidden rounded-lg border p-2 sm:p-3"
         data-mobile={isMobile ? "true" : "false"}
         data-coarse={isCoarsePointer ? "true" : "false"}
         onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
       >
+        {eventsLoading ? (
+          <div className="gcal-events-loading" aria-live="polite">
+            <span className="gcal-events-loading-bar" />
+            <span className="sr-only">{t("calendar.loadingEvents")}</span>
+          </div>
+        ) : null}
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}

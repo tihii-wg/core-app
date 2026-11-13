@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -40,6 +41,8 @@ export function useGoogleCalendarStatus(enabled = true) {
   });
 }
 
+const EVENTS_STALE_MS = 60_000;
+
 export function useGoogleCalendarEvents(from: string, to: string, enabled = true) {
   const { workspaceId } = useActiveWorkspaceId();
   return useQuery({
@@ -47,13 +50,31 @@ export function useGoogleCalendarEvents(from: string, to: string, enabled = true
     queryFn: () => listGoogleCalendarEvents(workspaceId, from, to),
     enabled: Boolean(workspaceId) && Boolean(from) && Boolean(to) && enabled,
     placeholderData: keepPreviousData,
+    staleTime: EVENTS_STALE_MS,
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
-      return query.state.data ? 60_000 : false;
+      return query.state.data ? EVENTS_STALE_MS : false;
     },
     retry: false,
   });
+}
+
+/** Prefetch a date range so swipe-prev/next usually hits cache. */
+export function usePrefetchGoogleCalendarEvents() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  return useCallback(
+    (from: string, to: string) => {
+      if (!workspaceId || !from || !to) return;
+      void queryClient.prefetchQuery({
+        queryKey: googleCalendarEventsKey(workspaceId, from, to),
+        queryFn: () => listGoogleCalendarEvents(workspaceId, from, to),
+        staleTime: EVENTS_STALE_MS,
+      });
+    },
+    [queryClient, workspaceId],
+  );
 }
 
 export function useGoogleCalendarList(enabled = false) {

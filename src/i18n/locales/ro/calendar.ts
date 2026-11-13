@@ -23,6 +23,7 @@ const calendar: Messages<typeof en> = {
   calendarsButton: "Calendare",
   settingsSheet: "Setări calendar",
   moreEvents: "încă {{count}}",
+  loadingEvents: "Se încarcă evenimentele…",
   busy: "Ocupat",
   mainBadge: "principal",
   calendarErrors: "{{count}} calendar(e) nu au putut fi încărcate — debifați-le dacă au fost eliminate din Google",

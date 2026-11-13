@@ -4,21 +4,32 @@ import { decideCalendarSwipe } from "./calendarSwipe";
 const start = { x: 100, y: 100, t: 1_000 };
 
 describe("decideCalendarSwipe", () => {
-  it("swipes left/right past threshold", () => {
+  it("swipes left/right past ~50px threshold", () => {
     expect(
-      decideCalendarSwipe(start, { x: 20, y: 105, t: 1_200 }, {
+      decideCalendarSwipe(start, { x: 45, y: 105, t: 1_200 }, {
         startedOnEvent: false,
         pointerCount: 1,
         fcBusy: false,
       }),
     ).toBe("next");
     expect(
-      decideCalendarSwipe(start, { x: 180, y: 95, t: 1_200 }, {
+      decideCalendarSwipe(start, { x: 160, y: 95, t: 1_200 }, {
         startedOnEvent: false,
         pointerCount: 1,
         fcBusy: false,
       }),
     ).toBe("prev");
+  });
+
+  it("commits early on high horizontal velocity", () => {
+    // 40px in 80ms ≈ 0.5 px/ms
+    expect(
+      decideCalendarSwipe(start, { x: 60, y: 102, t: 1_080 }, {
+        startedOnEvent: false,
+        pointerCount: 1,
+        fcBusy: false,
+      }),
+    ).toBe("next");
   });
 
   it("ignores mostly-vertical scrolls", () => {
@@ -51,7 +62,7 @@ describe("decideCalendarSwipe", () => {
     ).toBeNull();
   });
 
-  it("ignores while FullCalendar is dragging/selecting", () => {
+  it("ignores while FullCalendar is dragging/selecting or UI is blocked", () => {
     expect(
       decideCalendarSwipe(start, { x: 20, y: 100, t: 1_200 }, {
         startedOnEvent: false,
@@ -59,18 +70,19 @@ describe("decideCalendarSwipe", () => {
         fcBusy: true,
       }),
     ).toBeNull();
-  });
-
-  it("ignores slow or short gestures", () => {
     expect(
-      decideCalendarSwipe(start, { x: 50, y: 100, t: 1_100 }, {
+      decideCalendarSwipe(start, { x: 20, y: 100, t: 1_200 }, {
         startedOnEvent: false,
         pointerCount: 1,
         fcBusy: false,
+        blocked: true,
       }),
     ).toBeNull();
+  });
+
+  it("ignores slow short gestures", () => {
     expect(
-      decideCalendarSwipe(start, { x: 20, y: 100, t: 1_800 }, {
+      decideCalendarSwipe(start, { x: 70, y: 100, t: 1_400 }, {
         startedOnEvent: false,
         pointerCount: 1,
         fcBusy: false,

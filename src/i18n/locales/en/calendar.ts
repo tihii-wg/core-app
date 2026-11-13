@@ -20,6 +20,7 @@ export default {
   calendarsButton: "Calendars",
   settingsSheet: "Calendar settings",
   moreEvents: "more {{count}}",
+  loadingEvents: "Loading events…",
   busy: "Busy",
   mainBadge: "main",
   calendarErrors: "{{count}} calendar(s) could not be loaded — uncheck them if they were removed in Google",
