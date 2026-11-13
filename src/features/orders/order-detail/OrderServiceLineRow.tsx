@@ -111,6 +111,41 @@ function OrderServiceLineRowComponent({
     </>
   );
 
+  const lineActions =
+    showFieldEdit && lineId ? (
+      <div className="flex shrink-0 items-center self-end sm:-my-1.5">
+        {commentsEditable ? (
+          <OrderLineCommentButton
+            testId={`service-line-comment-${lineId}`}
+            hasComment={Boolean(line.comment?.trim())}
+            active={commentEditing}
+            onClick={() => setCommentEditing(true)}
+          />
+        ) : null}
+        <OrderLineEditButton
+          testId={`service-line-edit-${lineId}`}
+          // Not tied to background saves: the dialog always opens with the current line, and the row
+          // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
+          disabled={deletePending}
+          onClick={() => onEditLine(lineId)}
+        />
+        {canDelete ? (
+          <OrderLineDeleteButton
+            testId={`service-line-delete-${lineId}`}
+            disabled={deletePending}
+            onClick={() => void onDelete(lineId)}
+          />
+        ) : null}
+      </div>
+    ) : canDelete && lineId ? (
+      <OrderLineDeleteButton
+        testId={`service-line-delete-${lineId}`}
+        className="self-end sm:-my-1.5"
+        disabled={deletePending}
+        onClick={() => void onDelete(lineId)}
+      />
+    ) : null;
+
   return (
     <tr
       data-order-service-line-id={line.serviceId || undefined}
@@ -169,52 +204,26 @@ function OrderServiceLineRowComponent({
               }}
               onEditorClosed={onEditorClosed}
             />
-            <OrderLineWarrantyBadge
-              activated={Boolean(order.closedAt)}
-              status={order.closedAt && order.status !== "closed" ? "paused" : undefined}
-              startsAt={order.closedAt}
-              mileageUnit={order.vehicleMileageUnitSnapshot ?? "km"}
-              showWarrantyKm={showWarrantyKm}
-              limits={{
-                durationMonths: line.warrantyMonths ?? null,
-                durationDays: line.warrantyDays ?? null,
-                mileageLimit: line.warrantyKm ?? null,
-              }}
-            />
-          </div>
-          {showFieldEdit && lineId ? (
-            <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
-              {commentsEditable ? (
-                <OrderLineCommentButton
-                  testId={`service-line-comment-${lineId}`}
-                  hasComment={Boolean(line.comment?.trim())}
-                  active={commentEditing}
-                  onClick={() => setCommentEditing(true)}
+            {/* Last line + the line buttons (comment / pencil / delete) side by side: the lines above keep the
+                full width, so the row does not grow taller. On phones the column is too narrow → buttons below. */}
+            <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2">
+              <div className="min-w-0">
+                <OrderLineWarrantyBadge
+                  activated={Boolean(order.closedAt)}
+                  status={order.closedAt && order.status !== "closed" ? "paused" : undefined}
+                  startsAt={order.closedAt}
+                  mileageUnit={order.vehicleMileageUnitSnapshot ?? "km"}
+                  showWarrantyKm={showWarrantyKm}
+                  limits={{
+                    durationMonths: line.warrantyMonths ?? null,
+                    durationDays: line.warrantyDays ?? null,
+                    mileageLimit: line.warrantyKm ?? null,
+                  }}
                 />
-              ) : null}
-              <OrderLineEditButton
-                testId={`service-line-edit-${lineId}`}
-                // Not tied to background saves: the dialog always opens with the current line, and the row
-                // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
-                disabled={deletePending}
-                onClick={() => onEditLine(lineId)}
-              />
-              {canDelete ? (
-                <OrderLineDeleteButton
-                  testId={`service-line-delete-${lineId}`}
-                  disabled={deletePending}
-                  onClick={() => void onDelete(lineId)}
-                />
-              ) : null}
+              </div>
+              {lineActions}
             </div>
-          ) : canDelete && lineId ? (
-            <OrderLineDeleteButton
-              testId={`service-line-delete-${lineId}`}
-              className="self-end sm:-my-2.5 sm:self-start"
-              disabled={deletePending}
-              onClick={() => void onDelete(lineId)}
-            />
-          ) : null}
+          </div>
         </div>
       </td>
       <OrderServiceLineInlineCells

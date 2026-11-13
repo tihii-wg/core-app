@@ -21,7 +21,7 @@ export function OrderLineEditButton({ testId, disabled, onClick, className }: Or
       title={label}
       disabled={disabled}
       className={cn(
-        "inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground",
+        "inline-flex size-11 shrink-0 sm:size-8 items-center justify-center rounded-md text-muted-foreground",
         "transition-colors outline-none hover:bg-muted hover:text-foreground",
         "focus-visible:ring-[3px] focus-visible:ring-ring/35 disabled:pointer-events-none disabled:opacity-50",
         className,

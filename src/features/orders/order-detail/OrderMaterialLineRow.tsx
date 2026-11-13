@@ -140,6 +140,36 @@ function OrderMaterialLineRowComponent({
     </>
   );
 
+  const lineActions =
+    showFieldEdit && lineId && (commentsEditable || !catalog || canWarehouse) ? (
+      <div className="flex shrink-0 items-center self-end sm:-my-1.5">
+        {commentsEditable ? (
+          <OrderLineCommentButton
+            testId={`material-line-comment-${lineId}`}
+            hasComment={Boolean(line.comment?.trim())}
+            active={commentEditing}
+            onClick={() => setCommentEditing(true)}
+          />
+        ) : null}
+        {!catalog || canWarehouse ? (
+          <>
+            <OrderLineEditButton
+              testId={`material-line-edit-${lineId}`}
+              // Not tied to background saves: the dialog always opens with the current line, and the row
+              // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
+              disabled={deletePending}
+              onClick={() => onEditLine(lineId)}
+            />
+            <OrderLineDeleteButton
+              testId={`material-line-delete-${lineId}`}
+              disabled={deletePending}
+              onClick={() => void onDelete(lineId)}
+            />
+          </>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <tr data-order-material-line-row={line.id || undefined} className="group/line transition-colors">
       <td className="px-2 py-2 [overflow-wrap:anywhere] text-foreground sm:px-3">
@@ -182,11 +212,15 @@ function OrderMaterialLineRowComponent({
             />
             <p className="text-[11px] text-muted-foreground">{sourceLabel}</p>
             {status ? (
-              <>
-                <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
-                  {t(`orders.warehouse.status.${status}`)}
-                </StatusBadge>
-                <p className="text-[11px] text-muted-foreground tabular-nums">
+              <StatusBadge variant={warehouseStatusBadgeVariant(status)}>
+                {t(`orders.warehouse.status.${status}`)}
+              </StatusBadge>
+            ) : null}
+            {/* Last line («Выдано … · Вне склада …») + the line buttons side by side: the lines above keep the
+                full width, so the row does not grow taller. On phones the column is too narrow → buttons below. */}
+            <div className="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-2">
+              {status ? (
+                <p className="min-w-0 text-[11px] text-muted-foreground tabular-nums">
                   {t("orders.warehouse.fulfillmentSummary", {
                     issued: formatQuantity(materialIssued(line), locale),
                     returned: formatQuantity(materialReturned(line), locale),
@@ -194,39 +228,12 @@ function OrderMaterialLineRowComponent({
                     net: formatQuantity(netOutsideWarehouse(line), locale),
                   })}
                 </p>
-              </>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">{t("orders.form.freeformNoStockImpact")}</p>
-            )}
-          </div>
-          {showFieldEdit && lineId && (commentsEditable || !catalog || canWarehouse) ? (
-            <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
-              {commentsEditable ? (
-                <OrderLineCommentButton
-                  testId={`material-line-comment-${lineId}`}
-                  hasComment={Boolean(line.comment?.trim())}
-                  active={commentEditing}
-                  onClick={() => setCommentEditing(true)}
-                />
-              ) : null}
-              {!catalog || canWarehouse ? (
-                <>
-                  <OrderLineEditButton
-                    testId={`material-line-edit-${lineId}`}
-                    // Not tied to background saves: the dialog always opens with the current line, and the row
-                    // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
-                    disabled={deletePending}
-                    onClick={() => onEditLine(lineId)}
-                  />
-                  <OrderLineDeleteButton
-                    testId={`material-line-delete-${lineId}`}
-                    disabled={deletePending}
-                    onClick={() => void onDelete(lineId)}
-                  />
-                </>
-              ) : null}
+              ) : (
+                <p className="min-w-0 text-[11px] text-muted-foreground">{t("orders.form.freeformNoStockImpact")}</p>
+              )}
+              {lineActions}
             </div>
-          ) : null}
+          </div>
         </div>
       </td>
       <OrderMaterialLineInlineCells

@@ -83,10 +83,10 @@ function OrderMaterialLinesTableComponent({
           </colgroup>
         ) : (
           <colgroup>
-            <col className="w-[42%]" />
-            <col className="w-[16%]" />
-            <col className="w-[22%]" />
-            <col className="w-[20%]" />
+            <col className="w-[50%]" />
+            <col className="w-[12%]" />
+            <col className="w-[19%]" />
+            <col className="w-[19%]" />
           </colgroup>
         )}
         <thead className="bg-muted/50 text-xs text-muted-foreground">
