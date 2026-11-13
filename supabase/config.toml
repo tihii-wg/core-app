@@ -21,3 +21,9 @@ verify_jwt = false
 
 [functions.nas-storage]
 verify_jwt = false
+
+[functions.google-calendar-oauth]
+verify_jwt = false
+
+[functions.google-calendar]
+verify_jwt = false

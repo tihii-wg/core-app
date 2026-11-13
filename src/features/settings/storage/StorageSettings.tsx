@@ -22,6 +22,7 @@ import {
   useWorkspaceGoogleDrive,
   useWorkspaceNasStorage,
 } from "./useAttachmentStorage";
+import { GoogleCalendarSettingsCard } from "../../calendar/GoogleCalendarSettingsCard";
 
 function driveFolderUrl(rootFolderId: string) {
   return `https://drive.google.com/drive/folders/${encodeURIComponent(rootFolderId)}`;
@@ -402,6 +403,8 @@ export function StorageSettings() {
           ) : null}
         </CardContent>
       </Card>
+
+      <GoogleCalendarSettingsCard />
     </div>
   );
 }

@@ -17,6 +17,15 @@
 | `order-attachment-remote` | Upload / content / delete remote attachments (Drive or NAS); trash order folder after order delete. |
 | `order-attachment-drive` | Alias of `order-attachment-remote` (backward compatible). Prefer `order-attachment-remote`. |
 
+## Shared Google Calendar
+
+| Function | Purpose |
+| --- | --- |
+| `google-calendar-oauth` | Owner OAuth start / callback / disconnect; refresh token in Vault (`crm_gcal_*`); metadata in `workspace_google_calendar`. |
+| `google-calendar` | Member JSON API: list/select calendars (owner), CRUD events; JWT + `is_workspace_member`; tokens never leave the Edge Function. |
+
+Scopes: `calendar.events`, `calendar.calendarlist.readonly`, `email`. Reuses `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `APP_URL`.
+
 All of the above use `verify_jwt = false` in `supabase/config.toml` and validate the bearer token themselves.
 
 ### Deploy (MAIN `pundggjzzaqzbvykbxvo`)
@@ -27,6 +36,8 @@ supabase functions deploy nas-storage --project-ref pundggjzzaqzbvykbxvo --no-ve
 supabase functions deploy order-attachment-remote --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
 # Optional alias:
 supabase functions deploy order-attachment-drive --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
+supabase functions deploy google-calendar-oauth --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
+supabase functions deploy google-calendar --project-ref pundggjzzaqzbvykbxvo --no-verify-jwt
 ```
 
 Shared modules under `supabase/functions/_shared` are bundled automatically.
@@ -41,8 +52,8 @@ Shared modules under `supabase/functions/_shared` are bundled automatically.
 | `BACKUP_CRON_TOKEN` | yes (backups) | Same value as Vault secret `backup_cron_token` (scheduler) |
 | `OAUTH_STATE_SECRET` | yes (photos OAuth) | Prefer this for signing Google OAuth `state` |
 | `BACKUP_OAUTH_STATE_SECRET` | yes (backups) | Fallback for photos OAuth if `OAUTH_STATE_SECRET` is unset |
-| `GOOGLE_CLIENT_ID` | for Drive | Google Cloud OAuth client (backups + order photos) |
-| `GOOGLE_CLIENT_SECRET` | for Drive | |
+| `GOOGLE_CLIENT_ID` | for Drive / Calendar | Google Cloud OAuth client (backups + order photos + calendar) |
+| `GOOGLE_CLIENT_SECRET` | for Drive / Calendar | |
 | `APP_URL` | yes | App origin, e.g. `https://app.example.com` (CORS + redirects) |
 | `BACKUP_MAX_FILES_MB` | no | Default `150` — skip remaining storage files beyond this |
 
@@ -50,19 +61,23 @@ SQL (applied by owner, not by the agent):
 
 1. `supabase/manual/20261109090000_order_photos_google_drive.PRODUCTION.sql`
 2. `supabase/manual/20261109100000_order_photos_nas.PRODUCTION.sql`
+3. `supabase/manual/20261113100000_google_calendar.PRODUCTION.sql` (shared calendar — do not apply until authorized)
 
 ### Google OAuth redirect URIs
 
-Add both to the Google Cloud OAuth client:
+Add these to the Google Cloud OAuth client:
 
 ```
 {SUPABASE_URL}/functions/v1/backup-google-oauth/callback
 {SUPABASE_URL}/functions/v1/google-drive-photos-oauth/callback
+{SUPABASE_URL}/functions/v1/google-calendar-oauth/callback
 ```
 
 Example for MAIN:
 
 `https://pundggjzzaqzbvykbxvo.supabase.co/functions/v1/google-drive-photos-oauth/callback`
+
+`https://pundggjzzaqzbvykbxvo.supabase.co/functions/v1/google-calendar-oauth/callback`
 
 ### Exposing a Synology NAS over HTTPS (order photos)
 

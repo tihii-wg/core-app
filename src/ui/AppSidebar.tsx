@@ -1,6 +1,6 @@
 import { useApp } from "../lib/appContext";
 import type { AppModule } from "../lib/types";
-import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Warehouse, Wrench, FileText, Wallet, BarChart3, Settings, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Warehouse, Wrench, FileText, Wallet, BarChart3, CalendarDays, Settings, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -30,6 +30,7 @@ const navGroups: NavGroup[] = [
     labelKey: "nav.groups.operations",
     items: [
       { module: "orders", labelKey: "nav.modules.orders", icon: ClipboardList },
+      { module: "calendar", labelKey: "nav.modules.calendar", icon: CalendarDays },
       { module: "clients", labelKey: "nav.modules.clients", icon: Users },
       { module: "services", labelKey: "nav.modules.services", icon: Wrench },
       { module: "inventory", labelKey: "nav.modules.inventory", icon: Package },

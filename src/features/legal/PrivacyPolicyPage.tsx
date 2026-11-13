@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 
 /** Contact for privacy questions (shown publicly on /privacy). */
 export const PRIVACY_CONTACT_EMAIL = "vladimirpodolian@gmail.com";
-const UPDATED = "2026-11-09";
+const UPDATED = "2026-11-13";
 
 type Section = { title: string; body: string[] };
 type Policy = { title: string; updated: string; intro: string; sections: Section[] };
@@ -12,7 +12,7 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
     title: "Политика конфиденциальности Core App",
     updated: "Обновлено",
     intro:
-      "Core App — CRM для сервисных компаний (заказы, клиенты, склад, оплаты). Эта политика объясняет, какие данные мы обрабатываем и как используем доступ к Google Диску.",
+      "Core App — CRM для сервисных компаний (заказы, клиенты, склад, оплаты). Эта политика объясняет, какие данные мы обрабатываем и как используем доступ к Google Диску и Google Календарю.",
     sections: [
       {
         title: "Какие данные мы обрабатываем",
@@ -33,6 +33,15 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
         ],
       },
       {
+        title: "Google Календарь",
+        body: [
+          "Владелец компании может подключить свой Google Календарь, чтобы команда вела общий календарь внутри Core App. Мы запрашиваем доступ calendar.events (чтение и запись событий), calendar.calendarlist.readonly (список календарей владельца для выбора) и адрес почты аккаунта.",
+          "Читается и изменяется только календарь, который владелец явно выбрал (например отдельный календарь «Мастерская»). Другие календари Google и личные события в них приложению недоступны для записи.",
+          "Ключ доступа хранится в зашифрованном виде на сервере (Supabase Vault) и никогда не передаётся в браузер. Все обращения к Google Calendar API выполняются с сервера. Данные календаря не продаются, не передаются третьим лицам, не используются для рекламы и для обучения моделей ИИ.",
+          "Отключить Google Календарь можно в любой момент в Календарь / Настройки → Хранилище; при отключении доступ у Google отзывается (best effort). Также можно отозвать доступ на https://myaccount.google.com/permissions.",
+        ],
+      },
+      {
         title: "Как мы используем данные",
         body: [
           "Только для работы приложения: показ и обработка данных вашей компании, печать документов, уведомления, поддержка пользователей.",
@@ -42,8 +51,8 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
       {
         title: "Хранение и удаление",
         body: [
-          "Данные хранятся у провайдеров инфраструктуры (Supabase, Vercel) и, если выбрано владельцем, на его Google Диске или NAS.",
-          "Вы можете запросить выгрузку или удаление данных, написав нам. Файлы на вашем Google Диске или NAS остаются под вашим контролем.",
+          "Данные хранятся у провайдеров инфраструктуры (Supabase, Vercel) и, если выбрано владельцем, на его Google Диске, Google Календаре или NAS.",
+          "Вы можете запросить выгрузку или удаление данных, написав нам. Файлы и события на вашем Google Диске / Календаре или NAS остаются под вашим контролем.",
         ],
       },
       {
@@ -56,7 +65,7 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
     title: "Politica de confidențialitate Core App",
     updated: "Actualizat",
     intro:
-      "Core App este un CRM pentru companii de servicii (comenzi, clienți, stoc, plăți). Această politică explică ce date prelucrăm și cum folosim accesul la Google Drive.",
+      "Core App este un CRM pentru companii de servicii (comenzi, clienți, stoc, plăți). Această politică explică ce date prelucrăm și cum folosim accesul la Google Drive și Google Calendar.",
     sections: [
       {
         title: "Ce date prelucrăm",
@@ -77,13 +86,22 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
         ],
       },
       {
+        title: "Google Calendar",
+        body: [
+          "Proprietarul companiei poate conecta Google Calendar pentru un calendar partajat în Core App. Solicităm accesul calendar.events (citire/scriere evenimente), calendar.calendarlist.readonly (lista calendarelor pentru selecție) și adresa de e-mail.",
+          "Este citit și modificat doar calendarul ales explicit de proprietar. Celelalte calendare Google rămân inaccesibile pentru scriere.",
+          "Cheia de acces este stocată criptat pe server (Supabase Vault) și nu ajunge în browser. Toate apelurile către Google Calendar API rulează pe server.",
+          "Puteți deconecta Google Calendar oricând din Calendar / Setări → Stocare; la deconectare accesul este revocat la Google (best effort). De asemenea pe https://myaccount.google.com/permissions.",
+        ],
+      },
+      {
         title: "Cum folosim datele",
         body: ["Doar pentru funcționarea aplicației și asistență. Datele companiei sunt vizibile doar membrilor ei, conform rolurilor."],
       },
       {
         title: "Stocare și ștergere",
         body: [
-          "Datele sunt găzduite la furnizori de infrastructură (Supabase, Vercel) și, la alegerea proprietarului, în Google Drive sau NAS-ul acestuia.",
+          "Datele sunt găzduite la furnizori de infrastructură (Supabase, Vercel) și, la alegerea proprietarului, în Google Drive, Google Calendar sau NAS-ul acestuia.",
           "Puteți solicita exportul sau ștergerea datelor scriindu-ne.",
         ],
       },
@@ -94,7 +112,7 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
     title: "Core App Privacy Policy",
     updated: "Updated",
     intro:
-      "Core App is a CRM for service businesses (orders, clients, inventory, payments). This policy explains what data we process and how we use Google Drive access.",
+      "Core App is a CRM for service businesses (orders, clients, inventory, payments). This policy explains what data we process and how we use Google Drive and Google Calendar access.",
     sections: [
       {
         title: "Data we process",
@@ -115,13 +133,22 @@ const POLICIES: Record<"ru" | "ro" | "en", Policy> = {
         ],
       },
       {
+        title: "Google Calendar",
+        body: [
+          "A company owner can connect Google Calendar so the team can manage a shared calendar inside Core App. We request calendar.events (read/write events), calendar.calendarlist.readonly (list calendars for selection), and the account email address.",
+          "Only the calendar the owner explicitly selects is read and written (for example a dedicated “Workshop” calendar). Other Google calendars are not written by the app.",
+          "The access token is stored encrypted on the server (Supabase Vault) and never sent to the browser. All Google Calendar API calls run on the server. Calendar data is not sold, shared with third parties, used for advertising, or used to train AI models.",
+          "You can disconnect Google Calendar at any time in Calendar / Settings → Storage; disconnect revokes access at Google (best effort). You can also revoke at https://myaccount.google.com/permissions.",
+        ],
+      },
+      {
         title: "How we use data",
         body: ["Only to operate the app and provide support. A company's data is visible only to its members according to their roles."],
       },
       {
         title: "Storage and deletion",
         body: [
-          "Data is hosted by infrastructure providers (Supabase, Vercel) and, if the owner chooses, in their Google Drive or NAS.",
+          "Data is hosted by infrastructure providers (Supabase, Vercel) and, if the owner chooses, in their Google Drive, Google Calendar, or NAS.",
           "You can request an export or deletion of your data by contacting us.",
         ],
       },

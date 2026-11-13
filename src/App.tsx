@@ -26,8 +26,8 @@ import { Finance } from "./features/finance/Finance";
 import { ReportsModule } from "./features/reports/Reports";
 import { QuickReportPage } from "./features/reports/QuickReportPage";
 import { SettingsModule } from "./features/settings/Settings";
+import { CalendarPage } from "./features/calendar/CalendarPage";
 import { Leads } from "./features/leads/Leads";
-import { Estimates } from "./features/estimates/Estimates";
 import { Tasks } from "./features/tasks/Tasks";
 import { Bookings } from "./features/bookings/Bookings";
 import { PublicOrderPage } from "./features/public/PublicOrderPage";
@@ -92,9 +92,13 @@ export function AppRoutes() {
           <Route path="/:locale/:workspaceId/finance" element={<Finance />} />
           <Route path="/:locale/:workspaceId/reports" element={<ReportsModule />} />
           <Route path="/:locale/:workspaceId/reports/:reportType" element={<QuickReportPage />} />
+          <Route path="/:locale/:workspaceId/calendar" element={<CalendarPage />} />
           {/* Stage 9 (P2) read-only stubs; reached from Settings → Modules (no sidebar entries yet). */}
           <Route path="/:locale/:workspaceId/leads" element={<Leads />} />
-          <Route path="/:locale/:workspaceId/estimates" element={<Estimates />} />
+          <Route
+            path="/:locale/:workspaceId/estimates"
+            element={<Navigate to="../orders?type=estimate" relative="path" replace />}
+          />
           <Route path="/:locale/:workspaceId/tasks" element={<Tasks />} />
           <Route path="/:locale/:workspaceId/bookings" element={<Bookings />} />
           <Route path="/:locale/:workspaceId/schedule" element={<Bookings />} />

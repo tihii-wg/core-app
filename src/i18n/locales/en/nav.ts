@@ -10,6 +10,7 @@ export default {
     invoices: "Invoices",
     finance: "Finance",
     reports: "Reports",
+    calendar: "Calendar",
     settings: "Settings",
   },
   groups: {

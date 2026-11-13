@@ -13,6 +13,7 @@ const nav: Messages<typeof en> = {
     invoices: "Счета",
     finance: "Финансы",
     reports: "Отчёты",
+    calendar: "Календарь",
     settings: "Настройки",
   },
   groups: {

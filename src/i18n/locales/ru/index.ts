@@ -22,5 +22,6 @@ import stage9 from "./stage9";
 import catalogWarranty from "./catalogWarranty";
 import suppliers from "./suppliers";
 import industries from "./industries";
+import calendar from "./calendar";
 
-export const ru = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, warehouses, employees, settings, team, reports, finance, invoices, onboarding, vehicles, stage9, catalogWarranty, suppliers, industries };
+export const ru = { common, status, nav, auth, workspaces, dashboard, search, orders, clients, services, inventory, warehouses, employees, settings, team, reports, finance, invoices, onboarding, vehicles, stage9, catalogWarranty, suppliers, industries, calendar };
