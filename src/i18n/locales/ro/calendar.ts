@@ -3,6 +3,7 @@ import type { Messages } from "../../types";
 
 const calendar: Messages<typeof en> = {
   title: "Calendar",
+  untitled: "(Fără titlu)",
   description: "Calendar Google partajat pentru întreaga echipă",
   connect: "Conectează Google Calendar",
   connectHint:

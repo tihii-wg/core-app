@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../pages/PageHeader";
+import { Spinner } from "../../ui/Spinner";
 import { Button } from "../../ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Switch } from "../../ui/Switch";
@@ -117,7 +118,13 @@ export function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const gcalEvents = useMemo(() => mapGoogleEventsToFc(eventsQuery.data ?? []), [eventsQuery.data]);
+  const gcalEvents = useMemo(
+    () =>
+      mapGoogleEventsToFc(eventsQuery.data ?? []).map((ev) =>
+        ev.title === "(no title)" ? { ...ev, title: t("calendar.untitled") } : ev,
+      ),
+    [eventsQuery.data, t],
+  );
   const orderEvents = useMemo(() => {
     if (!showOrders || !orders.length) return [];
     return mapOrdersToFcOverlay(orders, {
@@ -260,7 +267,12 @@ export function CalendarPage() {
     <div className="space-y-4">
       <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
 
-      {!connected ? (
+      {/* Status not known yet (workspace or status still loading): no "not connected" flash. */}
+      {!statusQuery.data && !statusQuery.isError ? (
+        <div className="flex justify-center py-16">
+          <Spinner />
+        </div>
+      ) : !connected ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -369,12 +381,14 @@ export function CalendarPage() {
               firstDay={1}
               timeZone="local"
               nowIndicator
+              scrollTime="08:00:00"
               selectable
               editable
               eventStartEditable
               eventDurationEditable
               selectMirror
-              height="auto"
+              // Desktop: fixed height so the grid scrolls internally and opens at scrollTime (08:00).
+              height={isMobile ? "auto" : "max(560px, calc(100vh - 240px))"}
               events={fcEvents}
               datesSet={onDatesSet}
               select={onSelect}

@@ -1,5 +1,6 @@
 export default {
   title: "Calendar",
+  untitled: "(No title)",
   description: "Shared Google Calendar for the whole team",
   connect: "Connect Google Calendar",
   connectHint:
