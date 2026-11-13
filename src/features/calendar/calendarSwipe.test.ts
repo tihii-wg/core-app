@@ -52,14 +52,35 @@ describe("decideCalendarSwipe", () => {
     ).toBeNull();
   });
 
-  it("ignores gestures that started on an event", () => {
+  it("allows a quick swipe that started on an event", () => {
     expect(
       decideCalendarSwipe(start, { x: 20, y: 100, t: 1_200 }, {
         startedOnEvent: true,
         pointerCount: 1,
         fcBusy: false,
       }),
+    ).toBe("next");
+  });
+
+  it("ignores a long hold on an event (that is a drag)", () => {
+    expect(
+      decideCalendarSwipe(start, { x: 20, y: 100, t: 1_400 }, {
+        startedOnEvent: true,
+        pointerCount: 1,
+        fcBusy: false,
+      }),
     ).toBeNull();
+  });
+
+  it("accepts slightly diagonal thumb swipes", () => {
+    // dx=-70, dy=50 → ratio 1.4
+    expect(
+      decideCalendarSwipe(start, { x: 30, y: 150, t: 1_200 }, {
+        startedOnEvent: false,
+        pointerCount: 1,
+        fcBusy: false,
+      }),
+    ).toBe("next");
   });
 
   it("ignores while FullCalendar is dragging/selecting or UI is blocked", () => {

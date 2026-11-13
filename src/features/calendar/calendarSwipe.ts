@@ -5,6 +5,7 @@ export type SwipePointerSample = {
 };
 
 export type SwipeStartContext = {
+  /** Gesture began on an event chip. Allowed only as a quick swipe (before long-press drag kicks in). */
   startedOnEvent: boolean;
   pointerCount: number;
   fcBusy: boolean;
@@ -21,7 +22,10 @@ export const SWIPE_MIN_DX_FAST = 36;
 /** px per ms — ~450px/s feels intentional on phones. */
 export const SWIPE_MIN_VELOCITY = 0.45;
 export const SWIPE_MAX_DURATION_MS = 900;
-export const SWIPE_DX_OVER_DY = 1.5;
+/** Horizontal must dominate vertical by this ratio (thumb arcs are slightly diagonal). */
+export const SWIPE_DX_OVER_DY = 1.2;
+/** Matches FullCalendar eventLongPressDelay: holding an event this long means drag, not swipe. */
+export const SWIPE_EVENT_LONG_PRESS_MS = 350;
 
 /** Pure swipe detector for calendar period navigation. */
 export function decideCalendarSwipe(
@@ -31,13 +35,15 @@ export function decideCalendarSwipe(
 ): SwipeDecision {
   if (ctx.blocked) return null;
   if (ctx.pointerCount > 1) return null;
-  if (ctx.startedOnEvent) return null;
   if (ctx.fcBusy) return null;
 
   const dx = end.x - start.x;
   const dy = end.y - start.y;
   const duration = end.t - start.t;
   if (duration <= 0) return null;
+  // Swipes may start on an event (centre of day/week views is usually covered by events),
+  // but a long hold on an event is a drag/resize — never navigate then.
+  if (ctx.startedOnEvent && duration >= SWIPE_EVENT_LONG_PRESS_MS) return null;
 
   const absDx = Math.abs(dx);
   const absDy = Math.abs(dy);

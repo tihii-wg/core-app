@@ -143,6 +143,8 @@ export function CalendarPage() {
     null,
   );
   const swipeCommittedRef = useRef(false);
+  /** After a committed swipe, ignore the tap/click FullCalendar may emit on finger-up. */
+  const suppressTapUntilRef = useRef(0);
   const swipeRafRef = useRef<number | null>(null);
   const swipeLatestRef = useRef<SwipePointerSample | null>(null);
   const peekingRangeRef = useRef(false);
@@ -324,6 +326,7 @@ export function CalendarPage() {
 
   function onDateClick(arg: DateClickArg) {
     if (!connected) return;
+    if (Date.now() < suppressTapUntilRef.current) return;
     // Touch taps use dateClick (select needs long-press). Mouse create stays on select/drag.
     if (!isCoarsePointer && !isMobile) return;
     const draftRange = draftFromDateClick({
@@ -365,6 +368,10 @@ export function CalendarPage() {
   }
 
   function onEventClick(arg: EventClickArg) {
+    if (Date.now() < suppressTapUntilRef.current) {
+      arg.jsEvent.preventDefault();
+      return;
+    }
     const kind = arg.event.extendedProps.kind;
     if (kind === "order" || kind === "order_sync") {
       const orderId = (arg.event.extendedProps.orderId || arg.event.extendedProps.coreAppOrderId) as string;
@@ -479,6 +486,7 @@ export function CalendarPage() {
       if (!decision) return;
       swipeCommittedRef.current = true;
       swipeStartRef.current = null;
+      suppressTapUntilRef.current = Date.now() + 500;
       navigateBySwipe(decision);
     },
     [navigateBySwipe],
