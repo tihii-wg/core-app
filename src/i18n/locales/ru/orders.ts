@@ -1040,7 +1040,7 @@ const orders: Messages<typeof en> = {
     },
   },
   lineComments: {
-    add: "+ Добавить комментарий",
+    addLabel: "Добавить комментарий",
     edit: "Редактировать комментарий",
     placeholder: "Комментарий к позиции…",
     charsLeft: "Осталось {{count}} символов",

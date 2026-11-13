@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { serviceRowPropsEqual } from "./lineRowMemo";
 import { useTranslation } from "react-i18next";
 import type { Order, OrderService } from "../../../lib/types";
@@ -15,6 +15,7 @@ import OrderServiceLineInlineCells, {
   type ServiceLineInlineField,
 } from "../OrderServiceLineInlineCells";
 import { OrderLineCommentCell } from "../OrderLineCommentCell";
+import { OrderLineCommentButton } from "../OrderLineCommentButton";
 import { orderLineAmount } from "../../services/orderServiceLine";
 
 export type OrderServiceLineRowProps = {
@@ -80,6 +81,7 @@ function OrderServiceLineRowComponent({
   onEditorClosed,
 }: OrderServiceLineRowProps) {
   const { t } = useTranslation();
+  const [commentEditing, setCommentEditing] = useState(false);
   const lineId = line.id?.trim() ?? "";
   const lineGross = useMemo(
     () => orderLineAmount({ price: line.price, quantity: line.quantity }),
@@ -145,6 +147,8 @@ function OrderServiceLineRowComponent({
               visible={commentsVisible}
               editable={commentsEditable}
               saving={commentSaving}
+              editing={commentEditing}
+              onEditingChange={setCommentEditing}
               onSave={(body) => onSaveComment(lineId, body)}
             />
             <OrderServiceLinePerformerInline
@@ -180,6 +184,14 @@ function OrderServiceLineRowComponent({
           </div>
           {showFieldEdit && lineId ? (
             <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
+              {commentsEditable ? (
+                <OrderLineCommentButton
+                  testId={`service-line-comment-${lineId}`}
+                  hasComment={Boolean(line.comment?.trim())}
+                  active={commentEditing}
+                  onClick={() => setCommentEditing(true)}
+                />
+              ) : null}
               <OrderLineEditButton
                 testId={`service-line-edit-${lineId}`}
                 // Not tied to background saves: the dialog always opens with the current line, and the row

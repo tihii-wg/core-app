@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/Button";
@@ -13,22 +12,26 @@ type OrderLineCommentCellProps = {
   /** When false, show text only (no add/edit). */
   editable: boolean;
   saving?: boolean;
+  /** Editor open state, controlled by the row (its comment button next to the pencil opens it). */
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
   onSave: (next: string | null) => Promise<void>;
 };
 
 /**
- * Inline per-line comment under the line name.
- * Desktop: add link on hover/focus-within; touch: always show the add affordance.
+ * Inline per-line comment under the line name: the text (click to edit) or the editor. Opening it is the
+ * row's always-visible comment button next to the pencil.
  */
 export function OrderLineCommentCell({
   comment,
   visible,
   editable,
   saving = false,
+  editing,
+  onEditingChange: setEditing,
   onSave,
 }: OrderLineCommentCellProps) {
   const { t } = useTranslation();
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(comment ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -134,38 +137,18 @@ export function OrderLineCommentCell({
     );
   }
 
-  if (text) {
-    return (
-      <div className="group/comment mt-0.5 flex min-w-0 items-start gap-1" data-testid="order-line-comment">
-        <p
-          className="min-w-0 flex-1 text-xs text-muted-foreground [overflow-wrap:anywhere] line-clamp-3"
-          title={text}
-        >
-          {text}
-        </p>
-        {editable ? (
-          <button
-            type="button"
-            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-100 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 sm:opacity-0 sm:group-hover/comment:opacity-100 sm:group-focus-within/comment:opacity-100"
-            aria-label={t("orders.lineComments.edit")}
-            data-testid="order-line-comment-edit"
-            onClick={() => setEditing(true)}
-          >
-            <Pencil className="size-3.5" />
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-
+  if (!text) return null;
   return (
-    <button
-      type="button"
-      className="mt-0.5 text-left text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:outline-none opacity-100 sm:opacity-0 sm:group-hover/line:opacity-100 sm:group-focus-within/line:opacity-100"
-      data-testid="order-line-comment-add"
-      onClick={() => setEditing(true)}
+    <p
+      className={cn(
+        "mt-0.5 min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere] line-clamp-3",
+        editable && "cursor-text hover:text-foreground",
+      )}
+      title={text}
+      data-testid="order-line-comment"
+      onClick={editable ? () => setEditing(true) : undefined}
     >
-      {t("orders.lineComments.add")}
-    </button>
+      {text}
+    </p>
   );
 }

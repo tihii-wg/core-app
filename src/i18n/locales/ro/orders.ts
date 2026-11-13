@@ -1030,7 +1030,7 @@ const orders: Messages<typeof en> = {
     },
   },
   lineComments: {
-    add: "+ Adaugă comentariu",
+    addLabel: "Adaugă comentariu",
     edit: "Editează comentariul",
     placeholder: "Comentariu la poziție…",
     charsLeft: "{{count}} caractere rămase",

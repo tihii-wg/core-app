@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { materialRowPropsEqual } from "./lineRowMemo";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -28,6 +28,7 @@ import OrderMaterialLineInlineCells, {
   type MaterialLineInlineField,
 } from "../OrderMaterialLineInlineCells";
 import { OrderLineCommentCell } from "../OrderLineCommentCell";
+import { OrderLineCommentButton } from "../OrderLineCommentButton";
 
 export type OrderMaterialLineRowProps = {
   line: OrderMaterial;
@@ -92,6 +93,7 @@ function OrderMaterialLineRowComponent({
   onEditorClosed,
 }: OrderMaterialLineRowProps) {
   const { t } = useTranslation();
+  const [commentEditing, setCommentEditing] = useState(false);
   const catalog = isCatalogOrderMaterial(line);
   const source = resolveMaterialSupplySource(line);
   const sourceLabel =
@@ -162,6 +164,8 @@ function OrderMaterialLineRowComponent({
               visible={commentsVisible}
               editable={commentsEditable}
               saving={commentSaving}
+              editing={commentEditing}
+              onEditingChange={setCommentEditing}
               onSave={(body) => onSaveComment(lineId, body)}
             />
             <OrderLineWarrantyBadge
@@ -195,20 +199,32 @@ function OrderMaterialLineRowComponent({
               <p className="text-[11px] text-muted-foreground">{t("orders.form.freeformNoStockImpact")}</p>
             )}
           </div>
-          {showFieldEdit && lineId && (!catalog || canWarehouse) ? (
+          {showFieldEdit && lineId && (commentsEditable || !catalog || canWarehouse) ? (
             <div className="flex shrink-0 items-center self-end sm:-my-2.5 sm:self-start">
-              <OrderLineEditButton
-                testId={`material-line-edit-${lineId}`}
-                // Not tied to background saves: the dialog always opens with the current line, and the row
-                // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
-                disabled={deletePending}
-                onClick={() => onEditLine(lineId)}
-              />
-              <OrderLineDeleteButton
-                testId={`material-line-delete-${lineId}`}
-                disabled={deletePending}
-                onClick={() => void onDelete(lineId)}
-              />
+              {commentsEditable ? (
+                <OrderLineCommentButton
+                  testId={`material-line-comment-${lineId}`}
+                  hasComment={Boolean(line.comment?.trim())}
+                  active={commentEditing}
+                  onClick={() => setCommentEditing(true)}
+                />
+              ) : null}
+              {!catalog || canWarehouse ? (
+                <>
+                  <OrderLineEditButton
+                    testId={`material-line-edit-${lineId}`}
+                    // Not tied to background saves: the dialog always opens with the current line, and the row
+                    // deliberately skips re-rendering on the shared «saving» flag (lineRowMemo).
+                    disabled={deletePending}
+                    onClick={() => onEditLine(lineId)}
+                  />
+                  <OrderLineDeleteButton
+                    testId={`material-line-delete-${lineId}`}
+                    disabled={deletePending}
+                    onClick={() => void onDelete(lineId)}
+                  />
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>

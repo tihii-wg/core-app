@@ -1018,7 +1018,7 @@ export default {
     },
   },
   lineComments: {
-    add: "+ Add comment",
+    addLabel: "Add comment",
     edit: "Edit comment",
     placeholder: "Line comment…",
     charsLeft: "{{count}} characters left",
