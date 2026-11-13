@@ -9,6 +9,7 @@ import type {
   EventClickArg,
   EventDropArg,
   DatesSetArg,
+  DayHeaderContentArg,
   EventMountArg,
 } from "@fullcalendar/core";
 import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction";
@@ -606,6 +607,23 @@ export function CalendarPage() {
     />
   ) : null;
 
+  // Google Calendar–style day headers in time-grid views: small weekday + large date (today in a circle).
+  const renderDayHeader = useCallback(
+    (arg: DayHeaderContentArg) => {
+      if (!arg.view.type.startsWith("timeGrid")) return arg.text;
+      const weekday = new Intl.DateTimeFormat(i18n.language || "en", { weekday: "short" })
+        .format(arg.date)
+        .replace(".", "");
+      return (
+        <div className="gcal-dayhead">
+          <span className="gcal-dayhead-wd">{weekday}</span>
+          <span className={arg.isToday ? "gcal-dayhead-num is-today" : "gcal-dayhead-num"}>{arg.date.getDate()}</span>
+        </div>
+      );
+    },
+    [i18n.language],
+  );
+
   const phoneViews = useMemo(
     () => ({
       timeGrid3Day: {
@@ -674,6 +692,7 @@ export function CalendarPage() {
           firstDay={1}
           timeZone="local"
           nowIndicator
+          dayHeaderContent={renderDayHeader}
           scrollTime="08:00:00"
           selectable
           editable
