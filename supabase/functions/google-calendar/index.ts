@@ -1,4 +1,4 @@
-import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { corsHeaders, corsOriginFor, errorResponse, jsonResponse } from "../_shared/cors.ts";
 import {
   buildGoogleEventBody,
   getCachedEvents,
@@ -13,7 +13,7 @@ import {
 import { bearerToken, requireEnv, serviceClient, userClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (req) => {
-  const appUrl = (Deno.env.get("APP_URL") ?? "").replace(/\/$/, "");
+  const appUrl = corsOriginFor((Deno.env.get("APP_URL") ?? "").replace(/\/$/, ""), req);
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(appUrl) });
   }

@@ -42,6 +42,8 @@ export type OAuthStatePayload = {
   exp: number;
   nonce: string;
   locale?: string;
+  /** Allowed browser origin the OAuth flow started from (re-validated on callback). */
+  returnOrigin?: string;
 };
 
 /** Sign OAuth state: base64url(payload).base64url(hmac). */

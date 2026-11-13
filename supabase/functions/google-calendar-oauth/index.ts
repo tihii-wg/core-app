@@ -1,4 +1,4 @@
-import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
+import { corsHeaders, corsOriginFor, errorResponse, jsonResponse, resolveAllowedOrigin } from "../_shared/cors.ts";
 import { oauthStateExpiresAt, peekOAuthState, signOAuthState, verifyOAuthState } from "../_shared/crypto.ts";
 import { buildCalendarOAuthRedirect } from "../_shared/calendarOAuthRedirect.ts";
 import { type GoogleCredential, googleAccessToken } from "../_shared/googleDrive.ts";
@@ -12,9 +12,11 @@ const CALENDAR_SCOPES = [
 ].join(" ");
 
 Deno.serve(async (req) => {
-  const appUrl = (Deno.env.get("APP_URL") ?? "").replace(/\/$/, "");
+  // APP_URL: default redirect target. cors: the caller's allowed origin (APP_URL, APP_EXTRA_ORIGINS, localhost).
+  const configuredAppUrl = (Deno.env.get("APP_URL") ?? "").replace(/\/$/, "");
+  const cors = corsOriginFor(configuredAppUrl, req);
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(appUrl) });
+    return new Response(null, { status: 204, headers: corsHeaders(cors) });
   }
 
   const url = new URL(req.url);
@@ -25,30 +27,36 @@ Deno.serve(async (req) => {
       if (req.method === "GET") {
         const workspaceId = url.searchParams.get("workspaceId")?.trim() || "";
         const locale = url.searchParams.get("locale")?.trim() || "en";
-        return await handleStart(req, workspaceId, locale, appUrl);
+        return await handleStart(req, workspaceId, locale, cors, configuredAppUrl);
       }
       const body = (await req.json()) as { workspaceId?: string; locale?: string };
-      return await handleStart(req, body.workspaceId ?? "", body.locale ?? "en", appUrl);
+      return await handleStart(req, body.workspaceId ?? "", body.locale ?? "en", cors, configuredAppUrl);
     }
     if (path.endsWith("/callback") && req.method === "GET") {
-      return await handleCallback(url, appUrl);
+      return await handleCallback(url, configuredAppUrl);
     }
     if (path.endsWith("/disconnect") && req.method === "POST") {
       const body = (await req.json()) as { workspaceId?: string };
-      return await handleDisconnect(req, body.workspaceId ?? "", appUrl);
+      return await handleDisconnect(req, body.workspaceId ?? "", cors);
     }
     if (req.method === "POST" && !path.includes("/callback") && !path.includes("/disconnect")) {
       const body = (await req.json()) as { workspaceId?: string; locale?: string };
-      return await handleStart(req, body.workspaceId ?? "", body.locale ?? "en", appUrl);
+      return await handleStart(req, body.workspaceId ?? "", body.locale ?? "en", cors, configuredAppUrl);
     }
-    return errorResponse("not_found", "Unknown route", 404, appUrl);
+    return errorResponse("not_found", "Unknown route", 404, cors);
   } catch (error) {
     console.error("[google-calendar-oauth]", error instanceof Error ? error.message : error);
-    return errorResponse("provider_error", error instanceof Error ? error.message : "OAuth failed", 500, appUrl);
+    return errorResponse("provider_error", error instanceof Error ? error.message : "OAuth failed", 500, cors);
   }
 });
 
-async function handleStart(req: Request, workspaceId: string, locale: string, appUrl: string): Promise<Response> {
+async function handleStart(
+  req: Request,
+  workspaceId: string,
+  locale: string,
+  appUrl: string,
+  configuredAppUrl: string,
+): Promise<Response> {
   if (!workspaceId) return errorResponse("invalid_args", "workspaceId required", 400, appUrl);
   const jwt = bearerToken(req);
   if (!jwt) return errorResponse("unauthorized", "Missing bearer token", 401, appUrl);
@@ -69,6 +77,7 @@ async function handleStart(req: Request, workspaceId: string, locale: string, ap
       exp: oauthStateExpiresAt(),
       nonce: crypto.randomUUID(),
       locale,
+      returnOrigin: resolveAllowedOrigin(configuredAppUrl, req.headers.get("origin")) ?? undefined,
     },
     oauthStateSecret(),
   );
@@ -92,6 +101,7 @@ async function resolveCallbackContext(url: URL, state: string, secret: string) {
   return {
     workspaceId: peeked?.workspaceId ?? url.searchParams.get("ws"),
     locale: peeked?.locale ?? url.searchParams.get("locale"),
+    returnOrigin: peeked?.returnOrigin ?? null,
   };
 }
 
@@ -101,6 +111,8 @@ async function handleCallback(url: URL, appUrl: string): Promise<Response> {
   const oauthError = url.searchParams.get("error");
   const secret = oauthStateSecret();
   const ctx = await resolveCallbackContext(url, state, secret);
+  // Return to the app origin the flow started from (re-validated), else APP_URL.
+  appUrl = resolveAllowedOrigin(appUrl, ctx.returnOrigin) ?? appUrl;
 
   const errorRedirect = (reason: string) =>
     Response.redirect(
