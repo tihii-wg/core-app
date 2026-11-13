@@ -8,6 +8,9 @@ const sql = readFileSync(
   "utf8",
 );
 
+/** SQL outside function bodies — bulk data statements must never appear there. */
+const topLevelSql = sql.replace(/as \$fn\$[\s\S]*?\$fn\$;/g, "");
+
 const fn = (name: string) => {
   const needle = `create or replace function public.${name}(`;
   const i = sql.lastIndexOf(needle);
@@ -54,16 +57,39 @@ describe("closed_order_full_access SQL", () => {
     expect(sql).toMatch(/create or replace function public\.crm_acts_as_owner_for_closed_orders/);
     expect(sql).toMatch(/drop constraint if exists workspace_role_permission_grants_permission_check/);
     expect(sql).toMatch(/notify pgrst,\s*'reload schema'/i);
-    // Only reopen_cancelled_order's dynamic UPDATE of a single cancelled row — no bulk data migrations.
-    expect(sql).not.toMatch(/^\s*update public\.(orders|payments|workspaces)\b/im);
-    expect(sql).not.toMatch(/\bdelete from public\.(orders|payments)\b/i);
+    // Row-level UPDATE/DELETE live only inside function bodies — no bulk data migrations at top level.
+    expect(topLevelSql).not.toMatch(/^\s*update public\.(orders|payments|workspaces)\b/im);
+    expect(topLevelSql).not.toMatch(/\bdelete from public\.(orders|payments)\b/i);
     expect(sql).not.toMatch(/\bgrant\s+maintain\b/i);
   });
 
-  it("documents invoice/warranty delete protections stay via existing helpers", () => {
-    // Script does not rewrite delete_order_with_payments — it relies on crm_has_closed_order_permission.
-    expect(sql).not.toMatch(/create or replace function public\.delete_order_with_payments/);
-    expect(sql).toMatch(/crm_has_closed_order_permission@v4|crm_has_closed_order_permission/);
+  it("delete keeps invoice/warranty/payment/stock protections; only the non-closed cancelled branch uses acts-as-owner", () => {
+    const del = fn("delete_order_with_payments");
+    expect(del).toMatch(/crm_has_closed_order_permission\(p_workspace_id, 'orders\.delete_closed'\)/);
+    expect(del).toMatch(/crm_acts_as_owner_for_closed_orders\(p_workspace_id\)/);
+    expect(del).toMatch(/crm_has_permission\(p_workspace_id, 'orders\.delete'\)/);
+    expect(del).not.toMatch(/crm_is_workspace_owner_id/);
+    for (const code of [
+      "order_delete:not_cancelled",
+      "order_delete:has_invoice",
+      "order_delete:has_warranty_orders",
+      "order_delete:has_warranty_claims",
+      "order_delete:has_active_payment",
+    ]) {
+      expect(del).toContain(code);
+    }
+  });
+
+  it("custom status on cancelled orders and payment void accept full-access roles", () => {
+    const status = fn("set_order_lifecycle_regular_custom_status");
+    expect(status).toMatch(/crm_acts_as_owner_for_closed_orders\(p_workspace_id\)/);
+    expect(status).toMatch(/crm_owner_may_manage_closed_orders/);
+    expect(status).not.toMatch(/crm_is_workspace_owner_id/);
+
+    const voidFn = fn("crm_cancel_order_with_payment_void");
+    expect(voidFn).toMatch(/crm_acts_as_owner_for_closed_orders\(p_workspace_id\)/);
+    expect(voidFn).toMatch(/crm_has_permission\(p_workspace_id, 'orders\.edit'\)/);
+    expect(voidFn).not.toMatch(/crm_is_workspace_owner_id/);
   });
 
   it("covers owner vs role full-access paths for cancel/delete/edit/reopen/unlink", () => {
