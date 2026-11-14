@@ -136,12 +136,38 @@ export function CalendarPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const calendarRef = useRef<InstanceType<typeof FullCalendar> | null>(null);
   const calendarShellRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Time-grid views: size the half-hour rows so 07:00–19:00 (24 rows) fits the visible grid at once.
+   * Written as a CSS variable on the shell; FullCalendar then re-measures (updateSize) to place events.
+   */
+  const fitSlots = useCallback(() => {
+    const shell = calendarShellRef.current;
+    if (!shell) return;
+    const scroller = shell.querySelector<HTMLElement>(".fc-timegrid .fc-scrollgrid-section-liquid .fc-scroller");
+    if (!scroller || scroller.clientHeight <= 0) return;
+    const VISIBLE_HALF_HOURS = 24; // 07:00 → 19:00
+    // Each row also has a 1px grid line under it.
+    const px = Math.max(14, Math.floor(scroller.clientHeight / VISIBLE_HALF_HOURS) - 1);
+    const value = `${px}px`;
+    if (shell.style.getPropertyValue("--gcal-slot-h") === value) return;
+    shell.style.setProperty("--gcal-slot-h", value);
+    const api = calendarRef.current?.getApi();
+    api?.updateSize();
+    // Row heights changed → the pixel scroll offset no longer points at 07:00.
+    api?.scrollToTime("07:00:00");
+  }, []);
+
   /** Desktop/tablet: calendar height so its bottom edge sits at the bottom of the window (no page scroll). */
   const [fitHeight, setFitHeight] = useState<number | null>(null);
   useLayoutEffect(() => {
-    if (isMobile) return;
     const shell = calendarShellRef.current;
     if (!shell) return;
+    if (isMobile) {
+      fitSlots();
+      const onResize = () => fitSlots();
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }
     const BOTTOM_GAP = 16; // breathing room above the window's bottom edge
     const measure = () => {
       const top = shell.getBoundingClientRect().top + window.scrollY;
@@ -152,6 +178,7 @@ export function CalendarPage() {
         parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
       const next = Math.max(380, Math.floor(window.innerHeight - top - BOTTOM_GAP - chrome));
       setFitHeight((prev) => (prev === next ? prev : next));
+      fitSlots();
     };
     measure();
     window.addEventListener("resize", measure);
@@ -297,6 +324,7 @@ export function CalendarPage() {
   const onDatesSet = useCallback((arg: DatesSetArg) => {
     // Ignore synthetic prev/next used only to peek adjacent ranges for prefetch.
     if (peekingRangeRef.current) return;
+    requestAnimationFrame(() => fitSlots());
     // Update range immediately so the grid period changes without waiting on fetch.
     setRange((prev) => {
       const next = rangeIso(arg.start, arg.end);
@@ -718,7 +746,7 @@ export function CalendarPage() {
           timeZone="local"
           nowIndicator
           dayHeaderContent={renderDayHeader}
-          scrollTime="08:00:00"
+          scrollTime="07:00:00"
           selectable
           editable
           eventStartEditable
@@ -783,7 +811,9 @@ export function CalendarPage() {
           )}
         </div>
       ) : (
-        <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
+        connected && canAccess ? null : (
+          <PageHeader title={t("calendar.title")} description={t("calendar.description")} />
+        )
       )}
 
       {!status && !statusQuery.isError && statusQuery.isPending ? (
@@ -825,11 +855,11 @@ export function CalendarPage() {
         <>
           {!isMobile ? (
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0 text-sm">
-                <div className="text-foreground truncate font-medium">
-                  {status?.calendarSummary || t("calendar.title")}
+              <div className="min-w-0">
+                <h1 className="text-foreground truncate text-xl font-semibold tracking-tight">{t("calendar.title")}</h1>
+                <div className="text-muted-foreground truncate text-[13px]">
+                  {[status?.calendarSummary, status?.googleEmail].filter(Boolean).join(" · ")}
                 </div>
-                <div className="text-muted-foreground truncate">{status?.googleEmail}</div>
               </div>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {showOverlayToggle ? (

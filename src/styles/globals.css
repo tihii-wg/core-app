@@ -279,7 +279,8 @@ table.data-clip-cells td [data-slot="status-badge"] {
    ========================================================================= */
 /* Shared Google Calendar page: taller time slots (default ~1.5em is too cramped to read). */
 .gcal-fullcalendar .fc-timegrid-slot {
-  height: 2.5rem;
+  /* Set by CalendarPage (fitSlots) so 07:00–19:00 fits the visible grid; fallback before measuring. */
+  height: var(--gcal-slot-h, 1.75rem);
 }
 .gcal-fullcalendar .fc-timegrid-event .fc-event-main {
   font-size: 0.8rem;
