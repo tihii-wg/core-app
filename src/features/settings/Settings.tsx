@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TelegramNotificationsSettings } from "./TelegramNotificationsSettings";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -193,6 +194,7 @@ export function SettingsModule() {
 
         {/* Notifications Settings */}
         <TabsContent value="notifications" className="mt-5 space-y-5">
+          <TelegramNotificationsSettings />
           <Card>
             <CardHeader>
               <CardTitle>{t("settings.notifications.email.title")}</CardTitle>
