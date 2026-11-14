@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HardDrive, FolderGit2, ExternalLink, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -79,18 +79,27 @@ export function BackupsSettings() {
     setLocalHour(utcHourToLocalHour(settings.hourUtc, timeZone));
   }, [settings, timeZone]);
 
+  // Handle the redirect back from Google OAuth (?connected=google | ?error=…) exactly once.
+  // `settingsQuery` is a new object on every render, so it must not be an effect dependency —
+  // otherwise each re-render before the URL is cleaned fires the toast again.
+  const handledOAuthReturn = useRef<string | null>(null);
+  const refetchSettings = settingsQuery.refetch;
   useEffect(() => {
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
     if (!connected && !error) return;
-    if (connected === "google") toast.success(t("settings.backups.toast.connectedGoogle"));
-    if (error) toast.error(t("settings.backups.errors.oauth", { code: error }));
+    const marker = `${connected ?? ""}:${error ?? ""}`;
+    if (handledOAuthReturn.current !== marker) {
+      handledOAuthReturn.current = marker;
+      if (connected === "google") toast.success(t("settings.backups.toast.connectedGoogle"), { id: "backup-oauth" });
+      if (error) toast.error(t("settings.backups.errors.oauth", { code: error }), { id: "backup-oauth" });
+      void refetchSettings();
+    }
     const next = new URLSearchParams(searchParams);
     next.delete("connected");
     next.delete("error");
     setSearchParams(next, { replace: true });
-    void settingsQuery.refetch();
-  }, [searchParams, setSearchParams, settingsQuery, t]);
+  }, [refetchSettings, searchParams, setSearchParams, t]);
 
   const busy =
     updateSettings.isPending || disconnect.isPending || runBackup.isPending || connectGitHub.isPending;
