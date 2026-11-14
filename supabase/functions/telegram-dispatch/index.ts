@@ -9,6 +9,7 @@ import { requireEnv, serviceClient } from "../_shared/supabase.ts";
 import {
   buildNotificationMessage,
   sendTelegramMessage,
+  telegramApi,
   type OutboxRow,
   type WorkspaceInfo,
 } from "../_shared/telegram.ts";
@@ -35,6 +36,32 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: "TELEGRAM_BOT_TOKEN not configured" }, 500);
   }
+  // Setup actions (same cron-token auth): connect the bot's webhook from the server side, so the owner
+  // never has to paste the bot token into a browser. Body: { "action": "set_webhook" | "webhook_info" }.
+  const body = (await req.json().catch(() => ({}))) as { action?: string };
+  if (body.action === "set_webhook" || body.action === "webhook_info") {
+    if (body.action === "set_webhook") {
+      const secret = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "";
+      if (!secret) return json({ error: "TELEGRAM_WEBHOOK_SECRET not configured" }, 500);
+      const url = `${requireEnv("SUPABASE_URL").replace(/\/$/, "")}/functions/v1/telegram-webhook`;
+      const res = await telegramApi(botToken, "setWebhook", {
+        url,
+        secret_token: secret,
+        allowed_updates: ["message", "my_chat_member"],
+      });
+      return json({ action: "set_webhook", telegram: await res.json().catch(() => null) }, res.ok ? 200 : 502);
+    }
+    const res = await telegramApi(botToken, "getWebhookInfo", {});
+    const info = (await res.json().catch(() => null)) as { result?: Record<string, unknown> } | null;
+    const result = info?.result ?? {};
+    return json({
+      action: "webhook_info",
+      url: result.url ?? null,
+      pending: result.pending_update_count ?? null,
+      last_error: result.last_error_message ?? null,
+    });
+  }
+
   const appUrl = Deno.env.get("APP_URL") ?? "";
   const admin = serviceClient();
   const startedAt = Date.now();
