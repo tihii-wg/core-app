@@ -27,7 +27,10 @@ import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "./demoPrintContext";
 import { isDemoPrintSource } from "./templatePreviewHtml";
 import type { PrintContext, PrintDocumentKind } from "./templateVariables";
 import { computeFitWidthZoomPercent, needsFitWidth } from "./canvas/fitWidthZoom";
-import { sheetCssSizeForTemplate } from "./canvas/sheetPreview";
+import { SHEET_GAP_PX, sheetCssSizeForTemplate } from "./canvas/sheetPreview";
+
+/** Horizontal padding around the sheet inside the preview viewport (p-3 on both sides) + rounding gap. */
+const PREVIEW_SHEET_PADDING_PX = 26;
 
 export type TemplatePreviewDialogProps = {
   open: boolean;
@@ -84,6 +87,10 @@ export function TemplatePreviewDialog({
   const pageCssWidth = sheet?.widthPx ?? 794;
   const pageCssHeight = sheet?.heightPx ?? 1123;
   const scale = zoom / 100;
+  // Canvas previews render one .canvas-page per printed page; legacy HTML has none (assume 2 pages).
+  const canvasPages = html ? (html.match(/class="canvas-page"/g) ?? []).length : 0;
+  const previewDocHeight =
+    canvasPages > 0 ? canvasPages * (pageCssHeight + SHEET_GAP_PX) : pageCssHeight * 2;
 
   const recentOrdersQuery = useQuery({
     queryKey: ["print-builder-preview-orders", workspaceId],
@@ -170,7 +177,7 @@ export function TemplatePreviewDialog({
 
     const maybeFit = () => {
       if (zoomLockedByUser.current) return;
-      const available = viewport.clientWidth;
+      const available = viewport.clientWidth - PREVIEW_SHEET_PADDING_PX;
       if (!needsFitWidth(available, pageWidthMm)) {
         setZoom(100);
         return;
@@ -202,7 +209,7 @@ export function TemplatePreviewDialog({
     const viewport = viewportRef.current;
     if (!viewport) return;
     zoomLockedByUser.current = false;
-    applyFitWidth(viewport.clientWidth);
+    applyFitWidth(viewport.clientWidth - PREVIEW_SHEET_PADDING_PX);
   }
 
   const sourceOptions = useMemo(() => {
@@ -279,10 +286,10 @@ export function TemplatePreviewDialog({
           ) : html ? (
             <div className="flex justify-center p-3" data-testid="template-preview-sheet">
               <div
-                className="origin-top"
+                className="overflow-hidden"
                 style={{
                   width: pageCssWidth * scale,
-                  height: Math.max(pageCssHeight * scale, pageCssHeight * scale),
+                  height: previewDocHeight * scale,
                 }}
               >
                 <iframe
@@ -292,9 +299,10 @@ export function TemplatePreviewDialog({
                   className="block border-0 bg-transparent"
                   style={{
                     width: pageCssWidth,
-                    height: pageCssHeight * 2,
+                    height: previewDocHeight,
                     transform: `scale(${scale})`,
-                    transformOrigin: "top center",
+                    // Wrapper is sized to the scaled sheet, so scale from the top-left corner.
+                    transformOrigin: "top left",
                   }}
                 />
               </div>

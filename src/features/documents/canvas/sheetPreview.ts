@@ -20,16 +20,28 @@ export type SheetCssSize = {
   orientation: PageOrientation;
 };
 
+/** Vertical gap between pages in screen previews (px). */
+export const SHEET_GAP_PX = 12;
+
+/** Number of rendered pages in a canvas preview document (for sizing preview iframes). */
+export function countCanvasPages(html: string | null | undefined): number {
+  if (!html) return 1;
+  return Math.max(1, (html.match(/class="canvas-page"/g) ?? []).length);
+}
+
 /** Screen-only sheet chrome. Must not affect `@media print` / `@page` positioning. */
 export function canvasScreenSheetCss(marginsMm: number): string {
   const m = Math.max(0, marginsMm);
   return (
     `@media screen{` +
+    // No outer margins: the iframe is sized to exactly one sheet, so any extra margin causes a
+    // scrollbar that steals width and pushes the sheet left. Pages are separated by a bottom gap only.
+    `html{scrollbar-width:none;}html::-webkit-scrollbar{display:none;}` +
     `body{margin:0!important;background:#eef0f3;}` +
     `.canvas-page{` +
     `box-sizing:content-box;` +
     `padding:${m}mm;` +
-    `margin:12px auto;` +
+    `margin:0 auto ${SHEET_GAP_PX}px;` +
     `background:#fff;` +
     `box-shadow:0 1px 4px rgba(0,0,0,.15);` +
     `}` +
@@ -104,7 +116,8 @@ export function fitSheetScale(
 export function legacyScreenSheetCss(widthMm: number, heightMm: number): string {
   return (
     `@media screen{` +
-    `body{margin:0!important;background:#eef0f3;display:flex;justify-content:center;padding:12px 0;}` +
+    `html{scrollbar-width:none;}html::-webkit-scrollbar{display:none;}` +
+    `body{margin:0!important;background:#eef0f3;display:flex;justify-content:center;padding:0;}` +
     `body>div,body>.legacy-sheet{` +
     `box-sizing:border-box;` +
     `width:${widthMm}mm;` +

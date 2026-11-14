@@ -102,6 +102,7 @@ export function TemplateThumbnail({
               sandbox=""
               srcDoc={srcDoc}
               tabIndex={-1}
+              scrolling="no"
               className="pointer-events-none origin-top-left border-0 bg-transparent"
               style={{
                 width: sheet.widthPx,
