@@ -97,8 +97,11 @@ function makeFilter(column: string, op: string, value: unknown): Filter {
       return { column, describe, test: (v) => looseEq(v, value) };
     case "neq":
       return { column, describe, test: (v) => !looseEq(v, value) };
-    case "is":
-      return { column, describe, test: (v) => (value === null ? v == null : v === value) };
+    case "is": {
+      // PostgREST `is` takes null / true / false; inside `.or("col.is.null")` they arrive as strings.
+      const normalized = value === "null" ? null : value === "true" ? true : value === "false" ? false : value;
+      return { column, describe, test: (v) => (normalized === null ? v == null : v === normalized) };
+    }
     case "in":
       return { column, describe, test: (v) => (value as unknown[]).some((item) => looseEq(v, item)) };
     case "ilike":

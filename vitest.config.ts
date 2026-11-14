@@ -12,7 +12,8 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/tests/setup.ts",
-    exclude: [...configDefaults.exclude, "supabase/tests/**"],
+    // supabase/functions/** are Deno tests (https: imports) — run them with `deno test`, not vitest.
+    exclude: [...configDefaults.exclude, "supabase/tests/**", "supabase/functions/**"],
     // Integration UI flows regularly exceed the 5s default under full-suite load.
     testTimeout: 20_000,
     hookTimeout: 20_000,

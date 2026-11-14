@@ -78,7 +78,8 @@ describe("profile", () => {
   });
 
   it("requires a session", async () => {
-    await expect(getProfile()).rejects.toThrow("Auth session missing!");
+    // getProfile reads the local session (no /auth/v1/user round-trip) — see apiProfiles.ts.
+    await expect(getProfile()).rejects.toThrow("User is not authenticated");
   });
 
   it("returns null when the profile row does not exist yet", async () => {

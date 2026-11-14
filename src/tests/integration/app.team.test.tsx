@@ -55,7 +55,7 @@ describe("team members", () => {
   });
 
   it.each([
-    ["an unknown email", "ghost@example.com", "No Core App account uses this email. Ask them to sign up first."],
+    ["an unknown email", "ghost@example.com", "This person is not registered in Core App yet."],
     ["an existing member", USERS.member.email, "This user is already a team member"],
     ["an email the pattern rejects", "name@host", "Enter a valid email address"],
   ])("keeps the invite dialog open for %s", async (_label, email, message) => {
