@@ -140,21 +140,35 @@ export function CalendarPage() {
    * Time-grid views: size the half-hour rows so 07:00–19:00 (24 rows) fits the visible grid at once.
    * Written as a CSS variable on the shell; FullCalendar then re-measures (updateSize) to place events.
    */
+  const slotFitKeyRef = useRef<string | null>(null);
   const fitSlots = useCallback(() => {
     const shell = calendarShellRef.current;
     if (!shell) return;
     const scroller = shell.querySelector<HTMLElement>(".fc-timegrid .fc-scrollgrid-section-liquid .fc-scroller");
     if (!scroller || scroller.clientHeight <= 0) return;
+    // Only re-fit when the window or the view changes — not on every date change: the visible grid
+    // height wobbles a little between weeks (all-day row, loading bar) and must not move the hours.
+    const viewType = calendarRef.current?.getApi().view.type ?? "";
+    const key = `${window.innerWidth}x${window.innerHeight}:${viewType}`;
+    if (slotFitKeyRef.current === key) return;
+    slotFitKeyRef.current = key;
+
     const VISIBLE_HALF_HOURS = 24; // 07:00 → 19:00
     // Each row also has a 1px grid line under it.
     const px = Math.max(14, Math.floor(scroller.clientHeight / VISIBLE_HALF_HOURS) - 1);
     const value = `${px}px`;
-    if (shell.style.getPropertyValue("--gcal-slot-h") === value) return;
+    const previous = shell.style.getPropertyValue("--gcal-slot-h");
+    if (previous === value) return;
+
+    // Keep the time currently at the top of the grid (first fit: open at 07:00).
+    const oldRow = previous ? parseFloat(previous) + 1 : 0;
+    const topRows = oldRow > 0 ? scroller.scrollTop / oldRow : null;
     shell.style.setProperty("--gcal-slot-h", value);
     const api = calendarRef.current?.getApi();
     api?.updateSize();
-    // Row heights changed → the pixel scroll offset no longer points at 07:00.
-    api?.scrollToTime("07:00:00");
+    const fresh = shell.querySelector<HTMLElement>(".fc-timegrid .fc-scrollgrid-section-liquid .fc-scroller");
+    if (topRows == null) api?.scrollToTime("07:00:00");
+    else if (fresh) fresh.scrollTop = Math.round(topRows * (px + 1));
   }, []);
 
   /** Desktop/tablet: calendar height so its bottom edge sits at the bottom of the window (no page scroll). */
@@ -747,6 +761,8 @@ export function CalendarPage() {
           nowIndicator
           dayHeaderContent={renderDayHeader}
           scrollTime="07:00:00"
+          // Keep the user's scroll position (e.g. 09:00) when swiping / paging to other dates.
+          scrollTimeReset={false}
           selectable
           editable
           eventStartEditable
