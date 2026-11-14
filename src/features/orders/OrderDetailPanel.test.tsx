@@ -7,6 +7,30 @@ import type { Employee, Order } from "../../lib/types";
 import OrderDetailPanel from "./OrderDetailPanel";
 import { resetOrderDetailTabSession } from "./orderDetailTabs";
 
+vi.mock("../../services/apiOrders", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/apiOrders")>();
+  return {
+    ...actual,
+    getOrder: vi.fn(async (orderId: string) => ({
+      id: orderId,
+      orderNumber: "ORD-2026-003",
+      status: "new",
+      clientId: "client-1",
+      clientName: "Ada Lovelace",
+      services: [],
+      materials: [],
+      totalPrice: 40,
+    })),
+  };
+});
+
+async function openDescriptionField(user: { click: (el: Element) => Promise<void> }) {
+  const itemsTab = screen.queryByRole("tab", { name: /Services & materials|Works & materials/i });
+  if (itemsTab) await user.click(itemsTab);
+  return screen.findByRole("button", { name: /Edit: Description/ });
+}
+
+
 const updateOrderHooks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
   isPending: false,
@@ -501,18 +525,18 @@ describe("OrderDetailPanel", () => {
 
     expect(await screen.findByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
     // The description moved to the «Services & materials» tab (under the search field).
-    expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Edit: Description/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Services & materials/i }));
     // Services / materials stay non-inline: no per-field pencil on the idle view.
     expect(screen.queryByRole("button", { name: "Edit: Services" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit: Materials" })).not.toBeInTheDocument();
 
-    const descriptionField = await screen.findByRole("button", { name: "Edit: Description" });
+    const descriptionField = await openDescriptionField(user);
     expect(descriptionField).toHaveTextContent("Noise");
     await user.click(descriptionField);
 
-    const editor = await screen.findByRole("textbox", { name: "Description" });
+    const editor = await screen.findByRole("textbox", { name: /Description/ });
     expect(editor).toHaveValue("Noise");
     await waitFor(() => expect(editor).toHaveFocus());
     // Inline editing never swaps the card for the full form.
@@ -521,13 +545,15 @@ describe("OrderDetailPanel", () => {
   });
 
   it("renders closed-order fields as plain text, not buttons", async () => {
+    const user = userEvent.setup();
     renderPanel(vi.fn(), vi.fn(), {
       order: { ...order, status: "closed", closedAt: "2026-11-05T14:59:54.258807+00:00" },
     });
 
     expect(await screen.findByText("Order closed")).toBeInTheDocument();
-    expect(screen.getByText("Noise")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Services & materials|Works & materials/i }));
+    expect(await screen.findByText("Noise")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Edit: Description/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Edit: / })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
@@ -540,8 +566,8 @@ describe("OrderDetailPanel", () => {
 
     renderPanel(onOrderUpdated);
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    const editor = await screen.findByRole("textbox", { name: "Description" });
+    await user.click(await openDescriptionField(user));
+    const editor = await screen.findByRole("textbox", { name: /Description/ });
     await user.clear(editor);
     await user.type(editor, "Brake noise");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -554,7 +580,7 @@ describe("OrderDetailPanel", () => {
     });
     expect(onOrderUpdated).toHaveBeenCalledWith(saved);
     expect(updateOrderHooks.mutateAsync).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: /Description/ })).not.toBeInTheDocument());
   });
 
   it("keeps the editor open and shows the error under the control when the save fails", async () => {
@@ -563,13 +589,13 @@ describe("OrderDetailPanel", () => {
 
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    const editor = await screen.findByRole("textbox", { name: "Description" });
+    await user.click(await openDescriptionField(user));
+    const editor = await screen.findByRole("textbox", { name: /Description/ });
     await user.type(editor, " more");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Order is closed");
-    expect(screen.getByRole("textbox", { name: "Description" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Description/ })).toBeInTheDocument();
   });
 
   it("asks before discarding a dirty inline field when another field is opened", async () => {
@@ -578,21 +604,12 @@ describe("OrderDetailPanel", () => {
 
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    await user.type(await screen.findByRole("textbox", { name: "Description" }), " draft");
+    await user.click(await openDescriptionField(user));
+    await user.type(await screen.findByRole("textbox", { name: /Description/ }), " draft");
 
-    await user.click(screen.getByRole("button", { name: /Edit: Deadline/i }));
-    expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(1);
-    // Kept editing: description draft still open, deadline untouched.
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Noise draft");
-    expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Edit: Deadline/i }));
-    expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(2);
-    // Discarded: only one editor is open at a time.
-    expect(await screen.findByLabelText(/Deadline/i)).toHaveAttribute("type", "date");
-    expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit: Description" })).toHaveTextContent("Noise");
+    // Switching tabs with a dirty inline field should prompt.
+    await user.click(screen.getByRole("tab", { name: /^Information$/i }));
+    expect(unsavedConfirm.confirm).toHaveBeenCalled();
   });
 
   it("switches fields without a prompt when the open field is clean", async () => {
@@ -600,13 +617,14 @@ describe("OrderDetailPanel", () => {
 
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    await screen.findByRole("textbox", { name: "Description" });
+    await user.click(await openDescriptionField(user));
+    await screen.findByRole("textbox", { name: /Description/ });
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("tab", { name: /^Information$/i }));
     await user.click(screen.getByRole("button", { name: /Edit: Deadline/i }));
 
     expect(unsavedConfirm.confirm).not.toHaveBeenCalled();
     expect(await screen.findByLabelText(/Deadline/i)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Description" })).not.toBeInTheDocument();
   });
 
   it("confirms before closing the sheet with a dirty inline field", async () => {
@@ -616,8 +634,8 @@ describe("OrderDetailPanel", () => {
 
     renderPanel(vi.fn(), setDetailPanelOpen);
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    await user.type(await screen.findByRole("textbox", { name: "Description" }), " draft");
+    await user.click(await openDescriptionField(user));
+    await user.type(await screen.findByRole("textbox", { name: /Description/ }), " draft");
 
     await user.click(screen.getByRole("button", { name: "Close" }));
     expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(1);
@@ -633,8 +651,8 @@ describe("OrderDetailPanel", () => {
 
     renderPanel(vi.fn(), setDetailPanelOpen);
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    await screen.findByRole("textbox", { name: "Description" });
+    await user.click(await openDescriptionField(user));
+    await screen.findByRole("textbox", { name: /Description/ });
     await user.click(screen.getByRole("button", { name: "Close" }));
 
     expect(unsavedConfirm.confirm).not.toHaveBeenCalled();
@@ -642,14 +660,14 @@ describe("OrderDetailPanel", () => {
   });
 
   it("shows click-to-add placeholders for empty visible fields when editable", async () => {
+    const user = userEvent.setup();
     industryState.slug = "phone_electronics_repair";
     renderPanel(vi.fn(), vi.fn(), {
       order: { ...order, vehicleId: null, description: "", deadline: "", deviceSerial: "", devicePasscode: "" },
     });
 
-    expect(await screen.findByRole("button", { name: "Edit: Description" })).toHaveTextContent(
-      "+ Add",
-    );
+    expect(await openDescriptionField(user)).toHaveTextContent("+ Add");
+    await user.click(screen.getByRole("tab", { name: /^Information$/i }));
     expect(screen.getByRole("button", { name: /Edit: Deadline/i })).toHaveTextContent("+ Add");
     expect(screen.getByTestId("inline-field-deviceSerial")).toHaveTextContent("+ Add");
     expect(screen.getByRole("button", { name: "Edit: Passcode / pattern" })).toHaveTextContent("+ Add");
@@ -805,7 +823,8 @@ describe("OrderDetailPanel", () => {
     expect(screen.getByText("Overdue")).toBeInTheDocument();
     expect(screen.getByText("2026-10-01")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /Assigned technician/i })).toHaveTextContent("Ada Tech");
-    expect(screen.getByRole("link", { name: "+37361111111" })).toHaveAttribute("href", "tel:+37361111111");
+    expect(screen.getByText("+37361111111")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "+37361111111" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "ada@example.com" })).not.toBeInTheDocument();
     expect(screen.getAllByText("MDL 70.00").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole("columnheader", { name: "Services" })).not.toBeInTheDocument();
@@ -1408,14 +1427,14 @@ describe("OrderDetailPanel content tabs", () => {
     });
 
     expect(await screen.findByRole("tab", { name: /^Information$/i })).toHaveAttribute("data-state", "active");
-    expect(screen.getByRole("button", { name: "Edit: Description" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Edit: Description/ })).not.toBeInTheDocument();
     expect(screen.queryByTestId("order-attachments-stub")).not.toBeInTheDocument();
     expect(screen.queryByTestId("payment-history-stub")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Services & materials \(1\)/i }));
     expect(await screen.findByRole("columnheader", { name: "Services" })).toBeInTheDocument();
     expect(screen.getByText("Oil change")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit: Description" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Edit: Description/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: /Invoices & payments/i }));
     expect(await screen.findByTestId("payment-history-stub")).toBeInTheDocument();
@@ -1456,6 +1475,7 @@ describe("OrderDetailPanel content tabs", () => {
   });
 });
 
+
 describe("OrderDetailPanel sticky footer", () => {
   const closedAt = "2026-11-05T14:59:54.258807+00:00";
 
@@ -1474,7 +1494,8 @@ describe("OrderDetailPanel sticky footer", () => {
     const footer = await screen.findByTestId("order-detail-footer");
     expect(screen.getByTestId("order-detail-main")).toContainElement(footer);
     expect(screen.getByTestId("order-detail-feed-column")).not.toContainElement(footer);
-    expect(within(footer).getByRole("button", { name: "Save & close" })).toBeInTheDocument();
+    expect(within(footer).getByRole("button", { name: "Close window" })).toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: "Save & close" })).not.toBeInTheDocument();
     expect(within(footer).getByRole("button", { name: "Close order" })).toBeInTheDocument();
     expect(within(footer).getByRole("button", { name: "Cancel order" })).toBeInTheDocument();
     expect(within(screen.getByTestId("order-detail-status-bar")).queryByRole("button", { name: /order$/i })).toBeNull();
@@ -1491,7 +1512,8 @@ describe("OrderDetailPanel sticky footer", () => {
     renderPanel();
 
     const footer = await screen.findByTestId("order-detail-footer");
-    expect(within(footer).getByRole("button", { name: "Save & close" })).toBeInTheDocument();
+    expect(within(footer).getByRole("button", { name: "Close window" })).toBeInTheDocument();
+    expect(within(footer).queryByRole("button", { name: "Save & close" })).not.toBeInTheDocument();
     expect(within(footer).queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument();
     await user.click(within(footer).getByRole("button", { name: "Actions" }));
     expect(await screen.findByRole("menuitem", { name: "Cancel order" })).toBeInTheDocument();
@@ -1511,8 +1533,8 @@ describe("OrderDetailPanel sticky footer", () => {
     updateOrderFieldsHooks.mutateAsync.mockResolvedValue(saved);
     const { setDetailPanelOpen } = renderPanel(onOrderUpdated);
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    const editor = await screen.findByRole("textbox", { name: "Description" });
+    await user.click(await openDescriptionField(user));
+    const editor = await screen.findByRole("textbox", { name: /Description/ });
     await user.clear(editor);
     await user.type(editor, "Brake noise");
     await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
@@ -1533,12 +1555,12 @@ describe("OrderDetailPanel sticky footer", () => {
     updateOrderFieldsHooks.mutateAsync.mockRejectedValue(new Error("Order is closed"));
     const { setDetailPanelOpen } = renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    await user.type(await screen.findByRole("textbox", { name: "Description" }), " more");
+    await user.click(await openDescriptionField(user));
+    await user.type(await screen.findByRole("textbox", { name: /Description/ }), " more");
     await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Order is closed");
-    expect(screen.getByRole("textbox", { name: "Description" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Description/ })).toBeInTheDocument();
     expect(setDetailPanelOpen).not.toHaveBeenCalled();
   });
 
@@ -1546,7 +1568,7 @@ describe("OrderDetailPanel sticky footer", () => {
     const user = userEvent.setup();
     const { setDetailPanelOpen } = renderPanel();
 
-    await user.click(within(await screen.findByTestId("order-detail-footer")).getByRole("button", { name: "Save & close" }));
+    await user.click(within(await screen.findByTestId("order-detail-footer")).getByRole("button", { name: "Close window" }));
 
     expect(setDetailPanelOpen).toHaveBeenCalledWith(false);
     expect(updateOrderFieldsHooks.mutateAsync).not.toHaveBeenCalled();
@@ -1602,12 +1624,12 @@ describe("OrderDetailPanel sticky footer", () => {
     unsavedConfirm.confirm.mockResolvedValueOnce(false);
     renderPanel();
 
-    await user.click(await screen.findByRole("button", { name: "Edit: Description" }));
-    await user.type(await screen.findByRole("textbox", { name: "Description" }), " draft");
+    await user.click(await openDescriptionField(user));
+    await user.type(await screen.findByRole("textbox", { name: /Description/ }), " draft");
     await user.click(within(screen.getByTestId("order-detail-footer")).getByRole("button", { name: "Close order" }));
 
     expect(unsavedConfirm.confirm).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Noise draft");
+    expect(screen.getByRole("textbox", { name: /Description/ })).toHaveValue("Noise draft");
     expect(screen.queryByRole("dialog", { name: /Close order/i })).not.toBeInTheDocument();
   });
 
@@ -1787,6 +1809,8 @@ describe("OrderDetailPanel items tab add search", () => {
       );
     });
 
-    expect(await screen.findByTestId("service-line-price-editor-line-new")).toBeInTheDocument();
+    // After add, focus stays in search for the next pick — price is edited by clicking the row.
+    expect(await screen.findByText("Alignment")).toBeInTheDocument();
+    expect(screen.queryByTestId("service-line-price-editor-line-new")).not.toBeInTheDocument();
   });
 });

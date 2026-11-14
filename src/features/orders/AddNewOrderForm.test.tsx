@@ -1184,7 +1184,7 @@ describe("AddNewOrderForm client validation", () => {
     );
 
     await addCustomService(user, "Oil change", "80");
-    await user.type(screen.getByLabelText(/^Description$/i), "Needs oil and filter");
+    await user.type(screen.getByLabelText(/Description/i), "Needs oil and filter");
     const assignee = screen.getByRole("combobox", { name: /Assigned technician/i });
     await user.click(assignee);
     await user.click(await screen.findByRole("option", { name: "Ada" }));
@@ -1231,7 +1231,7 @@ describe("AddNewOrderForm client validation", () => {
     );
 
     await addCustomService(user, "Brake check", "50");
-    await user.type(screen.getByLabelText(/^Description$/i), "Squeaky brakes");
+    await user.type(screen.getByLabelText(/Description/i), "Squeaky brakes");
 
     await user.click(screen.getByRole("button", { name: /Add vehicle/i }));
     const dialog = await screen.findByRole("dialog");

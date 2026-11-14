@@ -395,7 +395,17 @@ describe("getOrders", () => {
   it("maps orders of one workspace with client name, lines and assigned employee", async () => {
     const [order] = await getOrders(WS.A);
     expect(order).toMatchObject({ id: "order-a1", clientName: "Ada Alpha", orderNumber: `ORD-${year}-001`, assignedEmployeeName: "Tom Tech", assignedEmployeeId: "employee-a1", totalPrice: 40, paymentStatus: "unpaid" });
-    expect(order.services).toEqual([{ id: "line-a1", serviceId: "service-a1", serviceName: "Oil change", price: 40, quantity: 1 }]);
+    expect(order.services).toEqual([
+      {
+        id: "line-a1",
+        serviceId: "service-a1",
+        serviceName: "Oil change",
+        price: 40,
+        quantity: 1,
+        technicianId: null,
+        technicianName: "",
+      },
+    ]);
   });
 
   it("returns an empty list for a workspace the user cannot read", async () => {

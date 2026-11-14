@@ -18,7 +18,7 @@ vi.mock("./apiActivityLog", () => ({
   recordActivity: vi.fn(async () => undefined),
 }));
 
-import { resetOrderMileageSnapshotSupport, updateOrderFields } from "./apiOrders";
+import { GET_ORDER_FULL_RPC, resetOrderMileageSnapshotSupport, updateOrderFields } from "./apiOrders";
 
 type Result = { data: unknown; error: unknown };
 
@@ -185,7 +185,9 @@ describe("updateOrderFields", () => {
 
     await updateOrderFields("order-1", { description: "x", devicePasscode: "1234" }, "ws-1");
 
-    expect(rpc).not.toHaveBeenCalled();
+    // getOrder may probe crm_get_order_full for hydration; no mutation / stock / team RPCs.
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(GET_ORDER_FULL_RPC, { p_order_id: "order-1" });
     expect(recorder.forbiddenWrites).toEqual([]);
     // Lines / materials / team are only read to hydrate the returned order.
     expect(recorder.updates).toHaveLength(1);

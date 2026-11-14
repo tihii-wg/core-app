@@ -217,6 +217,35 @@ class FakeQuery implements PromiseLike<Result> {
     return this;
   }
 
+  /** PostgREST `.not(column, op, value)` — negate a filter (e.g. `.not('col', 'is', null)`). */
+  not(column: string, op: string, value: unknown) {
+    const normalized =
+      op === "in" && typeof value === "string"
+        ? value.replace(/^\(|\)$/g, "").split(",").filter((part) => part.length > 0)
+        : value;
+    const filter = makeFilter(column, op, normalized);
+    const negated: Filter = {
+      column: filter.column,
+      describe: `not.${filter.describe}`,
+      test: (v) => !filter.test(v),
+    };
+    if (column.includes(".")) {
+      const [embed, ...rest] = column.split(".");
+      this.embedFilters.push({
+        embed,
+        filter: {
+          ...negated,
+          column: rest.join("."),
+          describe: `not.${makeFilter(rest.join("."), op, normalized).describe}`,
+          test: (v) => !makeFilter(rest.join("."), op, normalized).test(v),
+        },
+      });
+    } else {
+      this.filters.push(negated);
+    }
+    return this;
+  }
+
   order(column: string, options?: { ascending?: boolean }) {
     this.orders.push({ column, ascending: options?.ascending ?? true });
     return this;

@@ -19,6 +19,7 @@ function countQuery(result: CountResult, onCall?: (method: string, args: unknown
   const chain = {
     select: track("select"),
     eq: track("eq"),
+    or: track("or"),
     then: (resolve: (value: CountResult) => unknown, reject?: (reason: unknown) => unknown) =>
       Promise.resolve(result).then(resolve, reject),
   };

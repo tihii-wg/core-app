@@ -53,8 +53,13 @@ vi.mock("../reports/reportFormatting", () => ({
   useReportFormatting: () => ({ formatDate: (v: string) => v }),
 }));
 
-vi.mock("../profiles/useGetProfile", () => ({
+vi.mock("../profiles/useGetProfile", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../profiles/useGetProfile")>()),
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
+}));
+
+vi.mock("./PaymentFormDialog", () => ({
+  PaymentFormDialog: () => null,
 }));
 
 vi.mock("../../services/apiInvoices", () => ({

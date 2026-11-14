@@ -9,6 +9,7 @@ import {
   sanitizeAttachmentFileName,
   validateOrderAttachmentFile,
   ORDER_ATTACHMENT_MAX_BYTES,
+  ORDER_ATTACHMENT_PHOTO_SOURCE_MAX_BYTES,
 } from "./orderAttachments";
 
 function file(partial: Partial<File> & Pick<File, "name">): Pick<File, "name" | "type" | "size"> {
@@ -29,9 +30,21 @@ describe("orderAttachments validation", () => {
 
   it("rejects empty, oversized, and unsupported files", () => {
     expect(validateOrderAttachmentFile(file({ name: "a.jpg", type: "image/jpeg", size: 0 }))).toBe("empty");
-    expect(validateOrderAttachmentFile(file({ name: "a.jpg", type: "image/jpeg", size: ORDER_ATTACHMENT_MAX_BYTES + 1 }))).toBe(
-      "tooLarge",
-    );
+    // Non-images use the 20 MiB upload limit.
+    expect(
+      validateOrderAttachmentFile(file({ name: "spec.pdf", type: "application/pdf", size: ORDER_ATTACHMENT_MAX_BYTES + 1 })),
+    ).toBe("tooLarge");
+    // Photos may exceed 20 MiB before client-side compression; reject only above the source cap.
+    expect(
+      validateOrderAttachmentFile(
+        file({ name: "a.jpg", type: "image/jpeg", size: ORDER_ATTACHMENT_MAX_BYTES + 1 }),
+      ),
+    ).toBeNull();
+    expect(
+      validateOrderAttachmentFile(
+        file({ name: "a.jpg", type: "image/jpeg", size: ORDER_ATTACHMENT_PHOTO_SOURCE_MAX_BYTES + 1 }),
+      ),
+    ).toBe("tooLarge");
     expect(validateOrderAttachmentFile(file({ name: "malware.exe", type: "application/octet-stream", size: 10 }))).toBe(
       "unsupportedType",
     );

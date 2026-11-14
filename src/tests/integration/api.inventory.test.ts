@@ -67,10 +67,11 @@ describe("inventory items", () => {
       "Old bulb",
       "Spark plug",
     ]);
-    // Create always stores quantity 0 — Alpha (seeded stock) sorts first when descending by quantity.
+    // Create always stores quantity 0 — Alpha (seeded stock) sorts first; zero-qty parts keep insert order.
     expect((await getInventoryItems("", "all", { field: "quantity", ascending: false }, WS.A)).map((item) => item.name)).toEqual([
       "Alpha brake pads",
       "Spark plug",
+      "Old bulb",
     ]);
     expect((await getInventoryItems("spark", "all", sortByName, WS.A)).map((item) => item.name)).toEqual(["Spark plug"]);
     expect((await getInventoryItems("", "low_stock", sortByName, WS.A)).map((item) => item.name)).toEqual(["Alpha brake pads"]);
@@ -86,27 +87,29 @@ describe("inventory items", () => {
   });
 
   it("updates an item and refuses items from other workspaces", async () => {
+    // Catalog updates never write quantity — seeded stock (2 vs min 5) stays low_stock.
     const updated = await updateInventoryItem({ ...form, id: "item-a1", name: "Pads v2", sku: "AP-1", quantity: 20 }, WS.A);
-    expect(updated).toMatchObject({ name: "Pads v2", stockStatus: "in_stock" });
-    expect(fake.requests.find((item) => item.op === "update")?.values).not.toHaveProperty("workspace_id");
+    expect(updated).toMatchObject({ name: "Pads v2", quantity: 2, stockStatus: "low_stock" });
+    const updatePayload = fake.requests.find((item) => item.op === "update")?.values as Record<string, unknown> | undefined;
+    expect(updatePayload).not.toHaveProperty("workspace_id");
+    expect(updatePayload).not.toHaveProperty("quantity");
 
     await expect(updateInventoryItem({ ...form, id: "item-c1" }, WS.A)).rejects.toThrow("Inventory item was not found or you do not have permission to change it.");
     expect(row("inventory_items", "item-c1")?.name).toBe("Gamma oil");
   });
 
   it("recomputes stockStatus when quantity crosses each threshold", async () => {
-    const base = { ...form, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", minQuantity: 5 };
+    // Quantity is warehouse-owned; simulate stock changes on the row then re-read the status view.
+    const setQty = async (quantity: number) => {
+      row("inventory_items", "item-a1")!.quantity = quantity;
+      row("inventory_items", "item-a1")!.min_quantity = 5;
+      return getInventoryItem("item-a1", WS.A);
+    };
 
-    expect(await updateInventoryItem({ ...base, quantity: 5 }, WS.A)).toMatchObject({ quantity: 5, stockStatus: "low_stock" });
-    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ stockStatus: "low_stock" });
-
-    expect(await updateInventoryItem({ ...base, quantity: 6 }, WS.A)).toMatchObject({ quantity: 6, stockStatus: "in_stock" });
-    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ stockStatus: "in_stock" });
-
-    expect(await updateInventoryItem({ ...base, quantity: 0 }, WS.A)).toMatchObject({ quantity: 0, stockStatus: "out_of_stock" });
-    expect(await getInventoryItem("item-a1", WS.A)).toMatchObject({ stockStatus: "out_of_stock" });
-
-    expect(await updateInventoryItem({ ...base, quantity: 1 }, WS.A)).toMatchObject({ quantity: 1, stockStatus: "low_stock" });
+    expect(await setQty(5)).toMatchObject({ quantity: 5, stockStatus: "low_stock" });
+    expect(await setQty(6)).toMatchObject({ quantity: 6, stockStatus: "in_stock" });
+    expect(await setQty(0)).toMatchObject({ quantity: 0, stockStatus: "out_of_stock" });
+    expect(await setQty(1)).toMatchObject({ quantity: 1, stockStatus: "low_stock" });
     expect((await getInventoryItems("", "low_stock", sortByName, WS.A)).map((item) => item.id)).toContain("item-a1");
   });
 

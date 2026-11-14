@@ -273,7 +273,8 @@ describe("Dashboard shared orders list", () => {
 
     expect(screen.getByRole("columnheader", { name: "Order #" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Client" })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Client Type" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Client Type" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("order-client-type")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Vehicle/Service" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Payment" })).toBeInTheDocument();

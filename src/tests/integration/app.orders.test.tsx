@@ -27,7 +27,7 @@ async function openOrders(userId = USERS.member.id) {
 type User = ReturnType<typeof renderApp>["user"];
 
 async function fillNewOrder(user: User, dialog: HTMLElement) {
-  await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
+  await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Ada");
   await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
   // Vehicle industries use a linked vehicle record (not free-text Vehicle/plate/VIN fields).
   await user.click(within(dialog).getByRole("button", { name: /Add vehicle/i }));
@@ -113,7 +113,7 @@ describe("orders page", () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByPlaceholderText("Client"), "Nina New");
+    await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Nina New");
     await user.click(within(dialog).getByRole("combobox", { name: "Client type *" }));
     await user.click(await screen.findByRole("option", { name: "Organization" }));
     expect(within(dialog).getByLabelText(/^Organization name/i)).toHaveValue("Nina New");
@@ -145,7 +145,7 @@ describe("orders page", () => {
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
     await fillNewOrder(user, dialog);
-    const client = within(dialog).getByPlaceholderText("Client");
+    const client = within(dialog).getByRole("combobox", { name: /Client/i });
     await user.clear(client);
     await user.type(client, "ada alpha");
     expect(within(dialog).queryByLabelText("Phone *")).not.toBeInTheDocument();
@@ -279,7 +279,7 @@ describe("orders page", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(`Edit Order ${orderNumber}`)).toBeInTheDocument();
     // Linked-vehicle industries hide free-text device/VIN; change description instead.
-    const description = within(dialog).getByLabelText(/^Description$/i);
+    const description = within(dialog).getByLabelText(/Description/i);
     await user.clear(description);
     await user.type(description, "Edited from menu");
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
@@ -353,7 +353,7 @@ describe("orders page", () => {
     const { user } = await openOrders();
     const panel = await openOrderPanel(user);
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    const description = within(panel).getByLabelText(/^Description$/i);
+    const description = within(panel).getByLabelText(/Description/i);
     await user.clear(description);
     await user.type(description, "Should not persist");
     fake.failNext("orders", "update", { code: "PGRST000", message: "Network request failed" });
@@ -438,11 +438,11 @@ describe("orders page", () => {
     const { user } = await openOrders();
 
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    const clientTypeColumn = headers.indexOf("Client Type");
-    expect(clientTypeColumn).toBe(headers.indexOf("Client") + 1);
+    expect(headers).not.toContain("Client Type");
     const orderRow = screen.getByRole("row", { name: /Ada Alpha/ });
-    expect(within(orderRow).getAllByRole("cell")[clientTypeColumn]).toHaveTextContent(/^Organization$/);
-    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/Ada Alpha/);
+    const clientCell = within(orderRow).getAllByRole("cell")[headers.indexOf("Client")];
+    expect(clientCell).toHaveTextContent(/Ada Alpha/);
+    expect(within(clientCell).getByTestId("order-client-type")).toHaveTextContent(/Organization/i);
 
     const panel = await openOrderPanel(user);
     expect(within(panel).getByText("Client Type").parentElement).toHaveTextContent(/Organization/);
@@ -451,7 +451,7 @@ describe("orders page", () => {
 
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
+    await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Ada");
     expect(await within(dialog).findByRole("button", { name: "Ada Alpha Organization" })).toBeInTheDocument();
   });
 

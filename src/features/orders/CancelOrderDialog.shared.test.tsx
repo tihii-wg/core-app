@@ -33,7 +33,8 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
 vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
   useIsWorkspaceOwnerId: () => true,
 }));
-vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+vi.mock("../workspaces/useWorkspaceSubscription", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../workspaces/useWorkspaceSubscription")>()),
   useWorkspaceSubscription: () => ({ canWrite: true, isEntitlementPending: false }),
   useGuardSubscriptionWrite: () => vi.fn(),
 }));
@@ -88,7 +89,8 @@ vi.mock("../employees/useGetEmployees", () => ({
 vi.mock("./useUpdateOrder", () => ({
   useUpdateOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock("./useGetOrders", () => ({
+vi.mock("./useGetOrders", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useGetOrders")>()),
   useUpdateOrderTaxInvoiceNumber: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateOrderStatus: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
 }));
@@ -110,7 +112,8 @@ vi.mock("../finance/PaymentHistorySection", () => ({ PaymentHistorySection: () =
 vi.mock("../workspaces/useGetWorkspace", () => ({
   useGetWorkspace: () => ({ data: { currency: "MDL", requireTaxInvoiceNumber: false } }),
 }));
-vi.mock("../profiles/useGetProfile", () => ({
+vi.mock("../profiles/useGetProfile", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../profiles/useGetProfile")>()),
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
 }));
 

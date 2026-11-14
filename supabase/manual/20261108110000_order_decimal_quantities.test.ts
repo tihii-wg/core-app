@@ -48,7 +48,10 @@ describe("order_decimal_quantities SQL", () => {
     expect(sql).toMatch(/^commit;/m);
     expect(sql).toMatch(/\$preflight\$/);
     expect(sql).toMatch(/\$postflight\$/);
-    expect(sql).not.toMatch(/delete from public\.order_(services|materials)\b/i);
+    // Migration DDL must not wipe line tables. Function bodies may still DELETE inside
+    // sync/issue RPCs (copied from prerequisites) — strip $function$ … $function$ first.
+    const withoutFunctionBodies = sql.replace(/\$function\$[\s\S]*?\$function\$/g, "");
+    expect(withoutFunctionBodies).not.toMatch(/delete from public\.order_(services|materials)\b/i);
   });
 });
 

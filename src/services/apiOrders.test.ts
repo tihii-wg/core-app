@@ -39,6 +39,7 @@ function query(result: { data: unknown; error: unknown }) {
     eq: () => chain,
     neq: () => chain,
     is: () => chain,
+    or: () => chain,
     ilike: () => chain,
     like: () => Promise.resolve({ data: chain.numbers, error: null }),
     order: () => chain,

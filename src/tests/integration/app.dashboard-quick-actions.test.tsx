@@ -74,7 +74,7 @@ describe("dashboard quick actions", () => {
     const { user, location } = await openDashboard();
     const dialog = await openQuickAction(user, "Create Order", "Create New Order");
 
-    await user.type(within(dialog).getByPlaceholderText("Client"), "Ada");
+    await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Ada");
     await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
     await addVehicleOnOrderForm(user, dialog, { make: "VW", model: "Golf IV", plate: "abc123", vin: VIN.toLowerCase() });
     await user.click(within(dialog).getByPlaceholderText("Service"));
@@ -94,7 +94,7 @@ describe("dashboard quick actions", () => {
 
     await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
     await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
-    await user.type(within(dialog).getByPlaceholderText("Client"), "Nina New");
+    await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Nina New");
     expect(within(dialog).getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
     expect(within(dialog).queryByLabelText("IDNO")).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
@@ -160,9 +160,9 @@ describe("dashboard quick actions", () => {
 
     const orderRow = await screen.findByRole("row", { name: /Ada Alpha/ });
     const headers = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    const clientTypeColumn = headers.indexOf("Client Type");
-    expect(clientTypeColumn).toBe(headers.indexOf("Client") + 1);
-    expect(within(orderRow).getAllByRole("cell")[clientTypeColumn]).toHaveTextContent(/^Organization$/);
+    expect(headers).not.toContain("Client Type");
+    const clientCell = within(orderRow).getAllByRole("cell")[headers.indexOf("Client")];
+    expect(within(clientCell).getByTestId("order-client-type")).toHaveTextContent(/Organization/i);
     expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/^Ada Alpha$/);
   });
 

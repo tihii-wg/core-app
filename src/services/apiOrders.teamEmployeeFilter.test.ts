@@ -174,7 +174,8 @@ describe("getOrdersPage employee filter via team_employee_ids", () => {
     expect(capture.containsArgs).toEqual([["team_employee_ids", [EMP]]]);
     expect(capture.selectOpts[0]).toEqual({ count: "exact" });
     expect(capture.rangeCalls).toBe(1);
-    expect(capture.orArgs).toEqual([]);
+    // Kind filter excludes estimates; employee filter uses .contains, not .or.
+    expect(capture.orArgs).toEqual(["kind.eq.order,kind.is.null"]);
     expect(page.total).toBe(1);
     expect(page.orders).toHaveLength(1);
   });
@@ -269,9 +270,10 @@ describe("getOrdersPage employee filter via team_employee_ids", () => {
     });
 
     expect(capture.containsArgs).toEqual([["team_employee_ids", [EMP]]]);
-    expect(capture.orArgs.length).toBe(1);
-    const orFilter = capture.orArgs[0] ?? "";
-    expect(orFilter.startsWith(`employee_id.eq.${EMP},`)).toBe(true);
+    // Failed contains attempt + retry each apply kind filter; retry also applies employee or-filter.
+    expect(capture.orArgs.filter((f) => f === "kind.eq.order,kind.is.null")).toHaveLength(2);
+    const orFilter = capture.orArgs.find((f) => f.startsWith(`employee_id.eq.${EMP},`)) ?? "";
+    expect(orFilter).toBeTruthy();
     expect(orFilter).toContain("id.in.(");
     // Two chunks: 200 + 2 line ids, plus team id may merge into unique set.
     const inClauses = orFilter.match(/id\.in\.\(/g) ?? [];

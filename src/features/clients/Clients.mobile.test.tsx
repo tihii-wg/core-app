@@ -25,7 +25,8 @@ vi.mock("./useGetClients", () => ({
   }),
 }));
 
-vi.mock("../orders/useGetOrders", () => ({
+vi.mock("../orders/useGetOrders", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../orders/useGetOrders")>()),
   useGetOrders: () => ({
     isLoading: false,
     error: null,

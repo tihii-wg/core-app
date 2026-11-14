@@ -18,7 +18,8 @@ vi.mock("../workspaces/useActiveWorkspaceRole", () => ({
   useActiveWorkspaceRole: () => "owner",
 }));
 
-vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+vi.mock("../workspaces/useWorkspaceSubscription", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../workspaces/useWorkspaceSubscription")>()),
   useWorkspaceSubscription: () => ({ canWrite: true, isEntitlementPending: false }),
 }));
 

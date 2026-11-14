@@ -45,6 +45,7 @@ function thenable(result: QueryResult, onSelect?: (columns: string) => void) {
   };
   chain.eq = self;
   chain.in = self;
+  chain.not = self;
   chain.order = self;
   chain.then = (onFulfilled: (value: QueryResult) => unknown, onRejected?: (reason: unknown) => unknown) =>
     Promise.resolve(result).then(onFulfilled, onRejected);

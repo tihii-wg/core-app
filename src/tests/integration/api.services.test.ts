@@ -13,7 +13,12 @@ describe("createService", () => {
   it.each([USERS.owner, USERS.admin])("lets the $name ($email) create a service", async (user) => {
     fake.signInAs(user.id);
     const [created] = await createService(input, WS.A);
-    expect(created).toMatchObject({ service_name: "Wheel alignment", service_price: 30, description: null, workspace_id: WS.A });
+    expect(created).toMatchObject({
+      service_name: "Wheel alignment",
+      service_price: 30,
+      description: "",
+    });
+    expect(row("services", created.id)?.workspace_id).toBe(WS.A);
   });
 
   it.each([USERS.manager, USERS.member])("refuses $email with a readable permission error", async (user) => {
