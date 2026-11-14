@@ -28,7 +28,7 @@ type User = ReturnType<typeof renderApp>["user"];
 
 async function fillNewOrder(user: User, dialog: HTMLElement) {
   await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Ada");
-  await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
+  await user.click(await within(dialog).findByRole("option", { name: /Ada Alpha/ }));
   // Vehicle industries use a linked vehicle record (not free-text Vehicle/plate/VIN fields).
   await user.click(within(dialog).getByRole("button", { name: /Add vehicle/i }));
   const vehicleDialog = await screen.findByRole("dialog", { name: /Add vehicle/i });
@@ -113,15 +113,19 @@ describe("orders page", () => {
     const { user } = await openOrders();
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
+    // Unknown name → "Create new client" opens the client dialog (prefilled with the typed name).
     await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Nina New");
-    await user.click(within(dialog).getByRole("combobox", { name: "Client type *" }));
+    await user.click(await within(dialog).findByRole("button", { name: /Create new client/i }));
+    const clientDialog = await screen.findByRole("dialog", { name: /Add New Client/i });
+    await user.click(within(clientDialog).getByRole("combobox", { name: "Client type *" }));
     await user.click(await screen.findByRole("option", { name: "Organization" }));
-    expect(within(dialog).getByLabelText(/^Organization name/i)).toHaveValue("Nina New");
-    await user.type(within(dialog).getByLabelText("IDNO"), "1002600000001");
-    await user.type(within(dialog).getByLabelText("Contact name"), "Ion Popescu");
-    await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
-    expect(within(dialog).queryByLabelText(/Email/i)).not.toBeInTheDocument();
-    // New clients have no id until save; vehicle picker needs a selected existing client, so skip vehicle here.
+    expect(within(clientDialog).getByLabelText(/^Organization name/i)).toHaveValue("Nina New");
+    await user.type(within(clientDialog).getByLabelText("Tax ID / IDNO"), "1002600000001");
+    await user.type(within(clientDialog).getByLabelText("Contact person"), "Ion Popescu");
+    await user.type(within(clientDialog).getByLabelText("Phone *"), "+37369000001");
+    await user.click(within(clientDialog).getByRole("button", { name: "Add Client" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Add New Client/i })).not.toBeInTheDocument());
+    // The new client is selected in the order form; vehicle step skipped (not needed for this check).
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
     await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
@@ -148,10 +152,11 @@ describe("orders page", () => {
     const client = within(dialog).getByRole("combobox", { name: /Client/i });
     await user.clear(client);
     await user.type(client, "ada alpha");
-    expect(within(dialog).queryByLabelText("Phone *")).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("combobox", { name: "Client type *" })).not.toBeInTheDocument();
+    // An exact match is offered as a suggestion — no "Create new client" action.
+    expect(within(dialog).queryByRole("button", { name: /Create new client/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /Add New Client/i })).not.toBeInTheDocument();
     // Re-select Ada so vehicle fields stay tied to the existing client.
-    await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
+    await user.click(await within(dialog).findByRole("option", { name: /Ada Alpha/ }));
     const clientsBefore = fake.all("clients").length;
 
     await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
@@ -445,14 +450,15 @@ describe("orders page", () => {
     expect(within(clientCell).getByTestId("order-client-type")).toHaveTextContent(/Organization/i);
 
     const panel = await openOrderPanel(user);
-    expect(within(panel).getByText("Client Type").parentElement).toHaveTextContent(/Organization/);
+    // The client card shows the type as a badge next to the client name.
+    expect(within(within(panel).getByTestId("order-client-card-shell")).getByText("Organization")).toBeInTheDocument();
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /Create Order/ }));
     const dialog = await screen.findByRole("dialog");
     await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Ada");
-    expect(await within(dialog).findByRole("button", { name: "Ada Alpha Organization" })).toBeInTheDocument();
+    expect(await within(dialog).findByRole("option", { name: /Ada Alpha.*Organization/ })).toBeInTheDocument();
   });
 
   it("lists only orders of the active workspace", async () => {

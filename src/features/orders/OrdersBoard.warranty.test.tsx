@@ -46,10 +46,14 @@ vi.mock("../workspaces/useWorkspaceSubscription", () => ({
   useWorkspaceSubscription: () => ({ canWrite: true, isReadOnly: false }),
 }));
 
-vi.mock("./useGetOrders", () => ({
-  useGetOrders: () => ({
-    orders: [
-      {
+// The board loads its own list via useQuery(getOrders) (not useGetOrders).
+const boardOrders = vi.hoisted(() => [] as Order[]);
+vi.mock("../../services/apiOrders", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../services/apiOrders")>();
+  return { ...actual, getOrders: vi.fn(async () => boardOrders) };
+});
+
+boardOrders.push({
         id: "order-1",
         clientId: "client-1",
         clientName: "Ada Lovelace",
@@ -73,13 +77,7 @@ vi.mock("./useGetOrders", () => ({
         paymentStatus: "unpaid",
         createdAt: "2026-05-01",
         updatedAt: "2026-05-04",
-      } satisfies Order,
-    ],
-    isLoading: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
-}));
+      } satisfies Order);
 
 vi.mock("../statuses/useGetStatusDefinitions", () => ({
   useGetStatusDefinitions: () => ({ data: [], isLoading: false, error: null }),

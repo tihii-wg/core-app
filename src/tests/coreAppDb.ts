@@ -1361,3 +1361,25 @@ export function namesIn(table: string, workspaceId: string, column = "name") {
     .filter((item) => item.workspace_id === workspaceId)
     .map((item) => String(item[column]));
 }
+
+/**
+ * Creating materials requires an active warehouse (Inventory → "Add Part" is disabled without one).
+ * Opt-in per test file so stock-flow tests that rely on "no warehouse" keep their setup.
+ */
+export function seedWarehouses() {
+  for (const [letter, workspaceId] of [["a", WS.A], ["b", WS.B]] as const) {
+    fake.all("warehouses").push({
+      id: `warehouse-${letter}1`,
+      workspace_id: workspaceId,
+      location_id: null,
+      name: "Main warehouse",
+      warehouse_type: "company",
+      is_default: true,
+      is_active: true,
+      deleted_at: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    });
+  }
+}
+

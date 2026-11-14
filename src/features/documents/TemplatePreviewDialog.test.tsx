@@ -204,7 +204,8 @@ describe("TemplatePreviewDialog", () => {
 
       await waitFor(() => expect(screen.getByTitle(/Preview of Work order/i)).toBeInTheDocument());
       await waitFor(() => {
-        expect(screen.getByTestId("preview-zoom").textContent).toBe("43%");
+        // 343px viewport − 26px sheet padding = 317px → 317 / 793.7 ≈ 39% (the sheet must fit inside the padding).
+        expect(screen.getByTestId("preview-zoom").textContent).toBe("39%");
       });
       expect(screen.getByRole("button", { name: /Fit width|Pe lățime|По ширине/i })).toBeInTheDocument();
     } finally {

@@ -173,6 +173,10 @@ function renderDashboard() {
   return renderWithQuery(<Dashboard />);
 }
 
+function readOnlyNotices() {
+  return screen.queryAllByRole("status").filter((element) => /view-only/i.test(element.textContent ?? ""));
+}
+
 describe("Dashboard subscription notice", () => {
   beforeEach(() => {
     subscriptionState.canWrite = true;
@@ -188,7 +192,8 @@ describe("Dashboard subscription notice", () => {
 
     expect(screen.getByRole("heading", { name: /dashboard/i })).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-financial-cards")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // Spinners also use role="status" — only the read-only notice matters here.
+    expect(readOnlyNotices()).toHaveLength(0);
     expect(screen.queryByText(/view-only/i)).not.toBeInTheDocument();
   });
 
@@ -200,7 +205,8 @@ describe("Dashboard subscription notice", () => {
 
     renderDashboard();
 
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // Spinners also use role="status" — only the read-only notice matters here.
+    expect(readOnlyNotices()).toHaveLength(0);
     expect(screen.queryByText(/view-only/i)).not.toBeInTheDocument();
     expect(screen.getByTestId("dashboard-financial-cards")).toBeInTheDocument();
   });
@@ -212,7 +218,9 @@ describe("Dashboard subscription notice", () => {
 
     renderDashboard();
 
-    const notice = screen.getByRole("status");
+    const notices = readOnlyNotices();
+    expect(notices).toHaveLength(1);
+    const notice = notices[0];
     expect(notice).toHaveTextContent(/view-only/i);
     expect(notice).toHaveTextContent(/Expired/i);
     expect(screen.getByTestId("dashboard-financial-cards")).toBeInTheDocument();

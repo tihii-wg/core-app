@@ -147,7 +147,8 @@ describe("settlement -> order details (Clients wiring reproduction)", () => {
     const user = userEvent.setup();
     renderWithQuery(<Harness />);
 
-    await user.click(screen.getByRole("tab", { name: "Orders" }));
+    // Tab label carries the order count once loaded, e.g. "Orders (2)".
+    await user.click(await screen.findByRole("tab", { name: /^Orders/ }));
     const sheetsBefore = document.querySelectorAll('[data-slot="sheet-content"]').length;
     const historyButtons = screen.getAllByRole("button", { name: /ORD-2026-002/ });
     await user.click(historyButtons[0]);

@@ -62,7 +62,8 @@ describe("global search", () => {
   });
 
   it.each([
-    ["an order's car number", () => String(row("orders", "order-a1")!.car_number), ["Orders"]],
+    // The plate also matches the client who owns that vehicle (client search includes vehicle registrations).
+    ["an order's car number", () => String(row("orders", "order-a1")!.car_number), ["Orders", "Clients"]],
     ["an order's description", () => "Noise", ["Orders"]],
     ["a client's phone, which also finds that client's orders", () => "+3736111", ["Orders", "Clients"]],
     ["a client's email", () => "ada@example", ["Orders", "Clients"]],
@@ -112,7 +113,7 @@ describe("global search", () => {
 
     const panel = await screen.findByRole("dialog");
     expect(within(panel).getByText(orderNumber)).toBeInTheDocument();
-    expect(within(panel).getByText("Client Type")).toBeInTheDocument();
+    expect(within(panel).getByTestId("order-client-card-shell")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(location.pathname).toBe(servicesPath);
@@ -126,6 +127,8 @@ describe("global search", () => {
 
     const panel = await screen.findByRole("dialog");
     expect(within(panel).getByText("Ada Alpha")).toBeInTheDocument();
+    // Order history lives on the "Orders" tab (the panel opens on "General").
+    await user.click(await within(panel).findByRole("tab", { name: /^Orders/ }));
     expect(await within(panel).findByText(orderNumber)).toBeInTheDocument();
     expect(location.pathname).toBe(servicesPath);
   });
@@ -139,13 +142,15 @@ describe("global search", () => {
     await user.click(await within(panel).findByRole("button", { name: "Edit" }));
 
     const dialog = await screen.findByRole("dialog", { name: /Edit (Inventory Item|Part)/i });
-    const quantity = await within(dialog).findByLabelText("Quantity *");
-    await user.clear(quantity);
-    await user.type(quantity, "30");
+    // Quantity is warehouse-owned (read-only here); lower the minimum so stock 2 is no longer "low".
+    expect(within(dialog).getByLabelText("Quantity *")).toBeDisabled();
+    const minimum = within(dialog).getByLabelText("Minimum Quantity *");
+    await user.clear(minimum);
+    await user.type(minimum, "1");
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(row("inventory_items", "item-a1")?.quantity).toBe(30);
+    expect(row("inventory_items", "item-a1")).toMatchObject({ quantity: 2, min_quantity: 1 });
     expect(location.pathname).toBe(servicesPath);
     expect(unhandled.rejections).toEqual([]);
   });

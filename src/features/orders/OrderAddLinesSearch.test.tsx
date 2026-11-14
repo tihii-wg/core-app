@@ -182,7 +182,8 @@ describe("OrderAddLinesSearch", () => {
     expect(appendMock).not.toHaveBeenCalled();
     expect(onServiceAdded).not.toHaveBeenCalled();
     expect(onHighlightServiceLine).toHaveBeenCalledWith("svc-oil");
-    expect(toastFn).toHaveBeenCalled();
+    // The parent bumps the existing line's quantity and shows the explanation toast (not this component).
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("shows no-match actions with the right permissions", async () => {

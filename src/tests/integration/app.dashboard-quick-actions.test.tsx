@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fake } from "../fakeSupabase";
-import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
+import { USERS, WS, row, seedCoreApp, seedWarehouses } from "../coreAppDb";
 import { installDomStubs, renderApp, trackUnhandledRejections } from "../appHarness";
 
 vi.mock("../../services/supabase", async () => ({ default: (await import("../fakeSupabase")).fakeClient }));
@@ -12,6 +12,7 @@ let unhandled: ReturnType<typeof trackUnhandledRejections>;
 
 beforeEach(() => {
   seedCoreApp();
+  seedWarehouses();
   installDomStubs();
   unhandled = trackUnhandledRejections();
 });
@@ -75,7 +76,7 @@ describe("dashboard quick actions", () => {
     const dialog = await openQuickAction(user, "Create Order", "Create New Order");
 
     await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Ada");
-    await user.click(await within(dialog).findByRole("button", { name: "Ada Alpha Individual" }));
+    await user.click(await within(dialog).findByRole("option", { name: /Ada Alpha/ }));
     await addVehicleOnOrderForm(user, dialog, { make: "VW", model: "Golf IV", plate: "abc123", vin: VIN.toLowerCase() });
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
@@ -94,12 +95,15 @@ describe("dashboard quick actions", () => {
 
     await user.click(within(dialog).getByRole("combobox", { name: /Assigned technician|Assigned/i }));
     await user.click(await screen.findByRole("option", { name: "Tom Tech" }));
+    // Unknown name → "Create new client" opens the client dialog (individual by default).
     await user.type(within(dialog).getByRole("combobox", { name: /Client/i }), "Nina New");
-    expect(within(dialog).getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
-    expect(within(dialog).queryByLabelText("IDNO")).not.toBeInTheDocument();
-    await user.type(within(dialog).getByLabelText("Phone *"), "+37369000001");
-    expect(within(dialog).queryByLabelText(/Email/i)).not.toBeInTheDocument();
-    // New clients have no id until save; vehicle picker needs an existing client, so skip vehicle here.
+    await user.click(await within(dialog).findByRole("button", { name: /Create new client/i }));
+    const clientDialog = await screen.findByRole("dialog", { name: /Add New Client/i });
+    expect(within(clientDialog).getByRole("combobox", { name: "Client type *" })).toHaveTextContent("Individual");
+    expect(within(clientDialog).queryByLabelText("Tax ID / IDNO")).not.toBeInTheDocument();
+    await user.type(within(clientDialog).getByLabelText("Phone *"), "+37369000001");
+    await user.click(within(clientDialog).getByRole("button", { name: "Add Client" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Add New Client/i })).not.toBeInTheDocument());
     await user.click(within(dialog).getByPlaceholderText("Service"));
     await user.click(await within(dialog).findByRole("button", { name: /Oil change/i }));
     await user.click(within(dialog).getByRole("button", { name: "Save draft order" }));
@@ -163,7 +167,8 @@ describe("dashboard quick actions", () => {
     expect(headers).not.toContain("Client Type");
     const clientCell = within(orderRow).getAllByRole("cell")[headers.indexOf("Client")];
     expect(within(clientCell).getByTestId("order-client-type")).toHaveTextContent(/Organization/i);
-    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/^Ada Alpha$/);
+    // Client cell = name + client-type badge.
+    expect(within(orderRow).getAllByRole("cell")[headers.indexOf("Client")]).toHaveTextContent(/Ada Alpha/);
   });
 
   it("opens the order details first, then edits the order from the panel and stays on the dashboard", async () => {
@@ -179,7 +184,7 @@ describe("dashboard quick actions", () => {
 
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
     expect(within(panel).queryByLabelText("Vehicle *")).not.toBeInTheDocument();
-    const description = await within(panel).findByLabelText("Description");
+    const description = await within(panel).findByLabelText(/Description/i);
     await user.clear(description);
     await user.type(description, "Updated dashboard note");
     await user.click(within(panel).getByRole("button", { name: "Save Changes" }));
@@ -195,7 +200,7 @@ describe("dashboard quick actions", () => {
     await user.click(await screen.findByText("Alpha Garage car"));
     const panel = await screen.findByRole("dialog");
     await user.click(within(panel).getByRole("button", { name: "Edit" }));
-    const description = await within(panel).findByLabelText("Description");
+    const description = await within(panel).findByLabelText(/Description/i);
     await user.clear(description);
     await user.type(description, "Should not save");
     await user.click(within(panel).getByRole("button", { name: "Cancel" }));
@@ -293,13 +298,15 @@ describe("dashboard quick actions", () => {
 
     await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit Part" });
-    const quantity = await within(dialog).findByLabelText("Quantity *");
-    await user.clear(quantity);
-    await user.type(quantity, "30");
+    // Quantity is warehouse-owned (read-only here); lower the minimum so stock 2 is no longer "low".
+    expect(within(dialog).getByLabelText("Quantity *")).toBeDisabled();
+    const minimum = within(dialog).getByLabelText("Minimum Quantity *");
+    await user.clear(minimum);
+    await user.type(minimum, "1");
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(row("inventory_items", "item-a1")?.quantity).toBe(30);
+    expect(row("inventory_items", "item-a1")).toMatchObject({ quantity: 2, min_quantity: 1 });
     expect(await screen.findByText("No low stock items")).toBeInTheDocument();
     expect(screen.queryByText("Alpha brake pads")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Low Stock Items" })).toBeInTheDocument();
@@ -312,15 +319,17 @@ describe("dashboard quick actions", () => {
     await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Edit Part" });
-    const quantity = await within(dialog).findByLabelText("Quantity *");
-    await user.clear(quantity);
-    await user.type(quantity, "30");
+    // Quantity is warehouse-owned (read-only here); lower the minimum so stock 2 is no longer "low".
+    expect(within(dialog).getByLabelText("Quantity *")).toBeDisabled();
+    const minimum = within(dialog).getByLabelText("Minimum Quantity *");
+    await user.clear(minimum);
+    await user.type(minimum, "1");
     fake.failNext("inventory_items", "update", { code: "42501", message: 'new row violates row-level security policy for table "inventory_items"' });
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     expect(await screen.findByText("You do not have permission to change inventory in this workspace.")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(row("inventory_items", "item-a1")?.quantity).toBe(2);
+    expect(row("inventory_items", "item-a1")).toMatchObject({ quantity: 2, min_quantity: 5 });
   });
 
   it("navigates to the Orders page from View all", async () => {

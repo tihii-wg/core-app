@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fake } from "../fakeSupabase";
-import { USERS, WS, row, seedCoreApp } from "../coreAppDb";
+import { USERS, WS, row, seedCoreApp, seedWarehouses } from "../coreAppDb";
 import { installDomStubs, renderApp, trackUnhandledRejections } from "../appHarness";
 
 vi.mock("../../services/supabase", async () => ({ default: (await import("../fakeSupabase")).fakeClient }));
@@ -10,6 +10,7 @@ let unhandled: ReturnType<typeof trackUnhandledRejections>;
 
 beforeEach(() => {
   seedCoreApp();
+  seedWarehouses();
   installDomStubs();
   unhandled = trackUnhandledRejections();
 });
@@ -119,14 +120,16 @@ describe("inventory page", () => {
 
     await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
     const dialog = await screen.findByRole("dialog");
-    const quantity = await within(dialog).findByLabelText("Quantity *");
-    await user.clear(quantity);
-    await user.type(quantity, "30");
+    // Quantity is warehouse-owned (read-only here); lower the minimum so stock 2 is no longer "low".
+    expect(within(dialog).getByLabelText("Quantity *")).toBeDisabled();
+    const minimum = within(dialog).getByLabelText("Minimum Quantity *");
+    await user.clear(minimum);
+    await user.type(minimum, "1");
 
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(row("inventory_items", "item-a1")?.quantity).toBe(30);
+    expect(row("inventory_items", "item-a1")).toMatchObject({ quantity: 2, min_quantity: 1 });
     await waitFor(() => expect(screen.queryByRole("button", { name: /1 items low on stock/i })).not.toBeInTheDocument());
     expect(await screen.findByText("Stock looks healthy")).toBeInTheDocument();
     const updatedRow = await screen.findByRole("row", { name: /Alpha brake pads/ });
@@ -138,16 +141,18 @@ describe("inventory page", () => {
     const { user } = await openInventory();
     await user.click(screen.getByRole("button", { name: "Edit Alpha brake pads" }));
     const dialog = await screen.findByRole("dialog");
-    const quantity = await within(dialog).findByLabelText("Quantity *");
-    await user.clear(quantity);
-    await user.type(quantity, "30");
+    // Quantity is warehouse-owned (read-only here); lower the minimum so stock 2 is no longer "low".
+    expect(within(dialog).getByLabelText("Quantity *")).toBeDisabled();
+    const minimum = within(dialog).getByLabelText("Minimum Quantity *");
+    await user.clear(minimum);
+    await user.type(minimum, "1");
     fake.failNext("inventory_items", "update", { code: "42501", message: 'new row violates row-level security policy for table "inventory_items"' });
 
     await user.click(within(dialog).getByRole("button", { name: "Save Changes" }));
 
     expect(await screen.findByText("You do not have permission to change inventory in this workspace.")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(row("inventory_items", "item-a1")?.quantity).toBe(2);
+    expect(row("inventory_items", "item-a1")).toMatchObject({ quantity: 2, min_quantity: 5 });
     expect(unhandled.rejections).toEqual([]);
   });
 

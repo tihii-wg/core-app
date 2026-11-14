@@ -246,7 +246,8 @@ describe("useOrderStatusChange", () => {
     });
 
     expect(onLegacyStatusChange).toHaveBeenCalledExactlyOnceWith("in-progress");
-    expect(changeResult).toEqual({ ok: true, order: expect.objectContaining({ status: "in-progress" }) });
+    // No optimistic order: the owner applies the status only after the server confirms it.
+    expect(changeResult).toEqual({ ok: true });
     expect(moveOnBoard.mutateAsync).not.toHaveBeenCalled();
   });
 

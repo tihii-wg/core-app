@@ -229,14 +229,14 @@ describe("inventory mutations", () => {
     await settle(() => result.current.create.mutateAsync(inventoryForm));
     await waitFor(() => expect(result.current.list.items).toHaveLength(2));
 
-    await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 50 }));
-    await waitFor(() => expect(result.current.detail.item?.quantity).toBe(50));
-    await waitFor(() => expect(result.current.detail.item?.stockStatus).toBe("in_stock"));
+    // Catalog updates never write quantity (warehouse-owned); stock status follows the minimum.
+    await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 50, minQuantity: 1 }));
+    await waitFor(() => expect(result.current.detail.item).toMatchObject({ quantity: 2, minQuantity: 1, stockStatus: "in_stock" }));
     await waitFor(() => expect(result.current.list.items.find((item) => item.id === "item-a1")?.stockStatus).toBe("in_stock"));
 
-    await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 0, minQuantity: 1 }));
-    await waitFor(() => expect(result.current.detail.item).toMatchObject({ quantity: 0, stockStatus: "out_of_stock" }));
-    await waitFor(() => expect(result.current.list.items.find((item) => item.id === "item-a1")?.stockStatus).toBe("out_of_stock"));
+    await settle(() => result.current.update.mutateAsync({ ...inventoryForm, id: "item-a1", name: "Alpha brake pads", sku: "AP-1", quantity: 0, minQuantity: 5 }));
+    await waitFor(() => expect(result.current.detail.item).toMatchObject({ quantity: 2, minQuantity: 5, stockStatus: "low_stock" }));
+    await waitFor(() => expect(result.current.list.items.find((item) => item.id === "item-a1")?.stockStatus).toBe("low_stock"));
 
     await settle(() => result.current.remove.mutateAsync("item-a1"));
     await waitFor(() => expect(result.current.list.items.map((item) => item.name)).toEqual(["Wiper"]));

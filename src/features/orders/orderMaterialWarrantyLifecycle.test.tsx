@@ -21,6 +21,17 @@ vi.mock("../profiles/useGetProfile", () => ({
   useActiveWorkspaceId: () => ({ workspaceId: "ws-1", isLoading: false, error: null }),
 }));
 
+// Mileage warranty (km) is shown only for vehicle industries.
+vi.mock("../industries/useIndustryWorkflow", async () => {
+  const { industryWorkflow, industryOrderCopy } = await import("../industries/industryWorkflow");
+  return {
+    useIndustryWorkflow: () => {
+      const workflow = industryWorkflow("auto_repair");
+      return { workflow, copy: industryOrderCopy(workflow), industrySlug: "auto_repair", industryId: null, isLoading: false, error: null };
+    },
+  };
+});
+
 vi.mock("../../services/apiWarranty", () => ({
   getWarrantyRecordsForOrder: vi.fn(async () => [] as WarrantySnapshot[]),
 }));

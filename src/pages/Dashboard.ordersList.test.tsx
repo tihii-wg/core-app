@@ -17,6 +17,7 @@ const sampleOrder: Order = {
   device: "BMW X5",
   vin: "",
   carNumber: "ABC123",
+  clientType: "individual",
   service: "Oil change",
   services: [],
   description: "",
@@ -159,7 +160,14 @@ vi.mock("../features/industries/useIndustryWorkflow", async () => {
   return {
     useIndustryWorkflow: () => {
       const workflow = industryWorkflow("auto_repair");
-      return { workflow, copy: industryOrderCopy(workflow), shell: industryShellCopy(workflow) };
+      // OrderCard reads industrySlug/profile to decide which asset lines (plate) to show.
+      return {
+        workflow,
+        copy: industryOrderCopy(workflow),
+        shell: industryShellCopy(workflow),
+        industrySlug: "auto_repair",
+        profile: null,
+      };
     },
   };
 });

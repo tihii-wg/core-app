@@ -34,7 +34,8 @@ export type OrderStatusChangeOption = UnifiedStatusOption & {
 };
 
 export type OrderStatusChangeResult =
-  | { ok: true; order: Order }
+  /** `order` is omitted when the change is still in flight (legacy path applies it on success). */
+  | { ok: true; order?: Order }
   | { ok: false; reason: string };
 
 export type UseOrderStatusChangeOptions = {
@@ -333,13 +334,11 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
         }
 
         if (onLegacyStatusChange) {
+          // Fire-and-forget: the owner applies the status only after the server confirms it
+          // (useOrderDetails.changeStatus → onSuccess). Returning an optimistic order here made the
+          // detail panel show the new status even when the update was rejected, with no rollback.
           onLegacyStatusChange(move.status);
-          const next = applyStatusPatch(order, {
-            status: move.status,
-            customStatusId: null,
-            customStatus: null,
-          });
-          return { ok: true, order: next };
+          return { ok: true };
         }
 
         const result = await updateStatus({ orderId: order.id, status: move.status });
