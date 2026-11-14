@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || ''
   const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || ''
+  // Public Telegram bot username (not a secret), accepted with or without the VITE_ prefix.
+  const telegramBotUsername = (env.VITE_TELEGRAM_BOT_USERNAME || env.TELEGRAM_BOT_USERNAME || '').trim().replace(/^@/, '')
 
   return {
     // Chrome 109 = last Google Chrome / Chromium Edge on Windows 7.
@@ -36,6 +38,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
+      'import.meta.env.VITE_TELEGRAM_BOT_USERNAME': JSON.stringify(telegramBotUsername),
     },
   }
 })
