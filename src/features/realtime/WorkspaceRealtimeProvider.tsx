@@ -113,6 +113,11 @@ export function WorkspaceRealtimeProvider({ children }: Props) {
     // Only a RE-subscribe (after an error/timeout) needs it, to pick up changes missed meanwhile.
     let everSubscribed = false;
 
+    // Defensive: environments without Realtime (tests, misconfigured client) must not crash the app shell.
+    if (typeof supabase.channel !== "function") {
+      setChannelStatus("CLOSED");
+      return;
+    }
     let channel = supabase.channel(`ws:${workspaceId}`);
     for (const table of REALTIME_WORKSPACE_TABLES) {
       channel = channel.on(

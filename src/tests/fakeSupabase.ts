@@ -609,6 +609,19 @@ export class FakeSupabase {
         },
       }),
     },
+    // Realtime stub: channels subscribe immediately and never emit postgres_changes in tests.
+    channel: (_name: string) => {
+      const channel = {
+        on: (..._args: unknown[]) => channel,
+        subscribe: (callback?: (status: string) => void) => {
+          if (callback) queueMicrotask(() => callback("SUBSCRIBED"));
+          return channel;
+        },
+        unsubscribe: async () => "ok",
+      };
+      return channel;
+    },
+    removeChannel: async (_channel: unknown) => "ok",
   };
 }
 
