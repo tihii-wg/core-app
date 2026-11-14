@@ -8,13 +8,13 @@ import { useT } from "@/i18n/I18nProvider";
 
 export function LoginPage() {
   const t = useT();
-  const { configured, loading, session, demoMode, enterDemoMode, signIn } = useAuth();
+  const { configured, loading, session, signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!loading && (session || demoMode)) return <Navigate to="/" replace />;
+  if (!loading && session) return <Navigate to="/" replace />;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -45,11 +45,8 @@ export function LoginPage() {
         <p className="text-sm text-[var(--muted)]">{t("login.description")}</p>
 
         {!configured ? (
-          <div className="mt-5 space-y-3 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-sm text-[var(--muted)]">
-            <p>{t("login.notConfigured")}</p>
-            <Button type="button" variant="secondary" className="w-full" onClick={enterDemoMode}>
-              {t("login.continueDemo")}
-            </Button>
+          <div className="mt-5 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-3 text-sm text-[var(--muted)]">
+            <p>{t("errors.notConfigured")}</p>
           </div>
         ) : null}
 
@@ -82,11 +79,6 @@ export function LoginPage() {
           </Button>
         </form>
 
-        {configured ? (
-          <Button type="button" variant="ghost" className="mt-3 w-full" onClick={enterDemoMode}>
-            {t("login.continueDemo")}
-          </Button>
-        ) : null}
       </Card>
     </div>
   );

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="ru" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/core-app-logo.svg" />
@@ -15,7 +15,7 @@
           document.documentElement.setAttribute("data-theme", theme);
           document.documentElement.style.colorScheme = theme;
           var locale = localStorage.getItem("core-app-admin-locale");
-          document.documentElement.lang = locale === "ru" ? "ru" : "en";
+          document.documentElement.lang = locale === "en" ? "en" : "ru";
         } catch (e) {
           document.documentElement.setAttribute("data-theme", "light");
           document.documentElement.style.colorScheme = "light";

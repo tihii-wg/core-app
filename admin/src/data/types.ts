@@ -1,41 +1,59 @@
-/** Subscription statuses recognized by the Core App client model. */
+/** Subscription statuses recognized by Core App (`workspaces.subscription_status`). */
 export const subscriptionStatuses = ["trial", "active", "expired", "suspended", "cancelled"] as const;
 export type SubscriptionStatus = (typeof subscriptionStatuses)[number];
 
-/**
- * Plan labels used only for clearly labeled DEMO fixtures.
- * Repo migrations do not define a plans table or plan_id column.
- */
-export const demoPlanLabels = ["trial", "starter", "professional", "enterprise"] as const;
-export type DemoPlanLabel = (typeof demoPlanLabels)[number];
+export type AccessLabel = "writable" | "read-only";
 
-export type AdminWorkspaceRow = {
+export type AdminWorkspace = {
   id: string;
   name: string;
-  ownerName: string;
-  ownerEmail: string;
-  planLabel: DemoPlanLabel | "unknown";
+  createdAt: string | null;
+  deletedAt: string | null;
+  language: string | null;
+  currency: string | null;
+  ownerId: string | null;
+  ownerName: string | null;
+  ownerEmail: string | null;
+  ownerLastSignInAt: string | null;
   subscriptionStatus: SubscriptionStatus | null;
   subscriptionStartedAt: string | null;
   subscriptionExpiresAt: string | null;
-  employeeCount: number | null;
-  orderCount: number | null;
-  /** Access status derived from subscription for display; not a separate schema field. */
-  accessLabel: "writable" | "read-only" | "unknown";
+  subscriptionUpdatedAt: string | null;
+  memberCount: number;
+  employeeCount: number;
+  orderCount: number;
+  ordersLast30d: number;
+  lastOrderAt: string | null;
 };
 
-export type DataSourceMode = "demo" | "unavailable";
+export type AdminWorkspaceMember = {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+  joinedAt: string | null;
+  lastSignInAt: string | null;
+};
 
-export type AdminCapabilities = {
-  /** Cross-tenant workspace list via anon client + existing RLS */
-  listAllWorkspaces: boolean;
-  /** Aggregate employee/order counts without fetching private rows */
-  aggregateCounts: boolean;
-  /** Trusted platform-owner authorization on the backend */
-  platformOwnerAuthz: boolean;
-  changePlan: boolean;
-  changeExpiration: boolean;
-  suspendWorkspace: boolean;
-  reactivateWorkspace: boolean;
-  auditLog: boolean;
+export type AdminWorkspaceDetail = AdminWorkspace & {
+  members: AdminWorkspaceMember[];
+  stats: { clients: number; estimates: number };
+};
+
+export type SubscriptionSnapshot = {
+  subscription_status?: string | null;
+  subscription_started_at?: string | null;
+  subscription_expires_at?: string | null;
+};
+
+export type AuditEntry = {
+  id: number;
+  createdAt: string;
+  actorEmail: string | null;
+  action: string;
+  workspaceId: string | null;
+  workspaceName: string | null;
+  before: SubscriptionSnapshot | null;
+  after: SubscriptionSnapshot | null;
+  reason: string | null;
 };

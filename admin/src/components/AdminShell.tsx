@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Building2, CreditCard, LayoutDashboard, LogOut, Menu, Shield, X } from "lucide-react";
+import { Building2, History, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/auth/AuthProvider";
 import { useT } from "@/i18n/I18nProvider";
@@ -10,14 +10,13 @@ import { Button } from "./ui";
 
 export function AdminShell() {
   const t = useT();
-  const { user, demoMode, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
 
   const nav = [
     { to: "/", label: t("nav.overview"), icon: LayoutDashboard, end: true },
     { to: "/workspaces", label: t("nav.workspaces"), icon: Building2 },
-    { to: "/subscriptions", label: t("nav.subscriptions"), icon: CreditCard },
-    { to: "/security", label: t("nav.security"), icon: Shield },
+    { to: "/audit", label: t("nav.audit"), icon: History },
   ] as const;
 
   return (
@@ -87,7 +86,7 @@ export function AdminShell() {
               <Menu className="size-5" />
             </button>
             <p className="truncate text-sm text-[var(--muted)]">
-              {demoMode ? t("chrome.demoMode") : (user?.email ?? t("chrome.signedIn"))}
+              {user?.email ?? t("chrome.signedIn")}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">

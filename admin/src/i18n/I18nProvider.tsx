@@ -25,7 +25,7 @@ function readStoredLocale(): Locale {
   } catch {
     // ignore
   }
-  return "en";
+  return "ru";
 }
 
 function applyDocumentLang(locale: Locale) {

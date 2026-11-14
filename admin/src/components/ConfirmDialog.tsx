@@ -7,7 +7,9 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
-  confirmDisabled = true,
+  confirmDisabled = false,
+  confirmVariant = "danger",
+  busy = false,
   disabledReason,
   onClose,
   onConfirm,
@@ -18,6 +20,8 @@ export function ConfirmDialog({
   description: string;
   confirmLabel?: string;
   confirmDisabled?: boolean;
+  confirmVariant?: "primary" | "danger";
+  busy?: boolean;
   disabledReason?: string;
   onClose: () => void;
   onConfirm: () => void;
@@ -48,11 +52,11 @@ export function ConfirmDialog({
           </p>
         ) : null}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
             {t("common.cancel")}
           </Button>
-          <Button type="button" variant="danger" disabled={confirmDisabled} onClick={onConfirm}>
-            {confirmLabel ?? t("common.manage")}
+          <Button type="button" variant={confirmVariant} disabled={confirmDisabled || busy} onClick={onConfirm}>
+            {busy ? t("common.saving") : (confirmLabel ?? t("common.save"))}
           </Button>
         </div>
       </div>
