@@ -572,6 +572,14 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     setSelectedIds([]);
   }
 
+  /** Inner width of the sheet viewport (clientWidth includes padding — the sheet must fit inside it). */
+  function viewportInnerWidth(viewport: HTMLElement): number {
+    const cs = window.getComputedStyle(viewport);
+    const padding = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    // Small safety gap so rounding never produces a horizontal scrollbar.
+    return Math.max(0, viewport.clientWidth - padding - 2);
+  }
+
   function applyFitWidth(availableWidthPx: number) {
     setZoom(computeFitWidthZoomPercent(availableWidthPx, widthMm));
   }
@@ -585,7 +593,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     const viewport = sheetViewportRef.current;
     if (!viewport) return;
     zoomLockedByUser.current = false;
-    applyFitWidth(viewport.clientWidth);
+    applyFitWidth(viewportInnerWidth(viewport));
   }
 
   const pageBg = fillToCss(layout.page.background, themeColors);
@@ -600,8 +608,12 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
     const maybeFit = () => {
       if (zoomLockedByUser.current) return;
-      const available = viewport.clientWidth;
-      if (!needsFitWidth(available, widthMm)) return;
+      const available = viewportInnerWidth(viewport);
+      if (!needsFitWidth(available, widthMm)) {
+        // Sheet fits at 100% — reset any earlier fit so it is shown at natural size, centered.
+        setZoom(100);
+        return;
+      }
       setZoom(computeFitWidthZoomPercent(available, widthMm));
     };
 
