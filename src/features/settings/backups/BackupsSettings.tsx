@@ -11,6 +11,7 @@ import { Label } from "../../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../ui/Select";
 import { Switch } from "../../../ui/Switch";
 import { formatBackupSize, type BackupProvider } from "../../../services/apiBackups";
+import { RestoreBackupCard } from "./RestoreBackupCard";
 import { useActiveWorkspaceId } from "../../profiles/useGetProfile";
 import { useGetWorkspace } from "../../workspaces/useGetWorkspace";
 import { useActiveWorkspaceRole } from "../../workspaces/useActiveWorkspaceRole";
@@ -623,6 +624,7 @@ export function BackupsSettings() {
           </Card>
         ) : null
       )}
+      {isOwner ? <RestoreBackupCard /> : null}
     </div>
   );
 }

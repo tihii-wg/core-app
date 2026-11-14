@@ -121,6 +121,17 @@ export async function buildWorkspaceArchive(input: {
     tableCounts.push({ name, rowCount: rows.length });
   }
 
+  // Workspace settings row (name, currency, numbering, …) so a restore can recreate them.
+  // Secret-looking columns are dropped; subscription fields are ignored on restore anyway.
+  const { data: workspaceRow } = await input.admin.from("workspaces").select("*").eq("id", input.workspaceId).maybeSingle();
+  if (workspaceRow) {
+    const safe: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(workspaceRow as Record<string, unknown>)) {
+      if (!/(secret|token|credential|password)/i.test(key)) safe[key] = value;
+    }
+    zipEntries["workspace.json"] = strToU8(JSON.stringify(safe));
+  }
+
   const warnings: string[] = [];
   let fileCount = 0;
   if (input.includeFiles) {

@@ -7,6 +7,7 @@
 | `workspace-backup` | Build ZIP + upload to Google Drive / GitHub; scheduled (cron token) or manual (owner JWT). |
 | `backup-google-oauth` | Google OAuth start + callback for Drive credentials. |
 | `backup-github-connect` | Validate private repo + store fine-grained token. |
+| `workspace-restore` | Restore a backup ZIP into a NEW workspace (owner of the source workspace only). Needs `20261116120000_workspace_restore.PRODUCTION.sql`. |
 
 ## Order photo storage (Drive + NAS)
 
