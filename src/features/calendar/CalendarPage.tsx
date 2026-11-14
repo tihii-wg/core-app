@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -136,6 +136,34 @@ export function CalendarPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const calendarRef = useRef<InstanceType<typeof FullCalendar> | null>(null);
   const calendarShellRef = useRef<HTMLDivElement | null>(null);
+  /** Desktop/tablet: calendar height so its bottom edge sits at the bottom of the window (no page scroll). */
+  const [fitHeight, setFitHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (isMobile) return;
+    const shell = calendarShellRef.current;
+    if (!shell) return;
+    const BOTTOM_GAP = 16; // breathing room above the window's bottom edge
+    const measure = () => {
+      const top = shell.getBoundingClientRect().top + window.scrollY;
+      const style = window.getComputedStyle(shell);
+      // FullCalendar's height excludes the shell's own padding + border.
+      const chrome =
+        parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) +
+        parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      const next = Math.max(380, Math.floor(window.innerHeight - top - BOTTOM_GAP - chrome));
+      setFitHeight((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    // Content above the calendar (banners, picker, reminders) can change its top edge.
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    const page = shell.closest(".gcal-page");
+    if (observer && page) observer.observe(page);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  });
   const handledOauth = useRef<string | null>(null);
   const swipeStartRef = useRef<(SwipePointerSample & { startedOnEvent: boolean; pointerId: number }) | null>(
     null,
@@ -712,11 +740,11 @@ export function CalendarPage() {
               : undefined
           }
           // Phone: the calendar itself is (almost) one screen tall below the sticky 56px top bar — scroll the
-          // page up past the title/controls and the grid fills the screen. Desktop: taller than before.
+          // page up past the title/controls and the grid fills the screen. Desktop: fills the window down to its bottom edge.
           height={
             isMobile
               ? "max(480px, calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)))"
-              : "max(720px, calc(100vh - 120px))"
+              : (fitHeight ?? "max(560px, calc(100vh - 280px))")
           }
           // No "All day" label: it set the width of the hour column and squeezed the days (week view on a
           // phone). The all-day row stays, so all-day Google events are still shown.
