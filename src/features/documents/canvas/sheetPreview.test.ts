@@ -57,16 +57,19 @@ describe("sheetPreview", () => {
     expect(1123 * scale).toBeLessThanOrEqual(170 + 0.01);
   });
 
-  it("screen CSS adds padding and does not alter @page margins", () => {
+  it("screen CSS draws margins outside the content box and does not alter @page margins", () => {
     const layout = defaultCanvasLayoutForType("invoice");
     layout.page.marginsMm = 15;
     const css = canvasPageCssWithScreenPreview(layout);
     expect(css).toContain("@page{size:A4 portrait;margin:15mm}");
     expect(css).toContain("@media screen");
-    expect(css).toContain("padding:15mm");
+    // Margins drawn outside the content box (absolute elements ignore padding).
+    expect(css).toContain("margin:15mm 0 calc(15mm + 12px)");
+    expect(css).toContain("box-shadow:0 0 0 15mm #fff");
+    expect(css).not.toContain("padding:15mm");
     expect(canvasScreenSheetCss(15)).not.toContain("@page");
-    // Print media must not get the screen padding rule applied as a global style.
-    expect(css).not.toMatch(/@media print[^}]*padding:15mm/);
+    // Print media must not get the screen sheet rules applied as a global style.
+    expect(css).not.toMatch(/@media print[^}]*margin:15mm 0/);
   });
 
   it("centers legacy sheets on A4 when no canvas layout", () => {

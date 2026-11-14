@@ -1,6 +1,6 @@
 /**
  * Screen vs print sheet geometry for canvas (and legacy) template previews.
- * Print keeps `@page` margins; screen uses padding on `.canvas-page` so the iframe
+ * Print keeps `@page` margins; screen draws the margins around `.canvas-page` (margin + white ring) so the iframe
  * shows a full sheet centered on a gray desk.
  */
 
@@ -38,12 +38,17 @@ export function canvasScreenSheetCss(marginsMm: number): string {
     // scrollbar that steals width and pushes the sheet left. Pages are separated by a bottom gap only.
     `html{scrollbar-width:none;}html::-webkit-scrollbar{display:none;}` +
     `body{margin:0!important;background:#eef0f3;}` +
+    // Pages stack in a flex column so vertical margins never collapse: each page takes exactly
+    // one sheet height (content + 2·margin) plus the gap.
+    // Pages may sit directly in <body> (sync render) or inside .canvas-root (async render).
+    `body,.canvas-root{display:flex;flex-direction:column;align-items:center;}` +
+    // Margins are drawn OUTSIDE the content box (margin + white spread shadow), not with padding:
+    // elements are position:absolute and would ignore padding, landing on the sheet edge.
     `.canvas-page{` +
-    `box-sizing:content-box;` +
-    `padding:${m}mm;` +
-    `margin:0 auto ${SHEET_GAP_PX}px;` +
+    `flex:none;` +
+    `margin:${m}mm 0 calc(${m}mm + ${SHEET_GAP_PX}px);` +
     `background:#fff;` +
-    `box-shadow:0 1px 4px rgba(0,0,0,.15);` +
+    `box-shadow:0 0 0 ${m}mm #fff,0 1px 4px ${m}mm rgba(0,0,0,.12);` +
     `}` +
     `}`
   );
