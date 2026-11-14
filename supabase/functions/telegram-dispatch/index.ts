@@ -8,6 +8,7 @@ import { timingSafeEqual } from "../_shared/crypto.ts";
 import { requireEnv, serviceClient } from "../_shared/supabase.ts";
 import {
   buildNotificationMessage,
+  readBotToken,
   sendTelegramMessage,
   telegramApi,
   type OutboxRow,
@@ -30,12 +31,8 @@ Deno.serve(async (req) => {
     return json({ error: "unauthorized" }, 401);
   }
 
-  let botToken: string;
-  try {
-    botToken = requireEnv("TELEGRAM_BOT_TOKEN");
-  } catch {
-    return json({ error: "TELEGRAM_BOT_TOKEN not configured" }, 500);
-  }
+  const botToken = readBotToken();
+  if (!botToken) return json({ error: "TELEGRAM_BOT_TOKEN not configured" }, 500);
   // Setup actions (same cron-token auth): connect the bot's webhook from the server side, so the owner
   // never has to paste the bot token into a browser. Body: { "action": "set_webhook" | "webhook_info" }.
   const body = (await req.json().catch(() => ({}))) as { action?: string };

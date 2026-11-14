@@ -2,6 +2,21 @@
 
 export type NotifyLang = "ru" | "ro" | "en";
 
+const BOT_TOKEN_RE = /\d{6,12}:[A-Za-z0-9_-]{30,}/;
+
+/**
+ * The bot token from TELEGRAM_BOT_TOKEN. Tolerates a pasted BotFather message around it
+ * ("Use this token to access the HTTP API: 123:ABC…"), quotes or spaces: the first token-shaped match wins.
+ */
+export function extractBotToken(raw: string | null | undefined): string {
+  const value = (raw ?? "").trim();
+  return BOT_TOKEN_RE.exec(value)?.[0] ?? value;
+}
+
+export function readBotToken(): string {
+  return extractBotToken(Deno.env.get("TELEGRAM_BOT_TOKEN"));
+}
+
 export type OutboxRow = {
   id: number;
   workspace_id: string;

@@ -5,7 +5,7 @@
  */
 import { timingSafeEqual } from "../_shared/crypto.ts";
 import { serviceClient } from "../_shared/supabase.ts";
-import { botTexts, normalizeLang, sendTelegramMessage, type NotifyLang } from "../_shared/telegram.ts";
+import { botTexts, normalizeLang, readBotToken, sendTelegramMessage, type NotifyLang } from "../_shared/telegram.ts";
 
 type TgUser = { id: number; username?: string; first_name?: string; language_code?: string };
 type TgChat = { id: number; type: string };
@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
   if (!secret || !provided || !timingSafeEqual(provided, secret)) {
     return new Response("unauthorized", { status: 401 });
   }
-  const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
+  const botToken = readBotToken();
   if (!botToken) return ok();
 
   let update: TgUpdate;
