@@ -39,27 +39,24 @@ Deno.serve(async (req) => {
   // Setup actions (same cron-token auth): connect the bot's webhook from the server side, so the owner
   // never has to paste the bot token into a browser. Body: { "action": "set_webhook" | "webhook_info" }.
   const body = (await req.json().catch(() => ({}))) as { action?: string };
-  if (body.action === "set_webhook" || body.action === "webhook_info") {
-    if (body.action === "set_webhook") {
-      const secret = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "";
-      if (!secret) return json({ error: "TELEGRAM_WEBHOOK_SECRET not configured" }, 500);
-      const url = `${requireEnv("SUPABASE_URL").replace(/\/$/, "")}/functions/v1/telegram-webhook`;
-      const res = await telegramApi(botToken, "setWebhook", {
-        url,
-        secret_token: secret,
-        allowed_updates: ["message", "my_chat_member"],
-      });
-      return json({ action: "set_webhook", telegram: await res.json().catch(() => null) }, res.ok ? 200 : 502);
-    }
-    const res = await telegramApi(botToken, "getWebhookInfo", {});
-    const info = (await res.json().catch(() => null)) as { result?: Record<string, unknown> } | null;
-    const result = info?.result ?? {};
-    return json({
-      action: "webhook_info",
-      url: result.url ?? null,
-      pending: result.pending_update_count ?? null,
-      last_error: result.last_error_message ?? null,
-    });
+  if (body.action === "set_webhook" || body.action === "webhook_info" || body.action === "get_me") {
+    const trimmed = botToken.trim();
+    const tokenShape = {
+      length: trimmed.length,
+      trimmedDiffers: trimmed !== botToken,
+      looksValid: /^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(trimmed),
+    };
+    const call = async (method: string, payload: Record<string, unknown>) => {
+      const res = await telegramApi(trimmed, method, payload);
+      return { status: res.status, telegram: await res.json().catch(() => null) };
+    };
+    if (body.action === "get_me") return json({ action: "get_me", tokenShape, ...(await call("getMe", {})) });
+    if (body.action === "webhook_info") return json({ action: "webhook_info", ...(await call("getWebhookInfo", {})) });
+    const secret = (Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "").trim();
+    if (!secret) return json({ error: "TELEGRAM_WEBHOOK_SECRET not configured" }, 500);
+    const url = `${requireEnv("SUPABASE_URL").replace(/\/$/, "")}/functions/v1/telegram-webhook`;
+    const result = await call("setWebhook", { url, secret_token: secret, allowed_updates: ["message", "my_chat_member"] });
+    return json({ action: "set_webhook", tokenShape, secretLength: secret.length, ...result }, result.status === 200 ? 200 : 502);
   }
 
   const appUrl = Deno.env.get("APP_URL") ?? "";
