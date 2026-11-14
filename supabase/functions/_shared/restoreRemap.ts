@@ -65,6 +65,8 @@ export type RemappedBackup = {
 /**
  * Remaps a parsed backup. `files` are archive keys "files/<bucket>/<path>" (or "<bucket>/<path>").
  * Only files of the allowed buckets under the source workspace folder are kept.
+ * `restorable` limits which tables are restored (and therefore get new ids): references to rows of
+ * skipped tables keep pointing at the original rows, so foreign keys stay valid.
  */
 export function remapBackup(input: {
   sourceWorkspaceId: string;
@@ -73,12 +75,18 @@ export function remapBackup(input: {
   workspace: Record<string, unknown> | null;
   files: string[];
   newId: () => string;
+  restorable?: Set<string>;
 }): RemappedBackup {
-  const map = buildIdMap(input.sourceWorkspaceId, input.targetWorkspaceId, input.tables, input.newId);
-  const foreign = new Set<string>();
-  const tables: Record<string, unknown[]> = {};
+  const kept: Record<string, unknown[]> = {};
   for (const [name, rows] of Object.entries(input.tables)) {
     if (!/^[a-z_][a-z0-9_]*$/.test(name) || !Array.isArray(rows)) continue;
+    if (input.restorable && !input.restorable.has(name)) continue;
+    kept[name] = rows;
+  }
+  const map = buildIdMap(input.sourceWorkspaceId, input.targetWorkspaceId, kept, input.newId);
+  const foreign = new Set<string>();
+  const tables: Record<string, unknown[]> = {};
+  for (const [name, rows] of Object.entries(kept)) {
     tables[name] = rows.map((row) => remapValue(row, map, foreign));
   }
   const workspace = input.workspace ? (remapValue(input.workspace, map, new Set()) as Record<string, unknown>) : null;

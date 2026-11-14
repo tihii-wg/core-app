@@ -54,6 +54,25 @@ describe("remapBackup", () => {
     expect(Object.keys(result.tables)).toEqual(["clients"]);
   });
 
+  it("keeps references to skipped tables pointing at the original rows", () => {
+    const TOKEN_ROW = "77777777-7777-4777-8777-777777777777";
+    const result = remapBackup({
+      sourceWorkspaceId: SRC,
+      targetWorkspaceId: DST,
+      tables: {
+        orders: [{ id: ORDER, workspace_id: SRC, connection_id: TOKEN_ROW }],
+        integration_connections: [{ id: TOKEN_ROW, workspace_id: SRC }],
+      },
+      workspace: null,
+      files: [],
+      newId: seq(),
+      restorable: new Set(["orders"]),
+    });
+    expect(Object.keys(result.tables)).toEqual(["orders"]);
+    expect((result.tables.orders[0] as Record<string, string>).connection_id).toBe(TOKEN_ROW);
+    expect(result.foreignUuids).toEqual([TOKEN_ROW]);
+  });
+
   it("matches uuids case-insensitively", () => {
     const map = new Map([[ORDER, DST]]);
     expect(remapString(`x/${ORDER.toUpperCase()}/y`, map)).toBe(`x/${DST}/y`);

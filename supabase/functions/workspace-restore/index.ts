@@ -92,8 +92,19 @@ async function handleData(req: Request, userId: string, origin: string): Promise
     return errorResponse("owner_only", "Only the owner of the backed-up workspace can restore it", 403, origin);
   }
 
+  const { data: plan, error: planError } = await admin.rpc("crm_backup_restore_tables");
+  if (planError) throw new Error(planError.message);
+  const planRows = (plan ?? []) as { table_name: string; skip_reason: string | null }[];
+  const restorable = new Set(planRows.filter((row) => !row.skip_reason).map((row) => row.table_name));
+  const skipped: Record<string, string> = {};
+  for (const [name, rows] of Object.entries(body.tables)) {
+    if (restorable.has(name) || !Array.isArray(rows) || rows.length === 0) continue;
+    skipped[name] = planRows.find((row) => row.table_name === name)?.skip_reason ?? "not_in_schema";
+  }
+
   const targetWorkspaceId = crypto.randomUUID();
   const remapped = remapBackup({
+    restorable,
     sourceWorkspaceId,
     targetWorkspaceId,
     tables: body.tables,
@@ -151,7 +162,7 @@ async function handleData(req: Request, userId: string, origin: string): Promise
       jobId: job.id,
       workspaceId: targetWorkspaceId,
       restored: summary.restored ?? {},
-      skipped: summary.skipped ?? {},
+      skipped: { ...skipped, ...(summary.skipped ?? {}) },
       filesTotal,
       fileKeys: Object.keys(remapped.fileMap),
     },

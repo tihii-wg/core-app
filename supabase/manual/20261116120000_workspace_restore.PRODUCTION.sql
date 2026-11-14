@@ -8,24 +8,51 @@
 --     All app lookups by number are already scoped by workspace_id.
 --   * public.workspace_restore_jobs — restore progress (owner can read own jobs; writes service_role only).
 --   * public.crm_backup_restore_workspace(...) — service_role only, called by the Edge Function:
---       creates the new workspace, inserts all backup rows (ids already remapped by the function) with triggers
---       and FK triggers disabled (session_replication_role = replica) so nothing is re-applied (stock moves,
---       notifications, numbering), forces workspace_id to the new workspace, rejects references to other
---       tenants' rows, skips credential/integration tables (reconnect them after restore).
+--       creates the new workspace, inserts all backup rows (ids already remapped by the function) with the user
+--       triggers of the affected tables disabled inside the transaction (so nothing is re-applied: stock moves,
+--       notifications, numbering) and FK checks deferred to the end of the restore, forces workspace_id to the
+--       new workspace, rejects references to other tenants' rows, skips credential/integration tables
+--       (reconnect them after restore). The affected tables are locked for the few seconds the restore takes.
+--   * public.crm_backup_restore_tables() — plan tables + skip reason (used by the Edge Function).
 --   * public.crm_backup_restore_unique_risks() — lists unique indexes that ignore workspace_id (diagnostics).
 -- Idempotent. Transactional.
 -- =============================================================================
 
 begin;
 
+create or replace function pg_temp.crm_backup_restore_skip_reason_preflight(p_table text)
+returns boolean language sql stable as $fn$
+  select not (
+    p_table in ('notification_outbox', 'telegram_link_tokens', 'user_telegram_links', 'workspace_backup_settings',
+                'workspace_backup_runs')
+    or p_table ~* '(oauth|integration|webhook)'
+    or exists (select 1 from pg_attribute a where a.attrelid = to_regclass('public.' || quote_ident(p_table))
+               and a.attnum > 0 and not a.attisdropped
+               and a.attname ~* '(secret|token|credential|password|refresh|access_key|api_key)')
+  );
+$fn$;
+
 do $preflight$
 begin
   if to_regprocedure('public.crm_backup_table_plan()') is null then
     raise exception 'workspace_restore preflight: apply 20261107140000_workspace_backups first';
   end if;
-  -- The restore runs with triggers disabled; make sure this role may do that on this project.
-  perform set_config('session_replication_role', 'replica', true);
-  perform set_config('session_replication_role', 'origin', true);
+  -- The restore disables triggers / defers FKs on the tables it writes: that needs table ownership.
+  declare
+    v_not_owned text;
+  begin
+    select string_agg(x.t, ', ') into v_not_owned
+    from (
+      select p.table_name as t from public.crm_backup_table_plan() p
+      union select 'workspaces' union select 'workspace_members'
+    ) x
+    join pg_class c on c.oid = to_regclass('public.' || quote_ident(x.t))
+    where c.relowner <> (select oid from pg_roles where rolname = current_user)
+      and pg_temp.crm_backup_restore_skip_reason_preflight(x.t);
+    if v_not_owned is not null then
+      raise exception 'workspace_restore preflight: tables not owned by %: %', current_user, v_not_owned;
+    end if;
+  end;
 end;
 $preflight$;
 
@@ -101,6 +128,15 @@ $fn$;
 revoke all on function public.crm_backup_restore_skip_reason(text) from public, anon, authenticated;
 grant execute on function public.crm_backup_restore_skip_reason(text) to service_role;
 
+create or replace function public.crm_backup_restore_tables()
+returns table (table_name text, mode text, skip_reason text)
+language sql stable security definer set search_path = pg_catalog, public as $fn$
+  select p.table_name, p.mode, public.crm_backup_restore_skip_reason(p.table_name)
+  from public.crm_backup_table_plan() p;
+$fn$;
+revoke all on function public.crm_backup_restore_tables() from public, anon, authenticated;
+grant execute on function public.crm_backup_restore_tables() to service_role;
+
 -- Unique indexes that do not include workspace_id (a restored copy may collide with the original on them).
 create or replace function public.crm_backup_restore_unique_risks()
 returns table (table_name text, index_name text, definition text)
@@ -152,6 +188,12 @@ declare
   v_pk_col text;
   v_pk_type text;
   v_key text;
+  v_rel regclass;
+  v_tables text[];
+  v_trg record;
+  v_triggers jsonb := '[]'::jsonb;
+  v_fks jsonb := '[]'::jsonb;
+  v_item jsonb;
   v_protected text[] := array['id', 'owner_id', 'created_at', 'updated_at', 'deleted_at', 'name',
                               'subscription_status', 'subscription_started_at', 'subscription_expires_at',
                               'subscription_updated_at'];
@@ -188,8 +230,37 @@ begin
     end loop;
   end if;
 
-  -- Triggers (incl. FK checks) off for the rest of this transaction: rows are inserted exactly as backed up.
-  perform set_config('session_replication_role', 'replica', true);
+  -- Tables this restore writes to.
+  select array_agg(p.table_name) into v_tables
+  from public.crm_backup_table_plan() p
+  where p_tables ? p.table_name and public.crm_backup_restore_skip_reason(p.table_name) is null;
+  v_tables := coalesce(v_tables, '{}') || array['workspaces', 'workspace_members'];
+
+  -- Fail fast instead of queueing behind busy sessions.
+  perform set_config('lock_timeout', '15s', true);
+
+  -- User triggers off (by name, remembering their mode) so rows are inserted exactly as backed up:
+  -- no stock moves, notifications, numbering or seeding. Restored before the function returns.
+  for v_trg in
+    select t.tgrelid::regclass as rel, t.tgname, t.tgenabled
+    from pg_trigger t
+    where t.tgrelid in (select to_regclass('public.' || quote_ident(x)) from unnest(v_tables) x)
+      and not t.tgisinternal and t.tgenabled <> 'D'
+  loop
+    execute format('alter table %s disable trigger %I', v_trg.rel, v_trg.tgname);
+    v_triggers := v_triggers || jsonb_build_array(jsonb_build_object('rel', v_trg.rel::text, 'name', v_trg.tgname, 'mode', v_trg.tgenabled));
+  end loop;
+
+  -- FK checks deferred to the end of the restore (rows arrive in any order); checked all at once below.
+  for v_trg in
+    select con.conrelid::regclass as rel, con.conname
+    from pg_constraint con
+    where con.contype = 'f' and not con.condeferrable
+      and con.conrelid in (select to_regclass('public.' || quote_ident(x)) from unnest(v_tables) x)
+  loop
+    execute format('alter table %s alter constraint %I deferrable initially deferred', v_trg.rel, v_trg.conname);
+    v_fks := v_fks || jsonb_build_array(jsonb_build_object('rel', v_trg.rel::text, 'name', v_trg.conname));
+  end loop;
 
   -- Workspace row: current source row as the base, archive settings on top, protected fields from the server.
   v_ws := v_source;
@@ -280,7 +351,16 @@ begin
     on conflict (workspace_id, user_id) do update set role = 'owner', deleted_at = null;
   end if;
 
-  perform set_config('session_replication_role', 'origin', true);
+  -- Check every deferred FK now (a broken reference aborts the whole restore), then put things back.
+  execute 'set constraints all immediate';
+  for v_item in select * from jsonb_array_elements(v_fks) loop
+    execute format('alter table %s alter constraint %I not deferrable', v_item ->> 'rel', v_item ->> 'name');
+  end loop;
+  for v_item in select * from jsonb_array_elements(v_triggers) loop
+    execute format('alter table %s %s trigger %I', v_item ->> 'rel',
+                   case v_item ->> 'mode' when 'A' then 'enable always' when 'R' then 'enable replica' else 'enable' end,
+                   v_item ->> 'name');
+  end loop;
 
   return jsonb_build_object('workspace_id', p_target, 'restored', v_restored, 'skipped', v_skipped);
 end;
