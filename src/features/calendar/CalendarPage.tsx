@@ -661,7 +661,7 @@ export function CalendarPage() {
     connected && canAccess ? (
       <div
         ref={calendarShellRef}
-        className="bg-card gcal-fullcalendar relative min-w-0 flex-1 overflow-hidden rounded-lg border p-2 sm:p-3"
+        className="bg-card gcal-fullcalendar relative min-w-0 flex-1 scroll-mt-16 overflow-hidden rounded-lg border p-1 max-sm:-mx-2 sm:p-3"
         data-mobile={isMobile ? "true" : "false"}
         data-coarse={isCoarsePointer ? "true" : "false"}
         onPointerDown={onPointerDown}
@@ -711,11 +711,18 @@ export function CalendarPage() {
               ? (arg) => `+ ${t("calendar.moreEvents", { count: arg.num })}`
               : undefined
           }
+          // Phone: the calendar itself is (almost) one screen tall below the sticky 56px top bar — scroll the
+          // page up past the title/controls and the grid fills the screen. Desktop: taller than before.
           height={
             isMobile
-              ? "max(480px, calc(100dvh - 210px - env(safe-area-inset-bottom, 0px)))"
-              : "max(640px, calc(100vh - 180px))"
+              ? "max(480px, calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)))"
+              : "max(720px, calc(100vh - 120px))"
           }
+          // No "All day" label: it set the width of the hour column and squeezed the days (week view on a
+          // phone). The all-day row stays, so all-day Google events are still shown.
+          allDayContent={() => null}
+          // Narrow week columns on a phone: show the title instead of the time.
+          displayEventTime={!(isMobile && activeView === "timeGridWeek")}
           events={fcEvents}
           datesSet={onDatesSet}
           dateClick={onDateClick}

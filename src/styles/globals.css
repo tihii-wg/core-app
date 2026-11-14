@@ -425,6 +425,22 @@ table.data-clip-cells td [data-slot="status-badge"] {
 .gcal-fullcalendar .fc .fc-timegrid-axis {
   border-color: transparent;
 }
+/* Hour column only as wide as the hour labels (the "All day" label is removed). */
+.gcal-fullcalendar .fc .fc-timegrid-axis-cushion:empty {
+  display: none;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc .fc-timegrid-slot-label-cushion {
+  padding-right: 0.25rem;
+  padding-left: 0;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc .fc-timegrid-event .fc-event-main {
+  padding: 1px 2px;
+}
+.gcal-fullcalendar[data-mobile="true"] .fc .fc-timegrid-event .fc-event-title {
+  font-size: 10px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
 .gcal-fullcalendar .fc .fc-timegrid-divider {
   padding: 0;
   border-bottom-width: 1px;
