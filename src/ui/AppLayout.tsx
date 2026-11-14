@@ -11,6 +11,7 @@ import { normalizeWorkspaceLanguage } from "../services/apiWorkspaces";
 import { ownedWorkspaceNeedingSetup } from "../features/onboarding/businessSetup";
 import { SessionIdleGuard } from "../features/auth/SessionIdleGuard";
 import { WorkspaceRealtimeProvider } from "../features/realtime/WorkspaceRealtimeProvider";
+import { MyTasksReminder } from "../features/tasks/MyTasksReminder";
 
 export function AppLayout() {
   const { workspaceId, locale = "en" } = useParams();
@@ -83,6 +84,7 @@ export function AppLayout() {
               so wide monitors show more columns / rows instead of empty side margins. */}
           <main className="min-w-0 flex-1 px-4 py-5 sm:px-5 lg:px-6 lg:py-6 print:overflow-visible print:p-0">
             <div className="w-full min-w-0">
+              {canUseWorkspace ? <MyTasksReminder /> : null}
               <Outlet />
             </div>
           </main>

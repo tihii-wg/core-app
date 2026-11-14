@@ -11,6 +11,7 @@ export default {
     finance: "Finance",
     reports: "Reports",
     calendar: "Calendar",
+    tasks: "Tasks",
     settings: "Settings",
   },
   groups: {

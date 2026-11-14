@@ -1,4 +1,4 @@
-import { CalendarClock, ClipboardList, Link2, ListChecks, type LucideIcon } from "lucide-react";
+import { CalendarClock, ClipboardList, Link2, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 import { Badge } from "../../ui/badge";
@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 const comingModules = [
   { key: "leads", icon: ClipboardList, table: "leads", docSection: "5.13", route: "leads" },
   { key: "bookings", icon: CalendarClock, table: "bookings", docSection: "5.13", route: "bookings" },
-  { key: "tasks", icon: ListChecks, table: "tasks", docSection: "5.13", route: "tasks" },
 ] as const satisfies readonly { key: string; icon: LucideIcon; table: string; docSection: string; route: string }[];
 
 export function ComingModulesSettings() {

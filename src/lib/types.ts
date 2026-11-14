@@ -618,6 +618,7 @@ export type AppModule =
   | "finance"
   | "reports"
   | "calendar"
+  | "tasks"
   | "settings";
 
 export type Workspace = {

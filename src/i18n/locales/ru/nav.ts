@@ -14,6 +14,7 @@ const nav: Messages<typeof en> = {
     finance: "Финансы",
     reports: "Отчёты",
     calendar: "Календарь",
+    tasks: "Задачи",
     settings: "Настройки",
   },
   groups: {

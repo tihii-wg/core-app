@@ -16,6 +16,11 @@ const navCounts = vi.hoisted(() => ({
 
 const navigate = vi.hoisted(() => vi.fn());
 
+const myOpenTasks = vi.hoisted(() => ({ data: [] as unknown[] }));
+vi.mock("../features/tasks/useGetTasks", () => ({
+  useMyOpenTasks: () => ({ data: myOpenTasks.data }),
+}));
+
 vi.mock("../features/nav/useNavCounts", () => ({
   useNavCounts: () => navCounts,
 }));
@@ -98,6 +103,17 @@ describe("AppSidebar nav counts", () => {
     await user.click(orders);
 
     expect(navigate).toHaveBeenCalledWith("/en/ws-1/orders");
+  });
+
+  it("highlights open tasks assigned to me next to Tasks", async () => {
+    const user = userEvent.setup();
+    myOpenTasks.data = [{ id: "a" }, { id: "b" }];
+    renderSidebar();
+
+    expect(screen.getByTestId("nav-count-tasks")).toHaveTextContent("2");
+    await user.click(screen.getByRole("button", { name: /Tasks,\s*2/i }));
+    expect(navigate).toHaveBeenCalledWith("/en/ws-1/tasks");
+    myOpenTasks.data = [];
   });
 
   it("shows Warehouses in the sidebar and navigates to the warehouses module", async () => {

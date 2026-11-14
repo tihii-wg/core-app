@@ -1,6 +1,6 @@
 import { useApp } from "../lib/appContext";
 import type { AppModule } from "../lib/types";
-import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Warehouse, Wrench, FileText, Wallet, BarChart3, CalendarDays, Settings, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { LayoutDashboard, Users, ClipboardList, UserCog, Package, Warehouse, Wrench, FileText, Wallet, BarChart3, CalendarDays, ListChecks, Settings, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import type { NavCountModule } from "../services/apiNavCounts";
 import { useIsWorkspaceOwnerId } from "../features/workspaces/useIsWorkspaceOwnerId";
 import { useGoogleCalendarStatus } from "../features/calendar/useGoogleCalendar";
 import { LogoMark } from "./Logo";
+import { useMyOpenTasks } from "../features/tasks/useGetTasks";
 
 interface NavItem {
   module: AppModule;
@@ -33,6 +34,7 @@ const navGroups: NavGroup[] = [
     items: [
       { module: "orders", labelKey: "nav.modules.orders", icon: ClipboardList },
       { module: "calendar", labelKey: "nav.modules.calendar", icon: CalendarDays },
+      { module: "tasks", labelKey: "nav.modules.tasks", icon: ListChecks },
       { module: "clients", labelKey: "nav.modules.clients", icon: Users },
       { module: "services", labelKey: "nav.modules.services", icon: Wrench },
       { module: "inventory", labelKey: "nav.modules.inventory", icon: Package },
@@ -68,6 +70,8 @@ export function AppSidebar() {
   const currentWorkspaceId = location.pathname.split("/")[2];
   const { workflow } = useIndustryWorkflow();
   const { counts } = useNavCounts();
+  const { data: myOpenTasks } = useMyOpenTasks();
+  const myOpenTaskCount = myOpenTasks?.length ?? 0;
   const isOwner = useIsWorkspaceOwnerId();
   const calendarStatus = useGoogleCalendarStatus(Boolean(currentWorkspaceId));
   const hideCalendarNav =
@@ -95,8 +99,9 @@ export function AppSidebar() {
     const label = industryModuleLabel(workflow, module, { short: true }) || t(labelKey);
     const count = COUNTED_MODULES.has(module) ? counts[module as NavCountModule] : undefined;
     const showCount = !collapsed && typeof count === "number";
+    const ariaCount = module === "tasks" && myOpenTaskCount > 0 ? myOpenTaskCount : count;
     const accessibleLabel =
-      typeof count === "number" ? t("nav.sidebar.countAria", { label, count }) : collapsed ? label : undefined;
+      typeof ariaCount === "number" ? t("nav.sidebar.countAria", { label, count: ariaCount }) : collapsed ? label : undefined;
 
     return (
       <li key={module}>
@@ -126,6 +131,18 @@ export function AppSidebar() {
               {t("nav.sidebar.demo")}
             </span>
           )}
+          {module === "tasks" && myOpenTaskCount > 0 ? (
+            <span
+              data-testid="nav-count-tasks"
+              aria-hidden="true"
+              className={cn(
+                "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-warning px-1.5 text-[10px] font-semibold tabular-nums text-warning-foreground",
+                collapsed ? "absolute -right-1 -top-1" : "ml-auto",
+              )}
+            >
+              {myOpenTaskCount}
+            </span>
+          ) : null}
           {showCount ? (
             <span
               data-testid={`nav-count-${module}`}
