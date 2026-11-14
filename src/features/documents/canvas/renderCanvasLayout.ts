@@ -502,11 +502,7 @@ async function renderPlaced(
   return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}">${wrapped}</div>`;
 }
 
-export function canvasPageCss(layout: CanvasDocumentLayout, fontFamilyCss?: string): string {
-  const size = layout.page.size === "A5" ? "A5" : "A4";
-  const font = fontFamilyCss ? `font-family:${fontFamilyCss};` : "";
-  return `@page{size:${size} ${layout.page.orientation};margin:${layout.page.marginsMm}mm}body{${font}margin:0;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}`;
-}
+export { canvasPageCssWithScreenPreview as canvasPageCss } from "./sheetPreview";
 
 /**
  * Renders a canvas layout to a print-ready HTML fragment.

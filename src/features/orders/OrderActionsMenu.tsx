@@ -32,6 +32,7 @@ import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
 import { usePrintOrderDocument } from "../documents/usePrintOrderDocument";
+import { resolvePrintTemplatesForOrder } from "../documents/resolvePrintTemplates";
 import { isOrderPaidLocked, isPaidStatusOptionBlocked } from "./taxInvoice";
 import { useDeleteOrder } from "./useDeleteOrder";
 import { estimateCardVisibility, isEstimateOrder } from "./orderEstimates";
@@ -122,17 +123,7 @@ export function OrderActionsMenu({
   const { data: templates = [] } = useGetDocumentTemplates();
   const estimate = isEstimateOrder(order);
   const visibility = estimateCardVisibility(order);
-  const printTemplates = templates
-    .filter(
-      (template) =>
-        template.isActive &&
-        (estimate
-          ? template.documentType === "estimate" || template.documentType === "work_order"
-          : template.documentType === "work_order" || template.documentType === "act") &&
-        (Boolean(template.layout) || Boolean(template.bodyHtml.trim())),
-    )
-    .slice()
-    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
+  const printTemplates = resolvePrintTemplatesForOrder(templates, estimate, t);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -413,23 +404,16 @@ export function OrderActionsMenu({
           ) : null}
 
           <DropdownMenuSeparator />
-          {printTemplates.length === 0 ? (
-            <DropdownMenuItem onSelect={() => toast.error(i18n.t("orders.print.unavailable"))}>
+          {printTemplates.map((template) => (
+            <DropdownMenuItem
+              key={template.id}
+              disabled={printOrder.isPending}
+              onSelect={() => printOrder.mutate({ orderId: order.id, templateId: template.id })}
+            >
               <Printer />
-              {t("orders.print.action")}
+              <span className="truncate">{t("orders.print.withTemplate", { name: template.name })}</span>
             </DropdownMenuItem>
-          ) : (
-            printTemplates.map((template) => (
-              <DropdownMenuItem
-                key={template.id}
-                disabled={printOrder.isPending}
-                onSelect={() => printOrder.mutate({ orderId: order.id, templateId: template.id })}
-              >
-                <Printer />
-                <span className="truncate">{t("orders.print.withTemplate", { name: template.name })}</span>
-              </DropdownMenuItem>
-            ))
-          )}
+          ))}
           {visibility.showPublicLink && canWrite ? (
             <DropdownMenuItem disabled={copyingPublicLink} onSelect={() => void copyPublicStatusLink()}>
               <Link2 />

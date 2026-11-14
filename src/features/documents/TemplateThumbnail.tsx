@@ -3,11 +3,10 @@ import { useTranslation } from "react-i18next";
 import type { DocumentTemplate } from "../../services/apiDocumentTemplates";
 import type { DocumentStyle } from "./documentStyle";
 import { demoContextForTemplate, getTemplatePreviewHtml } from "./templatePreviewHtml";
+import { fitSheetScale, sheetCssSizeForTemplate } from "./canvas/sheetPreview";
 
 const THUMB_W = 120;
 const THUMB_H = 170;
-/** Approximate A4 CSS px width used inside the iframe before scale. */
-const A4_CSS_WIDTH = 794;
 
 type TemplateThumbnailProps = {
   template: DocumentTemplate;
@@ -22,7 +21,8 @@ type TemplateThumbnailProps = {
 };
 
 /**
- * Lazy A4-ratio thumbnail: IntersectionObserver gates rendering; HTML is memoized per template version.
+ * Lazy thumbnail: IntersectionObserver gates rendering; HTML is memoized per template version.
+ * Scales the full sheet (page size + orientation) to fit the thumb box, centered.
  */
 export function TemplateThumbnail({
   template,
@@ -71,7 +71,10 @@ export function TemplateThumbnail({
     return getTemplatePreviewHtml(template, ctx, documentStyle);
   }, [visible, template, documentStyle, locale, currency, vatRate, logoUrl, companyName, industrySlug]);
 
-  const scale = THUMB_W / A4_CSS_WIDTH;
+  const sheet = useMemo(() => sheetCssSizeForTemplate(template), [template]);
+  const scale = fitSheetScale(sheet, THUMB_W, THUMB_H);
+  const scaledW = sheet.widthPx * scale;
+  const scaledH = sheet.heightPx * scale;
 
   return (
     <div
@@ -79,21 +82,34 @@ export function TemplateThumbnail({
       className={className}
       style={{ width: THUMB_W, height: THUMB_H }}
       aria-label={t("settings.printTemplates.thumbnailLabel")}
+      data-testid="template-thumbnail"
+      data-sheet-w={Math.round(sheet.widthMm)}
+      data-sheet-h={Math.round(sheet.heightMm)}
     >
-      <div className="h-full w-full overflow-hidden rounded border border-border bg-white shadow-xs">
+      <div className="relative h-full w-full overflow-hidden rounded border border-border bg-[#eef0f3] shadow-xs">
         {srcDoc ? (
-          <iframe
-            title={t("settings.printTemplates.thumbnailLabel")}
-            sandbox=""
-            srcDoc={srcDoc}
-            tabIndex={-1}
-            className="pointer-events-none origin-top-left border-0 bg-white"
+          <div
+            className="absolute overflow-hidden"
             style={{
-              width: A4_CSS_WIDTH,
-              height: THUMB_H / scale,
-              transform: `scale(${scale})`,
+              left: (THUMB_W - scaledW) / 2,
+              top: (THUMB_H - scaledH) / 2,
+              width: scaledW,
+              height: scaledH,
             }}
-          />
+          >
+            <iframe
+              title={t("settings.printTemplates.thumbnailLabel")}
+              sandbox=""
+              srcDoc={srcDoc}
+              tabIndex={-1}
+              className="pointer-events-none origin-top-left border-0 bg-transparent"
+              style={{
+                width: sheet.widthPx,
+                height: sheet.heightPx,
+                transform: `scale(${scale})`,
+              }}
+            />
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center bg-muted/40 text-[10px] text-muted-foreground">
             …

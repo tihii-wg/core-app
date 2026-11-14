@@ -17,6 +17,7 @@ import {
   renderCanvasLayoutToHtml,
   renderCanvasLayoutToHtmlSync,
 } from "../features/documents/canvas/renderCanvasLayout";
+import { canvasScreenSheetCss, legacyScreenSheetCss, sheetCssSizeForTemplate } from "../features/documents/canvas/sheetPreview";
 import type { CanvasDocumentLayout } from "../features/documents/canvas/types";
 import {
   isDocumentLayout,
@@ -127,16 +128,16 @@ export function documentStyleToRenderStyle(style: DocumentStyle) {
   });
 }
 
-/** Effective page CSS: style page/font when layout.useStyle, else layout.page. */
+/** Effective page CSS: style page/font when layout.useStyle, else layout.page. Includes screen sheet chrome. */
 export function resolvePrintPageCss(layout: StoredDocumentLayout, style: DocumentStyle) {
   if (isCanvasDocumentLayout(layout)) {
     return canvasPageCss(layout, layout.useStyle === true ? fontFamilyCss(style.font.family) : undefined);
   }
   if (layout.useStyle === true) {
     const page = stylePageToLayoutPage(style.page, style.font);
-    return layoutPageCss(page, fontFamilyCss(style.font.family));
+    return `${layoutPageCss(page, fontFamilyCss(style.font.family))}${canvasScreenSheetCss(page.marginsMm)}`;
   }
-  return layoutPageCss(layout.page);
+  return `${layoutPageCss(layout.page)}${canvasScreenSheetCss(layout.page.marginsMm)}`;
 }
 
 /** Returns [] when `document_templates` is not applied yet. Retries without layout/body_html if absent. */
@@ -211,7 +212,8 @@ export function renderTemplateDocument(
     locale: ctx.locale,
     showCents: template.showCents,
   });
-  return buildPrintDocument(html, template.name);
+  const sheet = sheetCssSizeForTemplate(template);
+  return buildPrintDocument(html, template.name, legacyScreenSheetCss(sheet.widthMm, sheet.heightMm));
 }
 
 /** Async render (canvas QR codes as real images). Falls back to sync renderTemplateDocument. */
@@ -249,7 +251,7 @@ export async function getWorkspaceDocumentStyle(workspaceId: string | undefined)
 }
 
 /**
- * Prints an order using a template's layout or `body_html` and the full template-variable registry.
+ * Prints an order using a stored template id or a built-in default (`builtin:work_order` etc.).
  * Resolves "unavailable" when the template table/row/body is missing so callers can show a toast.
  */
 export async function printOrderDocument(
@@ -258,6 +260,28 @@ export async function printOrderDocument(
   workspaceId: string | undefined,
 ): Promise<PrintOrderResult> {
   const resolved = requireWorkspaceId(workspaceId);
+  const {
+    parseBuiltinTemplateId,
+    renderBuiltinTemplateDocumentAsync,
+  } = await import("../features/documents/resolvePrintTemplates");
+  const builtinType = parseBuiltinTemplateId(templateId);
+
+  if (builtinType) {
+    const kind: DocumentTemplateType =
+      builtinType === "act" ? "act" : builtinType === "estimate" ? "estimate" : "work_order";
+    const [ctx, documentStyle] = await Promise.all([
+      buildOrderPrintContext(orderId, resolved, kind === "estimate" ? "work_order" : kind),
+      getWorkspaceDocumentStyle(resolved),
+    ]);
+    if (ctx.order && !ctx.order.orderNumber.trim()) {
+      ctx.order = { ...ctx.order, orderNumber: i18n.t("orders.emptyOrderLabel") };
+    }
+    const documentHtml = await renderBuiltinTemplateDocumentAsync(builtinType, ctx, i18n.t.bind(i18n), documentStyle);
+    if (!documentHtml) return "unavailable";
+    printHtmlDocument(documentHtml);
+    return "printed";
+  }
+
   let { data, error } = await supabase
     .from("document_templates")
     .select(templateColumns)
@@ -282,10 +306,15 @@ export async function printOrderDocument(
   }
   if (!data) return "unavailable";
   const template = toDocumentTemplate(data as Record<string, unknown>);
-  const kind: DocumentTemplateType = template.documentType === "act" ? "act" : "work_order";
+  const kind: DocumentTemplateType =
+    template.documentType === "act"
+      ? "act"
+      : template.documentType === "estimate"
+        ? "estimate"
+        : "work_order";
 
   const [ctx, documentStyle] = await Promise.all([
-    buildOrderPrintContext(orderId, resolved, kind),
+    buildOrderPrintContext(orderId, resolved, kind === "estimate" ? "work_order" : kind),
     getWorkspaceDocumentStyle(resolved),
   ]);
   if (ctx.order && !ctx.order.orderNumber.trim()) {
@@ -298,38 +327,65 @@ export async function printOrderDocument(
   return "printed";
 }
 
-/** Prints an invoice via a document template layout/body_html. */
+/** Prints an invoice via a stored template id or built-in `builtin:invoice`. */
 export async function printInvoiceDocument(
   invoiceId: string,
   templateId: string,
   workspaceId: string | undefined,
 ): Promise<PrintOrderResult> {
   const resolved = requireWorkspaceId(workspaceId);
-  let { data, error } = await supabase
-    .from("document_templates")
-    .select(templateColumns)
-    .eq("workspace_id", resolved)
-    .eq("id", templateId)
-    .is("deleted_at", null)
-    .maybeSingle();
+  const {
+    parseBuiltinTemplateId,
+    renderBuiltinTemplateDocumentAsync,
+  } = await import("../features/documents/resolvePrintTemplates");
+  const builtinType = parseBuiltinTemplateId(templateId);
 
-  if (error && /layout|is_default/i.test(error.message ?? "")) {
-    ({ data, error } = await supabase
+  try {
+    if (builtinType === "invoice") {
+      const [ctx, documentStyle] = await Promise.all([
+        buildInvoicePrintContext(invoiceId, resolved),
+        getWorkspaceDocumentStyle(resolved),
+      ]);
+      const documentHtml = await renderBuiltinTemplateDocumentAsync("invoice", ctx, i18n.t.bind(i18n), documentStyle);
+      if (!documentHtml) return "unavailable";
+      printHtmlDocument(documentHtml);
+      return "printed";
+    }
+
+    let { data, error } = await supabase
       .from("document_templates")
-      .select(templateColumnsNoLayout)
+      .select(templateColumns)
       .eq("workspace_id", resolved)
       .eq("id", templateId)
       .is("deleted_at", null)
-      .maybeSingle());
-  }
+      .maybeSingle();
 
-  if (error) {
-    if (isMissingTableError(error, "document_templates") || /body_html/i.test(error.message ?? "")) return "unavailable";
-    throw new Error(error.message);
-  }
-  if (!data) return "unavailable";
-  const template = toDocumentTemplate(data as Record<string, unknown>);
-  try {
+    if (error && /layout|is_default/i.test(error.message ?? "")) {
+      ({ data, error } = await supabase
+        .from("document_templates")
+        .select(templateColumnsNoLayout)
+        .eq("workspace_id", resolved)
+        .eq("id", templateId)
+        .is("deleted_at", null)
+        .maybeSingle());
+    }
+
+    if (error) {
+      if (isMissingTableError(error, "document_templates") || /body_html/i.test(error.message ?? "")) return "unavailable";
+      throw new Error(error.message);
+    }
+    if (!data) {
+      // No stored row — fall back to built-in invoice so print works without opening Settings.
+      const [ctx, documentStyle] = await Promise.all([
+        buildInvoicePrintContext(invoiceId, resolved),
+        getWorkspaceDocumentStyle(resolved),
+      ]);
+      const documentHtml = await renderBuiltinTemplateDocumentAsync("invoice", ctx, i18n.t.bind(i18n), documentStyle);
+      if (!documentHtml) return "unavailable";
+      printHtmlDocument(documentHtml);
+      return "printed";
+    }
+    const template = toDocumentTemplate(data as Record<string, unknown>);
     const [ctx, documentStyle] = await Promise.all([
       buildInvoicePrintContext(invoiceId, resolved),
       getWorkspaceDocumentStyle(resolved),

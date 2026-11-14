@@ -5,11 +5,13 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
 } from "@dnd-kit/core";
-import { ArrowLeft, MoreHorizontal, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Redo2, Trash2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import toast from "react-hot-toast";
 import type { DocumentTemplate } from "../../../services/apiDocumentTemplates";
 import { buildInvoicePrintContext, buildOrderPrintContext, listRecentInvoicesForPrintPreview, listRecentOrdersForPrintPreview } from "../../../services/printContext";
@@ -36,7 +38,11 @@ import { useIsMobile } from "../../../hooks/use-mobile";
 import { cn } from "../../../lib/utils";
 import { CanvasPalette } from "./CanvasPalette";
 import { CanvasPropertiesPanel } from "./CanvasPropertiesPanel";
-import { createCanvasElementFromPalette, type PaletteDragPayload } from "./createElement";
+import {
+  createCanvasElementFromPalette,
+  defaultPaletteElementSizeMm,
+  type PaletteDragPayload,
+} from "./createElement";
 import { defaultCanvasLayoutForType } from "./defaultCanvasLayouts";
 import { CANVAS_MM_TO_PX, computeFitWidthZoomPercent, needsFitWidth } from "./fitWidthZoom";
 import { createHistory, pushHistory, redoHistory, undoHistory, type CanvasHistory } from "./history";
@@ -53,6 +59,7 @@ import { emptyPrintContext } from "../templateVariables";
 import { fillToCss } from "./fill";
 import { buildCanvasBoxStyle, rectElementReactStyle } from "./canvasElementStyle";
 import { clampBoxToContent, contentBoxMm, contentMmFromSheetClient } from "./contentBox";
+import { dropPreviewBoxFromContentPoint } from "./paletteDrop";
 import { resolveVariableLabel, segmentTextWithVariables } from "./variableDisplay";
 
 type SidePanel = "palette" | "properties" | null;
@@ -120,9 +127,14 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   const { workspaceId } = useActiveWorkspaceId();
   const save = useSaveDocumentTemplateLayout();
   const documentStyleQuery = useGetDocumentStyle();
-  const documentType = (template.documentType === "act" || template.documentType === "invoice" || template.documentType === "work_order"
-    ? template.documentType
-    : "work_order") as DocumentTemplateType;
+  const documentType = (
+    template.documentType === "act" ||
+    template.documentType === "invoice" ||
+    template.documentType === "estimate" ||
+    template.documentType === "work_order"
+      ? template.documentType
+      : "work_order"
+  ) as DocumentTemplateType;
 
   const initialLayout = useMemo(() => {
     if (template.layout && isCanvasDocumentLayout(template.layout)) {
@@ -197,7 +209,14 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     [commit, layout],
   );
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+  );
+  const [dragPayload, setDragPayload] = useState<PaletteDragPayload | null>(null);
+  const [dropPreview, setDropPreview] = useState<{ xMm: number; yMm: number; wMm: number; hMm: number } | null>(
+    null,
+  );
 
   const isInvoice = documentType === "invoice";
   const recentOrdersQuery = useQuery({
@@ -251,27 +270,70 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     return contentMmFromSheetClient(clientX, clientY, rect, MM_TO_PX, scale, content.marginsMm);
   }
 
+  function dropPointFromDrag(
+    event: { activatorEvent: Event; delta: { x: number; y: number } },
+    size: { wMm: number; hMm: number },
+  ) {
+    const activator = event.activatorEvent as PointerEvent;
+    if (!activator || typeof activator.clientX !== "number") return null;
+    // Top-left of the preview ≈ pointer minus a small grab offset into the box.
+    const endX = activator.clientX + event.delta.x;
+    const endY = activator.clientY + event.delta.y;
+    const point = mmFromClient(endX, endY);
+    if (!point) return null;
+    return dropPreviewBoxFromContentPoint(
+      point,
+      size,
+      content.contentWidthMm,
+      content.contentHeightMm,
+      layout.gridMm,
+      true,
+    );
+  }
+
+  const selectionBounds = useMemo(() => {
+    if (!selected.length) return null;
+    const minX = Math.min(...selected.map((el) => el.xMm));
+    const minY = Math.min(...selected.map((el) => el.yMm));
+    const maxX = Math.max(...selected.map((el) => el.xMm + el.wMm));
+    return { minX, minY, maxX, midX: (minX + maxX) / 2 };
+  }, [selected]);
+
+  function handleDragMove(event: DragMoveEvent) {
+    const payload = (event.active.data.current ?? dragPayloadRef.current) as PaletteDragPayload | null;
+    if (!payload || !canEdit) {
+      setDropPreview(null);
+      return;
+    }
+    const size = defaultPaletteElementSizeMm(payload);
+    const box = dropPointFromDrag(event, size);
+    setDropPreview(box);
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const payload = (event.active.data.current ?? dragPayloadRef.current) as PaletteDragPayload | null;
     dragPayloadRef.current = null;
+    setDragPayload(null);
+    const preview = dropPreview;
+    setDropPreview(null);
     if (!payload || !canEdit) return;
-    const endX = (event.activatorEvent as PointerEvent).clientX + event.delta.x;
-    const endY = (event.activatorEvent as PointerEvent).clientY + event.delta.y;
-    const point = mmFromClient(endX, endY);
-    if (!point) return;
-    const snapped = clampBoxToContent(
-      {
-        xMm: snapValue(point.xMm, layout.gridMm, true),
-        yMm: snapValue(point.yMm, layout.gridMm, true),
-        wMm: 40,
-        hMm: 10,
-      },
-      content.contentWidthMm,
-      content.contentHeightMm,
-    );
+    const size = defaultPaletteElementSizeMm(payload);
+    const snapped = preview ?? dropPointFromDrag(event, size);
+    if (!snapped) return;
     const created = createCanvasElementFromPalette(payload, snapped.xMm, snapped.yMm);
     commit({ ...layout, elements: [...layout.elements, created] });
     setSelectedIds([created.id]);
+  }
+
+  function deleteSelectedElements() {
+    if (!canEdit || !selectedIds.length) return;
+    const lockedOnly = selected.every((el) => el.locked);
+    if (lockedOnly) return;
+    commit({
+      ...layout,
+      elements: layout.elements.filter((el) => !selectedIds.includes(el.id) || el.locked),
+    });
+    setSelectedIds((ids) => ids.filter((id) => layout.elements.find((el) => el.id === id)?.locked));
   }
 
   // Pointer move / resize
@@ -436,10 +498,9 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
       }
       if ((event.key === "Delete" || event.key === "Backspace") && selectedIds.length && canEdit) {
         const tag = (event.target as HTMLElement)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (tag === "INPUT" || tag === "TEXTAREA" || (event.target as HTMLElement)?.isContentEditable) return;
         event.preventDefault();
-        commit({ ...layout, elements: layout.elements.filter((el) => !selectedIds.includes(el.id) || el.locked) });
-        setSelectedIds([]);
+        deleteSelectedElements();
         return;
       }
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) && selectedIds.length) {
@@ -824,6 +885,53 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
               );
             })}
 
+          {dropPreview ? (
+            <div
+              className="pointer-events-none absolute border-2 border-dashed border-sky-500 bg-sky-500/15"
+              data-testid="canvas-drop-preview"
+              style={{
+                left: dropPreview.xMm * MM_TO_PX,
+                top: dropPreview.yMm * MM_TO_PX,
+                width: dropPreview.wMm * MM_TO_PX,
+                height: dropPreview.hMm * MM_TO_PX,
+              }}
+            />
+          ) : null}
+
+          {selectionBounds && canEdit ? (
+            <div
+              className="absolute z-50 flex -translate-x-1/2 -translate-y-full gap-0.5 rounded-md border border-border bg-background p-0.5 shadow-md"
+              data-testid="canvas-selection-toolbar"
+              style={{
+                left: selectionBounds.midX * MM_TO_PX,
+                top: selectionBounds.minY * MM_TO_PX - 4,
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                disabled={selected.every((el) => el.locked)}
+                title={
+                  selected.every((el) => el.locked)
+                    ? t("settings.printTemplates.elementLocked")
+                    : selected.length > 1
+                      ? t("settings.printTemplates.deleteSelected", { count: selectedIds.length })
+                      : t("settings.printTemplates.deleteElement")
+                }
+                aria-label={
+                  selected.length > 1
+                    ? t("settings.printTemplates.deleteSelected", { count: selectedIds.length })
+                    : t("settings.printTemplates.deleteElement")
+                }
+                onClick={deleteSelectedElements}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
+          ) : null}
+
           {guides.map((guide, index) => (
             <div
               key={`${guide.orientation}-${guide.positionMm}-${index}`}
@@ -873,7 +981,15 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
         <DndContext
           sensors={sensors}
           onDragStart={(event) => {
-            dragPayloadRef.current = (event.active.data.current as PaletteDragPayload) ?? null;
+            const payload = (event.active.data.current as PaletteDragPayload) ?? null;
+            dragPayloadRef.current = payload;
+            setDragPayload(payload);
+          }}
+          onDragMove={handleDragMove}
+          onDragCancel={() => {
+            dragPayloadRef.current = null;
+            setDragPayload(null);
+            setDropPreview(null);
           }}
           onDragEnd={handleDragEnd}
         >
@@ -922,6 +1038,25 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 </Button>
                 <Button type="button" size="sm" variant="outline" onClick={sendBackward} disabled={!canEdit || !selectedIds.length}>
                   {t("settings.printTemplates.canvas.sendBackward")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!canEdit || !selectedIds.length || selected.every((el) => el.locked)}
+                  title={
+                    selected.length > 0 && selected.every((el) => el.locked)
+                      ? t("settings.printTemplates.elementLocked")
+                      : undefined
+                  }
+                  aria-label={
+                    selected.length > 1
+                      ? t("settings.printTemplates.deleteSelected", { count: selectedIds.length })
+                      : t("settings.printTemplates.deleteElement")
+                  }
+                  onClick={deleteSelectedElements}
+                >
+                  <Trash2 />
                 </Button>
                 <Button type="button" size="sm" variant="outline" onClick={resetDefault} disabled={!canEdit}>
                   {t("settings.printTemplates.resetDefault")}
@@ -1091,7 +1226,17 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
             </SheetContent>
           </Sheet>
 
-          <DragOverlay />
+          <DragOverlay dropAnimation={null}>
+            {dragPayload ? (
+              <div className="rounded-md border border-sky-400 bg-white px-2 py-1 text-xs shadow-md">
+                {dragPayload.kind === "variable"
+                  ? dragPayload.label || dragPayload.token
+                  : t(`settings.printTemplates.canvas.${dragPayload.elementType === "rect" ? "coloredArea" : dragPayload.elementType}`, {
+                      defaultValue: dragPayload.elementType,
+                    })}
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       </DialogContent>
     </Dialog>

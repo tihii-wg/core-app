@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { visibleTemplateVariables, type VariableGroup } from "../templateVariables";
 import type { CanvasElementType } from "./types";
 import type { PaletteDragPayload } from "./createElement";
@@ -56,7 +55,7 @@ function DraggableChip({
   children: React.ReactNode;
   onAdd?: (payload: PaletteDragPayload) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id, data: payload });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data: payload });
   return (
     <button
       type="button"
@@ -65,9 +64,8 @@ function DraggableChip({
       {...attributes}
       className={cn(
         "w-full rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted/60",
-        isDragging && "opacity-50",
+        isDragging && "opacity-40",
       )}
-      style={{ transform: CSS.Translate.toString(transform) }}
       onClick={() => onAdd?.(payload)}
     >
       {children}

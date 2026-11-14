@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
-import type { Invoice, InvoiceDocument } from "../../lib/types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Invoice } from "../../lib/types";
 
-const getInvoiceMock = vi.fn();
-const printInvoiceMutate = vi.fn();
+const printInvoiceDocument = vi.fn();
 vi.mock("../../services/apiInvoices", () => ({
-  getInvoice: (...args: unknown[]) => getInvoiceMock(...args),
+  getInvoice: vi.fn(),
+}));
+vi.mock("../../services/apiDocumentTemplates", () => ({
+  printInvoiceDocument: (...args: unknown[]) => printInvoiceDocument(...args),
 }));
 vi.mock("../workspaces/useWorkspaceMoney", () => ({
   useWorkspaceMoney: () => ({ currency: "MDL", formatMoney: (value: number) => `${value.toFixed(2)} MDL` }),
@@ -15,22 +17,8 @@ vi.mock("../workspaces/useWorkspaceMoney", () => ({
 vi.mock("../documents/useGetDocumentTemplates", () => ({
   useGetDocumentTemplates: () => ({ data: [], isLoading: false, error: null }),
 }));
-vi.mock("../documents/usePrintInvoiceDocument", () => ({
-  usePrintInvoiceDocument: () => ({ mutate: printInvoiceMutate, isPending: false }),
-}));
-vi.mock("./useInvoiceDocumentData", () => ({
-  useInvoiceDocumentData: () => ({
-    isLoading: false,
-    companyName: "Auto Service",
-    logoUrl: null,
-    supplier: { name: "Auto Service SRL", address: "", registrationNumber: "", taxNumber: "", email: "", iban: "", bankName: "", bankCode: "", extraInfo: "" },
-    sections: { works: [], materials: [], worksSubtotal: 0, materialsSubtotal: 0, grandTotal: 0 },
-  }),
-}));
-vi.mock("./InvoicePrintRoot", () => ({
-  InvoicePrintRoot: ({ job }: { job: { invoice: { id: string; invoiceNumber: string } } }) => (
-    <div data-testid="print-root">{job.invoice.invoiceNumber}</div>
-  ),
+vi.mock("../profiles/useGetProfile", () => ({
+  useActiveWorkspaceId: () => ({ workspaceId: "ws-1" }),
 }));
 
 import { InvoicePrintButton } from "./InvoicePrintButton";
@@ -54,8 +42,6 @@ const invoice: Invoice = {
   updatedAt: "2026-10-04",
 };
 
-const document: InvoiceDocument = { ...invoice, items: [] };
-
 function renderButton(onRowClick = vi.fn()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
@@ -71,24 +57,21 @@ function renderButton(onRowClick = vi.fn()) {
 }
 
 describe("InvoicePrintButton", () => {
-  it("falls back to InvoicePrintRoot when the workspace has no invoice template", async () => {
+  beforeEach(() => {
+    printInvoiceDocument.mockReset();
+    printInvoiceDocument.mockResolvedValue("printed");
+  });
+
+  it("prints the built-in invoice when the workspace has no custom templates", async () => {
     const user = userEvent.setup();
-    let resolveDocument: (value: InvoiceDocument) => void = () => {};
-    getInvoiceMock.mockReturnValue(new Promise<InvoiceDocument>((resolve) => { resolveDocument = resolve; }));
     const { onRowClick } = renderButton();
 
     const button = screen.getByRole("button", { name: "Print" });
     await user.click(button);
 
-    // Loading state: repeated clicks are blocked while data loads.
-    expect(button).toBeDisabled();
-    expect(getInvoiceMock).toHaveBeenCalledTimes(1);
-    expect(getInvoiceMock).toHaveBeenCalledWith("inv-42", "ws-1");
-    expect(onRowClick).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("print-root")).not.toBeInTheDocument();
-
-    resolveDocument(document);
-    await waitFor(() => expect(screen.getByTestId("print-root")).toHaveTextContent("INV-2026-042"));
+    await waitFor(() => {
+      expect(printInvoiceDocument).toHaveBeenCalledWith("inv-42", "builtin:invoice", "ws-1");
+    });
     expect(onRowClick).not.toHaveBeenCalled();
   });
 });

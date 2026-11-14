@@ -13,6 +13,7 @@ import {
 import type { DocumentTemplateType } from "./layout";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
+import { clearTemplatePreviewHtmlCache } from "./templatePreviewHtml";
 
 function useInvalidateTemplates() {
   const queryClient = useQueryClient();
@@ -133,6 +134,7 @@ export function useSaveDocumentTemplateLayout() {
           );
         },
       );
+      clearTemplatePreviewHtmlCache();
       invalidate();
       toast.success(i18n.t("settings.printTemplates.toast.saved"));
     },

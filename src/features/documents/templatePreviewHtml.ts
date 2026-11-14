@@ -12,14 +12,26 @@ export function isDemoPrintSource(id: string | null | undefined): boolean {
 
 export function templatePreviewCacheKey(template: DocumentTemplate, styleVersion = ""): string {
   const layoutKey = template.layout ? JSON.stringify(template.layout) : "legacy";
+  // bodyHtml length + layout JSON change on save; name helps when only the title changes.
   return [
     template.id,
     template.documentType,
+    template.name,
     template.showCents ? "1" : "0",
     String(template.bodyHtml.length),
+    // Short hash of body so identical lengths with different content still bust the cache.
+    String(simpleHash(template.bodyHtml)),
     layoutKey,
     styleVersion,
   ].join("|");
+}
+
+function simpleHash(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return hash;
 }
 
 export function clearTemplatePreviewHtmlCache() {
@@ -27,7 +39,7 @@ export function clearTemplatePreviewHtmlCache() {
 }
 
 function asDocumentKind(documentType: string): PrintDocumentKind {
-  if (documentType === "act" || documentType === "invoice") return documentType;
+  if (documentType === "act" || documentType === "invoice" || documentType === "estimate") return documentType;
   return "work_order";
 }
 

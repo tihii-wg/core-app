@@ -36,6 +36,10 @@ import { DocumentTemplateBuilder } from "../documents/DocumentTemplateBuilder";
 import { TemplatePreviewDialog } from "../documents/TemplatePreviewDialog";
 import { TemplateThumbnail } from "../documents/TemplateThumbnail";
 import type { DocumentTemplateType } from "../documents/layout";
+import {
+  builtinAsDocumentTemplate,
+  standardTemplateName,
+} from "../documents/resolvePrintTemplates";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
 import {
   useCreateDocumentTemplate,
@@ -226,7 +230,10 @@ export function PrintTemplatesSettings() {
 
   const editing = data.find((template) => template.id === editingId) ?? null;
   const editingStyle = editing?.documentType === DOCUMENT_STYLE_TYPE;
-  const previewTemplate = data.find((template) => template.id === previewTemplateId) ?? null;
+  const [previewBuiltinType, setPreviewBuiltinType] = useState<DocumentTemplateType | null>(null);
+  const previewTemplate =
+    data.find((template) => template.id === previewTemplateId) ??
+    (previewBuiltinType ? builtinAsDocumentTemplate(previewBuiltinType, t, workspaceId ?? "") : null);
   const defaultWorkOrder =
     data.find((template) => template.documentType === "work_order" && template.isDefault) ??
     data.find((template) => template.documentType === "work_order") ??
@@ -443,14 +450,15 @@ export function PrintTemplatesSettings() {
           </div>
         ) : null}
 
-        {!isLoading && !error && data.filter((template) => !isDocumentStyleType(template.documentType)).length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("settings.printTemplates.empty")}</p>
-        ) : null}
 
         {[...DOCUMENT_TYPES, ...[...grouped.keys()].filter((key) => !isBuilderDocumentType(key))].map((type) => {
           const templates = grouped.get(type) ?? [];
           if (templates.length === 0 && !isBuilderDocumentType(type)) return null;
-          if (templates.length === 0) return null;
+          const showBuiltin = isBuilderDocumentType(type);
+          if (templates.length === 0 && !showBuiltin) return null;
+          const builtinTemplate = showBuiltin
+            ? builtinAsDocumentTemplate(type as DocumentTemplateType, t, workspaceId ?? "")
+            : null;
           return (
             <div key={type} className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">
@@ -459,6 +467,75 @@ export function PrintTemplatesSettings() {
                   : type}
               </h3>
               <ul className="divide-y divide-border rounded-lg border border-border">
+                {builtinTemplate ? (
+                  <li className="space-y-3 px-4 py-3" data-testid={`builtin-template-${type}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-[min(100%,18rem)] flex-1 items-start gap-3">
+                        <TemplateThumbnail
+                          template={builtinTemplate}
+                          documentStyle={styleTemplate?.style ?? null}
+                          locale={previewLocale}
+                          currency={previewCurrency}
+                          vatRate={workspaceVatRate}
+                          companyName={previewCompanyName}
+                          industrySlug={industrySlug}
+                          className="shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="min-w-0 break-words text-sm font-medium text-foreground">
+                            {standardTemplateName(type as DocumentTemplateType, t)}
+                            <span className="ml-2 inline text-xs font-normal break-words text-muted-foreground">
+                              ({t("settings.printTemplates.builtinBadge")})
+                            </span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {t("settings.printTemplates.layoutTemplate")}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setPreviewTemplateId(null);
+                            setPreviewBuiltinType(type as DocumentTemplateType);
+                          }}
+                        >
+                          <Eye />
+                          {t("settings.printTemplates.preview")}
+                        </Button>
+                        {canEdit ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            loading={create.isPending}
+                            disabled={create.isPending}
+                            onClick={() =>
+                              create.mutate(
+                                {
+                                  documentType: type as DocumentTemplateType,
+                                  name: standardTemplateName(type as DocumentTemplateType, t),
+                                },
+                                {
+                                  onSuccess: (created) => {
+                                    setEditingId(created.id);
+                                    setEditorDirty(false);
+                                  },
+                                },
+                              )
+                            }
+                          >
+                            <Copy />
+                            {t("settings.printTemplates.createFromStandard")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                ) : null}
                 {templates.map((template) => (
                   <li key={template.id} className="space-y-3 px-4 py-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -643,7 +720,10 @@ export function PrintTemplatesSettings() {
         <TemplatePreviewDialog
           open={previewTemplate != null}
           onOpenChange={(next) => {
-            if (!next) setPreviewTemplateId(null);
+            if (!next) {
+              setPreviewTemplateId(null);
+              setPreviewBuiltinType(null);
+            }
           }}
           template={previewTemplate}
           documentStyle={
@@ -654,10 +734,14 @@ export function PrintTemplatesSettings() {
           vatRate={workspaceVatRate}
           companyName={previewCompanyName}
           industrySlug={industrySlug}
-          onOpenDesigner={(template) => {
-            setPreviewTemplateId(null);
-            void openEditor(template);
-          }}
+          onOpenDesigner={
+            previewBuiltinType
+              ? undefined
+              : (template) => {
+                  setPreviewTemplateId(null);
+                  void openEditor(template);
+                }
+          }
         />
       </CardContent>
     </Card>

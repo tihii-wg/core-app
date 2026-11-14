@@ -588,6 +588,24 @@ export function CanvasPropertiesPanel({
           onCheckedChange={(checked) => patchAll((el) => ({ ...el, locked: checked }))}
         />
       </div>
+
+      <Button
+        type="button"
+        variant="destructive"
+        size="sm"
+        className="w-full"
+        disabled={disabled || selected.every((el) => el.locked)}
+        title={selected.every((el) => el.locked) ? t("settings.printTemplates.elementLocked") : undefined}
+        onClick={() =>
+          onChangeElements((elements) =>
+            elements.filter((el) => !ids.has(el.id) || el.locked),
+          )
+        }
+      >
+        {selected.length > 1
+          ? t("settings.printTemplates.deleteSelected", { count: selected.length })
+          : t("settings.printTemplates.deleteElement")}
+      </Button>
     </div>
   );
 }

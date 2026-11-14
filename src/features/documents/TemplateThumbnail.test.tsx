@@ -77,4 +77,19 @@ describe("TemplateThumbnail", () => {
     });
     expect(disconnect).toHaveBeenCalled();
   });
+
+  it("exposes sheet size for A4 landscape templates", () => {
+    const base = defaultWorkOrderLayout();
+    const landscape = {
+      ...template,
+      layout: {
+        ...base,
+        page: { ...base.page, orientation: "landscape" as const },
+      },
+    };
+    render(<TemplateThumbnail template={landscape} locale="en" currency="MDL" />);
+    const root = screen.getByTestId("template-thumbnail");
+    expect(root).toHaveAttribute("data-sheet-w", "297");
+    expect(root).toHaveAttribute("data-sheet-h", "210");
+  });
 });

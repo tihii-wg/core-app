@@ -26,7 +26,8 @@ import type { DocumentStyle } from "./documentStyle";
 import { DEMO_PRINT_SOURCE_ID, demoPrintContext } from "./demoPrintContext";
 import { isDemoPrintSource } from "./templatePreviewHtml";
 import type { PrintContext, PrintDocumentKind } from "./templateVariables";
-import { CANVAS_MM_TO_PX, computeFitWidthZoomPercent, needsFitWidth } from "./canvas/fitWidthZoom";
+import { computeFitWidthZoomPercent, needsFitWidth } from "./canvas/fitWidthZoom";
+import { sheetCssSizeForTemplate } from "./canvas/sheetPreview";
 
 export type TemplatePreviewDialogProps = {
   open: boolean;
@@ -42,18 +43,9 @@ export type TemplatePreviewDialogProps = {
   onOpenDesigner?: (template: DocumentTemplate) => void;
 };
 
-/** Default A4 portrait width when the template does not store page mm. */
-const DEFAULT_PAGE_WIDTH_MM = 210;
-const PREVIEW_IFRAME_HEIGHT_PX = 1100;
-
 function asDocumentKind(documentType: string): PrintDocumentKind {
-  if (documentType === "act" || documentType === "invoice") return documentType;
+  if (documentType === "act" || documentType === "invoice" || documentType === "estimate") return documentType;
   return "work_order";
-}
-
-function pageWidthMmForTemplate(template: DocumentTemplate): number {
-  if (template.widthMm != null && template.widthMm > 0) return template.widthMm;
-  return DEFAULT_PAGE_WIDTH_MM;
 }
 
 export function TemplatePreviewDialog({
@@ -87,8 +79,10 @@ export function TemplatePreviewDialog({
   }, []);
 
   const isInvoice = template?.documentType === "invoice";
-  const pageWidthMm = template ? pageWidthMmForTemplate(template) : DEFAULT_PAGE_WIDTH_MM;
-  const pageCssWidth = pageWidthMm * CANVAS_MM_TO_PX;
+  const sheet = template ? sheetCssSizeForTemplate(template) : null;
+  const pageWidthMm = sheet?.widthMm ?? 210;
+  const pageCssWidth = sheet?.widthPx ?? 794;
+  const pageCssHeight = sheet?.heightPx ?? 1123;
   const scale = zoom / 100;
 
   const recentOrdersQuery = useQuery({
@@ -283,25 +277,27 @@ export function TemplatePreviewDialog({
           ) : error ? (
             <p className="p-4 text-sm text-destructive">{error}</p>
           ) : html ? (
-            <div
-              className="origin-top-left"
-              style={{
-                width: pageCssWidth * scale,
-                height: PREVIEW_IFRAME_HEIGHT_PX * scale,
-              }}
-            >
-              <iframe
-                title={t("settings.printTemplates.previewTitle", { name: template.name })}
-                sandbox=""
-                srcDoc={html}
-                className="block border-0 bg-white"
+            <div className="flex justify-center p-3" data-testid="template-preview-sheet">
+              <div
+                className="origin-top"
                 style={{
-                  width: pageCssWidth,
-                  height: PREVIEW_IFRAME_HEIGHT_PX,
-                  transform: `scale(${scale})`,
-                  transformOrigin: "top left",
+                  width: pageCssWidth * scale,
+                  height: Math.max(pageCssHeight * scale, pageCssHeight * scale),
                 }}
-              />
+              >
+                <iframe
+                  title={t("settings.printTemplates.previewTitle", { name: template.name })}
+                  sandbox=""
+                  srcDoc={html}
+                  className="block border-0 bg-transparent"
+                  style={{
+                    width: pageCssWidth,
+                    height: pageCssHeight * 2,
+                    transform: `scale(${scale})`,
+                    transformOrigin: "top center",
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <p className="p-4 text-sm text-muted-foreground">{t("settings.printTemplates.noBody")}</p>

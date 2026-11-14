@@ -8,6 +8,7 @@ import type { Invoice, InvoiceDocument } from "../../lib/types";
 import { getInvoice } from "../../services/apiInvoices";
 import { printInvoiceDocument } from "../../services/apiDocumentTemplates";
 import { useGetDocumentTemplates } from "../documents/useGetDocumentTemplates";
+import { resolvePrintTemplatesForInvoice } from "../documents/resolvePrintTemplates";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useInvoiceDocumentData } from "./useInvoiceDocumentData";
@@ -15,8 +16,9 @@ import { InvoicePrintRoot, type InvoicePrintJob } from "./InvoicePrintRoot";
 import { useInvoiceVat } from "./useInvoiceVat";
 
 /**
- * Quick-print for one invoice row. Prefers the workspace invoice template (default first).
- * Falls back to InvoicePrintRoot when templates are missing or layout rendering fails.
+ * Quick-print for one invoice row. Prefers the workspace invoice template (default first),
+ * then the built-in standard invoice (no Settings visit required).
+ * Falls back to InvoicePrintRoot only when rendering fails.
  */
 export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Invoice; triggerClassName?: string }) {
   const { t } = useTranslation();
@@ -26,17 +28,9 @@ export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Inv
   const { data: templates = [] } = useGetDocumentTemplates();
 
   const preferredTemplate = useMemo(() => {
-    const invoiceTemplates = templates
-      .filter(
-        (template) =>
-          template.isActive &&
-          template.documentType === "invoice" &&
-          (Boolean(template.layout) || Boolean(template.bodyHtml.trim())),
-      )
-      .slice()
-      .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
-    return invoiceTemplates[0] ?? null;
-  }, [templates]);
+    const choices = resolvePrintTemplatesForInvoice(templates, t);
+    return choices[0] ?? null;
+  }, [templates, t]);
 
   const documentQuery = useQuery({
     queryKey: ["invoice-row-print", invoice.workspaceId, invoice.id],
@@ -88,7 +82,7 @@ export function InvoicePrintButton({ invoice, triggerClassName }: { invoice: Inv
             void printWithTemplate(preferredTemplate.id);
             return;
           }
-          setLegacyActive(true);
+          void printWithTemplate("builtin:invoice");
         }}
       >
         {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Printer aria-hidden="true" />}

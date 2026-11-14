@@ -16,6 +16,34 @@ export type PaletteDragPayload =
   | { kind: "element"; elementType: CanvasElementType }
   | { kind: "variable"; token: string; label: string };
 
+/** Default w/h for drop preview (matches createCanvasElementFromPalette). */
+export function defaultPaletteElementSizeMm(payload: PaletteDragPayload): { wMm: number; hMm: number } {
+  if (payload.kind === "variable") return { wMm: 50, hMm: 8 };
+  switch (payload.elementType) {
+    case "text":
+      return { wMm: 60, hMm: 12 };
+    case "variable":
+      return { wMm: 50, hMm: 8 };
+    case "table":
+      return { wMm: 180, hMm: 40 };
+    case "totals":
+      return { wMm: 70, hMm: 30 };
+    case "rect":
+      return { wMm: 60, hMm: 20 };
+    case "image":
+    case "qr":
+      return { wMm: 25, hMm: 25 };
+    case "line":
+      return { wMm: 60, hMm: 2 };
+    case "signatures":
+      return { wMm: 120, hMm: 28 };
+    case "pageNumber":
+      return { wMm: 40, hMm: 8 };
+    default:
+      return { wMm: 40, hMm: 10 };
+  }
+}
+
 export function createCanvasElementFromPalette(
   payload: PaletteDragPayload,
   xMm: number,
