@@ -58,6 +58,7 @@ const ru: Messages = {
     save: "Сохранить",
     saving: "Сохранение…",
     refresh: "Обновить",
+    open: "Открыть",
     retry: "Повторить",
     backToWorkspaces: "К списку пространств",
     unknown: "Неизвестно",

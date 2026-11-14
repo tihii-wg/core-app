@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronRight, RefreshCw } from "lucide-react";
 import { AccessBadge } from "@/components/AccessBadge";
 import { ErrorPanel } from "@/components/ErrorPanel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -34,6 +34,7 @@ function sortRows(rows: AdminWorkspace[], key: SortKey) {
 
 export function WorkspacesPage() {
   const t = useT();
+  const navigate = useNavigate();
   const query = useWorkspaces();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -162,13 +163,21 @@ export function WorkspacesPage() {
                   <th className="px-4 py-3 text-right font-medium">{t("workspaces.colMembers")}</th>
                   <th className="px-4 py-3 text-right font-medium">{t("workspaces.colOrders")}</th>
                   <th className="px-4 py-3 font-medium">{t("workspaces.colCreated")}</th>
+                  <th className="px-4 py-3" aria-hidden />
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((row) => (
-                  <tr key={row.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[color-mix(in_oklab,var(--bg)_50%,transparent)]">
+                  <tr
+                    key={row.id}
+                    className="cursor-pointer border-b border-[var(--border)] last:border-0 hover:bg-[color-mix(in_oklab,var(--primary)_6%,transparent)]"
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest("a,button")) return;
+                      navigate(`/workspaces/${row.id}`);
+                    }}
+                  >
                     <td className="px-4 py-3">
-                      <Link className="font-medium text-[var(--primary)] hover:underline" to={`/workspaces/${row.id}`}>
+                      <Link className="font-medium text-[var(--fg)] underline decoration-[var(--border)] underline-offset-4 hover:decoration-current" to={`/workspaces/${row.id}`}>
                         {row.name}
                       </Link>
                       {row.deletedAt ? (
@@ -194,6 +203,15 @@ export function WorkspacesPage() {
                       <div className="text-xs text-[var(--muted)]">{t("workspaces.last30", { count: row.ordersLast30d })}</div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">{formatDate(row.createdAt)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        to={`/workspaces/${row.id}`}
+                        className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs font-medium text-[var(--fg)] hover:bg-[var(--bg)]"
+                      >
+                        {t("common.open")}
+                        <ChevronRight className="size-3.5" aria-hidden />
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

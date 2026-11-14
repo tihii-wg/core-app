@@ -56,6 +56,7 @@ const en = {
     save: "Save",
     saving: "Saving…",
     refresh: "Refresh",
+    open: "Open",
     retry: "Retry",
     backToWorkspaces: "Back to workspaces",
     unknown: "Unknown",
