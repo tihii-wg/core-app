@@ -194,23 +194,42 @@ export async function updateBackupSettings(
   patch: BackupSettingsPatch,
 ): Promise<WorkspaceBackupSettings> {
   const id = requireWorkspaceId(workspaceId);
-  const payload: Record<string, unknown> = {
-    workspace_id: id,
-    updated_at: new Date().toISOString(),
-  };
-  if (patch.provider !== undefined) payload.provider = patch.provider;
-  if (patch.enabled !== undefined) payload.enabled = patch.enabled;
-  if (patch.frequency !== undefined) payload.frequency = patch.frequency;
-  if (patch.hourUtc !== undefined) payload.hour_utc = patch.hourUtc;
-  if (patch.weekday !== undefined) payload.weekday = patch.weekday;
-  if (patch.retentionCount !== undefined) payload.retention_count = patch.retentionCount;
-  if (patch.includeFiles !== undefined) payload.include_files = patch.includeFiles;
-  if (patch.githubRepo !== undefined) payload.github_repo = patch.githubRepo;
-  if (patch.githubBranch !== undefined) payload.github_branch = patch.githubBranch;
-  if (patch.githubPath !== undefined) payload.github_path = patch.githubPath;
+  // Column privileges (20261107140000_workspace_backups): INSERT allows only the setting columns plus
+  // workspace_id (not updated_at); UPDATE allows the setting columns plus updated_at (not workspace_id).
+  // A PostgREST upsert sends every payload column in both INSERT and ON CONFLICT DO UPDATE, which fails
+  // with "permission denied for table workspace_backup_settings" — so update first, insert when missing.
+  const fields: Record<string, unknown> = {};
+  if (patch.provider !== undefined) fields.provider = patch.provider;
+  if (patch.enabled !== undefined) fields.enabled = patch.enabled;
+  if (patch.frequency !== undefined) fields.frequency = patch.frequency;
+  if (patch.hourUtc !== undefined) fields.hour_utc = patch.hourUtc;
+  if (patch.weekday !== undefined) fields.weekday = patch.weekday;
+  if (patch.retentionCount !== undefined) fields.retention_count = patch.retentionCount;
+  if (patch.includeFiles !== undefined) fields.include_files = patch.includeFiles;
+  if (patch.githubRepo !== undefined) fields.github_repo = patch.githubRepo;
+  if (patch.githubBranch !== undefined) fields.github_branch = patch.githubBranch;
+  if (patch.githubPath !== undefined) fields.github_path = patch.githubPath;
 
-  const { error } = await supabase.from("workspace_backup_settings").upsert(payload, { onConflict: "workspace_id" });
-  if (error) throw new Error(mapBackupError(error, i18n.t("settings.backups.errors.saveFailed")));
+  const updateExisting = async () => {
+    const { data, error } = await supabase
+      .from("workspace_backup_settings")
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq("workspace_id", id)
+      .select("workspace_id");
+    if (error) throw new Error(mapBackupError(error, i18n.t("settings.backups.errors.saveFailed")));
+    return Array.isArray(data) && data.length > 0;
+  };
+
+  if (!(await updateExisting())) {
+    const { error } = await supabase.from("workspace_backup_settings").insert({ workspace_id: id, ...fields });
+    if (error) {
+      // Another tab/user created the row in between — apply the change to it.
+      if (error.code !== "23505" || !(await updateExisting())) {
+        throw new Error(mapBackupError(error, i18n.t("settings.backups.errors.saveFailed")));
+      }
+    }
+  }
+
   const settings = await getBackupSettings(id);
   if (!settings) throw new Error(i18n.t("settings.backups.errors.saveFailed"));
   return settings;
