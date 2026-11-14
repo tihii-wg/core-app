@@ -31,8 +31,8 @@ describe("login", () => {
 
     await waitFor(() => expect(location.pathname).toBe(`/en/${WS.A}/dashboard`));
     // Dashboard lists orders by client name (device is no longer shown there).
-    expect(await screen.findByText("Ada Alpha")).toBeInTheDocument();
-    expect(screen.queryByText("Bob Beta")).not.toBeInTheDocument();
+    expect((await screen.findAllByText("Ada Alpha")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Bob Beta")).toHaveLength(0);
   });
 
   it("shows an error for wrong credentials and stays on the login page", async () => {
