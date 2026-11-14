@@ -273,9 +273,11 @@ const settings: Messages<typeof en> = {
     enableRecommended: "Activează recomandate",
     scopeLabel: "Ce comenzi",
     notLinkedNote: "Notificările vor sosi după conectarea Telegram.",
-    groups: { orders: "Comenzi", money: "Bani", deadlines: "Termene", inventory: "Stoc" },
+    groups: { orders: "Comenzi", money: "Bani", deadlines: "Termene", inventory: "Stoc", tasks: "Sarcini" },
     scope: { all: "Toate comenzile", mine: "Doar ale mele" },
     events: {
+      task_assigned: { label: "Sarcină atribuită mie", description: "Un coleg v-a atribuit o sarcină" },
+      task_completed: { label: "Sarcina mea finalizată", description: "Executantul a finalizat sarcina atribuită de dvs." },
       order_created: { label: "Comandă nouă", description: "A fost creată o comandă" },
       estimate_created: { label: "Deviz nou", description: "A fost creat un deviz" },
       order_status_changed: { label: "Status schimbat", description: "Statusul comenzii s-a schimbat" },

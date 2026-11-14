@@ -273,9 +273,11 @@ const settings: Messages<typeof en> = {
     enableRecommended: "Включить рекомендуемые",
     scopeLabel: "Какие заказы",
     notLinkedNote: "Уведомления начнут приходить после подключения Telegram.",
-    groups: { orders: "Заказы", money: "Деньги", deadlines: "Сроки", inventory: "Склад" },
+    groups: { orders: "Заказы", money: "Деньги", deadlines: "Сроки", inventory: "Склад", tasks: "Задачи" },
     scope: { all: "Все заказы", mine: "Только мои" },
     events: {
+      task_assigned: { label: "Мне поставили задачу", description: "Коллега поставил вам задачу" },
+      task_completed: { label: "Моя задача выполнена", description: "Исполнитель выполнил поставленную вами задачу" },
       order_created: { label: "Новый заказ", description: "Создан заказ" },
       estimate_created: { label: "Новая смета", description: "Создана смета" },
       order_status_changed: { label: "Смена статуса", description: "У заказа изменился статус" },

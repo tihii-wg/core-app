@@ -270,9 +270,11 @@ export default {
     enableRecommended: "Enable recommended",
     scopeLabel: "Which orders",
     notLinkedNote: "Notifications will start arriving after Telegram is connected.",
-    groups: { orders: "Orders", money: "Money", deadlines: "Deadlines", inventory: "Inventory" },
+    groups: { orders: "Orders", money: "Money", deadlines: "Deadlines", inventory: "Inventory", tasks: "Tasks" },
     scope: { all: "All orders", mine: "Only mine" },
     events: {
+      task_assigned: { label: "Task assigned to me", description: "A colleague set a task for you" },
+      task_completed: { label: "My task completed", description: "Someone finished a task you assigned" },
       order_created: { label: "New order", description: "An order was created" },
       estimate_created: { label: "New estimate", description: "An estimate was created" },
       order_status_changed: { label: "Status changed", description: "Order status was changed" },

@@ -14,6 +14,7 @@ export const NOTIFICATION_EVENT_GROUPS = {
   money: ["payment_received", "payment_stage_due"],
   deadlines: ["order_deadline_tomorrow", "order_overdue"],
   inventory: ["inventory_low_stock"],
+  tasks: ["task_assigned", "task_completed"],
 } as const;
 
 export type NotificationEventGroup = keyof typeof NOTIFICATION_EVENT_GROUPS;
@@ -24,8 +25,16 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = Object.values(NOTIFICATI
 
 /** Events where "only my orders" makes sense (assigned-to-me and stock are inherently scoped). */
 export function eventSupportsScope(event: NotificationEvent): boolean {
-  return event !== "order_assigned_to_me" && event !== "inventory_low_stock";
+  return (
+    event !== "order_assigned_to_me" &&
+    event !== "inventory_low_stock" &&
+    event !== "task_assigned" &&
+    event !== "task_completed"
+  );
 }
+
+/** Personal task events are on until the user switches them off (server: crm_notify_enqueue_default_on). */
+export const DEFAULT_ON_EVENTS: ReadonlySet<NotificationEvent> = new Set<NotificationEvent>(["task_assigned", "task_completed"]);
 
 /** Sensible starting set offered by «Включить рекомендуемые». */
 export const RECOMMENDED_EVENTS: NotificationEvent[] = [
@@ -35,6 +44,8 @@ export const RECOMMENDED_EVENTS: NotificationEvent[] = [
   "order_deadline_tomorrow",
   "order_overdue",
   "inventory_low_stock",
+  "task_assigned",
+  "task_completed",
 ];
 
 export type TelegramLink = {

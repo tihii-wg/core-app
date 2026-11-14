@@ -9,6 +9,7 @@ import { Skeleton } from "../../ui/Skeleton";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import {
+  DEFAULT_ON_EVENTS,
   NOTIFICATION_EVENT_GROUPS,
   RECOMMENDED_EVENTS,
   TelegramNotificationsUnavailableError,
@@ -63,7 +64,7 @@ export function TelegramNotificationsSettings() {
     (subscriptionsQuery.data ?? []).map((item) => [item.event, item]),
   );
   const current = (event: NotificationEvent): NotificationSubscription =>
-    subscriptions.get(event) ?? { event, enabled: false, scope: "all" };
+    subscriptions.get(event) ?? { event, enabled: DEFAULT_ON_EVENTS.has(event), scope: "all" };
 
   async function onConnect() {
     // Open the tab synchronously (popup blockers), then point it at the one-time bot link.

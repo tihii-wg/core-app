@@ -59,6 +59,7 @@ type Texts = {
   assigned: string; payment: string; paymentNoOrder: string; stageDue: string; deadlineTomorrow: string;
   overdue: string; lowStock: string; client: string; total: string; deadline: string; openOrder: string;
   openItem: string; linked: string; linkExpired: string; startHelp: string; unlinked: string; help: string;
+  taskAssigned: string; taskCompleted: string; taskFrom: string; taskBy: string; taskDue: string; openTasks: string;
 };
 
 const TEXTS: Record<NotifyLang, Texts> = {
@@ -80,6 +81,12 @@ const TEXTS: Record<NotifyLang, Texts> = {
     deadline: "Срок",
     openOrder: "Открыть заказ",
     openItem: "Открыть товар",
+    taskAssigned: "📌 Вам поставлена задача: <b>{title}</b>",
+    taskCompleted: "✅ Задача выполнена: <b>{title}</b>",
+    taskFrom: "От",
+    taskBy: "Выполнил(а)",
+    taskDue: "Срок",
+    openTasks: "Открыть задачи",
     linked: "✅ Telegram подключён к Core App. Выберите уведомления в «Настройки → Уведомления».",
     linkExpired: "Ссылка устарела. Откройте Core App → Настройки → Уведомления и нажмите «Подключить Telegram» ещё раз.",
     startHelp: "Чтобы получать уведомления, откройте Core App → Настройки → Уведомления и нажмите «Подключить Telegram».",
@@ -104,6 +111,12 @@ const TEXTS: Record<NotifyLang, Texts> = {
     deadline: "Termen",
     openOrder: "Deschide comanda",
     openItem: "Deschide articolul",
+    taskAssigned: "📌 Vi s-a atribuit o sarcină: <b>{title}</b>",
+    taskCompleted: "✅ Sarcină finalizată: <b>{title}</b>",
+    taskFrom: "De la",
+    taskBy: "Finalizată de",
+    taskDue: "Termen",
+    openTasks: "Deschide sarcinile",
     linked: "✅ Telegram este conectat la Core App. Alegeți notificările în „Setări → Notificări”.",
     linkExpired: "Linkul a expirat. Deschideți Core App → Setări → Notificări și apăsați din nou „Conectează Telegram”.",
     startHelp: "Pentru notificări deschideți Core App → Setări → Notificări și apăsați „Conectează Telegram”.",
@@ -128,6 +141,12 @@ const TEXTS: Record<NotifyLang, Texts> = {
     deadline: "Due",
     openOrder: "Open order",
     openItem: "Open item",
+    taskAssigned: "📌 New task for you: <b>{title}</b>",
+    taskCompleted: "✅ Task completed: <b>{title}</b>",
+    taskFrom: "From",
+    taskBy: "Done by",
+    taskDue: "Due",
+    openTasks: "Open tasks",
     linked: "✅ Telegram is connected to Core App. Choose notifications in Settings → Notifications.",
     linkExpired: "This link has expired. Open Core App → Settings → Notifications and tap “Connect Telegram” again.",
     startHelp: "To get notifications, open Core App → Settings → Notifications and tap “Connect Telegram”.",
@@ -180,11 +199,24 @@ export function buildNotificationMessage(row: OutboxRow, workspace: WorkspaceInf
         m: escapeHtml(str(p, "min_quantity")),
       });
       break;
+    case "task_assigned": head = fill(t.taskAssigned, { title: escapeHtml(str(p, "title") || "—") }); break;
+    case "task_completed": head = fill(t.taskCompleted, { title: escapeHtml(str(p, "title") || "—") }); break;
     default: head = escapeHtml(row.event);
   }
 
+  const isTask = row.event === "task_assigned" || row.event === "task_completed";
   const lines = [head];
-  if (row.event !== "inventory_low_stock") {
+  if (isTask) {
+    const description = str(p, "description");
+    if (row.event === "task_assigned" && description) {
+      lines.push(escapeHtml(description.length > 300 ? `${description.slice(0, 300)}…` : description));
+    }
+    // due_text is pre-formatted in the workspace time zone by the database trigger.
+    const due = str(p, "due_text") || (str(p, "due_at") ? formatDate(str(p, "due_at"), lang) : "");
+    if (row.event === "task_assigned" && due) lines.push(`${t.taskDue}: ${escapeHtml(due)}`);
+    const person = str(p, "actor_name");
+    if (person) lines.push(`${row.event === "task_assigned" ? t.taskFrom : t.taskBy}: ${escapeHtml(person)}`);
+  } else if (row.event !== "inventory_low_stock") {
     const client = str(p, "client");
     if (client) lines.push(`${t.client}: ${escapeHtml(client)}`);
     const device = str(p, "device");
@@ -202,7 +234,10 @@ export function buildNotificationMessage(row: OutboxRow, workspace: WorkspaceInf
   let buttonUrl: string | null = null;
   let buttonText: string | null = null;
   if (base && row.workspace_id) {
-    if (row.event === "inventory_low_stock" && row.entity_id) {
+    if (isTask) {
+      buttonUrl = `${base}/${lang}/${row.workspace_id}/tasks`;
+      buttonText = t.openTasks;
+    } else if (row.event === "inventory_low_stock" && row.entity_id) {
       buttonUrl = `${base}/${lang}/${row.workspace_id}/inventory?item=${encodeURIComponent(row.entity_id)}`;
       buttonText = t.openItem;
     } else if (str(p, "order_id") || (row.entity_id && row.event !== "payment_received")) {
