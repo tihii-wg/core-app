@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import en from "../../i18n/locales/en/settings";
 import ro from "../../i18n/locales/ro/settings";
 import ru from "../../i18n/locales/ru/settings";
-import { TEMPLATE_ACTIONS_DESKTOP_CLASS } from "./PrintTemplatesSettings";
+import { TEMPLATE_ACTIONS_DESKTOP_CLASS, TEMPLATE_ROW_ACTIONS_CLASS } from "./PrintTemplatesSettings";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -48,8 +48,10 @@ function lookup(locale: Record<string, unknown>, path: string): unknown {
 
 describe("print template i18n keys", () => {
   it("keeps template action rows wrappable (no shrink-0 with flex-wrap)", () => {
-    expect(TEMPLATE_ACTIONS_DESKTOP_CLASS).toContain("flex-wrap");
+    // Desktop actions join the parent's single wrapping row instead of wrapping as a nested block.
+    expect(TEMPLATE_ACTIONS_DESKTOP_CLASS).toContain("sm:contents");
     expect(TEMPLATE_ACTIONS_DESKTOP_CLASS).not.toContain("shrink-0");
+    expect(TEMPLATE_ROW_ACTIONS_CLASS).toContain("flex-wrap");
 
     const source = readFileSync(join(here, "PrintTemplatesSettings.tsx"), "utf8");
     const bad = source.match(/className="[^"]*shrink-0[^"]*flex-wrap[^"]*"/g) ?? [];

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { cn } from "../../lib/utils";
 import { Copy, Eye, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -79,24 +80,38 @@ type TemplateOverflowAction = {
 
 /**
  * Primary Edit stays visible; remaining actions wrap on ≥sm and collapse into ⋯ on phones.
- * Exported class strings are asserted in unit tests (no shrink-0 + flex-wrap).
+ * All buttons are siblings of ONE wrapping row (`contents`), so on medium widths they wrap button by button
+ * instead of whole nested groups dropping onto separate lines (the "staircase" layout).
+ * Exported class strings are asserted in unit tests.
  */
-export const TEMPLATE_ACTIONS_DESKTOP_CLASS = "hidden min-w-0 flex-wrap items-center gap-2 sm:flex";
+export const TEMPLATE_ACTIONS_DESKTOP_CLASS = "hidden sm:contents";
 export const TEMPLATE_ACTIONS_MOBILE_CLASS = "sm:hidden";
+/** Row layout (≥sm): thumbnail spans both rows on the left; title on top and actions below it on the right.
+ * Phones: thumbnail + title side by side, actions full width underneath. */
+export const TEMPLATE_ROW_GRID_CLASS =
+  "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 sm:grid-rows-[auto_1fr]";
+export const TEMPLATE_ROW_ACTIONS_CLASS =
+  "col-span-2 flex min-w-0 flex-wrap items-center gap-2 sm:col-span-1 sm:col-start-2";
 
 function TemplateActionsBar({
   editLabel,
   onEdit,
   actions,
   moreLabel,
+  leading,
+  className,
 }: {
   editLabel: string;
   onEdit: () => void;
   actions: TemplateOverflowAction[];
   moreLabel: string;
+  /** Buttons rendered first in the same row (e.g. Preview). */
+  leading?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className={cn(TEMPLATE_ROW_ACTIONS_CLASS, className)}>
+      {leading}
       <Button type="button" variant="outline" size="sm" onClick={onEdit}>
         <Pencil />
         {editLabel}
@@ -330,8 +345,8 @@ export function PrintTemplatesSettings() {
             <h3 className="text-sm font-semibold text-foreground">{t("settings.printTemplates.documentStyle")}</h3>
             <ul className="divide-y divide-border rounded-lg border border-border">
               <li className="space-y-3 px-4 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 flex-wrap items-start gap-3">
+                <div className={TEMPLATE_ROW_GRID_CLASS}>
+                  <div className="contents">
                     {defaultWorkOrder ? (
                       <TemplateThumbnail
                         template={{
@@ -346,7 +361,7 @@ export function PrintTemplatesSettings() {
                         vatRate={workspaceVatRate}
                         companyName={previewCompanyName}
                         industrySlug={industrySlug}
-                        className="shrink-0"
+                        className="shrink-0 sm:row-span-2"
                       />
                     ) : null}
                     <div className="min-w-0 flex-1">
@@ -440,6 +455,7 @@ export function PrintTemplatesSettings() {
               type="button"
               size="sm"
               variant="outline"
+              className="h-auto min-h-8 max-w-full whitespace-normal text-left"
               loading={addIndustryTemplates.isPending}
               disabled={addIndustryTemplates.isPending}
               onClick={() => void handleAddIndustryTemplates()}
@@ -469,8 +485,8 @@ export function PrintTemplatesSettings() {
               <ul className="divide-y divide-border rounded-lg border border-border">
                 {builtinTemplate ? (
                   <li className="space-y-3 px-4 py-3" data-testid={`builtin-template-${type}`}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="flex min-w-[min(100%,18rem)] flex-1 items-start gap-3">
+                    <div className={TEMPLATE_ROW_GRID_CLASS}>
+                      <div className="contents">
                         <TemplateThumbnail
                           template={builtinTemplate}
                           documentStyle={styleTemplate?.style ?? null}
@@ -479,7 +495,7 @@ export function PrintTemplatesSettings() {
                           vatRate={workspaceVatRate}
                           companyName={previewCompanyName}
                           industrySlug={industrySlug}
-                          className="shrink-0"
+                          className="shrink-0 sm:row-span-2"
                         />
                         <div className="min-w-0 flex-1">
                           <p className="min-w-0 break-words text-sm font-medium text-foreground">
@@ -493,7 +509,7 @@ export function PrintTemplatesSettings() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <div className={TEMPLATE_ROW_ACTIONS_CLASS}>
                         <Button
                           type="button"
                           variant="outline"
@@ -536,10 +552,17 @@ export function PrintTemplatesSettings() {
                     </div>
                   </li>
                 ) : null}
-                {templates.map((template) => (
+                {templates.map((template) => {
+                  const previewButton = (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setPreviewTemplateId(template.id)}>
+                      <Eye />
+                      {t("settings.printTemplates.preview")}
+                    </Button>
+                  );
+                  return (
                   <li key={template.id} className="space-y-3 px-4 py-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="flex min-w-[min(100%,18rem)] flex-1 items-start gap-3">
+                    <div className={TEMPLATE_ROW_GRID_CLASS}>
+                      <div className="contents">
                         <TemplateThumbnail
                           template={template}
                           documentStyle={
@@ -550,7 +573,7 @@ export function PrintTemplatesSettings() {
                           vatRate={workspaceVatRate}
                           companyName={previewCompanyName}
                           industrySlug={industrySlug}
-                          className="shrink-0"
+                          className="shrink-0 sm:row-span-2"
                         />
                         <div className="min-w-0 flex-1">
                         {renamingId === template.id ? (
@@ -607,18 +630,9 @@ export function PrintTemplatesSettings() {
                         </p>
                         </div>
                       </div>
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPreviewTemplateId(template.id)}
-                        >
-                          <Eye />
-                          {t("settings.printTemplates.preview")}
-                        </Button>
                       {canEdit ? (
                         <TemplateActionsBar
+                          leading={previewButton}
                           editLabel={t("settings.printTemplates.edit")}
                           onEdit={() => openEditor(template)}
                           moreLabel={t("common.actions")}
@@ -680,8 +694,9 @@ export function PrintTemplatesSettings() {
                             },
                           ]}
                         />
-                      ) : null}
-                      </div>
+                      ) : (
+                        <div className={TEMPLATE_ROW_ACTIONS_CLASS}>{previewButton}</div>
+                      )}
                     </div>
                     {editing && !editingStyle && editing.id === template.id ? (
                       forceSimpleMode || (!templateIsCanvas(template) && template.layout) ? (
@@ -709,7 +724,8 @@ export function PrintTemplatesSettings() {
                       )
                     ) : null}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
           );

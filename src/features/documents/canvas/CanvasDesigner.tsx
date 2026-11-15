@@ -179,6 +179,38 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     setSheetViewportEl(node);
   }, []);
   const dragPayloadRef = useRef<PaletteDragPayload | null>(null);
+  /** Live pointer position while a palette item is dragged (client coordinates). */
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const stopPointerTrackingRef = useRef<(() => void) | null>(null);
+
+  function startPointerTracking(activator: Event | null) {
+    stopPointerTrackingRef.current?.();
+    const initial = activator as (PointerEvent & TouchEvent) | null;
+    const first = initial && "touches" in initial && initial.touches?.length ? initial.touches[0] : initial;
+    lastPointerRef.current =
+      first && typeof first.clientX === "number" ? { x: first.clientX, y: first.clientY } : null;
+    const onPointer = (event: PointerEvent) => {
+      lastPointerRef.current = { x: event.clientX, y: event.clientY };
+    };
+    const onTouch = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (touch) lastPointerRef.current = { x: touch.clientX, y: touch.clientY };
+    };
+    window.addEventListener("pointermove", onPointer, { capture: true, passive: true });
+    window.addEventListener("touchmove", onTouch, { capture: true, passive: true });
+    stopPointerTrackingRef.current = () => {
+      window.removeEventListener("pointermove", onPointer, { capture: true });
+      window.removeEventListener("touchmove", onTouch, { capture: true });
+      stopPointerTrackingRef.current = null;
+    };
+  }
+
+  function stopPointerTracking() {
+    stopPointerTrackingRef.current?.();
+    lastPointerRef.current = null;
+  }
+
+  useEffect(() => () => stopPointerTrackingRef.current?.(), []);
   /** When true, ResizeObserver stops auto-fitting until the user clicks "Fit width". */
   const zoomLockedByUser = useRef(false);
 
@@ -274,11 +306,23 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     event: { activatorEvent: Event; delta: { x: number; y: number } },
     size: { wMm: number; hMm: number },
   ) {
-    const activator = event.activatorEvent as PointerEvent;
-    if (!activator || typeof activator.clientX !== "number") return null;
-    // Top-left of the preview ≈ pointer minus a small grab offset into the box.
-    const endX = activator.clientX + event.delta.x;
-    const endY = activator.clientY + event.delta.y;
+    // Prefer the live pointer position: dnd-kit's delta also includes scrolling of the palette list,
+    // which made the drop spot drift away from the cursor.
+    let endX: number;
+    let endY: number;
+    if (lastPointerRef.current) {
+      endX = lastPointerRef.current.x;
+      endY = lastPointerRef.current.y;
+    } else {
+      const activator = event.activatorEvent as PointerEvent | TouchEvent;
+      const start =
+        "touches" in activator && activator.touches?.length
+          ? activator.touches[0]
+          : (activator as PointerEvent);
+      if (!start || typeof start.clientX !== "number") return null;
+      endX = start.clientX + event.delta.x;
+      endY = start.clientY + event.delta.y;
+    }
     const point = mmFromClient(endX, endY);
     if (!point) return null;
     return dropPreviewBoxFromContentPoint(
@@ -316,9 +360,13 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     setDragPayload(null);
     const preview = dropPreview;
     setDropPreview(null);
-    if (!payload || !canEdit) return;
+    if (!payload || !canEdit) {
+      stopPointerTracking();
+      return;
+    }
     const size = defaultPaletteElementSizeMm(payload);
     const snapped = preview ?? dropPointFromDrag(event, size);
+    stopPointerTracking();
     if (!snapped) return;
     const created = createCanvasElementFromPalette(payload, snapped.xMm, snapped.yMm);
     commit({ ...layout, elements: [...layout.elements, created] });
@@ -992,13 +1040,18 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
         <DialogTitle className="sr-only">{t("settings.printTemplates.canvas.designer")}</DialogTitle>
         <DndContext
           sensors={sensors}
+          // Auto-scroll moved the palette list under the cursor (and the drop spot with it). Off: the sheet
+          // can still be scrolled with the wheel / trackpad while dragging.
+          autoScroll={false}
           onDragStart={(event) => {
+            startPointerTracking(event.activatorEvent);
             const payload = (event.active.data.current as PaletteDragPayload) ?? null;
             dragPayloadRef.current = payload;
             setDragPayload(payload);
           }}
           onDragMove={handleDragMove}
           onDragCancel={() => {
+            stopPointerTracking();
             dragPayloadRef.current = null;
             setDragPayload(null);
             setDropPreview(null);
