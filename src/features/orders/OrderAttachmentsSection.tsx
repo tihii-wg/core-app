@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Camera, Download, Eye, ExternalLink, FileText, ImageIcon, Paperclip, Trash2, Upload } from "lucide-react";
+import { Camera, Download, Eye, Loader2, ExternalLink, FileText, ImageIcon, Paperclip, Trash2, Upload } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
@@ -10,11 +10,13 @@ import {
   isDriveAttachment,
   isNasAttachment,
   isImageMimeType,
+  isRemoteAttachment,
   ORDER_ATTACHMENT_ACCEPT,
   validateOrderAttachmentFile,
   type OrderAttachment,
 } from "./orderAttachments";
-import { resolveOrderAttachmentUrl } from "../../services/apiOrderAttachments";
+import { fetchOrderAttachmentBlob, saveBlobAsFile } from "../../services/apiOrderAttachments";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useCanMutateOrderAttachments,
   useDeleteOrderAttachment,
@@ -196,6 +198,8 @@ export default function OrderAttachmentsSection({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<OrderAttachment | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OrderAttachment | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const busy = upload.isPending || remove.isPending;
 
   const driveFolderId = attachments.find((a) => a.driveFolderId)?.driveFolderId ?? null;
@@ -231,18 +235,25 @@ export default function OrderAttachmentsSection({
     }
   }
 
-  async function openExternal(attachment: OrderAttachment) {
-    let url: string | null = null;
+  async function downloadAttachment(attachment: OrderAttachment) {
+    if (downloadingId) return;
+    setDownloadingId(attachment.id);
     try {
-      url = await resolveOrderAttachmentUrl(attachment, "full");
-      window.open(url, "_blank", "noopener,noreferrer");
+      // Reuse the bytes already loaded for the preview when they are cached.
+      const remote = isRemoteAttachment(attachment);
+      const cached = queryClient.getQueryData<Blob | string>([
+        "order-attachment-url",
+        attachment.id,
+        attachment.storagePath,
+        "full",
+        remote,
+      ]);
+      const blob = cached instanceof Blob ? cached : await fetchOrderAttachmentBlob(attachment);
+      saveBlobAsFile(blob, attachment.fileName);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("orders.attachments.errors.signedUrlFailed"));
     } finally {
-      if (url?.startsWith("blob:")) {
-        // Give the new tab a moment to start loading before revoking.
-        window.setTimeout(() => URL.revokeObjectURL(url!), 60_000);
-      }
+      setDownloadingId(null);
     }
   }
 
@@ -359,8 +370,10 @@ export default function OrderAttachmentsSection({
                     <Eye className="size-3.5" />
                     {t("orders.attachments.previewAction")}
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" className="h-8 px-2" onClick={() => void openExternal(attachment)}>
-                    <Download className="size-3.5" />
+                  <Button type="button" variant="ghost" size="sm" className="h-8 px-2" disabled={downloadingId === attachment.id}
+                    onClick={() => void downloadAttachment(attachment)}
+                  >
+                    {downloadingId === attachment.id ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                     {t("orders.attachments.download")}
                   </Button>
                   {canMutate ? (

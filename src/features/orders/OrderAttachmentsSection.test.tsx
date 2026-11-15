@@ -49,7 +49,8 @@ vi.mock("./useOrderAttachments", () => ({
 
 vi.mock("../../services/apiOrderAttachments", () => ({
   createOrderAttachmentSignedUrl: vi.fn(async () => "https://storage.test/signed"),
-  resolveOrderAttachmentUrl: vi.fn(async () => "https://storage.test/signed"),
+  fetchOrderAttachmentBlob: vi.fn(async () => new Blob(["x"], { type: "image/jpeg" })),
+  saveBlobAsFile: vi.fn(),
 }));
 
 vi.mock("../workspaces/useIsWorkspaceOwnerId", () => ({
@@ -163,5 +164,14 @@ describe("OrderAttachmentsSection", () => {
     ];
     renderWithQuery(<OrderAttachmentsSection orderId="order-1" />);
     expect(screen.getByTitle(/On NAS/i)).toBeInTheDocument();
+  });
+
+  it("downloads the file as a real file save instead of opening a popup", async () => {
+    const api = await import("../../services/apiOrderAttachments");
+    attachmentsState.list = [sample];
+    renderWithQuery(<OrderAttachmentsSection orderId="order-1" />);
+    await userEvent.click(screen.getByRole("button", { name: "Download" }));
+    expect(api.fetchOrderAttachmentBlob).toHaveBeenCalledWith(expect.objectContaining({ id: sample.id }));
+    expect(api.saveBlobAsFile).toHaveBeenCalledWith(expect.any(Blob), sample.fileName);
   });
 });

@@ -578,3 +578,33 @@ export async function resolveOrderAttachmentUrl(
   }
   return createOrderAttachmentSignedUrl(attachment.storagePath);
 }
+
+/** Fetches the original file bytes (Supabase Storage, Google Drive or NAS). */
+export async function fetchOrderAttachmentBlob(
+  attachment: Pick<OrderAttachment, "id" | "storagePath" | "storageProvider" | "driveFileId" | "nasPath">,
+): Promise<Blob> {
+  if (isRemoteAttachment(attachment)) {
+    return fetchOrderAttachmentRemoteBlob(attachment.id, "full");
+  }
+  const signedUrl = await createOrderAttachmentSignedUrl(attachment.storagePath);
+  const response = await fetch(signedUrl);
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  return response.blob();
+}
+
+/**
+ * Saves a Blob as a file. A same-origin blob: URL makes the `download` attribute work
+ * in every browser, and saving a file is not blocked like a popup after an await.
+ */
+export function saveBlobAsFile(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName || "file";
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
