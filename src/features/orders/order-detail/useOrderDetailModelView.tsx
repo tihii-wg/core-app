@@ -301,8 +301,9 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
   }
 
   const filesTabActive = detailPanelOpen && detailTab === "files";
+  // Loaded as soon as the order opens (metadata only, no file bytes) so the Files tab shows its count right away.
   const { attachments: orderAttachments, isFetched: attachmentsFetched } = useOrderAttachments(selectedOrder?.id, {
-    enabled: filesTabActive,
+    enabled: detailPanelOpen,
   });
   const serviceLineCount = serviceLines.length;
   const materialLineCount = materialLines.length;

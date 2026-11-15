@@ -363,6 +363,7 @@ const orders: Messages<typeof en> = {
     installationBeforeMeasurement: "Montajul trebuie să fie la sau după data și ora măsurătorii.",
   },
   attachments: {
+    listMark: "Fișiere în comandă: {{count}}",
     title: "Poze și fișiere",
     subtitle: "Atașați poze și documente la această comandă.",
     takePhoto: "Fă o poză",

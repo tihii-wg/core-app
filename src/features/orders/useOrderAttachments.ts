@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import {
+  createOrderAttachmentSignedUrl,
   deleteOrderAttachment,
+  fetchOrderAttachmentRemoteBlob,
+  getOrderAttachmentCounts,
   listOrderAttachments,
-  resolveOrderAttachmentUrl,
   uploadOrderAttachment,
 } from "../../services/apiOrderAttachments";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -52,6 +54,7 @@ export function useUploadOrderAttachment(orderId: string | undefined) {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: orderAttachmentsQueryKey(workspaceId, orderId) });
+      queryClient.invalidateQueries({ queryKey: ["orders-attachment-counts", workspaceId] });
       if (result.fallbackFrom === "nas") {
         toast(i18n.t("orders.attachments.toast.nasFallback"), {
           id: "order-attachment-nas-fallback",
@@ -86,6 +89,7 @@ export function useDeleteOrderAttachment(orderId: string | undefined) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: orderAttachmentsQueryKey(workspaceId, orderId) });
+      queryClient.invalidateQueries({ queryKey: ["orders-attachment-counts", workspaceId] });
       toast.success(i18n.t("orders.attachments.toast.deleted"), { id: "order-attachment-deleted" });
     },
     onError: (error) => {
@@ -105,34 +109,53 @@ export function useOrderAttachmentUrl(
   { enabled = true, variant = "full" }: { enabled?: boolean; variant?: "thumb" | "full" } = {},
 ) {
   const remote = attachment ? isRemoteAttachment(attachment) : false;
-  const query = useQuery({
+  // Remote files are cached as a Blob, never as a blob: URL — every viewer makes its own object URL and
+  // revokes it on close. (Caching the URL broke re-opening: closing the preview revoked the cached URL.)
+  const query = useQuery<Blob | string>({
     queryKey: ["order-attachment-url", attachment?.id, attachment?.storagePath, variant, remote],
-    queryFn: () => resolveOrderAttachmentUrl(attachment!, variant),
+    queryFn: () =>
+      remote
+        ? fetchOrderAttachmentRemoteBlob(attachment!.id, variant)
+        : createOrderAttachmentSignedUrl(attachment!.storagePath),
     enabled: Boolean(attachment) && enabled,
     staleTime: remote ? 4 * 60 * 1000 : 10 * 60 * 1000,
     retry: false,
   });
 
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
   useEffect(() => {
-    if (!remote) {
+    const data = query.data;
+    if (!(data instanceof Blob)) {
       setBlobUrl(null);
       return;
     }
-    const url = query.data ?? null;
+    const url = URL.createObjectURL(data);
     setBlobUrl(url);
-    return () => {
-      if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
-    };
-  }, [remote, query.data]);
+    return () => URL.revokeObjectURL(url);
+  }, [query.data]);
 
+  const data = query.data instanceof Blob ? blobUrl : (query.data ?? null);
   return {
-    data: remote ? blobUrl : query.data,
-    isLoading: query.isLoading,
+    data,
+    isLoading: query.isLoading || (query.data instanceof Blob && !blobUrl),
     isError: query.isError,
     refetch: query.refetch,
   };
+}
+
+/** Attachment count per order for a list of orders (orders table / board / cards). One batched query. */
+export function useOrdersAttachmentCounts(orders: readonly { id: string }[]) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const ids = useMemo(() => orders.map((order) => order.id).sort(), [orders]);
+  const key = ids.join(",");
+  const query = useQuery({
+    queryKey: ["orders-attachment-counts", workspaceId, key],
+    queryFn: () => getOrderAttachmentCounts(workspaceId, ids),
+    enabled: Boolean(workspaceId) && ids.length > 0,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+  return useMemo(() => new Map(Object.entries(query.data ?? {})), [query.data]);
 }
 
 /** @deprecated Prefer useOrderAttachmentUrl with the full attachment. */

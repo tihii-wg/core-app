@@ -367,6 +367,7 @@ const orders: Messages<typeof en> = {
     installationBeforeMeasurement: "Дата монтажа не может быть раньше даты замера.",
   },
   attachments: {
+    listMark: "Файлов в заказе: {{count}}",
     title: "Фото и файлы",
     subtitle: "Прикрепите фотографии и документы к этому заказу.",
     takePhoto: "Сделать фото",

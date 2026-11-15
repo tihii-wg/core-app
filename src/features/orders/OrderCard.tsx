@@ -8,6 +8,7 @@ import { OrderActionsMenu } from "./OrderActionsMenu";
 import { OrderClientName } from "./OrderClientName";
 import { isEstimateOrder } from "./orderEstimates";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import { OrderFilesMark } from "./OrderFilesMark";
 import { OrderEstimateMark } from "./OrderEstimateMark";
 import OrderTeamAvatars from "./OrderTeamAvatars";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
@@ -28,6 +29,8 @@ type OrderCardProps = {
   hidePayments?: boolean;
   /** Batched warranty indicator for this card (from useOrdersWarrantyIndicators). */
   warrantyIndicator?: OrderWarrantyIndicatorModel | null;
+  /** Number of files attached to the order (floppy mark). */
+  attachmentCount?: number;
   formatMoney: (value: number) => string;
   onView: (order: Order) => void;
   onOpenClient?: (clientId: string) => void;
@@ -54,6 +57,7 @@ export function OrderCard({
   paymentStatus,
   hidePayments = false,
   warrantyIndicator,
+  attachmentCount,
   formatMoney,
   onView,
   onOpenClient,
@@ -79,7 +83,10 @@ export function OrderCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="break-all font-semibold text-primary tabular-nums">{order.orderNumber}</p>
+          <p className="flex flex-wrap items-center gap-1.5">
+            <span className="break-all font-semibold text-primary tabular-nums">{order.orderNumber}</span>
+            <OrderFilesMark count={attachmentCount} />
+          </p>
           <OrderEstimateMark order={order} className="mt-0.5" />
           <OrderWarrantyIndicator model={warrantyIndicator} className="mt-0.5" />
           <p className="mt-0.5 truncate font-medium text-foreground">

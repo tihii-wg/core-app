@@ -1,3 +1,4 @@
+import { isMissingTableError } from "./missingTable";
 import {
   buildOrderAttachmentStoragePath,
   isRemoteAttachment,
@@ -130,6 +131,41 @@ export async function listOrderAttachments(workspaceId: string | undefined, orde
 }
 
 const ATTACHMENT_ORDER_CHUNK = 100;
+
+/** Number of (not deleted) attachments per order — for the files mark in the orders list. One query per 100 ids. */
+export async function getOrderAttachmentCounts(
+  workspaceId: string | undefined,
+  orderIds: readonly string[],
+): Promise<Record<string, number>> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const ids = [...new Set(orderIds.filter(Boolean))];
+  const counts: Record<string, number> = {};
+  for (let index = 0; index < ids.length; index += ATTACHMENT_ORDER_CHUNK) {
+    const chunk = ids.slice(index, index + ATTACHMENT_ORDER_CHUNK);
+    let result = await supabase
+      .from("order_attachments")
+      .select("order_id")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("order_id", chunk)
+      .is("deleted_at", null);
+    if (result.error && /deleted_at|PGRST204|42703/i.test(result.error.message ?? "")) {
+      result = (await supabase
+        .from("order_attachments")
+        .select("order_id")
+        .eq("workspace_id", targetWorkspaceId)
+        .in("order_id", chunk)) as unknown as typeof result;
+    }
+    if (result.error) {
+      // The mark is decorative: a missing table / RLS denial just shows no marks.
+      if (isMissingTableError(result.error, "order_attachments") || result.error.code === "42501") return {};
+      throw new Error(errorMessage(result.error, attachmentErrors.loadFailed()));
+    }
+    for (const row of (result.data ?? []) as { order_id: string }[]) {
+      counts[row.order_id] = (counts[row.order_id] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
 
 /**
  * Metadata for many orders at once (client card «Файлы заказов»). Same rows/select and

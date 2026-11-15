@@ -12,6 +12,7 @@ import { OrderClientName } from "./OrderClientName";
 import OrderTeamAvatars from "./OrderTeamAvatars";
 import { isEstimateOrder } from "./orderEstimates";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
+import { OrderFilesMark } from "./OrderFilesMark";
 import { OrderEstimateMark } from "./OrderEstimateMark";
 import { isOrderOverdue } from "./orderVisibility";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
@@ -50,6 +51,8 @@ export type BuildOrderColumnsArgs = {
   /** Estimates list: estimate status only, no payment badge. */
   hidePayments?: boolean;
   warrantyByOrderId: Map<string, OrderWarrantyIndicatorModel | null | undefined>;
+  /** Files attached per order (floppy mark next to the number). */
+  attachmentCountByOrderId?: Map<string, number>;
   paymentStatusByOrder: Map<string, PaymentBalanceStatus>;
   invoiceNumberByOrder: Map<string, string>;
   paymentCountByOrder: Map<string, number>;
@@ -75,8 +78,11 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
       ...colSize("orderNumber"),
       cell: (order) => (
         <div className="min-w-0">
-          <span className="font-medium text-primary tabular-nums" title={order.orderNumber}>
-            {order.orderNumber}
+          <span className="inline-flex items-center gap-1.5">
+            <span className="font-medium text-primary tabular-nums" title={order.orderNumber}>
+              {order.orderNumber}
+            </span>
+            <OrderFilesMark count={args.attachmentCountByOrderId?.get(order.id)} />
           </span>
           <OrderEstimateMark order={order} className="mt-0.5 block w-fit" />
           <OrderWarrantyIndicator model={args.warrantyByOrderId.get(order.id)} className="mt-0.5" />

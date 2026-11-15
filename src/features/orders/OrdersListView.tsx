@@ -18,6 +18,7 @@ import { OrderColumnsMenu } from "./OrderColumnsMenu";
 import { buildOrderColumns } from "./buildOrderColumns";
 import { EditOrderDialog } from "./EditOrderDialog";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
+import { useOrdersAttachmentCounts } from "./useOrderAttachments";
 import {
   DEFAULT_DASHBOARD_ORDER_VISIBLE_COLUMNS,
   DEFAULT_ORDER_VISIBLE_COLUMNS,
@@ -119,6 +120,7 @@ export function OrdersListView({
   const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(orders, {
     useMileageWarranty: showWarrantyKm,
   });
+  const attachmentCountByOrderId = useOrdersAttachmentCounts(orders);
 
   const { storageKey, defaults } = storageForKey(columnVisibilityKey);
   const [internalVisible, setInternalVisible] = useState(
@@ -254,6 +256,7 @@ export function OrdersListView({
       today,
       hidePayments,
       warrantyByOrderId,
+      attachmentCountByOrderId,
       paymentStatusByOrder,
       invoiceNumberByOrder,
       paymentCountByOrder,
@@ -286,6 +289,7 @@ export function OrdersListView({
     today,
     hidePayments,
     warrantyByOrderId,
+    attachmentCountByOrderId,
     paymentStatusByOrder,
     invoiceNumberByOrder,
     paymentCountByOrder,
@@ -364,6 +368,7 @@ export function OrdersListView({
                   paymentStatus={paymentStatusByOrder.get(order.id)}
                   hidePayments={hidePayments}
                   warrantyIndicator={warrantyByOrderId.get(order.id)}
+                  attachmentCount={attachmentCountByOrderId.get(order.id)}
                   formatMoney={formatMoney}
                   onView={orderDetails.openOrder}
                   onOpenClient={onOpenClient}

@@ -356,6 +356,7 @@ export default {
     installationBeforeMeasurement: "Installation must be on or after the measurement date and time.",
   },
   attachments: {
+    listMark: "Files in this order: {{count}}",
     title: "Photos & Files",
     subtitle: "Attach photos and documents to this order.",
     takePhoto: "Take photo",

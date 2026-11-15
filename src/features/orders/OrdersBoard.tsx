@@ -20,6 +20,8 @@ import { isOrderOverdue, matchesDeadlineFilter, type DeadlineFilter } from "./or
 import { isPaidStatusChangeForbidden, isTaxInvoiceBlocked } from "./taxInvoice";
 import { OrderWarrantyIndicator } from "./OrderWarrantyIndicator";
 import { useOrdersWarrantyIndicators } from "./useOrdersWarrantyIndicators";
+import { useOrdersAttachmentCounts } from "./useOrderAttachments";
+import { OrderFilesMark } from "./OrderFilesMark";
 import type { OrderWarrantyIndicatorModel } from "./warranty";
 import { industryProfile } from "../industries/industryProfile";
 import { PaymentFormDialog } from "../finance/PaymentFormDialog";
@@ -102,6 +104,7 @@ export function OrdersBoard({
   const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(visibleOrders, {
     useMileageWarranty: showWarrantyKm,
   });
+  const attachmentCounts = useOrdersAttachmentCounts(visibleOrders);
   const columns = useMemo(() => buildOrderBoardColumns(visibleOrders, definitions), [visibleOrders, definitions]);
   const draggedOrder = draggedId ? visibleOrders.find((order) => order.id === draggedId) ?? null : null;
   const movingId = move.isPending ? move.variables?.orderId : undefined;
@@ -240,6 +243,7 @@ export function OrdersBoard({
                       isDragging={draggedId === order.id}
                       isMoving={movingId === order.id}
                       warrantyIndicator={warrantyByOrderId.get(order.id)}
+                      attachmentCount={attachmentCounts.get(order.id)}
                       formatMoney={formatMoney}
                       onOpen={onOpenOrder}
                       onDragStart={(event) => {
@@ -280,6 +284,7 @@ type BoardCardProps = {
   isDragging: boolean;
   isMoving: boolean;
   warrantyIndicator?: OrderWarrantyIndicatorModel | null;
+  attachmentCount?: number;
   formatMoney: (amount: number) => string;
   onOpen: (order: Order) => void;
   onDragStart: (event: DragEvent) => void;
@@ -293,6 +298,7 @@ function BoardCard({
   isDragging,
   isMoving,
   warrantyIndicator,
+  attachmentCount,
   formatMoney,
   onOpen,
   onDragStart,
@@ -333,7 +339,10 @@ function BoardCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <span className="text-sm font-semibold text-primary tabular-nums">{order.orderNumber || "—"}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-primary tabular-nums">{order.orderNumber || "—"}</span>
+            <OrderFilesMark count={attachmentCount} />
+          </span>
           <OrderWarrantyIndicator model={warrantyIndicator} className="mt-0.5" />
         </div>
         <OrderTotalBreakdownPopover order={order} formatMoney={formatMoney} className="shrink-0">
