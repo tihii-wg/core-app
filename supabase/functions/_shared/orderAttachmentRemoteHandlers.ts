@@ -1,4 +1,4 @@
-import { corsHeaders, errorResponse, jsonResponse } from "./cors.ts";
+import { corsHeaders, corsOriginFor, errorResponse, jsonResponse } from "./cors.ts";
 import {
   assertOrderMutableForAttachments,
   sanitizeAttachmentFileName,
@@ -333,7 +333,9 @@ export async function handleRemoteTrashOrderFolder(req: Request, appUrl: string)
 }
 
 export async function routeRemoteAttachment(req: Request): Promise<Response> {
-  const appUrl = (Deno.env.get("APP_URL") ?? "").replace(/\/$/, "");
+  // CORS origin for this caller: APP_URL, APP_EXTRA_ORIGINS or local dev (http://localhost:*).
+  // `appUrl` is only used for CORS headers in these handlers.
+  const appUrl = corsOriginFor((Deno.env.get("APP_URL") ?? "").replace(/\/$/, ""), req);
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(appUrl) });
   }
