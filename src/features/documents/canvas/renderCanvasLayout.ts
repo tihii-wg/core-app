@@ -345,6 +345,29 @@ function renderTotalsHtml(
   return html;
 }
 
+/**
+ * Synchronous HTML for blocks the designer draws with real data on the sheet (table, totals, signatures),
+ * using exactly the same renderer as print/preview so the sketch matches the printout.
+ */
+export function renderCanvasBlockPreviewHtml(
+  element: CanvasElement,
+  ctx: PrintContext,
+  colors: StyleColorPalette | null | undefined,
+  showCents: boolean,
+  showTokens: boolean,
+): string | null {
+  switch (element.type) {
+    case "table":
+      return renderTableHtml(element, ctx, colors, showCents, canvasRowsForSource(element.source, ctx), 0, true);
+    case "totals":
+      return renderTotalsHtml(element, ctx, colors, showCents, showTokens);
+    case "signatures":
+      return renderSignaturesHtml(element);
+    default:
+      return null;
+  }
+}
+
 async function qrDataUrl(content: string): Promise<string> {
   try {
     return await QRCode.toDataURL(content || " ", { margin: 0, width: 256, errorCorrectionLevel: "M" });

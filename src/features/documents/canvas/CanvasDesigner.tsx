@@ -47,7 +47,7 @@ import { defaultCanvasLayoutForType } from "./defaultCanvasLayouts";
 import { CANVAS_MM_TO_PX, computeFitWidthZoomPercent, needsFitWidth } from "./fitWidthZoom";
 import { createHistory, pushHistory, redoHistory, undoHistory, type CanvasHistory } from "./history";
 import { isCanvasDocumentLayout, parseCanvasDocumentLayout } from "./guards";
-import { renderCanvasLayoutToHtmlSync, canvasPageCss } from "./renderCanvasLayout";
+import { renderCanvasBlockPreviewHtml, renderCanvasLayoutToHtmlSync, canvasPageCss } from "./renderCanvasLayout";
 import { snapBox, snapValue, type Guide } from "./snap";
 import { pageSizeMm, type CanvasDocumentLayout, type CanvasElement } from "./types";
 import { convertBlocksLayoutToCanvas } from "./convertToCanvas";
@@ -812,10 +812,20 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
         </>
       );
     }
-    if (el.type === "table") return t("settings.printTemplates.canvas.table");
-    if (el.type === "totals") return t("settings.printTemplates.canvas.totals");
+    if (el.type === "table" || el.type === "totals" || el.type === "signatures") {
+      // Same HTML as the printout (escaped by the renderer), always filled with the selected preview data
+      // (demo or a real order/invoice) so rows and amounts are visible while designing.
+      const html = renderCanvasBlockPreviewHtml(el, previewCtx, themeColors, template.showCents, false);
+      if (html) {
+        return <div className="pointer-events-none h-full w-full" dangerouslySetInnerHTML={{ __html: html }} />;
+      }
+      return (
+        <span className="text-xs text-muted-foreground">
+          {t(`settings.printTemplates.canvas.${el.type}` as "settings.printTemplates.canvas.table")}
+        </span>
+      );
+    }
     if (el.type === "image") return t("settings.printTemplates.canvas.image");
-    if (el.type === "signatures") return t("settings.printTemplates.canvas.signatures");
     if (el.type === "qr") return t("settings.printTemplates.canvas.qr");
     if (el.type === "pageNumber") return el.format ?? "N/M";
     if (el.type === "line") return null;
@@ -880,7 +890,8 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                       align: el.style.align,
                     }
                   : buildCanvasBoxStyle(el.style, themeColors, {
-                      overflow: el.type === "totals" ? "visible" : "hidden",
+                      // Table and totals grow with their rows when printed — show all rows on the sketch too.
+                      overflow: el.type === "totals" || el.type === "table" ? "visible" : "hidden",
                     });
               const preview = renderElementPreview(el);
               const inner = box.wrapForAlign ? (
