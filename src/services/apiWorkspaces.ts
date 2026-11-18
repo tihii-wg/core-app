@@ -125,6 +125,25 @@ export function isLineCommentsVisibilityColumnSupported() {
   return lineCommentsVisibilityColumnSupported;
 }
 
+function isMissingPrintCurrencyPositionColumn(error: { code?: string; message?: string }) {
+  return (
+    (error.code === "42703" || error.code === "PGRST204" || /does not exist|schema cache/i.test(error.message ?? "")) &&
+    error.message?.includes("print_currency_position") === true
+  );
+}
+
+/** False once a read showed the column is missing (SQL 20261118120000 not applied). Re-checked after a minute. */
+let printCurrencyPositionColumnSupported = true;
+let printCurrencyPositionMissingAt = 0;
+function refreshPrintCurrencyPositionSupport() {
+  if (!printCurrencyPositionColumnSupported && Date.now() - printCurrencyPositionMissingAt > 60_000) {
+    printCurrencyPositionColumnSupported = true;
+  }
+}
+export function isPrintCurrencyPositionColumnSupported() {
+  return printCurrencyPositionColumnSupported;
+}
+
 function isMissingSessionIdleTimeoutColumn(error: { code?: string; message?: string }) {
   return (
     (error.code === "42703" || error.code === "PGRST204" || /does not exist|schema cache/i.test(error.message ?? "")) &&
@@ -175,6 +194,7 @@ function membershipSelect(options: {
   attachmentStorage: boolean;
   lineComments?: boolean;
   sessionIdle?: boolean;
+  printCurrency?: boolean;
 }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
@@ -185,6 +205,7 @@ function membershipSelect(options: {
   if (options.attachmentStorage) fields.push("attachment_storage");
   if (options.lineComments) fields.push("line_comments_visibility");
   if (options.sessionIdle) fields.push("session_idle_timeout_minutes");
+  if (options.printCurrency) fields.push("print_currency_position");
   const industry = options.industry
     ? `,
     industry:industries (
@@ -209,6 +230,7 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
     error.message?.includes("avatar_path") ||
     error.message?.includes("inventory_markup") ||
     error.message?.includes("session_idle_timeout_minutes") ||
+    error.message?.includes("print_currency_position") ||
     error.message?.includes("line_comments_visibility") ||
     mentionsPreferenceColumn(error.message) ||
     mentionsSubscriptionColumn(error.message) ||
@@ -252,6 +274,8 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let lineComments = lineCommentsVisibilityColumnSupported;
   refreshSessionIdleTimeoutSupport();
   let sessionIdle = sessionIdleTimeoutColumnSupported;
+  refreshPrintCurrencyPositionSupport();
+  let printCurrency = printCurrencyPositionColumnSupported;
 
   for (let attempt = 0; attempt < 18; attempt += 1) {
     const { data, error } = await run(
@@ -265,9 +289,16 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
         attachmentStorage,
         lineComments,
         sessionIdle,
+        printCurrency,
       }),
     );
     if (!error) return data;
+    if (printCurrency && isMissingPrintCurrencyPositionColumn(error)) {
+      printCurrency = false;
+      printCurrencyPositionColumnSupported = false;
+      printCurrencyPositionMissingAt = Date.now();
+      continue;
+    }
     if (sessionIdle && isMissingSessionIdleTimeoutColumn(error)) {
       sessionIdle = false;
       sessionIdleTimeoutColumnSupported = false;
@@ -314,6 +345,29 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   throw new Error(i18n.t("settings.workspace.errors.loadFailed"));
 }
 
+export type PrintCurrencyPosition = "before" | "after";
+
+export function normalizePrintCurrencyPosition(value: unknown): PrintCurrencyPosition {
+  return value === "after" ? "after" : "before";
+}
+
+export async function updateWorkspacePrintCurrencyPosition(workspaceId: string, position: PrintCurrencyPosition) {
+  if (!printCurrencyPositionColumnSupported) {
+    refreshPrintCurrencyPositionSupport();
+    if (!printCurrencyPositionColumnSupported) throw new Error(i18n.t("settings.general.regional.printCurrencyNotInstalled"));
+  }
+  try {
+    return await updateWorkspaceColumns(workspaceId, { print_currency_position: normalizePrintCurrencyPosition(position) });
+  } catch (error) {
+    if (error instanceof Error && /print_currency_position/.test(error.message)) {
+      printCurrencyPositionColumnSupported = false;
+      printCurrencyPositionMissingAt = Date.now();
+      throw new Error(i18n.t("settings.general.regional.printCurrencyNotInstalled"));
+    }
+    throw error;
+  }
+}
+
 export type WorkspaceDetails = {
   id: string;
   name: string;
@@ -338,6 +392,8 @@ export type WorkspaceDetails = {
   bankCode: string;
   companyDescription: string;
   printExtraInfo: string;
+  /** Currency code before ("MDL 100,00") or after ("100,00 MDL") the amount in printed documents. */
+  printCurrencyPosition: PrintCurrencyPosition;
   countryCode: string;
   documentLanguage: string;
   warrantyStart: string;
@@ -469,6 +525,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     bankCode: readString(record.bank_code),
     companyDescription: readString(record.company_description),
     printExtraInfo: readString(record.print_extra_info),
+    printCurrencyPosition: normalizePrintCurrencyPosition(record.print_currency_position),
     countryCode: readString(record.country_code, "MD") || "MD",
     documentLanguage: normalizeDocumentLanguage(readString(record.document_language, readString(record.language, "en"))),
     warrantyStart: normalizeWarrantyStart(readString(record.warranty_start)),

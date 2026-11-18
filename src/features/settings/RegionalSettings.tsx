@@ -12,8 +12,14 @@ import { languageNames, supportedLanguages } from "../../i18n/languages";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { useUpdateWorkspacePreferences } from "../workspaces/useUpdateWorkspace";
-import { normalizeWorkspaceDateFormat, normalizeWorkspaceLanguage, type WorkspaceDetails } from "../../services/apiWorkspaces";
+import { useUpdateWorkspacePreferences, useUpdateWorkspacePrintCurrencyPosition } from "../workspaces/useUpdateWorkspace";
+import {
+  normalizePrintCurrencyPosition,
+  normalizeWorkspaceDateFormat,
+  normalizeWorkspaceLanguage,
+  type PrintCurrencyPosition,
+  type WorkspaceDetails,
+} from "../../services/apiWorkspaces";
 import { workspacePreferenceDefaults } from "../../lib/workspaceFormat";
 import { countryOptions, normalizeDocumentLanguage } from "../../lib/workspaceGeneralSettings";
 import { replaceLocale } from "./settingsTab";
@@ -54,17 +60,25 @@ function RegionalForm({ workspace }: { workspace: WorkspaceDetails }) {
   const [timezone, setTimezone] = useState(workspace.timezone ?? workspacePreferenceDefaults.timezone);
   const [dateFormat, setDateFormat] = useState(normalizeWorkspaceDateFormat(workspace.dateFormat));
   const [currency, setCurrency] = useState(workspace.currency ?? workspacePreferenceDefaults.currency);
-  const { mutateAsync: savePreferences, isPending } = useUpdateWorkspacePreferences();
+  const [printCurrencyPosition, setPrintCurrencyPosition] = useState<PrintCurrencyPosition>(
+    normalizePrintCurrencyPosition(workspace.printCurrencyPosition),
+  );
+  const { mutateAsync: savePreferences, isPending: preferencesPending } = useUpdateWorkspacePreferences();
+  const { mutateAsync: savePrintCurrencyPosition, isPending: printCurrencyPending } =
+    useUpdateWorkspacePrintCurrencyPosition();
+  const isPending = preferencesPending || printCurrencyPending;
   const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const translatedTimezones = timezoneOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }));
 
-  const dirty =
+  const printCurrencyChanged = printCurrencyPosition !== normalizePrintCurrencyPosition(workspace.printCurrencyPosition);
+  const preferencesDirty =
     language !== normalizeWorkspaceLanguage(workspace.language) ||
     documentLanguage !== normalizeDocumentLanguage(workspace.documentLanguage) ||
     countryCode !== (workspace.countryCode || "MD") ||
     timezone !== (workspace.timezone ?? workspacePreferenceDefaults.timezone) ||
     dateFormat !== normalizeWorkspaceDateFormat(workspace.dateFormat) ||
     currency !== (workspace.currency ?? workspacePreferenceDefaults.currency);
+  const dirty = preferencesDirty || printCurrencyChanged;
 
   async function onSave() {
     if (!canEdit || !dirty) return;
@@ -79,15 +93,20 @@ function RegionalForm({ workspace }: { workspace: WorkspaceDetails }) {
 
     toast.loading(t("settings.general.regional.toast.saving"), { id: "regional" });
     try {
-      const saved = await savePreferences({
-        workspaceId: workspace.id,
-        language,
-        documentLanguage,
-        countryCode,
-        timezone,
-        dateFormat,
-        currency,
-      });
+      const saved = preferencesDirty
+        ? await savePreferences({
+            workspaceId: workspace.id,
+            language,
+            documentLanguage,
+            countryCode,
+            timezone,
+            dateFormat,
+            currency,
+          })
+        : null;
+      if (printCurrencyChanged) {
+        await savePrintCurrencyPosition({ workspaceId: workspace.id, position: printCurrencyPosition });
+      }
       const nextLanguage = saved?.language ?? language;
       const nextPath = replaceLocale(location.pathname, locale, nextLanguage);
       if (nextPath !== location.pathname) navigate(`${nextPath}${location.search}`, { replace: true });
@@ -211,6 +230,28 @@ function RegionalForm({ workspace }: { workspace: WorkspaceDetails }) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="regional-print-currency">{t("settings.general.regional.printCurrencyPosition")}</Label>
+            <Select
+              value={printCurrencyPosition}
+              onValueChange={(value) => setPrintCurrencyPosition(normalizePrintCurrencyPosition(value))}
+              disabled={!canEdit || isPending}
+            >
+              <SelectTrigger id="regional-print-currency" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="before">
+                  {t("settings.general.regional.printCurrencyBefore")} — {currency} 1 200,00
+                </SelectItem>
+                <SelectItem value="after">
+                  {t("settings.general.regional.printCurrencyAfter")} — 1 200,00 {currency}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{t("settings.general.regional.printCurrencyHint")}</p>
           </div>
         </div>
 

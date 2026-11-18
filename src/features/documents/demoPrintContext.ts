@@ -43,10 +43,21 @@ export const DEMO_LOGO_DATA_URI =
       `</svg>`,
   );
 
+/**
+ * Workspace "currency before / after the amount" for demo previews (thumbnails, designer, preview dialog),
+ * set by the print-templates settings page from the loaded workspace.
+ */
+let demoCurrencyPosition: "before" | "after" = "before";
+export function setDemoPrintCurrencyPosition(position: "before" | "after" | null | undefined) {
+  demoCurrencyPosition = position === "after" ? "after" : "before";
+}
+
 export type DemoPrintContextInput = {
   documentType: PrintDocumentKind;
   locale?: string;
   currency?: string;
+  /** Workspace setting: currency code before / after amounts. */
+  currencyPosition?: "before" | "after";
   vatRate?: number | null;
   mileageUnit?: MileageUnit;
   /** Prefer a real workspace logo URL when already loaded in the UI. */
@@ -228,6 +239,7 @@ function buildWorkspace(input: DemoPrintContextInput, t: (key: string) => string
     bankCode: "AGMDMD2X",
     companyDescription: "",
     printExtraInfo: t("settings.printTemplates.demo.companyPhone"),
+    printCurrencyPosition: input.currencyPosition ?? demoCurrencyPosition,
     countryCode: "MD",
     documentLanguage: input.locale ?? "ru",
     warrantyStart: "closed_at",

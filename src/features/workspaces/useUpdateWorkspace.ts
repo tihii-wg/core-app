@@ -11,8 +11,7 @@ import {
   updateWorkspacePreferences,
   updateWorkspaceSessionIdleTimeout,
   updateWorkspaceTaxInvoiceSettings,
-  type WorkspacePreferencesInput,
-} from "../../services/apiWorkspaces";
+  type WorkspacePreferencesInput, updateWorkspacePrintCurrencyPosition, type PrintCurrencyPosition } from "../../services/apiWorkspaces";
 import type { PaymentStageTemplateItem } from "../finance/paymentStages";
 import { useGuardSubscriptionWrite } from "./useWorkspaceSubscription";
 
@@ -64,6 +63,20 @@ export function useUpdateWorkspacePreferences() {
     },
     onSuccess(workspace) {
       if (!workspace) return;
+      invalidateWorkspace(queryClient, workspace.id, workspace);
+    },
+  });
+}
+
+export function useUpdateWorkspacePrintCurrencyPosition() {
+  const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
+  return useMutation({
+    mutationFn: ({ workspaceId, position }: { workspaceId: string; position: PrintCurrencyPosition }) => {
+      guardWrite();
+      return updateWorkspacePrintCurrencyPosition(workspaceId, position);
+    },
+    onSuccess(workspace) {
       invalidateWorkspace(queryClient, workspace.id, workspace);
     },
   });

@@ -1,3 +1,4 @@
+import { setDemoPrintCurrencyPosition } from "../documents/demoPrintContext";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Copy, Eye, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react";
@@ -193,6 +194,8 @@ export function PrintTemplatesSettings() {
 
   const previewLocale =
     workspace?.documentLanguage?.trim() || workspace?.language?.trim() || i18n.language || "en";
+  // Demo previews (thumbnails, designer, preview dialog) follow the workspace currency position.
+  setDemoPrintCurrencyPosition(workspace?.printCurrencyPosition);
   const previewCurrency = workspace?.currency?.trim() || "MDL";
   const previewCompanyName = workspace?.name?.trim() || null;
 

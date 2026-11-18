@@ -72,7 +72,7 @@ export function getTemplatePreviewHtml(
   documentStyle?: DocumentStyle | null,
 ): string | null {
   const styleVersion = documentStyle ? JSON.stringify(documentStyle) : "";
-  const key = `${templatePreviewCacheKey(template, styleVersion)}::${ctx.documentKind}::${ctx.locale}::${ctx.currency}`;
+  const key = `${templatePreviewCacheKey(template, styleVersion)}::${ctx.documentKind}::${ctx.locale}::${ctx.currency}::${ctx.workspace?.printCurrencyPosition ?? "before"}`;
   const cached = previewHtmlCache.get(key);
   if (cached != null) return cached || null;
   const html = renderTemplateDocument(template, ctx, documentStyle);

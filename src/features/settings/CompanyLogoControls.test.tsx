@@ -53,6 +53,7 @@ const workspace: WorkspaceDetails = {
   warrantyPartsKm: null,
   defaultCommentsVisibility: "private",
   lineCommentsVisibility: "private",
+  printCurrencyPosition: "before",
   defaultFilesVisibility: "private",
   preventDuplicateDeviceOrders: false,
   showClientMiddleName: false,

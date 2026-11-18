@@ -1,5 +1,6 @@
 /** Shared table / totals data for canvas rendering (mirrors layout.ts row logic). */
 
+import { withPrintCurrency } from "../printMoney";
 import { linePerformerNames } from "../../orders/linePerformers";
 import i18n from "../../../i18n";
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../../lib/types";
@@ -140,7 +141,7 @@ export function canvasRowsForSource(source: TableSource, ctx: PrintContext): Can
 export function formatCanvasMoney(n: number, ctx: PrintContext, showCents: boolean): string {
   const digits = showCents ? 2 : 0;
   const amount = n.toLocaleString(ctx.locale || "en", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return escapeHtmlText(ctx.currency ? `${ctx.currency} ${amount}` : amount);
+  return escapeHtmlText(withPrintCurrency(amount, ctx.currency, ctx));
 }
 
 function servicesSum(ctx: PrintContext) {

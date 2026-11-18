@@ -1,6 +1,7 @@
 /** Versioned print-document layout model + HTML renderer for the visual builder. */
 
 import { linePerformerNames } from "../orders/linePerformers";
+import { withPrintCurrency } from "./printMoney";
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../lib/types";
 import i18n, { currentLanguage } from "../../i18n";
 import { isAppLanguage } from "../../i18n/languages";
@@ -444,7 +445,7 @@ function formatToken(token: string, ctx: PrintContext, showCents: boolean): stri
     if (!Number.isFinite(n)) return "";
     const digits = showCents ? 2 : 0;
     const amount = n.toLocaleString(ctx.locale || "en", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    return escapeHtmlText(ctx.currency ? `${ctx.currency} ${amount}` : amount);
+    return escapeHtmlText(withPrintCurrency(amount, ctx.currency, ctx));
   }
   if (variable.kind === "date" || variable.kind === "datetime") {
     return escapeHtmlText(formatWorkspaceDate(String(raw), ctx.dateFormat, ctx.timeZone));
@@ -470,7 +471,7 @@ function templateHasValue(template: string, ctx: PrintContext, showCents: boolea
 function money(n: number, ctx: PrintContext, showCents: boolean) {
   const digits = showCents ? 2 : 0;
   const amount = n.toLocaleString(ctx.locale || "en", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return escapeHtmlText(ctx.currency ? `${ctx.currency} ${amount}` : amount);
+  return escapeHtmlText(withPrintCurrency(amount, ctx.currency, ctx));
 }
 
 type RenderEnv = {

@@ -1,5 +1,6 @@
 /** Pure helpers for print templates (variable substitution + HTML sanitising). No DOM side effects except `sanitizeTemplateHtml`. */
 
+import { withPrintCurrency } from "./printMoney";
 import type { Order } from "../../lib/types";
 import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import {
@@ -29,14 +30,13 @@ function escapeHtml(value: string) {
   return escapeHtmlText(value);
 }
 
-function formatMoneyValue(value: number, currency: string, showCents: boolean, locale: string) {
+function formatMoneyValue(value: number, currency: string, showCents: boolean, locale: string, ctx: PrintContext) {
   const digits = showCents ? 2 : 0;
   const amount = value.toLocaleString(locale || "en", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
-  const code = currency.trim();
-  return code ? `${code} ${amount}` : amount;
+  return withPrintCurrency(amount, currency, ctx);
 }
 
 function formatDateValue(value: string, ctx: PrintContext, kind: "date" | "datetime") {
@@ -70,7 +70,7 @@ function formatResolvedValue(
   if (kind === "money") {
     const n = typeof raw === "number" ? raw : Number(raw);
     if (!Number.isFinite(n)) return "";
-    return escapeHtml(formatMoneyValue(n, options.currency || ctx.currency, options.showCents, options.locale || ctx.locale));
+    return escapeHtml(formatMoneyValue(n, options.currency || ctx.currency, options.showCents, options.locale || ctx.locale, ctx));
   }
   if (kind === "date" || kind === "datetime") {
     const text = typeof raw === "string" ? raw : String(raw);
