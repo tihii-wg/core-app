@@ -48,6 +48,11 @@ export default {
     helper: "Helper",
     performer: "Performer",
     notAssigned: "Not assigned",
+    performers: "Performers",
+    addAnotherPerformer: "+ Another performer",
+    removePerformer: "Remove {{name}}",
+    done: "Done",
+    extraPerformersNotInstalled: "Several performers per service are not enabled yet: apply the SQL script 20261118100000_order_line_extra_performers in Supabase.",
     defaultPerformer: "Default performer",
   },
   vat: {

@@ -118,7 +118,8 @@ export async function appendOrderServiceLines(
   workspaceId: string | undefined,
 ): Promise<Order> {
   // One catalog service (the order-card search): one RPC when available.
-  if (drafts.length === 1 && drafts[0]?.serviceId?.trim()) {
+  // (A line with extra performers goes through `updateOrder`, which also writes extra_technician_ids.)
+  if (drafts.length === 1 && drafts[0]?.serviceId?.trim() && !drafts[0].extraTechnicianIds?.length) {
     const viaRpc = await addOrderServiceLineViaRpc(orderId, drafts[0]);
     if (viaRpc) return viaRpc;
     const quick = await appendOrderCatalogServiceLine(orderId, drafts[0], workspaceId);

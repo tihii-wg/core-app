@@ -1,4 +1,11 @@
-import { getOrder, orderFromLineRpcPayload, updateOrder, updateOrderServiceLinePrice } from "../../services/apiOrders";
+import {
+  getOrder,
+  orderFromLineRpcPayload,
+  updateOrder,
+  updateOrderServiceLinePrice,
+  writeLineExtraPerformers,
+} from "../../services/apiOrders";
+import { sameExtraPerformers } from "./linePerformers";
 import { isMissingRpcError } from "../../services/missingRpc";
 import supabase from "../../services/supabase";
 import type { Order, OrderService, OrderServiceKind } from "../../lib/types";
@@ -12,6 +19,8 @@ export type OrderServiceLinePatch = {
   price?: number;
   quantity?: number;
   technicianId?: string | null;
+  /** Additional performers (main one excluded). */
+  extraTechnicianIds?: string[];
   kind?: OrderServiceKind | null;
   warrantyMonths?: number | null;
   warrantyDays?: number | null;
@@ -71,6 +80,14 @@ export function applyOrderServiceLinePatch(line: OrderService, patch: OrderServi
           ...(patch.technicianId?.trim() ? {} : { technicianName: "" }),
         }
       : {}),
+    ...(patch.extraTechnicianIds !== undefined
+      ? {
+          extraTechnicianIds: [...patch.extraTechnicianIds],
+          extraTechnicianNames: patch.extraTechnicianIds.map(
+            (id) => line.extraTechnicianNames?.[(line.extraTechnicianIds ?? []).indexOf(id)] ?? "",
+          ),
+        }
+      : {}),
     ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
     ...(patch.warrantyMonths !== undefined ? { warrantyMonths: patch.warrantyMonths } : {}),
     ...(patch.warrantyDays !== undefined ? { warrantyDays: patch.warrantyDays } : {}),
@@ -92,6 +109,10 @@ export function diffOrderServiceLinePatch(original: OrderService, draft: OrderSe
   const nextTech = draft.technicianId?.trim() ? draft.technicianId.trim() : null;
   const prevTech = original.technicianId?.trim() ? original.technicianId.trim() : null;
   if (nextTech !== prevTech) patch.technicianId = nextTech;
+  if (draft.extraTechnicianIds !== undefined) {
+    const nextExtras = draft.extraTechnicianIds.filter((id) => id && id !== nextTech);
+    if (!sameExtraPerformers(nextExtras, original.extraTechnicianIds ?? [])) patch.extraTechnicianIds = nextExtras;
+  }
 
   const nextKind = draft.kind ?? null;
   const prevKind = original.kind ?? null;
@@ -187,6 +208,19 @@ export async function updateOrderServiceLine(
   }
   if (patch.discountType !== undefined && patch.discountType != null && !isLineDiscountType(patch.discountType)) {
     throw new Error("Invalid discount type");
+  }
+
+  // Extra performers live in their own column: write them first, then let the normal path (main performer
+  // via crm_update_order_service_line) re-sync the order team and return the fresh order.
+  if (patch.extraTechnicianIds !== undefined) {
+    const { extraTechnicianIds, ...rest } = patch;
+    const current = (await getOrder(orderId, workspaceId)).services.find((line) => line.id === id);
+    if (!current) throw new Error("Service line was not found on this order");
+    const mainId = rest.technicianId !== undefined ? rest.technicianId : (current.technicianId ?? null);
+    await writeLineExtraPerformers(orderId, [
+      { lineId: id, extraTechnicianIds: extraTechnicianIds.filter((extra) => extra && extra !== mainId) },
+    ]);
+    patch = { ...rest, technicianId: mainId };
   }
 
   // Prefetch when we need merged warranty/kind/discount values for the RPC (or the full-order fallback).

@@ -36,6 +36,9 @@ function lineToFormDefaults(line: OrderService): OrderService {
     kind: line.kind ?? null,
     technicianId: line.technicianId ?? null,
     technicianName: line.technicianName ?? "",
+    ...(line.extraTechnicianIds !== undefined
+      ? { extraTechnicianIds: [...line.extraTechnicianIds], extraTechnicianNames: [...(line.extraTechnicianNames ?? [])] }
+      : {}),
     warrantyMonths: line.warrantyMonths ?? null,
     warrantyDays: line.warrantyDays ?? null,
     warrantyKm: line.warrantyKm ?? null,
@@ -75,7 +78,10 @@ function EditOrderServiceLineDialogBody({
 
   const performerOptions = assignableTeamOptions(employees, order.assignedEmployeeId, [
     ...(order.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
-    ...order.services.map((entry) => ({ id: entry.technicianId, name: entry.technicianName })),
+    ...order.services.flatMap((entry) => [
+      { id: entry.technicianId, name: entry.technicianName },
+      ...(entry.extraTechnicianIds ?? []).map((id, index) => ({ id, name: entry.extraTechnicianNames?.[index] ?? "" })),
+    ]),
   ]);
 
   const draftLine = watched?.[0] ?? defaults;

@@ -685,6 +685,13 @@ export type OrderService = {
   technicianId?: string | null;
   /** Resolved employee display name for `technicianId`. */
   technicianName?: string;
+  /**
+   * employees.id of additional performers (order_services.extra_technician_ids), main one excluded.
+   * `undefined` = not managed by the caller (stored value is kept).
+   */
+  extraTechnicianIds?: string[];
+  /** Display names for `extraTechnicianIds`, same order. */
+  extraTechnicianNames?: string[];
   /** Per-order line comment (order_line_comments). Null/absent when unset or table missing. */
   comment?: string | null;
 };

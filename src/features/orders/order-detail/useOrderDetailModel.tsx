@@ -163,13 +163,19 @@ export function useOrderDetailModel({
   );
   const teamOptionsKey = [
     ...(orderTeam ?? []).map((member) => `${member.employeeId}:${member.name}`),
-    ...(orderServices ?? []).map((line) => `${line.technicianId ?? ""}:${line.technicianName ?? ""}`),
+    ...(orderServices ?? []).map(
+      (line) =>
+        `${line.technicianId ?? ""}:${line.technicianName ?? ""}:${(line.extraTechnicianIds ?? []).join("|")}:${(line.extraTechnicianNames ?? []).join("|")}`,
+    ),
   ].join("|");
   const teamOptions = useMemo(
     () =>
       assignableTeamOptions(employees, assignedEmployeeId, [
         ...(orderTeam ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
-        ...(orderServices ?? []).map((line) => ({ id: line.technicianId, name: line.technicianName })),
+        ...(orderServices ?? []).flatMap((line) => [
+          { id: line.technicianId, name: line.technicianName },
+          ...(line.extraTechnicianIds ?? []).map((id, index) => ({ id, name: line.extraTechnicianNames?.[index] ?? "" })),
+        ]),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- teamOptionsKey captures team/services content
     [employees, assignedEmployeeId, teamOptionsKey],

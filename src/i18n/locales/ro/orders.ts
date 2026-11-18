@@ -53,6 +53,11 @@ const orders: Messages<typeof en> = {
     helper: "Ajutor",
     performer: "Executant",
     notAssigned: "Neatribuit",
+    performers: "Executanți",
+    addAnotherPerformer: "+ Încă un executant",
+    removePerformer: "Elimină {{name}}",
+    done: "Gata",
+    extraPerformersNotInstalled: "Mai mulți executanți pe un serviciu nu sunt încă activați: aplicați scriptul SQL 20261118100000_order_line_extra_performers în Supabase.",
     defaultPerformer: "Executant implicit",
   },
   vat: {

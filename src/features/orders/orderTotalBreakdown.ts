@@ -1,5 +1,6 @@
 import type { Order } from "../../lib/types";
 import { lineNet, roundMoney } from "./orderTotals";
+import { linePerformerIds } from "./linePerformers";
 
 export type OrderTotalWorker = {
   /** employees.id, or null for lines without a performer. */
@@ -39,13 +40,25 @@ export function orderTotalBreakdown(
     const net = lineNet(line.price, line.quantity, line.discountType ?? null, line.discountValue ?? null);
     works += net;
     discount += gross - net;
-    const id = line.technicianId?.trim() || null;
-    const key = id ?? "__none__";
-    const name = id ? line.technicianName?.trim() || unassignedLabel : unassignedLabel;
-    const entry = byWorker.get(key) ?? { employeeId: id, name, amount: 0, lines: 0 };
-    entry.amount = roundMoney(entry.amount + net);
-    entry.lines += 1;
-    byWorker.set(key, entry);
+    // Several performers on one line share its amount equally.
+    const ids = linePerformerIds(line);
+    const performers: Array<{ id: string | null; name: string }> = ids.length
+      ? ids.map((id, index) => ({
+          id,
+          name:
+            (index === 0 ? line.technicianName : line.extraTechnicianNames?.[index - 1])?.trim() || unassignedLabel,
+        }))
+      : [{ id: null, name: unassignedLabel }];
+    const share = roundMoney(net / performers.length);
+    performers.forEach((performer, index) => {
+      // The last performer gets the rounding remainder so the shares add up to the line amount.
+      const amount = index === performers.length - 1 ? roundMoney(net - share * (performers.length - 1)) : share;
+      const key = performer.id ?? "__none__";
+      const entry = byWorker.get(key) ?? { employeeId: performer.id, name: performer.name, amount: 0, lines: 0 };
+      entry.amount = roundMoney(entry.amount + amount);
+      entry.lines += 1;
+      byWorker.set(key, entry);
+    });
   }
 
   for (const line of order.materials ?? []) {

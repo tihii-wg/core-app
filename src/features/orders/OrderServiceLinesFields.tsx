@@ -14,7 +14,8 @@ import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import CreateServiceDialog from "../services/CreateServiceDialog";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import type { AssignableTechnician } from "./assignableTechnicians";
-import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
+import OrderLinePerformersPicker from "./OrderLinePerformersPicker";
+import { linePerformerIds, splitLinePerformers } from "./linePerformers";
 import OrderLinePriceField from "./OrderLinePriceField";
 import OrderLineWarrantyFields from "./OrderLineWarrantyFields";
 import OrderServiceKindSelect from "./OrderServiceKindSelect";
@@ -265,16 +266,35 @@ export default function OrderServiceLinesFields({
                     />
                   )}
                 />
-                <OrderLinePerformerSelect
-                  id={`${idPrefix}-performer-${index}`}
-                  value={line?.technicianId ?? ""}
-                  options={performerOptions}
-                  disabled={disabled}
-                  onChange={(technicianId) => {
-                    setValue(`services.${index}.technicianId`, technicianId || null, { shouldDirty: true });
-                    onPerformerChosen?.(technicianId);
-                  }}
-                />
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("orders.team.performers")}</Label>
+                  <OrderLinePerformersPicker
+                    idPrefix={`${idPrefix}-performer-${index}`}
+                    value={linePerformerIds({
+                      technicianId: line?.technicianId ?? null,
+                      extraTechnicianIds: line?.extraTechnicianIds,
+                    })}
+                    options={performerOptions}
+                    knownNames={Object.fromEntries(
+                      [
+                        [line?.technicianId ?? "", line?.technicianName ?? ""],
+                        ...(line?.extraTechnicianIds ?? []).map((id, extraIndex) => [
+                          id,
+                          line?.extraTechnicianNames?.[extraIndex] ?? "",
+                        ]),
+                      ].filter(([id, name]) => id && name),
+                    )}
+                    disabled={disabled}
+                    onChange={(ids) => {
+                      const { technicianId, extraTechnicianIds } = splitLinePerformers(ids);
+                      setValue(`services.${index}.technicianId`, technicianId, { shouldDirty: true });
+                      setValue(`services.${index}.extraTechnicianIds` as never, extraTechnicianIds as never, {
+                        shouldDirty: true,
+                      });
+                      for (const id of ids) onPerformerChosen?.(id);
+                    }}
+                  />
+                </div>
                 <OrderLineWarrantyFields
                   idPrefix={`${idPrefix}-${index}`}
                   months={line?.warrantyMonths}

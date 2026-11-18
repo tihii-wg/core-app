@@ -26,6 +26,7 @@ import { isUuid } from "../lib/uuid";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import i18n from "../i18n";
+import { sameExtraPerformers } from "../features/orders/linePerformers";
 import { assertVehicleAssignable } from "./apiVehicles";
 import {
   consolidateOrderMaterials,
@@ -358,6 +359,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
       warrantyDays: mapWarrantyMonths(service.warrantyDays) ?? null,
       warrantyKm: mapWarrantyMonths(service.warrantyKm) ?? null,
       technicianId: technicianIdOrNull(service.technicianId),
+      ...(service.extraTechnicianIds?.length ? { extraTechnicianIds: [...service.extraTechnicianIds] } : {}),
     });
   }
 
@@ -656,12 +658,31 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   }
 
   try {
+    if (stampedLines.some((line) => line.extraTechnicianIds?.length)) {
+      const { data: savedLines, error: savedLinesError } = await supabase
+        .from("order_services")
+        .select("id, service_id")
+        .eq("order_id", String(order.id));
+      if (savedLinesError) throw new Error(savedLinesError.message);
+      const changes = stampedLines
+        .filter((line) => line.extraTechnicianIds?.length)
+        .map((line) => ({
+          lineId: String(
+            ((savedLines ?? []) as { id?: unknown; service_id?: unknown }[]).find(
+              (row) => String(row.service_id) === String(line.id),
+            )?.id ?? "",
+          ),
+          extraTechnicianIds: (line.extraTechnicianIds ?? []).filter((id) => id && id !== line.technicianId),
+        }))
+        .filter((change) => change.lineId);
+      await writeLineExtraPerformers(String(order.id), changes);
+    }
     await syncOrderEmployees({
       workspaceId: targetWorkspaceId,
       orderId: String(order.id),
       assignedEmployeeId: employeeId,
       team: input.team,
-      lineTechnicianIds: stampedLines.map((line) => line.technicianId),
+      lineTechnicianIds: stampedLines.flatMap((line) => [line.technicianId, ...(line.extraTechnicianIds ?? [])]),
     });
   } catch (error) {
     const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
@@ -754,6 +775,7 @@ type ResolvedServiceLine = {
   warrantyDays?: number | null;
   warrantyKm?: number | null;
   technicianId?: string | null;
+  extraTechnicianIds?: string[];
 };
 
 function orderServiceTechnicianInsertFields(service: { technicianId?: string | null }) {
@@ -853,6 +875,7 @@ type OrderServiceLine = {
   discount_type?: string | null;
   discount_value?: number | string | null;
   technician_id?: string | null;
+  extra_technician_ids?: unknown;
 };
 type OrderMaterialLine = {
   id?: string;
@@ -1450,8 +1473,83 @@ function mapServiceLines(
         : {}),
       technicianId,
       ...(technicianId ? { technicianName: nameById.get(technicianId) ?? "" } : { technicianName: "" }),
+      ...extraPerformersFromRow(line.extra_technician_ids, technicianId, nameById),
     };
   });
+}
+
+function isMissingExtraPerformersColumn(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  if (!/extra_technician_ids/i.test(message)) return false;
+  return error.code === "42703" || error.code === "PGRST204" || /column|schema cache/i.test(message);
+}
+
+/** Stored extra performers per line id; null when the column does not exist yet (SQL not applied). */
+async function loadLineExtraPerformers(orderId: string): Promise<Map<string, string[]> | null> {
+  const { data, error } = await supabase.from("order_services").select("id, extra_technician_ids").eq("order_id", orderId);
+  if (error) {
+    if (isMissingExtraPerformersColumn(error)) return null;
+    throw new Error(error.message);
+  }
+  const map = new Map<string, string[]>();
+  for (const row of (data ?? []) as { id?: unknown; extra_technician_ids?: unknown }[]) {
+    map.set(
+      String(row.id),
+      Array.isArray(row.extra_technician_ids) ? row.extra_technician_ids.map((id) => String(id)).filter(Boolean) : [],
+    );
+  }
+  return map;
+}
+
+/** Main + extra performer ids of the stored lines (for the order team sync). */
+async function storedLineTechnicianIds(
+  orderId: string,
+  lines: readonly { id?: unknown; technician_id?: string | null }[],
+): Promise<Array<string | null>> {
+  const extras = await loadLineExtraPerformers(orderId);
+  return lines.flatMap((line) => [
+    typeof line.technician_id === "string" ? line.technician_id : null,
+    ...(extras?.get(String(line.id)) ?? []),
+  ]);
+}
+
+/**
+ * Writes order_services.extra_technician_ids for the given lines (the DB guard drops duplicates / the main
+ * performer and checks the workspace). Clearing on a database without the column is a no-op; setting
+ * extras there asks to apply the SQL script.
+ */
+export async function writeLineExtraPerformers(
+  orderId: string,
+  changes: readonly { lineId: string; extraTechnicianIds: string[] }[],
+): Promise<void> {
+  for (const change of changes) {
+    const { data, error } = await supabase
+      .from("order_services")
+      .update({ extra_technician_ids: change.extraTechnicianIds })
+      .eq("id", change.lineId)
+      .eq("order_id", orderId)
+      .select("id");
+    if (error) {
+      if (isMissingExtraPerformersColumn(error)) {
+        if (change.extraTechnicianIds.length === 0) continue;
+        throw new Error(i18n.t("orders.team.extraPerformersNotInstalled"));
+      }
+      throw mapOrderTeamDbError(error) ?? new Error(error.message);
+    }
+    if (!data || data.length === 0) throw new Error(orderPermissionMessage());
+  }
+}
+
+/** order_services.extra_technician_ids → ids + names (absent column → no keys, so callers keep "unmanaged"). */
+function extraPerformersFromRow(
+  raw: unknown,
+  mainId: string | null,
+  nameById: Map<string, string>,
+): { extraTechnicianIds?: string[]; extraTechnicianNames?: string[] } {
+  if (!Array.isArray(raw)) return {};
+  const ids = [...new Set(raw.map((value) => String(value ?? "").trim()).filter((id) => id && id !== mainId))];
+  return { extraTechnicianIds: ids, extraTechnicianNames: ids.map((id) => nameById.get(id) ?? "") };
 }
 
 function mapMaterialLines(materialLines: OrderMaterialLine[]): OrderMaterial[] {
@@ -3853,7 +3951,7 @@ export async function appendOrderCatalogServiceLine(
     await syncOrderEmployees({
       workspaceId,
       orderId,
-      lineTechnicianIds: serviceLines.map((line) => (typeof line.technician_id === "string" ? line.technician_id : null)),
+      lineTechnicianIds: await storedLineTechnicianIds(orderId, serviceLines),
     });
   }
   const [totalsPatch, order] = await Promise.all([
@@ -4221,8 +4319,8 @@ export async function updateOrder(
 
   const lineTechnicianIds =
     services !== undefined
-      ? services.map((service) => service.technicianId)
-      : lines.map((line) => (typeof line.technician_id === "string" ? line.technician_id : null));
+      ? services.flatMap((service) => [service.technicianId, ...(service.extraTechnicianIds ?? [])])
+      : await storedLineTechnicianIds(orderId, lines);
 
   await syncOrderEmployees({
     workspaceId,
@@ -4727,6 +4825,28 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     if (line) line.technician_id = change.technicianId;
   }
 
+  // Extra performers (order_services.extra_technician_ids) on kept + newly inserted lines.
+  const extrasManaged = services.filter((service) => service.extraTechnicianIds !== undefined);
+  let extraPerformerChanges = 0;
+  if (extrasManaged.length > 0) {
+    const stored = await loadLineExtraPerformers(orderId);
+    const changes: { lineId: string; extraTechnicianIds: string[] }[] = [];
+    for (const service of extrasManaged) {
+      const lineId =
+        service.id?.trim() ||
+        inserted.find((item) => String(item.service_id) === String(service.serviceId))?.id ||
+        inserted.find((item) => isSameService(item, service))?.id ||
+        kept.find((item) => isSameService(item, service))?.id;
+      if (!lineId) continue;
+      const mainId = technicianIdOrNull(service.technicianId);
+      const wanted = [...new Set((service.extraTechnicianIds ?? []).map((id) => id.trim()).filter((id) => id && id !== mainId))];
+      const current = stored?.get(String(lineId)) ?? [];
+      if (!sameExtraPerformers(wanted, current)) changes.push({ lineId: String(lineId), extraTechnicianIds: wanted });
+    }
+    await writeLineExtraPerformers(orderId, changes);
+    extraPerformerChanges = changes.length;
+  }
+
   // Unit price / qty on kept lines (form may edit catalog defaults for this order only).
   for (const change of priceChanges) {
     const { error: priceError } = await supabase
@@ -4785,7 +4905,8 @@ async function syncOrderServices(workspaceId: string, orderId: string, services:
     removedIds.length === 0 &&
     kindChanges.length === 0 &&
     priceChanges.length === 0 &&
-    technicianChanges.length === 0
+    technicianChanges.length === 0 &&
+    extraPerformerChanges === 0
   ) {
     return { lines, summary: null };
   }

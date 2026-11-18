@@ -1,5 +1,6 @@
 /** Shared table / totals data for canvas rendering (mirrors layout.ts row logic). */
 
+import { linePerformerNames } from "../../orders/linePerformers";
 import i18n from "../../../i18n";
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../../lib/types";
 import type { InvoiceSections } from "../../invoices/invoiceItemSections";
@@ -38,7 +39,7 @@ function serviceRows(order: Order | null): CanvasLineRow[] {
           : "",
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
-    performer: line.technicianName?.trim() || "",
+    performer: linePerformerNames(line).join(", "),
     comment: line.comment?.trim() || "",
   }));
 }

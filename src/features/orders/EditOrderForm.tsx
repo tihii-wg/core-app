@@ -202,7 +202,10 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
   // Team chips and line performers may reference employees that are no longer assignable (e.g. inactive) — keep them visible.
   const teamOptions = assignableTeamOptions(employees, order.assignedEmployeeId, [
     ...(order.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
-    ...order.services.map((line) => ({ id: line.technicianId, name: line.technicianName })),
+    ...order.services.flatMap((line) => [
+      { id: line.technicianId, name: line.technicianName },
+      ...(line.extraTechnicianIds ?? []).map((id, index) => ({ id, name: line.extraTechnicianNames?.[index] ?? "" })),
+    ]),
   ]);
 
   const [customFieldState, setCustomFieldState] = useState<OrderCustomFieldValues>({});

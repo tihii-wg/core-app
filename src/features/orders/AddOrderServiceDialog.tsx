@@ -47,7 +47,10 @@ function AddOrderServiceDialogBody({ open, onOpenChange, order, onAdded }: AddOr
   const activeServices = useMemo(() => services?.filter((service) => service.status === "active"), [services]);
   const performerOptions = assignableTeamOptions(employees, order.assignedEmployeeId, [
     ...(order.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
-    ...order.services.map((line) => ({ id: line.technicianId, name: line.technicianName })),
+    ...order.services.flatMap((line) => [
+      { id: line.technicianId, name: line.technicianName },
+      ...(line.extraTechnicianIds ?? []).map((id, index) => ({ id, name: line.extraTechnicianNames?.[index] ?? "" })),
+    ]),
   ]);
 
   const onSubmit = handleSubmit(async (data) => {

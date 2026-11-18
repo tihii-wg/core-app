@@ -1,3 +1,4 @@
+import { splitLinePerformers } from "../linePerformers";
 import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
@@ -187,10 +188,15 @@ export function useOrderLineActions({
           });
         return;
       }
+      // Performers: "id1,id2,…" — first = main performer, the rest are extra performers.
+      const { technicianId, extraTechnicianIds } = splitLinePerformers(raw.split(","));
+      const line = selectedOrder.services.find((entry) => entry.id === lineId);
+      // Only touch the extra-performers column when the line has / gets extras (works before the SQL is applied).
+      const managesExtras = extraTechnicianIds.length > 0 || (line?.extraTechnicianIds?.length ?? 0) > 0;
       const updated = await updateServiceLine.mutateAsync({
         orderId: selectedOrder.id,
         lineId,
-        patch: { technicianId: raw.trim() ? raw.trim() : null },
+        patch: managesExtras ? { technicianId, extraTechnicianIds } : { technicianId },
       });
       onOrderUpdatedRef.current(updated);
     },

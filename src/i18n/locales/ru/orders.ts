@@ -55,6 +55,11 @@ const orders: Messages<typeof en> = {
     helper: "Помощник",
     performer: "Исполнитель",
     notAssigned: "Не назначен",
+    performers: "Исполнители",
+    addAnotherPerformer: "+ Ещё исполнитель",
+    removePerformer: "Убрать {{name}}",
+    done: "Готово",
+    extraPerformersNotInstalled: "Несколько исполнителей на одну услугу ещё не включены: примените SQL-скрипт 20261118100000_order_line_extra_performers в Supabase.",
     defaultPerformer: "Исполнитель по умолчанию",
   },
   vat: {

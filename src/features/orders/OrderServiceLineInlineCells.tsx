@@ -1,16 +1,11 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { OrderService } from "../../lib/types";
 import { formatQuantity, parseQuantity } from "../../lib/quantity";
 import { cn } from "../../lib/utils";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import type { AssignableTechnician } from "./assignableTechnicians";
+import OrderLinePerformersPicker from "./OrderLinePerformersPicker";
+import { linePerformerIds, linePerformerNames } from "./linePerformers";
 import { OrderLineInlineNumberEditor as InlineNumberEditor } from "./OrderLineInlineNumberEditor";
 import { parseOrderServiceLinePrice } from "./updateOrderServiceLine";
 
@@ -38,8 +33,6 @@ type OrderServiceLineInlineCellsProps = {
   /** Called when Esc / blur-cancel finishes so the parent can restore search focus. */
   onEditorClosed: () => void;
 };
-
-const NONE_VALUE = "__service_line_none__";
 
 /**
  * Click-to-edit price / performer cells for one order service line.
@@ -149,7 +142,7 @@ export default function OrderServiceLineInlineCells({
   );
 }
 
-/** Performer control rendered under the service name (not a table column). */
+/** Performer(s) control rendered under the service name (not a table column). */
 export function OrderServiceLinePerformerInline({
   line,
   editable,
@@ -170,29 +163,31 @@ export function OrderServiceLinePerformerInline({
   onRequestEdit: () => void;
   onCancel: () => void;
   onSaved: () => void;
-  onSaveField: (technicianId: string) => Promise<void>;
+  /** Receives all performer ids joined with "," — first = main performer. */
+  onSaveField: (performerIds: string) => Promise<void>;
   onEditorClosed: () => void;
 }) {
   const { t } = useTranslation();
   const canEditLine = editable && Boolean(line.id?.trim());
   const isEditing = Boolean(canEditLine && editing && editing.lineId === line.id && editing.field === "performer");
-  const name = line.technicianName?.trim() ?? "";
+  const names = linePerformerNames(line);
+  const label = names.length > 1 ? t("orders.team.performers") : t("orders.team.performer");
 
   if (isEditing) {
     return (
-      <InlinePerformerEditor
-        label={t("orders.team.performer")}
-        initial={line.technicianId ?? ""}
+      <InlinePerformersEditor
+        line={line}
         options={performerOptions}
         saving={saving}
         testId={`service-line-performer-editor-${line.id}`}
-        onCancel={() => {
-          onCancel();
-          onEditorClosed();
+        // Each add / remove is saved right away, but the editor stays open so several performers can be
+        // picked in a row; «Готово» (or Esc) closes it.
+        onSave={async (ids) => {
+          await onSaveField(ids.join(","));
         }}
-        onSave={async (technicianId) => {
-          await onSaveField(technicianId);
-          onSaved();
+        onDone={(changed) => {
+          if (changed) onSaved();
+          else onCancel();
           onEditorClosed();
         }}
       />
@@ -200,10 +195,10 @@ export function OrderServiceLinePerformerInline({
   }
 
   if (!canEditLine) {
-    if (!name) return null;
+    if (names.length === 0) return null;
     return (
       <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-        {t("orders.team.performer")}: {name}
+        {label}: {names.join(", ")}
       </p>
     );
   }
@@ -212,25 +207,106 @@ export function OrderServiceLinePerformerInline({
     <button
       type="button"
       data-testid={`service-line-performer-${line.id ?? "legacy"}`}
-      aria-label={t("orders.detail.editField", { field: t("orders.team.performer") })}
+      aria-label={t("orders.detail.editField", { field: t("orders.team.performers") })}
       className={cn(
         "-mx-1 rounded-md px-1 py-0.5 text-left text-xs outline-none transition-colors",
         "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/35",
-        name ? "text-muted-foreground [overflow-wrap:anywhere]" : "font-normal text-muted-foreground/80",
+        names.length ? "text-muted-foreground [overflow-wrap:anywhere]" : "font-normal text-muted-foreground/80",
       )}
       onClick={(event) => {
         event.stopPropagation();
         onRequestEdit();
       }}
     >
-      {name ? (
+      {names.length ? (
         <>
-          {t("orders.team.performer")}: {name}
+          {label}: {names.join(", ")}
         </>
       ) : (
         t("orders.detail.addPerformer")
       )}
     </button>
+  );
+}
+
+/** Editor for all performers of a line: every add / remove is saved right away; «Готово» closes it. */
+function InlinePerformersEditor({
+  line,
+  options,
+  saving,
+  testId,
+  onSave,
+  onDone,
+}: {
+  line: OrderService;
+  options: AssignableTechnician[];
+  saving: boolean;
+  testId: string;
+  onSave: (ids: string[]) => Promise<void>;
+  onDone: (changed: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<string[]>(() => linePerformerIds(line));
+  const [changed, setChanged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const knownNames: Record<string, string> = {};
+  if (line.technicianId && line.technicianName) knownNames[line.technicianId] = line.technicianName;
+  (line.extraTechnicianIds ?? []).forEach((id, index) => {
+    const name = line.extraTechnicianNames?.[index];
+    if (name) knownNames[id] = name;
+  });
+
+  async function change(next: string[]) {
+    const previous = draft;
+    setDraft(next);
+    setError(null);
+    setBusy(true);
+    try {
+      await onSave(next);
+      setChanged(true);
+    } catch (err) {
+      setDraft(previous);
+      setError(err instanceof Error && err.message ? err.message : t("common.somethingWentWrong"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="mt-0.5 space-y-1.5"
+      data-testid={testId}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          onDone(changed);
+        }
+      }}
+    >
+      <OrderLinePerformersPicker
+        idPrefix={testId}
+        value={draft}
+        options={options}
+        knownNames={knownNames}
+        saving={saving || busy}
+        onChange={(next) => void change(next)}
+      />
+      <button
+        type="button"
+        className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-muted disabled:opacity-50"
+        disabled={busy}
+        onClick={() => onDone(changed)}
+      >
+        {t("orders.team.done")}
+      </button>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive [overflow-wrap:anywhere]">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -273,110 +349,3 @@ function InlineValueButton({
   );
 }
 
-function InlinePerformerEditor({
-  label,
-  initial,
-  options,
-  saving,
-  testId,
-  onCancel,
-  onSave,
-}: {
-  label: string;
-  initial: string;
-  options: AssignableTechnician[];
-  saving: boolean;
-  testId: string;
-  onCancel: () => void;
-  onSave: (technicianId: string) => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(true);
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const skipBlurRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    setPortalContainer(rootRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null);
-  }, []);
-
-  async function submit(next: string) {
-    if (saving) return;
-    if (next === initial) {
-      onCancel();
-      return;
-    }
-    setError(null);
-    try {
-      await onSave(next);
-    } catch (err) {
-      if (mountedRef.current) {
-        setError(err instanceof Error && err.message ? err.message : t("common.somethingWentWrong"));
-      }
-    }
-  }
-
-  return (
-    <div
-      ref={rootRef}
-      className="mt-0.5 space-y-1"
-      data-testid={testId}
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          if (open) return;
-          event.preventDefault();
-          event.stopPropagation();
-          skipBlurRef.current = true;
-          onCancel();
-        }
-      }}
-    >
-      <Select
-        value={draft || NONE_VALUE}
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next && !skipBlurRef.current && !saving && !error) {
-            // Closing the list without a change cancels; a change already called submit.
-            if (draft === initial) onCancel();
-          }
-        }}
-        onValueChange={(next) => {
-          const value = next === NONE_VALUE ? "" : next;
-          setDraft(value);
-          skipBlurRef.current = true;
-          void submit(value);
-        }}
-        disabled={saving}
-      >
-        <SelectTrigger aria-label={label} className="h-9 w-full max-w-full text-base md:text-sm">
-          <SelectValue placeholder={t("orders.team.notAssigned")} />
-        </SelectTrigger>
-        <SelectContent container={portalContainer} position="popper" className="z-[80]">
-          <SelectItem value={NONE_VALUE}>{t("orders.team.notAssigned")}</SelectItem>
-          {options.map((technician) => (
-            <SelectItem key={technician.id} value={technician.id}>
-              {technician.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {error ? (
-        <p role="alert" className="text-xs text-destructive [overflow-wrap:anywhere]">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}

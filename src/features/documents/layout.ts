@@ -1,5 +1,6 @@
 /** Versioned print-document layout model + HTML renderer for the visual builder. */
 
+import { linePerformerNames } from "../orders/linePerformers";
 import type { InvoiceDocument, InvoiceItem, Order, OrderMaterial, OrderService } from "../../lib/types";
 import i18n, { currentLanguage } from "../../i18n";
 import { isAppLanguage } from "../../i18n/languages";
@@ -555,7 +556,7 @@ function serviceRows(order: Order | null): LineRow[] {
           : "",
     sum: lineNet(line.price, line.quantity, line.discountType, line.discountValue),
     warranty: line.warrantyMonths ? `${line.warrantyMonths} mo` : "",
-    performer: line.technicianName?.trim() || "",
+    performer: linePerformerNames(line).join(", "),
     comment: line.comment?.trim() || "",
   }));
 }
