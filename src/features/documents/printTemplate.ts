@@ -184,8 +184,10 @@ export function sanitizeTemplateHtml(html: string) {
   return doc.body.innerHTML;
 }
 
-const PRINT_PAGE_STYLE =
-  "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;color:#111;margin:16px}";
+/** Default print font — the designer sheet draws with the same stack so text wraps identically. */
+export const PRINT_DEFAULT_FONT_STACK = "system-ui,-apple-system,Segoe UI,Roboto,sans-serif";
+
+const PRINT_PAGE_STYLE = `body{font-family:${PRINT_DEFAULT_FONT_STACK};font-size:13px;color:#111;margin:16px}`;
 
 /** Wraps sanitised fragment into a standalone document for an iframe `srcDoc`. */
 export function buildPrintDocument(bodyHtml: string, title = "", extraCss = "") {

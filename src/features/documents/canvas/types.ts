@@ -72,6 +72,8 @@ export type VariableCanvasElement = CanvasElementBase & {
   labelBold?: boolean;
   labelColor?: ColorRef;
   hideIfEmpty?: boolean;
+  /** Colon between the label and the value (left label only). Default true. */
+  labelColon?: boolean;
 };
 
 export type TableCanvasElement = CanvasElementBase & {
@@ -79,6 +81,8 @@ export type TableCanvasElement = CanvasElementBase & {
   source: TableSource;
   columns: Array<TableColumn & { align?: "left" | "center" | "right" }>;
   showTotalsRow: boolean;
+  /** Column header row. Default true. */
+  showHeader?: boolean;
   headerBackground: ColorRef;
   headerTextColor: ColorRef;
   rowBackground?: ColorRef;
@@ -111,7 +115,7 @@ export type RectCanvasElement = CanvasElementBase & {
 
 export type ImageCanvasElement = CanvasElementBase & {
   type: "image";
-  /** "logo" uses workspace/company logo from print context. */
+  /** "logo" uses workspace/company logo from print context; "url" = own picture (data:image/… stored in the layout). */
   source: "logo" | "url";
   url?: string;
   objectFit?: "contain" | "cover" | "fill";

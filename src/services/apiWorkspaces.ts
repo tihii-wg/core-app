@@ -144,6 +144,25 @@ export function isPrintCurrencyPositionColumnSupported() {
   return printCurrencyPositionColumnSupported;
 }
 
+function isMissingWorkScheduleColumn(error: { code?: string; message?: string }) {
+  return (
+    (error.code === "42703" || error.code === "PGRST204" || /does not exist|schema cache/i.test(error.message ?? "")) &&
+    error.message?.includes("work_schedule") === true
+  );
+}
+
+/** False once a read showed workspaces.work_schedule is missing (SQL 20261118160000 not applied). Re-checked after a minute. */
+let workScheduleColumnSupported = true;
+let workScheduleMissingAt = 0;
+function refreshWorkScheduleSupport() {
+  if (!workScheduleColumnSupported && Date.now() - workScheduleMissingAt > 60_000) {
+    workScheduleColumnSupported = true;
+  }
+}
+export function isWorkScheduleColumnSupported() {
+  return workScheduleColumnSupported;
+}
+
 function isMissingSessionIdleTimeoutColumn(error: { code?: string; message?: string }) {
   return (
     (error.code === "42703" || error.code === "PGRST204" || /does not exist|schema cache/i.test(error.message ?? "")) &&
@@ -195,6 +214,7 @@ function membershipSelect(options: {
   lineComments?: boolean;
   sessionIdle?: boolean;
   printCurrency?: boolean;
+  workSchedule?: boolean;
 }) {
   const fields = ["id", "name", "owner_id", "deleted_at", "industry_id"];
   if (options.avatar) fields.push("avatar_path");
@@ -206,6 +226,7 @@ function membershipSelect(options: {
   if (options.lineComments) fields.push("line_comments_visibility");
   if (options.sessionIdle) fields.push("session_idle_timeout_minutes");
   if (options.printCurrency) fields.push("print_currency_position");
+  if (options.workSchedule) fields.push("work_schedule");
   const industry = options.industry
     ? `,
     industry:industries (
@@ -231,6 +252,7 @@ function isMissingIndustrySchema(error: { code?: string; message?: string }) {
     error.message?.includes("inventory_markup") ||
     error.message?.includes("session_idle_timeout_minutes") ||
     error.message?.includes("print_currency_position") ||
+    error.message?.includes("work_schedule") ||
     error.message?.includes("line_comments_visibility") ||
     mentionsPreferenceColumn(error.message) ||
     mentionsSubscriptionColumn(error.message) ||
@@ -276,6 +298,8 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
   let sessionIdle = sessionIdleTimeoutColumnSupported;
   refreshPrintCurrencyPositionSupport();
   let printCurrency = printCurrencyPositionColumnSupported;
+  refreshWorkScheduleSupport();
+  let workSchedule = workScheduleColumnSupported;
 
   for (let attempt = 0; attempt < 18; attempt += 1) {
     const { data, error } = await run(
@@ -290,9 +314,16 @@ async function selectMembership(run: (select: string) => PromiseLike<MembershipR
         lineComments,
         sessionIdle,
         printCurrency,
+        workSchedule,
       }),
     );
     if (!error) return data;
+    if (workSchedule && isMissingWorkScheduleColumn(error)) {
+      workSchedule = false;
+      workScheduleColumnSupported = false;
+      workScheduleMissingAt = Date.now();
+      continue;
+    }
     if (printCurrency && isMissingPrintCurrencyPositionColumn(error)) {
       printCurrency = false;
       printCurrencyPositionColumnSupported = false;
@@ -394,6 +425,8 @@ export type WorkspaceDetails = {
   printExtraInfo: string;
   /** Currency code before ("MDL 100,00") or after ("100,00 MDL") the amount in printed documents. */
   printCurrencyPosition: PrintCurrencyPosition;
+  /** Free-text working hours for printed documents (workspaces.work_schedule; "" when unset / not installed). */
+  workSchedule: string;
   countryCode: string;
   documentLanguage: string;
   warrantyStart: string;
@@ -526,6 +559,7 @@ export function toWorkspaceDetails(row: unknown): WorkspaceDetails | null {
     companyDescription: readString(record.company_description),
     printExtraInfo: readString(record.print_extra_info),
     printCurrencyPosition: normalizePrintCurrencyPosition(record.print_currency_position),
+    workSchedule: readString(record.work_schedule),
     countryCode: readString(record.country_code, "MD") || "MD",
     documentLanguage: normalizeDocumentLanguage(readString(record.document_language, readString(record.language, "en"))),
     warrantyStart: normalizeWarrantyStart(readString(record.warranty_start)),
@@ -888,16 +922,24 @@ export async function setWorkspaceIndustry(workspaceId: string, industryId: stri
 
 export async function updateWorkspaceDetails(
   workspaceId: string,
-  input: { name: string; industryId: string; inventoryMarkup: number } & Partial<WorkspaceCompanyFields>,
+  input: { name: string; industryId: string; inventoryMarkup: number } & Partial<WorkspaceCompanyFields> & {
+    workSchedule?: string;
+  },
 ) {
   const fields = workspaceUpdateFields(input);
   const user = await currentUser();
   await requireWorkspaceMembership(user.id, workspaceId);
 
   const resolvedIndustryId = await resolveIndustryId(fields.industryId);
-  const { data, error } = await supabase
+  refreshWorkScheduleSupport();
+  const schedulePatch =
+    input.workSchedule !== undefined && workScheduleColumnSupported
+      ? { work_schedule: input.workSchedule.trim() || null }
+      : {};
+  const runUpdate = (extra: Record<string, unknown>) => supabase
     .from("workspaces")
     .update({
+      ...extra,
       name: fields.name,
       industry_id: resolvedIndustryId,
       inventory_markup: fields.inventoryMarkup,
@@ -914,6 +956,14 @@ export async function updateWorkspaceDetails(
     .eq("id", workspaceId)
     .select("id")
     .maybeSingle();
+
+  let { data, error } = await runUpdate(schedulePatch);
+  if (error && "work_schedule" in schedulePatch && isMissingWorkScheduleColumn(error)) {
+    // SQL not applied yet: keep every other company field, skip the schedule.
+    workScheduleColumnSupported = false;
+    workScheduleMissingAt = Date.now();
+    ({ data, error } = await runUpdate({}));
+  }
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error(ownerOnlyWorkspaceMessage());

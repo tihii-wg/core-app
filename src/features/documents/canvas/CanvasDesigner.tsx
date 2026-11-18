@@ -18,7 +18,8 @@ import { buildInvoicePrintContext, buildOrderPrintContext, listRecentInvoicesFor
 import { useActiveWorkspaceId } from "../../profiles/useGetProfile";
 import { useGetDocumentStyle } from "../useGetDocumentStyle";
 import { useSaveDocumentTemplateLayout } from "../useDocumentTemplateMutations";
-import { applyTemplateVariables, buildPrintDocument } from "../printTemplate";
+import { PRINT_DEFAULT_FONT_STACK, buildPrintDocument } from "../printTemplate";
+import { fontFamilyCss } from "../documentStyle";
 import type { DocumentTemplateType } from "../layout";
 import { Button } from "../../../ui/Button";
 import { Dialog, DialogContent, DialogTitle } from "../../../ui/Dialog";
@@ -47,7 +48,13 @@ import { defaultCanvasLayoutForType } from "./defaultCanvasLayouts";
 import { CANVAS_MM_TO_PX, computeFitWidthZoomPercent, needsFitWidth } from "./fitWidthZoom";
 import { createHistory, pushHistory, redoHistory, undoHistory, type CanvasHistory } from "./history";
 import { isCanvasDocumentLayout, parseCanvasDocumentLayout } from "./guards";
-import { renderCanvasBlockPreviewHtml, renderCanvasLayoutToHtmlSync, canvasPageCss } from "./renderCanvasLayout";
+import {
+  CANVAS_LINE_HEIGHT,
+  applyTableGrowthShifts,
+  renderCanvasElementInnerHtml,
+  renderCanvasLayoutToHtmlSync,
+  canvasPageCss,
+} from "./renderCanvasLayout";
 import { snapBox, snapValue, type Guide } from "./snap";
 import { pageSizeMm, type CanvasDocumentLayout, type CanvasElement } from "./types";
 import { convertBlocksLayoutToCanvas } from "./convertToCanvas";
@@ -221,6 +228,10 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   }, [dirty, onDirtyChange]);
 
   const themeColors = documentStyleQuery.data?.colors ?? null;
+  // Exactly the font the printout uses (style font when the template follows the style, else the print default).
+  const styleFontFamily = documentStyleQuery.data?.font?.family;
+  const sheetFontCss =
+    layout.useStyle === true && styleFontFamily ? fontFamilyCss(styleFontFamily) : PRINT_DEFAULT_FONT_STACK;
   const selected = layout.elements.filter((el) => selectedIds.includes(el.id));
   const { widthMm, heightMm } = pageSizeMm(layout.page.size, layout.page.orientation);
   const content = useMemo(
@@ -281,7 +292,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
             colors: themeColors,
           }),
         );
-        const pageCss = canvasPageCss(layout);
+        const pageCss = canvasPageCss(layout, layout.useStyle === true ? sheetFontCss : undefined);
         setPreviewHtml(buildPrintDocument(body, name, pageCss));
       } catch {
         if (!cancelled) {
@@ -293,7 +304,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     return () => {
       cancelled = true;
     };
-  }, [previewEntityId, layout, workspaceId, isInvoice, documentType, template.showCents, themeColors, name, i18n.language]);
+  }, [previewEntityId, layout, workspaceId, isInvoice, documentType, template.showCents, themeColors, name, i18n.language, sheetFontCss]);
 
   function mmFromClient(clientX: number, clientY: number): { xMm: number; yMm: number } | null {
     const sheet = sheetRef.current;
@@ -334,6 +345,19 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
       true,
     );
   }
+
+  // Where the printout puts each element with the preview data: tables / totals grow with their rows and push
+  // the blocks below down. The sheet shows the same placement, so the sketch matches the paper.
+  const printPlacement = useMemo(() => {
+    const map = new Map<string, { yMm: number; hMm: number }>();
+    if (!showData) return map;
+    for (const placed of applyTableGrowthShifts(layout.elements, previewCtx)) {
+      if (Math.abs(placed.yMm - placed.element.yMm) > 0.01 || Math.abs(placed.hMm - placed.element.hMm) > 0.01) {
+        map.set(placed.element.id, { yMm: placed.yMm, hMm: placed.hMm });
+      }
+    }
+    return map;
+  }, [showData, layout.elements, previewCtx]);
 
   const selectionBounds = useMemo(() => {
     if (!selected.length) return null;
@@ -771,6 +795,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
       themeColors={themeColors}
       workspaceId={workspaceId}
       disabled={!canEdit}
+      isInvoice={isInvoice}
       onChangeElements={setElements}
       onChangePageBackground={(fill) =>
         commit({
@@ -782,55 +807,52 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   );
 
   function renderElementPreview(el: CanvasElement) {
-    const demoOpts = {
-      showCents: template.showCents,
-      currency: previewCtx.currency,
-      locale: previewCtx.locale || i18n.language || "en",
-    };
-    if (el.type === "text") {
-      if (showData) {
-        return applyTemplateVariables(el.content, previewCtx, demoOpts).replace(/<[^>]*>/g, "");
-      }
-      return segmentTextWithVariables(el.content, t).map((segment, index) =>
-        segment.kind === "text" ? (
-          <span key={index}>{segment.text}</span>
-        ) : (
-          <VariableChip key={`${segment.token}-${index}`} label={segment.label} known={segment.known} />
-        ),
+    if (el.type === "line" || el.type === "rect") return null;
+    // Field-names mode: text and variables show chips instead of values.
+    if (!showData && el.type === "text") {
+      return (
+        <span style={{ whiteSpace: "pre-wrap" }}>
+          {segmentTextWithVariables(el.content, t).map((segment, index) =>
+            segment.kind === "text" ? (
+              <span key={index}>{segment.text}</span>
+            ) : (
+              <VariableChip key={`${segment.token}-${index}`} label={segment.label} known={segment.known} />
+            ),
+          )}
+        </span>
       );
     }
-    if (el.type === "variable") {
-      if (showData) {
-        const value = applyTemplateVariables(el.token, previewCtx, demoOpts).replace(/<[^>]*>/g, "");
-        return `${el.label ? `${el.label}: ` : ""}${value || "—"}`;
-      }
+    if (!showData && el.type === "variable") {
       const resolved = resolveVariableLabel(el.token, t);
+      const separator = el.labelPosition === "top" ? "" : el.labelColon === false ? "" : ":";
       return (
         <>
-          {el.label ? <span className="mr-1 opacity-70">{el.label}:</span> : null}
+          {el.label ? <span className="mr-1 opacity-70">{`${el.label}${separator}`}</span> : null}
           <VariableChip label={resolved.label} known={resolved.known} />
         </>
       );
     }
-    if (el.type === "table" || el.type === "totals" || el.type === "signatures") {
-      // Same HTML as the printout (escaped by the renderer), always filled with the selected preview data
-      // (demo or a real order/invoice) so rows and amounts are visible while designing.
-      const html = renderCanvasBlockPreviewHtml(el, previewCtx, themeColors, template.showCents, false);
-      if (html) {
-        return <div className="pointer-events-none h-full w-full" dangerouslySetInnerHTML={{ __html: html }} />;
-      }
-      return (
-        <span className="text-xs text-muted-foreground">
-          {t(`settings.printTemplates.canvas.${el.type}` as "settings.printTemplates.canvas.table")}
-        </span>
-      );
-    }
-    if (el.type === "image") return t("settings.printTemplates.canvas.image");
     if (el.type === "qr") return t("settings.printTemplates.canvas.qr");
-    if (el.type === "pageNumber") return el.format ?? "N/M";
-    if (el.type === "line") return null;
-    if (el.type === "rect") return null;
-    return null;
+    // Everything else: the SAME HTML the printout gets (escaped by the renderer), filled with the selected
+    // preview data (demo or a real order / invoice) — so the sketch matches the paper.
+    const html = renderCanvasElementInnerHtml(el, previewCtx, themeColors, template.showCents, false);
+    if (!html) {
+      if (el.type === "image") {
+        return <span className="text-xs text-muted-foreground">{t("settings.printTemplates.canvas.image")}</span>;
+      }
+      if (el.type === "variable") return <span className="text-xs text-muted-foreground">—</span>;
+      return null;
+    }
+    return (
+      <div
+        className={
+          el.type === "image" || el.type === "table" || el.type === "totals" || el.type === "signatures"
+            ? "pointer-events-none h-full w-full"
+            : "pointer-events-none"
+        }
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
   }
 
   const sheetSurface = (
@@ -861,6 +883,9 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
           ref={contentRef}
           className="absolute box-border overflow-hidden border border-dashed border-sky-400/50"
           style={{
+            fontFamily: sheetFontCss,
+            lineHeight: CANVAS_LINE_HEIGHT,
+            color: "#111",
             left: content.marginsMm * MM_TO_PX,
             top: content.marginsMm * MM_TO_PX,
             width: content.contentWidthMm * MM_TO_PX,
@@ -903,11 +928,16 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 <div
                   key={el.id}
                   className={`absolute ${isSelected ? "ring-2 ring-sky-500" : "hover:ring-1 hover:ring-sky-300"}`}
+                  title={
+                    printPlacement.has(el.id) && el.type !== "table" && el.type !== "totals"
+                      ? t("settings.printTemplates.canvas.shiftedByTable")
+                      : undefined
+                  }
                   style={{
                     left: el.xMm * MM_TO_PX,
-                    top: el.yMm * MM_TO_PX,
+                    top: (printPlacement.get(el.id)?.yMm ?? el.yMm) * MM_TO_PX,
                     width: el.wMm * MM_TO_PX,
-                    height: el.hMm * MM_TO_PX,
+                    height: (printPlacement.get(el.id)?.hMm ?? el.hMm) * MM_TO_PX,
                     zIndex: el.zIndex,
                     cursor: el.locked ? "default" : "move",
                     ...box.reactStyle,
@@ -1228,12 +1258,18 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
             <div
               className={cn(
-                "grid min-h-0 flex-1",
+                // One row exactly as tall as the free space → each column scrolls on its own.
+                "grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)]",
                 isLg ? "grid-cols-[220px_minmax(0,1fr)_280px]" : isTablet ? "grid-cols-[220px_minmax(0,1fr)]" : "grid-cols-1",
               )}
             >
               {isLg || isTablet ? (
-                <div className="min-h-0 overflow-hidden border-r border-border">
+                <div
+                  className={cn(
+                    "min-h-0 border-r border-border",
+                    isLg || tabletPanel === "palette" ? "overflow-hidden" : "overflow-y-auto overscroll-contain",
+                  )}
+                >
                   {isLg || tabletPanel === "palette" ? (
                     <CanvasPalette onAddElement={isMobile ? addPaletteElement : undefined} />
                   ) : (
@@ -1249,7 +1285,12 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                 ) : null}
               </div>
 
-              {isLg ? <div className="min-h-0 overflow-hidden border-l border-border">{propertiesPanel}</div> : null}
+              {isLg ? (
+                // Own vertical scroll: long property lists (colours, table columns…) must reach the bottom.
+                <div className="min-h-0 overflow-y-auto overscroll-contain border-l border-border" data-testid="canvas-properties-scroll">
+                  {propertiesPanel}
+                </div>
+              ) : null}
             </div>
 
             {isMobile ? (

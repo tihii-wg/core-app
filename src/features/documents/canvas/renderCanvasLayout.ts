@@ -29,6 +29,12 @@ import {
   type TotalsCanvasElement,
 } from "./types";
 
+/**
+ * Line height of every canvas element on paper AND on the designer sheet. The app UI uses 1.5 and the print
+ * document the browser default; without one shared value text wrapped and stacked differently in the printout.
+ */
+export const CANVAS_LINE_HEIGHT = 1.2;
+
 export type RenderCanvasOptions = {
   showCents?: boolean;
   colors?: StyleColorPalette | null;
@@ -77,7 +83,14 @@ export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintCont
     if (item.element.type === "table") {
       const el = item.element as TableCanvasElement;
       const rows = canvasRowsForSource(el.source, ctx);
-      const grown = estimateTableHeightMm(rows.length, el.showTotalsRow, item.hMm);
+      const grown = estimateTableHeightMm(
+        rows.length,
+        el.showTotalsRow,
+        item.hMm,
+        el.showHeader !== false,
+        el.style.fontSizePt,
+        el.style.lineHeight ?? CANVAS_LINE_HEIGHT,
+      );
       const extra = grown - item.hMm;
       item.hMm = grown;
       shiftOverlappingBelow(placed, item, extra);
@@ -181,7 +194,7 @@ function renderTableHtml(
     : "border-collapse:collapse";
 
   let html = `<table style="width:100%;height:100%;${tableRadiusCss}">`;
-  if (includeHeader) {
+  if (includeHeader && el.showHeader !== false) {
     html += "<thead><tr>";
     columns.forEach((column, colIndex) => {
       const width = column.widthPercent ? `width:${column.widthPercent}%` : "";
@@ -396,32 +409,54 @@ function resolveQrContent(el: Extract<CanvasElement, { type: "qr" }>, ctx: Print
   return ctx.order?.orderNumber ? `order:${ctx.order.orderNumber}` : " ";
 }
 
-async function renderElementInner(
+/** Only real pictures: an embedded image (data:image/…) or an http(s) address. */
+function safeImageSrc(raw: string | undefined): string {
+  const src = (raw ?? "").trim();
+  if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(src)) return src;
+  if (/^https?:\/\//i.test(src)) return src;
+  return "";
+}
+
+function variableInnerHtml(
+  element: Extract<CanvasElement, { type: "variable" }>,
+  ctx: PrintContext,
+  colors: StyleColorPalette | null | undefined,
+  showCents: boolean,
+  showTokens: boolean,
+): string {
+  const tokenText = showTokens ? escapeHtmlText(element.token) : applyText(element.token, ctx, showCents, false);
+  const empty = !tokenText.replace(/<[^>]*>/g, "").trim();
+  if (empty && element.hideIfEmpty !== false) return "";
+  const labelColor = resolveCanvasColor(element.labelColor ?? element.style.color, colors) ?? "#666666";
+  const labelWeight = element.labelBold ? "700" : "400";
+  const separator = element.labelPosition === "top" ? "" : element.labelColon === false ? " " : ": ";
+  const label = element.label
+    ? `<span style="color:${labelColor};font-weight:${labelWeight}">${escapeHtmlText(element.label)}${separator}</span>`
+    : "";
+  if (element.labelPosition === "top" && label) {
+    return `<div style="display:flex;flex-direction:column;gap:1mm">${label}<div>${tokenText}</div></div>`;
+  }
+  return `${label}${tokenText}`;
+}
+
+/**
+ * Inner HTML of one element — the single source for print, preview AND the designer sheet, so the sketch
+ * matches the printout. QR codes need an async encoder: here they are a placeholder (see renderElementInner).
+ */
+export function renderCanvasElementInnerHtml(
   element: CanvasElement,
   ctx: PrintContext,
   colors: StyleColorPalette | null | undefined,
   showCents: boolean,
   showTokens: boolean,
-  pageIndex: number,
-  pageCount: number,
-): Promise<string> {
+  pageIndex = 0,
+  pageCount = 1,
+): string {
   switch (element.type) {
     case "text":
       return applyText(element.content, ctx, showCents, showTokens);
-    case "variable": {
-      const tokenText = showTokens ? escapeHtmlText(element.token) : applyText(element.token, ctx, showCents, false);
-      const empty = !tokenText.replace(/<[^>]*>/g, "").trim();
-      if (empty && element.hideIfEmpty !== false) return "";
-      const labelColor = resolveCanvasColor(element.labelColor ?? element.style.color, colors) ?? "#666666";
-      const labelWeight = element.labelBold ? "700" : "400";
-      const label = element.label
-        ? `<span style="color:${labelColor};font-weight:${labelWeight}">${escapeHtmlText(element.label)}${element.labelPosition === "top" ? "" : ": "}</span>`
-        : "";
-      if (element.labelPosition === "top" && label) {
-        return `<div style="display:flex;flex-direction:column;gap:1mm">${label}<div>${tokenText}</div></div>`;
-      }
-      return `${label}${tokenText}`;
-    }
+    case "variable":
+      return variableInnerHtml(element, ctx, colors, showCents, showTokens);
     case "table": {
       const rows = canvasRowsForSource(element.source, ctx);
       return renderTableHtml(element, ctx, colors, showCents, rows, 0, true);
@@ -441,7 +476,7 @@ async function renderElementInner(
         const match = /src="([^"]+)"/.exec(logo);
         src = match?.[1] ?? "";
       } else {
-        src = element.url?.trim() ?? "";
+        src = safeImageSrc(element.url);
       }
       if (!src) return "";
       const fit = element.objectFit ?? "contain";
@@ -456,19 +491,32 @@ async function renderElementInner(
     }
     case "signatures":
       return renderSignaturesHtml(element);
-    case "qr": {
-      if (showTokens) return `<div style="font-size:8pt;color:#666">QR</div>`;
-      const content = resolveQrContent(element, ctx);
-      const dataUrl = await qrDataUrl(content);
-      if (!dataUrl) return "";
-      return `<img src="${dataUrl}" alt="QR" style="width:100%;height:100%;object-fit:contain" />`;
-    }
+    case "qr":
+      return `<div style="font-size:8pt;color:#666">QR</div>`;
     case "pageNumber": {
       const format = element.format ?? "Стр. {n} из {m}";
       const text = format.replace(/\{n\}/g, String(pageIndex + 1)).replace(/\{m\}/g, String(pageCount));
       return escapeHtmlText(text);
     }
   }
+}
+
+async function renderElementInner(
+  element: CanvasElement,
+  ctx: PrintContext,
+  colors: StyleColorPalette | null | undefined,
+  showCents: boolean,
+  showTokens: boolean,
+  pageIndex: number,
+  pageCount: number,
+): Promise<string> {
+  if (element.type === "qr" && !showTokens) {
+    const content = resolveQrContent(element, ctx);
+    const dataUrl = await qrDataUrl(content);
+    if (!dataUrl) return "";
+    return `<img src="${dataUrl}" alt="QR" style="width:100%;height:100%;object-fit:contain" />`;
+  }
+  return renderCanvasElementInnerHtml(element, ctx, colors, showCents, showTokens, pageIndex, pageCount);
 }
 
 async function renderPlaced(
@@ -508,7 +556,8 @@ async function renderPlaced(
 
   // Totals grow with row count; keep visible so long "in words" lines are never clipped.
   const box = buildCanvasBoxStyle(item.element.style, colors, {
-    overflow: item.element.type === "totals" ? "visible" : "hidden",
+    // Tables and totals grow with their rows — never clip them (the designer sheet shows them whole too).
+    overflow: item.element.type === "totals" || item.element.type === "table" ? "visible" : "hidden",
   });
   const wrapped = box.wrapForAlign ? canvasAlignWrapperHtml(inner, box.align) : inner;
   const parts = [
@@ -573,7 +622,7 @@ export async function renderCanvasLayoutToHtml(
       "page-break-after:auto",
     );
   }
-  return `<div class="canvas-root" style="-webkit-print-color-adjust:exact;print-color-adjust:exact">${pageHtml.join("")}</div>`;
+  return `<div class="canvas-root" style="line-height:${CANVAS_LINE_HEIGHT};-webkit-print-color-adjust:exact;print-color-adjust:exact">${pageHtml.join("")}</div>`;
 }
 
 /**
@@ -603,37 +652,15 @@ export function renderCanvasLayoutToHtmlSync(
         .sort((a, b) => a.element.zIndex - b.element.zIndex || a.yMm - b.yMm)
         .map((item) => {
           const y = item.element.repeatOnEveryPage ? item.yMm : item.yMm - page.pageOffsetY;
-          let inner = "";
-          if (item.element.type === "text") inner = applyText(item.element.content, ctx, showCents, showTokens);
-          else if (item.element.type === "variable") {
-            const tokenText = showTokens
-              ? escapeHtmlText(item.element.token)
-              : applyText(item.element.token, ctx, showCents, false);
-            const label = item.element.label
-              ? `<span>${escapeHtmlText(item.element.label)}: </span>`
-              : "";
-            inner = `${label}${tokenText}`;
-          } else if (item.element.type === "table") {
-            const rows = canvasRowsForSource(item.element.source, ctx);
-            inner = renderTableHtml(item.element, ctx, colors, showCents, rows, 0, true);
-          } else if (item.element.type === "totals") {
-            inner = renderTotalsHtml(item.element, ctx, colors, showCents, showTokens);
-          } else if (item.element.type === "pageNumber") {
-            const format = item.element.format ?? "Стр. {n} из {m}";
-            inner = escapeHtmlText(
-              format.replace(/\{n\}/g, String(pageIndex + 1)).replace(/\{m\}/g, String(pages.length)),
-            );
-          } else if (item.element.type === "signatures") {
-            inner = renderSignaturesHtml(item.element);
-          } else if (item.element.type === "qr") {
-            inner = "QR";
-          } else if (item.element.type === "line") {
-            const color = resolveCanvasColor(item.element.color, colors) ?? "#000";
-            inner =
-              item.element.orientation === "horizontal"
-                ? `<div style="border-top:${item.element.thicknessPt}pt solid ${color}"></div>`
-                : `<div style="border-left:${item.element.thicknessPt}pt solid ${color};height:100%"></div>`;
-          }
+          const inner = renderCanvasElementInnerHtml(
+            item.element,
+            ctx,
+            colors,
+            showCents,
+            showTokens,
+            pageIndex,
+            pages.length,
+          );
 
           if (item.element.type === "rect") {
             const radiusMm = item.element.radiusMm ?? item.element.style.radiusMm;
@@ -646,7 +673,8 @@ export function renderCanvasLayoutToHtmlSync(
             return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${rectCss};-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
           }
           const box = buildCanvasBoxStyle(item.element.style, colors, {
-            overflow: item.element.type === "totals" ? "visible" : "hidden",
+            // Tables and totals grow with their rows — never clip them (the designer sheet shows them whole too).
+    overflow: item.element.type === "totals" || item.element.type === "table" ? "visible" : "hidden",
           });
           const wrapped = box.wrapForAlign ? canvasAlignWrapperHtml(inner, box.align) : inner;
           return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${box.outerCss};-webkit-print-color-adjust:exact;print-color-adjust:exact">${wrapped}</div>`;
@@ -654,7 +682,7 @@ export function renderCanvasLayoutToHtmlSync(
         .join("");
       const bgStyle = pageBg ? `background:${pageBg};` : "";
       const breakAfter = pageIndex < pages.length - 1 ? "page-break-after:always;" : "";
-      return `<div class="canvas-page" style="position:relative;width:${contentWidthMm}mm;height:${contentHeightMm}mm;${bgStyle}${breakAfter}-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden">${children}</div>`;
+      return `<div class="canvas-page" style="position:relative;width:${contentWidthMm}mm;height:${contentHeightMm}mm;line-height:${CANVAS_LINE_HEIGHT};${bgStyle}${breakAfter}-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden">${children}</div>`;
     })
     .join("");
 }

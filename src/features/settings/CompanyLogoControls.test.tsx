@@ -54,6 +54,7 @@ const workspace: WorkspaceDetails = {
   defaultCommentsVisibility: "private",
   lineCommentsVisibility: "private",
   printCurrencyPosition: "before",
+  workSchedule: "",
   defaultFilesVisibility: "private",
   preventDuplicateDeviceOrders: false,
   showClientMiddleName: false,

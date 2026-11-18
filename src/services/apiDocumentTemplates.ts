@@ -198,7 +198,8 @@ export function renderTemplateDocument(
     if (isCanvasDocumentLayout(layout)) {
       const body = renderCanvasLayoutToHtmlSync(layout, ctx, {
         showCents: template.showCents,
-        colors: layout.useStyle === true ? style.colors : null,
+        // Same palette the designer draws with: theme:* colors look identical on screen and on paper.
+        colors: style.colors,
       });
       return buildPrintDocument(body, template.name, resolvePrintPageCss(layout, style));
     }
@@ -227,7 +228,8 @@ export async function renderTemplateDocumentAsync(
     const style = resolveDocumentStyle(documentStyle);
     const body = await renderCanvasLayoutToHtml(layout, ctx, {
       showCents: template.showCents,
-      colors: layout.useStyle === true ? style.colors : null,
+      // Same palette the designer draws with: theme:* colors look identical on screen and on paper.
+        colors: style.colors,
     });
     return buildPrintDocument(body, template.name, resolvePrintPageCss(layout, style));
   }

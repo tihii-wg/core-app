@@ -240,6 +240,7 @@ function buildWorkspace(input: DemoPrintContextInput, t: (key: string) => string
     companyDescription: "",
     printExtraInfo: t("settings.printTemplates.demo.companyPhone"),
     printCurrencyPosition: input.currencyPosition ?? demoCurrencyPosition,
+    workSchedule: t("settings.printTemplates.demo.workSchedule"),
     countryCode: "MD",
     documentLanguage: input.locale ?? "ru",
     warrantyStart: "closed_at",

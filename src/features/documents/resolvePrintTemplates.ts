@@ -175,7 +175,8 @@ export function renderBuiltinTemplateDocument(
   documentStyle?: DocumentStyle | null,
 ): string {
   const layout = defaultCanvasLayoutForType(documentType, t);
-  const colors = layout.useStyle === true ? styleColors(documentStyle) : null;
+  // Same palette the designer draws with: theme:* colors look identical on screen and on paper.
+  const colors = styleColors(documentStyle);
   const body = renderCanvasLayoutToHtmlSync(layout, { ...ctx, documentKind: documentType }, {
     showCents: true,
     colors,
@@ -194,7 +195,8 @@ export async function renderBuiltinTemplateDocumentAsync(
   documentStyle?: DocumentStyle | null,
 ): Promise<string> {
   const layout = defaultCanvasLayoutForType(documentType, t);
-  const colors = layout.useStyle === true ? styleColors(documentStyle) : null;
+  // Same palette the designer draws with: theme:* colors look identical on screen and on paper.
+  const colors = styleColors(documentStyle);
   const body = await renderCanvasLayoutToHtml(layout, { ...ctx, documentKind: documentType }, {
     showCents: true,
     colors,

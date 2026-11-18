@@ -210,10 +210,21 @@ export function canvasTotalsRowVisible(key: TotalsRowKey, ctx: PrintContext): bo
 }
 
 /** Estimated table body height in mm (header + rows + optional totals). */
-export function estimateTableHeightMm(rowCount: number, showTotalsRow: boolean, baseHMm: number): number {
-  const headerMm = 8;
-  const rowMm = 6;
-  const totalsMm = showTotalsRow ? 7 : 0;
+export function estimateTableHeightMm(
+  rowCount: number,
+  showTotalsRow: boolean,
+  baseHMm: number,
+  showHeader = true,
+  fontSizePt = 10,
+  lineHeight = 1.2,
+): number {
+  // One text line at the element's font size + the cell paddings the renderer uses (1.5 mm rows, 2 mm header)
+  // + the 1 pt border. A fixed 6 mm per row was too small: the last rows / the Σ row were cut off on paper.
+  const lineMm = Math.max(6, fontSizePt) * 0.3528 * lineHeight;
+  const borderMm = 0.36;
+  const headerMm = showHeader ? lineMm + 4 + borderMm : 0;
+  const rowMm = lineMm + 3 + borderMm;
+  const totalsMm = showTotalsRow ? rowMm : 0;
   const computed = headerMm + rowCount * rowMm + totalsMm;
   return Math.max(baseHMm, computed);
 }

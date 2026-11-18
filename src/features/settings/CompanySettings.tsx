@@ -17,7 +17,7 @@ import { industryName, sortIndustriesForSelect } from "../industries/industryNam
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useUpdateWorkspace, useUpdateWorkspaceTaxInvoiceSettings } from "../workspaces/useUpdateWorkspace";
 import { parseMarkupPercent, markupFieldError } from "../inventory/markup";
-import type { WorkspaceDetails } from "../../services/apiWorkspaces";
+import { isWorkScheduleColumnSupported, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import { CompanyLogoControls } from "./CompanyLogoControls";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
@@ -36,6 +36,7 @@ type CompanyFormValues = {
   bankCode: string;
   companyDescription: string;
   printExtraInfo: string;
+  workSchedule: string;
 };
 
 function FieldError({ message }: { message?: string }) {
@@ -68,8 +69,10 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
       bankCode: workspace.bankCode ?? "",
       companyDescription: workspace.companyDescription ?? "",
       printExtraInfo: workspace.printExtraInfo ?? "",
+      workSchedule: workspace.workSchedule ?? "",
     },
   });
+  const workScheduleAvailable = isWorkScheduleColumnSupported();
 
   const saving = isSavingWorkspace || isSubmitting;
   const canEdit = useCanEditWorkspaceSettings(workspace.role);
@@ -123,6 +126,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
         bankCode: values.bankCode,
         companyDescription: values.companyDescription,
         printExtraInfo: values.printExtraInfo,
+        ...(workScheduleAvailable ? { workSchedule: values.workSchedule } : {}),
       });
     } catch {
       return;
@@ -257,6 +261,22 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
               <Label htmlFor="printExtraInfo">{t("settings.company.printExtraInfoLabel")}</Label>
               <Textarea id="printExtraInfo" rows={3} {...register("printExtraInfo")} disabled={locked} />
               <p className="text-xs text-muted-foreground">{t("settings.company.printExtraInfoHint")}</p>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="workSchedule">{t("settings.company.workScheduleLabel")}</Label>
+              <Textarea
+                id="workSchedule"
+                rows={2}
+                maxLength={500}
+                {...register("workSchedule")}
+                disabled={locked || !workScheduleAvailable}
+              />
+              <p className="text-xs text-muted-foreground">
+                {workScheduleAvailable
+                  ? t("settings.company.workScheduleHint")
+                  : t("settings.company.workScheduleNotInstalled")}
+              </p>
             </div>
           </div>
 

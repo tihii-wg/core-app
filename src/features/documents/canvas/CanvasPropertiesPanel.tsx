@@ -9,6 +9,10 @@ import { Button } from "../../../ui/Button";
 import { Switch } from "../../../ui/Switch";
 import type { ColorRef } from "../colorRef";
 import { groupedVisibleVariables, resolveVariableLabel } from "./variableDisplay";
+import { SignaturesBlockSettings, TableBlockSettings, TotalsBlockSettings } from "./CanvasBlockSettings";
+import { heightForImageRatio, templateImageFromFile, TemplateImageError } from "./imageUpload";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../ui/Select";
+import toast from "react-hot-toast";
 
 type Props = {
   layout: CanvasDocumentLayout;
@@ -16,6 +20,8 @@ type Props = {
   themeColors?: StyleColorPalette | null;
   workspaceId?: string;
   disabled?: boolean;
+  /** Invoice templates offer invoice table sources; order documents the order line sources. */
+  isInvoice?: boolean;
   onChangeElements: (updater: (elements: CanvasElement[]) => CanvasElement[]) => void;
   onChangePageBackground: (fill: Fill | null) => void;
 };
@@ -34,6 +40,7 @@ export function CanvasPropertiesPanel({
   themeColors,
   workspaceId,
   disabled,
+  isInvoice = false,
   onChangeElements,
   onChangePageBackground,
 }: Props) {
@@ -115,7 +122,7 @@ export function CanvasPropertiesPanel({
   }
 
   return (
-    <div className="space-y-4 overflow-auto p-3">
+    <div className="space-y-4 p-3 pb-8">
       <h3 className="text-sm font-medium">{t("settings.printTemplates.canvas.properties")}</h3>
       <p className="text-xs text-muted-foreground">
         {selected.length > 1 ? `${selected.length}` : single?.type}
@@ -272,7 +279,191 @@ export function CanvasPropertiesPanel({
               }
             />
           </div>
+          {single.label ? (
+            <>
+              <div className="space-y-1">
+                <Label className="text-xs">{t("settings.printTemplates.canvas.labelPosition")}</Label>
+                <div className="flex gap-1">
+                  {(["left", "top"] as const).map((position) => (
+                    <Button
+                      key={position}
+                      type="button"
+                      size="sm"
+                      variant={(single.labelPosition ?? "left") === position ? "default" : "outline"}
+                      disabled={disabled}
+                      onClick={() =>
+                        patchAll((el) =>
+                          el.type === "variable" ? { ...el, labelPosition: position === "left" ? undefined : "top" } : el,
+                        )
+                      }
+                    >
+                      {t(position === "left" ? "settings.printTemplates.canvas.labelLeft" : "settings.printTemplates.canvas.labelTop")}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              {(single.labelPosition ?? "left") === "left" ? (
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs">{t("settings.printTemplates.canvas.labelColon")}</Label>
+                  <Switch
+                    checked={single.labelColon !== false}
+                    disabled={disabled}
+                    data-testid="canvas-label-colon"
+                    onCheckedChange={(checked) =>
+                      patchAll((el) => (el.type === "variable" ? { ...el, labelColon: checked ? undefined : false } : el))
+                    }
+                  />
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">{t("settings.printTemplates.canvas.labelBold")}</Label>
+                <Switch
+                  checked={Boolean(single.labelBold)}
+                  disabled={disabled}
+                  onCheckedChange={(checked) =>
+                    patchAll((el) => (el.type === "variable" ? { ...el, labelBold: checked || undefined } : el))
+                  }
+                />
+              </div>
+            </>
+          ) : null}
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">{t("settings.printTemplates.canvas.hideIfEmpty")}</Label>
+            <Switch
+              checked={single.hideIfEmpty !== false}
+              disabled={disabled}
+              onCheckedChange={(checked) =>
+                patchAll((el) => (el.type === "variable" ? { ...el, hideIfEmpty: checked ? undefined : false } : el))
+              }
+            />
+          </div>
         </div>
+      ) : null}
+
+      {single?.type === "image" ? (
+        <div className="space-y-2" data-testid="canvas-image-settings">
+          <div className="space-y-1">
+            <Label className="text-xs">{t("settings.printTemplates.canvas.imageSource")}</Label>
+            <div className="flex flex-wrap gap-1">
+              {(["logo", "url"] as const).map((source) => (
+                <Button
+                  key={source}
+                  type="button"
+                  size="sm"
+                  variant={single.source === source ? "default" : "outline"}
+                  disabled={disabled}
+                  onClick={() => patchAll((el) => (el.type === "image" ? { ...el, source } : el))}
+                >
+                  {t(source === "logo" ? "settings.printTemplates.canvas.imageLogo" : "settings.printTemplates.canvas.imageCustom")}
+                </Button>
+              ))}
+            </div>
+          </div>
+          {single.source === "url" ? (
+            <div className="space-y-1">
+              <label
+                className={`inline-flex h-8 cursor-pointer items-center rounded-md border border-border px-3 text-sm hover:bg-muted ${
+                  disabled ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {single.url ? t("settings.printTemplates.canvas.imageReplace") : t("settings.printTemplates.canvas.imageUpload")}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  data-testid="canvas-image-file"
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (!file) return;
+                    void templateImageFromFile(file)
+                      .then((image) =>
+                        patchAll((el) =>
+                          el.type === "image"
+                            ? { ...el, source: "url", url: image.dataUrl, hMm: heightForImageRatio(el.wMm, image) }
+                            : el,
+                        ),
+                      )
+                      .catch((error: unknown) => {
+                        toast.error(
+                          error instanceof TemplateImageError && error.kind === "invalid"
+                            ? t("settings.printTemplates.canvas.imageInvalid")
+                            : t("settings.printTemplates.canvas.imageReadFailed"),
+                        );
+                      });
+                  }}
+                />
+              </label>
+              <p className="text-[11px] text-muted-foreground">{t("settings.printTemplates.canvas.imageHint")}</p>
+            </div>
+          ) : null}
+          <div className="space-y-1">
+            <Label className="text-xs">{t("settings.printTemplates.canvas.imageFit")}</Label>
+            <Select
+              value={single.objectFit ?? "contain"}
+              disabled={disabled}
+              onValueChange={(value) => {
+                if (value === "contain" || value === "cover" || value === "fill") {
+                  patchAll((el) => (el.type === "image" ? { ...el, objectFit: value } : el));
+                }
+              }}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contain">{t("settings.printTemplates.canvas.fitContain")}</SelectItem>
+                <SelectItem value="cover">{t("settings.printTemplates.canvas.fitCover")}</SelectItem>
+                <SelectItem value="fill">{t("settings.printTemplates.canvas.fitFill")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {single.source === "url" && single.url ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={disabled || single.locked}
+              onClick={() => {
+                const url = single.url ?? "";
+                const probe = new Image();
+                probe.onload = () =>
+                  patchAll((el) =>
+                    el.type === "image"
+                      ? { ...el, hMm: heightForImageRatio(el.wMm, { widthPx: probe.naturalWidth, heightPx: probe.naturalHeight }) }
+                      : el,
+                  );
+                probe.src = url;
+              }}
+            >
+              {t("settings.printTemplates.canvas.imageKeepRatio")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {single?.type === "table" ? (
+        <TableBlockSettings
+          element={single}
+          isInvoice={isInvoice}
+          disabled={disabled}
+          onChange={(next) => patchAll((el) => (el.id === next.id ? next : el))}
+        />
+      ) : null}
+      {single?.type === "totals" ? (
+        <TotalsBlockSettings
+          element={single}
+          disabled={disabled}
+          onChange={(next) => patchAll((el) => (el.id === next.id ? next : el))}
+        />
+      ) : null}
+      {single?.type === "signatures" ? (
+        <SignaturesBlockSettings
+          element={single}
+          disabled={disabled}
+          onChange={(next) => patchAll((el) => (el.id === next.id ? next : el))}
+        />
       ) : null}
 
       <div className="grid grid-cols-2 gap-2">

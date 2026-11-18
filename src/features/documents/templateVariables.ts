@@ -190,6 +190,17 @@ function companyIdno(ctx: PrintContext) {
   return text(ctx.legalEntity?.taxNumber) || text(ctx.workspace?.taxVatNumber) || text(ctx.workspace?.registrationNumber);
 }
 
+/** Tax / VAT number only (settings field «ИНН / НДС»), without falling back to the registration number. */
+function companyTaxVat(ctx: PrintContext) {
+  return text(ctx.legalEntity?.taxNumber) || text(ctx.workspace?.taxVatNumber);
+}
+
+/** Multi-line working hours: escaped, line breaks kept. */
+function companyWorkSchedule(ctx: PrintContext) {
+  const value = text(ctx.workspace?.workSchedule);
+  return value ? escapeHtmlText(value).replace(/\r?\n/g, "<br/>") : "";
+}
+
 function companyIban(ctx: PrintContext) {
   return text(ctx.legalEntity?.iban) || text(ctx.workspace?.iban);
 }
@@ -915,6 +926,13 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     resolve: companyIdno,
   },
   {
+    token: "#КОМПАНИЯ-ИНН-НДС",
+    group: "company",
+    labelKey: "settings.printTemplates.variables.company.taxVat.label",
+    kind: "text",
+    resolve: companyTaxVat,
+  },
+  {
     token: "#КОМПАНИЯ-IBAN",
     group: "company",
     labelKey: "settings.printTemplates.variables.company.iban.label",
@@ -948,6 +966,13 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     labelKey: "settings.printTemplates.variables.company.extraInfo.label",
     kind: "text",
     resolve: companyExtraInfo,
+  },
+  {
+    token: "#КОМПАНИЯ-ГРАФИК",
+    group: "company",
+    labelKey: "settings.printTemplates.variables.company.workSchedule.label",
+    kind: "html",
+    resolve: companyWorkSchedule,
   },
   {
     token: "#КОМПАНИЯ-ЛОГОТИП",

@@ -206,6 +206,7 @@ function parseElement(value: unknown): CanvasElement | null {
       if (value.labelBold != null && typeof value.labelBold !== "boolean") return null;
       if (value.labelColor != null && !isCanvasColorRef(value.labelColor)) return null;
       if (value.hideIfEmpty != null && typeof value.hideIfEmpty !== "boolean") return null;
+      if (value.labelColon != null && typeof value.labelColon !== "boolean") return null;
       return {
         ...base,
         type: "variable",
@@ -215,6 +216,7 @@ function parseElement(value: unknown): CanvasElement | null {
         ...(value.labelBold ? { labelBold: true } : {}),
         ...(isCanvasColorRef(value.labelColor) ? { labelColor: String(value.labelColor).trim() } : {}),
         ...(value.hideIfEmpty === false ? { hideIfEmpty: false } : value.hideIfEmpty ? { hideIfEmpty: true } : {}),
+        ...(value.labelColon === false ? { labelColon: false } : {}),
       } satisfies VariableCanvasElement;
     }
     case "table": {
@@ -222,6 +224,7 @@ function parseElement(value: unknown): CanvasElement | null {
       const columns = parseTableColumns(value.columns);
       if (!columns) return null;
       if (typeof value.showTotalsRow !== "boolean") return null;
+      if (value.showHeader != null && typeof value.showHeader !== "boolean") return null;
       if (!isCanvasColorRef(value.headerBackground) || !isCanvasColorRef(value.headerTextColor)) return null;
       if (!isCanvasColorRef(value.borderColor)) return null;
       if (value.borders !== "all" && value.borders !== "horizontal" && value.borders !== "none") return null;
@@ -238,6 +241,7 @@ function parseElement(value: unknown): CanvasElement | null {
         source: value.source as TableSource,
         columns,
         showTotalsRow: value.showTotalsRow,
+        ...(value.showHeader === false ? { showHeader: false } : {}),
         headerBackground: String(value.headerBackground).trim(),
         headerTextColor: String(value.headerTextColor).trim(),
         borderColor: String(value.borderColor).trim(),
