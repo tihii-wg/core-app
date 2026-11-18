@@ -1,5 +1,6 @@
 import { useCallback, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { serializeCustomFieldValue } from "../../../services/apiCustomFields";
 import type { UpdateOrderFieldsPatch } from "../../../services/apiOrders";
@@ -117,20 +118,32 @@ export function useOrderInlineEditors({
         }
         if (!linkedVehicle) throw new Error(t("vehicles.errors.notFound"));
         guardWrite();
-        await persistOrderVehicleMileage({
-          workspaceId,
-          clientId: linkedVehicle.clientId,
-          vehicle: linkedVehicle,
-          formMileage: text,
-          queryClient,
-        });
         const snapshot = buildOrderMileageSnapshot(text, linkedVehicle);
         if (!snapshot) {
           closeInlineEditor();
           return;
         }
-        patch = { ...snapshot, vehicleMileageConfirmed: true };
-        break;
+        // Optimistic: show the new mileage and close the editor right away; the order and the vehicle's current
+        // mileage are saved in parallel in the background (≈5 round trips). On failure the old value comes back.
+        const previous = order;
+        onOrderUpdated({ ...order, ...snapshot, vehicleMileageConfirmed: true });
+        closeInlineEditor();
+        void Promise.all([
+          saveOrderFields({ orderId: order.id, patch: { ...snapshot, vehicleMileageConfirmed: true } }),
+          persistOrderVehicleMileage({
+            workspaceId,
+            clientId: linkedVehicle.clientId,
+            vehicle: linkedVehicle,
+            formMileage: text,
+            queryClient,
+          }),
+        ])
+          .then(([updated]) => onOrderUpdated(updated))
+          .catch((error: unknown) => {
+            onOrderUpdated(previous);
+            toast.error(error instanceof Error && error.message ? error.message : t("common.somethingWentWrong"));
+          });
+        return;
       }
       case "description":
       case "deadline":

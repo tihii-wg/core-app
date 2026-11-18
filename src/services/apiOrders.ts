@@ -26,6 +26,7 @@ import { isUuid } from "../lib/uuid";
 import { assertValidOptionalVin } from "../lib/vin";
 import { parseMileageUnit } from "../features/vehicles/vehicleMileage";
 import i18n from "../i18n";
+import { markLocalOrderWrite } from "../features/realtime/localWrites";
 import { sameExtraPerformers } from "../features/orders/linePerformers";
 import { assertVehicleAssignable } from "./apiVehicles";
 import {
@@ -4130,6 +4131,7 @@ export async function updateOrder(
   }: UpdateOrderDetails,
   targetWorkspaceId: string | undefined,
 ) {
+  markLocalOrderWrite(orderId);
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
   // Empty `services: []` is allowed: syncOrderServices deletes every line for this order.
   // Omitting `services` (undefined) leaves existing lines untouched.
@@ -4452,6 +4454,7 @@ export async function updateOrderFields(
   targetWorkspaceId: string | undefined,
 ): Promise<Order> {
   const workspaceId = requireWorkspaceId(targetWorkspaceId);
+  markLocalOrderWrite(orderId);
 
   const columns: Record<string, unknown> = {};
   if (patch.description !== undefined) columns.description = nullIfEmptyText(patch.description);

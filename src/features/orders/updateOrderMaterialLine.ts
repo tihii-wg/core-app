@@ -1,3 +1,4 @@
+import { markLocalOrderWrite } from "../realtime/localWrites";
 import i18n from "../../i18n";
 import type { Order, OrderMaterial } from "../../lib/types";
 import { parseQuantity } from "../../lib/quantity";
@@ -365,6 +366,7 @@ export async function updateOrderMaterialLine(
   workspaceId: string | undefined,
   options?: { warehouseName?: string; skipStockPreflight?: boolean },
 ): Promise<Order> {
+  markLocalOrderWrite(orderId);
   const id = lineId.trim();
   if (!id) throw new Error("Material line id is required");
   const ws = requireWorkspaceId(workspaceId);

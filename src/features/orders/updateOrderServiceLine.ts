@@ -1,3 +1,4 @@
+import { markLocalOrderWrite } from "../realtime/localWrites";
 import {
   getOrder,
   orderFromLineRpcPayload,
@@ -193,6 +194,7 @@ export async function updateOrderServiceLine(
   patch: OrderServiceLinePatch,
   workspaceId: string | undefined,
 ): Promise<Order> {
+  markLocalOrderWrite(orderId);
   const id = lineId.trim();
   if (!id) throw new Error("Service line id is required");
 

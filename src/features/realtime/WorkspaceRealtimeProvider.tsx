@@ -1,3 +1,4 @@
+import { isRecentLocalOrderWrite, realtimeRowOrderId } from "./localWrites";
 import {
   createContext,
   useCallback,
@@ -130,6 +131,14 @@ export function WorkspaceRealtimeProvider({ children }: Props) {
         },
         (payload) => {
           const name = payload.table ?? table;
+          // Echo of a write this tab just made → already refreshed by the mutation itself.
+          if (name === "orders" || name === "order_employees" || name === "order_comments" || name === "order_attachments") {
+            const row = ((payload.new && Object.keys(payload.new).length ? payload.new : payload.old) ?? null) as Record<
+              string,
+              unknown
+            > | null;
+            if (isRecentLocalOrderWrite(realtimeRowOrderId(name, row))) return;
+          }
           scheduleInvalidate(name);
         },
       );

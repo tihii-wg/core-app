@@ -1,3 +1,4 @@
+import { markLocalOrderWrite } from "../realtime/localWrites";
 import {
   appendOrderCatalogServiceLine,
   getOrder,
@@ -117,6 +118,7 @@ export async function appendOrderServiceLines(
   drafts: readonly OrderService[],
   workspaceId: string | undefined,
 ): Promise<Order> {
+  markLocalOrderWrite(orderId);
   // One catalog service (the order-card search): one RPC when available.
   // (A line with extra performers goes through `updateOrder`, which also writes extra_technician_ids.)
   if (drafts.length === 1 && drafts[0]?.serviceId?.trim() && !drafts[0].extraTechnicianIds?.length) {
@@ -146,6 +148,7 @@ export async function appendOrderMaterialLines(
   drafts: readonly OrderMaterial[],
   workspaceId: string | undefined,
 ): Promise<Order> {
+  markLocalOrderWrite(orderId);
   const fresh = await getOrder(orderId, workspaceId);
   // Estimates never issue stock — skip add-and-issue RPC (warehouse optional).
   if (fresh.kind !== "estimate" && drafts.length === 1 && isCatalogOrderMaterial(drafts[0]!)) {
