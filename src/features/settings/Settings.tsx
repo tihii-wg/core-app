@@ -56,7 +56,7 @@ import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { applyProfileTheme, normalizeProfileTheme, type ProfileTheme } from "../../services/apiProfiles";
 import { TeamSettings } from "./TeamSettings";
 import { SubscriptionStatusCard } from "./SubscriptionStatusCard";
-import { ImportDataDemo } from "./ImportDataDemo";
+import { ImportDataSettings } from "./ImportDataSettings";
 import { StatusesSettings } from "./StatusesSettings";
 import { OrderFieldsSettings } from "./OrderFieldsSettings";
 import { LocationsSettings } from "./LocationsSettings";
@@ -372,7 +372,7 @@ export function SettingsModule() {
         </TabsContent>
 
         <TabsContent value="import" className="mt-5 space-y-5">
-          <ImportDataDemo />
+          <ImportDataSettings />
         </TabsContent>
 
         <TabsContent value="migration" className="mt-5 space-y-5">
