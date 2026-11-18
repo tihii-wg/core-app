@@ -586,6 +586,8 @@ const orders: Messages<typeof en> = {
     noResults: "Nimic găsit",
     createService: "Creează serviciul „<strong>{{name}}</strong>”",
     createWork: "Creează lucrarea „<strong>{{name}}</strong>”",
+    createItem: "Creează piesa „<strong>{{name}}</strong>”",
+    createMaterial: "Creează materialul „<strong>{{name}}</strong>”",
     addOneTime: "Poziție unică „<strong>{{name}}</strong>”",
     addCustomer: "Piesa clientului „<strong>{{name}}</strong>”",
   },

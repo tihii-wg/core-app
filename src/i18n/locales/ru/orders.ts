@@ -590,6 +590,8 @@ const orders: Messages<typeof en> = {
     noResults: "Ничего не найдено",
     createService: "Создать услугу «<strong>{{name}}</strong>»",
     createWork: "Создать работу «<strong>{{name}}</strong>»",
+    createItem: "Создать запчасть «<strong>{{name}}</strong>»",
+    createMaterial: "Создать материал «<strong>{{name}}</strong>»",
     addOneTime: "Разовая позиция «<strong>{{name}}</strong>»",
     addCustomer: "Запчасть клиента «<strong>{{name}}</strong>»",
   },

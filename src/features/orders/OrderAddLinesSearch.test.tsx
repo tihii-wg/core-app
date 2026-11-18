@@ -17,6 +17,19 @@ const createDialogState = vi.hoisted(() => ({
 }));
 const toastFn = vi.hoisted(() => Object.assign(vi.fn(), { error: toastError, success: vi.fn() }));
 
+vi.mock("../workspaces/useWorkspaceSubscription", () => ({
+  useWorkspaceSubscription: () => ({ canWrite: true }),
+}));
+
+vi.mock("../inventory/AddInventoryItemDialog", () => ({
+  AddInventoryItemDialog: (props: { open: boolean; initialName?: string }) =>
+    props.open ? <div data-testid="create-item-dialog">{props.initialName}</div> : null,
+}));
+
+vi.mock("../inventory/QuickGoodsReceiptDialog", () => ({
+  QuickGoodsReceiptDialog: () => null,
+}));
+
 vi.mock("../services/CreateServiceDialog", () => ({
   default: (props: { open: boolean; initialName?: string; onCreated?: (service: Service) => void }) => {
     createDialogState.props = props;
@@ -224,6 +237,20 @@ describe("OrderAddLinesSearch", () => {
 
     expect(await screen.findByTestId("create-service-dialog")).toHaveTextContent("Polishing");
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+  });
+
+  it("opens the Parts page 'new part' form with the typed name", async () => {
+    const user = userEvent.setup();
+    servicesState.services = [];
+    inventoryState.items = [];
+    renderSearch();
+
+    const input = screen.getByRole("combobox");
+    await user.click(input);
+    await user.type(input, "Cabin filter");
+    await user.click(await screen.findByTestId("order-add-lines-create-item"));
+
+    expect(await screen.findByTestId("create-item-dialog")).toHaveTextContent("Cabin filter");
   });
 
   it("hides create-service for roles that cannot manage services", async () => {

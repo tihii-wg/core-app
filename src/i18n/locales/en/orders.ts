@@ -579,6 +579,8 @@ export default {
     noResults: "Nothing found",
     createService: "Create service “<strong>{{name}}</strong>”",
     createWork: "Create work “<strong>{{name}}</strong>”",
+    createItem: "Create part “<strong>{{name}}</strong>”",
+    createMaterial: "Create material “<strong>{{name}}</strong>”",
     addOneTime: "One-time item “<strong>{{name}}</strong>”",
     addCustomer: "Customer part “<strong>{{name}}</strong>”",
   },

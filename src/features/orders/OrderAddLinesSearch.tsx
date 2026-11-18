@@ -2,6 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { createPortal } from "react-dom";
 import { Trans, useTranslation } from "react-i18next";
 import CreateServiceDialog from "../services/CreateServiceDialog";
+import { AddInventoryItemDialog } from "../inventory/AddInventoryItemDialog";
+import { QuickGoodsReceiptDialog } from "../inventory/QuickGoodsReceiptDialog";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import toast from "react-hot-toast";
 import type { InventoryItem, Order, OrderMaterial, OrderService, Service } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -58,6 +61,7 @@ type FlatOption =
   | { type: "show-more-services" }
   | { type: "show-more-items" }
   | { type: "create-service" }
+  | { type: "create-item" }
   | { type: "one-time" }
   | { type: "customer" };
 
@@ -106,6 +110,11 @@ export default function OrderAddLinesSearch({
   const [pendingServiceId, setPendingServiceId] = useState<string | null>(null);
   /** Name prefilled into the full "new service" dialog; null = dialog closed. */
   const [createServiceName, setCreateServiceName] = useState<string | null>(null);
+  /** Name prefilled into the Parts page "new part" dialog; null = dialog closed. */
+  const [createItemName, setCreateItemName] = useState<string | null>(null);
+  /** Part just created here → goods receipt (оприходование) dialog. */
+  const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
+  const { canWrite: canWriteWorkspace } = useWorkspaceSubscription();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -140,6 +149,8 @@ export default function OrderAddLinesSearch({
     (service) => service.service_name.trim().toLowerCase() === trimmedQuery.toLowerCase(),
   );
   const showCreateService = showNoMatchActions && allowServices && canCreateServices && !exactServiceName;
+  const exactItemName = activeItems.some((item) => item.name.trim().toLowerCase() === trimmedQuery.toLowerCase());
+  const showCreateItem = showNoMatchActions && allowMaterials && canWriteWorkspace && !exactItemName;
   const showFreeform = showNoMatchActions && allowMaterials && freeformSupported;
 
   const flatOptions = useMemo(() => {
@@ -153,6 +164,7 @@ export default function OrderAddLinesSearch({
       if (itemGroup.hiddenCount > 0) options.push({ type: "show-more-items" });
     }
     if (showCreateService) options.push({ type: "create-service" });
+    if (showCreateItem) options.push({ type: "create-item" });
     if (showFreeform) {
       options.push({ type: "one-time" });
       options.push({ type: "customer" });
@@ -166,17 +178,35 @@ export default function OrderAddLinesSearch({
     serviceGroup.hiddenCount,
     serviceGroup.visible,
     showCreateService,
+    showCreateItem,
     showFreeform,
   ]);
 
   const firstItemIndex = flatOptions.findIndex((option) => option.type === "item");
   const firstNoMatchIndex = flatOptions.findIndex(
-    (option) => option.type === "create-service" || option.type === "one-time" || option.type === "customer",
+    (option) =>
+      option.type === "create-service" ||
+      option.type === "create-item" ||
+      option.type === "one-time" ||
+      option.type === "customer",
   );
+
+  /** Inventory item to pre-highlight once it shows up in the list (a part just created here). */
+  const highlightItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setActiveIndex(0);
   }, [query, open, servicesExpanded, itemsExpanded, showNoMatchActions]);
+
+  // Runs after the reset above: once the refetched catalog contains the new part, highlight it for Enter.
+  useEffect(() => {
+    const wantedId = highlightItemIdRef.current;
+    if (!wantedId) return;
+    const index = flatOptions.findIndex((option) => option.type === "item" && option.item.id === wantedId);
+    if (index < 0) return;
+    highlightItemIdRef.current = null;
+    setActiveIndex(index);
+  }, [flatOptions, query, open]);
 
   useEffect(() => {
     if (!open) {
@@ -379,6 +409,22 @@ export default function OrderAddLinesSearch({
     setCreateServiceName(trimmedQuery);
   }
 
+  function openCreateItemDialog() {
+    if (!trimmedQuery) return;
+    setOpen(false);
+    setCreateItemName(trimmedQuery);
+  }
+
+  /** After the part is created (and received), put it into the search so Enter adds it to the order. */
+  function showItemInSearch(item: InventoryItem) {
+    highlightItemIdRef.current = item.id;
+    setQuery(item.name);
+    setServicesExpanded(false);
+    setItemsExpanded(false);
+    setOpen(true);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
   function handleServiceCreated(service: Service) {
     setQuery("");
     // Same as picking it from the catalog: the new service becomes an order line straight away.
@@ -401,6 +447,9 @@ export default function OrderAddLinesSearch({
         break;
       case "create-service":
         openCreateServiceDialog();
+        break;
+      case "create-item":
+        openCreateItemDialog();
         break;
       case "one-time":
         setOpen(false);
@@ -621,6 +670,32 @@ export default function OrderAddLinesSearch({
                 );
               }
 
+              if (option.type === "create-item") {
+                return (
+                  <div key="create-item" className={cn("px-3 py-1", index === firstNoMatchIndex && "border-t border-border pt-3")}>
+                    {index === firstNoMatchIndex ? (
+                      <p className="pb-2 text-sm text-muted-foreground">{t("orders.addLinesSearch.noResults")}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      data-option-index={index}
+                      data-testid="order-add-lines-create-item"
+                      className={cn("w-full rounded-md px-2 py-2 text-left text-sm hover:bg-muted", selected && "bg-muted")}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={openCreateItemDialog}
+                    >
+                      <Trans
+                        i18nKey={works ? "orders.addLinesSearch.createMaterial" : "orders.addLinesSearch.createItem"}
+                        values={{ name: trimmedQuery }}
+                        components={{ strong: <strong /> }}
+                      />
+                    </button>
+                  </div>
+                );
+              }
+
               if (option.type === "one-time" || option.type === "customer") {
                 return (
                   <div
@@ -703,6 +778,30 @@ export default function OrderAddLinesSearch({
         }}
         initialName={createServiceName ?? undefined}
         onCreated={handleServiceCreated}
+      />
+      <AddInventoryItemDialog
+        open={createItemName !== null}
+        onOpenChange={(next) => {
+          if (!next) setCreateItemName(null);
+        }}
+        initialName={createItemName ?? ""}
+        onCreated={(item) => {
+          setCreateItemName(null);
+          // Same procedure as on the Parts page: create → receive the stock (оприходование).
+          setReceiveItem(item);
+        }}
+      />
+      <QuickGoodsReceiptDialog
+        open={receiveItem !== null}
+        onOpenChange={(next) => {
+          if (next || !receiveItem) return;
+          const created = receiveItem;
+          setReceiveItem(null);
+          // Received or skipped: the new part is in the catalog now — show it in the search.
+          showItemInSearch(created);
+        }}
+        item={receiveItem}
+        defaultQuantity={1}
       />
     </div>
   );
