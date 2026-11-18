@@ -238,7 +238,10 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
   const showOrderColumn = isDesktopFeedLayout || detailTab !== "history";
   const showFeedColumn = isDesktopFeedLayout || detailTab === "history";
   const showFooter = Boolean(selectedOrder) && showOrderColumn;
-  const hasPendingEdit = isEditing || Boolean(editingField) || Boolean(serviceLineEdit) || Boolean(materialLineEdit);
+  // The performers editor saves every add / remove right away (closed with «Готово»), so it is not a pending
+  // edit: the footer keeps «Закрыть окно» instead of an active «Сохранить и закрыть».
+  const pendingServiceLineEdit = Boolean(serviceLineEdit) && serviceLineEdit?.field !== "performer";
+  const hasPendingEdit = isEditing || Boolean(editingField) || pendingServiceLineEdit || Boolean(materialLineEdit);
   const canSaveAndClose = canEditOrder && !closedContentLocked && hasPendingEdit;
   const lifecycleBusy = isStatusUpdating || isUnifiedStatusUpdating;
   const showCancelAction = !isEditing && (showOpenLifecycleActions || showCancelClosedAction);
