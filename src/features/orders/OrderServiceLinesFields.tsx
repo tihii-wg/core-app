@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import type { TFunction } from "i18next";
@@ -10,7 +10,8 @@ import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import ServiceCombobox from "../services/ServiceCombobox";
-import { catalogServiceToOrderLine, newServiceToOrderLine } from "../services/orderServiceLine";
+import { catalogServiceToOrderLine } from "../services/orderServiceLine";
+import CreateServiceDialog from "../services/CreateServiceDialog";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import type { AssignableTechnician } from "./assignableTechnicians";
 import OrderLinePerformerSelect from "./OrderLinePerformerSelect";
@@ -115,6 +116,8 @@ export default function OrderServiceLinesFields({
   const { formatMoney } = useWorkspaceMoney();
   const watched = useWatch({ control, name: "services" }) as OrderService[] | undefined;
   const lineLocked = warrantyDisabled ?? disabled;
+  /** Name for the full "new service" dialog; null = closed. */
+  const [createServiceName, setCreateServiceName] = useState<string | null>(null);
 
   function existingServiceIndex(serviceId: string | null, serviceName: string) {
     return fields.findIndex(
@@ -150,9 +153,20 @@ export default function OrderServiceLinesFields({
               onPerformerChosen?.(line.technicianId);
               onLineAdded?.();
             }}
-            onCreate={(serviceName, price) => {
-              if (incrementExisting(existingServiceIndex(null, serviceName))) return;
-              append(newServiceToOrderLine(serviceName, price, warrantyDefaults, orderMileageUnit));
+            onRequestCreate={(serviceName) => setCreateServiceName(serviceName)}
+          />
+          <CreateServiceDialog
+            open={createServiceName !== null}
+            onOpenChange={(next) => {
+              if (!next) setCreateServiceName(null);
+            }}
+            initialName={createServiceName ?? undefined}
+            onCreated={(service) => {
+              // The saved catalog service is added like a picked one.
+              if (incrementExisting(existingServiceIndex(service.id, service.service_name))) return;
+              const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
+              append(line);
+              onPerformerChosen?.(line.technicianId);
               onLineAdded?.();
             }}
           />

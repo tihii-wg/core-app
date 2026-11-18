@@ -7,7 +7,7 @@ import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
-import type { CreateMadalProps, addNewServiceFormData } from "../../lib/types";
+import type { CreateMadalProps, Service, addNewServiceFormData } from "../../lib/types";
 import { defaultServiceCategory, industryServiceCategoryOptions, industryServiceCopy, serviceCategoryLabel } from "../industries/industryWorkflow";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -22,7 +22,22 @@ import { assignableTechnicians } from "../orders/assignableTechnicians";
 
 const NO_DEFAULT_PERFORMER = "__none__";
 
-export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalProps) {
+type AddNewServiceFormProps = CreateMadalProps & {
+  /** Prefilled service name (e.g. typed in an order's search). */
+  initialName?: string;
+  /** Receives the saved catalog service. */
+  onCreated?: (service: Service) => void;
+};
+
+/** Empty price means 0 — a service may be free (price is set per order, or it is a no-charge job). */
+export function parseServicePriceInput(raw: unknown): number {
+  if (typeof raw === "number") return raw;
+  const text = String(raw ?? "").trim().replace(",", ".");
+  if (text === "") return 0;
+  return Number(text);
+}
+
+export default function AddNewServiceForm({ setCreateModalOpen, initialName, onCreated }: AddNewServiceFormProps) {
   const { t } = useTranslation();
   const { mutate } = useCreateNewService();
   const { services } = useGetServices();
@@ -45,7 +60,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
     formState: { errors, isSubmitting },
   } = useForm<addNewServiceFormData>({
     defaultValues: {
-      serviceName: "",
+      serviceName: initialName?.trim() ?? "",
       status: "active",
       category: defaultServiceCategory(workflow),
       price: undefined,
@@ -78,7 +93,8 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
         warrantyKm: normalized.warrantyKm,
       },
       {
-        onSuccess: () => {
+        onSuccess: (created) => {
+          const service = Array.isArray(created) ? created[0] : undefined;
           reset({
             serviceName: "",
             status: "active",
@@ -90,6 +106,7 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
           setWarranty(emptyCatalogWarrantyFormValues());
           setWarrantyError(null);
           setCreateModalOpen(false);
+          if (service) onCreated?.(service);
         },
       },
     );
@@ -162,12 +179,14 @@ export default function AddNewServiceForm({ setCreateModalOpen }: CreateMadalPro
             id="price"
             type="number"
             step="0.01"
+            min={0}
+            inputMode="decimal"
             {...register("price", {
-              valueAsNumber: true,
-              required: t("services.form.priceRequired"),
-              min: {
-                value: 0,
-                message: t("services.form.priceNegative"),
+              setValueAs: parseServicePriceInput,
+              validate: (value) => {
+                if (value === undefined || !Number.isFinite(value)) return t("services.form.priceRequired");
+                if (value < 0) return t("services.form.priceNegative");
+                return true;
               },
             })}
             placeholder="0.00"

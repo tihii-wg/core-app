@@ -12,7 +12,17 @@ const inventoryState = vi.hoisted(() => ({ items: [] as InventoryItem[] }));
 const roleState = vi.hoisted(() => ({ role: "owner" as string }));
 const freeformState = vi.hoisted(() => ({ supported: true }));
 const toastError = vi.hoisted(() => vi.fn());
+const createDialogState = vi.hoisted(() => ({
+  props: null as null | { open: boolean; initialName?: string; onCreated?: (service: Service) => void },
+}));
 const toastFn = vi.hoisted(() => Object.assign(vi.fn(), { error: toastError, success: vi.fn() }));
+
+vi.mock("../services/CreateServiceDialog", () => ({
+  default: (props: { open: boolean; initialName?: string; onCreated?: (service: Service) => void }) => {
+    createDialogState.props = props;
+    return props.open ? <div data-testid="create-service-dialog">{props.initialName}</div> : null;
+  },
+}));
 
 vi.mock("react-hot-toast", () => ({
   default: toastFn,
@@ -199,6 +209,21 @@ describe("OrderAddLinesSearch", () => {
     expect(await screen.findByTestId("order-add-lines-create-service")).toBeInTheDocument();
     expect(screen.getByTestId("order-add-lines-one-time")).toBeInTheDocument();
     expect(screen.getByTestId("order-add-lines-customer")).toBeInTheDocument();
+  });
+
+  it("opens the full new-service form with the typed name instead of an inline price box", async () => {
+    const user = userEvent.setup();
+    servicesState.services = [];
+    inventoryState.items = [];
+    renderSearch();
+
+    const input = screen.getByRole("combobox");
+    await user.click(input);
+    await user.type(input, "Polishing");
+    await user.click(await screen.findByTestId("order-add-lines-create-service"));
+
+    expect(await screen.findByTestId("create-service-dialog")).toHaveTextContent("Polishing");
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
   it("hides create-service for roles that cannot manage services", async () => {

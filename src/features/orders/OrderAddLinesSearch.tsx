@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Trans, useTranslation } from "react-i18next";
+import CreateServiceDialog from "../services/CreateServiceDialog";
 import toast from "react-hot-toast";
 import type { InventoryItem, Order, OrderMaterial, OrderService, Service } from "../../lib/types";
 import { cn } from "../../lib/utils";
@@ -9,7 +10,7 @@ import { Spinner } from "../../ui/Spinner";
 import { serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetServices from "../services/useGetServices";
-import { catalogServiceToOrderLine, newServiceToOrderLine } from "../services/orderServiceLine";
+import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -87,7 +88,7 @@ export default function OrderAddLinesSearch({
   const { supported: freeformSupported } = useOrderMaterialFreeformSupport();
   const { services } = useGetServices();
   const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
-  const { mutateAsync: appendLines, isPending } = useAppendOrderLines();
+  const { mutateAsync: appendLines } = useAppendOrderLines();
   const { data: warehouseRows = [] } = useGetWarehouses();
   const { data: warehouseStock = [] } = useGetWarehouseStock();
   // Picks are queued and saved one after another, so several services / items can be added in a row
@@ -103,9 +104,8 @@ export default function OrderAddLinesSearch({
   const [servicesExpanded, setServicesExpanded] = useState(false);
   const [itemsExpanded, setItemsExpanded] = useState(false);
   const [pendingServiceId, setPendingServiceId] = useState<string | null>(null);
-  const [createPrice, setCreatePrice] = useState("");
-  const [createPriceError, setCreatePriceError] = useState("");
-  const [creatingService, setCreatingService] = useState(false);
+  /** Name prefilled into the full "new service" dialog; null = dialog closed. */
+  const [createServiceName, setCreateServiceName] = useState<string | null>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -215,9 +215,6 @@ export default function OrderAddLinesSearch({
       const target = event.target as Node;
       if (rootRef.current?.contains(target) || listRef.current?.contains(target)) return;
       setOpen(false);
-      setCreatingService(false);
-      setCreatePrice("");
-      setCreatePriceError("");
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -234,9 +231,6 @@ export default function OrderAddLinesSearch({
     setQuery("");
     setServicesExpanded(false);
     setItemsExpanded(false);
-    setCreatingService(false);
-    setCreatePrice("");
-    setCreatePriceError("");
   }
 
   useEffect(() => {
@@ -379,27 +373,16 @@ export default function OrderAddLinesSearch({
     });
   }
 
-  async function handleCreateService() {
-    const name = trimmedQuery;
-    if (!showCreateService || !name) return;
-    const parsedPrice = Number(createPrice);
-    if (createPrice.trim() === "" || Number.isNaN(parsedPrice)) {
-      setCreatePriceError(t("services.form.priceRequired"));
-      setCreatingService(true);
-      return;
-    }
-    if (parsedPrice < 0) {
-      setCreatePriceError(t("services.form.priceNegative"));
-      setCreatingService(true);
-      return;
-    }
-    const draft = newServiceToOrderLine(
-      name,
-      parsedPrice,
-      warrantyDefaults,
-      order.vehicleMileageUnitSnapshot ?? "km",
-    );
-    addServiceLine(draft, draft.serviceId, draft.serviceId);
+  function openCreateServiceDialog() {
+    if (!showCreateService || !trimmedQuery) return;
+    setOpen(false);
+    setCreateServiceName(trimmedQuery);
+  }
+
+  function handleServiceCreated(service: Service) {
+    setQuery("");
+    // Same as picking it from the catalog: the new service becomes an order line straight away.
+    handleSelectService(service);
   }
 
   function activateOption(option: FlatOption) {
@@ -417,7 +400,7 @@ export default function OrderAddLinesSearch({
         setItemsExpanded(true);
         break;
       case "create-service":
-        setCreatingService(true);
+        openCreateServiceDialog();
         break;
       case "one-time":
         setOpen(false);
@@ -460,10 +443,6 @@ export default function OrderAddLinesSearch({
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (creatingService && showCreateService) {
-        void handleCreateService();
-        return;
-      }
       const option = flatOptions[activeIndex];
       if (option) activateOption(option);
     }
@@ -630,7 +609,7 @@ export default function OrderAddLinesSearch({
                       data-testid="order-add-lines-create-service"
                       className={cn("w-full rounded-md px-2 py-2 text-left text-sm hover:bg-muted", selected && "bg-muted")}
                       onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => setCreatingService(true)}
+                      onClick={openCreateServiceDialog}
                     >
                       <Trans
                         i18nKey={works ? "orders.addLinesSearch.createWork" : "orders.addLinesSearch.createService"}
@@ -638,38 +617,6 @@ export default function OrderAddLinesSearch({
                         components={{ strong: <strong /> }}
                       />
                     </button>
-                    {creatingService ? (
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          aria-label={t("services.combobox.priceAriaLabel")}
-                          value={createPrice}
-                          className={cn("min-h-11", createPriceError && "border-destructive")}
-                          onChange={(event) => {
-                            setCreatePrice(event.target.value);
-                            setCreatePriceError("");
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key !== "Enter") return;
-                            event.preventDefault();
-                            void handleCreateService();
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="min-h-11 shrink-0 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                          disabled={Boolean(pendingServiceId) || isPending}
-                          onClick={() => void handleCreateService()}
-                        >
-                          {t("common.add")}
-                        </button>
-                      </div>
-                    ) : null}
-                    {createPriceError ? <p className="text-xs text-destructive">{createPriceError}</p> : null}
                   </div>
                 );
               }
@@ -745,13 +692,18 @@ export default function OrderAddLinesSearch({
           setOpen(true);
           setServicesExpanded(false);
           setItemsExpanded(false);
-          setCreatingService(false);
-          setCreatePrice("");
-          setCreatePriceError("");
         }}
         onKeyDown={onKeyDown}
       />
       {menu}
+      <CreateServiceDialog
+        open={createServiceName !== null}
+        onOpenChange={(next) => {
+          if (!next) setCreateServiceName(null);
+        }}
+        initialName={createServiceName ?? undefined}
+        onCreated={handleServiceCreated}
+      />
     </div>
   );
 }

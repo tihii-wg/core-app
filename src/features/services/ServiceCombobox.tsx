@@ -11,6 +11,8 @@ type ServiceComboboxProps = {
   errors?: boolean;
   onChange?: (value: string) => void;
   onCreate?: (serviceName: string, price: number) => void;
+  /** Opens the full "new service" form for the typed name (takes precedence over the inline price box). */
+  onRequestCreate?: (serviceName: string) => void;
   onSelect?: (service: Service) => void;
   allowCreate?: boolean;
   /**
@@ -24,7 +26,8 @@ export default function ServiceCombobox({
   services,
   value,
   onChange,
-  onCreate,
+  onCreate: inlineCreate,
+  onRequestCreate,
   onSelect,
   errors,
   allowCreate = true,
@@ -41,6 +44,8 @@ export default function ServiceCombobox({
   // Set when focus itself opened the list, so the click that caused the focus does not close it again.
   const openedByFocusAtRef = useRef(0);
   const inputValue = value ?? uncontrolledValue;
+  // With the full create form the inline price box is not used.
+  const onCreate = onRequestCreate ? undefined : inlineCreate;
 
   function updateValue(next: string) {
     if (value === undefined) {
@@ -82,6 +87,13 @@ export default function ServiceCombobox({
   function createService() {
     const serviceName = inputValue.trim();
     if (!canCreate) return;
+
+    if (onRequestCreate) {
+      onRequestCreate(serviceName);
+      if (value === undefined) setUncontrolledValue("");
+      closeMenu();
+      return;
+    }
 
     if (onCreate) {
       const parsedPrice = Number(price);

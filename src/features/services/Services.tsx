@@ -13,7 +13,7 @@ import { Button } from "../../ui/Button";
 
 import { Description } from "@radix-ui/react-dialog";
 
-import AddNewServiceForm from "./AddNewServiceForm";
+import CreateServiceDialog from "./CreateServiceDialog";
 import useGetServices from "./useGetServices";
 import { useDebounce } from "../../hooks/useDebounce";
 import EditServiceForm from "./UpdateServiceForm";
@@ -259,15 +259,7 @@ export function Services() {
         rowClassName={(service) => (service.status === "inactive" ? "bg-muted/20" : undefined)}
       />
 
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
-        <DialogContent className="max-w-lg">
-          <Description className="sr-only">{serviceCopy.createDescription}</Description>
-          <DialogHeader>
-            <DialogTitle>{t("services.dialogs.createTitle")}</DialogTitle>
-          </DialogHeader>
-          <AddNewServiceForm setCreateModalOpen={setCreateModalOpen} />
-        </DialogContent>
-      </Dialog>
+      <CreateServiceDialog open={createModalOpen} onOpenChange={setCreateModalOpen} />
 
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-lg">
