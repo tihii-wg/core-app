@@ -9,7 +9,7 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetVehicle } from "../vehicles/useGetVehicle";
 import type { ConfirmOrderMileageResult } from "./ConfirmOrderMileageDialog";
-import { shouldConfirmMileageBeforeClose } from "./orderVehicleMileage";
+import { persistOrderVehicleMileage, shouldConfirmMileageBeforeClose } from "./orderVehicleMileage";
 
 /**
  * Soft mileage confirmation gate before opening CloseOrderDialog / closing after payment.
@@ -83,6 +83,16 @@ export function useConfirmOrderMileageBeforeClose() {
           workspaceId,
         );
         void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+        // The order's current mileage is also the vehicle's current mileage (vehicle card).
+        if (vehicle && current.clientId && result.mileage != null) {
+          await persistOrderVehicleMileage({
+            workspaceId,
+            clientId: current.clientId,
+            vehicle: vehicle as Vehicle,
+            formMileage: String(result.mileage),
+            queryClient,
+          }).catch(() => undefined);
+        }
         closeDialog(updated);
       } catch {
         // Keep the dialog open: closing now would activate warranties from the old
@@ -92,7 +102,7 @@ export function useConfirmOrderMileageBeforeClose() {
         setSaving(false);
       }
     },
-    [closeDialog, order, queryClient, saving, t, workspaceId],
+    [closeDialog, order, queryClient, saving, t, vehicle, workspaceId],
   );
 
   return {

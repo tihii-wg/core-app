@@ -1137,7 +1137,7 @@ const settings: Messages<typeof en> = {
         productDimensions: { label: "Dimensiuni produs", description: "Dimensiunile produsului (L×Î×A)" },
         measurementAt: { label: "Data măsurătorii", description: "Data și ora măsurătorii" },
         installationAt: { label: "Data montajului", description: "Data și ora montajului" },
-        mileage: { label: "Kilometraj vizită", description: "Citirea odometrului salvată pe comandă" },
+        mileage: { label: "Kilometraj curent (comandă)", description: "Kilometrajul curent salvat pe comandă" },
         mileageUnit: { label: "Unitate kilometraj", description: "km sau mi pentru kilometrajul vizitei pe comandă" },
         taxInvoice: { label: "Factură fiscală", description: "Numărul facturii fiscale pe comandă" },
       },

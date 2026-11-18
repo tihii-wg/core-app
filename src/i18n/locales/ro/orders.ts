@@ -845,7 +845,7 @@ const orders: Messages<typeof en> = {
     cancelDeleteHint: "Comanda poate fi ștearsă doar după anulare",
     closeTitle: "Închiderea comenzii",
     closeDescription: "Închide formal comanda {{number}}. Se salvează data închiderii pentru garanție.",
-    confirmMileageTitle: "Confirmați kilometrajul la recepție",
+    confirmMileageTitle: "Confirmați kilometrajul curent",
     confirmMileageDescription:
       "Garanția pe kilometraj va începe de la {{value}} {{unit}} — ultima citire cunoscută a vehiculului. Dacă kilometrajul de azi este altul, introduceți-l.",
     confirmMileageMissingDescription:

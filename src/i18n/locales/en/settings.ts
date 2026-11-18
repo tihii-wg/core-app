@@ -1132,7 +1132,7 @@ export default {
         productDimensions: { label: "Product dimensions", description: "Product dimensions (W×H×D)" },
         measurementAt: { label: "Measurement date", description: "Scheduled measurement date and time" },
         installationAt: { label: "Installation date", description: "Scheduled installation date and time" },
-        mileage: { label: "Visit mileage", description: "Odometer reading saved on the order" },
+        mileage: { label: "Current mileage (order)", description: "Current mileage saved on the order" },
         mileageUnit: { label: "Mileage unit", description: "km or mi for the order visit mileage" },
         taxInvoice: { label: "Tax invoice number", description: "Fiscal invoice number on the order" },
       },

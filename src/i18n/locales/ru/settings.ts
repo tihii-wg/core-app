@@ -1138,7 +1138,7 @@ const settings: Messages<typeof en> = {
         productDimensions: { label: "Размеры изделия", description: "Размеры изделия (Ш×В×Г)" },
         measurementAt: { label: "Дата замера", description: "Дата и время замера" },
         installationAt: { label: "Дата монтажа", description: "Дата и время монтажа" },
-        mileage: { label: "Пробег визита", description: "Показания одометра, сохранённые в заказе" },
+        mileage: { label: "Текущий пробег (заказ)", description: "Текущий пробег, сохранённый в заказе" },
         mileageUnit: { label: "Единица пробега", description: "км или ми для пробега визита в заказе" },
         taxInvoice: { label: "Налоговая накладная", description: "Номер фискального счёта в заказе" },
       },
