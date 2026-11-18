@@ -31,6 +31,7 @@ vi.mock("./apiStatusDefinitions", async (importOriginal) => {
   return {
     ...actual,
     getStatusDefinitionsByIds,
+    getStatusTransitions: vi.fn(async () => new Map<string, Set<string>>()),
     resolveCustomStatusForSystemStatus,
   };
 });

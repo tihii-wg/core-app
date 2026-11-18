@@ -50,9 +50,10 @@ function isMissingAssignedTo(error: { code?: string; message?: string } | null) 
   return Boolean(error) && /assigned_to/i.test(error?.message ?? "") && (error?.code === "42703" || error?.code === "PGRST204" || /does not exist|schema cache/i.test(error?.message ?? ""));
 }
 
+/** Local session (no network): used to filter reads; RLS enforces auth.uid() server-side. */
 async function currentUserId() {
-  const { data } = await supabase.auth.getUser();
-  return data.user?.id ?? null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? null;
 }
 
 /**

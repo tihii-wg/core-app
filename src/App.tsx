@@ -1,3 +1,9 @@
+import {
+  markLocalOrderWrite,
+  noteLocalMutationSettled,
+  noteLocalMutationStart,
+  orderIdFromMutationVariables,
+} from "./features/realtime/localWrites";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { Toaster } from "react-hot-toast";
@@ -127,6 +133,15 @@ const queryClient = new QueryClient({
     },
   }),
   mutationCache: new MutationCache({
+    // Any app write that names an order marks it as "changed by this tab": realtime echoes of it are skipped
+    // (the mutation refreshes what it changed itself). Marked at start and again on success, because the
+    // echo arrives after the commit.
+    onMutate: (variables) => {
+      noteLocalMutationStart();
+      markLocalOrderWrite(orderIdFromMutationVariables(variables));
+    },
+    onSuccess: (_data, variables) => markLocalOrderWrite(orderIdFromMutationVariables(variables)),
+    onSettled: () => noteLocalMutationSettled(),
     onError: (error) => {
       if (isInvalidSessionError(error)) void supabase.auth.signOut();
     },

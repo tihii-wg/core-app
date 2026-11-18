@@ -357,7 +357,7 @@ export default function OrderAddLinesSearch({
         }
         const revert = onMaterialPending?.([draft]) ?? (() => undefined);
         try {
-          const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft] });
+          const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft], orderKind: order.kind });
           latestOrderRef.current = updated;
           onMaterialAdded?.(updated);
         } catch (error) {
@@ -393,7 +393,7 @@ export default function OrderAddLinesSearch({
       }
       const revert = onMaterialPending?.([draft]) ?? (() => undefined);
       try {
-        const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft] });
+        const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft], orderKind: order.kind });
         latestOrderRef.current = updated;
         onMaterialAdded?.(updated);
       } catch (error) {

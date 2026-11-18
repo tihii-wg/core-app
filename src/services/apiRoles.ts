@@ -136,11 +136,11 @@ export async function clearMemberRole(workspaceId: string | undefined, userId: s
  */
 export async function getMyPermissions(workspaceId: string | undefined): Promise<string[] | null> {
   const resolved = requireWorkspaceId(workspaceId);
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  // Local session (no /auth/v1/user round trip, which the auth lock serializes with other reads).
+  // RLS on workspace_members / role grants still enforces auth.uid().
+  const { data: sessionData, error: userError } = await supabase.auth.getSession();
   if (userError) throw new Error(userError.message);
+  const user = sessionData.session?.user;
   if (!user) return null;
 
   const [member, assignment] = await Promise.all([

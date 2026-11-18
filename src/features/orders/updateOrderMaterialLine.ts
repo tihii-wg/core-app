@@ -364,7 +364,12 @@ export async function updateOrderMaterialLine(
   lineId: string,
   patch: OrderMaterialLinePatch,
   workspaceId: string | undefined,
-  options?: { warehouseName?: string; skipStockPreflight?: boolean },
+  options?: {
+    warehouseName?: string;
+    skipStockPreflight?: boolean;
+    /** The order as the card shows it — avoids re-reading it before the write (the RPC re-checks on the server). */
+    currentOrder?: Order | null;
+  },
 ): Promise<Order> {
   markLocalOrderWrite(orderId);
   const id = lineId.trim();
@@ -386,7 +391,9 @@ export async function updateOrderMaterialLine(
     throw new Error("Invalid discount type");
   }
 
-  const fresh = await getOrder(orderId, ws);
+  const known = options?.currentOrder && options.currentOrder.id === orderId ? options.currentOrder : null;
+  const knownHasLine = Boolean(known?.materials?.some((line) => line.id === id));
+  const fresh = known && knownHasLine ? known : await getOrder(orderId, ws);
   if (fresh.status === "cancelled") {
     throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }

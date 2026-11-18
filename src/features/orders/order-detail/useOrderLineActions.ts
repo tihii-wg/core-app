@@ -216,7 +216,7 @@ export function useOrderLineActions({
         const previous = selectedOrder;
         onOrderUpdatedRef.current(withOptimisticLinePrice(previous, "material", lineId, price));
         void updateMaterialLine
-          .mutateAsync({ orderId: previous.id, lineId, patch: { price }, warehouseName })
+          .mutateAsync({ orderId: previous.id, lineId, patch: { price }, warehouseName, currentOrder: previous })
           .then((updated) => onOrderUpdatedRef.current(updated))
           .catch((error: unknown) => {
             onOrderUpdatedRef.current(previous);
@@ -241,7 +241,8 @@ export function useOrderLineActions({
       const previous = selectedOrder;
       onOrderUpdatedRef.current(withOptimisticLinePrice(previous, "material", lineId, Number(line.price) || 0, quantity));
       void updateMaterialLine
-        .mutateAsync({ orderId: previous.id, lineId, patch: { quantity }, warehouseName })
+        // `previous` = before the optimistic change, so the stock delta is computed from the saved quantity.
+        .mutateAsync({ orderId: previous.id, lineId, patch: { quantity }, warehouseName, currentOrder: previous })
         .then((updated) => {
           onOrderUpdatedRef.current(updated);
           if (successMessage) toast.success(successMessage, { id: ORDER_FIELD_SAVED_TOAST_ID });

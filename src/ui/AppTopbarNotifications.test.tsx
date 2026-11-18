@@ -33,6 +33,14 @@ vi.mock("../features/orders/useGetOrders", () => ({
   useUpdateOrderStatus: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock("../features/notifications/useOrderAlertCandidates", () => ({
+  useOrderAlertCandidates: () => ({
+    orders: orderHooks.orders,
+    isLoading: orderHooks.isLoading,
+    error: orderHooks.error,
+  }),
+}));
+
 vi.mock("../features/inventory/useGetInventoryItems", () => ({
   useGetInventoryItems: () => ({
     items: inventoryHooks.items,

@@ -94,7 +94,7 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
       for (const merge of merges) {
         latest = await updateMaterialLine({ orderId: order.id, lineId: merge.lineId, patch: { quantity: merge.quantity } });
       }
-      if (newDrafts.length > 0) latest = await appendLines({ orderId: order.id, kind: "materials", drafts: newDrafts });
+      if (newDrafts.length > 0) latest = await appendLines({ orderId: order.id, kind: "materials", drafts: newDrafts, orderKind: order.kind });
       if (merges.length > 0) {
         const quantity = merges.length === 1 ? merges[0]!.quantity : null;
         toast.success(

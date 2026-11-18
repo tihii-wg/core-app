@@ -45,9 +45,9 @@ async function addOrderServiceLineViaRpc(orderId: string, draft: OrderService): 
     p_price: Number(draft.price) || 0,
     p_quantity: Number(draft.quantity) || 1,
     p_technician_id: draft.technicianId?.trim() || null,
-    p_warranty_months: draft.warrantyMonths ?? null,
-    p_warranty_days: draft.warrantyDays ?? null,
-    p_warranty_km: draft.warrantyKm ?? null,
+    p_warranty_months: positiveWholeOrNull(draft.warrantyMonths),
+    p_warranty_days: positiveWholeOrNull(draft.warrantyDays),
+    p_warranty_km: positiveWholeOrNull(draft.warrantyKm),
     p_kind: draft.kind ?? null,
   });
   if (error) {
@@ -107,6 +107,40 @@ async function addCatalogMaterialViaRpc(orderId: string, draft: OrderMaterial): 
   return order;
 }
 
+const ADD_ORDER_FREEFORM_MATERIAL_RPC = "crm_add_order_freeform_material";
+
+/** Same normalization as the full save path: positive whole number, otherwise "no limit". */
+function positiveWholeOrNull(value: number | null | undefined): number | null {
+  const n = Number(value);
+  return value != null && Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+/** One one-time item / customer part → one RPC (insert + client product discount + warranty + totals). */
+async function addFreeformMaterialViaRpc(orderId: string, draft: OrderMaterial): Promise<Order | null> {
+  const source = draft.supplySource;
+  if (source !== "one_time" && source !== "customer") return null;
+  if (draft.inventoryItemId?.trim()) return null;
+  const name = draft.itemName?.trim();
+  if (!name) return null;
+  const { data, error } = await supabase.rpc(ADD_ORDER_FREEFORM_MATERIAL_RPC, {
+    p_order_id: orderId,
+    p_item_name: name,
+    p_quantity: Number(draft.quantity) || 1,
+    p_price: Number(draft.price) || 0,
+    p_supply_source: source,
+    p_warranty_months: positiveWholeOrNull(draft.warrantyMonths),
+    p_warranty_days: positiveWholeOrNull(draft.warrantyDays),
+    p_warranty_km: positiveWholeOrNull(draft.warrantyKm),
+  });
+  if (error) {
+    if (isMissingRpcError(error, ADD_ORDER_FREEFORM_MATERIAL_RPC)) return null;
+    throw mapAddMaterialRpcError(error) ?? new Error(error.message);
+  }
+  const order = orderFromLineRpcPayload(data);
+  if (!order) throw new Error("Invalid order payload");
+  return order;
+}
+
 /**
  * Appends new service lines to the order's CURRENT lines (re-read right before saving, so lines another user
  * added meanwhile are not dropped). Existing lines keep their ids / stored fields; the new ones have no id, so
@@ -147,11 +181,23 @@ export async function appendOrderMaterialLines(
   orderId: string,
   drafts: readonly OrderMaterial[],
   workspaceId: string | undefined,
+  options: { orderKind?: Order["kind"] } = {},
 ): Promise<Order> {
   markLocalOrderWrite(orderId);
-  const fresh = await getOrder(orderId, workspaceId);
+  // The card already knows whether the order is an estimate → no extra read of the order before the RPC.
+  const knownKind = options.orderKind;
+  if (drafts.length === 1 && !isCatalogOrderMaterial(drafts[0]!)) {
+    const viaRpc = await addFreeformMaterialViaRpc(orderId, drafts[0]!);
+    if (viaRpc) return viaRpc;
+  }
+  const singleCatalog = drafts.length === 1 && isCatalogOrderMaterial(drafts[0]!);
   // Estimates never issue stock — skip add-and-issue RPC (warehouse optional).
-  if (fresh.kind !== "estimate" && drafts.length === 1 && isCatalogOrderMaterial(drafts[0]!)) {
+  if (singleCatalog && knownKind !== undefined && knownKind !== "estimate") {
+    const viaRpc = await addCatalogMaterialViaRpc(orderId, drafts[0]!);
+    if (viaRpc) return viaRpc;
+  }
+  const fresh = await getOrder(orderId, workspaceId);
+  if (singleCatalog && knownKind === undefined && fresh.kind !== "estimate") {
     const viaRpc = await addCatalogMaterialViaRpc(orderId, drafts[0]!);
     if (viaRpc) return viaRpc;
   }

@@ -10,7 +10,7 @@ import { isCatalogOrderMaterial } from "../inventory/orderMaterialLine";
 
 export type AppendOrderLinesInput =
   | { orderId: string; kind: "services"; drafts: OrderService[] }
-  | { orderId: string; kind: "materials"; drafts: OrderMaterial[] };
+  | { orderId: string; kind: "materials"; drafts: OrderMaterial[]; orderKind?: Order["kind"] };
 
 /**
  * Append-only line save for the add-service / add-material dialogs.
@@ -26,7 +26,7 @@ export function useAppendOrderLines() {
       guardWrite();
       return input.kind === "services"
         ? appendOrderServiceLines(input.orderId, input.drafts, workspaceId)
-        : appendOrderMaterialLines(input.orderId, input.drafts, workspaceId);
+        : appendOrderMaterialLines(input.orderId, input.drafts, workspaceId, { orderKind: input.orderKind });
     },
     onSuccess: (order, variables) => {
       const stockMoved =

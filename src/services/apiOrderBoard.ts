@@ -1,7 +1,7 @@
 import i18n from "../i18n";
 import type { OrderStatus } from "../lib/types";
 import { updateOrderStatus, type UpdateOrderStatusResult } from "./apiOrders";
-import { assertCustomStatusTransition, getStatusDefinitionsByIds } from "./apiStatusDefinitions";
+import { getStatusDefinitionsByIds, getStatusTransitions, isCustomStatusTransitionAllowed } from "./apiStatusDefinitions";
 import supabase from "./supabase";
 
 function requireWorkspaceId(workspaceId: string | undefined) {
@@ -40,6 +40,11 @@ export async function moveOrderOnBoard(
   }
 
   const definitionIds = customStatusId ? [customStatusId] : [];
+
+  // Transitions are read in the same wave as the order (needed whenever the order already has a custom status),
+  // so a board / detail status change is: one parallel read wave → one UPDATE.
+  const transitionsRequest = getStatusTransitions(resolved);
+  transitionsRequest.catch(() => undefined);
 
   const [orderResult, definitionsById] = await Promise.all([
     supabase
@@ -112,7 +117,12 @@ export async function moveOrderOnBoard(
   }
 
   if (fromCustomStatusId && existingStatus !== "cancelled") {
-    await assertCustomStatusTransition(resolved, fromCustomStatusId, customStatusId);
+    if (fromCustomStatusId !== customStatusId) {
+      const transitions = await transitionsRequest;
+      if (!isCustomStatusTransitionAllowed(transitions, fromCustomStatusId, customStatusId)) {
+        throw new Error(i18n.t("orders.board.errors.transitionForbidden"));
+      }
+    }
   }
 
   // No-op: already on this column — do not write activity or touch the row.
@@ -130,6 +140,7 @@ export async function moveOrderOnBoard(
   return updateOrderStatus(orderId, status, resolved, {
     customStatusId,
     recordActivity: true,
+    definitionsById,
     preloaded: {
       status: existingStatus,
       closedAt: existingClosedAt,

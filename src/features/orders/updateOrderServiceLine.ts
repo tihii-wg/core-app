@@ -216,9 +216,11 @@ export async function updateOrderServiceLine(
   // via crm_update_order_service_line) re-sync the order team and return the fresh order.
   if (patch.extraTechnicianIds !== undefined) {
     const { extraTechnicianIds, ...rest } = patch;
-    const current = (await getOrder(orderId, workspaceId)).services.find((line) => line.id === id);
-    if (!current) throw new Error("Service line was not found on this order");
-    const mainId = rest.technicianId !== undefined ? rest.technicianId : (current.technicianId ?? null);
+    // The card always sends the main performer together with the extras → no extra read of the order.
+    const mainId =
+      rest.technicianId !== undefined
+        ? rest.technicianId
+        : ((await getOrder(orderId, workspaceId)).services.find((line) => line.id === id)?.technicianId ?? null);
     await writeLineExtraPerformers(orderId, [
       { lineId: id, extraTechnicianIds: extraTechnicianIds.filter((extra) => extra && extra !== mainId) },
     ]);
@@ -228,7 +230,8 @@ export async function updateOrderServiceLine(
   // Prefetch when we need merged warranty/kind/discount values for the RPC (or the full-order fallback).
   let baseOrder: Order | null = null;
   let mergedForRpc: OrderService = { id } as OrderService;
-  if (patchTouchesExtendedFields(patch) || patch.technicianId !== undefined) {
+  // Only warranty / kind / discount need the current line for the RPC (price, qty and performer do not).
+  if (patchTouchesExtendedFields(patch)) {
     baseOrder = await getOrder(orderId, workspaceId);
     const current = baseOrder.services.find((line) => line.id === id);
     if (!current) throw new Error("Service line was not found on this order");

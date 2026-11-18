@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildActivityRow, getActivityLog, recordActivity, resolveActorName, toActivityLogEntry } from "./apiActivityLog";
 
 const from = vi.hoisted(() => vi.fn());
-const getUser = vi.hoisted(() => vi.fn());
+const getSession = vi.hoisted(() => vi.fn());
 
 vi.mock("./supabase", () => ({
-  default: { from, auth: { getUser } },
+  default: { from, auth: { getSession } },
 }));
 
 type Result = { data: Record<string, unknown>[] | null; error: { message?: string; code?: string } | null };
@@ -69,21 +69,21 @@ describe("apiActivityLog", () => {
   it("recordActivity inserts and resolves the actor", async () => {
     const insert = vi.fn().mockResolvedValue({ error: null });
     from.mockReturnValue({ insert });
-    getUser.mockResolvedValue({ data: { user: { id: "u1", email: "a@b.c" } } });
+    getSession.mockResolvedValue({ data: { session: { user: { id: "u1", email: "a@b.c" } } } });
     await expect(recordActivity({ workspaceId: "ws", entityType: "order", entityId: "o1", event: "e", details: { x: 1 } })).resolves.toEqual({ recorded: true });
     expect(from).toHaveBeenCalledWith("activity_log");
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ workspace_id: "ws", actor_user_id: "u1", actor_name: "a@b.c", details: { x: 1 } }));
   });
 
   it("recordActivity swallows missing table, RLS denial and thrown errors", async () => {
-    getUser.mockResolvedValue({ data: { user: null } });
+    getSession.mockResolvedValue({ data: { session: null } });
     from.mockReturnValue({ insert: vi.fn().mockResolvedValue({ error: { code: "PGRST205", message: "schema cache" } }) });
     await expect(recordActivity({ workspaceId: "ws", entityType: "order", event: "e" })).resolves.toEqual({ recorded: false });
     from.mockReturnValue({ insert: vi.fn().mockResolvedValue({ error: { code: "42501", message: "row-level security" } }) });
     await expect(recordActivity({ workspaceId: "ws", entityType: "order", event: "e" })).resolves.toEqual({ recorded: false });
     from.mockReturnValue({ insert: vi.fn().mockRejectedValue(new Error("network")) });
     await expect(recordActivity({ workspaceId: "ws", entityType: "order", event: "e" })).resolves.toEqual({ recorded: false });
-    getUser.mockRejectedValue(new Error("auth down"));
+    getSession.mockRejectedValue(new Error("auth down"));
     from.mockReturnValue({ insert: vi.fn().mockResolvedValue({ error: null }) });
     await expect(recordActivity({ workspaceId: "ws", entityType: "order", event: "e" })).resolves.toEqual({ recorded: true });
   });

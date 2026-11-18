@@ -1,4 +1,4 @@
-import { isRecentLocalOrderWrite, realtimeRowOrderId } from "./localWrites";
+import { isRecentLocalOrderWrite, isWithinLocalMutationWindow, realtimeRowOrderId } from "./localWrites";
 import {
   createContext,
   useCallback,
@@ -138,6 +138,9 @@ export function WorkspaceRealtimeProvider({ children }: Props) {
               unknown
             > | null;
             if (isRecentLocalOrderWrite(realtimeRowOrderId(name, row))) return;
+          } else if (isWithinLocalMutationWindow()) {
+            // Stock / catalog / payments … changed by our own write that is running or just finished.
+            return;
           }
           scheduleInvalidate(name);
         },

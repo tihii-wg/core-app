@@ -50,7 +50,7 @@ export type ListedWorkspaceMembership = {
 const ownerOnlyWorkspaceMessage = () => i18n.t("settings.company.ownerOnly");
 
 export async function getUserWorkspaces() {
-  const user = await currentUser();
+  const user = await currentSessionUser();
 
   const data = await selectMembership(
     (select) => supabase.from("workspace_members").select(select).eq("user_id", user.id).is("deleted_at", null).is("workspaces.deleted_at", null) as unknown as PromiseLike<MembershipResult>,
@@ -645,6 +645,20 @@ async function currentUser() {
   return user;
 }
 
+/**
+ * Signed-in user from the local session (no /auth/v1/user round trip). For READS only: the auth client
+ * serializes getUser() calls behind its session lock, so several reads each awaiting a network getUser()
+ * queued up one after another. RLS still checks auth.uid() on every query; writes keep `currentUser()`.
+ */
+async function currentSessionUser() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw new Error(error.message);
+  const user = data.session?.user;
+  // Same message getUser() gives without a session.
+  if (!user) throw new Error("Auth session missing!");
+  return user;
+}
+
 async function requireWorkspaceMembership(userId: string, workspaceId: string) {
   const { data, error } = await supabase
     .from("workspace_members")
@@ -726,7 +740,7 @@ async function readTeamProfiles(workspaceId: string, userId: string) {
 }
 
 export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceTeamMember[]> {
-  const user = await currentUser();
+  const user = await currentSessionUser();
   await requireWorkspaceMembership(user.id, workspaceId);
 
   const [{ data: members, error }, profiles] = await Promise.all([
@@ -837,7 +851,7 @@ export async function removeWorkspaceMember(workspaceId: string, userId: string)
 export async function getWorkspace(workspaceId: string) {
   if (!workspaceId) return null;
 
-  const user = await currentUser();
+  const user = await currentSessionUser();
   const data = await selectMembership(
     (select) =>
       supabase.from("workspace_members").select(select).eq("user_id", user.id).eq("workspace_id", workspaceId).is("deleted_at", null).is("workspaces.deleted_at", null).maybeSingle() as unknown as PromiseLike<MembershipResult>,

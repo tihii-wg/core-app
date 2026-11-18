@@ -26,7 +26,9 @@ export function useGetPayments(filters: PaymentListFilters = {}) {
     queryKey: paymentsQueryKey(workspaceId, filters),
     queryFn: () => getPayments(workspaceId, filters),
     enabled: Boolean(workspaceId),
-    staleTime: 0,
+    // Realtime (payments table) + invalidatePaymentViews keep this fresh; staleTime 0 re-read the ledger on
+    // every window focus / remount of the order card.
+    staleTime: 30_000,
     ...hot,
     retry: (failureCount, queryError) => !(queryError instanceof PaymentsUnavailableError) && failureCount < 3,
   });

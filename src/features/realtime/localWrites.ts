@@ -30,3 +30,40 @@ export function realtimeRowOrderId(table: string, row: Record<string, unknown> |
   const raw = table === "orders" ? row.id : row.order_id;
   return typeof raw === "string" && raw ? raw : null;
 }
+
+/** `orderId` (or `order.id` / `warrantyOrderId`) of a mutation's variables, when it is about one order. */
+export function orderIdFromMutationVariables(variables: unknown): string | null {
+  if (!variables || typeof variables !== "object") return null;
+  const record = variables as Record<string, unknown>;
+  for (const key of ["orderId", "warrantyOrderId"]) {
+    const value = record[key];
+    if (typeof value === "string" && value) return value;
+  }
+  const order = record.order;
+  if (order && typeof order === "object" && typeof (order as { id?: unknown }).id === "string") {
+    return (order as { id: string }).id;
+  }
+  return null;
+}
+
+/**
+ * Non-order tables (stock, catalog, payments, clients …) have no order id to match, so their echoes are
+ * skipped while one of our own writes is running and for a short time after it settles. The write already
+ * refreshed what it changed; other users' changes outside this window still arrive normally.
+ */
+const LOCAL_MUTATION_WINDOW_MS = 3_000;
+let inFlightMutations = 0;
+let lastMutationSettledAt = 0;
+
+export function noteLocalMutationStart() {
+  inFlightMutations += 1;
+}
+
+export function noteLocalMutationSettled() {
+  inFlightMutations = Math.max(0, inFlightMutations - 1);
+  lastMutationSettledAt = Date.now();
+}
+
+export function isWithinLocalMutationWindow(): boolean {
+  return inFlightMutations > 0 || Date.now() - lastMutationSettledAt < LOCAL_MUTATION_WINDOW_MS;
+}

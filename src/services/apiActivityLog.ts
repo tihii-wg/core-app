@@ -73,8 +73,10 @@ export async function recordActivity(input: RecordActivityInput): Promise<Record
 
     let user: AuthUserLike = null;
     try {
-      const { data } = await supabase.auth.getUser();
-      user = data?.user ?? null;
+      // Local session (no network round trip): only the actor's id / email are copied into the row,
+      // and RLS on activity_log still checks auth.uid() server-side.
+      const { data } = await supabase.auth.getSession();
+      user = data?.session?.user ?? null;
     } catch {
       user = null;
     }

@@ -68,6 +68,7 @@ import {
   getStatusDefinitions,
   getStatusDefinitionsByIds,
   resolveCustomStatusForSystemStatus,
+  type StatusDefinition,
 } from "./apiStatusDefinitions";
 import { findDefaultOrderStatus, parseLifecycleRpcError } from "../features/orders/orderLifecycle";
 import { mapMinPaidStatusError } from "../features/orders/minPaidStatusGuard";
@@ -1506,25 +1507,19 @@ async function loadLineExtraPerformers(orderId: string): Promise<Map<string, str
 let lineExtraPerformersColumnSupported: boolean | null = null;
 
 /**
- * Adds order_services.extra_technician_ids to lines loaded with the shared column list (orders list / card
- * opened from the list), so extra performers show without opening the line editor. No-op until the SQL is applied.
+ * order_services.extra_technician_ids for lines loaded with the shared column list (orders list / card opened
+ * from the list), so extra performers show without opening the line editor. Null until the SQL is applied.
  */
-async function withStoredExtraPerformers(
-  lines: OrderServiceLine[],
-  orderIds: readonly string[],
-): Promise<OrderServiceLine[]> {
-  if (lineExtraPerformersColumnSupported === false || lines.length === 0 || orderIds.length === 0) return lines;
+async function loadExtraPerformersByLineId(orderIds: readonly string[]): Promise<Map<string, unknown> | null> {
+  if (lineExtraPerformersColumnSupported === false || orderIds.length === 0) return null;
   const byLineId = new Map<string, unknown>();
   for (let start = 0; start < orderIds.length; start += 100) {
     const chunk = orderIds.slice(start, start + 100);
-    const { data, error } = await supabase
-      .from("order_services")
-      .select("id, extra_technician_ids")
-      .in("order_id", chunk);
+    const { data, error } = await supabase.from("order_services").select("id, extra_technician_ids").in("order_id", chunk);
     if (error) {
       if (isMissingExtraPerformersColumn(error)) {
         lineExtraPerformersColumnSupported = false;
-        return lines;
+        return null;
       }
       throw new Error(error.message);
     }
@@ -1533,6 +1528,11 @@ async function withStoredExtraPerformers(
     }
   }
   lineExtraPerformersColumnSupported = true;
+  return byLineId;
+}
+
+function mergeExtraPerformers(lines: OrderServiceLine[], byLineId: Map<string, unknown> | null): OrderServiceLine[] {
+  if (!byLineId) return lines;
   return lines.map((line) =>
     line.id && byLineId.has(String(line.id)) ? { ...line, extra_technician_ids: byLineId.get(String(line.id)) } : line,
   );
@@ -1542,8 +1542,10 @@ async function withStoredExtraPerformers(
 async function storedLineTechnicianIds(
   orderId: string,
   lines: readonly { id?: unknown; technician_id?: string | null }[],
+  /** Extras already being read by the caller (same order) — avoids a second round trip. */
+  extrasRequest?: ReturnType<typeof loadLineExtraPerformers> | null,
 ): Promise<Array<string | null>> {
-  const extras = await loadLineExtraPerformers(orderId);
+  const extras = await (extrasRequest ?? loadLineExtraPerformers(orderId));
   return lines.flatMap((line) => [
     typeof line.technician_id === "string" ? line.technician_id : null,
     ...(extras?.get(String(line.id)) ?? []),
@@ -2101,17 +2103,17 @@ async function orderSearchFilter(workspaceId: string, term: string) {
     "service",
     "description",
   ].map((column) => `${column}.ilike.%${term}%`);
-  const matchingClients = await getClients(term, workspaceId);
-  if (matchingClients.length > 0) filters.push(`client_id.in.(${matchingClients.map((client) => client.id).join(",")})`);
-  try {
-    const customOrderIds = await orderIdsMatchingCustomFieldSearch(workspaceId, term);
-    if (customOrderIds.length > 0) {
-      for (const chunk of chunkIdsForInFilter(customOrderIds)) {
-        filters.push(`id.in.(${chunk.join(",")})`);
-      }
-    }
-  } catch {
+  // Client match and custom-field match are independent → one parallel wave.
+  const [matchingClients, customOrderIds] = await Promise.all([
+    getClients(term, workspaceId),
     // Custom-field search is best-effort; column/client filters still apply.
+    orderIdsMatchingCustomFieldSearch(workspaceId, term).catch(() => [] as string[]),
+  ]);
+  if (matchingClients.length > 0) filters.push(`client_id.in.(${matchingClients.map((client) => client.id).join(",")})`);
+  if (customOrderIds.length > 0) {
+    for (const chunk of chunkIdsForInFilter(customOrderIds)) {
+      filters.push(`id.in.(${chunk.join(",")})`);
+    }
   }
   return filters.join(",");
 }
@@ -2129,11 +2131,41 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     ...rows.map((row) => (typeof row.estimate_status_id === "string" ? row.estimate_status_id.trim() : "")),
   ].filter(Boolean);
 
-  // Independent lookups run in parallel (previously sequential round trips).
-  const [{ data: employees, error: employeesError }, memberNames, statusDefinitions] = await Promise.all([
+  // Every lookup runs in ONE parallel wave: lines / materials / extra performers only need the order ids;
+  // the team only needs the employees (chained on that one request, not on the whole wave).
+  // A Supabase query is a thenable that fires again on every `then` → wrap it once into a real promise.
+  const employeesRequest = Promise.resolve(
     supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId),
+  );
+  const hasOrders = orderIds.length > 0;
+  const [
+    { data: employees, error: employeesError },
+    memberNames,
+    statusDefinitions,
+    linesResult,
+    materialsResult,
+    teams,
+    extraByLineId,
+  ] = await Promise.all([
+    employeesRequest,
     assigneeDisplayNames(workspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]),
     customStatusIds.length > 0 ? getStatusDefinitionsByIds(workspaceId, customStatusIds) : Promise.resolve(null),
+    hasOrders
+      ? withLineDiscountColumns(() =>
+          withOrderServiceKind((columns) =>
+            supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
+          ),
+        )
+      : Promise.resolve({ data: [], error: null }),
+    hasOrders
+      ? withOrderMaterialColumns(() =>
+          supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true }),
+        )
+      : Promise.resolve({ data: [], error: null }),
+    hasOrders
+      ? employeesRequest.then(({ data }) => loadOrderTeamsByOrderIds(workspaceId, orderIds, data ?? []))
+      : Promise.resolve(new Map<string, OrderTeamMember[]>()),
+    hasOrders ? loadExtraPerformersByLineId(orderIds) : Promise.resolve(null),
   ]);
 
   if (employeesError) throw new Error(employeesError.message);
@@ -2144,17 +2176,12 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
 
   let teamsByOrderId = new Map<string, OrderTeamMember[]>();
 
-  if (orderIds.length > 0) {
-    const [{ data: lines, error: linesError }, { data: materials, error: materialsError }, teams] = await Promise.all([
-      withLineDiscountColumns(() =>
-        withOrderServiceKind((columns) =>
-          supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
-        ),
-      ),
-      withOrderMaterialColumns(() => supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true })),
-      loadOrderTeamsByOrderIds(workspaceId, orderIds, employees ?? []),
-    ]);
-
+  if (hasOrders) {
+    const { data: lines, error: linesError } = linesResult as { data: unknown; error: { code?: string; message: string } | null };
+    const { data: materials, error: materialsError } = materialsResult as {
+      data: unknown;
+      error: { message: string } | null;
+    };
     if (linesError) {
       if (isMissingOrderServiceTechnicianColumn(linesError)) {
         markOrderServiceTechnicianUnsupported();
@@ -2171,7 +2198,7 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     } else {
       serviceLines = (lines ?? []) as unknown as OrderServiceLine[];
     }
-    serviceLines = await withStoredExtraPerformers(serviceLines, orderIds);
+    serviceLines = mergeExtraPerformers(serviceLines, extraByLineId);
     if (materialsError) throw new Error(materialsError.message);
     materialLines = (materials ?? []) as unknown as OrderMaterialLine[];
     teamsByOrderId = teams;
@@ -2391,6 +2418,57 @@ export async function getOrders(workspaceId: string | undefined, search = "", ki
     throw new Error(error.message);
   }
 
+  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+}
+
+/**
+ * Open work orders for the top-bar alerts (overdue / upcoming / unassigned). Only open statuses are read, so the
+ * bell never loads (and re-hydrates) the whole order history of the workspace.
+ */
+export async function getOrderAlertCandidates(workspaceId: string | undefined): Promise<Order[]> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  let query = supabase
+    .from("orders")
+    .select(orderColumns)
+    .eq("workspace_id", resolvedWorkspaceId)
+    .not("status", "in", "(completed,paid,cancelled,closed)")
+    .is("closed_at", null);
+  refreshOrderEstimatesSupport();
+  if (isOrderEstimatesSupported()) query = query.or("kind.eq.order,kind.is.null");
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(500);
+  if (error) {
+    if (isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      return getOrderAlertCandidates(workspaceId);
+    }
+    throw new Error(error.message);
+  }
+  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+}
+
+/**
+ * Closed orders of one client (and the same vehicle) that can be a warranty source for another order.
+ * Replaces loading the whole workspace order list in the order card (it only needs these few rows).
+ */
+export async function getWarrantySourceCandidates(
+  workspaceId: string | undefined,
+  params: { clientId: string; vehicleId: string | null | undefined; excludeOrderId: string },
+): Promise<Order[]> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const clientId = params.clientId.trim();
+  if (!clientId) return [];
+  const vehicleId = params.vehicleId?.trim() || null;
+  let query = supabase
+    .from("orders")
+    .select(orderColumns)
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("client_id", clientId)
+    .eq("status", "closed")
+    .not("closed_at", "is", null)
+    .neq("id", params.excludeOrderId);
+  query = vehicleId ? query.eq("vehicle_id", vehicleId) : query.is("vehicle_id", null);
+  const { data, error } = await query.order("closed_at", { ascending: false }).limit(200);
+  if (error) throw new Error(error.message);
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
 }
 
@@ -3562,6 +3640,8 @@ export async function updateOrderStatus(
       closedAt: string | null;
       customStatusId: string | null;
     };
+    /** Status definitions the caller already loaded (board move) — skips re-reading them. */
+    definitionsById?: Map<string, StatusDefinition>;
   },
 ): Promise<UpdateOrderStatusResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
@@ -3700,11 +3780,19 @@ export async function updateOrderStatus(
     ? { name: matched.name, color: matched.color }
     : null;
 
-  const definitionIds = [...new Set([nextCustomStatusId, fromCustomStatusId].filter(Boolean))] as string[];
-  const definitionsById =
-    definitionIds.length > 0
-      ? await getStatusDefinitionsByIds(targetWorkspaceId, definitionIds).catch(() => new Map())
-      : new Map();
+  // The previous definition is only needed for the no-op answer below.
+  const isNoOp = status === currentStatus && nextCustomStatusId === fromCustomStatusId;
+  const providedDefinitions = options?.definitionsById ?? new Map<string, StatusDefinition>();
+  const definitionIds = [
+    ...new Set([nextCustomStatusId, isNoOp ? fromCustomStatusId : null].filter(Boolean)),
+  ].filter((id) => !providedDefinitions.has(id as string)) as string[];
+  const definitionsById = new Map<string, StatusDefinition>(providedDefinitions);
+  if (definitionIds.length > 0) {
+    const loaded = await getStatusDefinitionsByIds(targetWorkspaceId, definitionIds).catch(
+      () => new Map<string, StatusDefinition>(),
+    );
+    for (const [id, definition] of loaded) definitionsById.set(id, definition);
+  }
 
   if (hasCustomOverride && nextCustomStatusId) {
     const found = definitionsById.get(nextCustomStatusId);
@@ -4136,15 +4224,17 @@ export async function updateOrder(
   // Empty `services: []` is allowed: syncOrderServices deletes every line for this order.
   // Omitting `services` (undefined) leaves existing lines untouched.
 
-  const employeeId = await resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
   const normalizedVin = assertValidOptionalVin(vin, "orders.validation.vinLength");
+  // The assignee check and the order read are independent → one parallel wave.
+  const employeeIdRequest = resolveAssignedEmployeeId(workspaceId, assignedEmployeeId);
+  employeeIdRequest.catch(() => undefined);
 
   let existingOrder: Record<string, unknown> | null = null;
   {
     const withKind = isOrderEstimatesSupported();
     const { data, error: existingError } = await supabase
       .from("orders")
-      .select(withKind ? "client_id, status, closed_at, kind" : "client_id, status, closed_at")
+      .select(withKind ? "client_id, vehicle_id, status, closed_at, kind" : "client_id, vehicle_id, status, closed_at")
       .eq("id", orderId)
       .eq("workspace_id", workspaceId)
       .maybeSingle();
@@ -4153,7 +4243,7 @@ export async function updateOrder(
         markOrderEstimatesUnsupported();
         const retry = await supabase
           .from("orders")
-          .select("client_id, status, closed_at")
+          .select("client_id, vehicle_id, status, closed_at")
           .eq("id", orderId)
           .eq("workspace_id", workspaceId)
           .maybeSingle();
@@ -4166,6 +4256,7 @@ export async function updateOrder(
       existingOrder = (data as Record<string, unknown> | null) ?? null;
     }
   }
+  const employeeId = await employeeIdRequest;
   if (!existingOrder) throw new Error(orderPermissionMessage());
 
   await assertOrderRowContentEditable(workspaceId, existingOrder);
@@ -4174,8 +4265,10 @@ export async function updateOrder(
 
   const clientId = typeof existingOrder.client_id === "string" ? existingOrder.client_id : null;
   // Omit vehicleId from the payload to leave orders.vehicle_id unchanged (assignee-only updates).
+  // The vehicle already on the order (assignee / team / field saves resend it) needs no re-check or rewrite.
+  const currentVehicleId = typeof existingOrder.vehicle_id === "string" ? existingOrder.vehicle_id : null;
   const vehiclePatch =
-    vehicleId === undefined
+    vehicleId === undefined || (nullIfEmptyUuid(vehicleId) ?? null) === currentVehicleId
       ? {}
       : { vehicle_id: await assertVehicleAssignable(workspaceId, clientId, nullIfEmptyUuid(vehicleId)) };
 
@@ -4249,6 +4342,19 @@ export async function updateOrder(
   const clientDiscounts =
     clientId && orderLineDiscountSupported && (hasNewServiceLines || hasMaterialSync) ? await loadClientDiscounts(workspaceId, clientId) : [];
 
+  const readExistingMaterials = async () => {
+    const { data: existingMaterials, error: materialsError } = await withOrderMaterialColumns(() =>
+      supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId).order("created_at", { ascending: true }),
+    );
+    if (materialsError) throw new Error(materialsError.message);
+    return (existingMaterials ?? []) as unknown as OrderMaterialLine[];
+  };
+  // Partial saves (assignee, team, fields) only re-read the stored lines → read them in one parallel wave.
+  const earlyMaterialsRequest = materials === undefined ? readExistingMaterials() : null;
+  earlyMaterialsRequest?.catch(() => undefined);
+  const earlyExtrasRequest = services === undefined ? loadLineExtraPerformers(orderId) : null;
+  earlyExtrasRequest?.catch(() => undefined);
+
   let lines: OrderServiceLine[] = [];
   let summary: Record<string, unknown> | null = null;
   if (services) {
@@ -4267,13 +4373,6 @@ export async function updateOrder(
   let materialLines: OrderMaterial[] = [];
   // sync_order_materials rewrites orders.total_price as the gross sum, so after it ran the net total is re-written below.
   let materialsRpcRan = false;
-  const readExistingMaterials = async () => {
-    const { data: existingMaterials, error: materialsError } = await withOrderMaterialColumns(() =>
-      supabase.from("order_materials").select(orderMaterialColumns()).eq("order_id", orderId).order("created_at", { ascending: true }),
-    );
-    if (materialsError) throw new Error(materialsError.message);
-    return (existingMaterials ?? []) as unknown as OrderMaterialLine[];
-  };
   if (materials !== undefined) {
     const desiredMaterials = consolidateOrderMaterials(materials);
     const existingRows = await readExistingMaterials();
@@ -4347,7 +4446,7 @@ export async function updateOrder(
       materialLines = [];
     }
   } else {
-    materialLines = mapMaterialLines(await readExistingMaterials());
+    materialLines = mapMaterialLines(await (earlyMaterialsRequest ?? readExistingMaterials()));
   }
 
   if (materialsRpcRan) {
@@ -4358,7 +4457,7 @@ export async function updateOrder(
   const lineTechnicianIds =
     services !== undefined
       ? services.flatMap((service) => [service.technicianId, ...(service.extraTechnicianIds ?? [])])
-      : await storedLineTechnicianIds(orderId, lines);
+      : await storedLineTechnicianIds(orderId, lines, earlyExtrasRequest);
 
   await syncOrderEmployees({
     workspaceId,
@@ -4368,22 +4467,22 @@ export async function updateOrder(
     lineTechnicianIds,
   });
 
-  const { data: refreshed, error: refreshError } = await supabase.from("orders").select(orderColumns).eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle();
+  // Re-read the row and the employees together, then names + team together (was 4 round trips in a row).
+  const [{ data: refreshed, error: refreshError }, { data: employees, error: employeesError }] = await Promise.all([
+    supabase.from("orders").select(orderColumns).eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle(),
+    supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId),
+  ]);
   if (refreshError) throw new Error(refreshError.message);
-
-  const { data: employees, error: employeesError } = await supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId);
-
   if (employeesError) throw new Error(employeesError.message);
 
   const row = (refreshed ?? data) as Record<string, unknown>;
   const hasEmployeeId = typeof row.employee_id === "string" && row.employee_id.trim() !== "";
   const legacyAssignedTo = !hasEmployeeId && typeof row.assigned_to === "string" ? String(row.assigned_to) : "";
   const createdById = typeof row.created_by === "string" ? row.created_by.trim() : "";
-  const memberNames = await assigneeDisplayNames(
-    workspaceId,
-    [...new Set([legacyAssignedTo, createdById].filter(Boolean))],
-  );
-  const teamsByOrderId = await loadOrderTeamsByOrderIds(workspaceId, [orderId], employees ?? []);
+  const [memberNames, teamsByOrderId] = await Promise.all([
+    assigneeDisplayNames(workspaceId, [...new Set([legacyAssignedTo, createdById].filter(Boolean))]),
+    loadOrderTeamsByOrderIds(workspaceId, [orderId], employees ?? []),
+  ]);
   return toOrder(
     { ...row, ...(summary ?? {}), ...(normalizedVin ? { vin: normalizedVin } : {}) },
     employees ?? [],

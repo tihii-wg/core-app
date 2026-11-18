@@ -6,7 +6,7 @@ import { buildInventoryAlerts, type InventoryAlert } from "../features/notificat
 import { buildOrderAlerts, type OrderAlert } from "../features/notifications/orderAlerts";
 import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
 import OrderDetailPanel from "../features/orders/OrderDetailPanel";
-import { useGetOrders } from "../features/orders/useGetOrders";
+import { useOrderAlertCandidates } from "../features/notifications/useOrderAlertCandidates";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
 import { localDateKey } from "../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
@@ -47,7 +47,7 @@ export default function AppTopbarNotifications() {
     };
   }, []);
   const loadAlerts = menuOpen || idleReady;
-  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders("", { enabled: loadAlerts });
+  const { orders, isLoading: ordersLoading, error: ordersError } = useOrderAlertCandidates({ enabled: loadAlerts, menuOpen });
   const {
     items: inventoryItems,
     isLoading: inventoryLoading,

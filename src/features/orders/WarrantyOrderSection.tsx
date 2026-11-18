@@ -19,7 +19,7 @@ import { formatVehicleMileage } from "../vehicles/vehicleMileage";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
-import { useGetOrders } from "./useGetOrders";
+import { getWarrantySourceCandidates } from "../../services/apiOrders";
 import { formatWarrantyEndsOn } from "./OrderWarrantyIndicator";
 
 type Props = {
@@ -34,7 +34,19 @@ export default function WarrantyOrderSection({ order, currentMileage, disabled, 
   const { workspaceId } = useActiveWorkspaceId();
   const { workflow } = useIndustryWorkflow();
   const showWarrantyKm = industryUsesMileageWarranty(workflow);
-  const { orders } = useGetOrders();
+  // Only this client's closed orders (same vehicle) — not the whole workspace order list. Not under
+  // ["orders", ws], so it is not refetched after every change to any order.
+  const { data: orders = [] } = useQuery({
+    queryKey: ["warranty-records", workspaceId, "source-candidates", order.clientId, order.vehicleId ?? null, order.id],
+    queryFn: () =>
+      getWarrantySourceCandidates(workspaceId, {
+        clientId: order.clientId,
+        vehicleId: order.vehicleId,
+        excludeOrderId: order.id,
+      }),
+    enabled: Boolean(workspaceId && order.clientId),
+    staleTime: 60_000,
+  });
   const [enabled, setEnabled] = useState(Boolean(order.warrantySourceOrderId));
   const [sourceOrderId, setSourceOrderId] = useState(order.warrantySourceOrderId ?? "");
   const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);

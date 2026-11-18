@@ -285,6 +285,12 @@ export async function getClients(
     query = query.eq("client_type", clientType);
   }
 
+  // Vehicle matching (plate / VIN / make / model) does not depend on the field matches → start it now so both
+  // reads run in one parallel wave instead of back to back.
+  const vehicleMatchRequest =
+    term && includeVehicleMatches ? collectVehicleMatchedClientIds(workspaceId, search, term) : null;
+  vehicleMatchRequest?.catch(() => undefined);
+
   let { data: clients, error } = await query;
 
   // Before the General Settings SQL is applied, deleted_at may not exist yet.
@@ -305,13 +311,9 @@ export async function getClients(
 
   // Also match clients via vehicles: plate/VIN (normalized) and make/model.
   // Order create form disables this when it shows explicit vehicle+client plate hits instead.
-  if (!term || !includeVehicleMatches) return byFields;
+  if (!vehicleMatchRequest) return byFields;
 
-  const { clientIds: matchedVehicleClientIds, error: vehicleError } = await collectVehicleMatchedClientIds(
-    workspaceId,
-    search,
-    term,
-  );
+  const { clientIds: matchedVehicleClientIds, error: vehicleError } = await vehicleMatchRequest;
 
   if (vehicleError) {
     // vehicles table / columns may be missing in older DBs — keep field matches only.

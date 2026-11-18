@@ -17,6 +17,8 @@ export type UpdateOrderMaterialLineInput = {
   lineId: string;
   patch: OrderMaterialLinePatch;
   warehouseName?: string;
+  /** Order as shown in the card (pre-change); skips re-reading it before the write. */
+  currentOrder?: Order | null;
 };
 
 /**
@@ -33,6 +35,7 @@ export function useUpdateOrderMaterialLine() {
       guardWrite();
       return updateOrderMaterialLine(input.orderId, input.lineId, input.patch, workspaceId, {
         warehouseName: input.warehouseName,
+        currentOrder: input.currentOrder,
       });
     },
     onSuccess: (order, variables) => {

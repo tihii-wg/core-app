@@ -223,12 +223,23 @@ export async function loadLatestVehicleMileage(
   vehicleIds: readonly string[],
 ): Promise<Map<string, { mileage: number; unit: MileageUnit | null }>> {
   const mileageByVehicleId = new Map<string, { mileage: number; unit: MileageUnit | null }>();
-  if (vehicleIds.length > 0) {
-    const { data: vehicles, error: vehiclesError } = await supabase
+  if (vehicleIds.length === 0) return mileageByVehicleId;
+  // Both reads are independent → one parallel wave instead of two round trips.
+  const [vehiclesResult, visitsResult] = await Promise.all([
+    supabase
       .from("vehicles")
       .select("id, current_mileage, mileage_unit")
       .eq("workspace_id", targetWorkspaceId)
-      .in("id", [...vehicleIds]);
+      .in("id", [...vehicleIds]),
+    supabase
+      .from("orders")
+      .select("vehicle_id, status, vehicle_mileage_snapshot, vehicle_mileage_unit_snapshot")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("vehicle_id", [...vehicleIds])
+      .not("vehicle_mileage_snapshot", "is", null),
+  ]);
+  {
+    const { data: vehicles, error: vehiclesError } = vehiclesResult;
     if (vehiclesError) {
       // Mileage is optional for time-only warranties; surface unexpected errors.
       if (!(isMissingRelationError(vehiclesError) || isMissingColumnError(vehiclesError))) {
@@ -247,13 +258,8 @@ export async function loadLatestVehicleMileage(
 
   // Latest known reading: a later visit's intake mileage (even while that order is still open) can be above the
   // vehicle's stored current mileage, and it is what ends mileage-limited items one by one.
-  if (vehicleIds.length > 0) {
-    const { data: visits, error: visitsError } = await supabase
-      .from("orders")
-      .select("vehicle_id, status, vehicle_mileage_snapshot, vehicle_mileage_unit_snapshot")
-      .eq("workspace_id", targetWorkspaceId)
-      .in("vehicle_id", [...vehicleIds])
-      .not("vehicle_mileage_snapshot", "is", null);
+  {
+    const { data: visits, error: visitsError } = visitsResult;
     if (visitsError) {
       if (!(isMissingRelationError(visitsError) || isMissingColumnError(visitsError))) {
         throw new Error(visitsError.message);

@@ -141,14 +141,61 @@ function toLedgerPayment(row: Record<string, unknown>): LedgerPayment {
   };
 }
 
+/**
+ * Signed-in check from the local session (no /auth/v1/user round trip in front of every ledger write).
+ * The payments RLS policies and triggers check auth.uid() server-side.
+ */
 async function requireAuthenticatedUser() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getSession();
   if (error) throw new Error(error.message);
+  const user = data.session?.user;
   if (!user) throw new Error(i18n.t("finance.payments.errors.notAuthenticated"));
   return user;
+}
+
+/**
+ * Ledger rows of one order and/or its invoice (payments, refunds and voids carry the same order / invoice ids).
+ * Remaining / refundable checks only need these — not the whole workspace ledger.
+ */
+async function fetchLinkedPayments(workspaceId: string, orderId: string | null, invoiceId: string | null) {
+  const parts = [orderId ? `order_id.eq.${orderId}` : null, invoiceId ? `invoice_id.eq.${invoiceId}` : null].filter(
+    Boolean,
+  ) as string[];
+  if (parts.length === 0) return [] as LedgerPayment[];
+  const { data, error } = await supabase
+    .from("payments")
+    .select(paymentColumns)
+    .eq("workspace_id", workspaceId)
+    .or(parts.join(","))
+    .order("paid_at", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw mapPaymentDbError(error);
+  return ((data ?? []) as Record<string, unknown>[]).map(toLedgerPayment);
+}
+
+/** Starts a request now and silences an early rejection; the caller still awaits it (and sees the error) later. */
+function started<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => undefined);
+  return promise;
+}
+
+/**
+ * Refund / void pre-checks for an existing payment in one parallel wave: closed-order guard, workspace currency,
+ * and the sibling ledger rows. Awaited in the old order, so the first failing check still decides the message.
+ */
+async function parallelLedgerChecks(workspaceId: string, original: LedgerPayment, currencyCode: string) {
+  const closedGuard = original.orderId
+    ? started(
+        import("./apiOrders").then(({ assertClosedOrderMutableOnServer }) =>
+          assertClosedOrderMutableOnServer(original.orderId as string, workspaceId),
+        ),
+      )
+    : null;
+  const currencyRequest = started(requireWorkspaceCurrency(workspaceId, currencyCode));
+  const siblingsRequest = started(fetchLinkedPayments(workspaceId, original.orderId ?? null, original.invoiceId ?? null));
+  if (closedGuard) await closedGuard;
+  await currencyRequest;
+  return siblingsRequest;
 }
 
 function validatePositiveAmount(amount: unknown) {
@@ -288,23 +335,19 @@ async function resolvePaymentLinks(
   }
 
   if (orderId) {
-    const { data: order, error } = await supabase
-      .from("orders")
-      .select("id, total_price")
-      .eq("id", orderId)
-      .eq("workspace_id", workspaceId)
-      .maybeSingle();
+    // The order and its invoice are read in one parallel wave.
+    const [{ data: order, error }, linkedInvoiceResult] = await Promise.all([
+      supabase.from("orders").select("id, total_price").eq("id", orderId).eq("workspace_id", workspaceId).maybeSingle(),
+      invoiceId
+        ? Promise.resolve(null)
+        : supabase.from("invoices").select("id, total").eq("workspace_id", workspaceId).eq("order_id", orderId).maybeSingle(),
+    ]);
     if (error) throw mapPaymentDbError(error);
     if (!order) throw new Error(i18n.t("finance.payments.errors.orderNotFound"));
     orderTotal = Number((order as { total_price?: unknown }).total_price ?? 0);
 
-    if (!invoiceId) {
-      const { data: linkedInvoice, error: invError } = await supabase
-        .from("invoices")
-        .select("id, total")
-        .eq("workspace_id", workspaceId)
-        .eq("order_id", orderId)
-        .maybeSingle();
+    if (!invoiceId && linkedInvoiceResult) {
+      const { data: linkedInvoice, error: invError } = linkedInvoiceResult;
       if (invError) throw mapPaymentDbError(invError);
       if (linkedInvoice) {
         invoiceId = String((linkedInvoice as { id: string }).id);
@@ -341,20 +384,29 @@ export async function recordPayment(input: RecordPaymentInput, workspaceId: stri
   const currencyCode = validateCurrency(input.currencyCode);
   const note = (input.note ?? "").trim();
 
-  const links = await resolvePaymentLinks(
-    targetWorkspaceId,
-    input.orderId?.trim() || null,
-    input.invoiceId?.trim() || null,
-  );
+  const inputOrderId = input.orderId?.trim() || null;
+  const inputInvoiceId = input.invoiceId?.trim() || null;
+  // Every check reads independently → one parallel wave, then the INSERT (was 6 round trips back to back).
+  // Awaited in the old order so the first failing check still decides the message.
+  const linksRequest = started(resolvePaymentLinks(targetWorkspaceId, inputOrderId, inputInvoiceId));
+  const closedGuardFor = (orderId: string) =>
+    import("./apiOrders").then(({ assertClosedOrderMutableOnServer }) =>
+      assertClosedOrderMutableOnServer(orderId, targetWorkspaceId),
+    );
+  const earlyClosedGuard = inputOrderId ? started(closedGuardFor(inputOrderId)) : null;
+  const currencyRequest = started(requireWorkspaceCurrency(targetWorkspaceId, currencyCode));
+  const paymentsRequest = started(fetchLinkedPayments(targetWorkspaceId, inputOrderId, inputInvoiceId));
 
+  const links = await linksRequest;
   if (links.orderId) {
-    const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
-    await assertClosedOrderMutableOnServer(links.orderId, targetWorkspaceId);
+    await (links.orderId === inputOrderId && earlyClosedGuard ? earlyClosedGuard : closedGuardFor(links.orderId));
   }
-
-  await requireWorkspaceCurrency(targetWorkspaceId, currencyCode);
-
-  const existing = await getPayments(targetWorkspaceId, {});
+  await currencyRequest;
+  // The links may add an id the early read did not know (order of an invoice, invoice of an order) → re-read.
+  const existing =
+    links.orderId === inputOrderId && (links.invoiceId === inputInvoiceId || !links.invoiceId)
+      ? await paymentsRequest
+      : await fetchLinkedPayments(targetWorkspaceId, links.orderId, links.invoiceId);
 
   if (links.invoiceId && links.invoiceTotal != null) {
     const linked = paymentsAffectingInvoice(existing, links.invoiceId, links.orderId);
@@ -432,14 +484,7 @@ export async function recordRefund(input: RecordRefundInput, workspaceId: string
   if (!isValidLedgerPayment(original)) {
     throw new Error(i18n.t("finance.payments.errors.originalInvalid"));
   }
-  if (original.orderId) {
-    const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
-    await assertClosedOrderMutableOnServer(original.orderId, targetWorkspaceId);
-  }
-
-  await requireWorkspaceCurrency(targetWorkspaceId, currencyCode);
-
-  const siblings = await getPayments(targetWorkspaceId, {});
+  const siblings = await parallelLedgerChecks(targetWorkspaceId, original, currencyCode);
   const remaining = refundableRemaining(original, siblings);
   if (roundMoney(amount - remaining) > 0.005) {
     throw new Error(i18n.t("finance.payments.errors.refundExceedsRemaining", { remaining: remaining.toFixed(2) }));
@@ -493,15 +538,8 @@ export async function recordPaymentVoid(input: RecordVoidInput, workspaceId: str
   if (!isValidLedgerPayment(original)) {
     throw new Error(i18n.t("finance.payments.errors.originalInvalid"));
   }
-  if (original.orderId) {
-    const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
-    await assertClosedOrderMutableOnServer(original.orderId, targetWorkspaceId);
-  }
-
   const currencyCode = normalizeCurrencyCode(original.currencyCode);
-  await requireWorkspaceCurrency(targetWorkspaceId, currencyCode);
-
-  const siblings = await getPayments(targetWorkspaceId, {});
+  const siblings = await parallelLedgerChecks(targetWorkspaceId, original, currencyCode);
   const remaining = refundableRemaining(original, siblings);
   if (remaining < original.amount - 0.005) {
     throw new Error(i18n.t("finance.payments.void.errors.alreadyOffset"));
@@ -593,7 +631,7 @@ export async function deleteFullyVoidedPayment(paymentId: string, workspaceId: s
   if (original.kind !== "payment") {
     throw new Error(i18n.t("finance.payments.void.errors.notAPayment"));
   }
-  const siblings = await getPayments(targetWorkspaceId, {});
+  const siblings = await fetchLinkedPayments(targetWorkspaceId, original.orderId ?? null, original.invoiceId ?? null);
   if (!isFullyVoidedPayment(original, siblings)) {
     throw new Error(i18n.t("finance.payments.void.errors.deleteRequiresFullVoid"));
   }

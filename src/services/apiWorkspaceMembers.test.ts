@@ -28,7 +28,10 @@ vi.mock("./supabase", () => {
 
   return {
     default: {
-      auth: { getUser: async () => ({ data: { user: { id: "user-1", email: "owner@example.com" } } }) },
+      auth: {
+        getUser: async () => ({ data: { user: { id: "user-1", email: "owner@example.com" } } }),
+        getSession: async () => ({ data: { session: { user: { id: "user-1", email: "owner@example.com" } } }, error: null }),
+      },
       from: (table: string) => builder(table),
       rpc: async (name: string, args: unknown) => {
         state.rpcCalls.push({ name, args });

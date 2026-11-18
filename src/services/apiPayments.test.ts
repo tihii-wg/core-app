@@ -14,7 +14,13 @@ const getUser = vi.hoisted(() => vi.fn());
 
 vi.mock("./supabase", () => ({
   default: {
-    auth: { getUser: (...args: unknown[]) => getUser(...args) },
+    auth: {
+      getUser: (...args: unknown[]) => getUser(...args),
+      getSession: async () => {
+        const result = (await getUser()) as { data?: { user?: unknown }; error?: unknown };
+        return { data: { session: result?.data?.user ? { user: result.data.user } : null }, error: result?.error ?? null };
+      },
+    },
     from,
     rpc,
   },
@@ -133,6 +139,7 @@ describe("deleteFullyVoidedPayment", () => {
     let orderCount = 0;
     chain.select = () => chain;
     chain.eq = () => chain;
+    chain.or = () => chain;
     chain.order = () => {
       orderCount += 1;
       if (orderCount >= 2) return Promise.resolve({ data: rows, error: null });
