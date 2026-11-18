@@ -229,9 +229,14 @@ export async function buildInvoicePrintContext(invoiceId: string, workspaceId: s
 
 /** Recent orders for the print-template preview picker (newest first). */
 export async function listRecentOrdersForPrintPreview(workspaceId: string | undefined, limit = 20): Promise<Order[]> {
-  const { getOrders } = await import("./apiOrders");
-  const orders = await getOrders(workspaceId);
-  return orders.slice(0, Math.max(1, Math.min(limit, 50)));
+  const { getOrdersPage } = await import("./apiOrders");
+  // One page of the newest orders with lines (the whole workspace list was loaded and sliced before).
+  const page = await getOrdersPage(workspaceId, {
+    today: new Date().toISOString().slice(0, 10),
+    page: 1,
+    pageSize: 50,
+  });
+  return page.orders.slice(0, Math.max(1, Math.min(limit, 50)));
 }
 
 /** Recent invoices for invoice-template preview. */

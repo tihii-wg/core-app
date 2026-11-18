@@ -42,8 +42,8 @@ export function useDashboardFinancials(now: Date): DashboardFinancials {
     isLoading: ordersLoading,
     isError: ordersError,
   } = useQuery({
-    queryKey: ["orders", workspaceId],
-    queryFn: () => getOrders(workspaceId),
+    queryKey: ["orders", workspaceId, "headers"],
+    queryFn: () => getOrders(workspaceId, "", "order", { lines: false }),
     enabled: Boolean(workspaceId),
   });
   const {

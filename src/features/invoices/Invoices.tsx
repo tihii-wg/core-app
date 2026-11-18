@@ -27,13 +27,14 @@ export function Invoices() {
   const isMobile = useIsMobile();
   const { workflow, copy } = useIndustryWorkflow();
   const { invoices, isLoading, error, refetch, isUnavailable } = useGetInvoices();
-  const { orders } = useGetOrders("", { enabled: !isUnavailable });
   const updateStatus = useUpdateInvoiceStatus();
   const { currency, formatMoney } = useWorkspaceMoney();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  // Only the "create invoice" dialog needs orders (with lines) — not every visit of the invoices list.
+  const { orders } = useGetOrders("", { enabled: !isUnavailable && createModalOpen });
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;

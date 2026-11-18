@@ -76,8 +76,8 @@ export function OrdersBoard({
     error,
     refetch,
   } = useQuery({
-    queryKey: ["orders", workspaceId, search, kind],
-    queryFn: () => getOrders(workspaceId, search, kind),
+    queryKey: ["orders", workspaceId, "headers", search, kind],
+    queryFn: () => getOrders(workspaceId, search, kind, { lines: false }),
     enabled: Boolean(workspaceId),
     ...hot,
   });

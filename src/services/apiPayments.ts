@@ -1,4 +1,5 @@
 import i18n from "../i18n";
+import { selectAllRows } from "./selectAllRows";
 import supabase from "./supabase";
 import {
   assertWorkspaceCurrencyMatch,
@@ -243,12 +244,15 @@ function assertCurrencyGate(existing: LedgerPayment[], proposedCurrency: string)
 /** Payments of the workspace, newest paid_at first. Optional filters applied server-side where possible. */
 export async function getPayments(workspaceId: string | undefined, filters: PaymentListFilters = {}) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  // All pages: the ledger of an imported workspace exceeds the API's 1 000-row cap.
+  const { data, error } = await selectAllRows((from, to) => {
   let query = supabase
     .from("payments")
     .select(paymentColumns)
     .eq("workspace_id", targetWorkspaceId)
     .order("paid_at", { ascending: false })
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
 
   if (filters.orderId) query = query.eq("order_id", filters.orderId);
   if (filters.invoiceId) query = query.eq("invoice_id", filters.invoiceId);
@@ -257,9 +261,9 @@ export async function getPayments(workspaceId: string | undefined, filters: Paym
   if (filters.link === "no-invoice") query = query.is("invoice_id", null);
   if (filters.paidFrom) query = query.gte("paid_at", `${filters.paidFrom}T00:00:00.000Z`);
   if (filters.paidTo) query = query.lte("paid_at", `${filters.paidTo}T23:59:59.999Z`);
-
-  const { data, error } = await query;
-  if (error) throw mapPaymentDbError(error);
+  return query.range(from, to);
+  });
+  if (error) throw mapPaymentDbError(error as Parameters<typeof mapPaymentDbError>[0]);
   return ((data ?? []) as Record<string, unknown>[]).map(toLedgerPayment);
 }
 

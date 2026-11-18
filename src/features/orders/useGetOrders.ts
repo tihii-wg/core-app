@@ -59,24 +59,44 @@ export function findCachedOrder(
         : undefined;
     if (!orders) continue;
     const found = orders.find((order) => order.id === orderId);
-    if (!found) continue;
+    // Lightweight list rows carry no lines — never hand them to the order card as the full order.
+    if (!found || found.linesOmitted) continue;
     if ((found.taxInvoiceNumber ?? "").trim()) return found;
     fallback ??= found;
   }
   return fallback;
 }
 
-/** Unpaginated orders (dashboard, notifications, global search). */
-export function useGetOrders(search = "", { enabled = true }: { enabled?: boolean } = {}) {
+/** Query key of the lightweight workspace order list (no lines) — shared by dashboard, employees, finance… */
+export function orderHeadersQueryKey(workspaceId: string | undefined) {
+  return ["orders", workspaceId, "headers"] as const;
+}
+
+/**
+ * Unpaginated orders. `lines: false` → the lightweight list without lines (`linesOmitted`), which is what
+ * counters / summaries need; the full list (lines included) is only for reports and invoices.
+ */
+export function useGetOrders(search = "", { enabled = true, lines = true }: { enabled?: boolean; lines?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
   const hot = useRealtimeHotQueryOptions();
   const { data: orders, isLoading, error, refetch } = useQuery({
-    queryKey: search ? ["orders", workspaceId, search] : ["orders", workspaceId],
-    queryFn: () => getOrders(workspaceId, search),
+    queryKey: !lines && !search ? orderHeadersQueryKey(workspaceId) : search ? ["orders", workspaceId, search] : ["orders", workspaceId],
+    queryFn: () => getOrders(workspaceId, search, "order", { lines: lines || Boolean(search) }),
     enabled: Boolean(workspaceId) && enabled,
     ...hot,
   });
 
+  return { orders: orders ?? [], isLoading, error, refetch };
+}
+
+/** One client's orders with lines (client card, search preview). */
+export function useClientOrders(clientId: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const { data: orders, isLoading, error, refetch } = useQuery({
+    queryKey: ["orders", workspaceId, "client", clientId],
+    queryFn: () => getOrders(workspaceId, "", "order", { clientId }),
+    enabled: Boolean(workspaceId && clientId) && enabled,
+  });
   return { orders: orders ?? [], isLoading, error, refetch };
 }
 

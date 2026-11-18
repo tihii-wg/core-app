@@ -51,7 +51,7 @@ export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end
     isLoading: ordersLoading,
     error: ordersError,
     refetch: refetchOrders,
-  } = useGetOrders();
+  } = useGetOrders("", { lines: false });
   const {
     expenses,
     isLoading: expensesLoading,

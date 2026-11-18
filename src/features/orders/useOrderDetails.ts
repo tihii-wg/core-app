@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Order, OrderStatus } from "../../lib/types";
-import type { UpdateOrderStatusResult } from "../../services/apiOrders";
+import { getOrder, type UpdateOrderStatusResult } from "../../services/apiOrders";
 import { useUpdateOrderStatus, findCachedOrder } from "./useGetOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
@@ -50,6 +50,24 @@ export function useOrderDetails() {
     // List rows can still be stale while placeholderData is showing a pre-save
     // page; merge any cached saved tax invoice number so the field is not empty+red.
     const cached = findCachedOrder(queryClient, workspaceId, order.id);
+    if (order.linesOmitted) {
+      // Row of a lightweight list (no lines): the card needs the full order — a cached one or one request.
+      if (cached) {
+        setSelectedOrder(resolveOrderForTaxGate(cached, order));
+        setDetailPanelOpen(true);
+        return;
+      }
+      void getOrder(order.id, workspaceId)
+        .then((full) => {
+          if (!full) return;
+          setSelectedOrder(resolveOrderForTaxGate(full, order));
+          setDetailPanelOpen(true);
+        })
+        .catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : t("orders.errors.loadFailed", { defaultValue: "Не удалось открыть заказ" }));
+        });
+      return;
+    }
     setSelectedOrder(resolveOrderForTaxGate(order, cached));
     setDetailPanelOpen(true);
   };

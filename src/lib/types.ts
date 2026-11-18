@@ -104,6 +104,11 @@ export interface Order {
   id: string;
   workspace_id?: string;
   /**
+   * True on rows of a lightweight list (dashboard, board, employees…) loaded without service/material lines
+   * and team: `services` / `materials` / `team` are empty there. Open/print such an order via `getOrder`.
+   */
+  linesOmitted?: boolean;
+  /**
    * `order` (default) or `estimate`. Absent/undefined when the estimates SQL is not applied —
    * treat as `order`.
    */

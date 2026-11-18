@@ -52,6 +52,54 @@ type TeamRow = {
   role?: string;
 };
 
+type TeamRowsResult = { data: TeamRow[] | null; error: { code?: string; message: string } | null };
+
+/** Above this many orders the whole workspace team table is cheaper than id lists (and stays below URL limits). */
+const WHOLE_WORKSPACE_THRESHOLD = 400;
+const TEAM_PAGE = 1000;
+
+/** Parallel id chunks: thousands of ids in one `in.(…)` URL are rejected (400). */
+async function loadTeamRowsByIdChunks(workspaceId: string, orderIds: string[]): Promise<TeamRowsResult> {
+  const chunks = Array.from({ length: Math.ceil(orderIds.length / 80) }, (_, index) => orderIds.slice(index * 80, index * 80 + 80));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      Promise.resolve(
+        supabase.from("order_employees").select("order_id, employee_id, role").eq("workspace_id", workspaceId).in("order_id", chunk),
+      ),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed) return { data: null, error: failed.error };
+  return { data: results.flatMap((result) => (result.data ?? []) as TeamRow[]), error: null };
+}
+
+/** Whole workspace in pages of 1 000 (first page, then the rest in parallel), filtered to `orderIds`. */
+async function loadWorkspaceTeamRows(workspaceId: string, orderIds: ReadonlySet<string>): Promise<TeamRowsResult> {
+  const page = (from: number) =>
+    Promise.resolve(
+      supabase
+        .from("order_employees")
+        .select("order_id, employee_id, role", from === 0 ? { count: "exact" } : undefined)
+        .eq("workspace_id", workspaceId)
+        .order("order_id", { ascending: true })
+        .order("employee_id", { ascending: true })
+        .range(from, from + TEAM_PAGE - 1),
+    );
+  const first = await page(0);
+  if (first.error) return { data: null, error: first.error };
+  const rows = [...((first.data ?? []) as TeamRow[])];
+  const total = first.count ?? rows.length;
+  if (total > TEAM_PAGE) {
+    const rest = await Promise.all(
+      Array.from({ length: Math.ceil(total / TEAM_PAGE) - 1 }, (_, index) => page((index + 1) * TEAM_PAGE)),
+    );
+    const failed = rest.find((result) => result.error);
+    if (failed) return { data: null, error: failed.error };
+    for (const result of rest) rows.push(...((result.data ?? []) as TeamRow[]));
+  }
+  return { data: rows.filter((row) => typeof row.order_id === "string" && orderIds.has(row.order_id)), error: null };
+}
+
 /**
  * Batched load of `order_employees` for many orders. Missing table → empty map (soft-fail).
  */
@@ -63,11 +111,9 @@ export async function loadOrderTeamsByOrderIds(
   const result = new Map<string, OrderTeamMember[]>();
   if (orderIds.length === 0 || orderEmployeesTableSupported === false) return result;
 
-  const { data, error } = await supabase
-    .from("order_employees")
-    .select("order_id, employee_id, role")
-    .eq("workspace_id", workspaceId)
-    .in("order_id", orderIds);
+  const { data, error } = orderIds.length > WHOLE_WORKSPACE_THRESHOLD
+    ? await loadWorkspaceTeamRows(workspaceId, new Set(orderIds))
+    : await loadTeamRowsByIdChunks(workspaceId, orderIds);
 
   if (error) {
     if (isMissingTableError(error, "order_employees")) {

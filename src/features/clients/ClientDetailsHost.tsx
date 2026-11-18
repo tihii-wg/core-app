@@ -1,5 +1,5 @@
 import type { Client, Order } from "../../lib/types";
-import { useGetOrders } from "../orders/useGetOrders";
+import { useClientOrders } from "../orders/useGetOrders";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { clientOrderSummaries } from "./clientOrders";
 import { useClientEstimates } from "./useClientEstimates";
@@ -26,7 +26,8 @@ export function ClientDetailsHost({
   onCreateOrder,
   onCreateEstimate,
 }: ClientDetailsHostProps) {
-  const { orders, isLoading, error } = useGetOrders("", { enabled: Boolean(selectedClient) && detailPanelOpen });
+  // Only this client's orders (the whole workspace list with lines was loaded here before).
+  const { orders, isLoading, error } = useClientOrders(selectedClient?.id, { enabled: detailPanelOpen });
   const { estimates } = useClientEstimates(selectedClient?.id, {
     enabled: Boolean(selectedClient) && detailPanelOpen,
   });

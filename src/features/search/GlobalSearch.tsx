@@ -7,7 +7,7 @@ import type { Client, InventoryItem, Order } from "../../lib/types";
 import { MIN_SEARCH_LENGTH, useGlobalSearch } from "./useGlobalSearch";
 import OrderDetailPanel from "../orders/OrderDetailPanel";
 import { useOrderDetails } from "../orders/useOrderDetails";
-import { useGetOrders } from "../orders/useGetOrders";
+import { useClientOrders } from "../orders/useGetOrders";
 import ClientDetailPanel from "../clients/ClientDetailPanel";
 import ClientTypeBadge from "../clients/ClientTypeBadge";
 import { clientOrderSummaries } from "../clients/clientOrders";
@@ -95,7 +95,7 @@ export default function GlobalSearch() {
   const orderDetails = useOrderDetails();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientPanelOpen, setClientPanelOpen] = useState(false);
-  const { orders: clientOrders } = useGetOrders("", { enabled: Boolean(selectedClient) });
+  const { orders: clientOrders } = useClientOrders(selectedClient?.id, { enabled: clientPanelOpen });
   const [inventoryDetailId, setInventoryDetailId] = useState<string | null>(null);
   const [editInventoryId, setEditInventoryId] = useState<string | null>(null);
   const [inventoryToDelete, setInventoryToDelete] = useState<InventoryItem | null>(null);

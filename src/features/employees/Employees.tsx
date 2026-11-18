@@ -52,7 +52,7 @@ export function Employees() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const debouncedSearch = useDebounce(searchQuery, 400);
   const { employees, isLoading, isPending, error, refetch } = useGetEmployees(debouncedSearch, roleFilter === "all" ? null : roleFilter);
-  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
+  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders("", { lines: false });
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);

@@ -1513,19 +1513,19 @@ let lineExtraPerformersColumnSupported: boolean | null = null;
 async function loadExtraPerformersByLineId(orderIds: readonly string[]): Promise<Map<string, unknown> | null> {
   if (lineExtraPerformersColumnSupported === false || orderIds.length === 0) return null;
   const byLineId = new Map<string, unknown>();
-  for (let start = 0; start < orderIds.length; start += 100) {
-    const chunk = orderIds.slice(start, start + 100);
-    const { data, error } = await supabase.from("order_services").select("id, extra_technician_ids").in("order_id", chunk);
-    if (error) {
-      if (isMissingExtraPerformersColumn(error)) {
-        lineExtraPerformersColumnSupported = false;
-        return null;
-      }
-      throw new Error(error.message);
+  // Chunks in parallel (they were awaited one after another: 3 400 orders = 34 round trips in a row).
+  const { data, error } = await selectInOrderIdChunks(orderIds, (chunk) =>
+    supabase.from("order_services").select("id, extra_technician_ids").in("order_id", chunk),
+  );
+  if (error) {
+    if (isMissingExtraPerformersColumn(error)) {
+      lineExtraPerformersColumnSupported = false;
+      return null;
     }
-    for (const row of (data ?? []) as { id?: unknown; extra_technician_ids?: unknown }[]) {
-      byLineId.set(String(row.id), row.extra_technician_ids);
-    }
+    throw new Error(error.message);
+  }
+  for (const row of (data ?? []) as { id?: unknown; extra_technician_ids?: unknown }[]) {
+    byLineId.set(String(row.id), row.extra_technician_ids);
   }
   lineExtraPerformersColumnSupported = true;
   return byLineId;
@@ -2118,7 +2118,53 @@ async function orderSearchFilter(workspaceId: string, term: string) {
   return filters.join(",");
 }
 
-async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknown>[]): Promise<Order[]> {
+/**
+ * Order ids per `in.(…)` request when hydrating many orders. A whole workspace (thousands of imported orders)
+ * in one URL is rejected (400) and one response is capped by the API row limit — so the ids go in parallel
+ * chunks that each stay well below both limits (≈7 lines per order → ≈560 rows per chunk).
+ */
+const ORDER_ID_CHUNK = 80;
+
+function orderIdChunks(orderIds: readonly string[]): string[][] {
+  const out: string[][] = [];
+  for (let start = 0; start < orderIds.length; start += ORDER_ID_CHUNK) out.push(orderIds.slice(start, start + ORDER_ID_CHUNK));
+  return out;
+}
+
+type ChunkResult = { data: unknown; error: { code?: string; message: string } | null };
+
+/** Runs one select per id chunk in parallel and concatenates the rows (first error wins). */
+async function selectInOrderIdChunks(
+  orderIds: readonly string[],
+  run: (chunk: string[]) => PromiseLike<unknown>,
+): Promise<ChunkResult> {
+  const results = (await Promise.all(orderIdChunks(orderIds).map((chunk) => Promise.resolve(run(chunk))))) as ChunkResult[];
+  const failed = results.find((result) => result.error);
+  if (failed) return { data: null, error: failed.error };
+  return { data: results.flatMap((result) => ((result.data ?? []) as unknown[])), error: null };
+}
+
+type HydrateOptions = {
+  /** false → header rows only (no lines / materials / team / extra performers): `linesOmitted: true`. */
+  lines?: boolean;
+};
+
+function groupByOrderId<T extends { order_id?: unknown }>(rows: readonly T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = String(row.order_id);
+    const bucket = map.get(key);
+    if (bucket) bucket.push(row);
+    else map.set(key, [row]);
+  }
+  return map;
+}
+
+async function hydrateOrderRows(
+  workspaceId: string,
+  rows: Record<string, unknown>[],
+  { lines: withLines = true }: HydrateOptions = {},
+): Promise<Order[]> {
   const orderIds = rows.map((row) => String(row.id)).filter(Boolean);
   // Legacy assigned_to auth user ids only — used when employee_id is missing and no employee row matches.
   const legacyAuthIds = rows
@@ -2137,7 +2183,7 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
   const employeesRequest = Promise.resolve(
     supabase.from("employees").select("id, name, profile_id").eq("workspace_id", workspaceId),
   );
-  const hasOrders = orderIds.length > 0;
+  const hasOrders = orderIds.length > 0 && withLines;
   const [
     { data: employees, error: employeesError },
     memberNames,
@@ -2151,18 +2197,23 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     assigneeDisplayNames(workspaceId, [...new Set([...legacyAuthIds, ...createdByIds])]),
     customStatusIds.length > 0 ? getStatusDefinitionsByIds(workspaceId, customStatusIds) : Promise.resolve(null),
     hasOrders
-      ? withLineDiscountColumns(() =>
-          withOrderServiceKind((columns) =>
-            supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
+      ? selectInOrderIdChunks(orderIds, (chunk) =>
+          withLineDiscountColumns(() =>
+            withOrderServiceKind((columns) =>
+              supabase.from("order_services").select(columns).in("order_id", chunk).order("created_at", { ascending: true }),
+            ),
           ),
         )
       : Promise.resolve({ data: [], error: null }),
     hasOrders
-      ? withOrderMaterialColumns(() =>
-          supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", orderIds).order("created_at", { ascending: true }),
+      ? selectInOrderIdChunks(orderIds, (chunk) =>
+          withOrderMaterialColumns(() =>
+            supabase.from("order_materials").select(orderMaterialColumns()).in("order_id", chunk).order("created_at", { ascending: true }),
+          ),
         )
       : Promise.resolve({ data: [], error: null }),
-    hasOrders
+    // The team is kept in the lightweight list too (avatars on the dashboard list / board cards).
+    orderIds.length > 0
       ? employeesRequest.then(({ data }) => loadOrderTeamsByOrderIds(workspaceId, orderIds, data ?? []))
       : Promise.resolve(new Map<string, OrderTeamMember[]>()),
     hasOrders ? loadExtraPerformersByLineId(orderIds) : Promise.resolve(null),
@@ -2185,9 +2236,11 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     if (linesError) {
       if (isMissingOrderServiceTechnicianColumn(linesError)) {
         markOrderServiceTechnicianUnsupported();
-        const retry = await withLineDiscountColumns(() =>
-          withOrderServiceKind((columns) =>
-            supabase.from("order_services").select(columns).in("order_id", orderIds).order("created_at", { ascending: true }),
+        const retry = await selectInOrderIdChunks(orderIds, (chunk) =>
+          withLineDiscountColumns(() =>
+            withOrderServiceKind((columns) =>
+              supabase.from("order_services").select(columns).in("order_id", chunk).order("created_at", { ascending: true }),
+            ),
           ),
         );
         if (retry.error) throw new Error(retry.error.message);
@@ -2201,8 +2254,8 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     serviceLines = mergeExtraPerformers(serviceLines, extraByLineId);
     if (materialsError) throw new Error(materialsError.message);
     materialLines = (materials ?? []) as unknown as OrderMaterialLine[];
-    teamsByOrderId = teams;
   }
+  teamsByOrderId = teams;
 
   if (statusDefinitions) {
     for (const [id, status] of statusDefinitions) {
@@ -2210,17 +2263,21 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     }
   }
 
-  return rows.map((row) =>
-    toOrder(
+  // Grouped once (filtering every line list per order was O(orders × lines): 3 400 × 25 000).
+  const linesByOrderId = groupByOrderId(serviceLines as unknown as { order_id?: unknown }[]);
+  const materialsByOrderId = groupByOrderId(materialLines as unknown as { order_id?: unknown }[]);
+  return rows.map((row) => {
+    const order = toOrder(
       row,
       employees ?? [],
-      serviceLines.filter((line) => line.order_id === row.id),
+      (linesByOrderId.get(String(row.id)) ?? []) as unknown as OrderServiceLine[],
       memberNames,
-      materialLines.filter((line) => line.order_id === row.id),
+      (materialsByOrderId.get(String(row.id)) ?? []) as unknown as OrderMaterialLine[],
       customStatuses,
       teamsByOrderId.get(String(row.id)) ?? [],
-    ),
-  );
+    );
+    return withLines ? order : { ...order, linesOmitted: true };
+  });
 }
 
 type OrdersFilterInput = {
@@ -2393,32 +2450,71 @@ async function applyOrdersEmployeeFilter(
 }
 
 /** Full workspace order list (dashboard, notifications, search). Prefer getOrdersPage for the Orders table. */
-export async function getOrders(workspaceId: string | undefined, search = "", kind: OrderListKind = "order") {
+const ORDER_LIST_PAGE = 1000;
+
+export type GetOrdersOptions = {
+  /** false → header rows only (`linesOmitted`), for lists that only count / group orders. Default true. */
+  lines?: boolean;
+  /** Only this client's orders. */
+  clientId?: string;
+};
+
+export async function getOrders(
+  workspaceId: string | undefined,
+  search = "",
+  kind: OrderListKind = "order",
+  options: GetOrdersOptions = {},
+): Promise<Order[]> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
-  let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
   refreshOrderEstimatesSupport();
-  if (isOrderEstimatesSupported() && kind !== "all") {
-    query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
-  } else if (kind === "estimate") {
-    return [] as Order[];
-  }
+  const filterByKind = isOrderEstimatesSupported() && kind !== "all";
+  if (!filterByKind && kind === "estimate") return [] as Order[];
 
   const term = searchTerm(search);
-  if (term) query = query.or(await orderSearchFilter(resolvedWorkspaceId, term));
+  const searchFilter = term ? await orderSearchFilter(resolvedWorkspaceId, term) : null;
 
-  const { data, error } = await query.order("created_at", { ascending: false }).order("id", { ascending: false });
+  // A query builder is mutable (`.range()` rewrites its own URL), so every page gets a fresh one.
+  const pageQuery = (from: number, to: number) => {
+    let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
+    if (filterByKind) query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
+    if (searchFilter) query = query.or(searchFilter);
+    if (options.clientId) query = query.eq("client_id", options.clientId);
+    return query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
+  };
+
+  // The API caps one response at 1 000 rows: read the first page, and only when it is full the next pages
+  // (4 in parallel per wave), so a workspace with thousands of imported orders gets all of them.
+  const first = await pageQuery(0, ORDER_LIST_PAGE - 1);
+  let data = first.data as unknown[] | null;
+  let error = first.error;
+  if (!error && (data?.length ?? 0) === ORDER_LIST_PAGE) {
+    const rest: unknown[] = [];
+    for (let from = ORDER_LIST_PAGE; ; from += ORDER_LIST_PAGE * 4) {
+      const pages = await Promise.all(
+        [0, 1, 2, 3].map((index) => pageQuery(from + index * ORDER_LIST_PAGE, from + (index + 1) * ORDER_LIST_PAGE - 1)),
+      );
+      const failed = pages.find((page) => page.error);
+      if (failed) {
+        error = failed.error;
+        break;
+      }
+      for (const page of pages) rest.push(...((page.data ?? []) as unknown[]));
+      if (pages.some((page) => (page.data?.length ?? 0) < ORDER_LIST_PAGE)) break;
+    }
+    data = [...(data ?? []), ...rest];
+  }
 
   if (error) {
     if (isMissingOrderEstimatesColumn(error)) {
       markOrderEstimatesUnsupported();
       if (kind === "estimate") return [] as Order[];
-      return getOrders(workspaceId, search, "order");
+      return getOrders(workspaceId, search, "order", options);
     }
     throw new Error(error.message);
   }
 
-  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[]);
+  return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[], { lines: options.lines !== false });
 }
 
 /**

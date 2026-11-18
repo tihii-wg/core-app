@@ -1,4 +1,5 @@
 import type { addNewServiceFormData, CatalogWarrantyType, Service, serviceCategory } from "../lib/types";
+import { selectAllRows } from "./selectAllRows";
 import {
   catalogWarrantyFromDbRow,
   catalogWarrantyToDbPayload,
@@ -154,7 +155,8 @@ export async function createService(input: addNewServiceFormData, workspaceId: s
 export async function getServices(workspaceId: string | undefined, search?: string, categoriesFilter?: serviceCategory) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
 
-  let query = supabase.from("services").select(serviceSelect).eq("workspace_id", targetWorkspaceId);
+  const { data, error } = await selectAllRows((from, to) => {
+  let query = supabase.from("services").select(serviceSelect).eq("workspace_id", targetWorkspaceId).order("id", { ascending: true });
 
   if (search) {
     query = query.ilike("service_name", `%${search}%`);
@@ -167,7 +169,8 @@ export async function getServices(workspaceId: string | undefined, search?: stri
       : query.eq("category", categoriesFilter);
   }
 
-  const { data, error } = await query;
+  return query.range(from, to);
+  });
 
   if (error) throw new Error(error.message);
 

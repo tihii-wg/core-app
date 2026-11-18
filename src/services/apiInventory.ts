@@ -1,4 +1,5 @@
 import type { InventoryItem, InventoryItemFormData, InventoryListFilter, InventorySort, InventorySortField } from "../lib/types";
+import { selectAllRows } from "./selectAllRows";
 import { DEFAULT_INVENTORY_MIN_QUANTITY } from "../features/inventory/inventoryDefaults";
 import { stockStatusFromQuantities } from "../features/inventory/stockStatus";
 import {
@@ -196,9 +197,17 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const column = inventorySortColumns[sort.field] ?? "created_at";
 
-  let query = supabase.from("inventory_items_with_status").select("*").eq("workspace_id", resolvedWorkspaceId).order(column, { ascending: sort.ascending });
-
   const term = searchTerm(search);
+  const supplierName = supplier?.trim();
+  // All pages (a catalog of thousands of parts was cut at the API's 1 000-row cap); fresh builder per page.
+  const { data, error } = await selectAllRows((from, to) => {
+  let query = supabase
+    .from("inventory_items_with_status")
+    .select("*")
+    .eq("workspace_id", resolvedWorkspaceId)
+    .order(column, { ascending: sort.ascending })
+    .order("id", { ascending: true });
+
   if (term) {
     query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%,category.ilike.%${term}%,supplier.ilike.%${term}%,location.ilike.%${term}%,description.ilike.%${term}%`);
   }
@@ -213,12 +222,12 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
     query = query.eq("is_active", true).eq("stock_status", filter);
   }
 
-  const supplierName = supplier?.trim();
   if (supplierName && supplierName !== "all") {
     query = query.eq("supplier", supplierName);
   }
 
-  const { data, error } = await query;
+  return query.range(from, to);
+  });
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
 
@@ -229,11 +238,15 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
 export async function getInventorySuppliers(workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
-  const { data, error } = await supabase
-    .from("inventory_items_with_status")
-    .select("supplier")
-    .eq("workspace_id", resolvedWorkspaceId)
-    .not("supplier", "is", null);
+  const { data, error } = await selectAllRows((from, to) =>
+    supabase
+      .from("inventory_items_with_status")
+      .select("supplier")
+      .eq("workspace_id", resolvedWorkspaceId)
+      .not("supplier", "is", null)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
 

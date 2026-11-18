@@ -28,7 +28,7 @@ import { Skeleton } from "../../ui/Skeleton";
 import { ClientCard } from "./ClientCard";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { clientOrderSummaries } from "./clientOrders";
-import { useGetOrders } from "../orders/useGetOrders";
+import { useClientOrders, useGetOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { industryClientCopy, industryClientTotalCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -53,7 +53,9 @@ export function Clients() {
   const debounceSearch = useDebounce(searchQuery, 400);
   const { workspaceId } = useActiveWorkspaceId();
   const { isLoading, clients = [], isPending, error: clientsError, refetch: refetchClients } = useGetClients(debounceSearch, clientType);
-  const { orders, isLoading: ordersLoading, error: ordersError } = useGetOrders();
+  // Counts per client need only the lightweight list (shared with the dashboard cache); the client card
+  // loads that client's orders with lines on its own.
+  const { orders: orderHeaders } = useGetOrders("", { lines: false });
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
 
@@ -66,6 +68,11 @@ export function Clients() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deletingClient, setDeletingClient] = useState<Client | null>(null);
+  const {
+    orders,
+    isLoading: ordersLoading,
+    error: ordersError,
+  } = useClientOrders(selectedClient?.id, { enabled: detailPanelOpen });
   const [visibleColumns, setVisibleColumns] = useState(
     () => new Set<ClientToggleableColumn>(readClientVisibleColumns()),
   );
@@ -79,12 +86,12 @@ export function Clients() {
 
   const orderCountByClientId = useMemo(() => {
     const map = new Map<string, number>();
-    for (const order of orders) {
+    for (const order of orderHeaders) {
       if (!order.clientId) continue;
       map.set(order.clientId, (map.get(order.clientId) ?? 0) + 1);
     }
     return map;
-  }, [orders]);
+  }, [orderHeaders]);
 
   useEffect(() => {
     const clientId = searchParams.get("client")?.trim();
@@ -147,10 +154,7 @@ export function Clients() {
     {
       key: "orders",
       header: t("clients.table.orders"),
-      cell: (client) => {
-        const clientOrders = getClientOrders(client.id);
-        return <span className="tabular-nums">{clientOrders.length}</span>;
-      },
+      cell: (client) => <span className="tabular-nums">{orderCountByClientId.get(client.id) ?? 0}</span>,
       className: "text-right",
     },
     {
@@ -262,7 +266,7 @@ export function Clients() {
       </div>
 
       {isMobile ? (
-        isLoading || ordersLoading ? (
+        isLoading ? (
           <div className="space-y-2" aria-busy="true">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
@@ -288,7 +292,7 @@ export function Clients() {
               <ClientCard
                 key={client.id}
                 client={client}
-                ordersCount={getClientOrders(client.id).length}
+                ordersCount={orderCountByClientId.get(client.id) ?? 0}
                 formatMoney={formatMoney}
                 onView={handleRowClick}
                 onEdit={setEditingClient}
@@ -301,7 +305,7 @@ export function Clients() {
         <DataTable
           columns={columns}
           data={clients}
-          isLoading={isLoading || ordersLoading}
+          isLoading={isLoading}
           keyExtractor={(client) => client.id}
           onRowClick={handleRowClick}
           emptyState={

@@ -1,4 +1,5 @@
 import type { Client, ClientListFilter, ClientType, CreateClientInput, UpdateClientInput } from "../lib/types";
+import { selectAllRows } from "./selectAllRows";
 import i18n from "../i18n";
 import { plateLoosePatterns, plateMatchesQuery } from "../lib/plateVin";
 import { MIN_PHONE_SEARCH_DIGITS, phoneDigits, phoneSearchVariants } from "../lib/phoneSearch";
@@ -274,16 +275,15 @@ export async function getClients(
 ) {
   if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
 
-  let query = supabase.from("clients").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
-
   const term = searchTerm(search);
-  if (term) {
-    query = query.or(clientFieldSearchOrFilter(term));
-  }
-
-  if (clientType === "individual" || clientType === "organization") {
-    query = query.eq("client_type", clientType);
-  }
+  // Fresh builder per page (`.range()` mutates it); `id` keeps pages stable. All pages, not the first 1 000.
+  const pageQuery = (withDeletedAt: boolean) => (from: number, to: number) => {
+    let query = supabase.from("clients").select("*").eq("workspace_id", workspaceId);
+    if (withDeletedAt) query = query.is("deleted_at", null);
+    if (term) query = query.or(clientFieldSearchOrFilter(term));
+    if (clientType === "individual" || clientType === "organization") query = query.eq("client_type", clientType);
+    return query.order("id", { ascending: true }).range(from, to);
+  };
 
   // Vehicle matching (plate / VIN / make / model) does not depend on the field matches → start it now so both
   // reads run in one parallel wave instead of back to back.
@@ -291,18 +291,11 @@ export async function getClients(
     term && includeVehicleMatches ? collectVehicleMatchedClientIds(workspaceId, search, term) : null;
   vehicleMatchRequest?.catch(() => undefined);
 
-  let { data: clients, error } = await query;
+  let { data: clients, error } = await selectAllRows(pageQuery(true));
 
   // Before the General Settings SQL is applied, deleted_at may not exist yet.
   if (error && (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("deleted_at")) {
-    let fallback = supabase.from("clients").select("*").eq("workspace_id", workspaceId);
-    if (term) {
-      fallback = fallback.or(clientFieldSearchOrFilter(term));
-    }
-    if (clientType === "individual" || clientType === "organization") {
-      fallback = fallback.eq("client_type", clientType);
-    }
-    ({ data: clients, error } = await fallback);
+    ({ data: clients, error } = await selectAllRows(pageQuery(false)));
   }
 
   if (error) throw new Error(error.message);

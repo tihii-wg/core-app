@@ -137,8 +137,10 @@ export default function Dashboard() {
     refetch: refetchOrders,
     isRefetching: ordersRefetching,
   } = useQuery({
-    queryKey: ["orders", workspaceId],
-    queryFn: () => getOrders(workspaceId),
+    // Lightweight list (no lines): counters, deadlines and the short lists only need order headers;
+    // opening an order loads it whole.
+    queryKey: ["orders", workspaceId, "headers"],
+    queryFn: () => getOrders(workspaceId, "", "order", { lines: false }),
     enabled: Boolean(workspaceId),
     ...hot,
   });

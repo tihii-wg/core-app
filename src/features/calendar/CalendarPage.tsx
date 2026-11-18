@@ -127,7 +127,7 @@ export function CalendarPage() {
   const [showOrders, setShowOrders] = useState(false);
   const syncOrdersOn = Boolean(status?.syncOrders);
   const showOverlayToggle = connectionOk && !syncOrdersOn;
-  const { orders } = useGetOrders("", { enabled: showOverlayToggle && showOrders });
+  const { orders } = useGetOrders("", { enabled: showOverlayToggle && showOrders, lines: false });
   const [activeView, setActiveView] = useState<GcalViewId>(() => readStoredGcalView(false));
   const [range, setRange] = useState(() => initialVisibleRange(readStoredGcalView(false)));
   const eventsQuery = useGoogleCalendarEvents(range.from, range.to, eventsEnabled);
