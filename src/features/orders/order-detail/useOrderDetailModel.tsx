@@ -239,6 +239,9 @@ export function useOrderDetailModel({
     closeInlineEditorRef.current!();
     stopEditing();
     setConfirmDeleteOpen(false);
+    // Line editors (e.g. the performers list, which saves every change itself) must not reopen with the order.
+    setServiceLineEdit(null);
+    setMaterialLineEdit(null);
   }
 
   async function startFieldEdit(field: OrderEditField | null) {

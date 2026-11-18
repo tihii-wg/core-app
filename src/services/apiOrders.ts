@@ -1502,6 +1502,41 @@ async function loadLineExtraPerformers(orderId: string): Promise<Map<string, str
   return map;
 }
 
+let lineExtraPerformersColumnSupported: boolean | null = null;
+
+/**
+ * Adds order_services.extra_technician_ids to lines loaded with the shared column list (orders list / card
+ * opened from the list), so extra performers show without opening the line editor. No-op until the SQL is applied.
+ */
+async function withStoredExtraPerformers(
+  lines: OrderServiceLine[],
+  orderIds: readonly string[],
+): Promise<OrderServiceLine[]> {
+  if (lineExtraPerformersColumnSupported === false || lines.length === 0 || orderIds.length === 0) return lines;
+  const byLineId = new Map<string, unknown>();
+  for (let start = 0; start < orderIds.length; start += 100) {
+    const chunk = orderIds.slice(start, start + 100);
+    const { data, error } = await supabase
+      .from("order_services")
+      .select("id, extra_technician_ids")
+      .in("order_id", chunk);
+    if (error) {
+      if (isMissingExtraPerformersColumn(error)) {
+        lineExtraPerformersColumnSupported = false;
+        return lines;
+      }
+      throw new Error(error.message);
+    }
+    for (const row of (data ?? []) as { id?: unknown; extra_technician_ids?: unknown }[]) {
+      byLineId.set(String(row.id), row.extra_technician_ids);
+    }
+  }
+  lineExtraPerformersColumnSupported = true;
+  return lines.map((line) =>
+    line.id && byLineId.has(String(line.id)) ? { ...line, extra_technician_ids: byLineId.get(String(line.id)) } : line,
+  );
+}
+
 /** Main + extra performer ids of the stored lines (for the order team sync). */
 async function storedLineTechnicianIds(
   orderId: string,
@@ -2135,6 +2170,7 @@ async function hydrateOrderRows(workspaceId: string, rows: Record<string, unknow
     } else {
       serviceLines = (lines ?? []) as unknown as OrderServiceLine[];
     }
+    serviceLines = await withStoredExtraPerformers(serviceLines, orderIds);
     if (materialsError) throw new Error(materialsError.message);
     materialLines = (materials ?? []) as unknown as OrderMaterialLine[];
     teamsByOrderId = teams;
