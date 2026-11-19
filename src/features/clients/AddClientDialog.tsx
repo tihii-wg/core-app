@@ -19,6 +19,7 @@ export function AddClientDialog({ open, onOpenChange, initialName, onCreated }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
+          
           <DialogTitle>{copy.addDialogTitle}</DialogTitle>
           <DialogDescription>{copy.addDialogDescription}</DialogDescription>
         </DialogHeader>
