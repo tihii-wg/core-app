@@ -8,7 +8,10 @@ const orders: Messages<typeof en> = {
   totalCount_many: "Всего {{count}} заказов",
   totalCount_other: "Всего {{count}} заказа",
   awaitingPayment: {
-    title: "Ожидает оплаты",
+    title: "Ожидают оплаты",
+    activeTitle: "Ожидают оплаты",
+    showAll: "Все заказы",
+    showAllLabel: "Показать все заказы",
     unpaidCount_one: "{{count}} неоплаченный заказ",
     unpaidCount_few: "{{count}} неоплаченных заказа",
     unpaidCount_many: "{{count}} неоплаченных заказов",

@@ -117,7 +117,15 @@ export function useClientOrders(clientId: string | undefined, { enabled = true }
   return { orders: orders ?? [], isLoading, error, refetch };
 }
 
-export type OrdersListParams = Omit<OrdersListQuery, "today"> & { today: string };
+export type OrdersListParams = Omit<OrdersListQuery, "today" | "onlyOrderIds"> & {
+  today: string;
+  /** Only orders with a remaining balance (ids from the awaiting-payment query, paged in the database). */
+  awaitingPayment?: boolean;
+};
+
+export function ordersAwaitingPaymentQueryKey(workspaceId: string | undefined) {
+  return ["orders", workspaceId, "awaitingPayment"] as const;
+}
 
 /** Server-paginated orders list for the Orders page. */
 export function useOrdersPage(params: OrdersListParams, { enabled = true }: { enabled?: boolean } = {}) {
@@ -134,31 +142,44 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
     today: params.today,
     page: params.page,
     pageSize,
+    awaitingPayment: Boolean(params.awaitingPayment),
   } as const;
+  const queryClient = useQueryClient();
+  // Awaiting-payment ids come from the same cached query as the header card (one ledger read for both).
+  const loadPage = async (key: typeof listKey) => {
+    const onlyOrderIds = key.awaitingPayment
+      ? (
+          await queryClient.fetchQuery({
+            queryKey: ordersAwaitingPaymentQueryKey(workspaceId),
+            queryFn: () => getOrdersAwaitingPayment(workspaceId),
+          })
+        ).orderIds
+      : undefined;
+    return getOrdersPage(workspaceId, {
+      search: key.search,
+      status: key.status,
+      customStatusId: key.customStatusId,
+      customStatusFallbackSystem: key.customStatusFallbackSystem,
+      deadline: key.deadline,
+      employeeId: key.employeeId,
+      kind: key.kind,
+      today: key.today,
+      page: key.page,
+      pageSize: key.pageSize,
+      ...(onlyOrderIds ? { onlyOrderIds } : {}),
+    });
+  };
 
   const hot = useRealtimeHotQueryOptions();
   const { data, isLoading, isFetching, isPlaceholderData, error, refetch } = useQuery({
     queryKey: ["orders", workspaceId, "page", listKey],
-    queryFn: () =>
-      getOrdersPage(workspaceId, {
-        search: listKey.search,
-        status: listKey.status,
-        customStatusId: listKey.customStatusId,
-        customStatusFallbackSystem: listKey.customStatusFallbackSystem,
-        deadline: listKey.deadline,
-        employeeId: listKey.employeeId,
-        kind: listKey.kind,
-        today: listKey.today,
-        page: listKey.page,
-        pageSize: listKey.pageSize,
-      }),
+    queryFn: () => loadPage(listKey),
     enabled: Boolean(workspaceId) && enabled,
     placeholderData: (previous: OrdersPageResult | undefined) => previous,
     ...hot,
   });
 
   // Next page in the background once this one is on screen → "Next" opens from cache, without waiting.
-  const queryClient = useQueryClient();
   const loadedPage = !isPlaceholderData ? data?.page : undefined;
   const loadedPageCount = data?.pageCount ?? 1;
   useEffect(() => {
@@ -166,7 +187,7 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
     const nextKey = { ...listKey, page: loadedPage + 1 };
     void queryClient.prefetchQuery({
       queryKey: ["orders", workspaceId, "page", nextKey],
-      queryFn: () => getOrdersPage(workspaceId, { ...nextKey }),
+      queryFn: () => loadPage(nextKey),
       staleTime: 30_000,
     });
     // listKey fields are primitives; the serialized key covers them.
@@ -193,7 +214,7 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
 export function useOrdersAwaitingPayment({ enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["orders", workspaceId, "awaitingPayment"],
+    queryKey: ordersAwaitingPaymentQueryKey(workspaceId),
     queryFn: () => getOrdersAwaitingPayment(workspaceId),
     enabled: Boolean(workspaceId) && enabled,
   });

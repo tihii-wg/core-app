@@ -4,6 +4,9 @@ export default {
   totalCount_other: "{{count}} total orders",
   awaitingPayment: {
     title: "Awaiting Payment",
+    activeTitle: "Awaiting payment",
+    showAll: "All orders",
+    showAllLabel: "Show all orders",
     unpaidCount_one: "{{count}} unpaid order",
     unpaidCount_other: "{{count}} unpaid orders",
     allPaid: "All orders paid",

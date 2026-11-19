@@ -3,7 +3,7 @@ import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearchParams } from "react-router-dom";
 
-import { Banknote, Plus } from "lucide-react";
+import { Banknote, List as ListIcon, Plus } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { PageHeader } from "../../pages/PageHeader";
 import { SearchAndFilters } from "../../ui/SearchAndFilters";
@@ -52,7 +52,6 @@ import { type DeadlineFilter } from "./orderVisibility";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { useGetPayments } from "../finance/usePayments";
-import { orderHasOutstandingBalance } from "../finance/paymentCalculations";
 import { ClientDetailsHost } from "../clients/ClientDetailsHost";
 import { useOpenClientDetails } from "../clients/useOpenClientDetails";
 import type { Client } from "../../lib/types";
@@ -234,14 +233,12 @@ export function Orders() {
     today,
     page,
     pageSize,
+    // Server-side: only orders with a remaining balance, with their own page count.
+    awaitingPayment: awaitingPaymentFilter && !isEstimatesView,
   }, { enabled: !isBoard && !isCalendar });
 
-  const displayedOrders = useMemo(() => {
-    if (!awaitingPaymentFilter) return orders;
-    return orders.filter((order) => orderHasOutstandingBalance(order, payments));
-  }, [awaitingPaymentFilter, orders, payments]);
-
-  const displayedTotal = awaitingPaymentFilter ? displayedOrders.length : total;
+  const displayedOrders = orders;
+  const displayedTotal = total;
 
   const awaitingPayment = useOrdersAwaitingPayment();
   const { canWrite: canCreateOrders } = useWorkspaceSubscription();
@@ -324,9 +321,9 @@ export function Orders() {
       ? t("orders.estimates.totalCount", { count: displayedTotal })
       : t("orders.totalCount", { count: displayedTotal });
 
-  const listTotal = awaitingPaymentFilter ? displayedOrders.length : total;
-  const listRangeFrom = listTotal === 0 ? 0 : awaitingPaymentFilter ? (displayedOrders.length === 0 ? 0 : 1) : rangeFrom;
-  const listRangeTo = listTotal === 0 ? 0 : awaitingPaymentFilter ? displayedOrders.length : rangeTo;
+  const listTotal = total;
+  const listRangeFrom = rangeFrom;
+  const listRangeTo = rangeTo;
 
   const paginationSummary =
     listTotal === 0
@@ -378,8 +375,8 @@ export function Orders() {
           <button
             type="button"
             aria-pressed={awaitingPaymentFilter}
-            aria-label={t("orders.awaitingPayment.filterLabel")}
-            title={awaitingPaymentFilter ? t("orders.awaitingPayment.filterActiveHint") : t("orders.awaitingPayment.filterLabel")}
+            aria-label={awaitingPaymentFilter ? t("orders.awaitingPayment.showAllLabel") : t("orders.awaitingPayment.filterLabel")}
+            title={awaitingPaymentFilter ? t("orders.awaitingPayment.showAllLabel") : t("orders.awaitingPayment.filterLabel")}
             onClick={toggleAwaitingPaymentFilter}
             className={cn(
               "flex h-[calc(3rem*1.5)] min-w-0 max-w-full cursor-pointer items-center gap-3 rounded-lg border px-3.5 text-left shadow-xs transition-colors sm:max-w-[16rem]",
@@ -394,8 +391,18 @@ export function Orders() {
                 statIconVariants[awaitingPaymentFilter || awaitingPayment.amount > 0 ? "primary" : "default"],
               )}
             >
-              <Banknote aria-hidden="true" className="size-4" />
+              {awaitingPaymentFilter ? <ListIcon aria-hidden="true" className="size-4" /> : <Banknote aria-hidden="true" className="size-4" />}
             </span>
+            {awaitingPaymentFilter ? (
+              // Filter on: the same button switches back to the full list.
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-xs font-medium text-muted-foreground">{t("orders.awaitingPayment.activeTitle")}</p>
+                <p className="mt-0.5 truncate text-base font-semibold tracking-tight text-foreground">{t("orders.awaitingPayment.showAll")}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {t("orders.awaitingPayment.unpaidCount", { count: awaitingPayment.count })} · {formatMoney(awaitingPayment.amount)}
+                </p>
+              </div>
+            ) : (
             <div className="min-w-0 leading-tight">
               <p className="truncate text-xs font-medium text-muted-foreground">{t("orders.awaitingPayment.title")}</p>
               {awaitingPayment.isLoading ? (
@@ -413,6 +420,7 @@ export function Orders() {
                     : t("orders.awaitingPayment.allPaid")}
               </p>
             </div>
+            )}
           </button>
           )
         }

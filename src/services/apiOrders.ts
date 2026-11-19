@@ -112,7 +112,15 @@ export type OrdersListQuery = {
    * `estimate` returns empty and `order` / `all` are unfiltered (all rows are orders).
    */
   kind?: OrderListKind;
+  /**
+   * Only these order ids (e.g. the orders awaiting payment, computed from the payment ledger). The page,
+   * count and the other filters still run in the database. `[]` → empty list.
+   */
+  onlyOrderIds?: readonly string[];
 };
+
+/** Up to this many ids go into one `in.(…)` filter (URL length); beyond it the id list itself is paged. */
+const MAX_IDS_IN_FILTER = 300;
 
 /** List scope: only orders, only estimates, or both in one list (estimates carry an «Расчёт» mark). */
 export type OrderListKind = OrderKind | "all";
@@ -2742,6 +2750,13 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
   const triedComputedEmployeeFilter =
     orderTeamEmployeeIdsSupported !== false && Boolean(rawEmployeeFilter);
 
+  // Restricted to a precomputed id list (orders awaiting payment).
+  const onlyIds = input.onlyOrderIds;
+  if (onlyIds && onlyIds.length === 0) return empty();
+  // Very long lists cannot go into one URL: page the (already ordered) id list itself.
+  const idsWindow =
+    onlyIds && onlyIds.length > MAX_IDS_IN_FILTER ? onlyIds.slice((page - 1) * pageSize, page * pageSize) : null;
+
   let query = supabase
     .from("orders")
     .select(orderColumns, { count: "exact" })
@@ -2750,11 +2765,13 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
   const filtered = await applyOrdersListFilters(query, resolvedWorkspaceId, input);
   if (!filtered) return empty();
   query = filtered.query;
+  if (idsWindow) query = query.in("id", idsWindow.length > 0 ? idsWindow : ["00000000-0000-0000-0000-000000000000"]);
+  else if (onlyIds) query = query.in("id", [...onlyIds]);
 
   // Stable ordering so pages don't shuffle when timestamps collide.
   query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
 
-  const from = (page - 1) * pageSize;
+  const from = idsWindow ? 0 : (page - 1) * pageSize;
   const to = from + pageSize - 1;
   const { data, error, count } = await query.range(from, to);
 
@@ -2776,7 +2793,7 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
     orderTeamEmployeeIdsSupported = true;
   }
 
-  const total = typeof count === "number" && count >= 0 ? count : (data ?? []).length;
+  const total = idsWindow && onlyIds ? onlyIds.length : typeof count === "number" && count >= 0 ? count : (data ?? []).length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   // If the requested page is past the end (e.g. last row deleted), re-fetch the last page once.
   if (total > 0 && page > pageCount) {
@@ -2796,6 +2813,8 @@ export async function getOrdersPage(workspaceId: string | undefined, input: Orde
 export type OrdersAwaitingPayment = {
   amount: number;
   count: number;
+  /** Orders with a remaining balance, newest first (same order as the Orders list). */
+  orderIds: string[];
 };
 
 /**
@@ -2809,17 +2828,19 @@ export async function getOrdersAwaitingPayment(workspaceId: string | undefined):
   refreshOrderEstimatesSupport();
   const includeKind = isOrderEstimatesSupported();
   const baseSelect = includeKind
-    ? "id, total_price, is_paid, status, closed_at, kind"
-    : "id, total_price, is_paid, status, closed_at";
+    ? "id, total_price, is_paid, status, closed_at, kind, created_at"
+    : "id, total_price, is_paid, status, closed_at, created_at";
 
-  const run = async (select: string, withClosedAt: boolean) => {
-    let query = supabase.from("orders").select(select).eq("workspace_id", resolvedWorkspaceId).neq("status", "cancelled");
-    if (withClosedAt) query = query.is("closed_at", null);
-    if (includeKind && select.includes("kind")) {
-      query = query.or("kind.eq.order,kind.is.null");
-    }
-    return query;
-  };
+  // Every matching order (all pages: open orders of a big workspace exceed the 1 000-row cap), newest first.
+  const run = (select: string, withClosedAt: boolean) =>
+    selectAllRows((from, to) => {
+      let query = supabase.from("orders").select(select).eq("workspace_id", resolvedWorkspaceId).neq("status", "cancelled");
+      if (withClosedAt) query = query.is("closed_at", null);
+      if (includeKind && select.includes("kind")) {
+        query = query.or("kind.eq.order,kind.is.null");
+      }
+      return query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
+    });
 
   const [{ data, error }, payments] = await Promise.all([
     run(baseSelect, true),
@@ -2833,7 +2854,7 @@ export async function getOrdersAwaitingPayment(workspaceId: string | undefined):
     }
     // closed_at may be absent on very old DBs — fall back without that filter.
     if (/closed_at/i.test(error.message)) {
-      const legacySelect = includeKind ? "id, total_price, is_paid, status, kind" : "id, total_price, is_paid, status";
+      const legacySelect = includeKind ? "id, total_price, is_paid, status, kind, created_at" : "id, total_price, is_paid, status, created_at";
       const legacy = await run(legacySelect, false);
       if (legacy.error) {
         if (includeKind && isMissingOrderEstimatesColumn(legacy.error)) {
@@ -2850,9 +2871,10 @@ export async function getOrdersAwaitingPayment(workspaceId: string | undefined):
   return sumAwaitingPayment((data ?? []) as unknown as Record<string, unknown>[], payments);
 }
 
-function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<ReturnType<typeof getPayments>>) {
+function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<ReturnType<typeof getPayments>>): OrdersAwaitingPayment {
   let amount = 0;
   let count = 0;
+  const orderIds: string[] = [];
   for (const row of rows) {
     if (row.kind === "estimate") continue;
     const statusRaw = typeof row.status === "string" ? row.status : "new";
@@ -2866,8 +2888,9 @@ function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<R
     if (!orderHasOutstandingBalance(order, payments)) continue;
     amount += orderPaymentBalance(order, payments).remaining;
     count += 1;
+    orderIds.push(order.id);
   }
-  return { amount, count };
+  return { amount, count, orderIds };
 }
 
 /** Optional until supabase/manual/20261112220000_order_line_comments.PRODUCTION.sql is applied. */

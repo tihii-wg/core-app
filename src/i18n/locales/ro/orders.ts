@@ -8,6 +8,9 @@ const orders: Messages<typeof en> = {
   totalCount_other: "{{count}} de comenzi în total",
   awaitingPayment: {
     title: "În așteptarea plății",
+    activeTitle: "În așteptarea plății",
+    showAll: "Toate comenzile",
+    showAllLabel: "Afișează toate comenzile",
     unpaidCount_one: "{{count}} comandă neachitată",
     unpaidCount_few: "{{count}} comenzi neachitate",
     unpaidCount_other: "{{count}} de comenzi neachitate",
