@@ -1028,6 +1028,7 @@ const settings: Messages<typeof en> = {
       cornerRadius: "Rotunjire colțuri (mm)",
       headerRadius: "Rotunjire antet (mm)",
       grandTotalRadius: "Rotunjire total general (mm)",
+      grandTotalText: "Culoarea textului totalului general",
       align: "Aliniere",
       alignLeft: "Stânga",
       alignCenter: "Centru",

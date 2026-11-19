@@ -1030,6 +1030,7 @@ const settings: Messages<typeof en> = {
       cornerRadius: "Скругление углов (мм)",
       headerRadius: "Скругление шапки (мм)",
       grandTotalRadius: "Скругление итоговой строки (мм)",
+      grandTotalText: "Цвет текста итоговой строки",
       align: "Выравнивание",
       alignLeft: "Слева",
       alignCenter: "По центру",

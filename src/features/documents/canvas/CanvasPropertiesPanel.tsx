@@ -751,6 +751,20 @@ export function CanvasPropertiesPanel({
               )
             }
           />
+          <ColorPicker
+            label={t("settings.printTemplates.canvas.grandTotalText")}
+            value={single.grandTotalTextColor ?? null}
+            themeColors={themeColors}
+            workspaceId={workspaceId}
+            disabled={disabled}
+            onChange={(next) =>
+              patchAll((el) =>
+                el.type === "totals"
+                  ? { ...el, grandTotalTextColor: typeof next === "string" && next ? next : undefined }
+                  : el,
+              )
+            }
+          />
           <div className="space-y-1">
             <Label className="text-xs">{t("settings.printTemplates.canvas.grandTotalRadius")}</Label>
             <Input

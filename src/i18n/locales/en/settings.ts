@@ -1022,6 +1022,7 @@ export default {
       cornerRadius: "Corner radius (mm)",
       headerRadius: "Header corner radius (mm)",
       grandTotalRadius: "Grand total corner radius (mm)",
+      grandTotalText: "Grand total text color",
       align: "Align",
       alignLeft: "Left",
       alignCenter: "Center",
