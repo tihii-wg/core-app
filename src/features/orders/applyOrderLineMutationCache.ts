@@ -54,7 +54,7 @@ export function applyOrderLineMutationCache(
   queryClient.setQueryData(["order", orderId], withComments);
 
   if (workspaceId) {
-    patchOrderLists(queryClient, workspaceId, (cached) => (cached.id === orderId ? withComments : cached));
+    const awaitingRefreshed = patchOrderLists(queryClient, workspaceId, (cached) => (cached.id === orderId ? withComments : cached));
     // Also cover the legacy ["orders-page", workspaceId] key if anything still reads it.
     queryClient.setQueriesData({ queryKey: ["orders-page", workspaceId] }, (data: unknown) => {
       if (!data || typeof data !== "object") return data;
@@ -63,6 +63,11 @@ export function applyOrderLineMutationCache(
       return { ...page, orders: page.orders.map((row) => (row.id === orderId ? withComments : row)) };
     });
     void queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId, orderId] });
+    // The order may not sit in any cached list page: compare with the open card too, so the «Awaiting
+    // payment» sum refreshes after any total change (patchOrderLists covers orders that are in a list).
+    if (!awaitingRefreshed && (!previous || previous.totalPrice !== withComments.totalPrice || previous.status !== withComments.status)) {
+      void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId, "awaitingPayment"] });
+    }
   }
 
   if (options.stockMoved && workspaceId) {

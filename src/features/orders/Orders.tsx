@@ -410,13 +410,18 @@ export function Orders() {
                   {awaitingPayment.error ? "—" : formatMoney(awaitingPayment.amount)}
                 </p>
               )}
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                {awaitingPayment.error
-                  ? t("orders.awaitingPayment.loadFailed")
-                  : awaitingPayment.count > 0
-                    ? t("orders.awaitingPayment.unpaidCount", { count: awaitingPayment.count })
-                    : t("orders.awaitingPayment.allPaid")}
-              </p>
+              {/* While loading the count is 0 — do not claim «all orders are paid» before the sum is known. */}
+              {awaitingPayment.isLoading ? (
+                <Skeleton className="mt-1 h-3 w-24" />
+              ) : (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {awaitingPayment.error
+                    ? t("orders.awaitingPayment.loadFailed")
+                    : awaitingPayment.count > 0
+                      ? t("orders.awaitingPayment.unpaidCount", { count: awaitingPayment.count })
+                      : t("orders.awaitingPayment.allPaid")}
+                </p>
+              )}
             </div>
             )}
           </button>
