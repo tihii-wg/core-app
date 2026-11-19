@@ -1,5 +1,6 @@
 /** Default canvas (v3) templates reproducing the original blue invoice/work-order design via theme refs. */
 
+import { rescaleCanvasLayoutToMargins } from "./layoutMargins";
 import type { TFunction } from "i18next";
 import i18n from "../../../i18n";
 import { themeRef } from "../colorRef";
@@ -61,6 +62,7 @@ function invoiceColumns(t: Translate) {
   ];
 }
 
+/** Design grid of the defaults (190 mm wide content); exported layouts are rescaled to margins 0. */
 function page(): CanvasDocumentLayout["page"] {
   return { size: "A4", orientation: "portrait", marginsMm: 10 };
 }
@@ -247,6 +249,11 @@ function invoicePartyBlocks(t: Translate): CanvasElement[] {
 }
 
 export function defaultCanvasWorkOrderLayout(t?: Translate): CanvasDocumentLayout {
+  // Designed on a 10 mm content box, delivered without margins: stretched edge to edge of the sheet.
+  return rescaleCanvasLayoutToMargins(buildDefaultCanvasWorkOrderLayout(t), 0);
+}
+
+function buildDefaultCanvasWorkOrderLayout(t?: Translate): CanvasDocumentLayout {
   const translate = tDefault(t);
   return {
     version: 3,
@@ -292,6 +299,11 @@ export function defaultCanvasWorkOrderLayout(t?: Translate): CanvasDocumentLayou
 }
 
 export function defaultCanvasActLayout(t?: Translate): CanvasDocumentLayout {
+  // Designed on a 10 mm content box, delivered without margins: stretched edge to edge of the sheet.
+  return rescaleCanvasLayoutToMargins(buildDefaultCanvasActLayout(t), 0);
+}
+
+function buildDefaultCanvasActLayout(t?: Translate): CanvasDocumentLayout {
   const translate = tDefault(t);
   return {
     version: 3,
@@ -317,6 +329,11 @@ export function defaultCanvasActLayout(t?: Translate): CanvasDocumentLayout {
 }
 
 export function defaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout {
+  // Designed on a 10 mm content box, delivered without margins: stretched edge to edge of the sheet.
+  return rescaleCanvasLayoutToMargins(buildDefaultCanvasInvoiceLayout(t), 0);
+}
+
+function buildDefaultCanvasInvoiceLayout(t?: Translate): CanvasDocumentLayout {
   const translate = tDefault(t);
   const invoiceTotals: TotalsRow[] = [
     total("servicesSum", L(translate, "subtotal")),

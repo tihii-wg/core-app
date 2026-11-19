@@ -13,6 +13,7 @@ import { SignaturesBlockSettings, TableBlockSettings, TotalsBlockSettings } from
 import { heightForImageRatio, templateImageFromFile, TemplateImageError } from "./imageUpload";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../ui/Select";
 import toast from "react-hot-toast";
+import { clampPageMarginsMm, MAX_PAGE_MARGINS_MM, MIN_PAGE_MARGINS_MM } from "./layoutMargins";
 
 type Props = {
   layout: CanvasDocumentLayout;
@@ -24,6 +25,8 @@ type Props = {
   isInvoice?: boolean;
   onChangeElements: (updater: (elements: CanvasElement[]) => CanvasElement[]) => void;
   onChangePageBackground: (fill: Fill | null) => void;
+  /** New page margins (mm); the content is stretched / shrunk to the new work area. */
+  onChangePageMargins: (marginsMm: number) => void;
 };
 
 function updateSelected(
@@ -43,6 +46,7 @@ export function CanvasPropertiesPanel({
   isInvoice = false,
   onChangeElements,
   onChangePageBackground,
+  onChangePageMargins,
 }: Props) {
   const { t } = useTranslation();
   const ids = new Set(selected.map((el) => el.id));
@@ -116,6 +120,12 @@ export function CanvasPropertiesPanel({
           workspaceId={workspaceId}
           disabled={disabled}
           onChange={(next) => onChangePageBackground(next && typeof next !== "string" ? next : next ? { color: next } : null)}
+        />
+        <PageMarginsField
+          key={layout.page.marginsMm}
+          value={layout.page.marginsMm}
+          disabled={disabled}
+          onCommit={onChangePageMargins}
         />
       </div>
     );
@@ -797,6 +807,51 @@ export function CanvasPropertiesPanel({
           ? t("settings.printTemplates.deleteSelected", { count: selected.length })
           : t("settings.printTemplates.deleteElement")}
       </Button>
+    </div>
+  );
+}
+
+/** Page margins (mm). Applied on blur / Enter — every change rescales the whole design. */
+function PageMarginsField({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  disabled?: boolean;
+  onCommit: (marginsMm: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(String(value));
+  const commit = () => {
+    const parsed = Number(draft.replace(",", "."));
+    const next = Number.isFinite(parsed) ? clampPageMarginsMm(parsed) : value;
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="canvas-page-margins">{t("settings.printTemplates.canvas.pageMargins")}</Label>
+      <Input
+        id="canvas-page-margins"
+        type="number"
+        inputMode="decimal"
+        min={MIN_PAGE_MARGINS_MM}
+        max={MAX_PAGE_MARGINS_MM}
+        step={1}
+        className="h-8"
+        disabled={disabled}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+        }}
+      />
+      <p className="text-xs text-muted-foreground">{t("settings.printTemplates.canvas.pageMarginsHint")}</p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { rescaleCanvasLayoutToMargins } from "./layoutMargins";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -803,6 +804,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
           page: { ...layout.page, background: fill ?? undefined },
         })
       }
+      onChangePageMargins={(marginsMm) => commit(rescaleCanvasLayoutToMargins(layout, marginsMm))}
     />
   );
 

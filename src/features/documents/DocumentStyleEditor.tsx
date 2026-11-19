@@ -311,7 +311,7 @@ export function DocumentStyleEditor({ template, canEdit, onClose, onDirtyChange 
                     onChange={(event) =>
                       setStyle((prev) => ({
                         ...prev,
-                        page: { ...prev.page, marginsMm: Number(event.target.value) || 10 },
+                        page: { ...prev.page, marginsMm: Number.isFinite(Number(event.target.value)) ? Math.max(0, Number(event.target.value)) : 0 },
                       }))
                     }
                   />

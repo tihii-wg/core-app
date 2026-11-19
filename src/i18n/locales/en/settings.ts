@@ -997,6 +997,8 @@ export default {
       totalsBackground: "Totals background",
       grandTotal: "Grand total row",
       pageBackground: "Page background",
+      pageMargins: "Page margins (mm)",
+      pageMarginsHint: "0 — print edge to edge. Changing it stretches or shrinks the content to the new work area.",
       themeColors: "Style colors",
       recentColors: "Recent colors",
       bringForward: "Bring forward",

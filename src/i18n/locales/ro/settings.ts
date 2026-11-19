@@ -1002,6 +1002,8 @@ const settings: Messages<typeof en> = {
       totalsBackground: "Fundal totaluri",
       grandTotal: "Rând total general",
       pageBackground: "Fundal pagină",
+      pageMargins: "Marginile paginii (mm)",
+      pageMarginsHint: "0 — tipărire de la margine la margine. La modificare, conținutul se întinde sau se micșorează pe noua zonă de lucru.",
       themeColors: "Culori stil",
       recentColors: "Culori recente",
       bringForward: "Aduceți în față",

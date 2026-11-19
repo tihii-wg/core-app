@@ -278,7 +278,7 @@ export function defaultDocumentStyle(): DocumentStyle {
     version: 1,
     colors,
     font: { family: "system", baseSizePt: 10 },
-    page: { size: "A4", orientation: "portrait", marginsMm: 10 },
+    page: { size: "A4", orientation: "portrait", marginsMm: 0 },
     title: {
       align: "right",
       sizePt: 14,

@@ -1003,6 +1003,8 @@ const settings: Messages<typeof en> = {
       totalsBackground: "Фон итогов",
       grandTotal: "Итоговая строка",
       pageBackground: "Фон страницы",
+      pageMargins: "Поля страницы (мм)",
+      pageMarginsHint: "0 — печать от края до края листа. При изменении содержимое растягивается или сжимается под новую рабочую область.",
       themeColors: "Цвета стиля",
       recentColors: "Недавние цвета",
       bringForward: "На передний план",
