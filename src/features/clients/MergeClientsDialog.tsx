@@ -9,7 +9,7 @@ import { Skeleton } from "../../ui/Skeleton";
 import type { Client } from "../../lib/types";
 import { getClientsPage, getClient, type MergeClientsPreview } from "../../services/apiClients";
 import { useClientOrderCounts } from "../orders/useGetOrders";
-import { getClientVehicles } from "../../services/apiVehicles";
+import { getVehicleCountsByClient } from "../../services/apiVehicles";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import ClientTypeBadge from "./ClientTypeBadge";
@@ -35,6 +35,8 @@ type MergeClientsDialogProps = {
 type Step = 1 | 2 | 3;
 
 const PAGE_SIZE = 80;
+/** «Select all found» takes at most this many clients in one merge. */
+const MAX_SELECT_ALL = 500;
 
 export function MergeClientsDialog({
   open,
@@ -121,19 +123,16 @@ export function MergeClientsDialog({
     if (!open || !workspaceId || selectedIds.length === 0) return;
     let cancelled = false;
     void (async () => {
-      const next = new Map(vehicleCounts);
-      await Promise.all(
-        selectedIds.map(async (id) => {
-          if (next.has(id)) return;
-          try {
-            const rows = await getClientVehicles(workspaceId, id);
-            next.set(id, rows.length);
-          } catch {
-            next.set(id, 0);
-          }
-        }),
-      );
-      if (!cancelled) setVehicleCounts(new Map(next));
+      // Only the clients without a count yet, all in one query (select-all can add dozens at once).
+      const missing = selectedIds.filter((id) => !vehicleCounts.has(id));
+      if (missing.length === 0) return;
+      let fetched: Map<string, number>;
+      try {
+        fetched = await getVehicleCountsByClient(workspaceId, missing);
+      } catch {
+        fetched = new Map(missing.map((id) => [id, 0]));
+      }
+      if (!cancelled) setVehicleCounts((prev) => new Map([...prev, ...fetched]));
     })();
     return () => {
       cancelled = true;
@@ -156,6 +155,39 @@ export function MergeClientsDialog({
     setSelectedIds((current) =>
       current.includes(client.id) ? current.filter((id) => id !== client.id) : [...current, client.id],
     );
+  }
+
+  const [selectingAll, setSelectingAll] = useState(false);
+  const totalFound = listQuery.data?.total ?? listed.length;
+
+  /** Select every client matching the search (not only the ones shown), up to MAX_SELECT_ALL. */
+  async function selectAllFound() {
+    if (!workspaceId) return;
+    let rows = visible;
+    if (totalFound > visible.length) {
+      setSelectingAll(true);
+      try {
+        const page = await getClientsPage(workspaceId, { search: debouncedSearch, page: 1, pageSize: MAX_SELECT_ALL });
+        rows = page.rows;
+      } catch {
+        rows = visible;
+      } finally {
+        setSelectingAll(false);
+      }
+    }
+    setSelectedCache((prev) => {
+      const next = new Map(prev);
+      for (const client of rows) next.set(client.id, client);
+      return next;
+    });
+    setSelectedIds((current) => {
+      const seen = new Set(current);
+      return [...current, ...rows.map((client) => client.id).filter((id) => !seen.has(id))];
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(initialTarget ? [initialTarget.id] : []);
   }
 
   async function goToStep2() {
@@ -250,8 +282,29 @@ export function MergeClientsDialog({
                 placeholder={t("clients.merge.searchPlaceholder")}
                 aria-label={t("clients.merge.searchPlaceholder")}
               />
-              {selectedIds.length > 0 ? (
-                <p className="text-xs text-muted-foreground">{t("clients.merge.selectedCount", { count: selectedIds.length })}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  // Only for a search: «all clients of the workspace» is never a merge someone means.
+                  disabled={!debouncedSearch.trim() || listQuery.isLoading || visible.length === 0 || selectingAll}
+                  loading={selectingAll}
+                  onClick={() => void selectAllFound()}
+                >
+                  {t("clients.merge.selectAllFound", { count: Math.min(totalFound, MAX_SELECT_ALL) })}
+                </Button>
+                {selectedIds.length > 0 ? (
+                  <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
+                    {t("clients.merge.clearSelection")}
+                  </Button>
+                ) : null}
+                {selectedIds.length > 0 ? (
+                  <span className="text-xs text-muted-foreground">{t("clients.merge.selectedCount", { count: selectedIds.length })}</span>
+                ) : null}
+              </div>
+              {totalFound > MAX_SELECT_ALL ? (
+                <p className="text-xs text-muted-foreground">{t("clients.merge.selectAllLimit", { count: MAX_SELECT_ALL })}</p>
               ) : null}
               {listQuery.isLoading ? (
                 <div className="space-y-2">

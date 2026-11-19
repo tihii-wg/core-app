@@ -217,6 +217,34 @@ export async function getClientVehicles(workspaceId: string | undefined, clientI
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(toVehicle);
 }
 
+/** Number of (non-deleted) vehicles per client — one query per 150 clients instead of one per client. */
+export async function getVehicleCountsByClient(
+  workspaceId: string | undefined,
+  clientIds: readonly string[],
+): Promise<Map<string, number>> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const ids = [...new Set(clientIds.filter(Boolean))];
+  const counts = new Map<string, number>(ids.map((id) => [id, 0]));
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += 150) chunks.push(ids.slice(index, index + 150));
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await supabase
+        .from("vehicles")
+        .select("client_id")
+        .eq("workspace_id", targetWorkspaceId)
+        .in("client_id", chunk)
+        .is("deleted_at", null)
+        .limit(10000);
+      if (error) throw new Error(error.message);
+      for (const row of (data ?? []) as { client_id: string | null }[]) {
+        if (row.client_id) counts.set(row.client_id, (counts.get(row.client_id) ?? 0) + 1);
+      }
+    }),
+  );
+  return counts;
+}
+
 export async function getVehicle(workspaceId: string | undefined, vehicleId: string) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const { data, error } = await withVehicleColumns(() =>
