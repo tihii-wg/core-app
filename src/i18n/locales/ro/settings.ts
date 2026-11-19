@@ -1619,6 +1619,8 @@ const settings: Messages<typeof en> = {
     notMember: "Puteți vizualiza și edita doar companiile din care faceți parte.",
     nameLabel: "Numele companiei",
     addressLabel: "Adresa companiei",
+    phoneLabel: "Telefonul companiei",
+    phoneHint: "Se tipărește în documente pentru #КОМПАНИЯ-ТЕЛЕФОН. Este telefonul locației principale (Setări → Locații).",
     billingEmailLabel: "E-mail de facturare",
     registrationNumberLabel: "Număr de înregistrare",
     taxVatNumberLabel: "Cod fiscal / TVA",

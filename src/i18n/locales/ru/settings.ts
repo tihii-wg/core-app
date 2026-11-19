@@ -1622,6 +1622,8 @@ const settings: Messages<typeof en> = {
     notMember: "Вы можете просматривать и изменять только компании, в которых состоите.",
     nameLabel: "Название компании",
     addressLabel: "Адрес компании",
+    phoneLabel: "Телефон компании",
+    phoneHint: "Печатается в документах вместо #КОМПАНИЯ-ТЕЛЕФОН. Это телефон основной локации (Настройки → Локации).",
     billingEmailLabel: "Email для счетов",
     registrationNumberLabel: "Регистрационный номер",
     taxVatNumberLabel: "ИНН / НДС",

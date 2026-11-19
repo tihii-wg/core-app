@@ -1612,6 +1612,8 @@ export default {
     notMember: "You can only view and edit companies you belong to.",
     nameLabel: "Company name",
     addressLabel: "Company address",
+    phoneLabel: "Company phone",
+    phoneHint: "Printed in documents for #КОМПАНИЯ-ТЕЛЕФОН. It is the phone of the default location (Settings → Locations).",
     billingEmailLabel: "Billing email",
     registrationNumberLabel: "Company registration number",
     taxVatNumberLabel: "Tax / VAT number",

@@ -61,10 +61,29 @@ export async function getLocations(workspaceId: string | undefined) {
  * Phone for print `#КОМПАНИЯ-ТЕЛЕФОН`: default active location, else first active (non-deleted).
  */
 export function pickPrintCompanyPhone(locations: readonly LocationRecord[]): string | null {
-  const active = locations.filter((location) => location.isActive);
-  const preferred = active.find((location) => location.isDefault) ?? active[0] ?? null;
-  const phone = preferred?.phone?.trim() ?? "";
+  const phone = pickPrintLocation(locations)?.phone?.trim() ?? "";
   return phone || null;
+}
+
+/** Location whose phone prints as the company phone: default active, else first active. */
+export function pickPrintLocation(locations: readonly LocationRecord[]): LocationRecord | null {
+  const active = locations.filter((location) => location.isActive);
+  return active.find((location) => location.isDefault) ?? active[0] ?? null;
+}
+
+/**
+ * Company phone from Settings → Company: stored on the print location (default / first active).
+ * A workspace without an active location gets a default one named after the company.
+ */
+export async function saveCompanyPhone(
+  phone: string,
+  printLocation: LocationRecord | null,
+  companyName: string,
+  workspaceId: string | undefined,
+) {
+  if (printLocation) return updateLocation(printLocation.id, { phone }, workspaceId);
+  if (!phone.trim()) return null;
+  return createLocation({ name: companyName.trim() || "—", phone, isDefault: true, isActive: true }, workspaceId);
 }
 
 export type LocationInput = {

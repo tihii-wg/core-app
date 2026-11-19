@@ -22,12 +22,16 @@ import { CompanyLogoControls } from "./CompanyLogoControls";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useCanEditWorkspaceSettings } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetLocations } from "../locations/useGetLocations";
+import { pickPrintLocation, saveCompanyPhone, type LocationRecord } from "../../services/apiLocations";
 
 type CompanyFormValues = {
   name: string;
   industryId: string;
   inventoryMarkup: string;
   companyAddress: string;
+  companyPhone: string;
   billingEmail: string;
   registrationNumber: string;
   taxVatNumber: string;
@@ -44,8 +48,19 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-destructive">{message}</p>;
 }
 
-function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
+function CompanyForm({
+  workspace,
+  printLocation,
+  phoneUnavailable,
+}: {
+  workspace: WorkspaceDetails;
+  printLocation: LocationRecord | null;
+  /** Locations could not be loaded: never create a duplicate location from an unknown state. */
+  phoneUnavailable: boolean;
+}) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [phoneSaving, setPhoneSaving] = useState(false);
   const { industries, isLoading: industriesLoading, error: industriesError } = useGetIndustries();
   const sortedIndustries = useMemo(() => sortIndustriesForSelect(industries), [industries]);
   const { mutateAsync: saveWorkspace, isPending: isSavingWorkspace } = useUpdateWorkspace();
@@ -61,6 +76,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
       industryId: workspace.industryId ?? "",
       inventoryMarkup: workspace.inventoryMarkup == null ? "0" : String(workspace.inventoryMarkup),
       companyAddress: workspace.companyAddress ?? "",
+      companyPhone: printLocation?.phone ?? "",
       billingEmail: workspace.billingEmail ?? "",
       registrationNumber: workspace.registrationNumber ?? "",
       taxVatNumber: workspace.taxVatNumber ?? "",
@@ -74,7 +90,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
   });
   const workScheduleAvailable = isWorkScheduleColumnSupported();
 
-  const saving = isSavingWorkspace || isSubmitting;
+  const saving = isSavingWorkspace || isSubmitting || phoneSaving;
   const canEdit = useCanEditWorkspaceSettings(workspace.role);
   const locked = saving || !canEdit;
 
@@ -111,8 +127,26 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
       return;
     }
 
+    const phone = values.companyPhone.trim();
+    const phoneChanged = !phoneUnavailable && phone !== (printLocation?.phone ?? "").trim();
+    // Phone lives on the print location: saved in parallel with the workspace row (no request chain).
+    const phoneSave = phoneChanged
+      ? (async () => {
+          setPhoneSaving(true);
+          try {
+            await saveCompanyPhone(phone, printLocation, values.name || workspace.name, workspace.id);
+            await queryClient.invalidateQueries({ queryKey: ["locations", workspace.id] });
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+            throw error;
+          } finally {
+            setPhoneSaving(false);
+          }
+        })()
+      : Promise.resolve();
+
     try {
-      await saveWorkspace({
+      await Promise.all([phoneSave, saveWorkspace({
         workspaceId: workspace.id,
         name: values.name,
         industryId: values.industryId,
@@ -127,7 +161,7 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
         companyDescription: values.companyDescription,
         printExtraInfo: values.printExtraInfo,
         ...(workScheduleAvailable ? { workSchedule: values.workSchedule } : {}),
-      });
+      })]);
     } catch {
       return;
     }
@@ -199,6 +233,12 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="companyAddress">{t("settings.company.addressLabel")}</Label>
               <Input id="companyAddress" {...register("companyAddress")} disabled={locked} />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="companyPhone">{t("settings.company.phoneLabel")}</Label>
+              <Input id="companyPhone" type="tel" autoComplete="tel" {...register("companyPhone")} disabled={locked || phoneUnavailable} />
+              <p className="text-xs text-muted-foreground">{t("settings.company.phoneHint")}</p>
             </div>
 
             <div className="space-y-2">
@@ -315,7 +355,11 @@ function CompanyForm({ workspace }: { workspace: WorkspaceDetails }) {
 export function CompanySettings() {
   const { t } = useTranslation();
   const { workspaceId } = useActiveWorkspaceId();
-  const { data: workspace, isLoading, error, refetch, isFetched } = useGetWorkspace(workspaceId);
+  const { data: workspace, isLoading: workspaceLoading, error, refetch, isFetched } = useGetWorkspace(workspaceId);
+  // Loaded in parallel with the workspace (cached by Settings → Locations too).
+  const locations = useGetLocations();
+  const isLoading = workspaceLoading || locations.isLoading;
+  const printLocation = pickPrintLocation(locations.data ?? []);
 
   if (!workspaceId) {
     return (
@@ -383,8 +427,10 @@ export function CompanySettings() {
 
   return (
     <CompanyForm
-      key={`${workspace.id}:${workspace.name}:${workspace.industryId ?? ""}:${workspace.inventoryMarkup ?? ""}:${workspace.companyAddress}:${workspace.billingEmail}`}
+      key={`${workspace.id}:${workspace.name}:${workspace.industryId ?? ""}:${workspace.inventoryMarkup ?? ""}:${workspace.companyAddress}:${workspace.billingEmail}:${printLocation?.id ?? ""}:${printLocation?.phone ?? ""}`}
       workspace={workspace}
+      printLocation={printLocation}
+      phoneUnavailable={Boolean(locations.error)}
     />
   );
 }
