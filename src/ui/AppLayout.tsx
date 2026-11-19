@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { Outlet, useLocation, useNavigate, useParams, Navigate } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
+import { EdgeSwipeBack } from "./EdgeSwipeBack";
 import { listedWorkspaceIds, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useGetProfile } from "../features/profiles/useGetProfile";
 import { useGetWorkspace } from "../features/workspaces/useGetWorkspace";
@@ -77,6 +78,7 @@ export function AppLayout() {
     <WorkspaceRealtimeProvider>
       <div className="flex min-h-screen bg-background print:block print:min-h-0 print:bg-white">
         <SessionIdleGuard />
+        <EdgeSwipeBack />
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col print:block">
           <AppTopbar />

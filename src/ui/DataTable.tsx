@@ -86,6 +86,8 @@ interface DataTableProps<T> {
   keyExtractor: (item: T) => string;
   onRowClick?: (item: T) => void;
   rowClassName?: (item: T) => string | undefined;
+  /** Denser rows (40 px instead of 48 px, less vertical padding) — more rows per screen. */
+  compact?: boolean;
   isLoading?: boolean;
   emptyState?: React.ReactNode;
   className?: string;
@@ -210,6 +212,7 @@ export function DataTable<T>({
   keyExtractor,
   onRowClick,
   rowClassName,
+  compact = false,
   isLoading,
   emptyState,
   className,
@@ -673,7 +676,7 @@ export function DataTable<T>({
             <TableCell
               key={column.key}
               className={cn(
-                "h-12 text-sm text-foreground",
+                compact ? "h-10 py-1.5 text-sm text-foreground" : "h-12 text-sm text-foreground",
                 layoutEnabled && "max-w-0 overflow-hidden",
                 column.className,
                 column.stickyRight && stickyCellClassName,

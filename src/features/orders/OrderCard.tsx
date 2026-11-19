@@ -79,7 +79,7 @@ export function OrderCard({
         if (isRowClickIgnored(event.target)) return;
         onView(order);
       }}
-      className="cursor-pointer rounded-lg border border-border bg-card p-3 shadow-xs transition-colors hover:bg-accent/40 active:bg-accent/60"
+      className="cursor-pointer rounded-lg border border-border bg-card px-3 py-2 shadow-xs transition-colors hover:bg-accent/40 active:bg-accent/60"
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
@@ -111,12 +111,12 @@ export function OrderCard({
           onCreateInvoice={onCreateInvoice}
           onOrderUpdated={onOrderUpdated}
           onDeleted={onDeleted}
-          triggerClassName="size-10 shrink-0"
+          triggerClassName="-mr-1 size-9 shrink-0"
         />
       </div>
 
       {(order.device || secondary) && (
-        <div className="mt-1.5 min-w-0 text-sm text-muted-foreground">
+        <div className="mt-1 min-w-0 text-sm leading-snug text-muted-foreground">
           {order.device ? (
             <p className="truncate" title={order.device}>
               {order.device}
@@ -130,8 +130,9 @@ export function OrderCard({
         </div>
       )}
 
-      <div className="mt-2.5 flex min-w-0 items-end gap-3 overflow-hidden border-t border-border pt-2.5">
-        <div className="flex min-w-0 max-w-full flex-1 flex-col items-stretch gap-1">
+      {/* Compact footer: status + payment pills in one row (they were stacked on two lines). */}
+      <div className="mt-2 flex min-w-0 items-end gap-3 overflow-hidden border-t border-border pt-2">
+        <div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center gap-1 [&>span]:min-h-0 [&>span]:py-0.5 [&>span]:text-[11px]">
           {hidePayments || isEstimateOrder(order) ? (
             order.estimateStatus ? (
               <EntityStatusBadge name={order.estimateStatus.name} color={order.estimateStatus.color} />

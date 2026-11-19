@@ -759,6 +759,8 @@ export function CalendarPage() {
     connected && canAccess ? (
       <div
         ref={calendarShellRef}
+        // Its own swipes (previous / next period): no edge "back" swipe over the grid.
+        data-edge-swipe-ignore=""
         className="bg-card gcal-fullcalendar relative min-w-0 flex-1 scroll-mt-16 overflow-hidden rounded-lg border p-1 max-sm:-mx-2 sm:p-3"
         data-mobile={isMobile ? "true" : "false"}
         data-coarse={isCoarsePointer ? "true" : "false"}

@@ -391,6 +391,7 @@ export function OrdersListView({
           onRowClick={orderDetails.openOrder}
           isLoading={isLoading}
           emptyState={emptyState}
+          compact
           resizable
           reorderable
           layoutStorageKey={orderColumnLayoutStorageKey(columnVisibilityKey)}

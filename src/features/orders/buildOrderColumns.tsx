@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import ClientTypeBadge from "../clients/ClientTypeBadge";
+import { ClientTypeIcon } from "../clients/ClientTypeBadge";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import type { ReactNode } from "react";
 import type { Order, OrderStatus } from "../../lib/types";
@@ -102,15 +102,17 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
             <div className="truncate font-medium" title={order.clientName}>
               <OrderClientName clientId={order.clientId} clientName={order.clientName} onOpenClient={args.onOpenClient} />
             </div>
-            <div className="truncate text-xs text-muted-foreground" title={phone}>
-              {phone}
+            {/* Phone + client type on one line (compact rows: was three lines). */}
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              {order.clientType ? (
+                <span data-testid="order-client-type" className="inline-flex shrink-0">
+                  <ClientTypeIcon clientType={order.clientType} />
+                </span>
+              ) : null}
+              <span className="truncate tabular-nums" title={phone}>
+                {phone}
+              </span>
             </div>
-            {/* Client type lives under the name/phone (the separate «Тип клиента» column was removed). */}
-            {order.clientType ? (
-              <div className="mt-1" data-testid="order-client-type">
-                <ClientTypeBadge clientType={order.clientType} />
-              </div>
-            ) : null}
           </div>
         );
       },
@@ -126,14 +128,15 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
             <div className="truncate" title={order.device}>
               {order.device}
             </div>
-            {secondary ? (
-              <div className="truncate text-xs tabular-nums text-muted-foreground" title={secondary}>
-                {secondary}
-              </div>
-            ) : null}
-            {order.service ? (
-              <div className="truncate text-xs text-muted-foreground" title={order.service}>
-                {order.service}
+            {/* Plate / details and the service on one line (compact rows). */}
+            {secondary || order.service ? (
+              <div
+                className="truncate text-xs text-muted-foreground"
+                title={[secondary, order.service].filter(Boolean).join(" · ")}
+              >
+                {secondary ? <span className="tabular-nums">{secondary}</span> : null}
+                {secondary && order.service ? " · " : null}
+                {order.service ?? null}
               </div>
             ) : null}
           </div>
@@ -155,7 +158,7 @@ export function buildOrderColumns(args: BuildOrderColumnsArgs): Column<Order>[] 
           );
         }
         return (
-          <div className="flex min-w-0 flex-col flex-wrap items-start gap-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1 [&>span]:min-h-0 [&>span]:py-0.5 [&>span]:text-[11px]">
             <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
             <PaymentStatusBadge status={args.paymentStatusByOrder.get(order.id) ?? order.paymentStatus} />
           </div>
