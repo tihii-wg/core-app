@@ -180,7 +180,7 @@ export function useOrderDetailModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- teamOptionsKey captures team/services content
     [employees, assignedEmployeeId, teamOptionsKey],
   );
-  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const { payments, isLoading: paymentsLoading } = useGetPayments({ orderIds: [selectedOrder?.id] });
   const {
     options: statusOptions,
     current: currentUnifiedStatus,

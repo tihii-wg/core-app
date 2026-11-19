@@ -82,7 +82,8 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
   const { data: workspace } = useGetWorkspace(workspaceId);
   const estimate = isEstimateOrder(order);
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions(estimate ? "estimate" : "order");
-  const paymentsQuery = useGetPayments();
+  // This order's ledger rows only; skipped when the caller already passes payments.
+  const paymentsQuery = useGetPayments({ orderIds: [order?.id] }, { enabled: !opts.payments });
   const payments = opts.payments ?? paymentsQuery.payments;
   const paymentsLoading = opts.paymentsLoading ?? paymentsQuery.isLoading;
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();

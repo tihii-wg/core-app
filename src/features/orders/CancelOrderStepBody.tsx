@@ -44,7 +44,7 @@ export function CancelOrderStepBody({
   onPayloadChange,
 }: CancelOrderStepBodyProps) {
   const { t } = useTranslation();
-  const { payments } = useGetPayments();
+  const { payments } = useGetPayments({ orderIds: [order.id] });
   const { formatMoney } = useWorkspaceMoney();
   const { formatDate } = useReportFormatting();
   const [voidPayments, setVoidPayments] = useState(true);
@@ -166,7 +166,7 @@ export function CancelOrderStepBody({
 export function useCancelOrderHasActivePayments(orderId: string | undefined): {
   hasActivePayments: boolean;
 } {
-  const { payments } = useGetPayments();
+  const { payments } = useGetPayments({ orderIds: [orderId] });
   const hasActivePayments = useMemo(() => {
     if (!orderId) return false;
     return activePaymentsBlockingOrderDelete(payments, orderId).some((row) => row.kind === "payment");

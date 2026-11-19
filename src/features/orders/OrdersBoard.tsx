@@ -2,6 +2,7 @@ import { useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
 import { isRowClickIgnored } from "../../ui/DataTable";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import { useTranslation } from "react-i18next";
+import { useGetPayments } from "../finance/usePayments";
 import toast from "react-hot-toast";
 import { ErrorState } from "../../ui/EmptyState";
 import { Skeleton } from "../../ui/Skeleton";
@@ -63,7 +64,7 @@ export function OrdersBoard({
   requireTaxInvoiceNumber,
   formatMoney,
   onOpenOrder,
-  payments,
+  payments: paymentsProp,
   kind = "order",
 }: OrdersBoardProps) {
   const { t } = useTranslation();
@@ -85,6 +86,9 @@ export function OrdersBoard({
     enabled: Boolean(workspaceId),
     ...hot,
   });
+  // Ledger rows of the board's orders only (open + recently finished), not the whole workspace ledger.
+  const boardPayments = useGetPayments({ orderIds: orders.map((order) => order.id) }, { enabled: !paymentsProp });
+  const payments = paymentsProp ?? (boardPayments.isLoading || boardPayments.error ? undefined : boardPayments.payments);
   const { data: definitions = [], isLoading: definitionsLoading } = useGetStatusDefinitions(
     isEstimates ? "estimate" : "order",
   );

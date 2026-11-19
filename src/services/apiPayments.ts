@@ -242,8 +242,34 @@ function assertCurrencyGate(existing: LedgerPayment[], proposedCurrency: string)
 }
 
 /** Payments of the workspace, newest paid_at first. Optional filters applied server-side where possible. */
+/** Order ids per `in (…)` request — keeps the URL well under proxy limits. */
+const PAYMENTS_ORDER_ID_CHUNK = 150;
+
 export async function getPayments(workspaceId: string | undefined, filters: PaymentListFilters = {}) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  if (filters.orderIds) {
+    const ids = [...new Set(filters.orderIds.filter((id): id is string => Boolean(id)))];
+    if (ids.length === 0) return [];
+    const { orderIds: _ids, ...rest } = filters;
+    void _ids;
+    const chunks: string[][] = [];
+    for (let index = 0; index < ids.length; index += PAYMENTS_ORDER_ID_CHUNK) chunks.push(ids.slice(index, index + PAYMENTS_ORDER_ID_CHUNK));
+    const parts = await Promise.all(chunks.map((chunk) => getPaymentRows(targetWorkspaceId, rest, chunk)));
+    const rows = parts.flat();
+    // Same order as the unfiltered ledger (newest paid first).
+    rows.sort((a, b) => String(b.paid_at ?? "").localeCompare(String(a.paid_at ?? "")) ||
+      String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) ||
+      String(b.id ?? "").localeCompare(String(a.id ?? "")));
+    return rows.map(toLedgerPayment);
+  }
+  return (await getPaymentRows(targetWorkspaceId, filters, null)).map(toLedgerPayment);
+}
+
+async function getPaymentRows(
+  targetWorkspaceId: string,
+  filters: Omit<PaymentListFilters, "orderIds">,
+  orderIds: string[] | null,
+): Promise<Record<string, unknown>[]> {
   // All pages: the ledger of an imported workspace exceeds the API's 1 000-row cap.
   const { data, error } = await selectAllRows((from, to) => {
   let query = supabase
@@ -255,6 +281,7 @@ export async function getPayments(workspaceId: string | undefined, filters: Paym
     .order("id", { ascending: false });
 
   if (filters.orderId) query = query.eq("order_id", filters.orderId);
+  if (orderIds) query = query.in("order_id", orderIds);
   if (filters.invoiceId) query = query.eq("invoice_id", filters.invoiceId);
   if (filters.paymentMethod) query = query.eq("payment_method", filters.paymentMethod);
   if (filters.link === "invoice") query = query.not("invoice_id", "is", null);
@@ -264,7 +291,7 @@ export async function getPayments(workspaceId: string | undefined, filters: Paym
   return query.range(from, to);
   });
   if (error) throw mapPaymentDbError(error as Parameters<typeof mapPaymentDbError>[0]);
-  return ((data ?? []) as Record<string, unknown>[]).map(toLedgerPayment);
+  return (data ?? []) as Record<string, unknown>[];
 }
 
 export async function getPaymentById(paymentId: string, workspaceId: string | undefined) {

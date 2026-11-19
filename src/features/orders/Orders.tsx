@@ -51,7 +51,6 @@ import { cn } from "../../lib/utils";
 import { type DeadlineFilter } from "./orderVisibility";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
-import { useGetPayments } from "../finance/usePayments";
 import { ClientDetailsHost } from "../clients/ClientDetailsHost";
 import { useOpenClientDetails } from "../clients/useOpenClientDetails";
 import type { Client } from "../../lib/types";
@@ -188,7 +187,6 @@ export function Orders() {
   const selectedFilterOption = statusFilter === "all" ? null : unifiedFilterOptions.find((option) => option.id === statusFilter) ?? null;
 
   const { invoices } = useGetInvoices();
-  const { payments, isLoading: paymentsLoading, error: paymentsError } = useGetPayments();
   const invoiceNumberByOrder = useMemo(() => new Map(invoices.flatMap((invoice) => (invoice.orderId ? [[invoice.orderId, invoice.invoiceNumber] as const] : []))), [invoices]);
 
   const hasActiveFilters =
@@ -546,7 +544,6 @@ export function Orders() {
           requireTaxInvoiceNumber={orderDetails.requireTaxInvoiceNumber}
           formatMoney={formatMoney}
           onOpenOrder={orderDetails.openOrder}
-          payments={paymentsLoading || paymentsError ? undefined : payments}
           // Board columns are order statuses: estimates appear there only when filtered to estimates.
           kind={isEstimatesView ? "estimate" : "order"}
         />

@@ -2838,13 +2838,10 @@ export type OrdersAwaitingPayment = {
  * (closed outstanding is shown on the closed order itself).
  */
 /**
- * `loadPayments`: the workspace ledger. The Orders page passes its cached ledger query, so an order change
- * (realtime / mutation) recomputes the card from cache instead of re-reading thousands of payments.
+ * Unpaid total of open orders. Only the ledger rows of those open orders are read (`order_id in …`), not the
+ * whole workspace ledger — a balance only counts rows of its own order.
  */
-export async function getOrdersAwaitingPayment(
-  workspaceId: string | undefined,
-  loadPayments?: () => Promise<Awaited<ReturnType<typeof getPayments>>>,
-): Promise<OrdersAwaitingPayment> {
+export async function getOrdersAwaitingPayment(workspaceId: string | undefined): Promise<OrdersAwaitingPayment> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   refreshOrderEstimatesSupport();
   const includeKind = isOrderEstimatesSupported();
@@ -2863,15 +2860,16 @@ export async function getOrdersAwaitingPayment(
       return query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
     });
 
-  const [{ data, error }, payments] = await Promise.all([
-    run(baseSelect, true),
-    (loadPayments ? loadPayments() : getPayments(resolvedWorkspaceId, {})).catch(() => []),
-  ]);
+  const paymentsOf = (rows: unknown[] | null | undefined) =>
+    getPayments(resolvedWorkspaceId, {
+      orderIds: ((rows ?? []) as Record<string, unknown>[]).map((row) => String(row.id ?? "")).filter(Boolean),
+    }).catch(() => [] as Awaited<ReturnType<typeof getPayments>>);
+  const { data, error } = await run(baseSelect, true);
 
   if (error) {
     if (includeKind && isMissingOrderEstimatesColumn(error)) {
       markOrderEstimatesUnsupported();
-      return getOrdersAwaitingPayment(workspaceId, loadPayments);
+      return getOrdersAwaitingPayment(workspaceId);
     }
     // closed_at may be absent on very old DBs — fall back without that filter.
     if (/closed_at/i.test(error.message)) {
@@ -2880,16 +2878,16 @@ export async function getOrdersAwaitingPayment(
       if (legacy.error) {
         if (includeKind && isMissingOrderEstimatesColumn(legacy.error)) {
           markOrderEstimatesUnsupported();
-          return getOrdersAwaitingPayment(workspaceId, loadPayments);
+          return getOrdersAwaitingPayment(workspaceId);
         }
         throw new Error(legacy.error.message);
       }
-      return sumAwaitingPayment((legacy.data ?? []) as unknown as Record<string, unknown>[], payments);
+      return sumAwaitingPayment((legacy.data ?? []) as unknown as Record<string, unknown>[], await paymentsOf(legacy.data));
     }
     throw new Error(error.message);
   }
 
-  return sumAwaitingPayment((data ?? []) as unknown as Record<string, unknown>[], payments);
+  return sumAwaitingPayment((data ?? []) as unknown as Record<string, unknown>[], await paymentsOf(data));
 }
 
 function sumAwaitingPayment(rows: Record<string, unknown>[], payments: Awaited<ReturnType<typeof getPayments>>): OrdersAwaitingPayment {

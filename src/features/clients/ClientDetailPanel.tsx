@@ -160,7 +160,8 @@ export default function ClientDetailPanel({
   }
 
   const { vehicles } = useGetClientVehicles(showVehicles && detailPanelOpen ? selectedClient?.id : null);
-  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  // The panel is mounted (closed) on the Orders / Clients pages: read the ledger only while it is open.
+  const { payments, isLoading: paymentsLoading } = useGetPayments({}, { enabled: Boolean(detailPanelOpen && selectedClient) });
   const industryBlocks = profile.orderFieldBlocks;
 
   if (selectedClient?.id !== editingClientId) {

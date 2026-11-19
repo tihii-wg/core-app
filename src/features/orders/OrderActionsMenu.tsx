@@ -162,7 +162,7 @@ function OrderActionsMenuFull({
   const [copyingPublicLink, setCopyingPublicLink] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
-  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const { payments, isLoading: paymentsLoading } = useGetPayments({ orderIds: [order.id] });
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
   const closedOrderPerms = useClosedOrderActionPermissions();

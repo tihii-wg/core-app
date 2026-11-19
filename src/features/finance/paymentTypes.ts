@@ -50,6 +50,11 @@ export type RecordRefundInput = {
 
 export type PaymentListFilters = {
   orderId?: string;
+  /**
+   * Only rows of these orders (`order_id in …`). Order-scoped views (orders list page, board, one order card)
+   * use this instead of the whole workspace ledger. Empty ids are ignored; the hook sorts / de-duplicates for the cache key.
+   */
+  orderIds?: readonly (string | null | undefined)[];
   invoiceId?: string;
   /** Inclusive YYYY-MM-DD on paid_at (date portion). */
   paidFrom?: string;

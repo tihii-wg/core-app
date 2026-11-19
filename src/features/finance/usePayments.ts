@@ -19,13 +19,24 @@ export function paymentsQueryKey(workspaceId: string | undefined, filters: Payme
   return ["payments", workspaceId, filters] as const;
 }
 
-export function useGetPayments(filters: PaymentListFilters = {}) {
+/**
+ * Ledger rows. With `orderIds` only the rows of those orders (orders list page, board, one order card / menu /
+ * dialog): every order-level calculation keys on `order_id`, so the result equals filtering the whole ledger
+ * without downloading thousands of unrelated payments. Empty / missing ids are dropped; no ids → no request.
+ * All variants live under ["payments", ws], so payment mutations and realtime events refresh them alike.
+ */
+export function useGetPayments(filters: PaymentListFilters = {}, { enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
   const hot = useRealtimeHotQueryOptions();
+  const scoped = filters.orderIds !== undefined;
+  const normalized: PaymentListFilters = scoped
+    ? { ...filters, orderIds: [...new Set(filters.orderIds!.filter((id): id is string => Boolean(id)))].sort() }
+    : filters;
+  const hasScope = !scoped || (normalized.orderIds?.length ?? 0) > 0;
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: paymentsQueryKey(workspaceId, filters),
-    queryFn: () => getPayments(workspaceId, filters),
-    enabled: Boolean(workspaceId),
+    queryKey: paymentsQueryKey(workspaceId, normalized),
+    queryFn: () => getPayments(workspaceId, normalized),
+    enabled: Boolean(workspaceId) && enabled && hasScope,
     // Realtime (payments table) + invalidatePaymentViews keep this fresh; staleTime 0 re-read the ledger on
     // every window focus / remount of the order card.
     staleTime: 30_000,

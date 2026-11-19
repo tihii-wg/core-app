@@ -95,7 +95,7 @@ export function OrderCancelChainDialog({
   const cancelOrder = useCancelOrder();
   const deleteOrder = useDeleteOrder();
   const { refetchContext, annulInvoice, deleteInvoice } = useOrderCancelChainActions();
-  const { payments } = useGetPayments();
+  const { payments } = useGetPayments({ orderIds: [order?.id] });
   const { data: orderStatusDefinitions = [] } = useGetStatusDefinitions("order");
   const workspaceRole = useActiveWorkspaceRole();
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();

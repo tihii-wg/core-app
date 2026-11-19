@@ -114,7 +114,8 @@ export function OrdersListView({
   const { formatMoney } = useWorkspaceMoney();
   const today = localDateKey(new Date());
   const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
-  const { payments } = useGetPayments();
+  // Payments of the orders on this page only (not the whole workspace ledger).
+  const { payments } = useGetPayments({ orderIds: orders.map((order) => order.id) });
   const createInvoice = useCreateInvoice();
   const showWarrantyKm = industryUsesMileageWarranty(workflow);
   const { byOrderId: warrantyByOrderId } = useOrdersWarrantyIndicators(orders, {
