@@ -1,6 +1,6 @@
 import i18n from "../i18n";
 import { applyCommonStyleToLayout } from "../features/documents/applyCommonStyle";
-import { createLayoutFromTemplate } from "../features/documents/createFromTemplate";
+import { createCanvasLayoutFromTemplate, createLayoutFromTemplate } from "../features/documents/createFromTemplate";
 import { defaultTemplateName } from "../features/documents/defaultLayouts";
 import {
   defaultDocumentStyle,
@@ -597,24 +597,37 @@ export async function createTemplatesFromSource(
   const resolved = requireWorkspaceId(workspaceId);
   const templates = await getDocumentTemplates(resolved);
   const source = templates.find((template) => template.id === sourceTemplateId);
-  if (!source || !source.layout || !isBuilderDocumentType(source.documentType) || isCanvasDocumentLayout(source.layout)) {
-    throw new Error(i18n.t("settings.printTemplates.errors.notSaved"));
+  // The template may be in the list but have no builder layout (legacy HTML) — that one cannot be converted.
+  if (!source) throw new Error(i18n.t("settings.printTemplates.errors.notSaved"));
+  if (!source.layout || !isBuilderDocumentType(source.documentType)) {
+    throw new Error(i18n.t("settings.printTemplates.errors.createFromUnsupported"));
   }
   const fromType = source.documentType;
   const created: DocumentTemplate[] = [];
   let unmappedTokens: string[] = [];
   for (const toType of targets) {
-    if (toType === fromType) continue;
-    const { layout, unmappedTokens: unmapped } = createLayoutFromTemplate(source.layout, fromType, toType);
+    // Visual (canvas) templates — what the designer makes now — keep their look; the older block layouts
+    // go through the block converter. The same type makes a copy to start a variant from.
+    const typeLabel = i18n.t(`settings.printTemplates.documentTypes.${toType}` as "settings.printTemplates.documentTypes.work_order");
+    const sourceLabel = i18n.t(`settings.printTemplates.documentTypes.${fromType}` as "settings.printTemplates.documentTypes.work_order");
+    const converted = isCanvasDocumentLayout(source.layout)
+      ? createCanvasLayoutFromTemplate(source.layout, fromType, toType, { from: sourceLabel, to: typeLabel })
+      : createLayoutFromTemplate(source.layout, fromType, toType);
+    const { layout, unmappedTokens: unmapped } = converted;
     if (unmappedTokens.length === 0) unmappedTokens = unmapped;
-    const bodyHtml = renderLayoutToHtml(layout, emptyPrintContext({ locale: "ru", documentKind: toType }), {
-      style: documentStyleToRenderStyle(defaultDocumentStyle()),
-    });
+    // Same body_html the designer stores on save (fallback for readers without layout support).
+    const bodyHtml = isCanvasDocumentLayout(layout)
+      ? renderCanvasLayoutToHtmlSync(layout, emptyPrintContext({ locale: "ru", documentKind: toType }), {
+          showCents: source.showCents,
+        })
+      : renderLayoutToHtml(layout, emptyPrintContext({ locale: "ru", documentKind: toType }), {
+          style: documentStyleToRenderStyle(defaultDocumentStyle()),
+        });
     const { data, error } = await supabase
       .from("document_templates")
       .insert({
         workspace_id: resolved,
-        name: `${source.name} → ${defaultTemplateName(toType)}`.slice(0, 200),
+        name: `${source.name} → ${typeLabel || defaultTemplateName(toType)}`.slice(0, 200),
         document_type: toType,
         layout,
         body_html: bodyHtml,

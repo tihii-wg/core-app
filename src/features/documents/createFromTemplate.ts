@@ -1,6 +1,8 @@
 /** Clone a layout into another document type, mapping table sources and type-specific tokens. */
 
 import type { DocumentLayout, DocumentTemplateType, LayoutBlock, TableSource } from "./layout";
+import type { CanvasDocumentLayout, CanvasElement } from "./canvas/types";
+import { knownTemplateTokens } from "./templateVariables";
 
 const TABLE_SOURCE_MAP: Record<DocumentTemplateType, Partial<Record<TableSource, TableSource>>> = {
   invoice: {
@@ -63,13 +65,17 @@ const TOKEN_MAP_TO_INVOICE: Record<string, string> = {
 
 const TOKEN_RE = /#[A-ZА-ЯЁ0-9-]+/giu;
 
+/** Order-based documents share the order / client / vehicle variables. */
+const ORDER_DOCUMENTS: ReadonlySet<DocumentTemplateType> = new Set(["work_order", "act", "estimate"]);
+
 function mapToken(token: string, from: DocumentTemplateType, to: DocumentTemplateType): string | null {
   if (from === to) return token;
+  if (ORDER_DOCUMENTS.has(from) && ORDER_DOCUMENTS.has(to)) return token;
   if (token === "#ДОКУМЕНТ-НАЗВАНИЕ" || token === "#ДОКУМЕНТ-НОМЕР" || token === "#ДОКУМЕНТ-ДАТА") return token;
-  if (to === "invoice" && (from === "work_order" || from === "act")) {
+  if (to === "invoice" && ORDER_DOCUMENTS.has(from)) {
     return TOKEN_MAP_TO_INVOICE[token] ?? null;
   }
-  if ((to === "work_order" || to === "act") && from === "invoice") {
+  if (ORDER_DOCUMENTS.has(to) && from === "invoice") {
     return TOKEN_MAP_TO_ORDER[token] ?? null;
   }
   // act ↔ work_order: tokens stay the same
@@ -101,7 +107,10 @@ function rewriteText(text: string, from: DocumentTemplateType, to: DocumentTempl
       ) {
         return upper;
       }
-      unmapped.add(upper);
+      // Other known shared variables (VAT rate, dates, staff …) work in every document — keep them silently.
+      // Invoice-only ones (#СЧЁТ-…, #ПОКУПАТЕЛЬ-…) are still reported: an order document has no invoice.
+      const invoiceOnly = /^#(СЧЁТ|ПОКУПАТЕЛЬ)/u.test(upper);
+      if (invoiceOnly || !knownTemplateTokens().has(upper)) unmapped.add(upper);
       return upper;
     }
     return mapped;
@@ -183,6 +192,72 @@ export function createLayoutFromTemplate(
       page: { ...source.page },
       useStyle: source.useStyle,
       blocks,
+    },
+    unmappedTokens: [...unmapped].sort(),
+  };
+}
+
+type DocumentTitles = { from: string; to: string };
+
+/** Static document title typed in the design («ЗАКАЗ-НАРЯД», «Заказ-наряд») → the new type's name, same case. */
+function retitle(value: string, titles: DocumentTitles | undefined): string {
+  if (!titles || !titles.from.trim() || !titles.to.trim() || titles.from === titles.to) return value;
+  const escaped = titles.from.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(new RegExp(escaped, "giu"), (match) =>
+    match === match.toUpperCase() && match !== match.toLowerCase() ? titles.to.toUpperCase() : titles.to,
+  );
+}
+
+function mapCanvasElement(
+  element: CanvasElement,
+  from: DocumentTemplateType,
+  to: DocumentTemplateType,
+  unmapped: Set<string>,
+  titles: DocumentTitles | undefined,
+): CanvasElement {
+  const text = (value: string) => rewriteText(value, from, to, unmapped);
+  switch (element.type) {
+    case "text":
+      return { ...element, content: retitle(text(element.content), titles) };
+    case "variable":
+      return { ...element, token: text(element.token), ...(element.label != null ? { label: text(element.label) } : {}) };
+    case "table":
+      return {
+        ...element,
+        source: mapTableSource(element.source, to),
+        columns: element.columns.map((column) => ({ ...column, label: text(column.label) })),
+      };
+    case "totals":
+      return { ...element, rows: element.rows.map((row) => ({ ...row, label: text(row.label) })) };
+    case "signatures":
+      return {
+        ...element,
+        labels: element.labels.map(text),
+        ...(element.dateLabel != null ? { dateLabel: text(element.dateLabel) } : {}),
+      };
+    case "qr":
+      return element.contentToken ? { ...element, contentToken: text(element.contentToken) } : element;
+    default:
+      return element;
+  }
+}
+
+/**
+ * Canvas (visual designer) version of createLayoutFromTemplate: same page, positions and styles; variables,
+ * texts, table sources and labels remapped to the target document type (same type = exact copy).
+ */
+export function createCanvasLayoutFromTemplate(
+  source: CanvasDocumentLayout,
+  fromType: DocumentTemplateType,
+  toType: DocumentTemplateType,
+  titles?: DocumentTitles,
+): { layout: CanvasDocumentLayout; unmappedTokens: string[] } {
+  const unmapped = new Set<string>();
+  const copy = structuredClone(source);
+  return {
+    layout: {
+      ...copy,
+      elements: copy.elements.map((element) => mapCanvasElement(element, fromType, toType, unmapped, titles)),
     },
     unmappedTokens: [...unmapped].sort(),
   };

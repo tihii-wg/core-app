@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "../../ui/DropdownMenu";
 import { useConfirm, useUnsavedChangesConfirm } from "../../ui/ConfirmProvider";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import type { DocumentTemplate } from "../../services/apiDocumentTemplates";
 import {
   applyCommonStyleToAllTemplates,
@@ -187,6 +188,8 @@ export function PrintTemplatesSettings() {
   const [forceSimpleMode, setForceSimpleMode] = useState(false);
   const [createType, setCreateType] = useState<DocumentTemplateType>("work_order");
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  /** «Create from this template» — source whose target document type is being chosen. */
+  const [createFromSourceId, setCreateFromSourceId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [editorDirty, setEditorDirty] = useState(false);
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
@@ -271,16 +274,19 @@ export function PrintTemplatesSettings() {
   }
 
   const createFrom = useMutation({
-    mutationFn: (sourceId: string) => {
+    mutationFn: ({ sourceId, target }: { sourceId: string; target: DocumentTemplateType }) => {
       guardWrite();
       const source = data.find((template) => template.id === sourceId);
-      if (!source || !isBuilderDocumentType(source.documentType)) throw new Error(t("settings.printTemplates.errors.notSaved"));
-      const targets = DOCUMENT_TYPES.filter((type) => type !== source.documentType);
-      return createTemplatesFromSource(sourceId, workspaceId, targets);
+      if (!source) throw new Error(t("settings.printTemplates.errors.notSaved"));
+      return createTemplatesFromSource(sourceId, workspaceId, [target]);
     },
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: ["document-templates", workspaceId] });
+    onSuccess: async (result) => {
+      setCreateFromSourceId(null);
+      await queryClient.invalidateQueries({ queryKey: ["document-templates", workspaceId] });
       toast.success(t("settings.printTemplates.toast.created"));
+      // Open the new template in the designer right away.
+      const createdTemplate = result.created[0];
+      if (createdTemplate) void openEditor(createdTemplate);
       if (result.unmappedTokens.length > 0) {
         toast.error(t("settings.printTemplates.unmappedTokens", { list: result.unmappedTokens.join(", ") }));
       }
@@ -646,7 +652,7 @@ export function PrintTemplatesSettings() {
                                     key: "createFrom",
                                     label: t("settings.printTemplates.createFromTemplate"),
                                     disabled: createFrom.isPending,
-                                    onClick: () => createFrom.mutate(template.id),
+                                    onClick: () => setCreateFromSourceId(template.id),
                                   } satisfies TemplateOverflowAction,
                                 ]
                               : []),
@@ -735,6 +741,40 @@ export function PrintTemplatesSettings() {
         })}
 
         <p className="text-xs text-muted-foreground">{t("settings.printTemplates.stubNote")}</p>
+
+        <Dialog open={createFromSourceId != null} onOpenChange={(next) => (!next ? setCreateFromSourceId(null) : undefined)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("settings.printTemplates.createFromDialog.title")}</DialogTitle>
+              <DialogDescription>
+                {t("settings.printTemplates.createFromDialog.description", {
+                  name: data.find((template) => template.id === createFromSourceId)?.name ?? "",
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2">
+              {DOCUMENT_TYPES.map((type) => {
+                const sourceType = data.find((template) => template.id === createFromSourceId)?.documentType;
+                return (
+                  <Button
+                    key={type}
+                    type="button"
+                    variant="outline"
+                    className="justify-between"
+                    disabled={createFrom.isPending}
+                    loading={createFrom.isPending && createFrom.variables?.target === type}
+                    onClick={() => createFromSourceId && createFrom.mutate({ sourceId: createFromSourceId, target: type })}
+                  >
+                    <span>{t(`settings.printTemplates.documentTypes.${type}` as "settings.printTemplates.documentTypes.work_order")}</span>
+                    {type === sourceType ? (
+                      <span className="text-xs text-muted-foreground">{t("settings.printTemplates.createFromDialog.copy")}</span>
+                    ) : null}
+                  </Button>
+                );
+              })}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <TemplatePreviewDialog
           open={previewTemplate != null}
