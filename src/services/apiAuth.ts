@@ -156,7 +156,24 @@ async function ensureOwnerMembership(userId: string, workspaceId: string) {
  * profile from auth metadata. Own-workspace mode also creates the workspace +
  * owner membership. Join mode never auto-creates a workspace. Idempotent.
  */
-export async function ensureSignupBootstrap(user: User): Promise<{ workspace: { id: string } | null; mode: SignUpMode }> {
+type SignupBootstrapResult = { workspace: { id: string } | null; mode: SignUpMode };
+
+// One bootstrap per user at a time. signUp / login and AuthSession's SIGNED_IN handler fire
+// together right after the first sign-in; run in parallel, both saw "no workspace yet" and
+// each created one (duplicate workspaces for a new user). Callers now share one run.
+const signupBootstrapInFlight = new Map<string, Promise<SignupBootstrapResult>>();
+
+export function ensureSignupBootstrap(user: User): Promise<SignupBootstrapResult> {
+  const running = signupBootstrapInFlight.get(user.id);
+  if (running) return running;
+  const run = runSignupBootstrap(user).finally(() => {
+    signupBootstrapInFlight.delete(user.id);
+  });
+  signupBootstrapInFlight.set(user.id, run);
+  return run;
+}
+
+async function runSignupBootstrap(user: User): Promise<SignupBootstrapResult> {
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
   const mode = normalizeSignUpMode(meta.signup_mode);
 
