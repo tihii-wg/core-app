@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Pencil, Plus, Trash2, Warehouse } from "lucide-react";
@@ -104,6 +105,8 @@ export function Inventory() {
   const { data: workspace } = useGetWorkspace(workspaceId);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(DEFAULT_LIST_PAGE_SIZE);
+  // After a page switch the list starts at the top of the screen (filters scroll out of view).
+  const listTop = useListTopAnchor();
   // Paginated in the database: search, filters, supplier and sort run there; one page is loaded.
   const {
     data: inventoryPage,
@@ -365,6 +368,7 @@ export function Inventory() {
         </Select>
       </div>
 
+      <div ref={listTop.ref}>
       {isError ? (
         <div className="rounded-lg border border-border bg-card shadow-xs">
           <ErrorState title={t("inventory.loadError.title")} description={t("inventory.loadError.listDescription")} onRetry={() => refetch()} />
@@ -433,6 +437,8 @@ export function Inventory() {
         />
       )}
 
+      </div>
+
       {!isLoading && (inventoryPage?.total ?? 0) > 0 ? (
         <ServerListPager
           page={inventoryPage?.page ?? page}
@@ -441,9 +447,12 @@ export function Inventory() {
           total={inventoryPage?.total ?? 0}
           onPageChange={(next) => {
             setPage(next);
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            listTop.scrollToListTop();
           }}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            listTop.scrollToListTop();
+          }}
         />
       ) : null}
 

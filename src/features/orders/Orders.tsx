@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearchParams } from "react-router-dom";
 
@@ -138,6 +139,8 @@ export function Orders() {
   const [awaitingPaymentFilter, setAwaitingPaymentFilter] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
+  // After a page switch the list starts at the top of the screen (filters scroll out of view).
+  const listTop = useListTopAnchor();
   const [visibleColumns, setVisibleColumns] = useState(() => new Set<OrderToggleableColumn>(readOrderVisibleColumns()));
   const [layoutEpoch, setLayoutEpoch] = useState(0);
   const [viewMode, setViewMode] = useState<OrderViewMode>(() => readOrderViewMode());
@@ -550,6 +553,7 @@ export function Orders() {
           kind={listKind}
         />
       ) : (
+        <div ref={listTop.ref}>
         <OrdersListView
           orders={displayedOrders}
           isLoading={ordersLoading}
@@ -566,6 +570,7 @@ export function Orders() {
           onOpenClient={openClientFromOrder}
           hidePayments={isEstimatesView}
         />
+        </div>
       )}
 
       {!isBoard && !isCalendar && !ordersLoading && total > 0 ? (
@@ -574,12 +579,18 @@ export function Orders() {
             className="min-w-0 flex-1 sm:justify-between"
             page={resolvedPage}
             pageCount={pageCount}
-            onPageChange={setPage}
+            onPageChange={(next) => {
+              setPage(next);
+              listTop.scrollToListTop();
+            }}
             summary={paginationSummary}
           />
           <Select
             value={String(pageSize)}
-            onValueChange={(value) => setPageSize(Number(value) as OrdersPageSize)}
+            onValueChange={(value) => {
+              setPageSize(Number(value) as OrdersPageSize);
+              listTop.scrollToListTop();
+            }}
           >
             <SelectTrigger className="h-9 w-full text-[13px] sm:w-40" aria-label={t("orders.pagination.pageSize")}>
               <SelectValue />

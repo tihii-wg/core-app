@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Merge, Plus, Phone, Pencil, Trash2 } from "lucide-react";
@@ -56,6 +57,8 @@ export function Clients() {
   const { workspaceId } = useActiveWorkspaceId();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(DEFAULT_LIST_PAGE_SIZE);
+  // After a page switch the list starts at the top of the screen (filters scroll out of view).
+  const listTop = useListTopAnchor();
   // Paginated in the database: only one page of clients is loaded (search / type filter run there too).
   const {
     data: clientsPage,
@@ -272,6 +275,7 @@ export function Clients() {
         )}
       </div>
 
+      <div ref={listTop.ref}>
       {isMobile ? (
         isLoading ? (
           <div className="space-y-2" aria-busy="true">
@@ -327,6 +331,8 @@ export function Clients() {
         />
       )}
 
+      </div>
+
       {!isLoading && totalClients > 0 ? (
         <ServerListPager
           page={resolvedPage}
@@ -335,9 +341,12 @@ export function Clients() {
           total={totalClients}
           onPageChange={(next) => {
             setPage(next);
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            listTop.scrollToListTop();
           }}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            listTop.scrollToListTop();
+          }}
         />
       ) : null}
 

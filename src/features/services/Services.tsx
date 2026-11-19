@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { Trans, useTranslation } from "react-i18next";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
@@ -52,6 +53,8 @@ export function Services() {
   const categoryQuery = categoryFilter === "all" ? undefined : (categoryFilter as serviceCategory);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<ListPageSize>(DEFAULT_LIST_PAGE_SIZE);
+  // After a page switch the list starts at the top of the screen (filters scroll out of view).
+  const listTop = useListTopAnchor();
   // Paginated in the database: search, category and status filters run there; one page is loaded.
   const {
     data: servicesPage,
@@ -247,6 +250,7 @@ export function Services() {
         }}
       />
 
+      <div ref={listTop.ref}>
       <DataTable
         columns={columns}
         isLoading={isLoading}
@@ -270,6 +274,8 @@ export function Services() {
         rowClassName={(service) => (service.status === "inactive" ? "bg-muted/20" : undefined)}
       />
 
+      </div>
+
       {!isLoading && (servicesPage?.total ?? 0) > 0 ? (
         <ServerListPager
           page={servicesPage?.page ?? page}
@@ -278,9 +284,12 @@ export function Services() {
           total={servicesPage?.total ?? 0}
           onPageChange={(next) => {
             setPage(next);
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            listTop.scrollToListTop();
           }}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            listTop.scrollToListTop();
+          }}
         />
       ) : null}
 
