@@ -16,7 +16,8 @@ import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction
 import ruLocale from "@fullcalendar/core/locales/ru";
 import roLocale from "@fullcalendar/core/locales/ro";
 import enGbLocale from "@fullcalendar/core/locales/en-gb";
-import { CalendarDays, CloudOff, Plus, Settings2 } from "lucide-react";
+import { CalendarDays, CloudOff, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Settings2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/DropdownMenu";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -87,6 +88,9 @@ function fcLocale(lang: string) {
   return enGbLocale;
 }
 
+/** localStorage: "1" when the desktop "My calendars" list is hidden. */
+const CALENDARS_PANEL_HIDDEN_KEY = "gcal.myCalendarsHidden";
+
 export function CalendarPage() {
   const { t, i18n } = useTranslation();
   const confirm = useConfirm();
@@ -112,6 +116,24 @@ export function CalendarPage() {
   const [calendarsSheetOpen, setCalendarsSheetOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const isMobile = useMediaQuery("(max-width: 639px)");
+  // Desktop: the "My calendars" list can be hidden so the calendar takes the full width (remembered).
+  const [calendarsPanelHidden, setCalendarsPanelHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem(CALENDARS_PANEL_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCalendarsPanel = () =>
+    setCalendarsPanelHidden((hidden) => {
+      const next = !hidden;
+      try {
+        window.localStorage.setItem(CALENDARS_PANEL_HIDDEN_KEY, next ? "1" : "0");
+      } catch {
+        // Storage unavailable: the choice lasts for this visit only.
+      }
+      return next;
+    });
   const isCoarsePointer = useMediaQuery("(pointer: coarse)");
   const status = statusQuery.data;
   const statusSettled = statusQuery.isFetched || statusQuery.isError;
@@ -182,7 +204,7 @@ export function CalendarPage() {
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
     }
-    const BOTTOM_GAP = 16; // breathing room above the window's bottom edge
+    const BOTTOM_GAP = 8; // breathing room above the window's bottom edge
     const measure = () => {
       const top = shell.getBoundingClientRect().top + window.scrollY;
       const style = window.getComputedStyle(shell);
@@ -660,7 +682,13 @@ export function CalendarPage() {
     [setVisible, calendarsQuery, refresh],
   );
 
-  const myCalendarsPanel = connected && canAccess ? (
+  // The grid's width changes when the list is hidden / shown: let FullCalendar re-measure.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => calendarRef.current?.getApi().updateSize());
+    return () => cancelAnimationFrame(frame);
+  }, [calendarsPanelHidden]);
+
+  const myCalendarsPanel = connected && canAccess && !(isDesktop && calendarsPanelHidden) ? (
     <CalendarMyCalendarsPanel
       items={myCalendarItems}
       editable={isOwner}
@@ -871,13 +899,28 @@ export function CalendarPage() {
         <>
           {!isMobile ? (
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h1 className="text-foreground truncate text-xl font-semibold tracking-tight">{t("calendar.title")}</h1>
                 <div className="text-muted-foreground truncate text-[13px]">
                   {[status?.calendarSummary, status?.googleEmail].filter(Boolean).join(" · ")}
                 </div>
               </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {/* View switcher in the header row: the calendar starts one row higher (taller grid). */}
+              <CalendarViewSwitcher activeView={activeView} isMobile={false} onChange={changeView} />
+              <div className="flex min-w-0 shrink-0 items-center gap-2">
+                {isDesktop ? (
+                  <Button
+                    size="sm"
+                    variant={calendarsPanelHidden ? "outline" : "secondary"}
+                    type="button"
+                    aria-pressed={!calendarsPanelHidden}
+                    title={calendarsPanelHidden ? t("calendar.showMyCalendars") : t("calendar.hideMyCalendars")}
+                    onClick={toggleCalendarsPanel}
+                  >
+                    {calendarsPanelHidden ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+                    {t("calendar.myCalendars")}
+                  </Button>
+                ) : null}
                 {showOverlayToggle ? (
                   <div className="flex items-center gap-2 pr-2">
                     <Switch id="gcal-orders" checked={showOrders} onCheckedChange={setShowOrders} />
@@ -898,14 +941,28 @@ export function CalendarPage() {
                   {t("calendar.addEvent")}
                 </Button>
                 {isOwner ? (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => setPickerOpen((v) => !v)}>
-                      {t("calendar.changeCalendar")}
-                    </Button>
-                    <Button size="sm" variant="destructive" disabled={busy} onClick={() => void onDisconnect()}>
-                      {t("calendar.disconnect")}
-                    </Button>
-                  </>
+                  // Rare actions in a menu: the header stays one row, so the calendar starts higher.
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon-sm" variant="outline" type="button" aria-label={t("calendar.moreActions")}>
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem onSelect={() => setPickerOpen((v) => !v)}>
+                        <CalendarDays className="size-4" />
+                        {t("calendar.changeCalendar")}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={busy}
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() => void onDisconnect()}
+                      >
+                        <CloudOff className="size-4" />
+                        {t("calendar.disconnect")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 ) : null}
               </div>
             </div>
@@ -938,7 +995,7 @@ export function CalendarPage() {
             </div>
           )}
 
-          <CalendarViewSwitcher activeView={activeView} isMobile={isMobile} onChange={changeView} />
+          {isMobile ? <CalendarViewSwitcher activeView={activeView} isMobile onChange={changeView} /> : null}
 
           {pickerOpen && isOwner && !isMobile ? (
             <Card>

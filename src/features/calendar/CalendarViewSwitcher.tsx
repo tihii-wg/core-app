@@ -35,7 +35,7 @@ export function CalendarViewSwitcher({ activeView, isMobile, onChange }: Props) 
         "gcal-view-switcher flex gap-1",
         isMobile
           ? "max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] pb-0.5"
-          : "flex-wrap",
+          : "shrink-0 flex-nowrap",
       )}
       role="tablist"
       aria-label={t("calendar.views.switcher")}
