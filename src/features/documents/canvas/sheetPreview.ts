@@ -29,7 +29,7 @@ export function countCanvasPages(html: string | null | undefined): number {
   return Math.max(1, (html.match(/class="canvas-page"/g) ?? []).length);
 }
 
-/** Screen-only sheet chrome. Must not affect `@media print` / `@page` positioning. */
+/** Screen sheet chrome + horizontal centering of the sheet in print (any print-dialog scale). */
 export function canvasScreenSheetCss(marginsMm: number): string {
   const m = Math.max(0, marginsMm);
   return (
@@ -50,6 +50,14 @@ export function canvasScreenSheetCss(marginsMm: number): string {
     `background:#fff;` +
     `box-shadow:0 0 0 ${m}mm #fff,0 1px 4px ${m}mm rgba(0,0,0,.12);` +
     `}` +
+    `}` +
+    // Print: the sheet has a fixed width in mm. With a print-dialog scale below 100% the printable area
+    // becomes wider than the sheet (in CSS units) and the browser left-aligned it → keep it centered.
+    `@media print{` +
+    `html,body{width:auto!important;}` +
+    `body{margin:0!important;}` +
+    `.canvas-root{display:block;width:100%;}` +
+    `.canvas-page{margin-left:auto!important;margin-right:auto!important;}` +
     `}`
   );
 }
