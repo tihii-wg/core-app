@@ -11,7 +11,6 @@ import {
 import i18n from "../i18n";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
-import { searchTerm } from "./searchTerm";
 
 const PREVIEW_RPC = "crm_inventory_item_delete_preview";
 const PURGE_RPC = "crm_purge_inventory_item";
@@ -194,14 +193,68 @@ export function distinctSupplierNames(values: readonly (string | null | undefine
   return [...seen].sort((a, b) => a.localeCompare(b));
 }
 
+/** Fields every search word is matched against (in addition to the separator-free `search_compact`). */
+const INVENTORY_SEARCH_FIELDS = ["name", "sku", "category", "supplier", "location", "description"] as const;
+
+/**
+ * `inventory_items.search_compact` (SQL 20261119140000_inventory_search_compact): all text fields without
+ * spaces / punctuation, so "0258986627" finds SKU "0 258 986 627". Until that SQL is applied the column is
+ * missing; the first failing query switches the search back to the per-field filter for this session.
+ */
+let searchCompactSupported: boolean | null = null;
+
+function isMissingSearchCompact(error: { message?: string } | null | undefined) {
+  return Boolean(error && /search_compact/i.test(error.message ?? ""));
+}
+
+/** Search words (max 6). Characters PostgREST treats as syntax become `*` (any text) — "0.258" also finds "0 258". */
+export function inventorySearchWords(search: string | undefined): { plain: string; compact: string }[] {
+  return (search ?? "")
+    .split(/\s+/)
+    .map((word) => ({
+      plain: word.replace(/[%_,()*\\.:"']+/g, "*").replace(/^\*+|\*+$/g, ""),
+      // Same rule as the SQL column: drop whitespace and ASCII punctuation.
+      compact: word.replace(/[\s!-/:-@[-`{-~]+/g, ""),
+    }))
+    .filter((word) => word.plain || word.compact)
+    .slice(0, 6);
+}
+
+/** Every word must match some field (AND across words, OR across fields), case-insensitive. */
+function applyInventorySearch<Q extends { or: (filters: string) => Q }>(query: Q, search: string | undefined, withCompact: boolean): Q {
+  let next = query;
+  for (const word of inventorySearchWords(search)) {
+    const parts: string[] = [];
+    if (word.plain) for (const field of INVENTORY_SEARCH_FIELDS) parts.push(`${field}.ilike.*${word.plain}*`);
+    if (withCompact && word.compact) parts.push(`search_compact.ilike.*${word.compact}*`);
+    if (parts.length) next = next.or(parts.join(","));
+  }
+  return next;
+}
+
+/** Runs a search query with `search_compact`, falling back once (and for the session) when the column is missing. */
+async function withSearchCompactFallback<T extends { error: { message?: string } | null }>(
+  hasSearch: boolean,
+  run: (withCompact: boolean) => PromiseLike<T>,
+): Promise<T> {
+  const useCompact = hasSearch && searchCompactSupported !== false;
+  const result = await run(useCompact);
+  if (useCompact && isMissingSearchCompact(result.error)) {
+    searchCompactSupported = false;
+    return run(false);
+  }
+  if (useCompact && !result.error) searchCompactSupported = true;
+  return result;
+}
+
 export async function getInventoryItems(search: string | undefined, filter: InventoryListFilter, sort: InventorySort, workspaceId: string | undefined, supplier?: string) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const column = inventorySortColumns[sort.field] ?? "created_at";
 
-  const term = searchTerm(search);
+  const hasSearch = inventorySearchWords(search).length > 0;
   const supplierName = supplier?.trim();
   // All pages (a catalog of thousands of parts was cut at the API's 1 000-row cap); fresh builder per page.
-  const { data, error } = await selectAllRows((from, to) => {
+  const { data, error } = await withSearchCompactFallback(hasSearch, (withCompact) => selectAllRows((from, to) => {
   let query = supabase
     .from("inventory_items_with_status")
     .select("*")
@@ -209,9 +262,7 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
     .order(column, { ascending: sort.ascending })
     .order("id", { ascending: true });
 
-  if (term) {
-    query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%,category.ilike.%${term}%,supplier.ilike.%${term}%,location.ilike.%${term}%,description.ilike.%${term}%`);
-  }
+  query = applyInventorySearch(query, search, withCompact);
 
   if (filter === "inactive") {
     query = query.eq("is_active", false);
@@ -228,7 +279,7 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
   }
 
   return query.range(from, to);
-  });
+  }));
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
 
@@ -252,26 +303,23 @@ export async function getInventoryPage(workspaceId: string | undefined, input: I
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   const column = inventorySortColumns[input.sort.field] ?? "created_at";
   const pageSize = Math.max(1, Math.floor(input.pageSize) || 50);
-  const term = searchTerm(input.search);
+  const hasSearch = inventorySearchWords(input.search).length > 0;
   const supplierName = input.supplier?.trim();
 
-  const run = (page: number) => {
+  const runWith = (page: number, withCompact: boolean) => {
     const { from, to } = pageBounds(page, pageSize);
     let query = supabase
       .from("inventory_items_with_status")
       .select("*", { count: "exact" })
       .eq("workspace_id", resolvedWorkspaceId);
-    if (term) {
-      query = query.or(
-        `name.ilike.%${term}%,sku.ilike.%${term}%,category.ilike.%${term}%,supplier.ilike.%${term}%,location.ilike.%${term}%,description.ilike.%${term}%`,
-      );
-    }
+    query = applyInventorySearch(query, input.search, withCompact);
     if (input.filter === "inactive") query = query.eq("is_active", false);
     else if (input.filter === "active") query = query.eq("is_active", true);
     else if (input.filter !== "all") query = query.eq("is_active", true).eq("stock_status", input.filter);
     if (supplierName && supplierName !== "all") query = query.eq("supplier", supplierName);
     return query.order(column, { ascending: input.sort.ascending }).order("id", { ascending: true }).range(from, to);
   };
+  const run = (page: number) => withSearchCompactFallback(hasSearch, (withCompact) => runWith(page, withCompact));
 
   let page = input.page;
   let result = await run(page);
@@ -285,11 +333,6 @@ export async function getInventoryPage(workspaceId: string | undefined, input: I
   const total = result.count ?? 0;
   if (total === 0) return emptyServerPage(pageSize);
   return serverPage(((result.data ?? []) as Record<string, unknown>[]).map(toInventoryItem), total, page, pageSize);
-}
-
-/** PostgREST-safe search token (its `or` syntax uses , ( ) and ilike uses % _ as wildcards). */
-function safeToken(token: string): string {
-  return token.replace(/[%_,()*\\]/g, " ").trim();
 }
 
 export type InventorySearchInput = {
@@ -308,26 +351,21 @@ export async function searchInventoryItems(
   input: InventorySearchInput,
 ): Promise<{ items: InventoryItem[]; total: number }> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
-  const tokens = input.query
-    .toLowerCase()
-    .split(/\s+/)
-    .map(safeToken)
-    .filter(Boolean)
-    .slice(0, 6);
+  const hasSearch = inventorySearchWords(input.query).length > 0;
+  const { data, error, count } = await withSearchCompactFallback(hasSearch, (withCompact) => {
   let query = supabase
     .from("inventory_items_with_status")
     .select("*", { count: "exact" })
     .eq("workspace_id", resolvedWorkspaceId)
     .eq("is_active", true);
-  for (const token of tokens) {
-    // Each `.or()` is ANDed with the others → every word must match one of the fields.
-    query = query.or(`name.ilike.%${token}%,sku.ilike.%${token}%,category.ilike.%${token}%,supplier.ilike.%${token}%`);
-  }
+  // Each `.or()` is ANDed with the others → every word must match one of the fields.
+  query = applyInventorySearch(query, input.query, withCompact);
   if (input.inStockOnly) query = query.gt("quantity", 0);
-  const { data, error, count } = await query
+  return query
     .order("name", { ascending: true })
     .order("id", { ascending: true })
     .limit(Math.max(1, Math.min(input.limit ?? 30, 200)));
+  });
   if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
   return { items: ((data ?? []) as Record<string, unknown>[]).map(toInventoryItem), total: count ?? 0 };
 }
