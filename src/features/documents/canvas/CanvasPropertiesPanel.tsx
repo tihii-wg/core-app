@@ -80,7 +80,15 @@ export function CanvasPropertiesPanel({
   function applyColorToSelection(kind: "text" | "background" | "border", value: ColorRef | Fill | null) {
     patchAll((el) => {
       if (kind === "text") {
-        return { ...el, style: { ...el.style, color: typeof value === "string" ? value : value?.color ?? el.style.color } };
+        const color = typeof value === "string" ? value : value?.color ?? el.style.color;
+        // The totals block paints its rows with its own textColor (set by the default templates) — write there.
+        if (el.type === "totals") return { ...el, textColor: color, style: { ...el.style, color } };
+        return { ...el, style: { ...el.style, color } };
+      }
+      if (kind === "background" && el.type === "totals") {
+        // Its table paints `background` over the box; the box background alone was hidden behind it.
+        const color = value == null ? undefined : typeof value === "string" ? value : value.color;
+        return { ...el, background: color, style: { ...el.style, background: undefined } };
       }
       if (kind === "background") {
         if (el.type === "rect") {
@@ -612,7 +620,7 @@ export function CanvasPropertiesPanel({
 
       <ColorPicker
         label={t("settings.printTemplates.canvas.textColor")}
-        value={single?.style.color ?? selected[0]?.style.color}
+        value={(single?.type === "totals" ? single.textColor : undefined) ?? single?.style.color ?? selected[0]?.style.color}
         themeColors={themeColors}
         workspaceId={workspaceId}
         disabled={disabled}
@@ -623,7 +631,9 @@ export function CanvasPropertiesPanel({
         value={
           single?.type === "rect"
             ? single.fill
-            : single?.style.background ?? selected[0]?.style.background ?? null
+            : single?.type === "totals"
+              ? (single.background ?? null)
+              : single?.style.background ?? selected[0]?.style.background ?? null
         }
         allowNoFill
         allowOpacity

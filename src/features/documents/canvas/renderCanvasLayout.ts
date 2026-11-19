@@ -386,11 +386,21 @@ function renderSignaturesHtml(element: Extract<CanvasElement, { type: "signature
   const cells = element.labels
     .map((label, index) => {
       const isExecutor = index === 0;
+      // Hidden line keeps its height (space to sign); hidden name / stamp are dropped.
+      const line = element.hideLine
+        ? `<div style="height:10mm;margin-bottom:1mm"></div>`
+        : `<div style="border-bottom:1pt solid #333;height:10mm;margin-bottom:1mm"></div>`;
+      const name = element.hideName ? "" : `<div style="font-size:0.85em;color:#444">${nameLine}</div>`;
+      const stampHtml = element.hideStamp
+        ? ""
+        : isExecutor
+          ? `<div style="font-size:0.85em;margin-top:1mm">${stamp}</div>`
+          : `<div style="font-size:0.85em;margin-top:1mm;visibility:hidden">${stamp}</div>`;
       return `<div style="flex:1;min-width:20mm">
             <div style="font-size:0.95em;font-weight:600;margin-bottom:2mm">${escapeHtmlText(label)}</div>
-            <div style="border-bottom:1pt solid #333;height:10mm;margin-bottom:1mm"></div>
-            <div style="font-size:0.85em;color:#444">${nameLine}</div>
-            ${isExecutor ? `<div style="font-size:0.85em;margin-top:1mm">${stamp}</div>` : `<div style="font-size:0.85em;margin-top:1mm;visibility:hidden">${stamp}</div>`}
+            ${line}
+            ${name}
+            ${stampHtml}
             ${
               element.dateLabel
                 ? `<div style="margin-top:3mm;border-bottom:1pt solid #333;height:5mm"></div><div style="font-size:0.85em;color:#666">${escapeHtmlText(element.dateLabel)}</div>`

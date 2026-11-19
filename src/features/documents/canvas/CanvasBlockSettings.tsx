@@ -406,6 +406,26 @@ export function SignaturesBlockSettings({
         <Plus className="size-3.5" />
         {t("settings.printTemplates.canvas.block.addSignature")}
       </Button>
+      {(
+        [
+          ["hideLine", "settings.printTemplates.canvas.block.signatureShowLine"],
+          ["hideName", "settings.printTemplates.canvas.block.signatureShowName"],
+          ["hideStamp", "settings.printTemplates.canvas.block.signatureShowStamp"],
+        ] as const
+      ).map(([key, labelKey]) => (
+        <div key={key} className="flex items-center justify-between gap-2">
+          <Label className="text-xs">{t(labelKey)}</Label>
+          <Switch
+            checked={!element[key]}
+            disabled={disabled}
+            onCheckedChange={(checked) => {
+              const { [key]: _old, ...rest } = element;
+              void _old;
+              onChange(checked ? rest : { ...rest, [key]: true });
+            }}
+          />
+        </div>
+      ))}
       <div className="space-y-1">
         <Label className="text-xs">{t("settings.printTemplates.canvas.block.dateLabel")}</Label>
         <Input

@@ -137,6 +137,12 @@ export type SignaturesCanvasElement = CanvasElementBase & {
   type: "signatures";
   labels: string[];
   dateLabel?: string;
+  /** Hide the signature line under each label. */
+  hideLine?: boolean;
+  /** Hide the «/ ФИО /» caption under the line. */
+  hideName?: boolean;
+  /** Hide «М.П.» (stamp) under the first signature. */
+  hideStamp?: boolean;
 };
 
 export type QrCanvasElement = CanvasElementBase & {

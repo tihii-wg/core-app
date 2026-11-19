@@ -333,6 +333,9 @@ function parseElement(value: unknown): CanvasElement | null {
         type: "signatures",
         labels: value.labels as string[],
         ...(typeof value.dateLabel === "string" ? { dateLabel: value.dateLabel } : {}),
+        ...(value.hideLine === true ? { hideLine: true } : {}),
+        ...(value.hideName === true ? { hideName: true } : {}),
+        ...(value.hideStamp === true ? { hideStamp: true } : {}),
       } satisfies SignaturesCanvasElement;
     }
     case "qr": {
