@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import type { StyleColorPalette } from "../colorRef";
 import { formatQuantity } from "../../../lib/quantity";
 import { vatIncludedAmount } from "../../finance/vat";
-import { applyTemplateVariables } from "../printTemplate";
+import { applyTemplateVariables, PRINT_DEFAULT_FONT_STACK } from "../printTemplate";
 import { escapeHtmlText, printContextVatBreakdown, type PrintContext } from "../templateVariables";
 import {
   buildCanvasBoxStyle,
@@ -50,23 +50,98 @@ type Placed = {
   hMm: number;
 };
 
-function overlapsX(a: Placed, b: { xMm: number; wMm: number }): boolean {
-  return a.xMm < b.xMm + b.wMm && a.xMm + a.wMm > b.xMm;
-}
+/** Elements that grow with their data (text / variables wrap, tables add rows, totals add lines). */
+const GROWABLE_TYPES = new Set<CanvasElement["type"]>(["text", "variable", "table", "totals"]);
 
-function shiftOverlappingBelow(placed: Placed[], grown: Placed, extra: number) {
-  if (extra <= 0) return;
-  const originalBottom = grown.yMm + (grown.hMm - extra);
-  for (const other of placed) {
-    if (other === grown) continue;
-    if (other.yMm >= originalBottom - 0.01 && overlapsX(other, grown)) {
-      other.yMm += extra;
-    }
+/** Ignore sub-0.1 mm differences (measurement noise). */
+const GROWTH_EPSILON_MM = 0.1;
+
+const PX_PER_MM = 96 / 25.4;
+const MEASURE_ROOT_ID = "__canvas-measure-root";
+const measureCache = new Map<string, number | null>();
+
+/**
+ * Natural height (mm) of an element's content at its width, measured by the browser exactly as it will print
+ * (same inner HTML and box style). `null` when there is no layout engine (tests / server) — callers estimate.
+ */
+function measureContentHeightMm(innerHtml: string, widthMm: number, boxCss: string): number | null {
+  if (typeof document === "undefined" || !document.body) return null;
+  const key = `${widthMm}|${boxCss}|${innerHtml}`;
+  if (measureCache.has(key)) return measureCache.get(key) ?? null;
+  let root = document.getElementById(MEASURE_ROOT_ID);
+  if (!root) {
+    root = document.createElement("div");
+    root.id = MEASURE_ROOT_ID;
+    root.setAttribute("aria-hidden", "true");
+    root.style.cssText =
+      `position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;` +
+      `font-family:${PRINT_DEFAULT_FONT_STACK};font-size:13px;color:#111;line-height:${CANVAS_LINE_HEIGHT}`;
+    document.body.appendChild(root);
   }
+  const box = document.createElement("div");
+  box.style.cssText = `${boxCss};position:static;display:block;width:${widthMm}mm;height:auto;min-height:0;max-height:none;overflow:visible`;
+  box.innerHTML = innerHtml;
+  root.appendChild(box);
+  const px = box.getBoundingClientRect().height;
+  root.removeChild(box);
+  // No layout engine (jsdom reports 0): fall back to estimates.
+  const mm = px > 0 ? px / PX_PER_MM : innerHtml.trim() ? null : 0;
+  if (measureCache.size > 600) measureCache.clear();
+  measureCache.set(key, mm);
+  return mm;
 }
 
-/** Grow tables/totals to fit content; shift overlapping elements below. */
-export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintContext): Placed[] {
+export type GrowthOptions = {
+  colors?: StyleColorPalette | null;
+  showCents?: boolean;
+  showTokens?: boolean;
+  /** Default true. The designer turns it off in "field names" mode (text shows chips, not data). */
+  growText?: boolean;
+};
+
+/** Height an element needs for its data; `null` = keep the designed height. */
+function contentHeightMm(item: Placed, ctx: PrintContext, options: GrowthOptions): number | null {
+  const element = item.element;
+  const colors = options.colors ?? null;
+  const showCents = options.showCents !== false;
+  const showTokens = options.showTokens === true;
+  const measured = () => {
+    const inner = renderCanvasElementInnerHtml(element, ctx, colors, showCents, showTokens, 0, 1);
+    const box = buildCanvasBoxStyle(element.style, colors, { overflow: "visible" });
+    return measureContentHeightMm(inner, item.wMm, box.outerCss);
+  };
+  if (element.type === "table") {
+    // A table is exactly as tall as its rows (rows keep one height; the box no longer stretches them).
+    const exact = measured();
+    if (exact != null) return exact;
+    const rows = canvasRowsForSource(element.source, ctx);
+    return estimateTableHeightMm(
+      rows.length,
+      element.showTotalsRow,
+      0,
+      element.showHeader !== false,
+      element.style.fontSizePt,
+      element.style.lineHeight ?? CANVAS_LINE_HEIGHT,
+    );
+  }
+  if (element.type === "totals") {
+    const exact = measured();
+    if (exact != null) return Math.max(item.hMm, exact);
+    const visibleRows = element.rows.filter((row) => row.enabled && canvasTotalsRowVisible(row.key, ctx));
+    return estimateTotalsHeightMm(visibleRows.length, item.hMm, visibleRows);
+  }
+  // Text / variables: grow when the data wraps to more lines (beyond a 0.5 mm font tolerance), never shrink.
+  const exact = measured();
+  return exact == null || exact <= item.hMm + 0.5 ? null : exact;
+}
+
+/**
+ * Flow layout for print: tables / totals / text / variables take the height their data needs, and every block
+ * below a changed element (overlapping it horizontally) moves by the same amount — down when it grew, up when a
+ * table is shorter than its designed box. A background rectangle that encloses a growing element grows with it.
+ * Elements repeated on every page (page number…) keep their place.
+ */
+export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintContext, options: GrowthOptions = {}): Placed[] {
   const placed: Placed[] = elements.map((element) => ({
     element,
     xMm: element.xMm,
@@ -76,33 +151,42 @@ export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintCont
   }));
 
   const growable = placed
-    .filter((item) => item.element.type === "table" || item.element.type === "totals")
-    .sort((a, b) => a.yMm - b.yMm);
+    .filter(
+      (item) =>
+        GROWABLE_TYPES.has(item.element.type) &&
+        !item.element.repeatOnEveryPage &&
+        (options.growText !== false || item.element.type === "table" || item.element.type === "totals"),
+    )
+    .sort((a, b) => a.yMm - b.yMm || a.xMm - b.xMm);
 
   for (const item of growable) {
-    if (item.element.type === "table") {
-      const el = item.element as TableCanvasElement;
-      const rows = canvasRowsForSource(el.source, ctx);
-      const grown = estimateTableHeightMm(
-        rows.length,
-        el.showTotalsRow,
-        item.hMm,
-        el.showHeader !== false,
-        el.style.fontSizePt,
-        el.style.lineHeight ?? CANVAS_LINE_HEIGHT,
-      );
-      const extra = grown - item.hMm;
-      item.hMm = grown;
-      shiftOverlappingBelow(placed, item, extra);
-      continue;
-    }
-    if (item.element.type === "totals") {
-      const el = item.element as TotalsCanvasElement;
-      const visibleRows = el.rows.filter((row) => row.enabled && canvasTotalsRowVisible(row.key, ctx));
-      const grown = estimateTotalsHeightMm(visibleRows.length, item.hMm, visibleRows);
-      const extra = grown - item.hMm;
-      item.hMm = grown;
-      shiftOverlappingBelow(placed, item, extra);
+    const target = contentHeightMm(item, ctx, options);
+    if (target == null) continue;
+    const extra = target - item.hMm;
+    if (Math.abs(extra) < GROWTH_EPSILON_MM) continue;
+    const originalTop = item.yMm;
+    const originalBottom = item.yMm + item.hMm;
+    item.hMm = Math.max(0, target);
+
+    // Background boxes around the element (e.g. a tinted client block) follow its height.
+    const containers = placed.filter(
+      (other) =>
+        other !== item &&
+        other.element.type === "rect" &&
+        !other.element.repeatOnEveryPage &&
+        other.xMm <= item.xMm + 0.01 &&
+        other.xMm + other.wMm >= item.xMm + item.wMm - 0.01 &&
+        other.yMm <= originalTop + 0.01 &&
+        other.yMm + other.hMm >= originalBottom - 0.01,
+    );
+    for (const container of containers) container.hMm = Math.max(0, container.hMm + extra);
+
+    const spanLeft = Math.min(item.xMm, ...containers.map((c) => c.xMm));
+    const spanRight = Math.max(item.xMm + item.wMm, ...containers.map((c) => c.xMm + c.wMm));
+    for (const other of placed) {
+      if (other === item || containers.includes(other) || other.element.repeatOnEveryPage) continue;
+      const overlapsColumn = other.xMm < spanRight - 0.01 && other.xMm + other.wMm > spanLeft + 0.01;
+      if (overlapsColumn && other.yMm >= originalBottom - 0.01) other.yMm = Math.max(0, other.yMm + extra);
     }
   }
 
@@ -193,7 +277,8 @@ function renderTableHtml(
     ? `border-collapse:separate;border-spacing:0;overflow:hidden;border-radius:${outerRadius}mm`
     : "border-collapse:collapse";
 
-  let html = `<table style="width:100%;height:100%;${tableRadiusCss}">`;
+  // No height:100%: rows keep their natural height; the element takes the table height (flow layout).
+  let html = `<table style="width:100%;${tableRadiusCss}">`;
   if (includeHeader && el.showHeader !== false) {
     html += "<thead><tr>";
     columns.forEach((column, colIndex) => {
@@ -594,7 +679,7 @@ export async function renderCanvasLayoutToHtml(
   const contentHeightMm = heightMm - margins * 2;
   const contentWidthMm = widthMm - margins * 2;
 
-  const placed = applyTableGrowthShifts(layout.elements, ctx);
+  const placed = applyTableGrowthShifts(layout.elements, ctx, { colors, showCents, showTokens });
   const pages = paginate(placed, contentHeightMm);
   const pageCount = pages.length;
   const pageBg = fillToCss(layout.page.background, colors);
@@ -641,7 +726,7 @@ export function renderCanvasLayoutToHtmlSync(
   const margins = layout.page.marginsMm;
   const contentHeightMm = heightMm - margins * 2;
   const contentWidthMm = widthMm - margins * 2;
-  const placed = applyTableGrowthShifts(layout.elements, ctx);
+  const placed = applyTableGrowthShifts(layout.elements, ctx, { colors, showCents, showTokens });
   const pages = paginate(placed, contentHeightMm);
   const pageBg = fillToCss(layout.page.background, colors);
 

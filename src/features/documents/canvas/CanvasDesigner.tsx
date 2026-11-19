@@ -351,8 +351,9 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
   // the blocks below down. The sheet shows the same placement, so the sketch matches the paper.
   const printPlacement = useMemo(() => {
     const map = new Map<string, { yMm: number; hMm: number }>();
-    if (!showData) return map;
-    for (const placed of applyTableGrowthShifts(layout.elements, previewCtx)) {
+    // Tables / totals always show sample rows on the sheet, so their flow applies in both modes; text and
+    // variables grow with data only when the data is shown.
+    for (const placed of applyTableGrowthShifts(layout.elements, previewCtx, { growText: showData })) {
       if (Math.abs(placed.yMm - placed.element.yMm) > 0.01 || Math.abs(placed.hMm - placed.element.hMm) > 0.01) {
         map.set(placed.element.id, { yMm: placed.yMm, hMm: placed.hMm });
       }
