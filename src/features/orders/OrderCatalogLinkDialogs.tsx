@@ -6,7 +6,7 @@ import { EditInventoryItemDialog } from "../inventory/EditInventoryItemDialog";
 import InventoryDetailPanel from "../inventory/InventoryDetailPanel";
 import { useGetInventoryItem } from "../inventory/useGetInventoryItem";
 import EditServiceForm from "../services/UpdateServiceForm";
-import useGetServices from "../services/useGetServices";
+import { useServicesByIds } from "../services/useGetServices";
 import type { InventoryItem } from "../../lib/types";
 
 type Props = {
@@ -22,7 +22,8 @@ type Props = {
  */
 export function OrderCatalogLinkDialogs({ serviceId, inventoryItemId, onCloseService, onCloseInventory }: Props) {
   const { t } = useTranslation();
-  const { services } = useGetServices();
+  // Only the linked service (by id), not the catalog.
+  const { services } = useServicesByIds(serviceId ? [serviceId] : []);
   const service = serviceId ? services.find((item) => item.id === serviceId) ?? null : null;
   const inventoryDetail = useGetInventoryItem(inventoryItemId);
   const [editInventoryId, setEditInventoryId] = useState<string | null>(null);

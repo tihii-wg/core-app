@@ -187,6 +187,7 @@ const orders: Messages<typeof en> = {
   board: {
     hint: "Trage un card în altă coloană pentru a schimba statusul sau fă clic pe el pentru a deschide comanda.",
     readOnlyHint: "Fă clic pe un card pentru a deschide comanda. Mutarea cardurilor este dezactivată pentru acest spațiu de lucru.",
+    scopeHint: "Se afișează comenzile deschise și cele finalizate în ultimele {{days}} zile — istoricul complet este în vizualizarea „Tabel”.",
     unassigned: "Fără status potrivit",
     emptyColumn: "Nicio comandă",
     openOrder: "Deschide comanda {{number}}",

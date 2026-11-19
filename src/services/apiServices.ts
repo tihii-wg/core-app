@@ -235,6 +235,64 @@ export async function getServicesPage(workspaceId: string | undefined, input: Se
   };
 }
 
+export type ServiceSearchInput = {
+  query: string;
+  /** Default true: only active services (what can be added to an order). */
+  activeOnly?: boolean;
+  limit?: number;
+};
+
+/** PostgREST-safe search token (its `or` syntax uses , ( ) and ilike uses % _ as wildcards). */
+function safeServiceToken(token: string): string {
+  return token.replace(/[%_,()*\\]/g, " ").trim();
+}
+
+/**
+ * Catalog search for pickers, in the database: services whose name or category contains every word of the
+ * query (AND, case-insensitive), by name, at most `limit` rows + the total match count.
+ */
+export async function searchServices(
+  workspaceId: string | undefined,
+  input: ServiceSearchInput,
+): Promise<{ services: Service[]; total: number }> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const tokens = input.query
+    .toLowerCase()
+    .split(/\s+/)
+    .map(safeServiceToken)
+    .filter(Boolean)
+    .slice(0, 6);
+  let query = supabase.from("services").select(serviceSelect, { count: "exact" }).eq("workspace_id", targetWorkspaceId);
+  if (input.activeOnly !== false) query = query.eq("status", "active");
+  for (const token of tokens) {
+    query = query.or(`service_name.ilike.%${token}%,category.ilike.%${token}%`);
+  }
+  const { data, error, count } = await query
+    .order("service_name", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(Math.max(1, Math.min(input.limit ?? 30, 200)));
+  if (error) throw new Error(error.message);
+  return { services: ((data ?? []) as Record<string, unknown>[]).map(mapServiceRow), total: count ?? 0 };
+}
+
+/** Services by id (lines of an order) — never the whole catalog. */
+export async function getServicesByIds(workspaceId: string | undefined, ids: readonly string[]): Promise<Service[]> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let start = 0; start < unique.length; start += 100) chunks.push(unique.slice(start, start + 100));
+  const results = await Promise.all(
+    chunks.map((chunk) => Promise.resolve(supabase.from("services").select(serviceSelect).eq("workspace_id", targetWorkspaceId).in("id", chunk))),
+  );
+  const out: Service[] = [];
+  for (const { data, error } of results) {
+    if (error) throw new Error(error.message);
+    out.push(...((data ?? []) as Record<string, unknown>[]).map(mapServiceRow));
+  }
+  return out;
+}
+
 /** Distinct categories used by the workspace's services (filter options) — one narrow column, not the catalog. */
 export async function getServiceCategoriesInUse(workspaceId: string | undefined): Promise<string[]> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);

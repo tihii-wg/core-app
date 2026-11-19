@@ -13,7 +13,7 @@ import { Spinner } from "../../ui/Spinner";
 import { serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useInventorySearch } from "../inventory/useGetInventoryItems";
 import { useDebounce } from "../../hooks/useDebounce";
-import useGetServices from "../services/useGetServices";
+import { useServiceSearch } from "../services/useGetServices";
 import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
@@ -22,7 +22,6 @@ import {
   ORDER_ADD_LINES_SEARCH_GROUP_LIMIT,
   filterInventoryForAddLinesSearch,
   filterServicesForAddLinesSearch,
-  takeAddLinesSearchGroup,
 } from "./orderAddLinesSearchFilter";
 import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
 import { useAppendOrderLines } from "./useAppendOrderLines";
@@ -92,7 +91,6 @@ export default function OrderAddLinesSearch({
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const warrantyDefaults = useWorkspaceWarrantyDefaults();
   const { supported: freeformSupported } = useOrderMaterialFreeformSupport();
-  const { services } = useGetServices();
   const { mutateAsync: appendLines } = useAppendOrderLines();
   const { data: warehouseRows = [] } = useGetWarehouses();
   const { data: warehouseStock = [] } = useGetWarehouseStock();
@@ -122,12 +120,14 @@ export default function OrderAddLinesSearch({
   const listRef = useRef<HTMLDivElement>(null);
   const [menuBox, setMenuBox] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const activeServices = useMemo(
-    () => (allowServices ? (services ?? []).filter((service) => service.status === "active") : []),
-    [allowServices, services],
-  );
-  // Parts are searched in the database (in stock, every word matched), not filtered from the whole catalog.
   const debouncedQuery = useDebounce(query, 200);
+  // Services are searched in the database too (active, every word in name / category).
+  const serviceSearch = useServiceSearch(
+    { query: debouncedQuery, limit: servicesExpanded ? 200 : ORDER_ADD_LINES_SEARCH_GROUP_LIMIT },
+    { enabled: allowServices && open },
+  );
+  const activeServices = useMemo(() => (allowServices ? serviceSearch.services : []), [allowServices, serviceSearch.services]);
+  // Parts are searched in the database (in stock, every word matched), not filtered from the whole catalog.
   const itemSearch = useInventorySearch(
     { query: debouncedQuery, inStockOnly: true, limit: itemsExpanded ? 200 : ORDER_ADD_LINES_SEARCH_GROUP_LIMIT },
     { enabled: allowMaterials && open },
@@ -143,7 +143,10 @@ export default function OrderAddLinesSearch({
     [activeItems, query],
   );
 
-  const serviceGroup = takeAddLinesSearchGroup(matchedServices, servicesExpanded);
+  const serviceGroup = {
+    visible: matchedServices,
+    hiddenCount: servicesExpanded || debouncedQuery !== query ? 0 : Math.max(0, serviceSearch.total - matchedServices.length),
+  };
   const itemGroup = {
     visible: matchedItems,
     hiddenCount: itemsExpanded || debouncedQuery !== query ? 0 : Math.max(0, itemSearch.total - matchedItems.length),

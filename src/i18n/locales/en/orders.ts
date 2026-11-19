@@ -181,6 +181,7 @@ export default {
   board: {
     hint: "Drag a card to another column to change its status, or click it to open the order.",
     readOnlyHint: "Click a card to open the order. Moving cards is disabled for this workspace.",
+    scopeHint: "Showing open orders and orders finished in the last {{days}} days — the full history is in the Table view.",
     unassigned: "No matching status",
     emptyColumn: "No orders",
     openOrder: "Open order {{number}}",

@@ -4,9 +4,15 @@ import { Input } from "../../ui/Input";
 import type { Service } from "../../lib/types";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { serviceCategoryLabel } from "../industries/industryWorkflow";
+import { useDebounce } from "../../hooks/useDebounce";
+import { useServiceSearch } from "./useGetServices";
+
+/** Rows shown by the database-backed search (typing narrows them down). */
+const SEARCH_LIMIT = 50;
 
 type ServiceComboboxProps = {
-  services: Service[];
+  /** Fixed list to pick from. Omitted → the catalog is searched in the database as the user types. */
+  services?: Service[];
   value?: string;
   errors?: boolean;
   onChange?: (value: string) => void;
@@ -73,14 +79,23 @@ export default function ServiceCombobox({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
 
+  const debouncedInput = useDebounce(inputValue, 200);
+  // Inactive services too: an exact (inactive) name must still block "create".
+  const search = useServiceSearch({ query: debouncedInput, activeOnly: false, limit: SEARCH_LIMIT }, { enabled: open && !services });
+  const source = services ?? search.services;
   const query = inputValue.trim().toLowerCase();
-  const filteredServices = (services ?? []).filter((service) => {
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const filteredServices = source.filter((service) => {
     if (service.status === "inactive") return false;
     if (!query) return true;
+    if (!services) {
+      const haystack = `${service.service_name ?? ""} ${service.category ?? ""}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    }
     return service.service_name?.toLowerCase().includes(query);
   });
 
-  const exactMatch = (services ?? []).some((service) => service.service_name?.toLowerCase() === inputValue.trim().toLowerCase());
+  const exactMatch = source.some((service) => service.service_name?.toLowerCase() === inputValue.trim().toLowerCase());
   const canCreate = allowCreate && Boolean(inputValue.trim()) && !exactMatch;
   const showEmpty = open && filteredServices.length === 0 && !canCreate;
 

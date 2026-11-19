@@ -11,7 +11,6 @@ import { Textarea } from "../../ui/Textarea";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import type { EditOrderFormData, Order, OrderMaterial, OrderService } from "../../lib/types";
 import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
-import useGetServices from "../services/useGetServices";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -163,7 +162,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const formRef = useRef<HTMLFormElement>(null);
-  const { services } = useGetServices();
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
@@ -193,7 +191,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
   });
   const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? order.clientId || null : null);
   const { client: orderClient } = useGetClient(industryBlocks.siteAddress ? order.clientId || null : null);
-  const activeServices = services?.filter((service) => service.status === "active");
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees, order.assignedEmployeeId);
   // Team chips and line performers may reference employees that are no longer assignable (e.g. inactive) — keep them visible.
@@ -616,7 +613,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
         append={serviceAppend}
         onRemove={(index) => void requestRemoveService(index)}
         setValue={setValue}
-        catalogServices={activeServices}
         allowCreate={canCreateServices}
         performerOptions={teamOptions}
         onPerformerChosen={addPerformerToTeam}

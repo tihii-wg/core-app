@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import type { Order, OrderService } from "../../lib/types";
 import useGetEmployees from "../employees/useGetEmployees";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
-import useGetServices from "../services/useGetServices";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import AddOrderLinesDialogShell from "./AddOrderLinesDialogShell";
@@ -28,7 +27,6 @@ function AddOrderServiceDialogBody({ open, onOpenChange, order, onAdded }: AddOr
   const { t } = useTranslation();
   const { workflow, industrySlug } = useIndustryWorkflow();
   const works = usesWorksAndMaterialsTabLabel(industrySlug);
-  const { services } = useGetServices();
   const { employees } = useGetEmployees();
   const canCreateServices = canManageServices(useActiveWorkspaceRole());
   const warrantyDefaults = useWorkspaceWarrantyDefaults();
@@ -44,7 +42,6 @@ function AddOrderServiceDialogBody({ open, onOpenChange, order, onAdded }: AddOr
   } = useForm<DraftServicesForm>({ defaultValues: { services: [] } });
   const { fields, append, remove } = useFieldArray({ control, name: "services" });
 
-  const activeServices = useMemo(() => services?.filter((service) => service.status === "active"), [services]);
   const performerOptions = assignableTeamOptions(employees, order.assignedEmployeeId, [
     ...(order.team ?? []).map((member) => ({ id: member.employeeId, name: member.name })),
     ...order.services.flatMap((line) => [
@@ -85,7 +82,6 @@ function AddOrderServiceDialogBody({ open, onOpenChange, order, onAdded }: AddOr
         append={append}
         onRemove={remove}
         setValue={setValue}
-        catalogServices={activeServices}
         allowCreate={canCreateServices}
         performerOptions={performerOptions}
         onLineAdded={() => setEmptyError(false)}

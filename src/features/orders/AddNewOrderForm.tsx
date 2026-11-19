@@ -7,7 +7,6 @@ import { Spinner } from "../../ui/Spinner";
 import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, Client, CreateMadalProps, OrderKind, Vehicle } from "../../lib/types";
-import useGetServices from "../services/useGetServices";
 import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -72,7 +71,6 @@ export default function AddNewOrderForm({
 }) {
   const { t } = useTranslation();
   const isEstimate = kind === "estimate";
-  const { services } = useGetServices();
   const [clientName, setClientName] = useState(initialClientName);
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const [clientDialogInitialName, setClientDialogInitialName] = useState("");
@@ -125,7 +123,6 @@ export default function AddNewOrderForm({
   const [customValues, setCustomValues] = useState<OrderCustomFieldValues>({});
   const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
 
-  const activeServices = services?.filter((service) => service.status === "active");
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees);
 
@@ -490,7 +487,6 @@ export default function AddNewOrderForm({
           append={serviceAppend}
           onRemove={serviceRemove}
           setValue={setValue}
-          catalogServices={activeServices}
           allowCreate={canCreateServices}
           performerOptions={technicianOptions}
           onPerformerChosen={addPerformerToTeam}

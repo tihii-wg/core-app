@@ -51,6 +51,9 @@ type OrdersBoardProps = {
  * Kanban-style orders view (docs §5.1). Read-only columns with click-to-open;
  * native HTML5 drag-and-drop moves a card between columns when the workspace can write.
  */
+/** The board shows open orders and orders finished within this many days. */
+export const BOARD_RECENT_DAYS = 30;
+
 export function OrdersBoard({
   search,
   employeeFilter,
@@ -76,8 +79,9 @@ export function OrdersBoard({
     error,
     refetch,
   } = useQuery({
-    queryKey: ["orders", workspaceId, "headers", search, kind],
-    queryFn: () => getOrders(workspaceId, search, kind, { lines: false }),
+    // Open orders + finished in the last BOARD_RECENT_DAYS days (the full history lives in the table view).
+    queryKey: ["orders", workspaceId, "headers", "board", search, kind, BOARD_RECENT_DAYS],
+    queryFn: () => getOrders(workspaceId, search, kind, { lines: false, recentClosedDays: BOARD_RECENT_DAYS }),
     enabled: Boolean(workspaceId),
     ...hot,
   });
@@ -181,7 +185,9 @@ export function OrdersBoard({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">{canWrite ? t("orders.board.hint") : t("orders.board.readOnlyHint")}</p>
+      <p className="text-xs text-muted-foreground">
+        {canWrite ? t("orders.board.hint") : t("orders.board.readOnlyHint")} {t("orders.board.scopeHint", { days: BOARD_RECENT_DAYS })}
+      </p>
       <div className="flex snap-x gap-3 overflow-x-auto pb-3" data-testid="orders-board">
         {columns.map((column) => {
           const droppable = canDropOn(column);

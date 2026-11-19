@@ -2458,7 +2458,14 @@ export type GetOrdersOptions = {
   lines?: boolean;
   /** Only this client's orders. */
   clientId?: string;
+  /**
+   * Board: open orders + orders finished in the last N days only (closed_at, or the last change for a
+   * finished order without closed_at) — not the whole order history.
+   */
+  recentClosedDays?: number;
 };
+
+const FINISHED_ORDER_STATUSES = "(completed,paid,cancelled,closed)";
 
 export async function getOrders(
   workspaceId: string | undefined,
@@ -2475,12 +2482,22 @@ export async function getOrders(
   const term = searchTerm(search);
   const searchFilter = term ? await orderSearchFilter(resolvedWorkspaceId, term) : null;
 
+  const recentSince =
+    options.recentClosedDays && options.recentClosedDays > 0
+      ? new Date(Date.now() - options.recentClosedDays * 86_400_000).toISOString()
+      : null;
+
   // A query builder is mutable (`.range()` rewrites its own URL), so every page gets a fresh one.
   const pageQuery = (from: number, to: number) => {
     let query = supabase.from("orders").select(orderColumns).eq("workspace_id", resolvedWorkspaceId);
     if (filterByKind) query = kind === "estimate" ? query.eq("kind", "estimate") : query.or("kind.eq.order,kind.is.null");
     if (searchFilter) query = query.or(searchFilter);
     if (options.clientId) query = query.eq("client_id", options.clientId);
+    if (recentSince) {
+      query = query.or(
+        `and(status.not.in.${FINISHED_ORDER_STATUSES},closed_at.is.null),closed_at.gte.${recentSince},and(closed_at.is.null,updated_at.gte.${recentSince})`,
+      );
+    }
     return query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
   };
 

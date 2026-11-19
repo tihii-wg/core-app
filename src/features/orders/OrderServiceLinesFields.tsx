@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { useServicesByIds } from "../services/useGetServices";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import type { TFunction } from "i18next";
@@ -35,7 +36,8 @@ type OrderServiceLinesFieldsProps = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setValue: UseFormSetValue<any>;
   /** Active catalog services offered by the combobox. */
-  catalogServices: Service[] | undefined;
+  /** Optional known catalog services (lookups only); the picker searches the catalog in the database. */
+  catalogServices?: Service[] | undefined;
   allowCreate: boolean;
   /** Line performer choices. */
   performerOptions: AssignableTechnician[];
@@ -116,6 +118,18 @@ export default function OrderServiceLinesFields({
   const { t } = useTranslation();
   const { formatMoney } = useWorkspaceMoney();
   const watched = useWatch({ control, name: "services" }) as OrderService[] | undefined;
+  // Catalog prices of the lines' services (by id, from the database) + services picked here + known ones.
+  const [pickedServices, setPickedServices] = useState<Service[]>([]);
+  const lineServiceIds = useMemo(
+    () => ((watched ?? fields) as { serviceId?: string | null }[]).map((line) => String(line?.serviceId ?? "")).filter(Boolean),
+    [watched, fields],
+  );
+  const { services: lineServices } = useServicesByIds(lineServiceIds);
+  const lookupServices = useMemo(() => {
+    const byId = new Map<string, Service>();
+    for (const service of [...(catalogServices ?? []), ...pickedServices, ...lineServices]) byId.set(service.id, service);
+    return [...byId.values()];
+  }, [catalogServices, pickedServices, lineServices]);
   const lineLocked = warrantyDisabled ?? disabled;
   /** Name for the full "new service" dialog; null = closed. */
   const [createServiceName, setCreateServiceName] = useState<string | null>(null);
@@ -144,10 +158,10 @@ export default function OrderServiceLinesFields({
         <>
           <Label htmlFor="service">{label}</Label>
           <ServiceCombobox
-            services={catalogServices ?? []}
             allowCreate={allowCreate}
             errors={!!errors?.root}
             onSelect={(service) => {
+              setPickedServices((current) => (current.some((item) => item.id === service.id) ? current : [...current, service]));
               if (incrementExisting(existingServiceIndex(service.id, service.service_name))) return;
               const line = catalogServiceToOrderLine(service, warrantyDefaults, orderMileageUnit);
               append(line);
@@ -258,7 +272,7 @@ export default function OrderServiceLinesFields({
                     <OrderLinePriceField
                       id={`${idPrefix}-price-${index}`}
                       value={priceField.value as number | "" | null | undefined}
-                      catalogPrice={catalogServices?.find((service) => service.id === field.serviceId)?.service_price ?? null}
+                      catalogPrice={lookupServices.find((service) => service.id === field.serviceId)?.service_price ?? null}
                       disabled={lineLocked}
                       errorMessage={errors?.[index]?.price?.message}
                       formatMoney={formatMoney}

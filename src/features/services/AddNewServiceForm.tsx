@@ -16,7 +16,6 @@ import { emptyCatalogWarrantyFormValues, normalizeCatalogWarrantyDefaults } from
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import ServiceCombobox from "./ServiceCombobox";
 import useCreateNewService from "./useCreateNewService";
-import useGetServices from "./useGetServices";
 import useGetEmployees from "../employees/useGetEmployees";
 import { assignableTechnicians } from "../orders/assignableTechnicians";
 
@@ -40,7 +39,6 @@ export function parseServicePriceInput(raw: unknown): number {
 export default function AddNewServiceForm({ setCreateModalOpen, initialName, onCreated }: AddNewServiceFormProps) {
   const { t } = useTranslation();
   const { mutate } = useCreateNewService();
-  const { services } = useGetServices();
   const { employees } = useGetEmployees();
   const technicianOptions = assignableTechnicians(employees);
   const { currency } = useWorkspaceMoney();
@@ -123,7 +121,7 @@ export default function AddNewServiceForm({ setCreateModalOpen, initialName, onC
             rules={{
               required: t("services.form.serviceRequired"),
             }}
-            render={({ field }) => <ServiceCombobox services={services} value={field.value} onChange={field.onChange} errors={Boolean(errors.serviceName)} openOnFocus={false} />}
+            render={({ field }) => <ServiceCombobox value={field.value} onChange={field.onChange} errors={Boolean(errors.serviceName)} openOnFocus={false} />}
           />
           {errors.serviceName && <p className="text-xs text-destructive">{t("services.form.serviceNameRequired")}</p>}
         </div>
