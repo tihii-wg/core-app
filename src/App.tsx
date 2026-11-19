@@ -42,6 +42,7 @@ import { AppLayout } from "./ui/AppLayout";
 import Dashboardredirect from "./ui/DashboardRedirect";
 import { BusinessSetupPage } from "./features/onboarding/BusinessSetupPage";
 import { AuthSession } from "./features/auth/AuthSession";
+import { AppUpdateWatcher } from "./app/AppUpdateWatcher";
 import { isInvalidSessionError } from "./services/apiAuth";
 import supabase from "./services/supabase";
 import { useUrlLanguage } from "./i18n/useUrlLanguage";
@@ -156,6 +157,7 @@ export default function App() {
           <AuthSession />
           <AppRoutes />
           <Toaster />
+          <AppUpdateWatcher />
         </AppProvider>
       </ConfirmProvider>
       <ReactQueryDevtools initialIsOpen={false} />

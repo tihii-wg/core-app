@@ -61,6 +61,10 @@ export default {
   demo: {
     label: "Demo data",
   },
+  appUpdate: {
+    available: "A new version of the app is available",
+    reload: "Reload",
+  },
   pagination: {
     previous: "Previous",
     next: "Next",

@@ -5,6 +5,7 @@ import { rememberSessionIdleActivity } from "./sessionIdleTimeout";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProfile } from "../../services/apiProfiles";
 import { languageFromPath } from "../../i18n/languages";
+import { isNewVersionDeployed } from "../../lib/appVersion";
 
 type LogInData = {
   email: string;
@@ -33,6 +34,12 @@ export function useLogin() {
       }
     }
 
+    // Logging in does not reload the page: if a newer deployment is live, load it now (the session is
+    // already stored, so the reloaded app opens signed in). Short timeout — never hold up the login.
+    if (await isNewVersionDeployed(1500)) {
+      window.location.assign(`/${language}/dashboard`);
+      return;
+    }
     navigate(`/${language}/dashboard`, { replace: true });
   }
 

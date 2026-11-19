@@ -64,6 +64,10 @@ const common: Messages<typeof en> = {
   demo: {
     label: "Демо-данные",
   },
+  appUpdate: {
+    available: "Доступна новая версия приложения",
+    reload: "Обновить",
+  },
   pagination: {
     previous: "Назад",
     next: "Вперёд",

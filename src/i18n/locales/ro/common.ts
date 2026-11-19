@@ -64,6 +64,10 @@ const common: Messages<typeof en> = {
   demo: {
     label: "Date demonstrative",
   },
+  appUpdate: {
+    available: "Este disponibilă o versiune nouă a aplicației",
+    reload: "Reîncarcă",
+  },
   pagination: {
     previous: "Anterior",
     next: "Următor",
