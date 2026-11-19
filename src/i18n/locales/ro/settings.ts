@@ -299,7 +299,9 @@ const settings: Messages<typeof en> = {
     toast: { disconnected: "Telegram deconectat" },
   },
   notifications: {
+    inDevelopment: "În dezvoltare",
     email: {
+      comingSoon: "Notificările prin e-mail sunt în dezvoltare. Când vor fi disponibile, mesajele vor veni pe e-mailul profilului după aceleași reguli ca în Telegram: actualizări ale comenzilor, facturi emise și achitate. Newsletterele doar cu acordul dvs.\nPână atunci evenimentele importante sunt disponibile în Telegram.",
       title: "Notificări prin e-mail",
       description: "Gestionați preferințele pentru notificările prin e-mail",
       orders: { label: "Actualizări comenzi", description: "Primiți e-mailuri despre schimbările de stare ale comenzilor" },
@@ -307,6 +309,7 @@ const settings: Messages<typeof en> = {
       marketing: { label: "E-mailuri de marketing", description: "Primiți oferte promoționale și noutăți" },
     },
     push: {
+      comingSoon: "Notificările push vor apărea odată cu aplicația pentru telefon. După instalare și permiterea notificărilor, mesajele vor veni chiar și cu aplicația închisă: comandă nouă, atribuire, schimbare de status, plată, termen mâine sau depășit, sarcină nouă, stoc redus.\nEvenimentele trimise se vor alege la fel ca în secțiunea Telegram de mai sus — fiecare angajat își setează singur. Până atunci aceste mesaje sunt disponibile în Telegram.",
       title: "Notificări push",
       description: "Gestionați preferințele pentru notificările push",
       orders: { label: "Comenzi noi", description: "Fiți notificat când sunt plasate comenzi noi" },

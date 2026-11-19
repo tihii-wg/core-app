@@ -34,7 +34,9 @@ import {
 } from "../../ui/Card";
 
 
-import { Switch } from "../../ui/Switch"
+import { Switch } from "../../ui/Switch";
+import { Badge } from "../../ui/badge";
+import { Clock } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import {
   Select,
@@ -74,17 +76,6 @@ export function SettingsModule() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = settingsTabFromSearch(searchParams.get("tab"));
-
-  const [notifications, setNotifications] = useState({
-    emailOrders: true,
-    emailInvoices: true,
-    emailMarketing: false,
-    pushOrders: true,
-    pushReminders: true,
-    pushAlerts: true,
-    smsOrders: false,
-    smsReminders: true,
-  });
 
   return (
     <div className="space-y-6">
@@ -195,113 +186,27 @@ export function SettingsModule() {
         {/* Notifications Settings */}
         <TabsContent value="notifications" className="mt-5 space-y-5">
           <TelegramNotificationsSettings />
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("settings.notifications.email.title")}</CardTitle>
-              <CardDescription>
-                {t("settings.notifications.email.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="divide-y divide-border rounded-lg border border-border">
-              {[
-                {
-                  key: "emailOrders",
-                  label: t("settings.notifications.email.orders.label"),
-                  description: t("settings.notifications.email.orders.description"),
-                },
-                {
-                  key: "emailInvoices",
-                  label: t("settings.notifications.email.invoices.label"),
-                  description: t("settings.notifications.email.invoices.description"),
-                },
-                {
-                  key: "emailMarketing",
-                  label: t("settings.notifications.email.marketing.label"),
-                  description: t("settings.notifications.email.marketing.description"),
-                },
-              ].map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-center justify-between gap-4 px-4 py-3.5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{item.label}</p>
-                    <p className="text-[13px] text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                  <Switch
-                    aria-label={item.label}
-                    checked={
-                      notifications[item.key as keyof typeof notifications]
-                    }
-                    onCheckedChange={(checked) =>
-                      setNotifications({
-                        ...notifications,
-                        [item.key]: checked,
-                      })
-                    }
-                  />
-                </div>
-              ))}
-              </div>
-            </CardContent>
-          </Card>
+          <ComingSoonNotificationsCard
+            title={t("settings.notifications.push.title")}
+            description={t("settings.notifications.push.description")}
+            explanation={t("settings.notifications.push.comingSoon")}
+            items={[
+              { key: "pushOrders", label: t("settings.notifications.push.orders.label"), description: t("settings.notifications.push.orders.description") },
+              { key: "pushReminders", label: t("settings.notifications.push.reminders.label"), description: t("settings.notifications.push.reminders.description") },
+              { key: "pushAlerts", label: t("settings.notifications.push.alerts.label"), description: t("settings.notifications.push.alerts.description") },
+            ]}
+          />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("settings.notifications.push.title")}</CardTitle>
-              <CardDescription>
-                {t("settings.notifications.push.description")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="divide-y divide-border rounded-lg border border-border">
-              {[
-                {
-                  key: "pushOrders",
-                  label: t("settings.notifications.push.orders.label"),
-                  description: t("settings.notifications.push.orders.description"),
-                },
-                {
-                  key: "pushReminders",
-                  label: t("settings.notifications.push.reminders.label"),
-                  description: t("settings.notifications.push.reminders.description"),
-                },
-                {
-                  key: "pushAlerts",
-                  label: t("settings.notifications.push.alerts.label"),
-                  description: t("settings.notifications.push.alerts.description"),
-                },
-              ].map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-center justify-between gap-4 px-4 py-3.5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{item.label}</p>
-                    <p className="text-[13px] text-muted-foreground">
-                      {item.description}
-                    </p>
-                  </div>
-                  <Switch
-                    aria-label={item.label}
-                    checked={
-                      notifications[item.key as keyof typeof notifications]
-                    }
-                    onCheckedChange={(checked) =>
-                      setNotifications({
-                        ...notifications,
-                        [item.key]: checked,
-                      })
-                    }
-                  />
-                </div>
-              ))}
-              </div>
-            </CardContent>
-          </Card>
+          <ComingSoonNotificationsCard
+            title={t("settings.notifications.email.title")}
+            description={t("settings.notifications.email.description")}
+            explanation={t("settings.notifications.email.comingSoon")}
+            items={[
+              { key: "emailOrders", label: t("settings.notifications.email.orders.label"), description: t("settings.notifications.email.orders.description") },
+              { key: "emailInvoices", label: t("settings.notifications.email.invoices.label"), description: t("settings.notifications.email.invoices.description") },
+              { key: "emailMarketing", label: t("settings.notifications.email.marketing.label"), description: t("settings.notifications.email.marketing.description") },
+            ]}
+          />
 
           <NotificationRulesSettings />
         </TabsContent>
@@ -542,6 +447,54 @@ function AppearanceForm({ theme: savedTheme }: { theme: ProfileTheme }) {
             <Save />
             {t("settings.appearance.save")}
           </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Notification channel that is not built yet (push needs the phone app, e-mail a sending service).
+ * Shown so people know it is coming; switches are disabled and nothing is stored or sent.
+ */
+function ComingSoonNotificationsCard({
+  title,
+  description,
+  explanation,
+  items,
+}: {
+  title: string;
+  description: string;
+  explanation: string;
+  items: { key: string; label: string; description: string }[];
+}) {
+  const { t } = useTranslation();
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>{title}</CardTitle>
+          <Badge variant="secondary">
+            <Clock aria-hidden />
+            {t("settings.notifications.inDevelopment")}
+          </Badge>
+        </div>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="whitespace-pre-line rounded-md border border-border bg-muted/40 px-3 py-2 text-[13px] text-muted-foreground">
+          {explanation}
+        </p>
+        <div className="divide-y divide-border rounded-lg border border-border opacity-60">
+          {items.map((item) => (
+            <div key={item.key} className="flex items-center justify-between gap-4 px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{item.label}</p>
+                <p className="text-[13px] text-muted-foreground">{item.description}</p>
+              </div>
+              <Switch aria-label={item.label} checked={false} disabled />
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

@@ -296,7 +296,9 @@ export default {
     toast: { disconnected: "Telegram disconnected" },
   },
   notifications: {
+    inDevelopment: "In development",
     email: {
+      comingSoon: "E-mail notifications are in development. Once available, messages will go to your profile e-mail by the same rules as Telegram: order updates, invoices issued and paid. Marketing e-mails only with your consent.\nUntil then important events are available in Telegram.",
       title: "Email Notifications",
       description: "Manage your email notification preferences",
       orders: { label: "Order updates", description: "Receive emails about order status changes" },
@@ -304,6 +306,7 @@ export default {
       marketing: { label: "Marketing emails", description: "Receive promotional offers and updates" },
     },
     push: {
+      comingSoon: "Push notifications will come with the phone app. Once it is installed and notifications are allowed, pop-up messages will arrive even when the app is closed: new order, assigned to you, status change, payment, deadline tomorrow or overdue, new task, low stock.\nWhich events are sent will be chosen the same way as in «Telegram notifications» above — every employee sets their own. Until then these messages are available in Telegram.",
       title: "Push Notifications",
       description: "Manage your push notification preferences",
       orders: { label: "New orders", description: "Get notified when new orders are placed" },
