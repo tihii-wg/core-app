@@ -258,7 +258,7 @@ async function resolveService(workspaceId: string, service: OrderService) {
  */
 async function resolveServicesForCreate(workspaceId: string, services: OrderService[]): Promise<{ id: string; name: string }[]> {
   if (services.length === 0) return [];
-  const ids = [...new Set(services.map((service) => service.serviceId).filter((id): id is string => Boolean(id) && isUuid(String(id))))];
+  const ids = [...new Set(services.map((service) => service.serviceId).filter((id): id is string => Boolean(id)))];
   const byId = new Map<string, { id: string; name: string }>();
   if (ids.length > 0) {
     const { data, error } = await supabase.from("services").select("id, service_name").eq("workspace_id", workspaceId).in("id", ids);
@@ -616,6 +616,10 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   if (orderError) {
     throw mapOrderIndustryFieldsDbError(orderError) ?? new Error(orderError.message);
   }
+
+  // Realtime echoes of this new order (insert, number / totals updates, team rows) are our own writes: the
+  // mutation refreshes the lists itself, so the echo must not trigger a second invalidation wave.
+  markLocalOrderWrite(String(insertedOrder.id));
 
   // The year of the number must be the year of the stored created_at (workspace time zone). The planned number
   // used the browser clock: keep it when the years agree (always, except a create right at New Year).

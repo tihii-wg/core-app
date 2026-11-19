@@ -232,10 +232,12 @@ export async function createClient({
   phoneNotificationsConsent,
   emailNotificationsConsent,
 }: CreateClientInput) {
+  // Local session — no /auth/v1/user round trip before the insert (RLS validates the token anyway).
   const {
-    data: { user },
+    data: { session },
     error: userError,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getSession();
+  const user = session?.user;
 
   if (userError) throw new Error(userError.message);
   if (!user) throw new Error(i18n.t("clients.errors.notAuthenticated"));

@@ -72,9 +72,15 @@ export function useCreateOrder() {
     },
     onSuccess: (order, input) => {
       queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+      // Client lists show balances / order counts, so they always refresh. Services and stock only when this
+      // create can have changed them: a service created from a typed name, stock issued for catalog parts.
       queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
+      if ((input.services ?? []).some((line) => !line.serviceId && line.serviceName?.trim())) {
+        queryClient.invalidateQueries({ queryKey: ["services", workspaceId] });
+      }
+      if ((input.materials ?? []).some((line) => Boolean(line.inventoryItemId))) {
+        queryClient.invalidateQueries({ queryKey: ["inventory", workspaceId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["order_events", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["orders-warranty-indicators", workspaceId] });
       queryClient.invalidateQueries({ queryKey: ["warranty-records", workspaceId] });
