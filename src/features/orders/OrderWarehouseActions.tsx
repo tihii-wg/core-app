@@ -10,7 +10,7 @@ import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
 import { isCatalogOrderMaterial } from "../inventory/orderMaterialLine";
 import { remainingToIssue, remainingToReturn } from "../inventory/warehouseMaterialStatus";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { useInventoryItemsByIds } from "../inventory/useGetInventoryItems";
 import { issueOrderMaterialsFromWarehouse, returnOrderMaterialsToWarehouse } from "../../services/apiWarehouse";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
@@ -41,8 +41,6 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const queryClient = useQueryClient();
-  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
-
   const { data: warehouseRows } = useGetWarehouses();
   const { data: warehouseStock, isSuccess: warehouseStockLoaded } = useGetWarehouseStock();
   const warehouses = useMemo(() => issuableWarehouses(warehouseRows), [warehouseRows]);
@@ -52,6 +50,11 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const stockMaterials = useMemo(() => materials.filter((line) => isCatalogOrderMaterial(line)), [materials]);
   const issueable = useMemo(() => stockMaterials.filter((line) => remainingToIssue(line) > 0), [stockMaterials]);
   const returnable = useMemo(() => stockMaterials.filter((line) => remainingToReturn(line) > 0), [stockMaterials]);
+  // Stock of this order's parts only (was the whole catalog), and only while the dialog is open.
+  const { items: inventoryItems } = useInventoryItemsByIds(
+    stockMaterials.map((line) => line.inventoryItemId?.trim() ?? ""),
+    { enabled: mode !== null },
+  );
 
   function openDialog(next: Mode) {
     const lines = next === "issue" ? issueable : returnable;

@@ -10,10 +10,9 @@ import { formatWorkspaceDate } from "../../lib/workspaceFormat";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
-import { useGetInventoryItems } from "./useGetInventoryItems";
+import { useInventoryItemsByIds } from "./useGetInventoryItems";
 import { useWorkspaceInventoryMovements } from "./useInventoryMovements";
 
-const itemsSort = { field: "name", ascending: true } as const;
 
 /** Inventory → History: recent stock movements with type / product / warehouse filters. */
 export function InventoryMovementsPanel() {
@@ -22,7 +21,6 @@ export function InventoryMovementsPanel() {
   const { data: workspace } = useGetWorkspace(workspaceId);
   const { data: movements = [], isLoading, isError, refetch } = useWorkspaceInventoryMovements(50);
   const { data: warehouses = [] } = useGetWarehouses();
-  const { items } = useGetInventoryItems("", "all", itemsSort);
 
   const [typeFilter, setTypeFilter] = useState<"all" | InventoryMovementType>("all");
   const [warehouseFilter, setWarehouseFilter] = useState("all");
@@ -32,6 +30,8 @@ export function InventoryMovementsPanel() {
     () => new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name])),
     [warehouses],
   );
+  // Parts of the listed movements only (names + product filter), not the whole catalog.
+  const { items } = useInventoryItemsByIds(movements.map((movement) => movement.inventoryItemId ?? ""));
   const itemNames = useMemo(() => new Map(items.map((item) => [item.id, item.name])), [items]);
 
   const rows = useMemo(() => {

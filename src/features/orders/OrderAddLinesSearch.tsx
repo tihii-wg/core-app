@@ -11,13 +11,15 @@ import { cn } from "../../lib/utils";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
 import { serviceCategoryLabel } from "../industries/industryWorkflow";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { useInventorySearch } from "../inventory/useGetInventoryItems";
+import { useDebounce } from "../../hooks/useDebounce";
 import useGetServices from "../services/useGetServices";
 import { catalogServiceToOrderLine } from "../services/orderServiceLine";
 import { useActiveWorkspaceRole } from "../workspaces/useActiveWorkspaceRole";
 import { canManageServices } from "../workspaces/workspaceRoles";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import {
+  ORDER_ADD_LINES_SEARCH_GROUP_LIMIT,
   filterInventoryForAddLinesSearch,
   filterServicesForAddLinesSearch,
   takeAddLinesSearchGroup,
@@ -91,7 +93,6 @@ export default function OrderAddLinesSearch({
   const warrantyDefaults = useWorkspaceWarrantyDefaults();
   const { supported: freeformSupported } = useOrderMaterialFreeformSupport();
   const { services } = useGetServices();
-  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: appendLines } = useAppendOrderLines();
   const { data: warehouseRows = [] } = useGetWarehouses();
   const { data: warehouseStock = [] } = useGetWarehouseStock();
@@ -125,10 +126,13 @@ export default function OrderAddLinesSearch({
     () => (allowServices ? (services ?? []).filter((service) => service.status === "active") : []),
     [allowServices, services],
   );
-  const activeItems = useMemo(
-    () => (allowMaterials ? inventoryItems.filter((item) => item.isActive) : []),
-    [allowMaterials, inventoryItems],
+  // Parts are searched in the database (in stock, every word matched), not filtered from the whole catalog.
+  const debouncedQuery = useDebounce(query, 200);
+  const itemSearch = useInventorySearch(
+    { query: debouncedQuery, inStockOnly: true, limit: itemsExpanded ? 200 : ORDER_ADD_LINES_SEARCH_GROUP_LIMIT },
+    { enabled: allowMaterials && open },
   );
+  const activeItems = useMemo(() => (allowMaterials ? itemSearch.items : []), [allowMaterials, itemSearch.items]);
 
   const matchedServices = useMemo(
     () => filterServicesForAddLinesSearch(activeServices, query),
@@ -140,7 +144,10 @@ export default function OrderAddLinesSearch({
   );
 
   const serviceGroup = takeAddLinesSearchGroup(matchedServices, servicesExpanded);
-  const itemGroup = takeAddLinesSearchGroup(matchedItems, itemsExpanded);
+  const itemGroup = {
+    visible: matchedItems,
+    hiddenCount: itemsExpanded || debouncedQuery !== query ? 0 : Math.max(0, itemSearch.total - matchedItems.length),
+  };
 
   const trimmedQuery = query.trim();
   const hasMatches = matchedServices.length > 0 || matchedItems.length > 0;

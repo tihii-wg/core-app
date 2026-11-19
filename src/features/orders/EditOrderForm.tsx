@@ -12,7 +12,6 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import type { EditOrderFormData, Order, OrderMaterial, OrderService } from "../../lib/types";
 import { getWarrantyRecordsForOrder } from "../../services/apiWarranty";
 import useGetServices from "../services/useGetServices";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useUpdateOrder } from "./useUpdateOrder";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -165,7 +164,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
   const guardWrite = useGuardSubscriptionWrite();
   const formRef = useRef<HTMLFormElement>(null);
   const { services } = useGetServices();
-  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { formatMoney } = useWorkspaceMoney();
   const { rate: workspaceVatRate } = useWorkspaceVatRate();
@@ -196,7 +194,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
   const { vehicles: clientVehicles } = useGetClientVehicles(showVehicles ? order.clientId || null : null);
   const { client: orderClient } = useGetClient(industryBlocks.siteAddress ? order.clientId || null : null);
   const activeServices = services?.filter((service) => service.status === "active");
-  const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees, order.assignedEmployeeId);
   // Team chips and line performers may reference employees that are no longer assignable (e.g. inactive) — keep them visible.
@@ -650,7 +647,6 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
           setValue={setValue}
           getValues={getValues}
           trigger={trigger as never}
-          inventoryItems={activeInventory}
           disabled={isSubmitting}
           warrantyDisabled={warrantyDisabled}
           warrantyDefaults={warrantyDefaults}

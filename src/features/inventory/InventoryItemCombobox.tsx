@@ -4,9 +4,15 @@ import { Plus } from "lucide-react";
 import { Input } from "../../ui/Input";
 import type { InventoryItem } from "../../lib/types";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
+import { useDebounce } from "../../hooks/useDebounce";
+import { useInventorySearch } from "./useGetInventoryItems";
+
+/** Rows shown by the database-backed search (type more to narrow it down). */
+const SEARCH_LIMIT = 50;
 
 type InventoryItemComboboxProps = {
-  items: InventoryItem[];
+  /** Fixed list to pick from. Omitted → the catalog is searched in the database as the user types. */
+  items?: InventoryItem[];
   errors?: boolean;
   onSelect?: (item: InventoryItem) => void;
   /** Opens inventory creation when the filtered list is empty. */
@@ -62,12 +68,22 @@ export default function InventoryItemCombobox({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
 
+  const debouncedQuery = useDebounce(query, 200);
+  const search = useInventorySearch({ query: debouncedQuery, limit: SEARCH_LIMIT }, { enabled: open && !items });
+  const source = items ?? search.items;
   const normalized = query.trim().toLowerCase();
-  const filtered = (items ?? []).filter((item) => {
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  const filtered = source.filter((item) => {
     if (!item.isActive) return false;
     if (!normalized) return true;
+    if (!items) {
+      // Server results: every word in name / SKU / category / supplier (same rule as the query).
+      const haystack = `${item.name} ${item.sku} ${item.category ?? ""} ${item.supplier ?? ""}`.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    }
     return item.name.toLowerCase().includes(normalized) || item.sku.toLowerCase().includes(normalized);
   });
+  const searching = !items && (search.isLoading || debouncedQuery !== query);
 
   const showCreate = Boolean(onCreateRequest) && filtered.length === 0;
   const showOneTime = Boolean(onAddOneTimeRequest) && filtered.length === 0 && query.trim().length > 0;
@@ -90,7 +106,9 @@ export default function InventoryItemCombobox({
 
       {open && (
         <div className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-popover shadow">
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && searching ? (
+            <p className="px-3 py-3 text-sm text-muted-foreground">{t("common.loading")}</p>
+          ) : filtered.length === 0 ? (
             <div className="space-y-2 px-3 py-3">
               <p className="text-sm text-muted-foreground">{t("orders.form.materialEmpty")}</p>
               {showOneTime ? (

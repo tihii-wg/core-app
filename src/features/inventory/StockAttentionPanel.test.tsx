@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { InventoryItem } from "../../lib/types";
 import { renderWithQuery } from "../../tests/renderQuery";
 import { StockAttentionPanel } from "./StockAttentionPanel";
+import { stockAttentionSummary } from "./stockAttention";
 
 function item(partial: Partial<InventoryItem>): InventoryItem {
   return {
@@ -32,7 +33,7 @@ describe("StockAttentionPanel", () => {
   it("shows a healthy empty state when active stock is above minimums", () => {
     renderWithQuery(
       <StockAttentionPanel
-        items={[item({ stockStatus: "in_stock", quantity: 10, minQuantity: 2 })]}
+        attention={stockAttentionSummary([item({ stockStatus: "in_stock", quantity: 10, minQuantity: 2 })])}
         activeFilter="all"
         onFilter={vi.fn()}
         onOpenItem={vi.fn()}
@@ -45,7 +46,7 @@ describe("StockAttentionPanel", () => {
 
   it("renders nothing when the workspace has no inventory items", () => {
     const { container } = renderWithQuery(
-      <StockAttentionPanel items={[]} activeFilter="all" onFilter={vi.fn()} onOpenItem={vi.fn()} />,
+      <StockAttentionPanel attention={undefined} activeFilter="all" onFilter={vi.fn()} onOpenItem={vi.fn()} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -58,7 +59,7 @@ describe("StockAttentionPanel", () => {
     const out = item({ id: "out", name: "Oil filter", stockStatus: "out_of_stock", quantity: 0, minQuantity: 1, sku: "OF-1" });
 
     renderWithQuery(
-      <StockAttentionPanel items={[low, out]} activeFilter="all" onFilter={onFilter} onOpenItem={onOpenItem} />,
+      <StockAttentionPanel attention={stockAttentionSummary([low, out])} activeFilter="all" onFilter={onFilter} onOpenItem={onOpenItem} />,
     );
 
     expect(screen.getByText("Stock needing attention")).toBeInTheDocument();
@@ -75,13 +76,13 @@ describe("StockAttentionPanel", () => {
 
   it("shows loading and error states", () => {
     const { rerender } = renderWithQuery(
-      <StockAttentionPanel items={[]} isLoading activeFilter="all" onFilter={vi.fn()} onOpenItem={vi.fn()} />,
+      <StockAttentionPanel attention={undefined} isLoading activeFilter="all" onFilter={vi.fn()} onOpenItem={vi.fn()} />,
     );
     expect(document.querySelector('[aria-busy="true"]')).toBeInTheDocument();
 
     rerender(
       <StockAttentionPanel
-        items={[]}
+        attention={undefined}
         isError
         activeFilter="all"
         onFilter={vi.fn()}

@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import type { InventoryItem, Order, OrderMaterial } from "../../lib/types";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import AddOrderLinesDialogShell from "./AddOrderLinesDialogShell";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
@@ -38,7 +37,6 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
   const { t } = useTranslation();
   const { workflow, industrySlug } = useIndustryWorkflow();
   const works = usesWorksAndMaterialsTabLabel(industrySlug);
-  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const warrantyDefaults = useWorkspaceWarrantyDefaults();
   const { mutateAsync: appendLines, isPending: appendPending } = useAppendOrderLines();
   const { mutateAsync: updateMaterialLine, isPending: updatePending } = useUpdateOrderMaterialLine();
@@ -55,7 +53,6 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
     formState: { errors, isSubmitted, isValid },
   } = useForm<DraftMaterialsForm>({ defaultValues: { materials: [] }, mode: "onChange" });
   const { fields, append, remove } = useFieldArray({ control, name: "materials" });
-  const activeInventory = useMemo(() => inventoryItems.filter((item) => item.isActive), [inventoryItems]);
 
   const onSubmit = handleSubmit(async (data) => {
     setSaveError(null);
@@ -150,7 +147,6 @@ function AddOrderMaterialDialogBody({ open, onOpenChange, order, onAdded, onPend
         setValue={setValue}
         getValues={getValues}
         trigger={trigger as never}
-        inventoryItems={activeInventory}
         disabled={isPending}
         warrantyDefaults={warrantyDefaults}
         orderMileageUnit={order.vehicleMileageUnitSnapshot ?? "km"}

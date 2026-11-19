@@ -1,5 +1,6 @@
 import type { addNewServiceFormData, CatalogWarrantyType, Service, serviceCategory } from "../lib/types";
 import { selectAllRows } from "./selectAllRows";
+import { emptyServerPage, isRangeBeyondEnd, pageBounds, serverPage, type ServerPage } from "../lib/serverPaging";
 import {
   catalogWarrantyFromDbRow,
   catalogWarrantyToDbPayload,
@@ -175,6 +176,79 @@ export async function getServices(workspaceId: string | undefined, search?: stri
   if (error) throw new Error(error.message);
 
   return ((data ?? []) as Record<string, unknown>[]).map(mapServiceRow);
+}
+
+export type ServicesPageQuery = {
+  search?: string;
+  category?: serviceCategory;
+  status?: "all" | "active" | "inactive";
+  page: number;
+  pageSize: number;
+};
+
+/** A Services list page + the workspace's active-service count (page header). */
+export type ServicesPage = ServerPage<Service> & { activeTotal: number };
+
+/**
+ * One page of the Services catalog, paginated in the database (`range` + exact count, by name): search,
+ * category and status filters run there too, so only `pageSize` rows are transferred.
+ */
+export async function getServicesPage(workspaceId: string | undefined, input: ServicesPageQuery): Promise<ServicesPage> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const pageSize = Math.max(1, Math.floor(input.pageSize) || 50);
+  const search = input.search?.trim() ?? "";
+
+  const run = (page: number) => {
+    const { from, to } = pageBounds(page, pageSize);
+    let query = supabase.from("services").select(serviceSelect, { count: "exact" }).eq("workspace_id", targetWorkspaceId);
+    if (search) query = query.ilike("service_name", `%${search}%`);
+    if (input.category) {
+      query =
+        input.category === "diagnostics" || input.category === "assesment"
+          ? query.in("category", ["diagnostics", "assesment"])
+          : query.eq("category", input.category);
+    }
+    if (input.status === "active" || input.status === "inactive") query = query.eq("status", input.status);
+    return query.order("service_name", { ascending: true }).order("id", { ascending: true }).range(from, to);
+  };
+  // Header count of active services in parallel (head request: no rows).
+  const activeRequest = Promise.resolve(
+    supabase.from("services").select("id", { count: "exact", head: true }).eq("workspace_id", targetWorkspaceId).eq("status", "active"),
+  );
+
+  let page = input.page;
+  let result = await run(page);
+  if (result.error && isRangeBeyondEnd(result.error)) {
+    const head = await run(1);
+    if (head.error) throw new Error(head.error.message);
+    page = serverPage([], head.count ?? 0, Number.MAX_SAFE_INTEGER, pageSize).page;
+    result = page === 1 ? head : await run(page);
+  }
+  if (result.error) throw new Error(result.error.message);
+  const active = await activeRequest;
+  const activeTotal = active.error ? 0 : (active.count ?? 0);
+  const total = result.count ?? 0;
+  if (total === 0) return { ...emptyServerPage<Service>(pageSize), activeTotal };
+  return {
+    ...serverPage(((result.data ?? []) as Record<string, unknown>[]).map(mapServiceRow), total, page, pageSize),
+    activeTotal,
+  };
+}
+
+/** Distinct categories used by the workspace's services (filter options) — one narrow column, not the catalog. */
+export async function getServiceCategoriesInUse(workspaceId: string | undefined): Promise<string[]> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await selectAllRows<{ category: string | null }>((from, to) =>
+    supabase
+      .from("services")
+      .select("category")
+      .eq("workspace_id", targetWorkspaceId)
+      .not("category", "is", null)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  if (error) throw new Error(error.message);
+  return [...new Set((data ?? []).map((row) => (row.category ?? "").trim()).filter(Boolean))];
 }
 
 export async function updateService(input: addNewServiceFormData, workspaceId: string | undefined) {

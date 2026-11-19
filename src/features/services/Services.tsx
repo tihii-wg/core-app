@@ -14,7 +14,9 @@ import { Button } from "../../ui/Button";
 import { Description } from "@radix-ui/react-dialog";
 
 import CreateServiceDialog from "./CreateServiceDialog";
-import useGetServices from "./useGetServices";
+import { useServiceCategoriesInUse, useServicesPage } from "./useGetServices";
+import { ServerListPager } from "../../ui/ServerListPager";
+import { DEFAULT_LIST_PAGE_SIZE, type ListPageSize } from "../../lib/serverPaging";
 import { useDebounce } from "../../hooks/useDebounce";
 import EditServiceForm from "./UpdateServiceForm";
 import useDeleteService from "./useDeleteService";
@@ -48,7 +50,20 @@ export function Services() {
 
   const debouncedSearch = useDebounce(searchQuery, 400);
   const categoryQuery = categoryFilter === "all" ? undefined : (categoryFilter as serviceCategory);
-  const { services, isLoading, isPending, error, refetch } = useGetServices(debouncedSearch, categoryQuery);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(DEFAULT_LIST_PAGE_SIZE);
+  // Paginated in the database: search, category and status filters run there; one page is loaded.
+  const {
+    data: servicesPage,
+    isLoading,
+    isPending,
+    error,
+    refetch,
+  } = useServicesPage({ search: debouncedSearch, category: categoryQuery, status: statusFilter, page, pageSize });
+  const services = useMemo(() => servicesPage?.rows ?? [], [servicesPage]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, categoryQuery, statusFilter, pageSize]);
   const { formatMoney } = useWorkspaceMoney();
   const { mutate: deleteServiceMutation, isPending: isDeleting } = useDeleteService();
   const { canWrite: subscriptionAllowsWrite } = useWorkspaceSubscription();
@@ -57,15 +72,15 @@ export function Services() {
   const serviceCopy = industryServiceCopy(workflow);
   // Categories actually used by this workspace's services (legacy codes or another industry's codes)
   // stay filterable after an industry change.
-  const { services: allServices } = useGetServices("", undefined);
+  const categoriesInUse = useServiceCategoriesInUse();
   const filterCategoryCodes = useMemo(() => {
     const codes = [...industryServiceCategoryOptions(workflow)];
-    for (const service of allServices ?? []) {
-      const code = normalizeServiceCategory(service.category);
+    for (const category of categoriesInUse) {
+      const code = normalizeServiceCategory(category);
       if (code && !codes.includes(code)) codes.push(code);
     }
     return codes;
-  }, [workflow, allServices]);
+  }, [workflow, categoriesInUse]);
   const categoryOptions = [
     { value: "all", label: t("services.filters.allCategories") },
     ...filterCategoryCodes.map((category) => ({
@@ -81,13 +96,9 @@ export function Services() {
     }
   }, [categoryFilter, filterCategoryCodes]);
 
-  const visibleServices = useMemo(() => {
-    if (statusFilter === "all") return services;
-    return services.filter((service) => service.status === statusFilter);
-  }, [services, statusFilter]);
-
-  const activeCount = services.filter((service) => service.status === "active").length;
-  const filteredEmpty = services.length > 0 && visibleServices.length === 0;
+  const visibleServices = services;
+  const activeCount = servicesPage?.activeTotal ?? 0;
+  const filteredEmpty = statusFilter !== "all";
 
   const openEdit = (service: Service) => {
     setSelectedService(service);
@@ -258,6 +269,20 @@ export function Services() {
         onRowClick={canManage ? openEdit : undefined}
         rowClassName={(service) => (service.status === "inactive" ? "bg-muted/20" : undefined)}
       />
+
+      {!isLoading && (servicesPage?.total ?? 0) > 0 ? (
+        <ServerListPager
+          page={servicesPage?.page ?? page}
+          pageCount={servicesPage?.pageCount ?? 1}
+          pageSize={pageSize}
+          total={servicesPage?.total ?? 0}
+          onPageChange={(next) => {
+            setPage(next);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onPageSizeChange={setPageSize}
+        />
+      ) : null}
 
       <CreateServiceDialog open={createModalOpen} onOpenChange={setCreateModalOpen} />
 

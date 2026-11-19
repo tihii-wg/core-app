@@ -1,17 +1,18 @@
 import { AlertTriangle, Package } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { InventoryItem, InventoryListFilter } from "../../lib/types";
+import type { StockAttention } from "../../services/apiInventory";
 import { InventoryStatusBadge } from "../../ui/StatusBadge";
 import { effectiveStockStatus } from "./stockStatus";
 import { Skeleton } from "../../ui/Skeleton";
 import { cn } from "../../lib/utils";
 import { quantityClass } from "./inventoryDisplay";
-import { stockAttentionSummary } from "./stockAttention";
 
 const PREVIEW_LIMIT = 5;
 
 type StockAttentionPanelProps = {
-  items: InventoryItem[];
+  /** Counts + first parts needing attention, computed in the database (not the whole catalog). */
+  attention: StockAttention | undefined;
   isLoading?: boolean;
   isError?: boolean;
   activeFilter: InventoryListFilter;
@@ -21,7 +22,7 @@ type StockAttentionPanelProps = {
 };
 
 export function StockAttentionPanel({
-  items,
+  attention,
   isLoading = false,
   isError = false,
   activeFilter,
@@ -30,7 +31,7 @@ export function StockAttentionPanel({
   onRetry,
 }: StockAttentionPanelProps) {
   const { t } = useTranslation();
-  const summary = stockAttentionSummary(items);
+  const summary = attention ?? { items: [], outCount: 0, lowCount: 0, attentionCount: 0 };
 
   if (isLoading) {
     return (
@@ -59,7 +60,7 @@ export function StockAttentionPanel({
     );
   }
 
-  if (items.length === 0) return null;
+  if (!attention) return null;
 
   if (summary.attentionCount === 0) {
     return (

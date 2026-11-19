@@ -13,11 +13,11 @@ import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
 import { PageHeader } from "./PageHeader";
 import { getOrders } from "../services/apiOrders";
-import { getClients } from "../services/apiClients";
+import { getRecentClients } from "../services/apiClients";
 import { getRecentActiveOrderIds } from "../services/apiOrderEvents";
 import {
   clientCreatedAt,
-  isAtOrBelowMinimum,
+  weekDateKeys,
   localDateKey,
   recentActivity,
   relativeDayLabel,
@@ -25,7 +25,7 @@ import {
   thisWeekStats,
   type ActivityItem,
 } from "./dashboardStats";
-import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
+import { useStockAttention } from "../features/inventory/useGetInventoryItems";
 import { useWorkspaceMoney } from "../features/workspaces/useWorkspaceMoney";
 import { useActiveWorkspaceId } from "../features/profiles/useGetProfile";
 import { useRealtimeHotQueryOptions } from "../features/realtime/useRealtimeHotQueryOptions";
@@ -144,13 +144,21 @@ export default function Dashboard() {
     enabled: Boolean(workspaceId),
     ...hot,
   });
+  // Start of this week (local midnight), one day of margin for time zones; stable for the whole day.
+  const weekStartKey = weekDateKeys(new Date())[0];
+  const weekStartIso = useMemo(() => {
+    const start = new Date(`${weekStartKey}T00:00:00`);
+    start.setDate(start.getDate() - 1);
+    return start.toISOString();
+  }, [weekStartKey]);
   const {
     data: workspaceClients = [],
     isLoading: clientsLoading,
     isError: clientsError,
   } = useQuery({
-    queryKey: ["clients", workspaceId, ""],
-    queryFn: () => getClients("", workspaceId),
+    // Only this week's new clients + the newest few (activity feed), not the whole client list.
+    queryKey: ["clients", workspaceId, "recent", weekStartIso],
+    queryFn: () => getRecentClients(workspaceId, weekStartIso, 6),
     enabled: Boolean(workspaceId),
   });
   // Same prefix as order-detail feed invalidation — refreshes after status/payment/line mutations.
@@ -184,13 +192,14 @@ export default function Dashboard() {
 
   const activity = recentActivity(workspaceOrders, workspaceClients, 6);
 
+  // Counted in the database; the list shows the first 50 (emptiest first), not the whole catalog.
   const {
-    items: inventoryItems,
+    data: stockAttention,
     isLoading: inventoryLoading,
     isError: inventoryError,
-  } = useGetInventoryItems("", "all", { field: "created_at", ascending: false });
-  const lowStockItems = inventoryItems.filter(isAtOrBelowMinimum);
-  const lowStockCount = lowStockItems.length;
+  } = useStockAttention(50);
+  const lowStockItems = stockAttention?.items ?? [];
+  const lowStockCount = stockAttention?.attentionCount ?? 0;
 
   const recentOrders = useMemo(() => {
     // No feed yet / SQL not applied / cold workspace with zero events → created_at fallback.

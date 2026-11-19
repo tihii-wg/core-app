@@ -21,14 +21,16 @@ import {
   type ClientToggleableColumn,
 } from "./clientColumnVisibility";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
-import { useGetClients } from "./useGetClients";
+import { useClientsPage } from "./useGetClients";
+import { ServerListPager } from "../../ui/ServerListPager";
+import { DEFAULT_LIST_PAGE_SIZE, type ListPageSize } from "../../lib/serverPaging";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { Skeleton } from "../../ui/Skeleton";
 import { ClientCard } from "./ClientCard";
 import ClientDetailPanel from "./ClientDetailPanel";
 import { clientOrderSummaries } from "./clientOrders";
-import { useClientOrders, useGetOrders } from "../orders/useGetOrders";
+import { useClientOrderCounts, useClientOrders } from "../orders/useGetOrders";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { industryClientCopy, industryClientTotalCount } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -52,10 +54,24 @@ export function Clients() {
   const [searchParams, setSearchParams] = useSearchParams();
   const debounceSearch = useDebounce(searchQuery, 400);
   const { workspaceId } = useActiveWorkspaceId();
-  const { isLoading, clients = [], isPending, error: clientsError, refetch: refetchClients } = useGetClients(debounceSearch, clientType);
-  // Counts per client need only the lightweight list (shared with the dashboard cache); the client card
-  // loads that client's orders with lines on its own.
-  const { orders: orderHeaders } = useGetOrders("", { lines: false });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(DEFAULT_LIST_PAGE_SIZE);
+  // Paginated in the database: only one page of clients is loaded (search / type filter run there too).
+  const {
+    data: clientsPage,
+    isLoading,
+    isPending,
+    error: clientsError,
+    refetch: refetchClients,
+  } = useClientsPage({ search: debounceSearch, clientType, page, pageSize });
+  const clients = useMemo(() => clientsPage?.rows ?? [], [clientsPage]);
+  const totalClients = clientsPage?.total ?? 0;
+  const resolvedPage = clientsPage?.page ?? page;
+  useEffect(() => {
+    setPage(1);
+  }, [debounceSearch, clientType, pageSize]);
+  // Order counts for the clients of this page only; the client card loads that client's orders itself.
+  const { counts: orderCountByClientId } = useClientOrderCounts(clients.map((client) => client.id));
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
 
@@ -83,15 +99,6 @@ export function Clients() {
   };
 
   const getClientOrders = (clientId: string) => clientOrderSummaries(orders, clientId);
-
-  const orderCountByClientId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const order of orderHeaders) {
-      if (!order.clientId) continue;
-      map.set(order.clientId, (map.get(order.clientId) ?? 0) + 1);
-    }
-    return map;
-  }, [orderHeaders]);
 
   useEffect(() => {
     const clientId = searchParams.get("client")?.trim();
@@ -220,7 +227,7 @@ export function Clients() {
     <div className="space-y-5">
       <PageHeader
         title={clientCopy.title}
-        description={isPending ? clientCopy.loading : industryClientTotalCount(workflow, clients.length)}
+        description={isPending ? clientCopy.loading : industryClientTotalCount(workflow, totalClients)}
         actions={
           canMutateClients ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -319,6 +326,20 @@ export function Clients() {
           }
         />
       )}
+
+      {!isLoading && totalClients > 0 ? (
+        <ServerListPager
+          page={resolvedPage}
+          pageCount={clientsPage?.pageCount ?? 1}
+          pageSize={pageSize}
+          total={totalClients}
+          onPageChange={(next) => {
+            setPage(next);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onPageSizeChange={setPageSize}
+        />
+      ) : null}
 
       <AddClientDialog open={addClientOpen} onOpenChange={setAddClientOpen} />
 

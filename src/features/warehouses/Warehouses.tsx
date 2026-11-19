@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Skeleton } from "../../ui/Skeleton";
 import { InventoryMovementsPanel } from "../inventory/InventoryMovementsPanel";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
+import { useInventoryItemsByIds } from "../inventory/useGetInventoryItems";
 import { WarehouseOpDialog } from "../inventory/WarehouseOpDialog";
 import { WarehouseOpsPanel } from "../inventory/WarehouseOpsPanel";
 import type { WarehouseOpKind } from "../inventory/warehouseOps";
@@ -26,7 +26,6 @@ import { useGetWarehouseStock } from "./useGetWarehouseStock";
 import { useGetWarehouses } from "./useGetWarehouses";
 
 const ALL = "all";
-const itemsSort = { field: "name", ascending: true } as const;
 
 type StockRow = {
   inventoryItemId: string;
@@ -51,7 +50,6 @@ export function Warehouses() {
   const { can } = useMyPermissions();
   const { data: warehouses = [], isLoading, isError, error, refetch } = useGetWarehouses();
   const { data: stock = [], isLoading: stockLoading } = useGetWarehouseStock();
-  const { items } = useGetInventoryItems("", "all", itemsSort);
 
   const activeWarehouses = useMemo(() => warehouses.filter((warehouse) => warehouse.isActive), [warehouses]);
   const defaultId = activeWarehouses.find((warehouse) => warehouse.isDefault)?.id ?? activeWarehouses[0]?.id ?? ALL;
@@ -65,6 +63,8 @@ export function Warehouses() {
     return defaultId;
   }, [activeWarehouses, defaultId, warehouseFilter]);
 
+  // Only the parts that have stock rows (names / units of the table), not the whole catalog.
+  const { items } = useInventoryItemsByIds(stock.map((row) => row.inventoryItemId));
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
   const stockRows = useMemo((): StockRow[] => {
@@ -304,7 +304,6 @@ export function Warehouses() {
             if (!open) setCreateKind(null);
           }}
           warehouses={warehouses}
-          items={items}
           stock={stock}
           formatMoney={formatMoney}
         />

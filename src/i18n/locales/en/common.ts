@@ -66,6 +66,9 @@ export default {
     next: "Next",
     page: "Page {{page}}",
     showing: "Showing {{from}}–{{to}} of {{total}}",
+    pageOf: "Page {{page}} of {{pageCount}}",
+    pageSize: "Rows per page",
+    perPage: "{{count}} / page",
   },
   tableLayout: {
     resizeColumn: "Resize column «{{column}}»",

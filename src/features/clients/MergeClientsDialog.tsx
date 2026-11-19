@@ -7,7 +7,8 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Skeleton } from "../../ui/Skeleton";
 import type { Client } from "../../lib/types";
-import { getClients, getClient, type MergeClientsPreview } from "../../services/apiClients";
+import { getClientsPage, getClient, type MergeClientsPreview } from "../../services/apiClients";
+import { useClientOrderCounts } from "../orders/useGetOrders";
 import { getClientVehicles } from "../../services/apiVehicles";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -39,7 +40,7 @@ export function MergeClientsDialog({
   open,
   onClose,
   clients,
-  orderCountByClientId,
+  orderCountByClientId: knownOrderCounts,
   onMerged,
   initialTargetClientId,
 }: MergeClientsDialogProps) {
@@ -77,12 +78,22 @@ export function MergeClientsDialog({
 
   const listQuery = useQuery({
     queryKey: ["clients", workspaceId, "merge-picker", debouncedSearch],
-    queryFn: () => getClients(debouncedSearch, workspaceId, "all"),
+    // First PAGE_SIZE matches from the database (+1 to know whether the list was cut), not every client.
+    queryFn: () => getClientsPage(workspaceId, { search: debouncedSearch, page: 1, pageSize: PAGE_SIZE + 1 }),
     enabled: open && Boolean(workspaceId),
   });
 
-  const listed = listQuery.data ?? [];
+  const listed = useMemo(() => listQuery.data?.rows ?? [], [listQuery.data]);
   const visible = listed.slice(0, PAGE_SIZE);
+  // Order counts of the clients shown / selected here (known counts from the caller fill the gaps).
+  const { counts: fetchedOrderCounts } = useClientOrderCounts([...visible.map((client) => client.id), ...selectedIds], {
+    enabled: open,
+  });
+  const orderCountByClientId = useMemo(() => {
+    const merged = new Map(knownOrderCounts);
+    for (const [id, count] of fetchedOrderCounts) merged.set(id, count);
+    return merged;
+  }, [knownOrderCounts, fetchedOrderCounts]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;

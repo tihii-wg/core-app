@@ -69,6 +69,9 @@ const common: Messages<typeof en> = {
     next: "Вперёд",
     page: "Страница {{page}}",
     showing: "Показаны {{from}}–{{to}} из {{total}}",
+    pageOf: "Страница {{page}} из {{pageCount}}",
+    pageSize: "На странице",
+    perPage: "{{count}} / стр.",
   },
   tableLayout: {
     resizeColumn: "Изменить ширину столбца «{{column}}»",

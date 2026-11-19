@@ -69,6 +69,9 @@ const common: Messages<typeof en> = {
     next: "Următor",
     page: "Pagina {{page}}",
     showing: "Se afișează {{from}}–{{to}} din {{total}}",
+    pageOf: "Pagina {{page}} din {{pageCount}}",
+    pageSize: "Rânduri pe pagină",
+    perPage: "{{count}} / pag.",
   },
   tableLayout: {
     resizeColumn: "Modifică lățimea coloanei «{{column}}»",

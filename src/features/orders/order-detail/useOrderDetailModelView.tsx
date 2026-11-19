@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
-import { useGetInventoryItems } from "../../inventory/useGetInventoryItems";
+import { useInventoryItemsByIds } from "../../inventory/useGetInventoryItems";
 import { effectiveOrderVatRate } from "../../finance/orderVat";
 import { isOrderOverdue } from "../orderVisibility";
 import { localDateKey } from "../../../pages/dashboardStats";
@@ -161,7 +161,10 @@ export function useOrderDetailModelView(ctx: Record<string, any>) {
   const overdue = selectedOrder ? isOrderOverdue(selectedOrder, today) : false;
   const serviceLines = selectedOrder?.services ?? [];
   const materialLines = selectedOrder?.materials ?? [];
-  const { items: inventoryItemsForCost } = useGetInventoryItems("", "all", { field: "name", ascending: true });
+  // Purchase prices of the parts in THIS order only (the whole catalog was loaded on every card open).
+  const { items: inventoryItemsForCost } = useInventoryItemsByIds(
+    materialLines.map((line: { inventoryItemId?: string | null }) => line.inventoryItemId ?? "").filter(Boolean),
+  );
   const purchasePriceById = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of inventoryItemsForCost) {

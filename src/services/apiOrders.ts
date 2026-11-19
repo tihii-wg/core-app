@@ -11,6 +11,7 @@ import type {
   PaymentStatus,
   UpdateOrderDetails,
 } from "../lib/types";
+import { selectAllRows } from "./selectAllRows";
 import {
   isOrderServiceTechnicianSupported,
   loadOrderTeamsByOrderIds,
@@ -2515,6 +2516,37 @@ export async function getOrders(
   }
 
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[], { lines: options.lines !== false });
+}
+
+/**
+ * Number of orders per client, for the given clients only (one page of the Clients list): reads just
+ * `client_id` of their orders instead of the workspace order list.
+ */
+export async function getOrderCountsByClient(workspaceId: string | undefined, clientIds: readonly string[]): Promise<Map<string, number>> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const counts = new Map<string, number>();
+  const ids = [...new Set(clientIds.filter(Boolean))];
+  if (ids.length === 0) return counts;
+  refreshOrderEstimatesSupport();
+  const byKind = isOrderEstimatesSupported();
+  const chunks: string[][] = [];
+  for (let start = 0; start < ids.length; start += 100) chunks.push(ids.slice(start, start + 100));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      selectAllRows<{ client_id: string | null }>((from, to) => {
+        let query = supabase.from("orders").select("client_id").eq("workspace_id", resolvedWorkspaceId).in("client_id", chunk);
+        if (byKind) query = query.or("kind.eq.order,kind.is.null");
+        return query.order("id", { ascending: true }).range(from, to);
+      }),
+    ),
+  );
+  for (const { data, error } of results) {
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      if (row.client_id) counts.set(row.client_id, (counts.get(row.client_id) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 /**

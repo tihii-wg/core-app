@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { InventoryItemSearchSelect } from "./InventoryItemSearchSelect";
+import { useInventorySearch } from "./useGetInventoryItems";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Plus, Trash2 } from "lucide-react";
@@ -36,6 +38,8 @@ import {
   type WarehouseOpKind,
 } from "./warehouseOps";
 
+const EMPTY_ITEMS: InventoryItem[] = [];
+
 type DraftLine = OpDraftLine;
 
 type WarehouseOpDialogProps = {
@@ -43,7 +47,8 @@ type WarehouseOpDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   warehouses: WarehouseRecord[];
-  items: InventoryItem[];
+  /** Optional known parts (lookups only); the line picker searches the catalog in the database. */
+  items?: InventoryItem[];
   stock: WarehouseStockRecord[];
   formatMoney: (value: number) => string;
 };
@@ -102,7 +107,7 @@ function OpForm({
   kind,
   onDone,
   warehouses,
-  items,
+  items = EMPTY_ITEMS,
   stock,
   formatMoney,
   addMaterialOpen,
@@ -139,18 +144,19 @@ function OpForm({
   // Items created during this draft stay selectable until the parent inventory query catches up.
   const [createdItems, setCreatedItems] = useState<InventoryItem[]>([]);
 
+  // Parts picked in this dialog (from the database search).
+  const [pickedItems, setPickedItems] = useState<InventoryItem[]>([]);
+
   const catalogItems = useMemo(() => {
     const byId = new Map(items.map((item) => [item.id, item]));
-    for (const item of createdItems) {
-      if (!byId.has(item.id)) byId.set(item.id, item);
-    }
+    for (const item of [...createdItems, ...pickedItems]) byId.set(item.id, item);
     return Array.from(byId.values());
-  }, [items, createdItems]);
+  }, [items, createdItems, pickedItems]);
 
-  const activeItems = useMemo(() => catalogItems.filter((item) => item.isActive), [catalogItems]);
   const itemById = useMemo(() => new Map(catalogItems.map((item) => [item.id, item])), [catalogItems]);
-  // Parent list with zero active items (not a filtered search) — empty catalog for this workspace.
-  const catalogEmpty = items.filter((item) => item.isActive).length === 0 && createdItems.length === 0;
+  // Empty catalog = no active part at all (one-row count query, not the catalog).
+  const anyActiveItem = useInventorySearch({ query: "", limit: 1 });
+  const catalogEmpty = !anyActiveItem.isLoading && anyActiveItem.total === 0 && createdItems.length === 0;
 
   const { suppliers } = useGetInventorySuppliers();
   const [warehouseId, setWarehouseId] = useState(activeWarehouses.find((w) => w.isDefault)?.id ?? activeWarehouses[0]?.id ?? "");
@@ -198,10 +204,10 @@ function OpForm({
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
 
-  function pickItem(key: number, itemId: string) {
-    const item = itemById.get(itemId);
+  function pickItem(key: number, item: InventoryItem) {
+    setPickedItems((current) => (current.some((existing) => existing.id === item.id) ? current : [...current, item]));
     updateLine(key, {
-      itemId,
+      itemId: item.id,
       // Receipts and write-offs default to the item's purchase price; the user can still change it.
       unitCost: item?.purchasePrice != null ? String(item.purchasePrice) : "",
     });
@@ -415,19 +421,13 @@ function OpForm({
                     return (
                       <li key={line.key} className="grid gap-2 rounded-md border border-border p-2 sm:grid-cols-[minmax(0,1fr)_6rem_7rem_auto] sm:items-start">
                         <div className="min-w-0 space-y-1">
-                          <Select value={line.itemId} onValueChange={(value) => pickItem(line.key, value)} disabled={isPending}>
-                            <SelectTrigger aria-label={t("inventory.ops.fields.itemAria", { line: index + 1 })}>
-                              <SelectValue placeholder={t("inventory.ops.fields.itemPlaceholder")} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {activeItems.map((option) => (
-                                <SelectItem key={option.id} value={option.id}>
-                                  {option.name}
-                                  {option.sku ? ` · ${option.sku}` : ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <InventoryItemSearchSelect
+                            selected={item}
+                            onPick={(picked) => pickItem(line.key, picked)}
+                            disabled={isPending}
+                            ariaLabel={t("inventory.ops.fields.itemAria", { line: index + 1 })}
+                            placeholder={t("inventory.ops.fields.itemPlaceholder")}
+                          />
                           {item && kind !== "receipt" ? (
                             <p className="text-xs text-muted-foreground">
                               {t("inventory.ops.fields.available", { count: available, unit: item.unit })}
@@ -525,7 +525,7 @@ function OpForm({
           <Button
             type="submit"
             variant="outline"
-            disabled={isPending || activeItems.length === 0}
+            disabled={isPending || catalogEmpty}
             onClick={() => {
               submitModeRef.current = "draft";
             }}
@@ -535,7 +535,7 @@ function OpForm({
           </Button>
           <Button
             type="submit"
-            disabled={isPending || activeItems.length === 0}
+            disabled={isPending || catalogEmpty}
             onClick={() => {
               submitModeRef.current = "post";
             }}

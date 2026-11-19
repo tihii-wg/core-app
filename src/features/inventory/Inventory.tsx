@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Pencil, Plus, Trash2, Warehouse } from "lucide-react";
@@ -12,7 +12,9 @@ import { ErrorState, NoInventory, NoSearchResults } from "../../ui/EmptyState";
 import { cn } from "../../lib/utils";
 import { useDebounce } from "../../hooks/useDebounce";
 import type { InventoryItem, InventoryListFilter, InventorySort, InventorySortField } from "../../lib/types";
-import { useGetInventoryItems } from "./useGetInventoryItems";
+import { useInventoryPage, useStockAttention } from "./useGetInventoryItems";
+import { ServerListPager } from "../../ui/ServerListPager";
+import { DEFAULT_LIST_PAGE_SIZE, type ListPageSize } from "../../lib/serverPaging";
 import { useGetInventorySuppliers } from "./useGetInventorySuppliers";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
@@ -38,9 +40,6 @@ import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNo
 import { languageFromPath } from "../../i18n/languages";
 import { Card, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { SupplierLink } from "../suppliers/SupplierLink";
-
-/** Fixed sort for the attention query so it stays cacheable while the table sort changes. */
-const attentionSort: InventorySort = { field: "quantity", ascending: true };
 
 type SortLabelKey = "name" | "sku" | "quantity" | "purchasePrice" | "createdAt" | "updatedAt";
 
@@ -103,7 +102,19 @@ export function Inventory() {
   const sort: InventorySort = { field: sortOption.field, ascending: sortOption.ascending };
 
   const { data: workspace } = useGetWorkspace(workspaceId);
-  const { items, isLoading, isError, refetch } = useGetInventoryItems(debouncedSearch, stockFilter, sort, { supplier: supplierFilter });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<ListPageSize>(DEFAULT_LIST_PAGE_SIZE);
+  // Paginated in the database: search, filters, supplier and sort run there; one page is loaded.
+  const {
+    data: inventoryPage,
+    isLoading,
+    isError,
+    refetch,
+  } = useInventoryPage({ search: debouncedSearch, filter: stockFilter, sort, supplier: supplierFilter, page, pageSize });
+  const items = useMemo(() => inventoryPage?.rows ?? [], [inventoryPage]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, stockFilter, supplierFilter, sortValue, pageSize]);
   const { suppliers, isLoading: suppliersLoading } = useGetInventorySuppliers();
 
   // A selected supplier can disappear (renamed/deleted): fall back to "all".
@@ -112,11 +123,11 @@ export function Inventory() {
     if (!suppliers.includes(supplierFilter)) setSupplierFilter("all");
   }, [suppliers, suppliersLoading, supplierFilter]);
   const {
-    items: attentionItems,
+    data: attention,
     isLoading: attentionLoading,
     isError: attentionError,
     refetch: refetchAttention,
-  } = useGetInventoryItems("", "all", attentionSort);
+  } = useStockAttention(5);
   const detailQuery = useGetInventoryItem(detailId);
   const hasSearchOrFilter = Boolean(debouncedSearch) || stockFilter !== "active" || supplierFilter !== "all";
 
@@ -234,7 +245,7 @@ export function Inventory() {
       <PageHeader
         title={inventoryCopy.title}
         description={
-          isLoading ? inventoryCopy.loading : isError ? t("inventory.loadFailedSummary") : industryInventoryItemCount(workflow, items.length)
+          isLoading ? inventoryCopy.loading : isError ? t("inventory.loadFailedSummary") : industryInventoryItemCount(workflow, inventoryPage?.total ?? 0)
         }
         actions={
           canMutateInventory ? (
@@ -272,7 +283,7 @@ export function Inventory() {
       <SubscriptionReadOnlyNotice />
 
       <StockAttentionPanel
-        items={attentionItems}
+        attention={attention}
         isLoading={attentionLoading}
         isError={attentionError}
         activeFilter={stockFilter}
@@ -421,6 +432,20 @@ export function Inventory() {
           }
         />
       )}
+
+      {!isLoading && (inventoryPage?.total ?? 0) > 0 ? (
+        <ServerListPager
+          page={inventoryPage?.page ?? page}
+          pageCount={inventoryPage?.pageCount ?? 1}
+          pageSize={pageSize}
+          total={inventoryPage?.total ?? 0}
+          onPageChange={(next) => {
+            setPage(next);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onPageSizeChange={setPageSize}
+        />
+      ) : null}
 
       <AddInventoryItemDialog
         open={createOpen && canCreateMaterial}

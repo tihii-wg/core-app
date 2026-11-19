@@ -19,7 +19,6 @@ import { WAREHOUSE_OP_PERMISSIONS } from "../roles/permissions";
 import { useMyPermissions } from "../roles/useMyPermissions";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
-import { useGetInventoryItems } from "./useGetInventoryItems";
 import {
   useGetGoodsReceipts,
   useGetStockTransfers,
@@ -36,7 +35,6 @@ import { WarehouseOpDialog } from "./WarehouseOpDialog";
 import type { WarehouseOpKind } from "./warehouseOps";
 
 const kinds: WarehouseOpKind[] = ["receipt", "transfer", "writeOff", "supplierReturn"];
-const itemsSort = { field: "name", ascending: true } as const;
 
 type OpsQuery = {
   data: { available: boolean; rows: WarehouseOpRecord[] } | undefined;
@@ -73,7 +71,6 @@ export function WarehouseOpsPanel() {
   const supplierReturns = useGetSupplierReturns();
   const warehousesQuery = useGetWarehouses();
   const stockQuery = useGetWarehouseStock();
-  const { items } = useGetInventoryItems("", "all", itemsSort);
 
   const postReceipt = usePostGoodsReceipt();
   const postTransfer = usePostStockTransfer();
@@ -316,7 +313,6 @@ export function WarehouseOpsPanel() {
             if (!open) setCreateKind(null);
           }}
           warehouses={warehousesQuery.data ?? []}
-          items={items}
           stock={stockQuery.data ?? []}
           formatMoney={formatMoney}
         />

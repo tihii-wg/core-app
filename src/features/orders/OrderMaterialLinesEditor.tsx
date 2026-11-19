@@ -23,6 +23,7 @@ import {
   resolveMaterialSupplySource,
 } from "../inventory/orderMaterialLine";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
+import { useInventoryItemsByIds } from "../inventory/useGetInventoryItems";
 import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
 import { orderLineAmount } from "../services/orderServiceLine";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
@@ -54,7 +55,11 @@ type OrderMaterialLinesEditorProps = {
   getValues: UseFormGetValues<any>;
   /** Optional; used to surface quantity errors on blur before submit. */
   trigger?: (name?: string | string[]) => Promise<boolean>;
-  inventoryItems: InventoryItem[];
+  /**
+   * Optional known catalog items (lookups only). The picker searches the catalog in the database and the
+   * editor loads the parts of its own lines by id — the whole catalog is never needed.
+   */
+  inventoryItems?: InventoryItem[];
   disabled?: boolean;
   /** When true, warranty inputs are read-only (e.g. order already closed). */
   warrantyDisabled?: boolean;
@@ -105,7 +110,7 @@ export default function OrderMaterialLinesEditor({
   setValue,
   getValues,
   trigger,
-  inventoryItems,
+  inventoryItems: knownInventoryItems,
   disabled = false,
   warrantyDisabled = false,
   warrantyDefaults,
@@ -133,6 +138,24 @@ export default function OrderMaterialLinesEditor({
   const canReceiveStock = warehouses.length > 0;
   const hideAddUi = singleLine || hideAddRemove;
   const watched = useWatch({ control, name: "materials" });
+  // Catalog items of the lines (by id, from the database) + items picked in this session + known ones.
+  const [pickedItems, setPickedItems] = useState<ReadonlyMap<string, InventoryItem>>(() => new Map());
+  const lineItemIds = useMemo(
+    () =>
+      ((watched ?? fields) as { inventoryItemId?: string | null }[])
+        .map((line) => String(line?.inventoryItemId ?? "").trim())
+        .filter(Boolean),
+    [watched, fields],
+  );
+  const { items: lineCatalogItems } = useInventoryItemsByIds(lineItemIds);
+  const inventoryItems = useMemo(() => {
+    const byId = new Map<string, InventoryItem>();
+    for (const item of knownInventoryItems ?? []) byId.set(item.id, item);
+    for (const item of pickedItems.values()) byId.set(item.id, item);
+    for (const item of lineCatalogItems) byId.set(item.id, item);
+    if (initialCatalogItem) byId.set(initialCatalogItem.id, byId.get(initialCatalogItem.id) ?? initialCatalogItem);
+    return [...byId.values()];
+  }, [knownInventoryItems, pickedItems, lineCatalogItems, initialCatalogItem]);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialName, setCreateInitialName] = useState("");
   const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
@@ -215,6 +238,7 @@ export default function OrderMaterialLinesEditor({
 
   function handleSelect(item: InventoryItem) {
     if (!issueWarehouseId) return;
+    setPickedItems((previous) => (previous.has(item.id) ? previous : new Map(previous).set(item.id, item)));
     setAddStockError(null);
     const onHand = warehouseStockOf(warehouseStock, issueWarehouseId, item.id);
     const existingIndex = fields.findIndex((field) => isCatalogOrderMaterial(field) && field.inventoryItemId === item.id);
@@ -388,7 +412,6 @@ export default function OrderMaterialLinesEditor({
                 </div>
               )}
               <InventoryItemCombobox
-                items={inventoryItems}
                 onSelect={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelect}
                 onSelectOutOfStock={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelectOutOfStock}
                 onCreateRequest={disabled || warehouses.length === 0 ? undefined : handleCreateRequest}

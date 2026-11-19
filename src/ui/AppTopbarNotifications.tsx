@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { buildInventoryAlerts, type InventoryAlert } from "../features/notifications/inventoryAlerts";
 import { buildOrderAlerts, type OrderAlert } from "../features/notifications/orderAlerts";
-import { useGetInventoryItems } from "../features/inventory/useGetInventoryItems";
+import { useStockAttention } from "../features/inventory/useGetInventoryItems";
 import OrderDetailPanel from "../features/orders/OrderDetailPanel";
 import { useOrderAlertCandidates } from "../features/notifications/useOrderAlertCandidates";
 import { useOrderDetails } from "../features/orders/useOrderDetails";
@@ -48,11 +48,13 @@ export default function AppTopbarNotifications() {
   }, []);
   const loadAlerts = menuOpen || idleReady;
   const { orders, isLoading: ordersLoading, error: ordersError } = useOrderAlertCandidates({ enabled: loadAlerts, menuOpen });
+  // The few emptiest parts from the database (shares the dashboard's attention query shape), not the catalog.
   const {
-    items: inventoryItems,
+    data: stockAttention,
     isLoading: inventoryLoading,
     isError: inventoryError,
-  } = useGetInventoryItems("", "all", { field: "quantity", ascending: true }, { enabled: loadAlerts });
+  } = useStockAttention(10, { enabled: loadAlerts });
+  const inventoryItems = useMemo(() => stockAttention?.items ?? [], [stockAttention]);
 
   const orderAlerts = useMemo(() => buildOrderAlerts(orders, localDateKey(new Date())), [orders]);
   const inventoryAlerts = useMemo(() => buildInventoryAlerts(inventoryItems), [inventoryItems]);

@@ -4,6 +4,7 @@ import i18n from "../../i18n";
 import {
   DEFAULT_ORDERS_PAGE_SIZE,
   getOrders,
+  getOrderCountsByClient,
   getOrdersAwaitingPayment,
   getOrdersPage,
   updateOrderStatus,
@@ -88,6 +89,21 @@ export function useGetOrders(search = "", { enabled = true, lines = true }: { en
 
   return { orders: orders ?? [], isLoading, error, refetch };
 }
+
+/** Orders per client for the given clients (one list page) — `client_id` only, not the order list. */
+export function useClientOrderCounts(clientIds: readonly string[], { enabled = true }: { enabled?: boolean } = {}) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const ids = [...new Set(clientIds)].sort();
+  const { data, isLoading } = useQuery({
+    queryKey: ["orders", workspaceId, "client-counts", ids],
+    queryFn: () => getOrderCountsByClient(workspaceId, ids),
+    enabled: Boolean(workspaceId) && enabled && ids.length > 0,
+    placeholderData: (previous) => previous,
+  });
+  return { counts: data ?? EMPTY_COUNTS, isLoading };
+}
+
+const EMPTY_COUNTS = new Map<string, number>();
 
 /** One client's orders with lines (client card, search preview). */
 export function useClientOrders(clientId: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {

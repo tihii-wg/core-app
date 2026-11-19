@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import type { Order, OrderMaterial } from "../../lib/types";
 import { industryUsesMileageWarranty } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import AddOrderLinesDialogShell from "./AddOrderLinesDialogShell";
 import OrderMaterialLinesEditor from "./OrderMaterialLinesEditor";
 import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
@@ -54,13 +53,11 @@ function EditOrderMaterialLineDialogBody({
   const { t } = useTranslation();
   const { workflow, industrySlug } = useIndustryWorkflow();
   const works = usesWorksAndMaterialsTabLabel(industrySlug);
-  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const warrantyDefaults = useWorkspaceWarrantyDefaults();
   const { mutateAsync: saveLine, isPending } = useUpdateOrderMaterialLine();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const defaults = useMemo(() => lineToFormDefaults(line), [line]);
-  const activeInventory = useMemo(() => inventoryItems.filter((item) => item.isActive), [inventoryItems]);
 
   const {
     control,
@@ -120,7 +117,6 @@ function EditOrderMaterialLineDialogBody({
         setValue={setValue}
         getValues={getValues}
         trigger={trigger as never}
-        inventoryItems={activeInventory}
         disabled={isPending}
         warrantyDefaults={warrantyDefaults}
         orderMileageUnit={order.vehicleMileageUnitSnapshot ?? "km"}

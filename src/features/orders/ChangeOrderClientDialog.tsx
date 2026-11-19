@@ -15,7 +15,7 @@ import { Spinner } from "../../ui/Spinner";
 import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useGetClientDiscounts } from "../clients/useGetClientExtensions";
-import { useGetClients } from "../clients/useGetClients";
+import { useClientPickerSearch } from "../clients/useGetClients";
 import { industrySupportsClientVehicles } from "../industries/industryCapabilities";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -110,7 +110,8 @@ export default function ChangeOrderClientDialog({
   const selectedVehicleId = useWatch({ control, name: "vehicleId" }) || "";
 
   const debouncedClientSearch = useDebounce(clientName.trim(), 250);
-  const { clients } = useGetClients(debouncedClientSearch, "all", { includeVehicleMatches: !showVehicles });
+  // First matches from the database (the whole client list was loaded for an empty search).
+  const { clients } = useClientPickerSearch(debouncedClientSearch, { includeVehicleMatches: !showVehicles });
   const vehicleFieldSearchEnabled = showVehicles && debouncedClientSearch.length >= 2;
   const {
     hits: vehicleRegistrationHits,

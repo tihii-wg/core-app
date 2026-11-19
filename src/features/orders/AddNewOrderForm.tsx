@@ -1,6 +1,6 @@
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
-import { useGetClients } from "../clients/useGetClients";
+import { useClientPickerSearch } from "../clients/useGetClients";
 import { Textarea } from "../../ui/Textarea";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
@@ -8,7 +8,6 @@ import useGetEmployees from "../employees/useGetEmployees";
 import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, Client, CreateMadalProps, OrderKind, Vehicle } from "../../lib/types";
 import useGetServices from "../services/useGetServices";
-import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
 import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -86,7 +85,6 @@ export default function AddNewOrderForm({
   const debouncedClientSearch = useDebounce(clientName.trim(), 250);
   const clientListSearch = debouncedClientSearch || searchQuery;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
-  const { items: inventoryItems } = useGetInventoryItems("", "all", { field: "name", ascending: true });
   const { mutateAsync: createOrder } = useCreateOrder();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
@@ -105,7 +103,8 @@ export default function AddNewOrderForm({
   const showWarrantyKm = industryUsesMileageWarranty(workflow);
   // When vehicle hits are shown separately, skip getClients' vehicle→client expansion to avoid
   // client-only rows that would clear the vehicle on select.
-  const { clients } = useGetClients(clientListSearch, "all", { includeVehicleMatches: !showVehicles });
+  // First matches from the database (the whole client list was loaded for an empty search).
+  const { clients } = useClientPickerSearch(clientListSearch, { includeVehicleMatches: !showVehicles });
   const vehicleFieldSearchEnabled = showVehicles && debouncedClientSearch.length >= 2;
   const {
     hits: vehicleRegistrationHits,
@@ -127,7 +126,6 @@ export default function AddNewOrderForm({
   const [customErrors, setCustomErrors] = useState<Record<string, string>>({});
 
   const activeServices = services?.filter((service) => service.status === "active");
-  const activeInventory = inventoryItems.filter((item) => item.isActive);
   const techniciansError = employeesError;
   const technicianOptions = assignableTechnicians(employees);
 
@@ -516,7 +514,6 @@ export default function AddNewOrderForm({
             setValue={setValue}
             getValues={getValues}
             trigger={trigger as never}
-            inventoryItems={activeInventory}
             disabled={isSubmitting}
             warrantyDefaults={warrantyDefaults}
             orderMileageUnit={orderMileageUnit}

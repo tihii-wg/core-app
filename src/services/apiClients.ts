@@ -1,5 +1,6 @@
 import type { Client, ClientListFilter, ClientType, CreateClientInput, UpdateClientInput } from "../lib/types";
 import { selectAllRows } from "./selectAllRows";
+import { emptyServerPage, isRangeBeyondEnd, pageBounds, serverPage, type ServerPage } from "../lib/serverPaging";
 import i18n from "../i18n";
 import { plateLoosePatterns, plateMatchesQuery } from "../lib/plateVin";
 import { MIN_PHONE_SEARCH_DIGITS, phoneDigits, phoneSearchVariants } from "../lib/phoneSearch";
@@ -325,6 +326,98 @@ export async function getClients(
   );
 
   return [...byFields, ...extras];
+}
+
+/** Above this many clients matched through their vehicles, the ids no longer fit one filter URL. */
+const MAX_VEHICLE_IDS_IN_FILTER = 150;
+
+export type ClientsPageQuery = {
+  search?: string;
+  clientType?: ClientListFilter;
+  page: number;
+  pageSize: number;
+  /** Default true. The order form turns it off when it shows its own vehicle matches. */
+  includeVehicleMatches?: boolean;
+};
+
+/**
+ * One page of the Clients list, paginated in the database (`range` + exact count): only `pageSize` rows are
+ * transferred, newest first. Search matches the client fields and — like `getClients` — clients whose
+ * vehicle plate / VIN / make / model matches.
+ */
+export async function getClientsPage(workspaceId: string | undefined, input: ClientsPageQuery): Promise<ServerPage<Client>> {
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+  const clientType = input.clientType ?? "all";
+  const pageSize = Math.max(1, Math.floor(input.pageSize) || 50);
+  const term = searchTerm(input.search ?? "");
+
+  let vehicleClientIds: string[] = [];
+  if (term && input.includeVehicleMatches !== false) {
+    const { clientIds, error } = await collectVehicleMatchedClientIds(workspaceId, input.search ?? "", term);
+    if (error && !(error.code === "42P01" || error.code === "42703" || error.code === "PGRST204")) throw new Error(error.message);
+    vehicleClientIds = clientIds;
+    if (vehicleClientIds.length > MAX_VEHICLE_IDS_IN_FILTER) {
+      // Very broad vehicle match (e.g. a make): page the complete match list here instead.
+      const all = await getClients(input.search ?? "", workspaceId, clientType, { includeVehicleMatches: true });
+      const { from } = pageBounds(input.page, pageSize);
+      const page = serverPage(all.slice(from, from + pageSize), all.length, input.page, pageSize);
+      return page.page === input.page ? page : getClientsPage(workspaceId, { ...input, page: page.page });
+    }
+  }
+
+  const run = (withDeletedAt: boolean, page: number) => {
+    const { from, to } = pageBounds(page, pageSize);
+    let query = supabase.from("clients").select("*", { count: "exact" }).eq("workspace_id", workspaceId);
+    if (withDeletedAt) query = query.is("deleted_at", null);
+    if (term) {
+      const fields = clientFieldSearchOrFilter(term);
+      query = query.or(vehicleClientIds.length > 0 ? `${fields},id.in.(${vehicleClientIds.join(",")})` : fields);
+    }
+    if (clientType === "individual" || clientType === "organization") query = query.eq("client_type", clientType);
+    return query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
+  };
+
+  let withDeletedAt = true;
+  let result = await run(withDeletedAt, input.page);
+  if (result.error && (result.error.code === "42703" || result.error.code === "PGRST204") && result.error.message?.includes("deleted_at")) {
+    withDeletedAt = false;
+    result = await run(withDeletedAt, input.page);
+  }
+  if (result.error && isRangeBeyondEnd(result.error)) {
+    // The page no longer exists (rows deleted / filter narrowed) → last page.
+    const head = await run(withDeletedAt, 1);
+    if (head.error) throw new Error(head.error.message);
+    const lastPage = serverPage([], head.count ?? 0, Number.MAX_SAFE_INTEGER, pageSize).page;
+    if (lastPage === 1) return serverPage(((head.data ?? []) as Record<string, unknown>[]).map(toClient), head.count ?? 0, 1, pageSize);
+    result = await run(withDeletedAt, lastPage);
+    if (result.error) throw new Error(result.error.message);
+    return serverPage(((result.data ?? []) as Record<string, unknown>[]).map(toClient), result.count ?? 0, lastPage, pageSize);
+  }
+  if (result.error) throw new Error(result.error.message);
+  const total = result.count ?? 0;
+  if (total === 0) return emptyServerPage(pageSize);
+  return serverPage(((result.data ?? []) as Record<string, unknown>[]).map(toClient), total, input.page, pageSize);
+}
+
+/**
+ * Clients the dashboard needs: everyone created since `sinceIso` (week stats) plus the `newestLimit` newest
+ * (activity feed) — instead of the whole client list.
+ */
+export async function getRecentClients(workspaceId: string | undefined, sinceIso: string, newestLimit = 6): Promise<Client[]> {
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+  const base = () => supabase.from("clients").select("*").eq("workspace_id", workspaceId).is("deleted_at", null);
+  const [since, newest] = await Promise.all([
+    selectAllRows((from, to) => base().gte("created_at", sinceIso).order("id", { ascending: true }).range(from, to)),
+    Promise.resolve(base().order("created_at", { ascending: false }).order("id", { ascending: false }).limit(Math.max(1, newestLimit))),
+  ]);
+  if (since.error) throw new Error(since.error.message);
+  if (newest.error) throw new Error(newest.error.message);
+  const byId = new Map<string, Client>();
+  for (const row of [...((since.data ?? []) as Record<string, unknown>[]), ...((newest.data ?? []) as Record<string, unknown>[])]) {
+    const client = toClient(row);
+    byId.set(client.id, client);
+  }
+  return [...byId.values()];
 }
 
 export async function getClient(workspaceId: string | undefined, clientId: string) {

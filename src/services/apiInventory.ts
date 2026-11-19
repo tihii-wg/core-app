@@ -1,5 +1,6 @@
 import type { InventoryItem, InventoryItemFormData, InventoryListFilter, InventorySort, InventorySortField } from "../lib/types";
 import { selectAllRows } from "./selectAllRows";
+import { emptyServerPage, isRangeBeyondEnd, pageBounds, serverPage, type ServerPage } from "../lib/serverPaging";
 import { DEFAULT_INVENTORY_MIN_QUANTITY } from "../features/inventory/inventoryDefaults";
 import { stockStatusFromQuantities } from "../features/inventory/stockStatus";
 import {
@@ -232,6 +233,168 @@ export async function getInventoryItems(search: string | undefined, filter: Inve
   if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
 
   return ((data ?? []) as Record<string, unknown>[]).map(toInventoryItem);
+}
+
+export type InventoryPageQuery = {
+  search?: string;
+  filter: InventoryListFilter;
+  sort: InventorySort;
+  supplier?: string;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * One page of the Parts list, paginated in the database (`range` + exact count). Search, stock / active
+ * filters, supplier and sort run there, so only `pageSize` rows are transferred.
+ */
+export async function getInventoryPage(workspaceId: string | undefined, input: InventoryPageQuery): Promise<ServerPage<InventoryItem>> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const column = inventorySortColumns[input.sort.field] ?? "created_at";
+  const pageSize = Math.max(1, Math.floor(input.pageSize) || 50);
+  const term = searchTerm(input.search);
+  const supplierName = input.supplier?.trim();
+
+  const run = (page: number) => {
+    const { from, to } = pageBounds(page, pageSize);
+    let query = supabase
+      .from("inventory_items_with_status")
+      .select("*", { count: "exact" })
+      .eq("workspace_id", resolvedWorkspaceId);
+    if (term) {
+      query = query.or(
+        `name.ilike.%${term}%,sku.ilike.%${term}%,category.ilike.%${term}%,supplier.ilike.%${term}%,location.ilike.%${term}%,description.ilike.%${term}%`,
+      );
+    }
+    if (input.filter === "inactive") query = query.eq("is_active", false);
+    else if (input.filter === "active") query = query.eq("is_active", true);
+    else if (input.filter !== "all") query = query.eq("is_active", true).eq("stock_status", input.filter);
+    if (supplierName && supplierName !== "all") query = query.eq("supplier", supplierName);
+    return query.order(column, { ascending: input.sort.ascending }).order("id", { ascending: true }).range(from, to);
+  };
+
+  let page = input.page;
+  let result = await run(page);
+  if (result.error && isRangeBeyondEnd(result.error)) {
+    const head = await run(1);
+    if (head.error) throw inventoryError(head.error, i18n.t("inventory.errors.loadFailed"));
+    page = serverPage([], head.count ?? 0, Number.MAX_SAFE_INTEGER, pageSize).page;
+    result = page === 1 ? head : await run(page);
+  }
+  if (result.error) throw inventoryError(result.error, i18n.t("inventory.errors.loadFailed"));
+  const total = result.count ?? 0;
+  if (total === 0) return emptyServerPage(pageSize);
+  return serverPage(((result.data ?? []) as Record<string, unknown>[]).map(toInventoryItem), total, page, pageSize);
+}
+
+/** PostgREST-safe search token (its `or` syntax uses , ( ) and ilike uses % _ as wildcards). */
+function safeToken(token: string): string {
+  return token.replace(/[%_,()*\\]/g, " ").trim();
+}
+
+export type InventorySearchInput = {
+  query: string;
+  /** Only parts with stock left (quantity > 0) — what can be issued to an order. */
+  inStockOnly?: boolean;
+  limit?: number;
+};
+
+/**
+ * Catalog search for pickers, in the database: active parts whose name / SKU / category / supplier contain
+ * every word of the query (AND, case-insensitive), by name, at most `limit` rows + the total match count.
+ */
+export async function searchInventoryItems(
+  workspaceId: string | undefined,
+  input: InventorySearchInput,
+): Promise<{ items: InventoryItem[]; total: number }> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const tokens = input.query
+    .toLowerCase()
+    .split(/\s+/)
+    .map(safeToken)
+    .filter(Boolean)
+    .slice(0, 6);
+  let query = supabase
+    .from("inventory_items_with_status")
+    .select("*", { count: "exact" })
+    .eq("workspace_id", resolvedWorkspaceId)
+    .eq("is_active", true);
+  for (const token of tokens) {
+    // Each `.or()` is ANDed with the others → every word must match one of the fields.
+    query = query.or(`name.ilike.%${token}%,sku.ilike.%${token}%,category.ilike.%${token}%,supplier.ilike.%${token}%`);
+  }
+  if (input.inStockOnly) query = query.gt("quantity", 0);
+  const { data, error, count } = await query
+    .order("name", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(Math.max(1, Math.min(input.limit ?? 30, 200)));
+  if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
+  return { items: ((data ?? []) as Record<string, unknown>[]).map(toInventoryItem), total: count ?? 0 };
+}
+
+/** Parts by id (lines of an order, picked items) — never the whole catalog. */
+export async function getInventoryItemsByIds(workspaceId: string | undefined, ids: readonly string[]): Promise<InventoryItem[]> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let start = 0; start < unique.length; start += 100) chunks.push(unique.slice(start, start + 100));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      Promise.resolve(
+        supabase.from("inventory_items_with_status").select("*").eq("workspace_id", resolvedWorkspaceId).in("id", chunk),
+      ),
+    ),
+  );
+  const out: InventoryItem[] = [];
+  for (const { data, error } of results) {
+    if (error) throw inventoryError(error, i18n.t("inventory.errors.loadFailed"));
+    out.push(...((data ?? []) as Record<string, unknown>[]).map(toInventoryItem));
+  }
+  return out;
+}
+
+/** Active parts out of stock / at or below their minimum: counts + the first `previewLimit` (emptiest first). */
+export type StockAttention = {
+  items: InventoryItem[];
+  outCount: number;
+  lowCount: number;
+  attentionCount: number;
+};
+
+/**
+ * Stock attention computed in the database (two head counts + one short list) instead of loading every part:
+ * same rule as the view — quantity ≤ 0 → out of stock; quantity ≤ min_quantity (> 0) → low stock.
+ */
+export async function getStockAttention(workspaceId: string | undefined, previewLimit = 10): Promise<StockAttention> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const base = () =>
+    supabase.from("inventory_items_with_status").select("id", { count: "exact", head: true }).eq("workspace_id", resolvedWorkspaceId).eq("is_active", true);
+  const [out, low, list] = await Promise.all([
+    Promise.resolve(base().eq("stock_status", "out_of_stock")),
+    Promise.resolve(base().eq("stock_status", "low_stock")),
+    Promise.resolve(
+      supabase
+        .from("inventory_items_with_status")
+        .select("*")
+        .eq("workspace_id", resolvedWorkspaceId)
+        .eq("is_active", true)
+        .in("stock_status", ["out_of_stock", "low_stock"])
+        .order("quantity", { ascending: true })
+        .order("name", { ascending: true })
+        .limit(Math.max(1, previewLimit)),
+    ),
+  ]);
+  const failed = out.error ?? low.error ?? list.error;
+  if (failed) throw inventoryError(failed, i18n.t("inventory.errors.loadFailed"));
+  const outCount = out.count ?? 0;
+  const lowCount = low.count ?? 0;
+  return {
+    items: ((list.data ?? []) as Record<string, unknown>[]).map(toInventoryItem),
+    outCount,
+    lowCount,
+    attentionCount: outCount + lowCount,
+  };
 }
 
 /** Distinct non-empty supplier names used by parts in the workspace (filter options). */
