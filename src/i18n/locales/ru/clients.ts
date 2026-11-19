@@ -155,6 +155,10 @@ const clients: Messages<typeof en> = {
     noOrders: "Заказов пока нет",
 
     noOrdersHint: "Заказы этого клиента появятся здесь.",
+
+    shownOf: "Показано {{shown}} из {{total}}",
+
+    showMore: "Показать ещё {{count}}",
     ordersLoadFailed: "Не удалось загрузить заказы",
     ordersLoadFailedHint: "Обновите страницу, чтобы попробовать снова.",
     createOrder: "Создать заказ",

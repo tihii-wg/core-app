@@ -154,6 +154,10 @@ const clients: Messages<typeof en> = {
     noOrders: "Nicio comandă încă",
 
     noOrdersHint: "Comenzile acestui client vor apărea aici.",
+
+    shownOf: "Afișate {{shown}} din {{total}}",
+
+    showMore: "Arată încă {{count}}",
     ordersLoadFailed: "Comenzile nu au putut fi încărcate",
     ordersLoadFailedHint: "Reîmprospătați pagina pentru a încerca din nou.",
     createOrder: "Creează comandă",

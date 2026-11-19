@@ -150,6 +150,10 @@ export default {
     noOrders: "No orders yet",
 
     noOrdersHint: "Orders for this client will show up here.",
+
+    shownOf: "Showing {{shown}} of {{total}}",
+
+    showMore: "Show {{count}} more",
     ordersLoadFailed: "Could not load orders",
     ordersLoadFailedHint: "Refresh the page to try again.",
     createOrder: "Create Order",

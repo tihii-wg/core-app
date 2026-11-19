@@ -279,6 +279,17 @@ export default function ClientDetailPanel({
     [debouncedCardSearch, searchableOrders, vehicles, payments, statusLabels, t, industryBlocks, customFieldTextsByOrderId],
   );
 
+  // Orders / estimates tabs render ORDER_LIST_LIMIT rows at a time; «Show more» adds the next batch.
+  const [ordersShown, setOrdersShown] = useState(ORDER_LIST_LIMIT);
+  const [estimatesShown, setEstimatesShown] = useState(ORDER_LIST_LIMIT);
+  const listResetKey = `${selectedClient?.id ?? ""}|${debouncedCardSearch}|${JSON.stringify(assetFilter ?? null)}`;
+  const [prevListResetKey, setPrevListResetKey] = useState(listResetKey);
+  if (listResetKey !== prevListResetKey) {
+    setPrevListResetKey(listResetKey);
+    setOrdersShown(ORDER_LIST_LIMIT);
+    setEstimatesShown(ORDER_LIST_LIMIT);
+  }
+
   const filteredOrders = useMemo(() => {
     const bySearch = debouncedCardSearch.trim()
       ? (() => {
@@ -591,8 +602,9 @@ export default function ClientDetailPanel({
                             <p className="mt-1 text-xs text-muted-foreground">{t("clients.detail.noOrdersHint")}</p>
                           </div>
                         ) : (
+                          <>
                           <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-                            {filteredOrders.slice(0, ORDER_LIST_LIMIT).map((order) => {
+                            {filteredOrders.slice(0, ordersShown).map((order) => {
                               const historyLine = clientOrderHistoryLine(
                                 order,
                                 shouldShowOrderAssetValue(workflow.orderFields.device, order.device, "device"),
@@ -638,6 +650,22 @@ export default function ClientDetailPanel({
                               );
                             })}
                           </ul>
+                          {filteredOrders.length > ordersShown ? (
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {t("clients.detail.shownOf", { shown: ordersShown, total: filteredOrders.length })}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setOrdersShown((count) => count + ORDER_LIST_LIMIT)}
+                              >
+                                {t("clients.detail.showMore", { count: Math.min(ORDER_LIST_LIMIT, filteredOrders.length - ordersShown) })}
+                              </Button>
+                            </div>
+                          ) : null}
+                          </>
                         )}
                       </div>
                     ) : null}
@@ -670,8 +698,9 @@ export default function ClientDetailPanel({
                             <p className="mt-1 text-xs text-muted-foreground">{t("clients.detail.noEstimatesHint")}</p>
                           </div>
                         ) : (
+                          <>
                           <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-                            {estimateSummaries.slice(0, ORDER_LIST_LIMIT).map((order) => {
+                            {estimateSummaries.slice(0, estimatesShown).map((order) => {
                               const historyLine = clientOrderHistoryLine(
                                 order,
                                 shouldShowOrderAssetValue(workflow.orderFields.device, order.device, "device"),
@@ -725,6 +754,22 @@ export default function ClientDetailPanel({
                               );
                             })}
                           </ul>
+                          {estimateSummaries.length > estimatesShown ? (
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {t("clients.detail.shownOf", { shown: estimatesShown, total: estimateSummaries.length })}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEstimatesShown((count) => count + ORDER_LIST_LIMIT)}
+                              >
+                                {t("clients.detail.showMore", { count: Math.min(ORDER_LIST_LIMIT, estimateSummaries.length - estimatesShown) })}
+                              </Button>
+                            </div>
+                          ) : null}
+                          </>
                         )}
                       </div>
                     ) : null}
