@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
@@ -136,7 +137,7 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
   } as const;
 
   const hot = useRealtimeHotQueryOptions();
-  const { data, isLoading, isFetching, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, isPlaceholderData, error, refetch } = useQuery({
     queryKey: ["orders", workspaceId, "page", listKey],
     queryFn: () =>
       getOrdersPage(workspaceId, {
@@ -156,14 +157,33 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
     ...hot,
   });
 
+  // Next page in the background once this one is on screen → "Next" opens from cache, without waiting.
+  const queryClient = useQueryClient();
+  const loadedPage = !isPlaceholderData ? data?.page : undefined;
+  const loadedPageCount = data?.pageCount ?? 1;
+  useEffect(() => {
+    if (!workspaceId || !enabled || loadedPage == null || loadedPage >= loadedPageCount) return;
+    const nextKey = { ...listKey, page: loadedPage + 1 };
+    void queryClient.prefetchQuery({
+      queryKey: ["orders", workspaceId, "page", nextKey],
+      queryFn: () => getOrdersPage(workspaceId, { ...nextKey }),
+      staleTime: 30_000,
+    });
+    // listKey fields are primitives; the serialized key covers them.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryClient, workspaceId, enabled, loadedPage, loadedPageCount, JSON.stringify(listKey)]);
+
   return {
     orders: data?.orders ?? [],
     total: data?.total ?? 0,
-    page: data?.page ?? params.page,
+    // While the next page loads, the previous page stays on screen (placeholder) — its `page` must not be
+    // reported back: the Orders page would "clamp" to it and undo the click (page fetched twice / not switching).
+    page: isPlaceholderData || !data ? params.page : data.page,
     pageSize: data?.pageSize ?? pageSize,
     pageCount: data?.pageCount ?? 1,
     isLoading,
     isFetching,
+    isPlaceholderData,
     error,
     refetch,
   };

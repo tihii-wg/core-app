@@ -85,12 +85,42 @@ type OrderActionsMenuProps = {
   onOrderUpdated?: (order: Order) => void;
   /** Extra classes for the trigger (e.g. a larger touch target on mobile cards). */
   triggerClassName?: string;
+  /** Open on mount (the lightweight trigger mounts the full menu on the first click). */
+  defaultOpen?: boolean;
 };
+
+/**
+ * Row/card actions menu. Every order row has one, but at most one is used at a time: until the first click
+ * only a plain "⋮" button is rendered — the full menu (≈15 hooks, payments ledger, hidden close / cancel /
+ * delete / payment dialogs) mounts on that click, already open, and then stays mounted. Rendering the full
+ * menu in 25 rows was ~60% of a list page render.
+ */
+export function OrderActionsMenu(props: OrderActionsMenuProps) {
+  const { t } = useTranslation();
+  const [activated, setActivated] = useState(false);
+  if (activated) return <OrderActionsMenuFull {...props} defaultOpen />;
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className={props.triggerClassName}
+      aria-label={t("orders.actions.menuLabel", { number: props.order.orderNumber })}
+      aria-haspopup="menu"
+      onClick={(event) => {
+        event.stopPropagation();
+        setActivated(true);
+      }}
+    >
+      <EllipsisVertical />
+    </Button>
+  );
+}
 
 // The menu sits inside a clickable table row and React events bubble through the portal, so clicks
 // are stopped here to keep the row from opening the order panel. Non-modal so the edit dialog
 // opened from it gets focus and pointer events back.
-export function OrderActionsMenu({
+function OrderActionsMenuFull({
   order,
   invoiceNumber,
   linkedPaymentCount = 0,
@@ -105,6 +135,7 @@ export function OrderActionsMenu({
   onDeleted,
   onOrderUpdated,
   triggerClassName,
+  defaultOpen = false,
 }: OrderActionsMenuProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
@@ -242,7 +273,7 @@ export function OrderActionsMenu({
 
   return (
     <>
-      <DropdownMenu modal={false}>
+      <DropdownMenu modal={false} defaultOpen={defaultOpen}>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="ghost" size="icon-sm" className={triggerClassName} aria-label={t("orders.actions.menuLabel", { number: order.orderNumber })} onClick={stop}>
             <EllipsisVertical />

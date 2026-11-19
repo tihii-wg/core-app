@@ -66,7 +66,8 @@ export function CloseOrderDialog({
   const closeOrder = useCloseOrder();
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
-  const { stages: paymentStages } = useOrderPaymentStages(order?.id);
+  // Only while open: the dialog is mounted (closed) in every order row's menu — 25 requests per list page.
+  const { stages: paymentStages } = useOrderPaymentStages(open ? order?.id : undefined);
   const [closeAfterPayment, setCloseAfterPayment] = useState(true);
   const [paymentsOverride, setPaymentsOverride] = useState<LedgerPayment[] | null>(null);
   const [freshOrder, setFreshOrder] = useState<Order | null>(null);
