@@ -2,15 +2,11 @@ import { describe, expect, it } from "vitest";
 import { isOrderEditRelevantTable, mapRealtimeTableToQueryKeys } from "./mapRealtimeTableToQueryKeys";
 
 describe("mapRealtimeTableToQueryKeys", () => {
-  it("maps orders family like useDeleteOrder", () => {
+  it("maps orders family without stock views (stock tables have their own events)", () => {
     expect(mapRealtimeTableToQueryKeys("orders", "ws-1")).toEqual([
       ["orders", "ws-1"],
-      ["orders-page", "ws-1"],
       ["order_events", "ws-1"],
       ["clients", "ws-1"],
-      ["inventory", "ws-1"],
-      ["inventory-movements", "ws-1"],
-      ["warehouse-stock", "ws-1"],
       ["dashboard", "ws-1"],
       ["orders-warranty-indicators", "ws-1"],
       ["warranty-records", "ws-1"],
@@ -18,6 +14,21 @@ describe("mapRealtimeTableToQueryKeys", () => {
     expect(mapRealtimeTableToQueryKeys("order_employees", "ws-1")).toEqual(
       mapRealtimeTableToQueryKeys("orders", "ws-1"),
     );
+    const keys = mapRealtimeTableToQueryKeys("orders", "ws-1").map((key) => key[0]);
+    expect(keys).not.toContain("inventory");
+    expect(keys).not.toContain("warehouse-stock");
+  });
+
+  it("maps comments and attachments to the order feed only", () => {
+    expect(mapRealtimeTableToQueryKeys("order_comments", "ws-1")).toEqual([
+      ["order_comments", "ws-1"],
+      ["order_events", "ws-1"],
+    ]);
+    expect(mapRealtimeTableToQueryKeys("order_attachments", "ws-1")).toEqual([
+      ["order-attachments", "ws-1"],
+      ["orders-attachment-counts", "ws-1"],
+      ["order_events", "ws-1"],
+    ]);
   });
 
   it("maps payments family like invalidatePaymentViews", () => {

@@ -18,6 +18,22 @@ import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { useRealtimeHotQueryOptions } from "../realtime/useRealtimeHotQueryOptions";
 import { patchOrderInLists } from "./orderCache";
+import { getPayments } from "../../services/apiPayments";
+import { paymentsQueryKey } from "../finance/usePayments";
+
+/**
+ * Ledger for the awaiting-payment sum, from the SAME cache entry as useGetPayments() (Orders page, order
+ * card). Payment events / mutations invalidate it, so it is reused while valid and re-read only when stale —
+ * an order edit no longer reloads the whole ledger (thousands of rows, several requests).
+ */
+function cachedLedger(queryClient: QueryClient, workspaceId: string | undefined) {
+  return () =>
+    queryClient.fetchQuery({
+      queryKey: paymentsQueryKey(workspaceId, {}),
+      queryFn: () => getPayments(workspaceId, {}),
+      staleTime: 30_000,
+    });
+}
 import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 
 /** Patches taxInvoiceNumber on every cached orders list/page for this workspace. */
@@ -151,7 +167,7 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
       ? (
           await queryClient.fetchQuery({
             queryKey: ordersAwaitingPaymentQueryKey(workspaceId),
-            queryFn: () => getOrdersAwaitingPayment(workspaceId),
+            queryFn: () => getOrdersAwaitingPayment(workspaceId, cachedLedger(queryClient, workspaceId)),
           })
         ).orderIds
       : undefined;
@@ -213,9 +229,10 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
 /** Unpaid non-cancelled order total for the Orders header card. */
 export function useOrdersAwaitingPayment({ enabled = true }: { enabled?: boolean } = {}) {
   const { workspaceId } = useActiveWorkspaceId();
+  const queryClient = useQueryClient();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ordersAwaitingPaymentQueryKey(workspaceId),
-    queryFn: () => getOrdersAwaitingPayment(workspaceId),
+    queryFn: () => getOrdersAwaitingPayment(workspaceId, cachedLedger(queryClient, workspaceId)),
     enabled: Boolean(workspaceId) && enabled,
   });
 

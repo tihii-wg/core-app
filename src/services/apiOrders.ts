@@ -2837,7 +2837,14 @@ export type OrdersAwaitingPayment = {
  * Cancelled and formally closed orders are excluded from the “awaiting payment” list
  * (closed outstanding is shown on the closed order itself).
  */
-export async function getOrdersAwaitingPayment(workspaceId: string | undefined): Promise<OrdersAwaitingPayment> {
+/**
+ * `loadPayments`: the workspace ledger. The Orders page passes its cached ledger query, so an order change
+ * (realtime / mutation) recomputes the card from cache instead of re-reading thousands of payments.
+ */
+export async function getOrdersAwaitingPayment(
+  workspaceId: string | undefined,
+  loadPayments?: () => Promise<Awaited<ReturnType<typeof getPayments>>>,
+): Promise<OrdersAwaitingPayment> {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
   refreshOrderEstimatesSupport();
   const includeKind = isOrderEstimatesSupported();
@@ -2858,13 +2865,13 @@ export async function getOrdersAwaitingPayment(workspaceId: string | undefined):
 
   const [{ data, error }, payments] = await Promise.all([
     run(baseSelect, true),
-    getPayments(resolvedWorkspaceId, {}).catch(() => []),
+    (loadPayments ? loadPayments() : getPayments(resolvedWorkspaceId, {})).catch(() => []),
   ]);
 
   if (error) {
     if (includeKind && isMissingOrderEstimatesColumn(error)) {
       markOrderEstimatesUnsupported();
-      return getOrdersAwaitingPayment(workspaceId);
+      return getOrdersAwaitingPayment(workspaceId, loadPayments);
     }
     // closed_at may be absent on very old DBs — fall back without that filter.
     if (/closed_at/i.test(error.message)) {
@@ -2873,7 +2880,7 @@ export async function getOrdersAwaitingPayment(workspaceId: string | undefined):
       if (legacy.error) {
         if (includeKind && isMissingOrderEstimatesColumn(legacy.error)) {
           markOrderEstimatesUnsupported();
-          return getOrdersAwaitingPayment(workspaceId);
+          return getOrdersAwaitingPayment(workspaceId, loadPayments);
         }
         throw new Error(legacy.error.message);
       }

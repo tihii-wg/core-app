@@ -8,20 +8,28 @@ export function mapRealtimeTableToQueryKeys(table: string, workspaceId: string):
   switch (table) {
     case "orders":
     case "order_employees":
-    case "order_comments":
-    case "order_attachments":
-      // Same set as useDeleteOrder (+ payments touch via invalidatePaymentViews when needed).
+      // Order lists, client balances / counts, dashboard, warranty. NOT stock: when an order issues or returns
+      // parts, warehouse_stock / inventory_items change too and their own events refresh the stock views —
+      // an order edit by another user no longer reloads the whole parts catalog.
       return [
         ["orders", workspaceId],
-        ["orders-page", workspaceId],
         ["order_events", workspaceId],
         ["clients", workspaceId],
-        ["inventory", workspaceId],
-        ["inventory-movements", workspaceId],
-        ["warehouse-stock", workspaceId],
         ["dashboard", workspaceId],
         ["orders-warranty-indicators", workspaceId],
         ["warranty-records", workspaceId],
+      ];
+    case "order_comments":
+      // A comment changes the order feed only.
+      return [
+        ["order_comments", workspaceId],
+        ["order_events", workspaceId],
+      ];
+    case "order_attachments":
+      return [
+        ["order-attachments", workspaceId],
+        ["orders-attachment-counts", workspaceId],
+        ["order_events", workspaceId],
       ];
     case "payments":
     case "invoices":
