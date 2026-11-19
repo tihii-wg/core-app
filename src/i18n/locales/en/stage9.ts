@@ -79,8 +79,16 @@ export default {
     total: "Total",
   },
   tasks: {
+    orderFallback: "Order",
+    orderLink: "Order {{number}}",
+    createFromOrder: "Create task",
     add: "Add task",
     form: {
+      order: "Order",
+      orderPlaceholder: "Order number, plate or client…",
+      orderHint: "Optional. The task links to the order.",
+      orderEmpty: "No orders found",
+      unlinkOrder: "Unlink order",
       title: "New task",
       editTitle: "Edit task",
       description: "Who should do it, what exactly, and by when.",

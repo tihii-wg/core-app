@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { CalendarClock, Check, Pencil, PlayCircle, RotateCcw, Trash2, UserRound } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { CalendarClock, Check, ClipboardList, Pencil, PlayCircle, RotateCcw, Trash2, UserRound } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { cn } from "../../lib/utils";
@@ -50,6 +51,10 @@ export function TaskItem({
   const { t, i18n } = useTranslation();
   const done = Boolean(task.completedAt);
   const overdue = isTaskOverdue(task);
+  const location = useLocation();
+  // /:locale/:workspaceId/… → the Orders page opens the linked order (?open=<id>).
+  const [, locale, workspaceSegment] = location.pathname.split("/");
+  const orderHref = task.orderId ? `/${locale}/${workspaceSegment}/orders?open=${encodeURIComponent(task.orderId)}` : null;
 
   return (
     <div
@@ -100,6 +105,12 @@ export function TaskItem({
               <UserRound className="size-3.5" aria-hidden />
               {t("stage9.tasks.assigneeShort", { name: assigneeName })}
             </span>
+          ) : null}
+          {orderHref ? (
+            <Link to={orderHref} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+              <ClipboardList className="size-3.5" aria-hidden />
+              {t("stage9.tasks.orderLink", { number: task.orderNumber || "" }).trim()}
+            </Link>
           ) : null}
           {authorName ? <span>{t("stage9.tasks.authorShort", { name: authorName })}</span> : null}
           {done && task.completedAt ? (

@@ -81,8 +81,16 @@ export default {
     total: "Итого",
   },
   tasks: {
+    orderFallback: "Заказ",
+    orderLink: "Заказ {{number}}",
+    createFromOrder: "Создать задачу",
     add: "Добавить задачу",
     form: {
+      order: "Заказ",
+      orderPlaceholder: "Номер заказа, госномер или клиент…",
+      orderHint: "Необязательно. Задача будет видна по ссылке на заказ.",
+      orderEmpty: "Заказы не найдены",
+      unlinkOrder: "Отвязать заказ",
       title: "Новая задача",
       editTitle: "Изменить задачу",
       description: "Кому, что именно и к какому сроку.",

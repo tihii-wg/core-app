@@ -18,9 +18,14 @@ export type TaskRecord = {
   completedAt: string | null;
   createdBy: string | null;
   assignedTo: string | null;
+  /** Order the task is about (tasks.order_id) — its number for display. */
+  orderId: string | null;
+  orderNumber: string | null;
+  clientId: string | null;
 };
 
-const taskColumns = "id, title, description, priority, status_id, due_at, created_at, completed_at, created_by, assigned_to";
+const taskColumns =
+  "id, title, description, priority, status_id, due_at, created_at, completed_at, created_by, assigned_to, order_id, client_id, task_order:orders(number)";
 const legacyTaskColumns = "id, title, priority, status_id, due_at, created_at";
 
 export function toTask(row: Record<string, unknown>): TaskRecord {
@@ -35,6 +40,9 @@ export function toTask(row: Record<string, unknown>): TaskRecord {
     completedAt: str(row.completed_at),
     createdBy: str(row.created_by),
     assignedTo: str(row.assigned_to),
+    orderId: str(row.order_id),
+    orderNumber: str((row.task_order as { number?: unknown } | null | undefined)?.number),
+    clientId: str(row.client_id),
   };
 }
 
@@ -138,6 +146,9 @@ export type TaskInput = {
   description?: string | null;
   /** Workspace member (auth user id) who must do the task; null = nobody. */
   assignedTo?: string | null;
+  /** Linked order (null = none); its client is stored with it. */
+  orderId?: string | null;
+  clientId?: string | null;
 };
 
 const MAX_TASK_TITLE = 256;
@@ -160,7 +171,19 @@ export function buildTaskRow(input: TaskInput) {
     row.description = description || null;
   }
   if (input.assignedTo !== undefined) row.assigned_to = input.assignedTo || null;
-  return row as { title: string; priority: TaskPriority; due_at: string | null; description?: string | null; assigned_to?: string | null };
+  if (input.orderId !== undefined) {
+    row.order_id = input.orderId || null;
+    row.client_id = input.orderId ? input.clientId || null : null;
+  }
+  return row as {
+    title: string;
+    priority: TaskPriority;
+    due_at: string | null;
+    description?: string | null;
+    assigned_to?: string | null;
+    order_id?: string | null;
+    client_id?: string | null;
+  };
 }
 
 function mapTaskWriteError(error: unknown): never {
@@ -209,4 +232,43 @@ export function isTaskOverdue(task: Pick<TaskRecord, "dueAt" | "completedAt">, n
   if (task.completedAt || !task.dueAt) return false;
   const due = new Date(task.dueAt);
   return !Number.isNaN(due.getTime()) && due.getTime() < now.getTime();
+}
+
+export type TaskOrderOption = { id: string; number: string; clientId: string | null; clientName: string };
+
+/** Orders to link a task to: by number or client name, newest first (a short list for the picker). */
+export async function searchOrdersForTask(workspaceId: string | undefined, term: string, limit = 10): Promise<TaskOrderOption[]> {
+  const id = requireWorkspaceId(workspaceId);
+  const safe = term.trim().replace(/[%_,()*\\]/g, " ").trim();
+  let query = supabase
+    .from("orders")
+    .select("id, number, client_id, clients!orders_client_id_fkey(name)")
+    .eq("workspace_id", id);
+  if (safe) {
+    // Client name match → its order ids are found through the embedded filter below.
+    query = query.or(`number.ilike.%${safe}%,device.ilike.%${safe}%,car_number.ilike.%${safe}%`);
+  }
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
+  if (error) throw new Error(error.message);
+  let rows = (data ?? []) as Record<string, unknown>[];
+  if (safe && rows.length < limit) {
+    // Also by client name (a filter on the embedded client).
+    const byClient = await supabase
+      .from("orders")
+      .select("id, number, client_id, clients!orders_client_id_fkey!inner(name)")
+      .eq("workspace_id", id)
+      .ilike("clients.name", `%${safe}%`)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (!byClient.error) {
+      const seen = new Set(rows.map((row) => String(row.id)));
+      rows = [...rows, ...((byClient.data ?? []) as Record<string, unknown>[]).filter((row) => !seen.has(String(row.id)))].slice(0, limit);
+    }
+  }
+  return rows.map((row) => ({
+    id: String(row.id),
+    number: typeof row.number === "string" ? row.number : "",
+    clientId: str(row.client_id),
+    clientName: str((row.clients as { name?: unknown } | null | undefined)?.name) ?? "",
+  }));
 }

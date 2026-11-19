@@ -80,8 +80,16 @@ export default {
     total: "Total",
   },
   tasks: {
+    orderFallback: "Comandă",
+    orderLink: "Comanda {{number}}",
+    createFromOrder: "Creează sarcină",
     add: "Adaugă sarcină",
     form: {
+      order: "Comandă",
+      orderPlaceholder: "Numărul comenzii, nr. de înmatriculare sau client…",
+      orderHint: "Opțional. Sarcina va avea un link către comandă.",
+      orderEmpty: "Nu s-au găsit comenzi",
+      unlinkOrder: "Detașează comanda",
       title: "Sarcină nouă",
       editTitle: "Editează sarcina",
       description: "Cine, ce anume și până când.",

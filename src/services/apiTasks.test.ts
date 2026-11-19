@@ -13,6 +13,9 @@ function task(partial: Partial<TaskRecord>): TaskRecord {
     completedAt: null,
     createdBy: "author",
     assignedTo: "worker",
+    orderId: null,
+    orderNumber: null,
+    clientId: null,
     ...partial,
   };
 }

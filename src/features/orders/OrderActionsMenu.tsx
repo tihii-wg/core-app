@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, CircleX, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Link2, Lock, Pencil, Printer, Trash2 } from "lucide-react";
+import { Check, CircleX, ClipboardList, EllipsisVertical, Eye, FileCheck2, FilePlus2, FileX2, Link2, Lock, Pencil, Printer, Trash2 } from "lucide-react";
+import { TaskFormDialog } from "../tasks/TaskFormDialog";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
@@ -160,6 +161,7 @@ function OrderActionsMenuFull({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [copyingPublicLink, setCopyingPublicLink] = useState(false);
   const [recordPaymentOpen, setRecordPaymentOpen] = useState(false);
+  const [taskOpen, setTaskOpen] = useState(false);
   const { payments, isLoading: paymentsLoading } = useGetPayments();
   const { formatMoney } = useWorkspaceMoney();
   const formallyClosed = isOrderFormallyClosed(order);
@@ -284,6 +286,12 @@ function OrderActionsMenuFull({
             <Eye />
             {t("orders.actions.viewDetails")}
           </DropdownMenuItem>
+          {canWrite ? (
+            <DropdownMenuItem onSelect={() => setTaskOpen(true)}>
+              <ClipboardList />
+              {t("stage9.tasks.createFromOrder")}
+            </DropdownMenuItem>
+          ) : null}
 
           <DropdownMenuSeparator />
           <DropdownMenuLabel>
@@ -534,6 +542,22 @@ function OrderActionsMenuFull({
       ) : null}
 
       <ConfirmOrderMileageDialog {...mileageConfirm.dialogProps} />
+
+      {taskOpen ? (
+        // The menu lives inside a clickable order row: keep the dialog's clicks / keys from reaching it.
+        <span className="contents" onClick={stop} onKeyDown={stop} onPointerDown={stop}>
+        <TaskFormDialog
+          open
+          onOpenChange={setTaskOpen}
+          initialOrder={{
+            id: order.id,
+            number: order.orderNumber,
+            clientId: order.clientId || null,
+            clientName: order.clientName,
+          }}
+        />
+        </span>
+      ) : null}
 
       <CloseOrderDialog
         order={order}
