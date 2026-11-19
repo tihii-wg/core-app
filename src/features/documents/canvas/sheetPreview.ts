@@ -53,11 +53,19 @@ export function canvasScreenSheetCss(marginsMm: number): string {
     `}` +
     // Print: the sheet has a fixed width in mm. With a print-dialog scale below 100% the printable area
     // becomes wider than the sheet (in CSS units) and the browser left-aligned it → keep it centered.
+    // Print: any print-dialog scale. The sheet always spans the full paper width (horizontal placement in % of
+    // the width, see printWidthVars); text and heights follow the scale, and what no longer fits continues on
+    // the next sheet instead of being cut off (or leaving empty margins when scaled down).
     `@media print{` +
     `html,body{width:auto!important;}` +
     `body{margin:0!important;}` +
     `.canvas-root{display:block;width:100%;}` +
-    `.canvas-page{margin-left:auto!important;margin-right:auto!important;}` +
+    `.canvas-page{width:100%!important;margin-left:0!important;margin-right:0!important;overflow:visible!important;}` +
+    `.canvas-page>[data-el][style*="--cx"]{left:var(--cx)!important;width:var(--cw)!important;}` +
+    // Bigger scale = bigger text in the same width: extra wrapped lines stay visible instead of being cut.
+    `.canvas-page>[data-el]{overflow:visible!important;}` +
+    // A block that meets the sheet edge moves to the next sheet whole (signatures, boxes); tables may split.
+    `.canvas-page>[data-el]:not(:has(table)){break-inside:avoid;}` +
     `}`
   );
 }

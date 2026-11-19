@@ -605,6 +605,17 @@ async function renderElementInner(
   return renderCanvasElementInnerHtml(element, ctx, colors, showCents, showTokens, pageIndex, pageCount);
 }
 
+/**
+ * Print-only horizontal geometry as a share of the content width (`--cx` / `--cw`). With a print-dialog scale
+ * other than 100 % the sheet is wider / narrower in CSS units; the print CSS then places elements by these
+ * percentages, so the design always spans the full sheet width while text and heights follow the scale
+ * (and continue on the next sheet when they get taller). At 100 % the result equals the mm placement.
+ */
+function printWidthVars(item: { xMm: number; wMm: number }, contentWidthMm: number): string {
+  const pct = (value: number) => `${Math.round((value / contentWidthMm) * 100000) / 1000}%`;
+  return contentWidthMm > 0 ? `--cx:${pct(item.xMm)};--cw:${pct(item.wMm)}` : "";
+}
+
 async function renderPlaced(
   item: Placed,
   ctx: PrintContext,
@@ -614,6 +625,7 @@ async function renderPlaced(
   pageIndex: number,
   pageCount: number,
   pageOffsetY: number,
+  contentWidthMm: number,
 ): Promise<string> {
   const y = item.element.repeatOnEveryPage ? item.yMm : item.yMm - pageOffsetY;
   const inner = await renderElementInner(item.element, ctx, colors, showCents, showTokens, pageIndex, pageCount);
@@ -635,6 +647,7 @@ async function renderPlaced(
       `z-index:${item.element.zIndex}`,
       `-webkit-print-color-adjust:exact`,
       `print-color-adjust:exact`,
+      printWidthVars(item, contentWidthMm),
       rectCss,
     ];
     return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}"></div>`;
@@ -655,6 +668,7 @@ async function renderPlaced(
     `z-index:${item.element.zIndex}`,
     `-webkit-print-color-adjust:exact`,
     `print-color-adjust:exact`,
+    printWidthVars(item, contentWidthMm),
     box.outerCss,
   ];
   return `<div data-el="${escapeHtmlText(item.element.id)}" style="${parts.join(";")}">${wrapped}</div>`;
@@ -692,7 +706,7 @@ export async function renderCanvasLayoutToHtml(
         .slice()
         .sort((a, b) => a.element.zIndex - b.element.zIndex || a.yMm - b.yMm)
         .map((item) =>
-          renderPlaced(item, ctx, colors, showCents, showTokens, page.pageIndex, pageCount, page.pageOffsetY),
+          renderPlaced(item, ctx, colors, showCents, showTokens, page.pageIndex, pageCount, page.pageOffsetY, contentWidthMm),
         ),
     );
     const bgStyle = pageBg
@@ -756,14 +770,14 @@ export function renderCanvasLayoutToHtmlSync(
               radiusMm,
               colors,
             });
-            return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${rectCss};-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
+            return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${printWidthVars(item, contentWidthMm)};${rectCss};-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
           }
           const box = buildCanvasBoxStyle(canvasElementBoxStyle(item.element), colors, {
             // Tables and totals grow with their rows — never clip them (the designer sheet shows them whole too).
     overflow: item.element.type === "totals" || item.element.type === "table" ? "visible" : "hidden",
           });
           const wrapped = box.wrapForAlign ? canvasAlignWrapperHtml(inner, box.align) : inner;
-          return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${box.outerCss};-webkit-print-color-adjust:exact;print-color-adjust:exact">${wrapped}</div>`;
+          return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${printWidthVars(item, contentWidthMm)};${box.outerCss};-webkit-print-color-adjust:exact;print-color-adjust:exact">${wrapped}</div>`;
         })
         .join("");
       const bgStyle = pageBg ? `background:${pageBg};` : "";
