@@ -337,6 +337,15 @@ const settings: Messages<typeof en> = {
     },
   },
   subscription: {
+    trial: {
+      title_one: "Perioadă de probă: a rămas {{count}} zi",
+      title_few: "Perioadă de probă: au rămas {{count}} zile",
+      title_other: "Perioadă de probă: au rămas {{count}} de zile",
+      description: "Toate funcțiile sunt disponibile până la {{date}}, apoi spațiul de lucru va fi doar pentru vizualizare până la activarea abonamentului.",
+      expiredTitle: "Perioada de probă s-a încheiat",
+      expiredDescription: "Perioada de probă s-a încheiat pe {{date}}, iar spațiul de lucru este acum doar pentru vizualizare: datele sunt vizibile, dar crearea și modificarea sunt dezactivate. Contactați asistența pentru a activa abonamentul.",
+      dismiss: "Ascunde până mâine",
+    },
     title: "Abonament workspace",
     description: "Starea abonamentului pentru workspace-ul activ. Modificările se gestionează în afara aplicației.",
     statusLabel: "Stare",

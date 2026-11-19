@@ -334,6 +334,14 @@ export default {
     },
   },
   subscription: {
+    trial: {
+      title_one: "Free trial: {{count}} day left",
+      title_other: "Free trial: {{count}} days left",
+      description: "All features are available until {{date}}, then the workspace becomes view-only until a subscription is activated.",
+      expiredTitle: "Your free trial has ended",
+      expiredDescription: "The trial ended on {{date}}, so the workspace is now view-only: you can browse your data, but creating and editing are disabled. Contact support to activate a subscription.",
+      dismiss: "Hide until tomorrow",
+    },
     title: "Workspace subscription",
     description: "Subscription status for the active workspace. Changes are managed outside the app.",
     statusLabel: "Status",

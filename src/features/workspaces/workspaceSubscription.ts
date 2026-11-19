@@ -67,3 +67,22 @@ export function subscriptionStatusBadgeVariant(
   if (status === "trial") return "info";
   return "muted";
 }
+
+/** Whole days left until `expiresAt` (rounded up; 0 when already past, null without an expiry). */
+export function subscriptionDaysLeft(expiresAt: string | null | undefined, now: Date = new Date()): number | null {
+  const expiry = parseSubscriptionTimestamp(expiresAt);
+  if (!expiry) return null;
+  const ms = expiry.getTime() - now.getTime();
+  if (ms <= 0) return 0;
+  return Math.ceil(ms / 86_400_000);
+}
+
+/** Trial whose end date has passed — the workspace is read-only until a subscription is set. */
+export function isTrialExpired(
+  state: Pick<WorkspaceSubscriptionFields, "subscriptionStatus" | "subscriptionExpiresAt"> | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (state?.subscriptionStatus !== "trial") return false;
+  const expiry = parseSubscriptionTimestamp(state.subscriptionExpiresAt);
+  return expiry == null || expiry.getTime() <= now.getTime();
+}

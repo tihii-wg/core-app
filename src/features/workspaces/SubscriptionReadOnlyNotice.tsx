@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { currentIntlLocale } from "../../i18n";
 import { useWorkspaceSubscription } from "./useWorkspaceSubscription";
-import { parseSubscriptionTimestamp } from "./workspaceSubscription";
+import { isTrialExpired, parseSubscriptionTimestamp } from "./workspaceSubscription";
 
 type SubscriptionReadOnlyNoticeProps = {
   className?: string;
@@ -16,7 +16,7 @@ const defaultNoticeClassName =
  */
 export function SubscriptionReadOnlyNotice({ className }: SubscriptionReadOnlyNoticeProps) {
   const { t } = useTranslation();
-  const { canWrite, status, expiresAt, isEntitlementPending, error, refetch } = useWorkspaceSubscription();
+  const { canWrite, status, expiresAt, subscription, isEntitlementPending, error, refetch } = useWorkspaceSubscription();
 
   if (isEntitlementPending) return null;
 
@@ -35,6 +35,8 @@ export function SubscriptionReadOnlyNotice({ className }: SubscriptionReadOnlyNo
   }
 
   if (canWrite) return null;
+  // An ended trial is announced app-wide by SubscriptionTrialBanner (AppLayout).
+  if (isTrialExpired(subscription)) return null;
 
   const expiry = parseSubscriptionTimestamp(expiresAt);
   const expiryLabel = expiry
