@@ -239,6 +239,17 @@ export default {
     deletePhone: "Delete phone {{phone}}",
     deleteAddress: "Delete address {{address}}",
     balanceNote: "The client balance is an advance (prepayment). Entries below are ledger rows when present; debt is not derived from them.",
+    balanceAdd: {
+      title: "Record a balance entry",
+      kinds: { advance: "Advance from client (+)", writeOff: "Write-off (−)" },
+      amount: "Amount",
+      amountPlaceholder: "Amount",
+      comment: "Comment",
+      commentPlaceholder: "Comment, e.g. «Cash advance»",
+      submit: "Record",
+      done: "Recorded, client balance recalculated",
+      errors: { amount: "Enter an amount greater than zero." },
+    },
     balanceCancel: {
       action: "Cancel",
       confirmTitle: "Cancel this balance entry?",

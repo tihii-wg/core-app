@@ -101,6 +101,33 @@ const balanceColumns = "id, client_id, amount, currency_code, document_type, doc
 export const BALANCE_CANCEL_DOCUMENT_TYPE = "balance_cancel";
 
 /**
+ * Records an advance received from the client (amount > 0) or a write-off (amount < 0): ledger row +
+ * clients.balance change in one server call. Returns the new client balance.
+ */
+export async function addClientBalanceEntry(
+  clientId: string,
+  input: { amount: number; description?: string },
+): Promise<{ clientId: string; balance: number }> {
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount === 0) throw new Error(i18n.t("clients.extras.balanceAdd.errors.amount"));
+  const { data, error } = await supabase.rpc("crm_add_client_balance_entry", {
+    p_client_id: clientId,
+    p_amount: amount,
+    p_description: input.description?.trim() || null,
+  });
+  if (error) {
+    const message = error.message ?? "";
+    if (error.code === "PGRST202" || /crm_add_client_balance_entry/.test(message)) {
+      throw new Error(i18n.t("clients.extras.balanceCancel.errors.sqlMissing"));
+    }
+    if (/forbidden|read_only/.test(message)) throw new Error(i18n.t("clients.extras.balanceCancel.errors.forbidden"));
+    throw new Error(message || i18n.t("common.somethingWentWrong"));
+  }
+  const result = (data ?? {}) as { client_id?: string; balance?: number | string };
+  return { clientId: String(result.client_id ?? clientId), balance: Number(result.balance ?? 0) };
+}
+
+/**
  * Cancels a balance (advance) entry on the server: adds a reversal row (−amount) and subtracts the amount
  * from clients.balance — the advance used by the client settlement. Returns the new client balance.
  * SQL: supabase/manual/20261119200000_cancel_client_balance_entry.PRODUCTION.sql.

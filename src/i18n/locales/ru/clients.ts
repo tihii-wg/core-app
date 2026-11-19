@@ -244,6 +244,17 @@ const clients: Messages<typeof en> = {
     deletePhone: "Удалить телефон {{phone}}",
     deleteAddress: "Удалить адрес {{address}}",
     balanceNote: "Баланс клиента — это аванс (предоплата) клиента. Записи ниже — строки журнала, если они есть; долг из них не выводится.",
+    balanceAdd: {
+      title: "Записать движение по балансу",
+      kinds: { advance: "Аванс от клиента (+)", writeOff: "Списание (−)" },
+      amount: "Сумма",
+      amountPlaceholder: "Сумма",
+      comment: "Комментарий",
+      commentPlaceholder: "Комментарий, например «Аванс наличными»",
+      submit: "Записать",
+      done: "Записано, баланс клиента пересчитан",
+      errors: { amount: "Введите сумму больше нуля." },
+    },
     balanceCancel: {
       action: "Отменить",
       confirmTitle: "Отменить запись баланса?",

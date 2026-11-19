@@ -243,6 +243,17 @@ const clients: Messages<typeof en> = {
     deletePhone: "Șterge telefonul {{phone}}",
     deleteAddress: "Șterge adresa {{address}}",
     balanceNote: "Soldul clientului este avansul (plata în avans) clientului. Intrările de mai jos sunt rânduri de registru, când există; datoria nu se deduce din ele.",
+    balanceAdd: {
+      title: "Înregistrați o mișcare de sold",
+      kinds: { advance: "Avans de la client (+)", writeOff: "Decontare (−)" },
+      amount: "Sumă",
+      amountPlaceholder: "Sumă",
+      comment: "Comentariu",
+      commentPlaceholder: "Comentariu, ex. «Avans numerar»",
+      submit: "Înregistrează",
+      done: "Înregistrat, soldul clientului recalculat",
+      errors: { amount: "Introduceți o sumă mai mare ca zero." },
+    },
     balanceCancel: {
       action: "Anulează",
       confirmTitle: "Anulați această înregistrare de sold?",

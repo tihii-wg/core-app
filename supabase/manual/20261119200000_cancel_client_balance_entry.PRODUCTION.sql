@@ -1,5 +1,10 @@
--- Cancel a client balance (advance) entry.
+-- Client balance (advance) entries: add an entry (advance received / write-off) and cancel an entry.
 --
+-- crm_add_client_balance_entry(client, amount, description): positive amount = advance (prepayment)
+-- received from the client, negative = write-off / correction. Inserts the ledger row and changes
+-- clients.balance by the same amount — the advance the settlement (взаиморасчёт) uses.
+--
+-- Cancel:
 -- client_balance_entries are a ledger: clients have no UPDATE / DELETE on it (RLS). Cancelling an entry
 -- adds a reversal row (−amount, document_type = 'balance_cancel', document_id = the cancelled entry) and
 -- subtracts the amount from clients.balance — the advance that the client settlement (взаиморасчёт) uses.
@@ -87,6 +92,68 @@ $$;
 
 revoke all on function public.crm_cancel_client_balance_entry(uuid, text) from public, anon;
 grant execute on function public.crm_cancel_client_balance_entry(uuid, text) to authenticated;
+
+create or replace function public.crm_add_client_balance_entry(
+  p_client_id uuid,
+  p_amount numeric,
+  p_description text default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_client public.clients%rowtype;
+  v_amount numeric := round(coalesce(p_amount, 0), 2);
+  v_entry_id uuid;
+  v_balance numeric;
+  v_currency text;
+begin
+  if p_client_id is null or v_amount = 0 or abs(v_amount) > 1000000000 then
+    raise exception 'balance_add:invalid_args' using errcode = '22023';
+  end if;
+
+  select * into v_client from public.clients where id = p_client_id for update;
+  if not found then
+    raise exception 'balance_add:not_found' using errcode = 'P0002';
+  end if;
+  if not public.crm_has_permission(v_client.workspace_id, 'contacts.edit') then
+    raise exception 'balance_add:forbidden' using errcode = '42501';
+  end if;
+  if to_regprocedure('public.workspace_write_allowed(uuid)') is not null
+     and not public.workspace_write_allowed(v_client.workspace_id) then
+    raise exception 'balance_add:read_only' using errcode = '42501';
+  end if;
+
+  select coalesce(nullif(trim(w.currency), ''), 'MDL') into v_currency from public.workspaces w where w.id = v_client.workspace_id;
+
+  insert into public.client_balance_entries
+    (workspace_id, client_id, amount, currency_code, document_type, description, is_adjustment, created_by)
+  values (
+    v_client.workspace_id,
+    v_client.id,
+    v_amount,
+    coalesce(v_currency, 'MDL'),
+    case when v_amount > 0 then 'advance' else 'write_off' end,
+    left(nullif(trim(coalesce(p_description, '')), ''), 500),
+    false,
+    auth.uid()
+  )
+  returning id into v_entry_id;
+
+  update public.clients
+     set balance = coalesce(balance, 0) + v_amount
+   where id = v_client.id
+  returning balance into v_balance;
+
+  return jsonb_build_object('entry_id', v_entry_id, 'client_id', v_client.id, 'balance', v_balance);
+end;
+$$;
+
+revoke all on function public.crm_add_client_balance_entry(uuid, numeric, text) from public, anon;
+grant execute on function public.crm_add_client_balance_entry(uuid, numeric, text) to authenticated;
 
 commit;
 

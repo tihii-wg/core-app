@@ -17,6 +17,7 @@ import {
   useDeleteClientDiscount,
   useGetClientBalanceEntries,
   useCancelClientBalanceEntry,
+  useAddClientBalanceEntry,
   useGetClientDiscounts,
   useGetClientPhones,
   useUpsertClientDiscount,
@@ -249,7 +250,12 @@ function BalanceTab({ clientId, onBalanceChanged }: { clientId: string; onBalanc
       available={available}
       isEmpty={rows.length === 0}
       emptyLabel={t("clients.extras.noBalanceEntries")}
-      form={<p className="text-xs text-muted-foreground">{t("clients.extras.balanceNote")}</p>}
+      form={
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">{t("clients.extras.balanceNote")}</p>
+          <AddBalanceEntryForm clientId={clientId} onBalanceChanged={onBalanceChanged} />
+        </div>
+      }
     >
       <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
         {rows.map((row) => {
@@ -259,7 +265,15 @@ function BalanceTab({ clientId, onBalanceChanged }: { clientId: string; onBalanc
             <li key={row.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
               <div className="min-w-0">
                 <p className={`truncate text-sm ${isCancelled ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                  {row.description ?? (isReversal ? null : row.documentType) ?? t("clients.extras.balanceEntry")}
+                  {row.description ??
+                    (row.documentType === "advance"
+                      ? t("clients.extras.balanceAdd.kinds.advance")
+                      : row.documentType === "write_off"
+                        ? t("clients.extras.balanceAdd.kinds.writeOff")
+                        : isReversal
+                          ? null
+                          : row.documentType) ??
+                    t("clients.extras.balanceEntry")}
                 </p>
                 <p className="text-xs text-muted-foreground tabular-nums">{row.createdAt.split("T")[0]}</p>
               </div>
@@ -381,6 +395,66 @@ function DiscountRow({ clientId, target, discount }: { clientId: string; target:
 }
 
 const checkboxClassName = "size-4 rounded border-border-strong accent-primary";
+
+/** Advance received from the client (+) or a write-off (−); goes to the client's balance (advance). */
+function AddBalanceEntryForm({ clientId, onBalanceChanged }: { clientId: string; onBalanceChanged?: (balance: number) => void }) {
+  const { t } = useTranslation();
+  const addEntry = useAddClientBalanceEntry(clientId, onBalanceChanged);
+  const [kind, setKind] = useState<"advance" | "writeOff">("advance");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const parsed = Number(amount.replace(",", "."));
+  const valid = Number.isFinite(parsed) && parsed > 0;
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!valid) return;
+    addEntry.mutate(
+      { amount: kind === "advance" ? parsed : -parsed, description },
+      {
+        onSuccess: () => {
+          setAmount("");
+          setDescription("");
+          setKind("advance");
+        },
+      },
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-2 rounded-lg border border-border p-3" aria-label={t("clients.extras.balanceAdd.title")}>
+      <p className="text-sm font-medium text-foreground">{t("clients.extras.balanceAdd.title")}</p>
+      <div className="flex flex-wrap gap-3 text-xs text-foreground">
+        {(["advance", "writeOff"] as const).map((value) => (
+          <label key={value} className="flex items-center gap-1.5">
+            <input type="radio" name={`balance-kind-${clientId}`} checked={kind === value} onChange={() => setKind(value)} />
+            {t(`clients.extras.balanceAdd.kinds.${value}`)}
+          </label>
+        ))}
+      </div>
+      <div className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-2">
+        <Input
+          inputMode="decimal"
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          placeholder={t("clients.extras.balanceAdd.amountPlaceholder")}
+          aria-label={t("clients.extras.balanceAdd.amount")}
+        />
+        <Input
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder={t("clients.extras.balanceAdd.commentPlaceholder")}
+          aria-label={t("clients.extras.balanceAdd.comment")}
+        />
+      </div>
+      <div className="flex justify-end">
+        <Button type="submit" size="sm" loading={addEntry.isPending} disabled={!valid}>
+          {t("clients.extras.balanceAdd.submit")}
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 function AddPhoneForm({ clientId }: { clientId: string }) {
   const { t } = useTranslation();
