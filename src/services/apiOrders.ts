@@ -253,6 +253,49 @@ async function resolveService(workspaceId: string, service: OrderService) {
 }
 
 /**
+ * Services of a new order, in form order. Catalog ids are checked in ONE query; lines without a (valid) id
+ * fall back to resolveService (by name / create) one after another, so two equal new names make one service.
+ */
+async function resolveServicesForCreate(workspaceId: string, services: OrderService[]): Promise<{ id: string; name: string }[]> {
+  if (services.length === 0) return [];
+  const ids = [...new Set(services.map((service) => service.serviceId).filter((id): id is string => Boolean(id) && isUuid(String(id))))];
+  const byId = new Map<string, { id: string; name: string }>();
+  if (ids.length > 0) {
+    const { data, error } = await supabase.from("services").select("id, service_name").eq("workspace_id", workspaceId).in("id", ids);
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as { id: string; service_name: string }[]) {
+      byId.set(String(row.id), { id: String(row.id), name: String(row.service_name) });
+    }
+  }
+  const resolved: { id: string; name: string }[] = [];
+  for (const service of services) {
+    const known = service.serviceId ? byId.get(String(service.serviceId)) : undefined;
+    resolved.push(known ?? (await resolveService(workspaceId, { ...service, serviceId: "" })));
+  }
+  return resolved;
+}
+
+/**
+ * Vehicle of a new order: belongs to the workspace and to the order's client (same rules as
+ * assertVehicleAssignable) and its mileage for the intake snapshot — one query instead of two.
+ */
+async function loadAssignableVehicleForCreate(workspaceId: string, clientId: string | null, vehicleId: string | null) {
+  if (!vehicleId) return null;
+  if (!clientId) throw new Error(i18n.t("vehicles.errors.vehicleNeedsClient"));
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("id, current_mileage, initial_mileage, mileage_unit")
+    .eq("id", vehicleId)
+    .eq("workspace_id", workspaceId)
+    .eq("client_id", clientId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(i18n.t("vehicles.errors.invalidSelection"));
+  return data as { id: string; current_mileage: unknown; initial_mileage: unknown; mileage_unit: unknown };
+}
+
+/**
  * Resolve a form assignee to employees.id for orders.employee_id.
  * Employees belong to a workspace via workspace_id only — profile_id / Auth is optional.
  * Legacy form values that still hold an auth user id (from old assigned_to) are remapped to employees.id.
@@ -353,42 +396,80 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   }
   // Orders may be saved with zero services (empty draft / cleared lines).
   // Blank draft rows are skipped; named entries still go through resolveService.
-  const resolvedServices: ResolvedServiceLine[] = [];
-  for (const service of input.services ?? []) {
-    if (!service.serviceId && !service.serviceName?.trim()) continue;
-    const resolved = await resolveService(targetWorkspaceId, service);
-    resolvedServices.push({
-      ...resolved,
-      price: service.price,
-      quantity: service.quantity,
-      ...(service.kind ? { kind: service.kind } : {}),
-      ...(isLineDiscountType(service.discountType) && Number(service.discountValue) > 0
-        ? { discountType: service.discountType, discountValue: Number(service.discountValue) }
-        : {}),
-      // Snapshot form/catalog warranty onto the line — create insert must persist these.
-      warrantyMonths: mapWarrantyMonths(service.warrantyMonths) ?? null,
-      warrantyDays: mapWarrantyMonths(service.warrantyDays) ?? null,
-      warrantyKm: mapWarrantyMonths(service.warrantyKm) ?? null,
-      technicianId: technicianIdOrNull(service.technicianId),
-      ...(service.extraTechnicianIds?.length ? { extraTechnicianIds: [...service.extraTechnicianIds] } : {}),
-    });
-  }
-
-  const employeeId = await resolveAssignedEmployeeId(targetWorkspaceId, input.assignedEmployeeId);
-  const clientId = await resolveClientId(targetWorkspaceId, input);
-  const vehicleId = await assertVehicleAssignable(targetWorkspaceId, clientId, nullIfEmptyUuid(input.vehicleId));
+  //
+  // Performance: every independent lookup below runs in parallel (one network round trip instead of ~10
+  // sequential ones). Only real dependencies wait: a NEW client is created after the service / employee
+  // checks passed (no orphan client when validation fails), and the vehicle + client discounts need the client.
+  const serviceInputs = (input.services ?? []).filter((service) => service.serviceId || service.serviceName?.trim());
+  const createAsEstimate = input.kind === "estimate" && isOrderEstimatesSupported();
   const materials = consolidateOrderMaterials(input.materials ?? []);
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  if (!user) throw new Error(i18n.t("clients.errors.notAuthenticated"));
+  const servicesPromise = resolveServicesForCreate(targetWorkspaceId, serviceInputs);
+  const employeePromise = resolveAssignedEmployeeId(targetWorkspaceId, input.assignedEmployeeId);
+  const existingClientId = nullIfEmptyUuid(input.clientId);
+  const clientPromise: Promise<string | null> = existingClientId
+    ? Promise.resolve(existingClientId)
+    : Promise.all([servicesPromise, employeePromise]).then(() => resolveClientId(targetWorkspaceId, input));
+  const clientDependentPromise = clientPromise.then((clientId) =>
+    Promise.all([
+      loadAssignableVehicleForCreate(targetWorkspaceId, clientId, nullIfEmptyUuid(input.vehicleId)),
+      clientId && orderLineDiscountSupported ? loadClientDiscounts(targetWorkspaceId, clientId) : Promise.resolve([] as ClientDiscountLike[]),
+    ]),
+  );
+  // Number planned before the insert (latest sequence of this year in the workspace time zone); the insert
+  // carries it, so no follow-up UPDATE is needed. Checked against the stored created_at below.
+  // The sequence is read for the default-zone year at the same time as the time zone; it is re-read only when
+  // the workspace zone is in another year right now (minutes around New Year).
+  const nowIso = new Date().toISOString();
+  const guessedPrefix = `ORD-${yearInTimeZone(nowIso, null)}-`;
+  const guessedLatest = latestOrderSequence(targetWorkspaceId, guessedPrefix).catch(() => null);
+  const numberingPromise = workspaceTimeZone(targetWorkspaceId).then(async (zone) => {
+    const prefix = `ORD-${yearInTimeZone(nowIso, zone)}-`;
+    const latest =
+      prefix === guessedPrefix ? await guessedLatest : await latestOrderSequence(targetWorkspaceId, prefix).catch(() => null);
+    return { timeZone: zone, prefix, latest };
+  });
+  // Schema probe the materials write needs (cached per session) — warmed now instead of after the insert.
+  if (materials.length > 0) void probeOrderMaterialFreeformSupport();
+  const definitionsPromise = getStatusDefinitions(targetWorkspaceId, createAsEstimate ? "estimate" : "order").catch(() => []);
+  // Local session (no /auth/v1/user round trip); RLS checks created_by against the token anyway.
+  const userPromise = supabase.auth.getSession().then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    const sessionUser = data.session?.user;
+    if (!sessionUser) throw new Error(i18n.t("clients.errors.notAuthenticated"));
+    return sessionUser;
+  });
+
+  const [resolvedServiceRows, employeeId, clientId, [vehicleRow, clientDiscounts], numbering, definitions, user] = await Promise.all([
+    servicesPromise,
+    employeePromise,
+    clientPromise,
+    clientDependentPromise,
+    numberingPromise,
+    definitionsPromise,
+    userPromise,
+  ]);
+  const vehicleId = vehicleRow ? String(vehicleRow.id) : null;
+  const timeZone = numbering.timeZone;
+
+  const resolvedServices: ResolvedServiceLine[] = serviceInputs.map((service, index) => ({
+    ...resolvedServiceRows[index],
+    price: service.price,
+    quantity: service.quantity,
+    ...(service.kind ? { kind: service.kind } : {}),
+    ...(isLineDiscountType(service.discountType) && Number(service.discountValue) > 0
+      ? { discountType: service.discountType, discountValue: Number(service.discountValue) }
+      : {}),
+    // Snapshot form/catalog warranty onto the line — create insert must persist these.
+    warrantyMonths: mapWarrantyMonths(service.warrantyMonths) ?? null,
+    warrantyDays: mapWarrantyMonths(service.warrantyDays) ?? null,
+    warrantyKm: mapWarrantyMonths(service.warrantyKm) ?? null,
+    technicianId: technicianIdOrNull(service.technicianId),
+    ...(service.extraTechnicianIds?.length ? { extraTechnicianIds: [...service.extraTechnicianIds] } : {}),
+  }));
 
   // Client discounts (service_order / product_order) are stamped onto the lines once, here. Lines that already
   // carry a discount are left alone, so a discount can never be applied twice.
-  const clientDiscounts = clientId && orderLineDiscountSupported ? await loadClientDiscounts(targetWorkspaceId, clientId) : [];
   const stampedServices = stampClientDiscountsOnLines(
     resolvedServices,
     materials.map((line) => ({ ...line })),
@@ -400,7 +481,6 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     services: stampedLines.map(serviceInputToMoneyLine),
     materials: stampedServices.materials.map(materialToMoneyLine),
   });
-  const timeZone = await workspaceTimeZone(targetWorkspaceId);
   const normalizedVin = assertValidOptionalVin(input.vin, "orders.validation.vinLength");
   const device = nullIfEmptyText(input.device);
   const carNumber = nullIfEmptyText(input.carNumber)?.toUpperCase() ?? null;
@@ -410,21 +490,11 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   // calculated from this snapshot when the order is closed — without it they would show months only.
   let intakeMileage = input.vehicleMileageSnapshot;
   let intakeMileageUnit = input.vehicleMileageUnitSnapshot;
-  if (vehicleId && (intakeMileage === undefined || intakeMileage === null)) {
-    const { data: vehicleRow } = await supabase
-      .from("vehicles")
-      .select("current_mileage, initial_mileage, mileage_unit")
-      .eq("id", vehicleId)
-      .eq("workspace_id", targetWorkspaceId)
-      .maybeSingle();
-    const known = numberOrNull(vehicleRow?.current_mileage) ?? numberOrNull(vehicleRow?.initial_mileage);
-    const vehicleUnit = vehicleRow ? parseMileageUnit(vehicleRow.mileage_unit) : null;
-    if (vehicleRow) {
-      // Always record the vehicle's unit (even without a known mileage): warranty limits on the lines are
-      // stored in the order's unit, so a miles vehicle must make the order «mi», not the default «km».
-      intakeMileage = known;
-      intakeMileageUnit = vehicleUnit ?? intakeMileageUnit ?? null;
-    }
+  if (vehicleRow && (intakeMileage === undefined || intakeMileage === null)) {
+    // Always record the vehicle's unit (even without a known mileage): warranty limits on the lines are
+    // stored in the order's unit, so a miles vehicle must make the order «mi», not the default «km».
+    intakeMileage = numberOrNull(vehicleRow.current_mileage) ?? numberOrNull(vehicleRow.initial_mileage);
+    intakeMileageUnit = parseMileageUnit(vehicleRow.mileage_unit) ?? intakeMileageUnit ?? null;
   }
   const mileageSnapshotPatch = orderMileageSnapshotFields({
     vehicleMileageSnapshot: intakeMileage,
@@ -434,10 +504,8 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     vehicleMileageConfirmed: input.vehicleMileageConfirmed,
   });
 
-  const createAsEstimate = input.kind === "estimate" && isOrderEstimatesSupported();
-  const definitions = await getStatusDefinitions(targetWorkspaceId, createAsEstimate ? "estimate" : "order").catch(
-    () => [],
-  );
+  let plannedNumber: string | null =
+    numbering.latest == null ? null : `${numbering.prefix}${String(numbering.latest + 1).padStart(3, "0")}`;
   // Estimates start in the workspace's default estimate status (findDefaultOrderStatus only looks at orders).
   const defaultStatus = createAsEstimate
     ? (() => {
@@ -482,7 +550,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
             }
           : {}),
         is_paid: false,
-        number: `ORD-PENDING-${crypto.randomUUID()}`,
+        number: plannedNumber ?? `ORD-PENDING-${crypto.randomUUID()}`,
         vin: normalizedVin,
         service_id: resolvedServices[0]?.id ?? null,
         service: resolvedServices.length > 0 ? resolvedServices.map((service) => service.name).join(", ") : null,
@@ -533,50 +601,50 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     ));
   }
 
+  if (orderError && orderError.code === "23505" && plannedNumber) {
+    // The planned number was taken in the meantime (parallel create): insert as pending, number below.
+    plannedNumber = null;
+    ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
+      insertOrderRow(
+        Boolean(Object.keys(mileageSnapshotPatch).length) && orderMileageSnapshotSupported !== false,
+        Boolean(Object.keys(mileageConfirmedPatch).length) && orderMileageConfirmedSupported !== false,
+        createAsEstimate && isOrderEstimatesSupported(),
+      ),
+    ));
+  }
+
   if (orderError) {
     throw mapOrderIndustryFieldsDbError(orderError) ?? new Error(orderError.message);
   }
 
-  let order: Record<string, unknown>;
-  try {
-    order = await assignOrderNumber(targetWorkspaceId, insertedOrder, timeZone);
-  } catch (error) {
-    await supabase.from("orders").delete().eq("id", insertedOrder.id).eq("workspace_id", targetWorkspaceId);
-    throw error;
+  // The year of the number must be the year of the stored created_at (workspace time zone). The planned number
+  // used the browser clock: keep it when the years agree (always, except a create right at New Year).
+  let order: Record<string, unknown> = insertedOrder as Record<string, unknown>;
+  const plannedNumberValid =
+    plannedNumber != null &&
+    String(insertedOrder.number ?? "") === plannedNumber &&
+    `ORD-${yearInTimeZone(String(insertedOrder.created_at), timeZone)}-` === numbering.prefix;
+  if (!plannedNumberValid) {
+    try {
+      order = await assignOrderNumber(targetWorkspaceId, insertedOrder, timeZone);
+    } catch (error) {
+      await supabase.from("orders").delete().eq("id", insertedOrder.id).eq("workspace_id", targetWorkspaceId);
+      throw error;
+    }
   }
 
   // Discount metadata actually written on the service lines (the column may be missing on this database).
   let writtenServiceLines: ResolvedServiceLine[] = stampedLines;
-  if (resolvedServices.length > 0) {
-    const { error: orderServicesError } = await withLineDiscountColumns(() =>
-      withOrderServiceKind((_columns, withKind) =>
-        supabase.from("order_services").insert(
-          stampedLines.map((service) => ({
-            order_id: order.id,
-            service_id: service.id,
-            service_name: service.name,
-            price: service.price,
-            quantity: service.quantity,
-            ...(withKind && service.kind ? { kind: service.kind } : {}),
-            ...(orderLineDiscountSupported && lineHasDiscount(service) ? { discount_type: service.discountType, discount_value: service.discountValue } : {}),
-            ...orderServiceWarrantyInsertFields(service),
-            ...orderServiceTechnicianInsertFields(service),
-          })),
-        ),
-      ),
-    );
-    if (!orderLineDiscountSupported) writtenServiceLines = stampedLines.map(stripServiceDiscount);
+  let writtenMaterialLines: OrderMaterial[] = [];
+  let issuedForCompensation: Awaited<ReturnType<typeof applyCatalogImmediateIssue>>["issuedForCompensation"] = [];
+  const orderId = String(order.id);
 
-    if (orderServicesError) {
-      const teamMapped = mapOrderTeamDbError(orderServicesError);
-      // Retry without warranty / technician columns when the schema has not been upgraded yet.
-      if (
-        orderLineWarrantySupported !== false &&
-        /warranty_months|warranty_days|warranty_km/i.test(orderServicesError.message ?? "") &&
-        (orderServicesError.code === "42703" || orderServicesError.code === "PGRST204")
-      ) {
-        orderLineWarrantySupported = false;
-        const { error: retryError } = await withLineDiscountColumns(() =>
+  // Service lines, team and materials are independent writes: they run in parallel. Any failure rolls the
+  // whole order back AFTER every branch settled (issued stock is returned first, then the order is deleted).
+  const servicesBranch = async () => {
+    if (resolvedServices.length > 0) {
+      const insertServiceLines = () =>
+        withLineDiscountColumns(() =>
           withOrderServiceKind((_columns, withKind) =>
             supabase.from("order_services").insert(
               stampedLines.map((service) => ({
@@ -586,94 +654,40 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
                 price: service.price,
                 quantity: service.quantity,
                 ...(withKind && service.kind ? { kind: service.kind } : {}),
-                ...(orderLineDiscountSupported && lineHasDiscount(service)
-                  ? { discount_type: service.discountType, discount_value: service.discountValue }
-                  : {}),
+                ...(orderLineDiscountSupported && lineHasDiscount(service) ? { discount_type: service.discountType, discount_value: service.discountValue } : {}),
+                // Both helpers drop their columns once the schema is known not to have them.
+                ...orderServiceWarrantyInsertFields(service),
                 ...orderServiceTechnicianInsertFields(service),
               })),
             ),
           ),
         );
-        if (retryError) {
-          if (isMissingOrderServiceTechnicianColumn(retryError)) {
-            markOrderServiceTechnicianUnsupported();
-            const { error: retryNoTech } = await withLineDiscountColumns(() =>
-              withOrderServiceKind((_columns, withKind) =>
-                supabase.from("order_services").insert(
-                  stampedLines.map((service) => ({
-                    order_id: order.id,
-                    service_id: service.id,
-                    service_name: service.name,
-                    price: service.price,
-                    quantity: service.quantity,
-                    ...(withKind && service.kind ? { kind: service.kind } : {}),
-                    ...(orderLineDiscountSupported && lineHasDiscount(service)
-                      ? { discount_type: service.discountType, discount_value: service.discountValue }
-                      : {}),
-                  })),
-                ),
-              ),
-            );
-            if (!retryNoTech) {
-              // ok
-            } else {
-              const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-              if (rollbackError) {
-                throw new Error(`${retryNoTech.message}; order rollback failed: ${rollbackError.message}`);
-              }
-              throw mapOrderTeamDbError(retryNoTech) ?? new Error(retryNoTech.message);
-            }
-          } else {
-            const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-            if (rollbackError) {
-              throw new Error(`${retryError.message}; order rollback failed: ${rollbackError.message}`);
-            }
-            throw mapOrderTeamDbError(retryError) ?? new Error(retryError.message);
-          }
+      // Retry without warranty / technician columns when the schema has not been upgraded yet.
+      for (let attempt = 0; ; attempt += 1) {
+        const { error } = await insertServiceLines();
+        if (!error) break;
+        const missingWarranty =
+          orderLineWarrantySupported !== false &&
+          /warranty_months|warranty_days|warranty_km/i.test(error.message ?? "") &&
+          (error.code === "42703" || error.code === "PGRST204");
+        if (attempt < 2 && missingWarranty) {
+          orderLineWarrantySupported = false;
+          continue;
         }
-      } else if (isMissingOrderServiceTechnicianColumn(orderServicesError)) {
-        markOrderServiceTechnicianUnsupported();
-        const { error: retryError } = await withLineDiscountColumns(() =>
-          withOrderServiceKind((_columns, withKind) =>
-            supabase.from("order_services").insert(
-              stampedLines.map((service) => ({
-                order_id: order.id,
-                service_id: service.id,
-                service_name: service.name,
-                price: service.price,
-                quantity: service.quantity,
-                ...(withKind && service.kind ? { kind: service.kind } : {}),
-                ...(orderLineDiscountSupported && lineHasDiscount(service)
-                  ? { discount_type: service.discountType, discount_value: service.discountValue }
-                  : {}),
-                ...orderServiceWarrantyInsertFields(service),
-              })),
-            ),
-          ),
-        );
-        if (retryError) {
-          const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-          if (rollbackError) {
-            throw new Error(`${retryError.message}; order rollback failed: ${rollbackError.message}`);
-          }
-          throw mapOrderTeamDbError(retryError) ?? new Error(retryError.message);
+        if (attempt < 2 && isMissingOrderServiceTechnicianColumn(error)) {
+          markOrderServiceTechnicianUnsupported();
+          continue;
         }
-      } else {
-        const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-        if (rollbackError) {
-          throw new Error(`${orderServicesError.message}; order rollback failed: ${rollbackError.message}`);
-        }
-        throw teamMapped ?? new Error(orderServicesError.message);
+        throw mapOrderTeamDbError(error) ?? new Error(error.message);
       }
+      if (!orderLineDiscountSupported) writtenServiceLines = stampedLines.map(stripServiceDiscount);
     }
-  }
 
-  try {
     if (stampedLines.some((line) => line.extraTechnicianIds?.length)) {
       const { data: savedLines, error: savedLinesError } = await supabase
         .from("order_services")
         .select("id, service_id")
-        .eq("order_id", String(order.id));
+        .eq("order_id", orderId);
       if (savedLinesError) throw new Error(savedLinesError.message);
       const changes = stampedLines
         .filter((line) => line.extraTechnicianIds?.length)
@@ -686,81 +700,77 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
           extraTechnicianIds: (line.extraTechnicianIds ?? []).filter((id) => id && id !== line.technicianId),
         }))
         .filter((change) => change.lineId);
-      await writeLineExtraPerformers(String(order.id), changes);
+      await writeLineExtraPerformers(orderId, changes);
     }
-    await syncOrderEmployees({
+  };
+
+  const teamBranch = () =>
+    syncOrderEmployees({
       workspaceId: targetWorkspaceId,
-      orderId: String(order.id),
+      orderId,
       assignedEmployeeId: employeeId,
       team: input.team,
       lineTechnicianIds: stampedLines.flatMap((line) => [line.technicianId, ...(line.extraTechnicianIds ?? [])]),
+      // Brand-new order: nothing to diff against, skip reading order_employees.
+      freshOrder: true,
     });
-  } catch (error) {
-    const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-    if (rollbackError) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`${message}; order rollback failed: ${rollbackError.message}`);
-    }
-    throw error;
-  }
 
-  let writtenMaterialLines: OrderMaterial[] = [];
-  if (materials.length > 0) {
-    const orderId = String(order.id);
-    let issuedForCompensation: Awaited<ReturnType<typeof applyCatalogImmediateIssue>>["issuedForCompensation"] = [];
-    try {
-      const freeform = freeformMaterialsOnly(materials);
-      const hasCatalog = materials.some(isCatalogOrderMaterial);
+  const materialsBranch = async () => {
+    if (materials.length === 0) return;
+    const freeform = freeformMaterialsOnly(materials);
+    const hasCatalog = materials.some(isCatalogOrderMaterial);
 
-      // Estimates never touch stock: persist catalog lines via sync with quantity_issued = 0.
-      if (createAsEstimate) {
-        const syncedMaterials = await persistEstimateMaterialWarehouses(
-          orderId,
-          materials,
-          await syncOrderMaterialsRpc(orderId, materials, targetWorkspaceId),
-        );
-        const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, syncedMaterials);
-        const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
-        writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
-      } else {
-        assertCatalogWarehousesSelected(materials);
+    // Estimates never touch stock: persist catalog lines via sync with quantity_issued = 0.
+    if (createAsEstimate) {
+      const syncedMaterials = await persistEstimateMaterialWarehouses(
+        orderId,
+        materials,
+        await syncOrderMaterialsRpc(orderId, materials, targetWorkspaceId),
+      );
+      const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, syncedMaterials);
+      const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+      writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
+    } else {
+      assertCatalogWarehousesSelected(materials);
 
-        // Catalog: atomic add+issue per line (RPC contract). Freeform: sync_order_materials only.
-        // Warranty columns are never written by add/issue — always persist via apply_order_material_warranties.
-        if (hasCatalog) {
-          const applied = await applyCatalogImmediateIssue({ orderId, desired: materials, existing: [] });
-          issuedForCompensation = applied.issuedForCompensation;
-          if (freeform.length > 0) {
-            // Include catalog lines so sync does not delete just-issued rows.
-            // Re-apply warranties from the original form `materials` — merge/RPC round-trips can drop them.
-            const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
-            const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, synced);
-            const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
-            writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
-          } else {
-            const withWarranty = await persistOrderMaterialWarranties(
-              orderId,
-              targetWorkspaceId,
-              materials,
-              applied.catalog,
-            );
-            const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
-            writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
-          }
+      // Catalog: atomic add+issue per line (RPC contract). Freeform: sync_order_materials only.
+      // Warranty columns are never written by add/issue — always persist via apply_order_material_warranties.
+      if (hasCatalog) {
+        const applied = await applyCatalogImmediateIssue({ orderId, desired: materials, existing: [] });
+        issuedForCompensation = applied.issuedForCompensation;
+        if (freeform.length > 0) {
+          // Include catalog lines so sync does not delete just-issued rows.
+          // Re-apply warranties from the original form `materials` — merge/RPC round-trips can drop them.
+          const synced = await syncOrderMaterialsRpc(orderId, mergeCatalogAndFreeform(applied.catalog, freeform), targetWorkspaceId);
+          const withWarranty = await persistOrderMaterialWarranties(orderId, targetWorkspaceId, materials, synced);
+          const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
         } else {
-          const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
-          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, syncedMaterials, productPercent ?? 0, new Set());
+          const withWarranty = await persistOrderMaterialWarranties(
+            orderId,
+            targetWorkspaceId,
+            materials,
+            applied.catalog,
+          );
+          const withCustomPrices = await applyCustomCatalogMaterialPrices(orderId, materials, withWarranty);
+          writtenMaterialLines = await stampMaterialLineDiscounts(orderId, withCustomPrices, productPercent ?? 0, new Set());
         }
+      } else {
+        const syncedMaterials = await syncOrderMaterialsRpc(orderId, freeform, targetWorkspaceId);
+        writtenMaterialLines = await stampMaterialLineDiscounts(orderId, syncedMaterials, productPercent ?? 0, new Set());
       }
-    } catch (error) {
-      await compensateIssuedCatalogMaterials(orderId, issuedForCompensation);
-      const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
-      const syncMessage = error instanceof Error ? error.message : String(error);
-      if (rollbackError) {
-        throw new Error(`${syncMessage}; order rollback failed: ${rollbackError.message}`);
-      }
-      throw error instanceof Error ? error : new Error(syncMessage);
     }
+  };
+
+  const settled = await Promise.allSettled([servicesBranch(), teamBranch(), materialsBranch()]);
+  const failed = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failed) {
+    await compensateIssuedCatalogMaterials(orderId, issuedForCompensation);
+    const { error: rollbackError } = await supabase.from("orders").delete().eq("id", order.id).eq("workspace_id", targetWorkspaceId);
+    const reason: unknown = failed.reason;
+    const message = reason instanceof Error ? reason.message : String(reason);
+    if (rollbackError) throw new Error(`${message}; order rollback failed: ${rollbackError.message}`);
+    throw reason instanceof Error ? reason : new Error(message);
   }
 
   // Re-persist only when what was written can differ from the insert-time totals: the materials RPC rewrote

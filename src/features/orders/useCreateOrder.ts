@@ -4,7 +4,7 @@ import i18n from "../../i18n";
 import { createOrder } from "../../services/apiOrders";
 import { replaceOrderPaymentStages } from "../../services/apiPaymentStages";
 import type { CreateOrderInput } from "../../lib/types";
-import { getWorkspace } from "../../services/apiWorkspaces";
+import { getWorkspace, type WorkspaceDetails } from "../../services/apiWorkspaces";
 import { applyTemplateToStages } from "../finance/paymentStages";
 import { invalidatePaymentStageViews } from "../finance/useOrderPaymentStages";
 import { industryPaymentStageTemplate, industryProfile } from "../industries/industryProfile";
@@ -16,13 +16,15 @@ import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
 async function maybeApplyPaymentStageTemplate(
   created: { id?: unknown; createdAt?: unknown; created_at?: unknown },
   workspaceId: string | undefined,
+  cachedWorkspace: WorkspaceDetails | null | undefined,
 ) {
   const orderId = typeof created.id === "string" ? created.id : "";
   const createdAtRaw = created.createdAt ?? created.created_at;
   const createdAt = typeof createdAtRaw === "string" ? createdAtRaw : "";
   if (!workspaceId || !orderId) return;
   try {
-    const workspace = await getWorkspace(workspaceId);
+    // The active workspace is already in the query cache (layout / settings): no extra request.
+    const workspace = cachedWorkspace ?? (await getWorkspace(workspaceId));
     const template =
       workspace?.paymentStageTemplate && workspace.paymentStageTemplate.length > 0
         ? workspace.paymentStageTemplate
@@ -57,7 +59,11 @@ export function useCreateOrder() {
     mutationFn: async (input: CreateOrderInput) => {
       guardWrite();
       const order = await createOrder(input, workspaceId);
-      await maybeApplyPaymentStageTemplate(order, workspaceId);
+      await maybeApplyPaymentStageTemplate(
+        order,
+        workspaceId,
+        queryClient.getQueryData<WorkspaceDetails | null>(["workspace", workspaceId]),
+      );
       return order;
     },
     onMutate: (input) => {

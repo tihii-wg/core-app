@@ -153,6 +153,8 @@ export async function syncOrderEmployees(params: {
   assignedEmployeeId?: string | null;
   team?: OrderTeamMemberInput[];
   lineTechnicianIds?: Array<string | null | undefined>;
+  /** The order was just inserted: it has no team rows yet, so the read of existing rows is skipped. */
+  freshOrder?: boolean;
 }): Promise<void> {
   if (orderEmployeesTableSupported === false) return;
 
@@ -162,11 +164,13 @@ export async function syncOrderEmployees(params: {
     lineTechnicianIds: params.lineTechnicianIds,
   });
 
-  const { data: existingRows, error: loadError } = await supabase
-    .from("order_employees")
-    .select("employee_id, role")
-    .eq("workspace_id", params.workspaceId)
-    .eq("order_id", params.orderId);
+  const { data: existingRows, error: loadError } = params.freshOrder
+    ? { data: [] as unknown[], error: null }
+    : await supabase
+        .from("order_employees")
+        .select("employee_id, role")
+        .eq("workspace_id", params.workspaceId)
+        .eq("order_id", params.orderId);
 
   if (loadError) {
     if (isMissingTableError(loadError, "order_employees")) {
@@ -218,6 +222,8 @@ export async function syncOrderEmployees(params: {
         orderEmployeesTableSupported = false;
         return;
       }
+      // A database trigger already added someone: do the regular read + diff instead.
+      if (params.freshOrder && error.code === "23505") return syncOrderEmployees({ ...params, freshOrder: false });
       throw mapOrderTeamDbError(error) ?? new Error(error.message);
     }
   }
