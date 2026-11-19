@@ -243,6 +243,20 @@ const clients: Messages<typeof en> = {
     deletePhone: "Șterge telefonul {{phone}}",
     deleteAddress: "Șterge adresa {{address}}",
     balanceNote: "Soldul clientului este avansul (plata în avans) clientului. Intrările de mai jos sunt rânduri de registru, când există; datoria nu se deduce din ele.",
+    balanceCancel: {
+      action: "Anulează",
+      confirmTitle: "Anulați această înregistrare de sold?",
+      confirmBody: "«{{description}}» de {{amount}} va fi anulată: suma se scade din soldul (avansul) clientului și nu mai contează în decontare. Înregistrarea rămâne în istoric ca anulată.",
+      confirm: "Anulează înregistrarea",
+      done: "Înregistrare anulată, soldul clientului recalculat",
+      cancelled: "Anulat",
+      reversal: "Stornare",
+      errors: {
+        sqlMissing: "Anularea înregistrărilor de sold nu este activată: aplicați SQL 20261119200000_cancel_client_balance_entry.",
+        alreadyCancelled: "Această înregistrare este deja anulată.",
+        forbidden: "Nu aveți drept să modificați soldul clientului sau spațiul este doar pentru vizualizare.",
+      },
+    },
     discounts: {
       tab: "Reduceri",
       note: "Procentul de reducere implicit pentru fiecare tip de document. Reducerile la servicii/materiale se aplică rândurilor noi ale comenzii și se salvează în totalul comenzii.",

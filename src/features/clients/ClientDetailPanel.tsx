@@ -462,7 +462,10 @@ export default function ClientDetailPanel({
                       <p className="mt-1 text-xs text-muted-foreground">{t("clients.detail.balanceHint")}</p>
                     </div>
 
-                    <ClientExtrasSection clientId={selectedClient.id} />
+                    <ClientExtrasSection
+                      clientId={selectedClient.id}
+                      onBalanceChanged={(balance) => onClientUpdated({ ...selectedClient, balance })}
+                    />
 
                     {notes ? (
                       <div>

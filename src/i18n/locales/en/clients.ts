@@ -239,6 +239,20 @@ export default {
     deletePhone: "Delete phone {{phone}}",
     deleteAddress: "Delete address {{address}}",
     balanceNote: "The client balance is an advance (prepayment). Entries below are ledger rows when present; debt is not derived from them.",
+    balanceCancel: {
+      action: "Cancel",
+      confirmTitle: "Cancel this balance entry?",
+      confirmBody: "«{{description}}» for {{amount}} will be cancelled: the amount is subtracted from the client's balance (advance) and no longer counts in the settlement. The entry stays in the history as cancelled.",
+      confirm: "Cancel entry",
+      done: "Entry cancelled, client balance recalculated",
+      cancelled: "Cancelled",
+      reversal: "Reversal",
+      errors: {
+        sqlMissing: "Cancelling balance entries is not enabled yet: apply SQL 20261119200000_cancel_client_balance_entry.",
+        alreadyCancelled: "This entry is already cancelled.",
+        forbidden: "No permission to change the client balance, or the workspace is view-only.",
+      },
+    },
     discounts: {
       tab: "Discounts",
       note: "Default discount percent per document type. The service/material order discounts are applied to new order lines and saved in the order total.",

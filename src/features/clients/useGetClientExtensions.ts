@@ -11,6 +11,7 @@ import {
   getClientPhones,
   type CreateClientAddressInput,
   type CreateClientPhoneInput,
+  cancelClientBalanceEntry,
 } from "../../services/apiClientExtensions";
 import { deleteClientDiscount, getClientDiscounts, upsertClientDiscount, type UpsertClientDiscountInput } from "../../services/apiClientDiscounts";
 import type { ClientDiscountTarget } from "./clientDiscounts";
@@ -96,6 +97,28 @@ export function useDeleteClientPhone(clientId: string) {
 
 export function useDeleteClientAddress(clientId: string) {
   return useClientExtensionMutation<string>("addresses", clientId, deleteClientAddress);
+}
+
+/** Cancel a balance entry; refreshes the entries, client lists and the open card's balance. */
+export function useCancelClientBalanceEntry(clientId: string, onBalanceChanged?: (balance: number) => void) {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+  return useMutation({
+    mutationFn: (entryId: string) => {
+      guardWrite();
+      return cancelClientBalanceEntry(entryId);
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["client_extensions", "balance", workspaceId, clientId] });
+      void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+      onBalanceChanged?.(result.balance);
+      toast.success(i18n.t("clients.extras.balanceCancel.done"));
+    },
+    onError: (error) => {
+      toast.error(error.message || i18n.t("common.somethingWentWrong"));
+    },
+  });
 }
 
 export function useUpsertClientDiscount(clientId: string) {

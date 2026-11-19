@@ -32,6 +32,8 @@ export type ClientBalanceEntry = {
   amount: number;
   currencyCode: string;
   documentType: string | null;
+  /** For a cancellation row (`document_type = balance_cancel`): the cancelled entry. */
+  documentId: string | null;
   description: string | null;
   isAdjustment: boolean;
   createdAt: string;
@@ -84,6 +86,7 @@ export function toClientBalanceEntry(row: Record<string, unknown>): ClientBalanc
     amount: Number(row.amount ?? 0),
     currencyCode: text(row.currency_code) || "MDL",
     documentType: optionalText(row.document_type),
+    documentId: optionalText(row.document_id),
     description: optionalText(row.description),
     isAdjustment: Boolean(row.is_adjustment),
     createdAt: text(row.created_at),
@@ -92,7 +95,33 @@ export function toClientBalanceEntry(row: Record<string, unknown>): ClientBalanc
 
 const phoneColumns = "id, client_id, phone, label, is_primary, has_whatsapp, allow_sms, created_at";
 const addressColumns = "id, client_id, label, address, is_default, created_at";
-const balanceColumns = "id, client_id, amount, currency_code, document_type, description, is_adjustment, created_at";
+const balanceColumns = "id, client_id, amount, currency_code, document_type, document_id, description, is_adjustment, created_at";
+
+/** `document_type` of the reversal row written when an entry is cancelled. */
+export const BALANCE_CANCEL_DOCUMENT_TYPE = "balance_cancel";
+
+/**
+ * Cancels a balance (advance) entry on the server: adds a reversal row (−amount) and subtracts the amount
+ * from clients.balance — the advance used by the client settlement. Returns the new client balance.
+ * SQL: supabase/manual/20261119200000_cancel_client_balance_entry.PRODUCTION.sql.
+ */
+export async function cancelClientBalanceEntry(entryId: string, reason?: string): Promise<{ clientId: string; balance: number }> {
+  const { data, error } = await supabase.rpc("crm_cancel_client_balance_entry", {
+    p_entry_id: entryId,
+    p_reason: reason?.trim() || null,
+  });
+  if (error) {
+    const message = error.message ?? "";
+    if (error.code === "PGRST202" || /crm_cancel_client_balance_entry/.test(message)) {
+      throw new Error(i18n.t("clients.extras.balanceCancel.errors.sqlMissing"));
+    }
+    if (/already_cancelled/.test(message)) throw new Error(i18n.t("clients.extras.balanceCancel.errors.alreadyCancelled"));
+    if (/forbidden|read_only/.test(message)) throw new Error(i18n.t("clients.extras.balanceCancel.errors.forbidden"));
+    throw new Error(message || i18n.t("common.somethingWentWrong"));
+  }
+  const result = (data ?? {}) as { client_id?: string; balance?: number | string };
+  return { clientId: String(result.client_id ?? ""), balance: Number(result.balance ?? 0) };
+}
 
 export async function getClientPhones(workspaceId: string | undefined, clientId: string): Promise<ClientExtensionResult<ClientPhone>> {
   const resolved = requireWorkspaceId(workspaceId);

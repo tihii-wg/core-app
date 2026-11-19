@@ -1,5 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Undo2 } from "lucide-react";
+import { useConfirm } from "../../ui/ConfirmProvider";
+import { BALANCE_CANCEL_DOCUMENT_TYPE } from "../../services/apiClientExtensions";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../ui/Tabs";
 import { Button } from "../../ui/Button";
@@ -14,6 +16,7 @@ import {
   useGetClientAddresses,
   useDeleteClientDiscount,
   useGetClientBalanceEntries,
+  useCancelClientBalanceEntry,
   useGetClientDiscounts,
   useGetClientPhones,
   useUpsertClientDiscount,
@@ -30,6 +33,8 @@ type ExtrasTab = "phones" | "addresses" | "balance" | "discounts";
 
 type ClientExtrasSectionProps = {
   clientId: string;
+  /** Called with the new advance after a balance entry is cancelled (the card shows it). */
+  onBalanceChanged?: (balance: number) => void;
 };
 
 /**
@@ -38,7 +43,7 @@ type ClientExtrasSectionProps = {
  * Data comes from crm_ro_v1 tables and degrades to a notice when they are missing.
  * Nothing is fetched until a tab is opened.
  */
-export function ClientExtrasSection({ clientId }: ClientExtrasSectionProps) {
+export function ClientExtrasSection({ clientId, onBalanceChanged }: ClientExtrasSectionProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<ExtrasTab | "">("");
 
@@ -67,7 +72,7 @@ export function ClientExtrasSection({ clientId }: ClientExtrasSectionProps) {
           <AddressesTab clientId={clientId} />
         </TabsContent>
         <TabsContent value="balance">
-          <BalanceTab clientId={clientId} />
+          <BalanceTab clientId={clientId} onBalanceChanged={onBalanceChanged} />
         </TabsContent>
         <TabsContent value="discounts">
           <DiscountsTab clientId={clientId} />
@@ -214,9 +219,28 @@ function AddressesTab({ clientId }: { clientId: string }) {
   );
 }
 
-function BalanceTab({ clientId }: { clientId: string }) {
+function BalanceTab({ clientId, onBalanceChanged }: { clientId: string; onBalanceChanged?: (balance: number) => void }) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { rows, available, isLoading, isError } = useGetClientBalanceEntries(clientId);
+  const cancelEntry = useCancelClientBalanceEntry(clientId, onBalanceChanged);
+  // Entries already cancelled (a reversal row points at them).
+  const cancelledIds = new Set(
+    rows.filter((row) => row.documentType === BALANCE_CANCEL_DOCUMENT_TYPE && row.documentId).map((row) => row.documentId as string),
+  );
+
+  async function handleCancel(row: (typeof rows)[number]) {
+    const ok = await confirm({
+      title: t("clients.extras.balanceCancel.confirmTitle"),
+      description: t("clients.extras.balanceCancel.confirmBody", {
+        amount: `${row.amount.toFixed(2)} ${row.currencyCode}`,
+        description: row.description ?? t("clients.extras.balanceEntry"),
+      }),
+      confirmLabel: t("clients.extras.balanceCancel.confirm"),
+      cancelLabel: t("common.cancel"),
+    });
+    if (ok) cancelEntry.mutate(row.id);
+  }
 
   return (
     <TabState
@@ -228,22 +252,49 @@ function BalanceTab({ clientId }: { clientId: string }) {
       form={<p className="text-xs text-muted-foreground">{t("clients.extras.balanceNote")}</p>}
     >
       <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-        {rows.map((row) => (
-          <li key={row.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm text-foreground">
-                {row.description ?? row.documentType ?? t("clients.extras.balanceEntry")}
-              </p>
-              <p className="text-xs text-muted-foreground tabular-nums">{row.createdAt.split("T")[0]}</p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className={`text-sm font-medium tabular-nums ${row.amount < 0 ? "text-destructive" : "text-foreground"}`}>
-                {row.amount.toFixed(2)} {row.currencyCode}
-              </span>
-              {row.isAdjustment ? <StatusBadge variant="muted">{t("clients.extras.adjustment")}</StatusBadge> : null}
-            </div>
-          </li>
-        ))}
+        {rows.map((row) => {
+          const isReversal = row.documentType === BALANCE_CANCEL_DOCUMENT_TYPE;
+          const isCancelled = cancelledIds.has(row.id);
+          return (
+            <li key={row.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className={`truncate text-sm ${isCancelled ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                  {row.description ?? (isReversal ? null : row.documentType) ?? t("clients.extras.balanceEntry")}
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums">{row.createdAt.split("T")[0]}</p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span
+                  className={`text-sm font-medium tabular-nums ${
+                    isCancelled ? "text-muted-foreground line-through" : row.amount < 0 ? "text-destructive" : "text-foreground"
+                  }`}
+                >
+                  {row.amount.toFixed(2)} {row.currencyCode}
+                </span>
+                {isCancelled ? (
+                  <StatusBadge variant="muted">{t("clients.extras.balanceCancel.cancelled")}</StatusBadge>
+                ) : isReversal ? (
+                  <StatusBadge variant="warning">{t("clients.extras.balanceCancel.reversal")}</StatusBadge>
+                ) : (
+                  <>
+                    {row.isAdjustment ? <StatusBadge variant="muted">{t("clients.extras.adjustment")}</StatusBadge> : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      disabled={cancelEntry.isPending}
+                      onClick={() => void handleCancel(row)}
+                    >
+                      <Undo2 />
+                      {t("clients.extras.balanceCancel.action")}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </TabState>
   );
