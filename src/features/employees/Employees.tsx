@@ -275,16 +275,17 @@ export function Employees() {
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-warning/10 text-warning">
             <UserRoundX aria-hidden="true" className="size-4" />
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 break-words">
             <p className="text-sm font-medium text-foreground">{t("employees.workload.unassignedTitle")}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{t("employees.workload.unassignedHint")}</p>
           </div>
-          <div className="flex gap-4 text-sm tabular-nums">
-            <div className="text-right">
+          {/* Phone: counters on their own line under the text (side by side they overlapped the title). */}
+          <div className="flex w-full gap-6 pl-11 text-sm tabular-nums sm:w-auto sm:gap-4 sm:pl-0">
+            <div className="sm:text-right">
               <p className="text-xs text-muted-foreground">{t("employees.workload.open")}</p>
               <p className="font-semibold text-foreground">{workload.unassigned.open}</p>
             </div>
-            <div className="text-right">
+            <div className="sm:text-right">
               <p className="text-xs text-muted-foreground">{t("employees.workload.overdue")}</p>
               <p className={cn("font-semibold", workload.unassigned.overdue > 0 ? "text-destructive" : "text-foreground")}>
                 {workload.unassigned.overdue}
