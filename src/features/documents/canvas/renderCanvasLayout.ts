@@ -9,6 +9,7 @@ import { escapeHtmlText, printContextVatBreakdown, type PrintContext } from "../
 import {
   buildCanvasBoxStyle,
   canvasAlignWrapperHtml,
+  canvasElementBoxStyle,
   rectElementCss,
 } from "./canvasElementStyle";
 import { fillToCss, resolveCanvasColor } from "./fill";
@@ -107,7 +108,7 @@ function contentHeightMm(item: Placed, ctx: PrintContext, options: GrowthOptions
   const showTokens = options.showTokens === true;
   const measured = () => {
     const inner = renderCanvasElementInnerHtml(element, ctx, colors, showCents, showTokens, 0, 1);
-    const box = buildCanvasBoxStyle(element.style, colors, { overflow: "visible" });
+    const box = buildCanvasBoxStyle(canvasElementBoxStyle(element), colors, { overflow: "visible" });
     return measureContentHeightMm(inner, item.wMm, box.outerCss);
   };
   if (element.type === "table") {
@@ -640,7 +641,7 @@ async function renderPlaced(
   }
 
   // Totals grow with row count; keep visible so long "in words" lines are never clipped.
-  const box = buildCanvasBoxStyle(item.element.style, colors, {
+  const box = buildCanvasBoxStyle(canvasElementBoxStyle(item.element), colors, {
     // Tables and totals grow with their rows — never clip them (the designer sheet shows them whole too).
     overflow: item.element.type === "totals" || item.element.type === "table" ? "visible" : "hidden",
   });
@@ -757,7 +758,7 @@ export function renderCanvasLayoutToHtmlSync(
             });
             return `<div data-el="${escapeHtmlText(item.element.id)}" style="position:absolute;left:${item.xMm}mm;top:${y}mm;width:${item.wMm}mm;height:${item.hMm}mm;z-index:${item.element.zIndex};${rectCss};-webkit-print-color-adjust:exact;print-color-adjust:exact"></div>`;
           }
-          const box = buildCanvasBoxStyle(item.element.style, colors, {
+          const box = buildCanvasBoxStyle(canvasElementBoxStyle(item.element), colors, {
             // Tables and totals grow with their rows — never clip them (the designer sheet shows them whole too).
     overflow: item.element.type === "totals" || item.element.type === "table" ? "visible" : "hidden",
           });

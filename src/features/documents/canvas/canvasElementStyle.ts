@@ -57,6 +57,17 @@ function borderReactStyle(border: CanvasBorder, colors: StyleColorPalette | null
  * Outer box styles. When verticalAlign is middle/bottom, uses flex column + justify-content
  * and leaves text-align to an inner wrapper (see wrapForAlign) so horizontal align works.
  */
+/**
+ * Box style an element is drawn with. Tables and totals pad their own cells, so the element box adds no
+ * padding: otherwise the coloured block was inset (2 mm) from its frame and never reached the page edge.
+ */
+export function canvasElementBoxStyle(element: { type: string; style: CanvasElementStyle }): CanvasElementStyle {
+  if ((element.type === "table" || element.type === "totals") && element.style.paddingMm) {
+    return { ...element.style, paddingMm: 0 };
+  }
+  return element.style;
+}
+
 export function buildCanvasBoxStyle(
   style: CanvasElementStyle,
   colors: StyleColorPalette | null | undefined,

@@ -56,7 +56,7 @@ import {
   renderCanvasLayoutToHtmlSync,
   canvasPageCss,
 } from "./renderCanvasLayout";
-import { snapBox, snapValue, type Guide } from "./snap";
+import { snapBox, snapEdge, snapValue, type Guide } from "./snap";
 import { pageSizeMm, type CanvasDocumentLayout, type CanvasElement } from "./types";
 import { convertBlocksLayoutToCanvas } from "./convertToCanvas";
 import { isDocumentLayout } from "../layout";
@@ -65,7 +65,7 @@ import { isDemoPrintSource } from "../templatePreviewHtml";
 import { findUnknownTokensInCanvasLayout } from "../templateTokenScan";
 import { emptyPrintContext } from "../templateVariables";
 import { fillToCss } from "./fill";
-import { buildCanvasBoxStyle, rectElementReactStyle } from "./canvasElementStyle";
+import { buildCanvasBoxStyle, canvasElementBoxStyle, rectElementReactStyle } from "./canvasElementStyle";
 import { clampBoxToContent, contentBoxMm, contentMmFromSheetClient } from "./contentBox";
 import { dropPreviewBoxFromContentPoint } from "./paletteDrop";
 import { resolveVariableLabel, segmentTextWithVariables } from "./variableDisplay";
@@ -492,16 +492,37 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
       hMm = Math.max(5, o.hMm - dyMm);
       yMm = o.yMm + (o.hMm - hMm);
     }
-    if (keepAspect && (handle === "se" || handle === "nw" || handle === "ne" || handle === "sw")) {
+    const cornerAspect = keepAspect && (handle === "se" || handle === "nw" || handle === "ne" || handle === "sw");
+    if (cornerAspect) {
       const ratio = o.wMm / o.hMm;
       hMm = wMm / ratio;
     }
+    // Snap only the edges being dragged (to the page edges / other blocks, else the grid); the opposite edges
+    // stay put — snapping x / width separately moved the left edge and kept the right one off the page edge.
+    const resizeOthers = layout.elements.filter((el) => el.id !== o.id);
+    const resizeGuides: Guide[] = [];
+    let left = xMm;
+    let right = xMm + wMm;
+    let top = yMm;
+    let bottom = yMm + hMm;
+    const snapMoving = (value: number, axis: "x" | "y") => {
+      const snapped = snapEdge(value, axis, resizeOthers, layout.gridMm, content);
+      if (snapped.guide) resizeGuides.push(snapped.guide);
+      return snapped.positionMm;
+    };
+    if (handle.includes("e")) right = snapMoving(right, "x");
+    if (handle.includes("w")) left = snapMoving(left, "x");
+    if (!cornerAspect) {
+      if (handle.includes("s")) bottom = snapMoving(bottom, "y");
+      if (handle.includes("n")) top = snapMoving(top, "y");
+    }
+    setGuides(resizeGuides);
     const clamped = clampBoxToContent(
       {
-        xMm: snapValue(xMm, layout.gridMm, true),
-        yMm: snapValue(yMm, layout.gridMm, true),
-        wMm: snapValue(wMm, layout.gridMm, true),
-        hMm: snapValue(hMm, layout.gridMm, true),
+        xMm: left,
+        yMm: top,
+        wMm: Math.max(5, right - left),
+        hMm: Math.max(5, bottom - top),
       },
       content.contentWidthMm,
       content.contentHeightMm,
@@ -917,7 +938,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
                       wrapForAlign: false,
                       align: el.style.align,
                     }
-                  : buildCanvasBoxStyle(el.style, themeColors, {
+                  : buildCanvasBoxStyle(canvasElementBoxStyle(el), themeColors, {
                       // Table and totals grow with their rows when printed — show all rows on the sketch too.
                       overflow: el.type === "totals" || el.type === "table" ? "visible" : "hidden",
                     });
