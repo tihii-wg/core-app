@@ -71,7 +71,12 @@ export type VariableCanvasElement = CanvasElementBase & {
   labelPosition?: "left" | "top";
   labelBold?: boolean;
   labelColor?: ColorRef;
-  hideIfEmpty?: boolean;
+  /**
+   * Opt-in: drop the whole element (label included) when the value is empty. Off by default — everything
+   * placed in the designer prints. Replaces the legacy `hideIfEmpty` flag, which was on for every element
+   * and silently removed labels like «Тел.» from printouts; stored `hideIfEmpty` is ignored.
+   */
+  hideWhenEmpty?: boolean;
   /** Colon between the label and the value (left label only). Default true. */
   labelColon?: boolean;
 };

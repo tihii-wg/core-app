@@ -61,7 +61,6 @@ export function createCanvasElementFromPalette(
       token: payload.token,
       label: payload.label,
       labelPosition: "left",
-      hideIfEmpty: true,
       style: style({ fontSizePt: 10 }),
     };
   }
@@ -89,7 +88,6 @@ export function createCanvasElementFromPalette(
         hMm: 8,
         zIndex: 10,
         token: "#ЗАКАЗ-НОМЕР",
-        hideIfEmpty: true,
         style: style(),
       };
     case "table":

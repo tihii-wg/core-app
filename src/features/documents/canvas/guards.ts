@@ -206,6 +206,7 @@ function parseElement(value: unknown): CanvasElement | null {
       if (value.labelBold != null && typeof value.labelBold !== "boolean") return null;
       if (value.labelColor != null && !isCanvasColorRef(value.labelColor)) return null;
       if (value.hideIfEmpty != null && typeof value.hideIfEmpty !== "boolean") return null;
+      if (value.hideWhenEmpty != null && typeof value.hideWhenEmpty !== "boolean") return null;
       if (value.labelColon != null && typeof value.labelColon !== "boolean") return null;
       return {
         ...base,
@@ -215,7 +216,8 @@ function parseElement(value: unknown): CanvasElement | null {
         ...(value.labelPosition === "left" || value.labelPosition === "top" ? { labelPosition: value.labelPosition } : {}),
         ...(value.labelBold ? { labelBold: true } : {}),
         ...(isCanvasColorRef(value.labelColor) ? { labelColor: String(value.labelColor).trim() } : {}),
-        ...(value.hideIfEmpty === false ? { hideIfEmpty: false } : value.hideIfEmpty ? { hideIfEmpty: true } : {}),
+        // Legacy `hideIfEmpty` is dropped on purpose (see VariableCanvasElement.hideWhenEmpty).
+        ...(value.hideWhenEmpty === true ? { hideWhenEmpty: true } : {}),
         ...(value.labelColon === false ? { labelColon: false } : {}),
       } satisfies VariableCanvasElement;
     }

@@ -512,7 +512,7 @@ function variableInnerHtml(
 ): string {
   const tokenText = showTokens ? escapeHtmlText(element.token) : applyText(element.token, ctx, showCents, false);
   const empty = !tokenText.replace(/<[^>]*>/g, "").trim();
-  if (empty && element.hideIfEmpty !== false) return "";
+  if (empty && element.hideWhenEmpty === true) return "";
   const labelColor = resolveCanvasColor(element.labelColor ?? element.style.color, colors) ?? "#666666";
   const labelWeight = element.labelBold ? "700" : "400";
   const separator = element.labelPosition === "top" ? "" : element.labelColon === false ? " " : ": ";

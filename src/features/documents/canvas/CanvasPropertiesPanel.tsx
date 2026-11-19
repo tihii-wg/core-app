@@ -340,10 +340,10 @@ export function CanvasPropertiesPanel({
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs">{t("settings.printTemplates.canvas.hideIfEmpty")}</Label>
             <Switch
-              checked={single.hideIfEmpty !== false}
+              checked={single.hideWhenEmpty === true}
               disabled={disabled}
               onCheckedChange={(checked) =>
-                patchAll((el) => (el.type === "variable" ? { ...el, hideIfEmpty: checked ? undefined : false } : el))
+                patchAll((el) => (el.type === "variable" ? { ...el, hideWhenEmpty: checked || undefined } : el))
               }
             />
           </div>
