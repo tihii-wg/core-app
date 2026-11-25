@@ -34,7 +34,8 @@ export function CreateOrderDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-lg w-full owerflow-hidden "
+        // Fits the screen (phones included); the form scrolls inside, so «Создать» is always reachable.
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden"
         // Do not autofocus the client field — that would open the clients dropdown on mount.
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
@@ -46,7 +47,7 @@ export function CreateOrderDialog({
             {isEstimate ? t("orders.estimates.createDialog.description") : t("orders.createDialog.description")}
           </DialogDescription>
         </DialogHeader>
-        <div className="overflow-y-auto pr-2">
+        <div className="flex min-h-0 flex-1 flex-col" data-testid="create-order-scroll">
           {open ? (
             <AddNewOrderForm
               key={formKey}
