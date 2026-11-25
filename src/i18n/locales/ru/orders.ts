@@ -304,7 +304,7 @@ const orders: Messages<typeof en> = {
     addMaterialLabel: "Добавить материал",
     materialSearchPlaceholder: "Поиск запчастей и материалов...",
     materialEmpty: "Нет подходящих позиций склада",
-    createNewMaterial: "+ Создать новый материал",
+    createNewMaterial: "Создать новый материал",
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Доступный остаток",
     receiveStock: "Оприходовать на склад",

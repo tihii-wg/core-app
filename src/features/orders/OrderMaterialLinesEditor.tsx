@@ -414,7 +414,9 @@ export default function OrderMaterialLinesEditor({
               <InventoryItemCombobox
                 onSelect={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelect}
                 onSelectOutOfStock={disabled || warehouses.length === 0 || !issueWarehouseId ? undefined : handleSelectOutOfStock}
-                onCreateRequest={disabled || warehouses.length === 0 ? undefined : handleCreateRequest}
+                // Also without a warehouse: the create dialog then explains that a warehouse is needed and
+                // links to Warehouses (same as «Создать материал» in the order card search).
+                onCreateRequest={disabled ? undefined : handleCreateRequest}
                 onAddOneTimeRequest={disabled || !freeformSupported ? undefined : handleAddOneTimeRequest}
                 searchPlaceholder={copy.materialSearchPlaceholder}
                 errors={!!errors?.root || Boolean(addStockError)}

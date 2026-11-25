@@ -300,7 +300,7 @@ const orders: Messages<typeof en> = {
     addMaterialLabel: "Adaugă material",
     materialSearchPlaceholder: "Caută piese și materiale...",
     materialEmpty: "Nu există articole de inventar potrivite",
-    createNewMaterial: "+ Creează material nou",
+    createNewMaterial: "Creează material nou",
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Stoc disponibil",
     receiveStock: "Recepționează stoc în depozit",

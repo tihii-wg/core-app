@@ -293,7 +293,7 @@ export default {
     addMaterialLabel: "Add material",
     materialSearchPlaceholder: "Search parts and materials...",
     materialEmpty: "No matching inventory items",
-    createNewMaterial: "+ Create new material",
+    createNewMaterial: "Create new material",
     materialOptionAria: "{{name}}, {{stock}}, {{price}}",
     availableStock: "Available stock",
     availableStockValue: "{{count}} {{unit}} in stock",
