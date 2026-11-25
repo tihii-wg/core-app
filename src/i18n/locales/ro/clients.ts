@@ -30,7 +30,7 @@ const clients: Messages<typeof en> = {
     searchPlaceholder: "Caută după nume, telefon sau email…",
     selectedCount: "{{count}} selectați",
     selectAllFound: "Selectează toți găsiții ({{count}})",
-    clearSelection: "Anulează selecția",
+    clearSelection: "Anulează tot",
     selectAllLimit: "Peste {{count}} clienți găsiți — «Selectează toți» îi ia pe primii {{count}}. Restrângeți căutarea.",
     noMatches: "Niciun rezultat",
     next: "Înainte",

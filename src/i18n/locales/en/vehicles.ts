@@ -130,7 +130,7 @@ export default {
     description: "Find duplicates by VIN, plate or make, tick them and choose the vehicle to keep. Orders, warranties and mileage history of the others move to it.",
     searchPlaceholder: "VIN, plate, make or model",
     selectAllFound: "Select all found ({{count}})",
-    clearSelection: "Clear selection",
+    clearSelection: "Clear all",
     selectedCount: "Selected: {{count}}",
     nothingFound: "Nothing found",
     noVin: "no VIN",

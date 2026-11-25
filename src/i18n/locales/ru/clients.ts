@@ -31,7 +31,7 @@ const clients: Messages<typeof en> = {
     searchPlaceholder: "Поиск по имени, телефону или email…",
     selectedCount: "Выбрано: {{count}}",
     selectAllFound: "Выбрать всех найденных ({{count}})",
-    clearSelection: "Снять выбор",
+    clearSelection: "Отменить все",
     selectAllLimit: "Найдено больше {{count}} клиентов — «Выбрать всех» возьмёт первые {{count}}. Уточните поиск.",
     noMatches: "Ничего не найдено",
     next: "Далее",

@@ -132,7 +132,7 @@ export default {
     description: "Найдите дубликаты по VIN, госномеру или марке, отметьте их и выберите, какой автомобиль оставить. Заказы, гарантии и история пробега остальных перейдут к нему.",
     searchPlaceholder: "VIN, госномер, марка или модель",
     selectAllFound: "Выбрать все найденные ({{count}})",
-    clearSelection: "Снять выбор",
+    clearSelection: "Отменить все",
     selectedCount: "Выбрано: {{count}}",
     nothingFound: "Ничего не найдено",
     noVin: "без VIN",

@@ -186,8 +186,9 @@ export function MergeClientsDialog({
     });
   }
 
+  /** «Отменить все»: nothing stays selected (the card's client can be ticked again if needed). */
   function clearSelection() {
-    setSelectedIds(initialTarget ? [initialTarget.id] : []);
+    setSelectedIds([]);
   }
 
   async function goToStep2() {
@@ -294,11 +295,16 @@ export function MergeClientsDialog({
                 >
                   {t("clients.merge.selectAllFound", { count: Math.min(totalFound, MAX_SELECT_ALL) })}
                 </Button>
-                {selectedIds.length > 0 ? (
-                  <Button type="button" size="sm" variant="ghost" onClick={clearSelection}>
-                    {t("clients.merge.clearSelection")}
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={selectedIds.length === 0 || selectingAll}
+                  onClick={clearSelection}
+                  data-testid="merge-clients-clear-all"
+                >
+                  {t("clients.merge.clearSelection")}
+                </Button>
                 {selectedIds.length > 0 ? (
                   <span className="text-xs text-muted-foreground">{t("clients.merge.selectedCount", { count: selectedIds.length })}</span>
                 ) : null}

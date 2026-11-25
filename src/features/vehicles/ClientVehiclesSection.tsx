@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Car, Merge, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Order, Vehicle } from "../../lib/types";
+import { cn } from "../../lib/utils";
 import { Button } from "../../ui/Button";
 import {
   Dialog,
@@ -93,7 +94,16 @@ export function ClientVehiclesSection({
 
   return (
     <section className="space-y-3">
-      {/* Same layout as the client card «Заказы» tab: search on top, then title + action row, then the list. */}
+      {/* Same layout as the client card «Заказы» tab: search on top, then title + action row, then the list.
+          In the full list (Vehicles tab) search + actions stay pinned to the top while the list scrolls. */}
+      <div
+        className={cn(
+          "space-y-3",
+          visibleVehicleIds == null &&
+            "sticky top-0 z-10 -mx-5 -mt-5 border-b border-border/60 bg-elevated px-5 pt-5 pb-3",
+        )}
+        data-testid="client-vehicles-toolbar"
+      >
       {showSearch ? (
         <Input
           type="search"
@@ -130,6 +140,7 @@ export function ClientVehiclesSection({
             {t("vehicles.add")}
           </Button>
         </div>
+      </div>
       </div>
 
       <MergeVehiclesDialog

@@ -222,7 +222,7 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
             <Button
               type="button"
               size="sm"
-              variant="ghost"
+              variant="outline"
               disabled={busy || selected.length === 0}
               onClick={() => {
                 setSelected([]);

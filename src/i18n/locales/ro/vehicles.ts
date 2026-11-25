@@ -131,7 +131,7 @@ export default {
     description: "Găsiți duplicatele după VIN, număr sau marcă, bifați-le și alegeți vehiculul păstrat. Comenzile, garanțiile și istoricul kilometrajului celorlalte trec la el.",
     searchPlaceholder: "VIN, număr, marcă sau model",
     selectAllFound: "Selectează toate găsite ({{count}})",
-    clearSelection: "Anulează selecția",
+    clearSelection: "Anulează tot",
     selectedCount: "Selectate: {{count}}",
     nothingFound: "Nimic găsit",
     noVin: "fără VIN",

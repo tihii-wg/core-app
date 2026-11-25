@@ -26,7 +26,7 @@ export default {
     searchPlaceholder: "Search by name, phone, or email…",
     selectedCount: "{{count}} selected",
     selectAllFound: "Select all found ({{count}})",
-    clearSelection: "Clear selection",
+    clearSelection: "Clear all",
     selectAllLimit: "More than {{count}} clients match — «Select all» takes the first {{count}}. Refine the search.",
     noMatches: "No matching clients",
     next: "Next",
