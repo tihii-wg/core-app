@@ -19,6 +19,28 @@ begin;
 create index if not exists client_balance_entries_document_idx
   on public.client_balance_entries (workspace_id, document_type, document_id);
 
+-- Subscription write check. workspace_write_allowed() exists only where an earlier optional SQL was
+-- applied; a direct call would not even compile without it, so it is called dynamically.
+create or replace function public.crm_balance_write_allowed(p_workspace uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_allowed boolean;
+begin
+  if to_regprocedure('public.workspace_write_allowed(uuid)') is null then
+    return true;
+  end if;
+  execute 'select public.workspace_write_allowed($1)' into v_allowed using p_workspace;
+  return coalesce(v_allowed, false);
+end;
+$$;
+
+revoke all on function public.crm_balance_write_allowed(uuid) from public, anon;
+
 create or replace function public.crm_cancel_client_balance_entry(p_entry_id uuid, p_reason text default null)
 returns jsonb
 language plpgsql
@@ -44,8 +66,7 @@ begin
   if not public.crm_has_permission(v_entry.workspace_id, 'contacts.edit') then
     raise exception 'balance_cancel:forbidden' using errcode = '42501';
   end if;
-  if to_regprocedure('public.workspace_write_allowed(uuid)') is not null
-     and not public.workspace_write_allowed(v_entry.workspace_id) then
+  if not public.crm_balance_write_allowed(v_entry.workspace_id) then
     raise exception 'balance_cancel:read_only' using errcode = '42501';
   end if;
 
@@ -122,8 +143,7 @@ begin
   if not public.crm_has_permission(v_client.workspace_id, 'contacts.edit') then
     raise exception 'balance_add:forbidden' using errcode = '42501';
   end if;
-  if to_regprocedure('public.workspace_write_allowed(uuid)') is not null
-     and not public.workspace_write_allowed(v_client.workspace_id) then
+  if not public.crm_balance_write_allowed(v_client.workspace_id) then
     raise exception 'balance_add:read_only' using errcode = '42501';
   end if;
 
