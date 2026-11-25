@@ -1068,6 +1068,7 @@ export default {
         title: "Block content",
         tableSource: "Show",
         showHeader: "Table header",
+        commentUnderName: "Line comment under the name",
         showTotalsRow: "Total row under the table",
         columns: "Columns",
         columnWidth: "Width, %",

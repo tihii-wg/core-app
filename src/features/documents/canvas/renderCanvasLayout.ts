@@ -326,6 +326,9 @@ function renderTableHtml(
           break;
         case "name":
           value = escapeHtmlText(row.name);
+          if (el.commentUnderName && row.comment) {
+            value += `<div style="font-size:0.85em;opacity:0.75;white-space:pre-wrap">${escapeHtmlText(row.comment)}</div>`;
+          }
           break;
         case "sku":
           value = escapeHtmlText(row.sku);

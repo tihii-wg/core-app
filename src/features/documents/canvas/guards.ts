@@ -227,6 +227,7 @@ function parseElement(value: unknown): CanvasElement | null {
       if (!columns) return null;
       if (typeof value.showTotalsRow !== "boolean") return null;
       if (value.showHeader != null && typeof value.showHeader !== "boolean") return null;
+      if (value.commentUnderName != null && typeof value.commentUnderName !== "boolean") return null;
       if (!isCanvasColorRef(value.headerBackground) || !isCanvasColorRef(value.headerTextColor)) return null;
       if (!isCanvasColorRef(value.borderColor)) return null;
       if (value.borders !== "all" && value.borders !== "horizontal" && value.borders !== "none") return null;
@@ -244,6 +245,7 @@ function parseElement(value: unknown): CanvasElement | null {
         columns,
         showTotalsRow: value.showTotalsRow,
         ...(value.showHeader === false ? { showHeader: false } : {}),
+        ...(value.commentUnderName === true ? { commentUnderName: true } : {}),
         headerBackground: String(value.headerBackground).trim(),
         headerTextColor: String(value.headerTextColor).trim(),
         borderColor: String(value.borderColor).trim(),

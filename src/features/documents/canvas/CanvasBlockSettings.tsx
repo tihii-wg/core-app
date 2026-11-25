@@ -181,6 +181,14 @@ export function TableBlockSettings({
         />
       </div>
       <div className="flex items-center justify-between gap-2">
+        <Label className="text-xs">{t("settings.printTemplates.canvas.block.commentUnderName")}</Label>
+        <Switch
+          checked={element.commentUnderName === true}
+          disabled={disabled}
+          onCheckedChange={(checked) => onChange({ ...element, commentUnderName: checked ? true : undefined })}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-2">
         <Label className="text-xs">{t("settings.printTemplates.canvas.block.showTotalsRow")}</Label>
         <Switch
           checked={element.showTotalsRow}

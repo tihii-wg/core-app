@@ -4,7 +4,12 @@ import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Order, OrderStatus } from "../../lib/types";
-import { getOrder, type UpdateOrderStatusResult } from "../../services/apiOrders";
+import {
+  attachOrderLineComments,
+  getOrder,
+  isOrderLineCommentsSupported,
+  type UpdateOrderStatusResult,
+} from "../../services/apiOrders";
 import { useUpdateOrderStatus, findCachedOrder } from "./useGetOrders";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
@@ -46,6 +51,27 @@ export function useOrderDetails() {
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  /**
+   * List rows (full or cached) carry no line comments — those live in order_line_comments.
+   * Opening the card from such a row loads them with ONE request (in the background, the card opens at once)
+   * and fills only lines the user has not touched meanwhile. getOrder() already attaches them.
+   */
+  const loadLineComments = (order: Order) => {
+    if (!isOrderLineCommentsSupported()) return;
+    const lines = [...(order.services ?? []), ...(order.materials ?? [])];
+    // No lines → nothing to attach; every line already has comment set (null/text) → loaded by getOrder.
+    if (lines.length === 0 || lines.every((line) => line.comment !== undefined)) return;
+    void attachOrderLineComments(order, workspaceId)
+      .then((withComments) => {
+        setSelectedOrder((current) =>
+          current?.id === order.id ? preserveOrderLineComments(withComments, current) : current,
+        );
+      })
+      .catch(() => {
+        // Comments are secondary: the card stays usable without them.
+      });
+  };
+
   const openOrder = (order: Order) => {
     // List rows can still be stale while placeholderData is showing a pre-save
     // page; merge any cached saved tax invoice number so the field is not empty+red.
@@ -55,6 +81,7 @@ export function useOrderDetails() {
       if (cached) {
         setSelectedOrder(resolveOrderForTaxGate(cached, order));
         setDetailPanelOpen(true);
+        loadLineComments(cached);
         return;
       }
       void getOrder(order.id, workspaceId)
@@ -70,6 +97,7 @@ export function useOrderDetails() {
     }
     setSelectedOrder(resolveOrderForTaxGate(order, cached));
     setDetailPanelOpen(true);
+    loadLineComments(order);
   };
 
   const syncOrder = (order: Order) =>

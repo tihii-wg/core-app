@@ -1076,6 +1076,7 @@ const settings: Messages<typeof en> = {
         title: "Содержимое блока",
         tableSource: "Что выводить",
         showHeader: "Шапка таблицы",
+        commentUnderName: "Комментарий к позиции под наименованием",
         showTotalsRow: "Строка «Итого» под таблицей",
         columns: "Колонки",
         columnWidth: "Ширина, %",

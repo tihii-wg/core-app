@@ -88,6 +88,8 @@ export type TableCanvasElement = CanvasElementBase & {
   showTotalsRow: boolean;
   /** Column header row. Default true. */
   showHeader?: boolean;
+  /** Line comment printed in small text under the name (public comments only). Default off. */
+  commentUnderName?: boolean;
   headerBackground: ColorRef;
   headerTextColor: ColorRef;
   rowBackground?: ColorRef;
