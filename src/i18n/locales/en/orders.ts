@@ -208,6 +208,7 @@ export default {
   },
   print: {
     action: "Print",
+    mobilePrint: "Print / PDF",
     withTemplate: "Print: {{name}}",
     unavailable: "Printing is unavailable: no print template with content found.",
   },

@@ -170,7 +170,105 @@ export async function getDocumentTemplates(workspaceId: string | undefined) {
 export type PrintOrderResult = "printed" | "unavailable";
 
 /** Prints through a hidden same-origin iframe (no popup blocker issues). */
+/**
+ * Phones / tablets: printing a hidden iframe (desktop path below) does nothing in mobile Safari / Chrome
+ * (they print the app page or ignore the call). Show the document full-screen instead; «Печать / PDF»
+ * (a fresh tap, so the browser allows it) opens it as its own page and calls print() there, where the
+ * system print / save-as-PDF sheet works.
+ */
+function isMobilePrintDevice() {
+  if (typeof window === "undefined") return false;
+  const coarse = window.matchMedia?.("(pointer: coarse)").matches === true;
+  const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  return mobileUa || (coarse && window.innerWidth < 1024);
+}
+
+const MOBILE_PRINT_ROOT_ID = "crm-mobile-print-preview";
+
+function openMobilePrintPreview(html: string) {
+  document.getElementById(MOBILE_PRINT_ROOT_ID)?.remove();
+
+  const root = document.createElement("div");
+  root.id = MOBILE_PRINT_ROOT_ID;
+  root.setAttribute("role", "dialog");
+  root.setAttribute("aria-modal", "true");
+  root.style.cssText =
+    "position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;background:#f4f5f7;pointer-events:auto;";
+
+  const bar = document.createElement("div");
+  bar.style.cssText =
+    "display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:10px 12px;" +
+    "padding-top:max(10px,env(safe-area-inset-top));background:#fff;border-bottom:1px solid #e5e7eb;";
+
+  const button = (label: string, primary: boolean) => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.textContent = label;
+    el.style.cssText =
+      "min-height:44px;padding:0 16px;border-radius:8px;font:600 15px system-ui,-apple-system,sans-serif;" +
+      (primary ? "background:#2563eb;color:#fff;border:0;" : "background:#fff;color:#111;border:1px solid #d1d5db;");
+    return el;
+  };
+  const closeButton = button(i18n.t("common.close"), false);
+  const printButton = button(i18n.t("orders.print.mobilePrint"), true);
+  bar.append(closeButton, printButton);
+
+  // The sheet is laid out at A4 width (~800 px) and scaled down to the phone width, so the whole page
+  // is visible like a PDF preview (the iframe ignores the document's own viewport).
+  const SHEET_PX = 820;
+  const area = document.createElement("div");
+  area.style.cssText = "position:relative;flex:1;min-height:0;overflow:hidden;";
+  const frame = document.createElement("iframe");
+  frame.title = i18n.t("orders.print.action");
+  frame.style.cssText =
+    `position:absolute;top:0;left:0;width:${SHEET_PX}px;border:0;background:#fff;transform-origin:0 0;`;
+  frame.srcdoc = html;
+  area.append(frame);
+
+  root.append(bar, area);
+  document.body.appendChild(root);
+
+  const fit = () => {
+    const scale = Math.min(1, area.clientWidth / SHEET_PX);
+    frame.style.transform = `scale(${scale})`;
+    frame.style.height = `${Math.ceil(area.clientHeight / scale)}px`;
+  };
+  fit();
+  window.addEventListener("resize", fit);
+
+  const close = () => {
+    window.removeEventListener("resize", fit);
+    root.remove();
+  };
+  closeButton.addEventListener("click", close);
+  printButton.addEventListener("click", () => {
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    const win = window.open(url, "_blank");
+    window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    if (!win) {
+      // Popup refused: try printing the preview frame (works on some Android builds).
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      return;
+    }
+    const runPrint = () => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        // The page stays open: the user can print / share it from the browser menu.
+      }
+    };
+    if (win.document?.readyState === "complete") window.setTimeout(runPrint, 300);
+    else win.addEventListener("load", () => window.setTimeout(runPrint, 300), { once: true });
+  });
+}
+
 export function printHtmlDocument(html: string) {
+  if (isMobilePrintDevice()) {
+    openMobilePrintPreview(html);
+    return;
+  }
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";

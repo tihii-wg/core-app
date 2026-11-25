@@ -217,6 +217,7 @@ const orders: Messages<typeof en> = {
   },
   print: {
     action: "Печать",
+    mobilePrint: "Печать / PDF",
     withTemplate: "Печать: {{name}}",
     unavailable: "Печать недоступна: не найден шаблон печати с содержимым.",
   },

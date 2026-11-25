@@ -214,6 +214,7 @@ const orders: Messages<typeof en> = {
   },
   print: {
     action: "Tipărește",
+    mobilePrint: "Tipărire / PDF",
     withTemplate: "Tipărește: {{name}}",
     unavailable: "Tipărirea nu este disponibilă: nu există un șablon de tipărire cu conținut.",
   },
