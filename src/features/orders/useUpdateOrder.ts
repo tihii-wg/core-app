@@ -1,3 +1,4 @@
+import { toastOrderWriteError } from "./duplicateOpenVinToast";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
@@ -44,7 +45,7 @@ export function useUpdateOrder() {
       toast.success(i18n.t("orders.toast.updated"), { id: "update-order" });
     },
     onError: (error) => {
-      toast.error(error.message || i18n.t("common.somethingWentWrong"), { id: "update-order" });
+      toastOrderWriteError(error, "update-order", i18n.t("common.somethingWentWrong"));
     },
   });
 }

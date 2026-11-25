@@ -623,6 +623,9 @@ const orders: Messages<typeof en> = {
     returned: "Materialele au fost returnate",
   },
   errors: {
+    duplicateOpenVin: "Un vehicul cu VIN {{vin}} există deja într-o comandă deschisă. Setările interzic mai multe comenzi deschise pentru un VIN.",
+    duplicateOpenVinWithOrder: "Un vehicul cu VIN {{vin}} există deja în comanda deschisă nr. {{number}}. Setările interzic mai multe comenzi deschise pentru un VIN.",
+    openExistingOrder: "Deschide comanda nr. {{number}}",
     notFoundOrForbidden: "Comanda nu a fost găsită sau nu aveți permisiunea de a o modifica.",
     paidStatusLocked: "Doar proprietarul spațiului de lucru poate schimba statusul unei comenzi Plătite.",
     statusChangeUnavailable: "Această schimbare de status nu este disponibilă pentru comandă.",

@@ -617,6 +617,9 @@ export default {
     returned: "Materials returned",
   },
   errors: {
+    duplicateOpenVin: "A vehicle with VIN {{vin}} is already in an open order. Settings forbid several open orders for one VIN.",
+    duplicateOpenVinWithOrder: "A vehicle with VIN {{vin}} is already in open order #{{number}}. Settings forbid several open orders for one VIN.",
+    openExistingOrder: "Open order #{{number}}",
     notFoundOrForbidden: "Order was not found or you do not have permission to change it.",
     paidStatusLocked: "Only the workspace owner can change the status of a Paid order.",
     statusChangeUnavailable: "This status change is not available for the order.",

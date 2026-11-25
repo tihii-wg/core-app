@@ -11,6 +11,7 @@ import { industryPaymentStageTemplate, industryProfile } from "../industries/ind
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { notifyOrderCalendarChanged } from "../calendar/pokeCalendarSync";
+import { toastOrderWriteError } from "./duplicateOpenVinToast";
 
 /** Auto-apply workspace/industry template only when it has more than one stage. */
 async function maybeApplyPaymentStageTemplate(
@@ -95,7 +96,7 @@ export function useCreateOrder() {
       );
     },
     onError: (error) => {
-      toast.error(error.message || i18n.t("common.somethingWentWrong"), { id: "create-order" });
+      toastOrderWriteError(error, "create-order", i18n.t("common.somethingWentWrong"));
     },
   });
 }

@@ -1,3 +1,4 @@
+import { toastOrderWriteError } from "./duplicateOpenVinToast";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -273,7 +274,7 @@ export function useUpdateOrderStatus() {
           queryClient.setQueryData(key, data);
         }
       }
-      toast.error(error.message || i18n.t("orders.toast.statusUpdateFailed"), { id: "update-order-status" });
+      toastOrderWriteError(error, "update-order-status", i18n.t("orders.toast.statusUpdateFailed"));
     },
     onSuccess: (result, { orderId }) => {
       const patch: Partial<Order> = {

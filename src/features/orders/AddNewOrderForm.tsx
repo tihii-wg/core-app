@@ -1,3 +1,4 @@
+import { useOpenOrderRequest } from "./duplicateOpenVinToast";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { useClientPickerSearch } from "../clients/useGetClients";
@@ -9,7 +10,7 @@ import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, Client, CreateMadalProps, OrderKind, Vehicle } from "../../lib/types";
 import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -84,6 +85,8 @@ export default function AddNewOrderForm({
   const clientListSearch = debouncedClientSearch || searchQuery;
   const { employees, error: employeesError, isLoading: employeesLoading } = useGetEmployees();
   const { mutateAsync: createOrder } = useCreateOrder();
+  // «Open order №…» in the duplicate-VIN toast: close this dialog so the existing order card is visible.
+  useOpenOrderRequest(useCallback(() => setCreateModalOpen(false), [setCreateModalOpen]));
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();

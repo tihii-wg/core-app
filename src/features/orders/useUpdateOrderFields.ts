@@ -1,3 +1,5 @@
+import { isDuplicateOpenVinError } from "../../services/apiOrders";
+import { toastOrderWriteError } from "./duplicateOpenVinToast";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
@@ -47,6 +49,12 @@ export function useUpdateOrderFields() {
     onSuccess: (_order, variables) => {
       invalidateOrderFieldQueries(queryClient, workspaceId, variables.orderId);
       toast.success(i18n.t("orders.toast.fieldSaved"), { id: ORDER_FIELD_SAVED_TOAST_ID });
+    },
+    onError: (error) => {
+      // The message is shown inline; a duplicate open-order VIN additionally gets a toast linking that order.
+      if (isDuplicateOpenVinError(error) && error.existingOrderId) {
+        toastOrderWriteError(error, "update-order-fields-vin", error.message);
+      }
     },
   });
 }

@@ -627,6 +627,9 @@ const orders: Messages<typeof en> = {
     returned: "Материалы возвращены",
   },
   errors: {
+    duplicateOpenVin: "Автомобиль с VIN {{vin}} уже есть в открытом заказе. В настройках запрещено несколько открытых заказов на один VIN.",
+    duplicateOpenVinWithOrder: "Автомобиль с VIN {{vin}} уже есть в открытом заказе №{{number}}. В настройках запрещено несколько открытых заказов на один VIN.",
+    openExistingOrder: "Открыть заказ №{{number}}",
     notFoundOrForbidden: "Заказ не найден или у вас нет прав на его изменение.",
     paidStatusLocked: "Изменить статус оплаченного заказа может только владелец рабочего пространства.",
     statusChangeUnavailable: "Это изменение статуса недоступно для заказа.",

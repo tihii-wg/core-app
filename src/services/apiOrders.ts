@@ -601,7 +601,7 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
     ));
   }
 
-  if (orderError && orderError.code === "23505" && plannedNumber) {
+  if (orderError && orderError.code === "23505" && plannedNumber && !duplicateOpenVinFromDbError(orderError)) {
     // The planned number was taken in the meantime (parallel create): insert as pending, number below.
     plannedNumber = null;
     ({ data: insertedOrder, error: orderError } = await withOrderDiscountColumns(() =>
@@ -614,7 +614,11 @@ export async function createOrder(input: CreateOrderInput, workspaceId: string |
   }
 
   if (orderError) {
-    throw mapOrderIndustryFieldsDbError(orderError) ?? new Error(orderError.message);
+    throw (
+      (await duplicateOpenVinErrorFrom(orderError, targetWorkspaceId)) ??
+      mapOrderIndustryFieldsDbError(orderError) ??
+      new Error(orderError.message)
+    );
   }
 
   // Realtime echoes of this new order (insert, number / totals updates, team rows) are our own writes: the
@@ -3709,6 +3713,8 @@ export async function reopenCancelledOrder(
     if (isMissingRpcError(error, "reopen_cancelled_order")) {
       throw new MissingRpcError("reopen_cancelled_order", i18n.t("orders.lifecycle.errors.rpcRequired"));
     }
+    const duplicateVin = await duplicateOpenVinErrorFrom(error, targetWorkspaceId, orderId);
+    if (duplicateVin) throw duplicateVin;
     const minPaidMessage = await mapOrderStatusDbErrorMessage(error.message, targetWorkspaceId);
     if (minPaidMessage !== error.message) throw new Error(minPaidMessage);
     throw new Error(mapReopenCancelledOrderError(error.message));
@@ -4032,14 +4038,22 @@ export async function updateOrderStatus(
       let legacyQuery = supabase.from("orders").update(legacyPayload).eq("id", orderId).eq("workspace_id", targetWorkspaceId);
       if (!ownerMayChangePaid && status !== "paid") legacyQuery = legacyQuery.neq("status", "paid");
       const legacy = await legacyQuery.select("id");
-      if (legacy.error) throw new Error(await mapOrderStatusDbErrorMessage(legacy.error.message, targetWorkspaceId));
+      if (legacy.error) {
+        throw (
+          (await duplicateOpenVinErrorFrom(legacy.error, targetWorkspaceId, orderId)) ??
+          new Error(await mapOrderStatusDbErrorMessage(legacy.error.message, targetWorkspaceId))
+        );
+      }
       if (!legacy.data || legacy.data.length === 0) throw new Error(orderPermissionMessage());
       if (options?.recordActivity !== false) {
         queueStatusActivity(targetWorkspaceId, orderId, { from: currentStatus || null, to: status });
       }
       return { status, customStatusId: null, customStatus: null };
     }
-    throw new Error(await mapOrderStatusDbErrorMessage(error.message, targetWorkspaceId));
+    throw (
+      (await duplicateOpenVinErrorFrom(error, targetWorkspaceId, orderId)) ??
+      new Error(await mapOrderStatusDbErrorMessage(error.message, targetWorkspaceId))
+    );
   }
   if (!data || data.length === 0) {
     const { data: again, error: againError } = await supabase
@@ -4109,6 +4123,74 @@ function readOrderTimestamp(row: Record<string, unknown>, column: string): strin
 }
 
 /** Map industry-field DB check failures to localized copy (never surface raw constraint names). */
+/** Trigger orders_enforce_unique_open_vin (workspace setting «one VIN per open order»). */
+const DUPLICATE_OPEN_VIN_RE = /open order already exists in this workspace for VIN\s+(\S+)/i;
+
+/** Duplicate open-order VIN, carrying the conflicting open order so the UI can link to it. */
+export class DuplicateOpenVinError extends Error {
+  readonly vin: string;
+  readonly existingOrderId: string | null;
+  readonly existingOrderNumber: string | null;
+  constructor(vin: string, existingOrderId: string | null, existingOrderNumber: string | null) {
+    super(
+      existingOrderNumber
+        ? i18n.t("orders.errors.duplicateOpenVinWithOrder", { vin, number: existingOrderNumber })
+        : i18n.t("orders.errors.duplicateOpenVin", { vin }),
+    );
+    this.name = "DuplicateOpenVinError";
+    this.vin = vin;
+    this.existingOrderId = existingOrderId;
+    this.existingOrderNumber = existingOrderNumber;
+  }
+}
+
+export function isDuplicateOpenVinError(error: unknown): error is DuplicateOpenVinError {
+  // Name check too: survives duplicated module instances (HMR / chunk splits) where instanceof fails.
+  return (
+    error instanceof DuplicateOpenVinError ||
+    (error instanceof Error && error.name === "DuplicateOpenVinError" && "existingOrderId" in error)
+  );
+}
+
+function duplicateOpenVinFromDbError(error: { message?: string } | null | undefined): string | null {
+  const match = DUPLICATE_OPEN_VIN_RE.exec(error?.message ?? "");
+  return match?.[1] ? match[1].replace(/[.,;)]+$/, "") : null;
+}
+
+/**
+ * Maps the duplicate-VIN trigger error to DuplicateOpenVinError with the open order already holding the VIN.
+ * Costs one request, and only on this failure path (the success path is unchanged).
+ */
+async function duplicateOpenVinErrorFrom(
+  error: { message?: string } | null | undefined,
+  workspaceId: string,
+  excludeOrderId?: string,
+): Promise<DuplicateOpenVinError | null> {
+  const vin = duplicateOpenVinFromDbError(error);
+  if (!vin) return null;
+  try {
+    const { data } = await supabase
+      .from("orders")
+      .select("id, number, vin")
+      .eq("workspace_id", workspaceId)
+      .in("status", OPEN_ORDER_STATUSES)
+      .ilike("vin", `%${vin.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`)
+      .limit(20);
+    const match = ((data ?? []) as Array<{ id?: unknown; number?: unknown; vin?: unknown }>).find(
+      (row) =>
+        String(row.id ?? "") !== (excludeOrderId ?? "") &&
+        String(row.vin ?? "").trim().toUpperCase() === vin.toUpperCase(),
+    );
+    if (match) {
+      const number = String(match.number ?? "").trim();
+      return new DuplicateOpenVinError(vin, String(match.id), number || null);
+    }
+  } catch {
+    // Lookup is best-effort: still report the duplicate, just without the link.
+  }
+  return new DuplicateOpenVinError(vin, null, null);
+}
+
 export function mapOrderIndustryFieldsDbError(error: {
   code?: string;
   message?: string;
@@ -4519,7 +4601,9 @@ export async function updateOrder(
     }
   }
 
-  if (error) throw mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
+  if (error) {
+    throw (await duplicateOpenVinErrorFrom(error, workspaceId, orderId)) ?? mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
+  }
   if (!data) throw new Error(orderPermissionMessage());
 
   // Saved lines keep their stored discounts (matched by id); only NEW lines receive the client's discount.
@@ -4819,7 +4903,9 @@ export async function updateOrderFields(
         error = null;
       }
     }
-    if (error) throw mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
+    if (error) {
+      throw (await duplicateOpenVinErrorFrom(error, workspaceId, orderId)) ?? mapOrderIndustryFieldsDbError(error) ?? new Error(error.message);
+    }
     if (!data) throw new Error(orderPermissionMessage());
   }
 

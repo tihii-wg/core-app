@@ -1,5 +1,5 @@
+import { toastOrderWriteError } from "./duplicateOpenVinToast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import { moveOrderOnBoard } from "../../services/apiOrderBoard";
 import type { Order, OrderStatus } from "../../lib/types";
@@ -60,7 +60,7 @@ export function useMoveOrderOnBoard() {
           queryClient.setQueryData(key, data);
         }
       }
-      toast.error(error.message || i18n.t("orders.toast.statusUpdateFailed"), { id: "move-order-board" });
+      toastOrderWriteError(error, "move-order-board", i18n.t("orders.toast.statusUpdateFailed"));
     },
     onSuccess: (result: UpdateOrderStatusResult, input) => {
       const patch: Partial<Order> = {

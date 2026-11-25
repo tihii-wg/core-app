@@ -14,6 +14,7 @@ import { SessionIdleGuard } from "../features/auth/SessionIdleGuard";
 import { WorkspaceRealtimeProvider } from "../features/realtime/WorkspaceRealtimeProvider";
 import { MyTasksReminder } from "../features/tasks/MyTasksReminder";
 import { SubscriptionTrialBanner } from "../features/workspaces/SubscriptionTrialBanner";
+import { OpenOrderRequestListener } from "../features/orders/OpenOrderRequestListener";
 
 export function AppLayout() {
   const { workspaceId, locale = "en" } = useParams();
@@ -88,6 +89,7 @@ export function AppLayout() {
           <main className="min-w-0 flex-1 px-4 py-5 sm:px-5 lg:px-6 lg:py-6 print:overflow-visible print:p-0">
             <div className="w-full min-w-0">
               {canUseWorkspace ? <SubscriptionTrialBanner /> : null}
+              <OpenOrderRequestListener />
               {canUseWorkspace ? <MyTasksReminder /> : null}
               <Outlet />
             </div>
