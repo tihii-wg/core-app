@@ -31,12 +31,29 @@ begin
 end;
 $preflight$;
 
--- 1) Comments: everything written so far stays visible to the whole team.
-update public.order_comments set is_public = true where is_public is distinct from true;
-
--- 2) Files: visibility column, existing files public, new ones from the workspace default.
+-- 1) + 2) First application only (the visibility policies do not exist yet): everything written so far
+-- stays visible to the whole team. Re-running the script never makes private items public again.
 alter table public.order_attachments add column if not exists is_public boolean;
-update public.order_attachments set is_public = true where is_public is null;
+-- The column may already exist (crm_ro_v1) with DEFAULT false: the trigger below must decide instead.
+alter table public.order_attachments alter column is_public drop default;
+
+do $backfill$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'order_comments' and policyname = 'order_comments_visibility'
+  ) then
+    update public.order_comments set is_public = true where is_public is distinct from true;
+  end if;
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'order_attachments' and policyname = 'order_attachments_visibility'
+  ) then
+    update public.order_attachments set is_public = true where is_public is distinct from true;
+  end if;
+  update public.order_attachments set is_public = true where is_public is null;
+end;
+$backfill$;
 
 create or replace function public.order_attachments_default_visibility()
 returns trigger
