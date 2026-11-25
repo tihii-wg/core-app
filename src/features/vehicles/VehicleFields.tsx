@@ -1,3 +1,4 @@
+import { VinOwnerNotice, type VinOwnerCheckOptions } from "./VinOwnerNotice";
 import type { FieldErrors, UseFormRegister, UseFormSetValue, UseFormWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Input } from "../../ui/Input";
@@ -22,6 +23,8 @@ type VehicleFieldsProps = {
    * `edit` — both fields (initial historical, current editable) with short hints.
    */
   mode?: "create" | "edit";
+  /** Check the VIN against other vehicles and show who already has it. */
+  vinCheck?: VinOwnerCheckOptions;
 };
 
 export function VehicleFields({
@@ -32,6 +35,7 @@ export function VehicleFields({
   errors,
   disabled,
   mode = "edit",
+  vinCheck,
 }: VehicleFieldsProps) {
   const { t } = useTranslation();
   const fuelType = watch("fuelType");
@@ -109,6 +113,7 @@ export function VehicleFields({
           disabled={disabled}
         />
         {errors.vin && <p className="text-xs text-destructive">{errors.vin.message}</p>}
+        {vinCheck ? <VinOwnerNotice vin={watch("vin") ?? ""} options={vinCheck} disabled={disabled} /> : null}
       </div>
 
       <div className="space-y-1.5">

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { mileageValidate } from "../../lib/mileage";
 import { orderAssetFieldsFromVehicle, vehicleDisplayLabel, vehicleSummaryDetails } from "../../services/apiVehicles";
 import { useGetClientVehicles } from "../vehicles/useGetClientVehicles";
-import { useCreateVehicle } from "../vehicles/useVehicleMutations";
+import { useCreateVehicle, useTransferVehicle } from "../vehicles/useVehicleMutations";
 import { VehicleFormDialog } from "../vehicles/VehicleFormDialog";
 import { mileageUnitAbbreviation, mileageUnitLabel } from "../vehicles/vehicleMileage";
 import type { OrderFieldConfigItem } from "./orderFieldConfig";
@@ -92,6 +92,7 @@ export function OrderVehicleFields<T extends FieldValues>({
   const intakeMileageRaw = useWatch({ control, name: "currentMileage" as Path<T> }) as string | undefined;
   const { vehicles, isLoading, isFetched, isError } = useGetClientVehicles(clientId || null);
   const createVehicle = useCreateVehicle(clientId);
+  const transferVehicle = useTransferVehicle(clientId);
   const [createOpen, setCreateOpen] = useState(false);
   /** Optimistic row so the selector/summary work before the client vehicles query settles. */
   const [createdVehicle, setCreatedVehicle] = useState<Vehicle | null>(null);
@@ -247,6 +248,23 @@ export function OrderVehicleFields<T extends FieldValues>({
       })
     : null;
 
+  /** Picks a vehicle that was just created (or moved to this client) in the order form. */
+  function selectNewVehicle(created: Vehicle) {
+    pendingCreatedVehicleId.current = created.id;
+    // Ensure the new option exists in the Select before setting its value; otherwise Radix
+    // can emit an empty onValueChange while options catch up (worse inside a parent form).
+    flushSync(() => {
+      setCreatedVehicle(created);
+    });
+    setValue(vehicleIdPath, created.id as PathValue<T, Path<T>>, { shouldDirty: true });
+    syncedAssetVehicleId.current = created.id;
+    syncedMileageVehicleId.current = created.id;
+    skipInitialAssetSync.current = false;
+    applyOrderAssetSnapshot(setValue, created);
+    // Explicit snapshot from the create form value (initial = current on create).
+    applyVisitMileage(setValue, mileageFormValueFromVehicle(created), { shouldDirty: true });
+  }
+
   return (
     <div className="space-y-2" data-edit-field="vehicle">
       <div className="flex items-center justify-between gap-2">
@@ -370,21 +388,13 @@ export function OrderVehicleFields<T extends FieldValues>({
         description={t("vehicles.addFromOrderDescription")}
         submitting={createVehicle.isPending}
         mode="create"
+        clientId={clientId}
+        onTransferExisting={async (match) => {
+          // Change of owner: the existing car is moved to this client and picked for the order.
+          selectNewVehicle(await transferVehicle.mutateAsync(match));
+        }}
         onSubmit={async (input) => {
-          const created = await createVehicle.mutateAsync(input);
-          pendingCreatedVehicleId.current = created.id;
-          // Ensure the new option exists in the Select before setting its value; otherwise Radix
-          // can emit an empty onValueChange while options catch up (worse inside a parent form).
-          flushSync(() => {
-            setCreatedVehicle(created);
-          });
-          setValue(vehicleIdPath, created.id as PathValue<T, Path<T>>, { shouldDirty: true });
-          syncedAssetVehicleId.current = created.id;
-          syncedMileageVehicleId.current = created.id;
-          skipInitialAssetSync.current = false;
-          applyOrderAssetSnapshot(setValue, created);
-          // Explicit snapshot from the create form value (initial = current on create).
-          applyVisitMileage(setValue, mileageFormValueFromVehicle(created), { shouldDirty: true });
+          selectNewVehicle(await createVehicle.mutateAsync(input));
         }}
       />
     </div>

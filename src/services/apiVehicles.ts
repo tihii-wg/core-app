@@ -378,13 +378,147 @@ function stripMileageUnitFromPayload(payload: Record<string, unknown>) {
   return next;
 }
 
-export async function createVehicle(workspaceId: string | undefined, clientId: string, input: VehicleInput) {
+/** Another vehicle in the workspace with the same VIN, and the client it belongs to. */
+export type VinOwnerMatch = {
+  vehicleId: string;
+  clientId: string;
+  clientName: string;
+  clientPhone: string | null;
+  /** Owner was deleted — the car is still in the base and can be given to the new owner. */
+  clientDeleted: boolean;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  licensePlate: string | null;
+  vin: string;
+};
+
+/** Creating / saving a vehicle whose VIN is already on another vehicle. */
+export class DuplicateVehicleVinError extends Error {
+  readonly match: VinOwnerMatch;
+  constructor(match: VinOwnerMatch) {
+    super(
+      i18n.t("vehicles.vinOwner.duplicateError", {
+        vin: match.vin,
+        client: match.clientName || i18n.t("vehicles.vinOwner.unnamedClient"),
+      }),
+    );
+    this.name = "DuplicateVehicleVinError";
+    this.match = match;
+  }
+}
+
+export function isDuplicateVehicleVinError(error: unknown): error is DuplicateVehicleVinError {
+  return error instanceof Error && error.name === "DuplicateVehicleVinError" && "match" in error;
+}
+
+function escapeIlike(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/**
+ * Active vehicle with this VIN (case-insensitive) in the workspace, with its owner.
+ * One query; a second one (owner name) only when a vehicle is found.
+ */
+export async function findVehicleByVin(
+  workspaceId: string | undefined,
+  vin: string | null | undefined,
+  {
+    excludeVehicleId,
+    ignoreIfExcludedMatches = false,
+  }: {
+    excludeVehicleId?: string | null;
+    /** Editing a vehicle that already had this VIN (old duplicates): do not block unrelated edits. */
+    ignoreIfExcludedMatches?: boolean;
+  } = {},
+): Promise<VinOwnerMatch | null> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const normalized = (vin ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("id, client_id, make, model, year, license_plate, vin")
+    .eq("workspace_id", targetWorkspaceId)
+    .is("deleted_at", null)
+    .ilike("vin", escapeIlike(normalized))
+    .order("created_at", { ascending: true })
+    .limit(5);
+  if (error) {
+    if (error.code === "42P01" || error.code === "42703" || error.code === "PGRST204") return null;
+    throw new Error(error.message);
+  }
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  if (
+    ignoreIfExcludedMatches &&
+    excludeVehicleId &&
+    rows.some((candidate) => String(candidate.id) === excludeVehicleId && String(candidate.vin ?? "").trim().toUpperCase() === normalized)
+  ) {
+    return null;
+  }
+  const row = rows.find(
+    (candidate) =>
+      String(candidate.id) !== (excludeVehicleId ?? "") &&
+      String(candidate.vin ?? "").trim().toUpperCase() === normalized,
+  );
+  if (!row) return null;
+  const clientId = String(row.client_id ?? "");
+  const { data: client } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("workspace_id", targetWorkspaceId)
+    .eq("id", clientId)
+    .maybeSingle();
+  const owner = (client ?? null) as { name?: string | null; phone?: string | null; deleted_at?: string | null } | null;
+  return {
+    vehicleId: String(row.id),
+    clientId,
+    clientName: owner?.name?.trim() ?? "",
+    clientPhone: owner?.phone?.trim() || null,
+    clientDeleted: Boolean(owner?.deleted_at),
+    make: typeof row.make === "string" ? row.make : null,
+    model: typeof row.model === "string" ? row.model : null,
+    year: typeof row.year === "number" ? row.year : null,
+    licensePlate: typeof row.license_plate === "string" ? row.license_plate : null,
+    vin: normalized,
+  };
+}
+
+/**
+ * Change of owner (car sold / new owner): the vehicle moves to another client of the same workspace.
+ * Past orders keep their client and vehicle, so the car's history stays complete.
+ */
+export async function transferVehicleToClient(workspaceId: string | undefined, vehicleId: string, clientId: string) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const targetClientId = clientId.trim();
   if (!targetClientId) throw new Error(i18n.t("vehicles.errors.clientRequired"));
   await assertClientInWorkspace(targetWorkspaceId, targetClientId);
+  const { data, error } = await withVehicleColumns(() =>
+    supabase
+      .from("vehicles")
+      .update({ client_id: targetClientId, updated_at: new Date().toISOString() })
+      .eq("id", vehicleId)
+      .eq("workspace_id", targetWorkspaceId)
+      .is("deleted_at", null)
+      .select(vehicleColumns() as typeof vehicleBaseColumns)
+      .maybeSingle(),
+  );
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error(i18n.t("vehicles.errors.notFound"));
+  return toVehicle(data as unknown as Record<string, unknown>);
+}
 
+export async function createVehicle(workspaceId: string | undefined, clientId: string, input: VehicleInput) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const targetClientId = clientId.trim();
+  if (!targetClientId) throw new Error(i18n.t("vehicles.errors.clientRequired"));
   let payload = payloadFromInput(input);
+  // One VIN = one vehicle: a second car with the same VIN is refused (the UI offers a change of owner instead).
+  const [, vinOwner] = await Promise.all([
+    assertClientInWorkspace(targetWorkspaceId, targetClientId),
+    findVehicleByVin(targetWorkspaceId, typeof payload.vin === "string" ? payload.vin : null),
+  ]);
+  if (vinOwner) throw new DuplicateVehicleVinError(vinOwner);
+
   let { data, error } = await supabase
     .from("vehicles")
     .insert({
@@ -421,6 +555,13 @@ export async function createVehicle(workspaceId: string | undefined, clientId: s
 export async function updateVehicle(workspaceId: string | undefined, vehicleId: string, input: VehicleInput) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   let payload = payloadFromInput(input);
+  if (typeof payload.vin === "string" && payload.vin) {
+    const vinOwner = await findVehicleByVin(targetWorkspaceId, payload.vin, {
+      excludeVehicleId: vehicleId,
+      ignoreIfExcludedMatches: true,
+    });
+    if (vinOwner) throw new DuplicateVehicleVinError(vinOwner);
+  }
   let { data, error } = await supabase
     .from("vehicles")
     .update({ ...payload, updated_at: new Date().toISOString() } as Record<string, unknown>)

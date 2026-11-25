@@ -18,7 +18,7 @@ import { highlightMatch } from "../clients/clientSearch";
 import { formatVehicleMileage } from "./vehicleMileage";
 import { filterClientVehiclesByQuery } from "./clientVehicleSearch";
 import { useGetClientVehicles } from "./useGetClientVehicles";
-import { useArchiveVehicle, useCreateVehicle, useUpdateVehicle } from "./useVehicleMutations";
+import { useArchiveVehicle, useCreateVehicle, useTransferVehicle, useUpdateVehicle } from "./useVehicleMutations";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { VehicleFormDialog } from "./VehicleFormDialog";
 
@@ -51,6 +51,7 @@ export function ClientVehiclesSection({
       ? allVehicles
       : allVehicles.filter((vehicle) => visibleVehicleIds.includes(vehicle.id));
   const createVehicle = useCreateVehicle(clientId);
+  const transferVehicle = useTransferVehicle(clientId);
   const updateVehicle = useUpdateVehicle(clientId);
   const archiveVehicle = useArchiveVehicle(clientId);
 
@@ -260,6 +261,10 @@ export function ClientVehiclesSection({
         title={editing ? t("vehicles.editTitle") : t("vehicles.addTitle")}
         description={editing ? t("vehicles.editDescription") : t("vehicles.addDescription")}
         initial={editing}
+        clientId={clientId}
+        onTransferExisting={async (match) => {
+          await transferVehicle.mutateAsync(match);
+        }}
         submitting={createVehicle.isPending || updateVehicle.isPending}
         onSubmit={async (input) => {
           if (editing) {

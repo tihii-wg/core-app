@@ -1,8 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import type { Vehicle, VehicleInput } from "../../lib/types";
-import { probeVehicleMileageUnitSupport } from "../../services/apiVehicles";
+import { probeVehicleMileageUnitSupport, type VinOwnerMatch } from "../../services/apiVehicles";
+import { normalizeVin } from "../../lib/vin";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { fetchVinOwner } from "./vinOwner";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Spinner } from "../../ui/Spinner";
@@ -19,6 +23,10 @@ type VehicleFormDialogProps = {
   onSubmit: (input: VehicleInput) => Promise<void>;
   /** Defaults to create when `initial` is absent, edit when present. */
   mode?: "create" | "edit";
+  /** Client the vehicle belongs to — enables «this VIN is already on another client» + change of owner. */
+  clientId?: string | null;
+  /** Create mode: move the existing vehicle with this VIN to `clientId` instead of creating a duplicate. */
+  onTransferExisting?: (match: VinOwnerMatch) => Promise<void>;
 };
 
 export function VehicleFormDialog({
@@ -30,7 +38,12 @@ export function VehicleFormDialog({
   submitting,
   onSubmit,
   mode,
+  clientId,
+  onTransferExisting,
 }: VehicleFormDialogProps) {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const [transferring, setTransferring] = useState(false);
   const fieldsMode = mode ?? (initial ? "edit" : "create");
   const { t } = useTranslation();
   const {
@@ -39,6 +52,7 @@ export function VehicleFormDialog({
     reset,
     setValue,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<VehicleFormValues>({
     defaultValues: vehicleToFormValues(initial),
@@ -55,11 +69,33 @@ export function VehicleFormDialog({
     void probeVehicleMileageUnitSupport();
   }, [open]);
 
-  const busy = Boolean(submitting || isSubmitting);
+  const busy = Boolean(submitting || isSubmitting || transferring);
 
   async function submit(values: VehicleFormValues) {
+    // One VIN = one vehicle. In edit mode only a changed VIN is checked (old duplicates stay editable).
+    const vinChanged = fieldsMode === "create" || normalizeVin(values.vin) !== normalizeVin(initial?.vin);
+    if (vinChanged) {
+      const match = await fetchVinOwner(queryClient, workspaceId, values.vin, initial?.id ?? null);
+      if (match) {
+        setError("vin", { type: "duplicate", message: t("vehicles.vinOwner.blockedSave") });
+        return;
+      }
+    }
     await onSubmit(vehicleFormValuesToInput(values));
     onOpenChange(false);
+  }
+
+  async function transfer(match: VinOwnerMatch) {
+    if (!onTransferExisting || transferring) return;
+    setTransferring(true);
+    try {
+      await onTransferExisting(match);
+      onOpenChange(false);
+    } catch {
+      // The mutation hook toasts the error.
+    } finally {
+      setTransferring(false);
+    }
   }
 
   // Avoid a nested <form> inside order/client forms: even portaled dialogs bubble
@@ -97,6 +133,12 @@ export function VehicleFormDialog({
             errors={errors}
             disabled={busy}
             mode={fieldsMode}
+            vinCheck={{
+              excludeVehicleId: initial?.id ?? null,
+              currentClientId: clientId ?? initial?.clientId ?? null,
+              onTransfer: fieldsMode === "create" && clientId && onTransferExisting ? (match) => void transfer(match) : undefined,
+              transferPending: transferring,
+            }}
           />
 
           <DialogFooter>

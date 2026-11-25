@@ -8,7 +8,9 @@ import { Label } from "../../ui/Label";
 import { Spinner } from "../../ui/Spinner";
 import { Switch } from "../../ui/Switch";
 import type { Client, ClientFormValues, CreateMadalProps } from "../../lib/types";
-import { createVehicle } from "../../services/apiVehicles";
+import { createVehicle, transferVehicleToClient, type VinOwnerMatch } from "../../services/apiVehicles";
+import { normalizeVin } from "../../lib/vin";
+import { fetchVinOwner } from "../vehicles/vinOwner";
 import { useCreateNewClient } from "./useCreateNewClient";
 import ClientFormFields from "./ClientFormFields";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -38,6 +40,8 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
   const guardWrite = useGuardSubscriptionWrite();
   const [addVehicle, setAddVehicle] = useState(false);
   const [vehicleSaving, setVehicleSaving] = useState(false);
+  /** Change of owner chosen for an existing car with the entered VIN (applied after the client is created). */
+  const [transferMatch, setTransferMatch] = useState<VinOwnerMatch | null>(null);
 
   const emptyClient: ClientFormValues = {
     clientType: "individual",
@@ -67,6 +71,7 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
     reset: resetVehicle,
     trigger: triggerVehicle,
     getValues: getVehicleValues,
+    setError: setVehicleError,
     formState: { errors: vehicleErrors },
   } = useForm<VehicleFormValues>({ defaultValues: emptyVehicleFormValues() });
 
@@ -92,6 +97,7 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
     });
     resetVehicle(emptyVehicleFormValues());
     setAddVehicle(false);
+    setTransferMatch(null);
     setCreateModalOpen(false);
   }
 
@@ -105,6 +111,21 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
         vehicleInput = vehicleFormValuesToInput(getVehicleValues());
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+        return;
+      }
+
+      // Checked BEFORE the client is created: a VIN that is already on another client is either moved to
+      // the new client (change of owner) or the save stops — never a client without its car.
+      let vinOwner: VinOwnerMatch | null = null;
+      try {
+        vinOwner = await fetchVinOwner(queryClient, workspaceId, vehicleInput.vin);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
+        return;
+      }
+      const transfer = vinOwner && transferMatch?.vehicleId === vinOwner.vehicleId ? vinOwner : null;
+      if (vinOwner && !transfer) {
+        setVehicleError("vin", { type: "duplicate", message: t("vehicles.vinOwner.blockedSave") });
         return;
       }
 
@@ -128,10 +149,16 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
       let vehicleId: string | null = null;
       try {
         guardWrite();
-        const vehicle = await createVehicle(workspaceId, createdClient.id, vehicleInput);
+        const vehicle = transfer
+          ? await transferVehicleToClient(workspaceId, transfer.vehicleId, createdClient.id)
+          : await createVehicle(workspaceId, createdClient.id, vehicleInput);
         vehicleId = vehicle.id;
         void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, createdClient.id) });
-        toast.success(t("vehicles.toast.created"), { id: "create-client-vehicle" });
+        if (transfer) {
+          void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, transfer.clientId) });
+          void queryClient.invalidateQueries({ queryKey: ["vehicle-vin-owner", workspaceId] });
+        }
+        toast.success(transfer ? t("vehicles.vinOwner.transferDone") : t("vehicles.toast.created"), { id: "create-client-vehicle" });
       } catch (error) {
         const detail = error instanceof Error && error.message ? ` ${error.message}` : "";
         toast.error(`${t("clients.toast.createdButVehicleFailed")}${detail}`, { id: "create-client-vehicle" });
@@ -198,6 +225,14 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
                 watch={watchVehicle}
                 errors={vehicleErrors}
                 disabled={busy}
+                vinCheck={{
+                  currentClientId: null,
+                  onTransfer: (match) => setTransferMatch(match),
+                  transferLabel: t("vehicles.vinOwner.transferOnSave"),
+                  transferSelected:
+                    transferMatch != null && transferMatch.vin === normalizeVin(watchVehicle("vin")),
+                  onCancelTransfer: () => setTransferMatch(null),
+                }}
               />
             ) : null}
           </div>

@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import type { Vehicle, VehicleInput } from "../../lib/types";
-import { archiveVehicle, createVehicle, updateVehicle } from "../../services/apiVehicles";
+import { archiveVehicle, createVehicle, transferVehicleToClient, updateVehicle, type VinOwnerMatch } from "../../services/apiVehicles";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { clientVehiclesQueryKey } from "./useGetClientVehicles";
@@ -74,6 +74,37 @@ export function useArchiveVehicle(clientId: string) {
       void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId, "id", vehicleId] });
       void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
       toast.success(i18n.t("vehicles.toast.archived"), { id: "vehicle-mutate" });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("common.somethingWentWrong"), { id: "vehicle-mutate" });
+    },
+  });
+}
+
+/** Change of owner: moves an existing vehicle (found by VIN) to `clientId`. */
+export function useTransferVehicle(clientId: string) {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+
+  return useMutation({
+    mutationFn: (match: VinOwnerMatch) => {
+      guardWrite();
+      return transferVehicleToClient(workspaceId, match.vehicleId, clientId);
+    },
+    onSuccess: (vehicle, match) => {
+      queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, clientId), (previous: Vehicle[] | undefined) => {
+        const list = previous ?? [];
+        return list.some((row) => row.id === vehicle.id) ? list : [vehicle, ...list];
+      });
+      queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, match.clientId), (previous: Vehicle[] | undefined) =>
+        previous ? previous.filter((row) => row.id !== vehicle.id) : previous,
+      );
+      queryClient.setQueryData(vehicleQueryKey(workspaceId, vehicle.id), vehicle);
+      // Owner changed: the VIN lookup cache must not keep offering the old owner.
+      void queryClient.invalidateQueries({ queryKey: ["vehicle-vin-owner", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId] });
+      toast.success(i18n.t("vehicles.vinOwner.transferDone"), { id: "vehicle-mutate" });
     },
     onError: (error: Error) => {
       toast.error(error.message || i18n.t("common.somethingWentWrong"), { id: "vehicle-mutate" });
