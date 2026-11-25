@@ -75,7 +75,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
       if (meta?.catalogServiceId) openServiceLinePriceAfterAdd(updated, meta.catalogServiceId);
     },
     highlightServiceLine: (serviceId: string) => highlightExistingServiceLine(serviceId),
-    incrementMaterialLine: (inventoryItemId: string) => incrementExistingMaterialLine(inventoryItemId),
+    incrementMaterialLine: (inventoryItemId: string, by?: number) => incrementExistingMaterialLine(inventoryItemId, by),
     materialAdded: (updated: Parameters<typeof onOrderUpdated>[0]) => onOrderUpdated(updated),
     materialPending: (drafts: Parameters<typeof applyPendingMaterials>[0]) => applyPendingMaterials(drafts),
     openMaterial: (prefill: Parameters<typeof setAddMaterialPrefill>[0]) => {

@@ -586,6 +586,12 @@ const orders: Messages<typeof en> = {
     needMaterial: "Добавьте хотя бы один товар",
   },
   addLinesSearch: {
+    qtyLabel: "Количество",
+    qtyAdd: "Добавить",
+    qtyInvalid: "Укажите количество больше нуля",
+    qtyNotEnough: "На одном складе есть только {{count}} {{unit}}",
+    qtyHintStock: "Enter — добавить, Esc — отмена. В наличии: {{count}} {{unit}}",
+    qtyHint: "Enter — добавить, Esc — отмена",
     placeholder: "Найти услугу или товар…",
     placeholderWorks: "Найти работу или материал…",
     servicesGroup: "Услуги",

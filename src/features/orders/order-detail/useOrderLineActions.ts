@@ -106,7 +106,7 @@ export function useOrderLineActions({
    * by 1 (issues one more unit from that line's warehouse; the RPC enforces the stock limit and the
    * optimistic update rolls back with its error). Returns false when there is no such line.
    */
-  const incrementExistingMaterialLine = useStableCallback((inventoryItemId: string): boolean => {
+  const incrementExistingMaterialLine = useStableCallback((inventoryItemId: string, by: number = 1): boolean => {
     const selectedOrder = orderRef.current;
     if (!selectedOrder) return false;
     const existing = (selectedOrder.materials ?? []).find(
@@ -126,7 +126,8 @@ export function useOrderLineActions({
       toast(t("orders.toast.materialAlreadyInOrder"));
       return true;
     }
-    const quantity = (Number(existing.quantity) || 0) + 1;
+    const step = Number.isFinite(by) && by > 0 ? by : 1;
+    const quantity = Math.round(((Number(existing.quantity) || 0) + step) * 1000) / 1000;
     const message = t("orders.toast.materialAlreadyInOrderIncreased", { quantity });
     toast.success(message, { id: ORDER_FIELD_SAVED_TOAST_ID });
     void saveMaterialLineField(lineId, "quantity", String(quantity), message).catch((error: unknown) => {

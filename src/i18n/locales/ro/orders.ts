@@ -582,6 +582,12 @@ const orders: Messages<typeof en> = {
     needMaterial: "Adăugați cel puțin un material",
   },
   addLinesSearch: {
+    qtyLabel: "Cantitate",
+    qtyAdd: "Adaugă",
+    qtyInvalid: "Introduceți o cantitate mai mare decât zero",
+    qtyNotEnough: "Într-un depozit sunt doar {{count}} {{unit}}",
+    qtyHintStock: "Enter — adaugă, Esc — anulează. În stoc: {{count}} {{unit}}",
+    qtyHint: "Enter — adaugă, Esc — anulează",
     placeholder: "Căutați un serviciu sau un produs…",
     placeholderWorks: "Căutați o lucrare sau un material…",
     servicesGroup: "Servicii",

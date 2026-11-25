@@ -29,7 +29,7 @@ export type OrderItemsTabProps = {
   onServiceAdded: (updated: Order, meta?: { catalogServiceId?: string }) => void;
   onHighlightServiceLine: (serviceId: string) => void;
   /** Catalog item already on the order: bump that line. Returns false when there is no such line. */
-  onIncrementMaterialLine: (inventoryItemId: string) => boolean;
+  onIncrementMaterialLine: (inventoryItemId: string, by?: number) => boolean;
   onMaterialAdded?: (order: Order) => void;
   onMaterialPending?: (drafts: OrderMaterial[]) => () => void;
   onOpenMaterial: (prefill: AddOrderMaterialPrefill) => void;

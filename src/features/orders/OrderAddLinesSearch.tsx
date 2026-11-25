@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import type { InventoryItem, Order, OrderMaterial, OrderService, Service } from "../../lib/types";
 import { cn } from "../../lib/utils";
 import { Input } from "../../ui/Input";
+import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import { serviceCategoryLabel } from "../industries/industryWorkflow";
 import { useInventorySearch } from "../inventory/useGetInventoryItems";
@@ -49,8 +50,8 @@ type OrderAddLinesSearchProps = {
   onMaterialPending?: (drafts: OrderMaterial[]) => () => void;
   /** Catalog service already on the order: the parent bumps that line's quantity (no duplicate line). */
   onHighlightServiceLine: (serviceId: string) => void;
-  /** Catalog item already on the order: the parent bumps that line. Returns false when there is no such line. */
-  onIncrementMaterialLine?: (inventoryItemId: string) => boolean;
+  /** Catalog item already on the order: the parent bumps that line by `by`. Returns false when there is no such line. */
+  onIncrementMaterialLine?: (inventoryItemId: string, by?: number) => boolean;
   onOpenMaterial: (prefill: OrderAddLinesMaterialPrefill) => void;
   /** Lets the parent restore focus to the search after a line-price / performer editor closes. */
   focusRegistration?: (focus: () => void) => void;
@@ -114,6 +115,11 @@ export default function OrderAddLinesSearch({
   /** Part just created here → goods receipt (оприходование) dialog. */
   const [receiveItem, setReceiveItem] = useState<InventoryItem | null>(null);
   const { canWrite: canWriteWorkspace } = useWorkspaceSubscription();
+  /** Catalog item picked from the search: asks how many before it is added (Enter adds, Esc cancels). */
+  const [qtyPrompt, setQtyPrompt] = useState<InventoryItem | null>(null);
+  const [qtyText, setQtyText] = useState("1");
+  const [qtyError, setQtyError] = useState<string | null>(null);
+  const qtyInputRef = useRef<HTMLInputElement>(null);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -342,52 +348,84 @@ export default function OrderAddLinesSearch({
     return null;
   }
 
+  /** Issuable warehouse that can give `quantity` (the first one with enough stock), else null. */
+  function issueWarehouseFor(itemId: string, quantity: number): string | null {
+    for (const warehouse of issuableWarehouses(warehouseRows)) {
+      if (warehouseStockOf(warehouseStock, warehouse.id, itemId) >= quantity) return warehouse.id;
+    }
+    return null;
+  }
+
+  /** Most that one warehouse can give (a line is issued from one warehouse). */
+  function maxIssuable(itemId: string): number {
+    return issuableWarehouses(warehouseRows).reduce(
+      (max, warehouse) => Math.max(max, warehouseStockOf(warehouseStock, warehouse.id, itemId)),
+      0,
+    );
+  }
+
   function handleSelectItem(item: InventoryItem) {
-    if (onIncrementMaterialLine?.(item.id)) {
-      readyForNextPick();
-      return;
-    }
-    // Estimates never issue stock now, but keep the warehouse that has the item: on acceptance the
-    // conversion issues each line from its warehouse (a line without one would stay «К выдаче»).
-    if (isEstimateOrder(order)) {
-      const draft = catalogItemToOrderMaterial(
-        item,
-        1,
-        quickIssueWarehouseId(item.id) ?? issuableWarehouses(warehouseRows)[0]?.id ?? undefined,
-        warrantyDefaults,
-        order.vehicleMileageUnitSnapshot ?? "km",
-      );
-      readyForNextPick();
-      void enqueue(async () => {
-        if (
-          (latestOrderRef.current.materials ?? []).some((line) => line.id && line.inventoryItemId === item.id) &&
-          onIncrementMaterialLine?.(item.id)
-        ) {
-          return;
-        }
-        const revert = onMaterialPending?.([draft]) ?? (() => undefined);
-        try {
-          const updated = await appendLines({ orderId: order.id, kind: "materials", drafts: [draft], orderKind: order.kind });
-          latestOrderRef.current = updated;
-          onMaterialAdded?.(updated);
-        } catch (error) {
-          revert();
-          toast.error(error instanceof Error ? error.message : t("common.somethingWentWrong"));
-        }
-      });
-      return;
-    }
-    const warehouseId = onMaterialAdded ? quickIssueWarehouseId(item.id) : null;
-    if (!warehouseId) {
-      // No warehouse with stock known here (or no quick-add wiring): fall back to the material dialog.
+    const onOrder = (order.materials ?? []).some((line) => line.id && line.inventoryItemId === item.id);
+    // No warehouse with stock known here (or no quick-add wiring): the full material dialog, as before.
+    if (!onOrder && !isEstimateOrder(order) && (!onMaterialAdded || !quickIssueWarehouseId(item.id))) {
       setOpen(false);
       setQuery("");
       onOpenMaterial({ kind: "catalog", item });
       return;
     }
+    setOpen(false);
+    setQtyPrompt(item);
+    setQtyText("1");
+    setQtyError(null);
+    window.setTimeout(() => {
+      qtyInputRef.current?.focus();
+      qtyInputRef.current?.select();
+    }, 0);
+  }
+
+  function cancelQtyPrompt() {
+    setQtyPrompt(null);
+    setQtyError(null);
+    readyForNextPick();
+  }
+
+  function confirmQtyPrompt() {
+    const item = qtyPrompt;
+    if (!item) return;
+    const quantity = Number(qtyText.trim().replace(",", "."));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setQtyError(t("orders.addLinesSearch.qtyInvalid"));
+      return;
+    }
+    const estimate = isEstimateOrder(order);
+    const onOrder = (latestOrderRef.current.materials ?? []).some((line) => line.id && line.inventoryItemId === item.id);
+    if (onOrder) {
+      setQtyPrompt(null);
+      readyForNextPick();
+      onIncrementMaterialLine?.(item.id, quantity);
+      return;
+    }
+    const warehouseId = estimate
+      ? quickIssueWarehouseId(item.id) ?? issuableWarehouses(warehouseRows)[0]?.id ?? undefined
+      : issueWarehouseFor(item.id, quantity);
+    if (!estimate && !warehouseId) {
+      setQtyError(
+        t("orders.addLinesSearch.qtyNotEnough", {
+          count: maxIssuable(item.id),
+          unit: item.unit?.trim() || t("orders.addLinesSearch.unitFallback"),
+        }),
+      );
+      return;
+    }
+    setQtyPrompt(null);
+    addCatalogMaterial(item, quantity, warehouseId ?? undefined);
+  }
+
+  /** Saves a catalog material line (queued), keeping the focus in the search for the next pick. */
+  function addCatalogMaterial(item: InventoryItem, quantity: number, warehouseId: string | undefined) {
     const draft = catalogItemToOrderMaterial(
       item,
-      1,
+      quantity,
       warehouseId,
       warrantyDefaults,
       order.vehicleMileageUnitSnapshot ?? "km",
@@ -397,7 +435,7 @@ export default function OrderAddLinesSearch({
       // Picked twice quickly: the first pick's line exists now → bump it instead of a second line.
       if (
         (latestOrderRef.current.materials ?? []).some((line) => line.id && line.inventoryItemId === item.id) &&
-        onIncrementMaterialLine?.(item.id)
+        onIncrementMaterialLine?.(item.id, quantity)
       ) {
         return;
       }
@@ -780,6 +818,61 @@ export default function OrderAddLinesSearch({
         }}
         onKeyDown={onKeyDown}
       />
+      {qtyPrompt ? (
+        <div
+          className="mt-2 space-y-1.5 rounded-md border border-primary/40 bg-primary/5 p-2.5"
+          data-testid="order-add-lines-qty-prompt"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={qtyPrompt.name}>
+              {qtyPrompt.name}
+            </span>
+            <Input
+              ref={qtyInputRef}
+              value={qtyText}
+              inputMode="decimal"
+              aria-label={t("orders.addLinesSearch.qtyLabel")}
+              className="h-9 w-24 text-right tabular-nums"
+              onChange={(event) => {
+                setQtyText(event.target.value);
+                setQtyError(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  confirmQtyPrompt();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  cancelQtyPrompt();
+                }
+              }}
+            />
+            <span className="text-sm text-muted-foreground">
+              {qtyPrompt.unit?.trim() || t("orders.addLinesSearch.unitFallback")}
+            </span>
+            <Button type="button" size="sm" onClick={confirmQtyPrompt}>
+              {t("orders.addLinesSearch.qtyAdd")}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={cancelQtyPrompt}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+          {qtyError ? (
+            <p className="text-xs text-destructive">{qtyError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {isEstimateOrder(order)
+                ? t("orders.addLinesSearch.qtyHint")
+                : t("orders.addLinesSearch.qtyHintStock", {
+                    count: maxIssuable(qtyPrompt.id),
+                    unit: qtyPrompt.unit?.trim() || t("orders.addLinesSearch.unitFallback"),
+                  })}
+            </p>
+          )}
+        </div>
+      ) : null}
       {menu}
       <CreateServiceDialog
         open={createServiceName !== null}

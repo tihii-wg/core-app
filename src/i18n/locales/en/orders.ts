@@ -575,6 +575,12 @@ export default {
     needMaterial: "Add at least one material",
   },
   addLinesSearch: {
+    qtyLabel: "Quantity",
+    qtyAdd: "Add",
+    qtyInvalid: "Enter a quantity above zero",
+    qtyNotEnough: "Only {{count}} {{unit}} in one warehouse",
+    qtyHintStock: "Enter — add, Esc — cancel. In stock: {{count}} {{unit}}",
+    qtyHint: "Enter — add, Esc — cancel",
     placeholder: "Find a service or product…",
     placeholderWorks: "Find a work or material…",
     servicesGroup: "Services",
