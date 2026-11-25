@@ -54,7 +54,7 @@ describe("print line comments", () => {
     expect(rows[0]?.comment).toBe("");
   });
 
-  it("renders escaped comment under the name in legacy HTML tables", () => {
+  it("renders escaped comment in brackets after the name in legacy HTML tables", () => {
     const ctx = emptyPrintContext({ order: orderWithComment() });
     const html = applyTemplateVariables("#ТАБЛИЦА-УСЛУГ", ctx);
     expect(html).toContain("Oil &lt;b&gt;change&lt;/b&gt;");

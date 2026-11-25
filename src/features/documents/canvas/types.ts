@@ -88,7 +88,10 @@ export type TableCanvasElement = CanvasElementBase & {
   showTotalsRow: boolean;
   /** Column header row. Default true. */
   showHeader?: boolean;
-  /** Line comment printed in small text under the name (public comments only). Default off. */
+  /**
+   * Line comment printed in brackets right after the name (public comments only).
+   * Default on; `false` switches it off. Ignored when the table has its own «Comment» column.
+   */
   commentUnderName?: boolean;
   headerBackground: ColorRef;
   headerTextColor: ColorRef;

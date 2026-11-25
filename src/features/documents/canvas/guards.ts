@@ -245,7 +245,7 @@ function parseElement(value: unknown): CanvasElement | null {
         columns,
         showTotalsRow: value.showTotalsRow,
         ...(value.showHeader === false ? { showHeader: false } : {}),
-        ...(value.commentUnderName === true ? { commentUnderName: true } : {}),
+        ...(value.commentUnderName === false ? { commentUnderName: false } : {}),
         headerBackground: String(value.headerBackground).trim(),
         headerTextColor: String(value.headerTextColor).trim(),
         borderColor: String(value.borderColor).trim(),

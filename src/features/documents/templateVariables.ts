@@ -330,7 +330,7 @@ function nameWithCommentHtml(name: string, comment: string | null | undefined) {
   const nameHtml = escapeHtmlText(name);
   const trimmed = comment?.trim() || "";
   if (!trimmed) return nameHtml;
-  return `${nameHtml}<div style="font-size:0.85em;color:#666;margin-top:2px">${escapeHtmlText(trimmed)}</div>`;
+  return `${nameHtml} (${escapeHtmlText(trimmed)})`;
 }
 
 function buildServicesTable(ctx: PrintContext) {

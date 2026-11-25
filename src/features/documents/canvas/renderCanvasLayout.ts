@@ -263,6 +263,8 @@ function renderTableHtml(
   includeHeader: boolean,
 ): string {
   const columns = el.columns.filter((column) => column.enabled);
+  // Line comment goes in brackets right after the name — unless switched off or shown in its own column.
+  const commentInName = el.commentUnderName !== false && !columns.some((column) => column.key === "comment");
   if (columns.length === 0) return "";
   const borderColor = resolveCanvasColor(el.borderColor, colors) ?? "#cccccc";
   const headerBg = resolveCanvasColor(el.headerBackground, colors) ?? "#1a6de0";
@@ -326,8 +328,8 @@ function renderTableHtml(
           break;
         case "name":
           value = escapeHtmlText(row.name);
-          if (el.commentUnderName && row.comment) {
-            value += `<div style="font-size:0.85em;opacity:0.75;white-space:pre-wrap">${escapeHtmlText(row.comment)}</div>`;
+          if (commentInName && row.comment) {
+            value += ` (${escapeHtmlText(row.comment)})`;
           }
           break;
         case "sku":

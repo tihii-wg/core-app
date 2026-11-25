@@ -1132,7 +1132,7 @@ const settings: Messages<typeof en> = {
         title: "Conținutul blocului",
         tableSource: "Ce se afișează",
         showHeader: "Antetul tabelului",
-        commentUnderName: "Comentariul poziției sub denumire",
+        commentUnderName: "Comentariul poziției — în paranteze după denumire",
         showTotalsRow: "Rândul «Total» sub tabel",
         columns: "Coloane",
         columnWidth: "Lățime, %",
