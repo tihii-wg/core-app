@@ -1288,6 +1288,7 @@ const settings: Messages<typeof en> = {
         address: { label: "Адрес клиента" },
         type: { label: "Тип клиента" },
         idno: { label: "IDNO клиента", description: "Фискальный код организации" },
+        balance: { label: "Баланс клиента", description: "Аванс клиента (вкладка «Баланс» в карточке клиента) на момент печати" },
       },
       vehicle: {
         make: { label: "Марка" },

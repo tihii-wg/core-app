@@ -825,6 +825,19 @@ export const TEMPLATE_VARIABLES: readonly TemplateVariable[] = [
     kind: "text",
     resolve: (ctx) => text(ctx.client?.tax_id),
   },
+  {
+    token: "#КЛИЕНТ-БАЛАНС",
+    group: "client",
+    labelKey: "settings.printTemplates.variables.client.balance.label",
+    descriptionKey: "settings.printTemplates.variables.client.balance.description",
+    kind: "money",
+    // The client's balance (advance) from the client card «Баланс» tab, as of printing.
+    resolve: (ctx) => {
+      if (!ctx.client) return null;
+      const value = Number(ctx.client.balance);
+      return Number.isFinite(value) ? value : 0;
+    },
+  },
 
   // Vehicle
   {

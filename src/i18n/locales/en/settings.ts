@@ -1280,6 +1280,7 @@ export default {
         address: { label: "Client address" },
         type: { label: "Client type" },
         idno: { label: "Client IDNO", description: "Organization tax / fiscal code" },
+        balance: { label: "Client balance", description: "Client advance (the «Balance» tab of the client card) at print time" },
       },
       vehicle: {
         make: { label: "Make" },

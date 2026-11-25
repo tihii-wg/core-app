@@ -1286,6 +1286,7 @@ const settings: Messages<typeof en> = {
         address: { label: "Adresă client" },
         type: { label: "Tip client" },
         idno: { label: "IDNO client", description: "Codul fiscal al organizației" },
+        balance: { label: "Soldul clientului", description: "Avansul clientului (fila «Sold» din fișa clientului) la momentul tipăririi" },
       },
       vehicle: {
         make: { label: "Marcă" },

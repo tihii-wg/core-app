@@ -312,7 +312,7 @@ function buildClient(documentType: PrintDocumentKind, t: (key: string) => string
     email: "ivan.petrov@example.com",
     phone: "+373 69 000 000",
     address: t("settings.printTemplates.demo.clientAddress"),
-    balance: 0,
+    balance: 500,
     created_at: "",
     client_type: "individual",
     tax_id: "2000100000000",
