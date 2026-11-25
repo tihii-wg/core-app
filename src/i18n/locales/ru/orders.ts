@@ -585,6 +585,18 @@ const orders: Messages<typeof en> = {
     needWork: "Добавьте хотя бы одну работу",
     needMaterial: "Добавьте хотя бы один товар",
   },
+  visibility: {
+    private: "Приватный",
+    public: "Публичный",
+    privateHint: "Видят только автор и владелец пространства",
+    publicHint: "Видят все сотрудники",
+    makePrivate: "Сделать приватным",
+    makePublic: "Сделать публичным",
+    errors: {
+      notInstalled: "Переключение видимости появится после применения SQL 20261125180000_order_comments_files_visibility.",
+      forbidden: "Менять видимость может только автор или владелец пространства.",
+    },
+  },
   addLinesSearch: {
     qtyLabel: "Количество",
     qtyAdd: "Добавить",

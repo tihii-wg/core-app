@@ -20,6 +20,18 @@ const ATTACHMENT_SELECT =
 
 const REMOTE_FUNCTION = "order-attachment-remote";
 
+/** order_attachments.is_public (SQL 20261125180000); off once the column turns out to be missing. */
+let attachmentVisibilitySupported = true;
+
+/** Typed as the base list (the PostgREST type parser cannot read a column list built at runtime). */
+function listSelect(): typeof ATTACHMENT_SELECT {
+  return (attachmentVisibilitySupported ? `${ATTACHMENT_SELECT}, is_public` : ATTACHMENT_SELECT) as typeof ATTACHMENT_SELECT;
+}
+
+function isMissingVisibilityColumn(error: { message?: string; code?: string } | null | undefined) {
+  return Boolean(error) && /is_public/i.test(error?.message ?? "") && /42703|PGRST204|does not exist|schema cache/i.test(`${error?.code ?? ""} ${error?.message ?? ""}`);
+}
+
 const attachmentErrors = {
   orderRequired: () => i18n.t("orders.attachments.errors.orderRequired"),
   empty: () => i18n.t("orders.attachments.errors.empty"),
@@ -94,6 +106,7 @@ export function toOrderAttachment(row: Record<string, unknown>): OrderAttachment
     mimeType,
     fileSize: Number.isFinite(fileSize) ? fileSize : 0,
     createdAt: typeof row.created_at === "string" ? row.created_at : "",
+    ...(typeof row.is_public === "boolean" ? { isPublic: row.is_public } : {}),
   };
 }
 
@@ -105,13 +118,19 @@ export async function listOrderAttachments(workspaceId: string | undefined, orde
   const selectLegacy =
     "id, workspace_id, order_id, uploaded_by, file_name, storage_path, storage_provider, drive_file_id, drive_folder_id, mime_type, file_size, created_at";
 
-  let result = await supabase
-    .from("order_attachments")
-    .select(ATTACHMENT_SELECT)
-    .eq("workspace_id", targetWorkspaceId)
-    .eq("order_id", targetOrderId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  const runList = () =>
+    supabase
+      .from("order_attachments")
+      .select(listSelect())
+      .eq("workspace_id", targetWorkspaceId)
+      .eq("order_id", targetOrderId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+  let result = await runList();
+  if (result.error && isMissingVisibilityColumn(result.error)) {
+    attachmentVisibilitySupported = false;
+    result = await runList();
+  }
 
   if (result.error && /nas_path|deleted_at|PGRST204|42703/i.test(result.error.message ?? "")) {
     result = (await supabase
@@ -183,13 +202,19 @@ export async function listOrderAttachmentsForOrders(workspaceId: string | undefi
   const rows: Record<string, unknown>[] = [];
   for (let index = 0; index < ids.length; index += ATTACHMENT_ORDER_CHUNK) {
     const chunk = ids.slice(index, index + ATTACHMENT_ORDER_CHUNK);
-    let result = await supabase
-      .from("order_attachments")
-      .select(ATTACHMENT_SELECT)
-      .eq("workspace_id", targetWorkspaceId)
-      .in("order_id", chunk)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+    const runChunk = () =>
+      supabase
+        .from("order_attachments")
+        .select(listSelect())
+        .eq("workspace_id", targetWorkspaceId)
+        .in("order_id", chunk)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+    let result = await runChunk();
+    if (result.error && isMissingVisibilityColumn(result.error)) {
+      attachmentVisibilitySupported = false;
+      result = await runChunk();
+    }
 
     if (result.error && /nas_path|deleted_at|PGRST204|42703/i.test(result.error.message ?? "")) {
       result = (await supabase

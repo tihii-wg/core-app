@@ -27,6 +27,8 @@ export type OrderAttachment = {
   mimeType: string;
   fileSize: number;
   createdAt: string;
+  /** Private = only the uploader and the workspace owner see it. Undefined until the SQL adds the column. */
+  isPublic?: boolean;
 };
 
 export function isDriveAttachment(attachment: Pick<OrderAttachment, "storageProvider" | "driveFileId">) {

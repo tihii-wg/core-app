@@ -1,3 +1,4 @@
+import { isMissingRpcError } from "./missingRpc";
 import i18n from "../i18n";
 import { resolveActorName } from "./apiActivityLog";
 import { isMissingTableError, requireWorkspaceId } from "./missingTable";
@@ -82,7 +83,12 @@ export async function getOrderComments(workspaceId: string | undefined, orderId:
   return { comments: ((data ?? []) as Record<string, unknown>[]).map(toOrderComment), isUnavailable: false };
 }
 
-export async function createOrderComment(workspaceId: string | undefined, orderId: string, body: string): Promise<OrderComment> {
+export async function createOrderComment(
+  workspaceId: string | undefined,
+  orderId: string,
+  body: string,
+  isPublic = false,
+): Promise<OrderComment> {
   const resolved = requireWorkspaceId(workspaceId);
   if (!orderId.trim()) throw new Error(i18n.t("orders.feed.errors.noOrder"));
   const { assertClosedOrderMutableOnServer } = await import("./apiOrders");
@@ -100,7 +106,7 @@ export async function createOrderComment(workspaceId: string | undefined, orderI
   // author_user_id defaults to auth.uid() in the table definition.
   const { data, error } = await supabase
     .from("order_comments")
-    .insert({ workspace_id: resolved, order_id: orderId, body: text, author_name: authorName, is_public: false })
+    .insert({ workspace_id: resolved, order_id: orderId, body: text, author_name: authorName, is_public: isPublic })
     .select(commentColumns)
     .single();
 
@@ -124,4 +130,19 @@ export async function deleteOrderComment(workspaceId: string | undefined, orderI
   if (error) throw writeError(error);
   // RLS filters rows silently: no returned row means the caller may not edit it (or it is already gone).
   if (!data || data.length === 0) throw new Error(i18n.t("orders.feed.errors.permission"));
+}
+
+const SET_ITEM_VISIBILITY_RPC = "crm_set_order_item_visibility";
+
+/** Switches one order comment / file between private (author + owner) and public (whole team). */
+export async function setOrderItemVisibility(kind: "comment" | "file", id: string, isPublic: boolean): Promise<boolean> {
+  const { data, error } = await supabase.rpc(SET_ITEM_VISIBILITY_RPC, { p_kind: kind, p_id: id, p_public: isPublic });
+  if (error) {
+    if (isMissingRpcError(error, SET_ITEM_VISIBILITY_RPC)) throw new Error(i18n.t("orders.visibility.errors.notInstalled"));
+    if (/item_visibility:forbidden|item_visibility:not_authenticated/.test(error.message ?? "")) {
+      throw new Error(i18n.t("orders.visibility.errors.forbidden"));
+    }
+    throw new Error(error.message || i18n.t("common.somethingWentWrong"));
+  }
+  return data === true;
 }

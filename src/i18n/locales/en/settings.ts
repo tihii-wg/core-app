@@ -85,7 +85,7 @@ export default {
       lineCommentsPublic: "Public — visible to staff and included on printouts",
       lineCommentsHint:
         "Private: service and material line comments are visible only to the workspace owner on the order card — they never appear for staff or on printouts. Public: all workspace members can see them, and comments can be included in printed documents.",
-      visibilityHint: "UI defaults only. Access still follows workspace roles and storage policies. Comment/file attachments are not modeled yet.",
+      visibilityHint: "Private — only the author and the workspace owner see it; public — all team members. This is the default for new order comments and files: each one can be switched separately (the Private / Public mark next to it). Existing comments and files stay visible to everyone.",
       preventDuplicateDevice: "Prevent the same vehicle/device on multiple open orders",
       preventDuplicateDeviceHint: "When enabled, open orders (new, in progress, waiting for parts) cannot share the same VIN. Free-text device names alone are not treated as unique identifiers.",
       save: "Save order settings",

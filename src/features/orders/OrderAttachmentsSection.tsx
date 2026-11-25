@@ -1,3 +1,6 @@
+import { ItemVisibilityToggle } from "./ItemVisibilityToggle";
+import { useSetOrderItemVisibility } from "./useSetOrderItemVisibility";
+import { useGetProfile } from "../profiles/useGetProfile";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Camera, Download, Eye, Loader2, ExternalLink, FileText, ImageIcon, Paperclip, Trash2, Upload } from "lucide-react";
@@ -192,6 +195,8 @@ export default function OrderAttachmentsSection({
   const canMutate = canMutateOverride === false ? false : canMutateRole;
   const isOwner = useIsWorkspaceOwnerId();
   const { attachments, isLoading, error, refetch } = useOrderAttachments(orderId, { enabled });
+  const { data: profile } = useGetProfile();
+  const setVisibility = useSetOrderItemVisibility(orderId ?? "");
   const upload = useUploadOrderAttachment(orderId);
   const remove = useDeleteOrderAttachment(orderId);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -364,7 +369,15 @@ export default function OrderAttachmentsSection({
                 <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                   {attachment.mimeType || "—"} · {formatAttachmentBytes(attachment.fileSize, currentIntlLocale())}
                 </p>
-                <p className="mt-0.5 text-[11px] text-subtle-foreground tabular-nums">{formatUploadedAt(attachment.createdAt)}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-subtle-foreground tabular-nums">
+                  {formatUploadedAt(attachment.createdAt)}
+                  <ItemVisibilityToggle
+                    isPublic={attachment.isPublic}
+                    canChange={canMutate && (isOwner || (Boolean(profile?.id) && attachment.uploadedBy === profile?.id))}
+                    pending={setVisibility.isPending}
+                    onChange={(next) => setVisibility.mutate({ kind: "file", id: attachment.id, isPublic: next })}
+                  />
+                </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Button type="button" variant="ghost" size="sm" className="h-8 px-2" onClick={() => setPreview(attachment)}>
                     <Eye className="size-3.5" />

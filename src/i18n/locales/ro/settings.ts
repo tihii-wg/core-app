@@ -88,7 +88,7 @@ const settings: Messages<typeof en> = {
       lineCommentsPublic: "Public — vizibil angajaților și apare la tipărire",
       lineCommentsHint:
         "Privat: comentariile la servicii și materiale sunt vizibile doar proprietarului spațiului în cardul comenzii — nu apar pentru angajați și nu se tipăresc. Public: toți membrii spațiului le văd, iar comentariile pot fi incluse în documentele tipărite.",
-      visibilityHint: "Doar valori implicite în UI. Accesul respectă rolurile și politicile de stocare. Atașamentele comentarii/fișiere nu sunt modelate încă.",
+      visibilityHint: "Privat — văd doar autorul și proprietarul spațiului; public — toți angajații. Aceasta este valoarea pentru comentariile noi la comandă și fișiere: fiecare poate fi comutat separat (eticheta Privat / Public de lângă el). Comentariile și fișierele existente rămân vizibile tuturor.",
       preventDuplicateDevice: "Previne același vehicul/dispozitiv pe mai multe comenzi deschise",
       preventDuplicateDeviceHint: "Când este activ, comenzile deschise (nou, în lucru, așteaptă piese) nu pot partaja același VIN. Numele libere ale dispozitivului nu sunt tratate ca identificatori unici.",
       save: "Salvați setările comenzilor",

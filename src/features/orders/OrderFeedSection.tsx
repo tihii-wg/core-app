@@ -1,3 +1,8 @@
+import { ItemVisibilityToggle } from "./ItemVisibilityToggle";
+import { useSetOrderItemVisibility } from "./useSetOrderItemVisibility";
+import { useActiveWorkspaceId, useGetProfile } from "../profiles/useGetProfile";
+import { useGetWorkspace } from "../workspaces/useGetWorkspace";
+import { useIsWorkspaceOwnerId } from "../workspaces/useIsWorkspaceOwnerId";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -78,6 +83,15 @@ export default function OrderFeedSection({
   const createComment = useCreateOrderComment(orderId);
   const deleteComment = useDeleteOrderComment(orderId);
   const [draft, setDraft] = useState("");
+  const { workspaceId } = useActiveWorkspaceId();
+  const { data: workspace } = useGetWorkspace(workspaceId);
+  const { data: profile } = useGetProfile();
+  const isOwner = useIsWorkspaceOwnerId();
+  const setVisibility = useSetOrderItemVisibility(orderId);
+  // New comments start with the workspace default (Settings → General → Orders); the switch below changes it.
+  const defaultPublic = workspace?.defaultCommentsVisibility === "public";
+  const [draftPublic, setDraftPublic] = useState<boolean | null>(null);
+  const draftIsPublic = draftPublic ?? defaultPublic;
 
   const statusLabel = (value: string) =>
     (ORDER_STATUSES as readonly string[]).includes(value) ? industryOrderStatusLabel(workflow, value as OrderStatus) : value;
@@ -85,7 +99,15 @@ export default function OrderFeedSection({
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!draft.trim() || createComment.isPending) return;
-    createComment.mutate(draft, { onSuccess: () => setDraft("") });
+    createComment.mutate(
+      { body: draft, isPublic: draftIsPublic },
+      {
+        onSuccess: () => {
+          setDraft("");
+          setDraftPublic(null);
+        },
+      },
+    );
   }
 
   const commentForm = canComment ? (
@@ -99,7 +121,13 @@ export default function OrderFeedSection({
         rows={2}
         disabled={createComment.isPending}
       />
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2">
+        <ItemVisibilityToggle
+          isPublic={draftIsPublic}
+          canChange
+          pending={createComment.isPending}
+          onChange={(next) => setDraftPublic(next)}
+        />
         <Button type="submit" size="sm" disabled={!draft.trim() || createComment.isPending}>
           {createComment.isPending ? t("common.saving") : t("orders.feed.addComment")}
         </Button>
@@ -126,7 +154,14 @@ export default function OrderFeedSection({
                 {" · "}
                 <time dateTime={comment.createdAt} className="tabular-nums">
                   {formatStamp(comment.createdAt, locale)}
-                </time>
+                </time>{" "}
+                <ItemVisibilityToggle
+                  className="ml-1 align-middle"
+                  isPublic={comment.isPublic}
+                  canChange={canComment && (isOwner || (Boolean(profile?.id) && comment.authorUserId === profile?.id))}
+                  pending={setVisibility.isPending}
+                  onChange={(next) => setVisibility.mutate({ kind: "comment", id: comment.id, isPublic: next })}
+                />
               </p>
               {canComment ? (
                 <Button

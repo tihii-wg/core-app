@@ -574,6 +574,18 @@ export default {
     needWork: "Add at least one work item",
     needMaterial: "Add at least one material",
   },
+  visibility: {
+    private: "Private",
+    public: "Public",
+    privateHint: "Visible only to the author and the workspace owner",
+    publicHint: "Visible to all team members",
+    makePrivate: "Make private",
+    makePublic: "Make public",
+    errors: {
+      notInstalled: "Switching visibility becomes available after applying SQL 20261125180000_order_comments_files_visibility.",
+      forbidden: "Only the author or the workspace owner can change visibility.",
+    },
+  },
   addLinesSearch: {
     qtyLabel: "Quantity",
     qtyAdd: "Add",

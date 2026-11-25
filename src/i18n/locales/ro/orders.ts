@@ -581,6 +581,18 @@ const orders: Messages<typeof en> = {
     needWork: "Adăugați cel puțin o lucrare",
     needMaterial: "Adăugați cel puțin un material",
   },
+  visibility: {
+    private: "Privat",
+    public: "Public",
+    privateHint: "Văzut doar de autor și de proprietarul spațiului",
+    publicHint: "Văzut de toți angajații",
+    makePrivate: "Fă privat",
+    makePublic: "Fă public",
+    errors: {
+      notInstalled: "Schimbarea vizibilității va fi disponibilă după aplicarea SQL 20261125180000_order_comments_files_visibility.",
+      forbidden: "Doar autorul sau proprietarul spațiului poate schimba vizibilitatea.",
+    },
+  },
   addLinesSearch: {
     qtyLabel: "Cantitate",
     qtyAdd: "Adaugă",

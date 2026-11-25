@@ -44,9 +44,9 @@ export function useCreateOrderComment(orderId: string) {
   const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (body: string) => {
+    mutationFn: ({ body, isPublic }: { body: string; isPublic: boolean }) => {
       guardWrite();
-      return createOrderComment(workspaceId, orderId, body);
+      return createOrderComment(workspaceId, orderId, body, isPublic);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order_comments", workspaceId, orderId] });
