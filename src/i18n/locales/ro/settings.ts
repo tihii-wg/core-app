@@ -25,6 +25,7 @@ const settings: Messages<typeof en> = {
     import: "Import date",
     migration: "Migrare din RO App",
     modules: "Module",
+    trash: "Coș",
   },
   general: {
     visibility: {
@@ -2278,6 +2279,48 @@ const settings: Messages<typeof en> = {
       forbidden: "Nu aveți acces la acest spațiu de lucru",
       oauth: "Nu s-a putut conecta Google Drive ({{code}})",
       oauthGeneric: "Nu s-a putut conecta Google Drive",
+    },
+  },
+  trash: {
+    title: "Coș",
+    description: "Clienții, vehiculele, șabloanele de tipărire, sarcinile și spațiile de lucru șterse rămân aici {{days}} de zile, apoi sunt șterse automat. Le puteți restaura sau șterge imediat.",
+    ownerOnly: "Coșul este disponibil doar proprietarului spațiului de lucru.",
+    empty: "Coșul este gol",
+    emptyTrash: "Golește coșul",
+    restore: "Restaurează",
+    deleteNow: "Șterge definitiv",
+    deletedOn: "Șters {{date}}",
+    daysLeft_one: "se șterge peste {{count}} zi",
+    daysLeft_few: "se șterge peste {{count}} zile",
+    daysLeft_other: "se șterge peste {{count}} de zile",
+    merged: "unit cu alt client",
+    linkedNote: "Clienții, vehiculele și alte înregistrări legate de comenzi, plăți sau facturi dispar din coș la ștergerea definitivă, dar datele rămân ascunse ca istoricul comenzilor să nu fie afectat. Un spațiu de lucru șters este eliminat cu toate datele sale în decurs de o oră.",
+    kinds: {
+      client: "Clienți",
+      vehicle: "Vehicule",
+      template: "Șabloane de tipărire",
+      task: "Sarcini",
+      workspace: "Spații de lucru",
+    },
+    confirmOne: {
+      title: "Ștergeți definitiv?",
+      description: "„{{title}}” va fi șters definitiv.",
+      workspace: "Spațiul de lucru „{{title}}” și toate datele sale (comenzi, clienți, plăți) vor fi șterse definitiv.",
+    },
+    confirmAll: {
+      title: "Goliți coșul?",
+      description: "Toate cele {{count}} înregistrări din coș vor fi șterse definitiv, inclusiv spațiile de lucru șterse cu toate datele lor.",
+    },
+    toast: {
+      restored: "„{{title}}” restaurat",
+      deleted: "Șterse definitiv: {{count}}",
+      kept: "scoase din coș (legate de comenzi, istoric păstrat): {{count}}",
+      workspaces: "spații de lucru de șters: {{count}}",
+    },
+    errors: {
+      sqlMissing: "Coșul va fi disponibil după aplicarea SQL 20261125213000_trash.",
+      forbidden: "Coșul este disponibil doar proprietarului.",
+      notFound: "Înregistrarea a fost deja ștearsă sau restaurată.",
     },
   },
   backups: {

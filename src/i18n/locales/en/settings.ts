@@ -22,6 +22,7 @@ export default {
     import: "Import Data",
     migration: "RO App migration",
     modules: "Modules",
+    trash: "Trash",
   },
   general: {
     visibility: {
@@ -2261,6 +2262,47 @@ export default {
       forbidden: "You do not have access to this workspace",
       oauth: "Could not connect Google Drive ({{code}})",
       oauthGeneric: "Could not connect Google Drive",
+    },
+  },
+  trash: {
+    title: "Trash",
+    description: "Deleted clients, vehicles, print templates, tasks and workspaces stay here for {{days}} days and are then removed automatically. You can restore them or delete them now.",
+    ownerOnly: "Only the workspace owner can open the trash.",
+    empty: "The trash is empty",
+    emptyTrash: "Empty trash",
+    restore: "Restore",
+    deleteNow: "Delete forever",
+    deletedOn: "Deleted {{date}}",
+    daysLeft_one: "removed in {{count}} day",
+    daysLeft_other: "removed in {{count}} days",
+    merged: "merged into another client",
+    linkedNote: "Clients, vehicles and other records linked to orders, payments or invoices leave the trash when deleted forever, but their data stays hidden so order history is not damaged. A deleted workspace is erased with all its data within an hour.",
+    kinds: {
+      client: "Clients",
+      vehicle: "Vehicles",
+      template: "Print templates",
+      task: "Tasks",
+      workspace: "Workspaces",
+    },
+    confirmOne: {
+      title: "Delete forever?",
+      description: "“{{title}}” will be deleted permanently.",
+      workspace: "Workspace “{{title}}” and all its data (orders, clients, payments) will be erased permanently.",
+    },
+    confirmAll: {
+      title: "Empty the trash?",
+      description: "All {{count}} items in the trash will be deleted permanently, including deleted workspaces with all their data.",
+    },
+    toast: {
+      restored: "“{{title}}” restored",
+      deleted: "Deleted forever: {{count}}",
+      kept: "removed from trash (linked to orders, history kept): {{count}}",
+      workspaces: "workspaces to erase: {{count}}",
+    },
+    errors: {
+      sqlMissing: "The trash becomes available after applying SQL 20261125213000_trash.",
+      forbidden: "Only the owner can use the trash.",
+      notFound: "The item was already deleted or restored.",
     },
   },
   backups: {

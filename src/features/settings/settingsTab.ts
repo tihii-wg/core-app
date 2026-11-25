@@ -18,6 +18,7 @@ export const settingsTabs = [
   "storage",
   "import",
   "migration",
+  "trash",
   "modules",
 ] as const;
 

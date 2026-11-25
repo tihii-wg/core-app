@@ -24,6 +24,7 @@ import {
   Blocks,
   HardDriveDownload,
   HardDrive,
+  Trash2,
 } from "lucide-react";
 import {
   Card,
@@ -72,6 +73,7 @@ import { NotificationRulesSettings } from "./NotificationRulesSettings";
 import { WarehousesSettings } from "./WarehousesSettings";
 import { ComingModulesSettings } from "./ComingModulesSettings";
 import { MigrationSettings } from "../migration/MigrationSettings";
+import { TrashSettings } from "./TrashSettings";
 
 export function SettingsModule() {
   const { t } = useTranslation();
@@ -172,6 +174,10 @@ export function SettingsModule() {
           <TabsTrigger value="migration">
             <DatabaseZap />
             {t("settings.tabs.migration")}
+          </TabsTrigger>
+          <TabsTrigger value="trash">
+            <Trash2 />
+            {t("settings.tabs.trash")}
           </TabsTrigger>
           <TabsTrigger value="modules">
             <Blocks />
@@ -291,6 +297,10 @@ export function SettingsModule() {
 
         <TabsContent value="migration" className="mt-5 space-y-5">
           <MigrationSettings />
+        </TabsContent>
+
+        <TabsContent value="trash" className="mt-5 space-y-5">
+          <TrashSettings />
         </TabsContent>
 
         <TabsContent value="modules" className="mt-5 space-y-5">
