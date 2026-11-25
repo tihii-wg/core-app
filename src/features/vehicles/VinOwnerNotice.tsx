@@ -51,6 +51,9 @@ export function VinOwnerNotice({ vin, options, disabled }: { vin: string; option
           {match.clientDeleted ? <span> · {t("vehicles.vinOwner.ownerDeleted")}</span> : null}
         </p>
         {vehicleLabel ? <p>{t("vehicles.vinOwner.foundVehicle", { vehicle: vehicleLabel })}</p> : null}
+        {!sameClient && match.ordersCount > 0 && (options.onTransfer || options.transferSelected) ? (
+          <p className="text-foreground">{t("vehicles.vinOwner.ordersMove", { count: match.ordersCount })}</p>
+        ) : null}
       </div>
       {sameClient ? (
         <p className="pl-6 text-[13px] text-foreground">{t("vehicles.vinOwner.sameClient")}</p>
@@ -75,6 +78,7 @@ export function VinOwnerNotice({ vin, options, disabled }: { vin: string; option
             {options.transferLabel ?? t("vehicles.vinOwner.transfer")}
           </Button>
           <p className="text-xs text-muted-foreground">{t("vehicles.vinOwner.transferHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("vehicles.vinOwner.plateHint")}</p>
         </div>
       ) : null}
     </div>

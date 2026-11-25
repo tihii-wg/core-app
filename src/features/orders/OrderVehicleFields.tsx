@@ -389,9 +389,9 @@ export function OrderVehicleFields<T extends FieldValues>({
         submitting={createVehicle.isPending}
         mode="create"
         clientId={clientId}
-        onTransferExisting={async (match) => {
-          // Change of owner: the existing car is moved to this client and picked for the order.
-          selectNewVehicle(await transferVehicle.mutateAsync(match));
+        onTransferExisting={async (match, licensePlate) => {
+          // Change of owner: the existing car (with its orders) is moved to this client and picked for the order.
+          selectNewVehicle((await transferVehicle.mutateAsync({ match, licensePlate })).vehicle);
         }}
         onSubmit={async (input) => {
           selectNewVehicle(await createVehicle.mutateAsync(input));

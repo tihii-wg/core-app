@@ -9,6 +9,7 @@ import { isMileageUnit, parseMileageUnit } from "../features/vehicles/vehicleMil
 import { toClient } from "./apiClients";
 import { searchTerm } from "./searchTerm";
 import supabase from "./supabase";
+import { isMissingRpcError } from "./missingRpc";
 
 /** One vehicle + owning client for create-order Client field (plate and/or make/model). */
 export type VehicleRegistrationSearchHit = {
@@ -386,6 +387,8 @@ export type VinOwnerMatch = {
   clientPhone: string | null;
   /** Owner was deleted — the car is still in the base and can be given to the new owner. */
   clientDeleted: boolean;
+  /** Orders of the current owner with this car (they move with a change of owner). */
+  ordersCount: number;
   make: string | null;
   model: string | null;
   year: number | null;
@@ -462,12 +465,15 @@ export async function findVehicleByVin(
   );
   if (!row) return null;
   const clientId = String(row.client_id ?? "");
-  const { data: client } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("workspace_id", targetWorkspaceId)
-    .eq("id", clientId)
-    .maybeSingle();
+  const [{ data: client }, { count: ordersCount }] = await Promise.all([
+    supabase.from("clients").select("*").eq("workspace_id", targetWorkspaceId).eq("id", clientId).maybeSingle(),
+    supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", targetWorkspaceId)
+      .eq("vehicle_id", String(row.id))
+      .eq("client_id", clientId),
+  ]);
   const owner = (client ?? null) as { name?: string | null; phone?: string | null; deleted_at?: string | null } | null;
   return {
     vehicleId: String(row.id),
@@ -475,6 +481,7 @@ export async function findVehicleByVin(
     clientName: owner?.name?.trim() ?? "",
     clientPhone: owner?.phone?.trim() || null,
     clientDeleted: Boolean(owner?.deleted_at),
+    ordersCount: ordersCount ?? 0,
     make: typeof row.make === "string" ? row.make : null,
     model: typeof row.model === "string" ? row.model : null,
     year: typeof row.year === "number" ? row.year : null,
@@ -483,19 +490,60 @@ export async function findVehicleByVin(
   };
 }
 
+export type VehicleTransferResult = {
+  vehicle: Vehicle;
+  /** Orders of the previous owner with this car now on the new owner; null = SQL not applied (car only). */
+  movedOrders: number | null;
+};
+
+const TRANSFER_VEHICLE_RPC = "crm_transfer_vehicle";
+
+function mapTransferVehicleError(error: { message?: string }): Error {
+  const message = error.message ?? "";
+  if (/transfer_vehicle:forbidden|transfer_vehicle:not_authenticated/.test(message)) return new Error(i18n.t("vehicles.vinOwner.errors.forbidden"));
+  if (/transfer_vehicle:client_not_found/.test(message)) return new Error(i18n.t("vehicles.errors.clientRequired"));
+  if (/transfer_vehicle:vehicle_not_found/.test(message)) return new Error(i18n.t("vehicles.errors.notFound"));
+  return new Error(message || i18n.t("common.somethingWentWrong"));
+}
+
 /**
- * Change of owner (car sold / new owner): the vehicle moves to another client of the same workspace.
- * Past orders keep their client and vehicle, so the car's history stays complete.
+ * Change of owner (car sold / new owner): the vehicle moves to another client of the same workspace together
+ * with the previous owner's orders for this car (SQL crm_transfer_vehicle). An optional new licence plate goes
+ * to the vehicle and its open orders. Without the SQL only the vehicle moves.
  */
-export async function transferVehicleToClient(workspaceId: string | undefined, vehicleId: string, clientId: string) {
+export async function transferVehicleToClient(
+  workspaceId: string | undefined,
+  vehicleId: string,
+  clientId: string,
+  { licensePlate }: { licensePlate?: string | null } = {},
+): Promise<VehicleTransferResult> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const targetClientId = clientId.trim();
   if (!targetClientId) throw new Error(i18n.t("vehicles.errors.clientRequired"));
+  const plate = nullIfEmptyText(licensePlate ?? null)?.toUpperCase() ?? null;
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc(TRANSFER_VEHICLE_RPC, {
+    p_vehicle_id: vehicleId,
+    p_client_id: targetClientId,
+    p_license_plate: plate,
+  });
+  if (!rpcError) {
+    const payload = (rpcData ?? {}) as { vehicle?: Record<string, unknown>; moved_orders?: number };
+    if (!payload.vehicle) throw new Error(i18n.t("vehicles.errors.notFound"));
+    return { vehicle: toVehicle(payload.vehicle), movedOrders: Number(payload.moved_orders ?? 0) };
+  }
+  if (!isMissingRpcError(rpcError, TRANSFER_VEHICLE_RPC)) throw mapTransferVehicleError(rpcError);
+
+  // Older database: move the car only.
   await assertClientInWorkspace(targetWorkspaceId, targetClientId);
   const { data, error } = await withVehicleColumns(() =>
     supabase
       .from("vehicles")
-      .update({ client_id: targetClientId, updated_at: new Date().toISOString() })
+      .update({
+        client_id: targetClientId,
+        ...(plate ? { license_plate: plate } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", vehicleId)
       .eq("workspace_id", targetWorkspaceId)
       .is("deleted_at", null)
@@ -504,7 +552,7 @@ export async function transferVehicleToClient(workspaceId: string | undefined, v
   );
   if (error) throw new Error(error.message);
   if (!data) throw new Error(i18n.t("vehicles.errors.notFound"));
-  return toVehicle(data as unknown as Record<string, unknown>);
+  return { vehicle: toVehicle(data as unknown as Record<string, unknown>), movedOrders: null };
 }
 
 export async function createVehicle(workspaceId: string | undefined, clientId: string, input: VehicleInput) {

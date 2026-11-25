@@ -1,8 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
 import type { Vehicle, VehicleInput } from "../../lib/types";
-import { archiveVehicle, createVehicle, transferVehicleToClient, updateVehicle, type VinOwnerMatch } from "../../services/apiVehicles";
+import { archiveVehicle, createVehicle, transferVehicleToClient, updateVehicle, type VehicleTransferResult, type VinOwnerMatch } from "../../services/apiVehicles";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { clientVehiclesQueryKey } from "./useGetClientVehicles";
@@ -81,33 +81,58 @@ export function useArchiveVehicle(clientId: string) {
   });
 }
 
-/** Change of owner: moves an existing vehicle (found by VIN) to `clientId`. */
+/** Change of owner: moves an existing vehicle (found by VIN) to `clientId` with the previous owner's orders for it. */
 export function useTransferVehicle(clientId: string) {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
 
   return useMutation({
-    mutationFn: (match: VinOwnerMatch) => {
+    mutationFn: ({ match, licensePlate }: { match: VinOwnerMatch; licensePlate?: string | null }) => {
       guardWrite();
-      return transferVehicleToClient(workspaceId, match.vehicleId, clientId);
+      return transferVehicleToClient(workspaceId, match.vehicleId, clientId, { licensePlate });
     },
-    onSuccess: (vehicle, match) => {
-      queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, clientId), (previous: Vehicle[] | undefined) => {
-        const list = previous ?? [];
-        return list.some((row) => row.id === vehicle.id) ? list : [vehicle, ...list];
-      });
-      queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, match.clientId), (previous: Vehicle[] | undefined) =>
-        previous ? previous.filter((row) => row.id !== vehicle.id) : previous,
-      );
-      queryClient.setQueryData(vehicleQueryKey(workspaceId, vehicle.id), vehicle);
-      // Owner changed: the VIN lookup cache must not keep offering the old owner.
-      void queryClient.invalidateQueries({ queryKey: ["vehicle-vin-owner", workspaceId] });
-      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId] });
-      toast.success(i18n.t("vehicles.vinOwner.transferDone"), { id: "vehicle-mutate" });
+    onSuccess: (result, { match }) => {
+      applyVehicleTransferToCache(queryClient, workspaceId, clientId, match, result);
+      notifyVehicleTransfer(result);
     },
     onError: (error: Error) => {
       toast.error(error.message || i18n.t("common.somethingWentWrong"), { id: "vehicle-mutate" });
     },
   });
+}
+
+/** Cache after a change of owner: lists of both clients, the vehicle, VIN lookups, orders and clients (counts). */
+export function applyVehicleTransferToCache(
+  queryClient: QueryClient,
+  workspaceId: string | undefined,
+  clientId: string,
+  match: VinOwnerMatch,
+  result: VehicleTransferResult,
+) {
+  const { vehicle } = result;
+  queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, clientId), (previous: Vehicle[] | undefined) => {
+    const list = previous ?? [];
+    return list.some((row) => row.id === vehicle.id) ? list.map((row) => (row.id === vehicle.id ? vehicle : row)) : [vehicle, ...list];
+  });
+  queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, match.clientId), (previous: Vehicle[] | undefined) =>
+    previous ? previous.filter((row) => row.id !== vehicle.id) : previous,
+  );
+  queryClient.setQueryData(vehicleQueryKey(workspaceId, vehicle.id), vehicle);
+  void queryClient.invalidateQueries({ queryKey: ["vehicle-vin-owner", workspaceId] });
+  void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId] });
+  if (result.movedOrders) {
+    void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+  }
+}
+
+export function notifyVehicleTransfer(result: VehicleTransferResult) {
+  if (result.movedOrders == null) {
+    toast.success(i18n.t("vehicles.vinOwner.transferDoneNoOrders"), { id: "vehicle-mutate", duration: 8000 });
+  } else if (result.movedOrders > 0) {
+    toast.success(i18n.t("vehicles.vinOwner.transferDoneWithOrders", { count: result.movedOrders }), { id: "vehicle-mutate" });
+  } else {
+    toast.success(i18n.t("vehicles.vinOwner.transferDone"), { id: "vehicle-mutate" });
+  }
 }

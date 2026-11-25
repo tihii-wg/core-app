@@ -262,8 +262,8 @@ export function ClientVehiclesSection({
         description={editing ? t("vehicles.editDescription") : t("vehicles.addDescription")}
         initial={editing}
         clientId={clientId}
-        onTransferExisting={async (match) => {
-          await transferVehicle.mutateAsync(match);
+        onTransferExisting={async (match, licensePlate) => {
+          await transferVehicle.mutateAsync({ match, licensePlate });
         }}
         submitting={createVehicle.isPending || updateVehicle.isPending}
         onSubmit={async (input) => {

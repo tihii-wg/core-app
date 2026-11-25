@@ -20,6 +20,7 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { VehicleFields } from "../vehicles/VehicleFields";
 import { clientVehiclesQueryKey } from "../vehicles/useGetClientVehicles";
+import { applyVehicleTransferToCache, notifyVehicleTransfer } from "../vehicles/useVehicleMutations";
 import { emptyVehicleFormValues, vehicleFormValuesToInput, type VehicleFormValues } from "../vehicles/vehicleForm";
 
 export type AddNewClientFormProps = CreateMadalProps & {
@@ -149,16 +150,21 @@ export default function AddNewClientForm({ setCreateModalOpen, initialName, onCr
       let vehicleId: string | null = null;
       try {
         guardWrite();
-        const vehicle = transfer
-          ? await transferVehicleToClient(workspaceId, transfer.vehicleId, createdClient.id)
-          : await createVehicle(workspaceId, createdClient.id, vehicleInput);
-        vehicleId = vehicle.id;
-        void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, createdClient.id) });
         if (transfer) {
-          void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, transfer.clientId) });
-          void queryClient.invalidateQueries({ queryKey: ["vehicle-vin-owner", workspaceId] });
+          // Change of owner: the car (with the previous owner's orders for it) moves to the new client;
+          // a plate typed in the form becomes its new plate.
+          const result = await transferVehicleToClient(workspaceId, transfer.vehicleId, createdClient.id, {
+            licensePlate: vehicleInput.licensePlate ?? null,
+          });
+          vehicleId = result.vehicle.id;
+          applyVehicleTransferToCache(queryClient, workspaceId, createdClient.id, transfer, result);
+          notifyVehicleTransfer(result);
+        } else {
+          const vehicle = await createVehicle(workspaceId, createdClient.id, vehicleInput);
+          vehicleId = vehicle.id;
+          void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, createdClient.id) });
+          toast.success(t("vehicles.toast.created"), { id: "create-client-vehicle" });
         }
-        toast.success(transfer ? t("vehicles.vinOwner.transferDone") : t("vehicles.toast.created"), { id: "create-client-vehicle" });
       } catch (error) {
         const detail = error instanceof Error && error.message ? ` ${error.message}` : "";
         toast.error(`${t("clients.toast.createdButVehicleFailed")}${detail}`, { id: "create-client-vehicle" });

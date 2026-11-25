@@ -26,7 +26,7 @@ type VehicleFormDialogProps = {
   /** Client the vehicle belongs to — enables «this VIN is already on another client» + change of owner. */
   clientId?: string | null;
   /** Create mode: move the existing vehicle with this VIN to `clientId` instead of creating a duplicate. */
-  onTransferExisting?: (match: VinOwnerMatch) => Promise<void>;
+  onTransferExisting?: (match: VinOwnerMatch, licensePlate: string | null) => Promise<void>;
 };
 
 export function VehicleFormDialog({
@@ -53,6 +53,7 @@ export function VehicleFormDialog({
     setValue,
     watch,
     setError,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<VehicleFormValues>({
     defaultValues: vehicleToFormValues(initial),
@@ -89,7 +90,8 @@ export function VehicleFormDialog({
     if (!onTransferExisting || transferring) return;
     setTransferring(true);
     try {
-      await onTransferExisting(match);
+      // A plate typed in the form = the new owner's plate (optional).
+      await onTransferExisting(match, getValues("licensePlate")?.trim() || null);
       onOpenChange(false);
     } catch {
       // The mutation hook toasts the error.
