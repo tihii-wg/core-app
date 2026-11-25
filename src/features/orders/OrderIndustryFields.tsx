@@ -7,7 +7,11 @@ import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Textarea } from "../../ui/Textarea";
 import type { IndustryOrderFieldBlocks } from "../industries/industryProfile";
-import { hasVisibleIndustryOrderFields, type OrderIndustryFormFields } from "./industryOrderFieldHelpers";
+import {
+  hasVisibleIndustryOrderFields,
+  type OrderIndustryFieldKey,
+  type OrderIndustryFormFields,
+} from "./industryOrderFieldHelpers";
 import type { OrderFieldConfigItem } from "./orderFieldConfig";
 
 type OrderIndustryFieldsProps<T extends OrderIndustryFormFields> = {
@@ -21,6 +25,8 @@ type OrderIndustryFieldsProps<T extends OrderIndustryFormFields> = {
   disabled?: boolean;
   /** Workspace order-field config (label / visible / required overrides). */
   fieldConfig?: Map<string, OrderFieldConfigItem>;
+  /** Render just this field (no grid wrapper) — forms place each field by the workspace order. */
+  onlyKey?: OrderIndustryFieldKey;
 };
 
 function cfgVisible(fieldConfig: Map<string, OrderFieldConfigItem> | undefined, key: string, industryDefault: boolean) {
@@ -50,19 +56,21 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
   idPrefix = "",
   disabled = false,
   fieldConfig,
+  onlyKey,
 }: OrderIndustryFieldsProps<T>) {
   const { t } = useTranslation();
   const [showPasscode, setShowPasscode] = useState(false);
+  const pick = (key: OrderIndustryFieldKey) => !onlyKey || onlyKey === key;
 
-  const showSerial = cfgVisible(fieldConfig, "deviceSerial", blocks.deviceSerial);
-  const showImei = cfgVisible(fieldConfig, "deviceImei", blocks.deviceImei);
-  const showCondition = cfgVisible(fieldConfig, "deviceCondition", blocks.deviceCondition);
-  const showCompleteness = cfgVisible(fieldConfig, "deviceCompleteness", blocks.deviceCompleteness);
-  const showPasscodeField = cfgVisible(fieldConfig, "devicePasscode", blocks.devicePasscode);
-  const showSite = cfgVisible(fieldConfig, "siteAddress", blocks.siteAddress);
-  const showDimensions = cfgVisible(fieldConfig, "productDimensions", blocks.productDimensions);
-  const showMeasurement = cfgVisible(fieldConfig, "measurementAt", blocks.measurementAt);
-  const showInstallation = cfgVisible(fieldConfig, "installationAt", blocks.installationAt);
+  const showSerial = pick("deviceSerial") && cfgVisible(fieldConfig, "deviceSerial", blocks.deviceSerial);
+  const showImei = pick("deviceImei") && cfgVisible(fieldConfig, "deviceImei", blocks.deviceImei);
+  const showCondition = pick("deviceCondition") && cfgVisible(fieldConfig, "deviceCondition", blocks.deviceCondition);
+  const showCompleteness = pick("deviceCompleteness") && cfgVisible(fieldConfig, "deviceCompleteness", blocks.deviceCompleteness);
+  const showPasscodeField = pick("devicePasscode") && cfgVisible(fieldConfig, "devicePasscode", blocks.devicePasscode);
+  const showSite = pick("siteAddress") && cfgVisible(fieldConfig, "siteAddress", blocks.siteAddress);
+  const showDimensions = pick("productDimensions") && cfgVisible(fieldConfig, "productDimensions", blocks.productDimensions);
+  const showMeasurement = pick("measurementAt") && cfgVisible(fieldConfig, "measurementAt", blocks.measurementAt);
+  const showInstallation = pick("installationAt") && cfgVisible(fieldConfig, "installationAt", blocks.installationAt);
 
   if (
     !showSerial &&
@@ -105,7 +113,7 @@ export default function OrderIndustryFields<T extends OrderIndustryFormFields>({
   const installTimeId = `${idPrefix}installationTime`;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="order-industry-fields">
+    <div className={onlyKey ? "contents" : "grid grid-cols-1 gap-3 sm:grid-cols-2"} data-testid="order-industry-fields">
       {showSerial ? (
         <div className="space-y-1.5" data-edit-field="deviceSerial">
           <Label htmlFor={serialId}>

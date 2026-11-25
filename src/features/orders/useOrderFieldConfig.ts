@@ -10,6 +10,7 @@ import {
   getOrderFieldDefinitions,
   resetAllSystemOrderFieldOverrides,
   resetSystemOrderFieldOverride,
+  saveOrderFieldSortOrders,
   softDeleteCustomOrderField,
   updateCustomOrderField,
   upsertCustomFieldValues,
@@ -18,6 +19,7 @@ import {
   type UpdateCustomOrderFieldInput,
   type UpsertSystemOrderFieldOverrideInput,
   type CustomFieldValueRow,
+  type OrderFieldSortWrite,
 } from "../../services/apiCustomFields";
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
@@ -110,6 +112,24 @@ export function useUpsertSystemOrderFieldOverride() {
       return upsertSystemOrderFieldOverride(workspaceId, input);
     },
     onSuccess: () => invalidateOrderFieldConfig(queryClient, workspaceId),
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("common.somethingWentWrong"));
+    },
+  });
+}
+
+/** Saves a new field order (parallel writes, one refetch). */
+export function useSaveOrderFieldOrder() {
+  const { workspaceId } = useActiveWorkspaceId();
+  const queryClient = useQueryClient();
+  const guardWrite = useGuardSubscriptionWrite();
+
+  return useMutation({
+    mutationFn: (writes: OrderFieldSortWrite[]) => {
+      guardWrite();
+      return saveOrderFieldSortOrders(workspaceId, writes);
+    },
+    onSettled: () => invalidateOrderFieldConfig(queryClient, workspaceId),
     onError: (error: Error) => {
       toast.error(error.message || i18n.t("common.somethingWentWrong"));
     },

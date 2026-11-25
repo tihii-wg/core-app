@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, Fragment, type ReactNode, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -40,6 +40,8 @@ import OrderTeamSelect from "./OrderTeamSelect";
 import { mergeOrderTeam } from "./orderTeam";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderIndustryFields from "./OrderIndustryFields";
+import { ORDER_INDUSTRY_FIELD_KEYS } from "./industryOrderFieldHelpers";
+import { sortByFieldOrder } from "./orderFieldLayout";
 import {
   OrderCustomFields,
   collectCustomFieldPayload,
@@ -542,7 +544,7 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
   }, [initialFocusField]);
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       {showRemoteNotice ? (
         <RemoteOrderEditNotice
           onRefresh={() => void reloadFromRemote()}
@@ -550,7 +552,8 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
           refreshing={remoteRefreshing}
         />
       ) : null}
-      {showVehicles && order.clientId ? (
+      {sortByFieldOrder<{ key: string; node: ReactNode }>([
+      { key: "vehicle", node: showVehicles && order.clientId ? (
         <OrderVehicleFields
           control={control}
           setValue={setValue}
@@ -563,8 +566,9 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
           preserveInitialAssetSnapshot
           fieldConfig={orderFieldMap}
         />
-      ) : null}
+      ) : null },
 
+      ...(["device", "carNumber", "vin"] as const).map((assetKey) => ({ key: assetKey, node: (
       <OrderAssetFields
         register={register}
         errors={errors}
@@ -575,8 +579,11 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
         preserveHiddenValues
         hideVisibleFields={hideDuplicateVehicleAssetFields}
         fieldConfig={orderFieldMap}
+        onlyKey={assetKey}
       />
+      ) })),
 
+      ...ORDER_INDUSTRY_FIELD_KEYS.map((industryKey) => ({ key: industryKey, node: (
       <OrderIndustryFields
         register={register}
         setValue={setValue}
@@ -586,10 +593,14 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
         idPrefix="edit-order-"
         disabled={isSubmitting}
         fieldConfig={orderFieldMap}
+        onlyKey={industryKey}
       />
+      ) })),
 
+      ...orderFieldConfig.filter((field) => field.isCustom && field.visible).map((customField) => ({ key: customField.key, node: (
       <OrderCustomFields
         fields={orderFieldConfig}
+        onlyKey={customField.key}
         values={customFieldState}
         errors={customErrors}
         idPrefix="edit-order-"
@@ -604,7 +615,10 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
           });
         }}
       />
+      ) })),
 
+      { key: "services", node: (
+      <>
       <OrderWarrantyPauseNotice order={order} records={warrantyRecords} />
 
       <OrderServiceLinesFields
@@ -630,8 +644,10 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
           return Boolean(key && restartWarrantyHints.has(key));
         }}
       />
+      </>
+      ) },
 
-      {materialsCfg?.visible !== false ? (
+      { key: "materials", node: materialsCfg?.visible !== false ? (
         <OrderMaterialLinesEditor
           control={control as never}
           fields={materialFields}
@@ -653,9 +669,9 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
           restartWarrantyHints={restartWarrantyHints}
           warrantyCatalogKeyForLine={warrantyCatalogKeyForMaterial}
         />
-      ) : null}
+      ) : null },
 
-      {descriptionCfg?.visible !== false ? (
+      { key: "description", node: descriptionCfg?.visible !== false ? (
         <div className="space-y-1.5" data-edit-field="description">
           <Label htmlFor="edit-order-description">
             {descriptionCfg?.label ?? t("orders.form.descriptionLabel")}
@@ -669,10 +685,9 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
             disabled={isSubmitting}
           />
         </div>
-      ) : null}
+      ) : null },
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {assignedCfg?.visible !== false ? (
+        { key: "assignedEmployee", node: assignedCfg?.visible !== false ? (
           <Controller
             name="assignedEmployeeId"
             control={control}
@@ -703,9 +718,9 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
               />
             )}
           />
-        ) : null}
+        ) : null },
 
-        {deadlineCfg?.visible !== false ? (
+        { key: "deadline", node: deadlineCfg?.visible !== false ? (
           <div className="space-y-1.5" data-edit-field="deadline">
             <Label htmlFor="edit-order-deadline">
               {deadlineCfg?.label ?? copy.deadlineLabel}
@@ -718,10 +733,9 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
               disabled={isSubmitting}
             />
           </div>
-        ) : null}
-      </div>
+        ) : null },
 
-      {teamCfg?.visible !== false ? (
+      { key: "team", node: teamCfg?.visible !== false ? (
         <Controller
           name="team"
           control={control}
@@ -736,7 +750,10 @@ const EditOrderForm = forwardRef<EditOrderFormHandle, EditOrderFormProps>(functi
             />
           )}
         />
-      ) : null}
+      ) : null },
+      ], orderFieldMap).map((block) => (
+        <Fragment key={block.key}>{block.node}</Fragment>
+      ))}
 
       <OrderTotalsSummary
         money={orderMoney}

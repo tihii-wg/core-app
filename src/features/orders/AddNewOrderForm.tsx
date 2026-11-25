@@ -1,3 +1,4 @@
+import { sortByFieldOrder } from "./orderFieldLayout";
 import { useOpenOrderRequest } from "./duplicateOpenVinToast";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
@@ -10,7 +11,7 @@ import { Controller, useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { addNewOrderFormData, Client, CreateMadalProps, OrderKind, Vehicle } from "../../lib/types";
 import { AddClientDialog } from "../clients/AddClientDialog";
 import ClientCombobox from "../clients/ClientCombobox";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +30,7 @@ import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscriptio
 import { assignableTechnicians } from "./assignableTechnicians";
 import OrderAssetFields from "./OrderAssetFields";
 import OrderIndustryFields from "./OrderIndustryFields";
+import { ORDER_INDUSTRY_FIELD_KEYS } from "./industryOrderFieldHelpers";
 import { OrderCustomFields, collectCustomFieldPayload, validateRequiredCustomFields, type OrderCustomFieldValues } from "./OrderCustomFields";
 import { fieldConfigMap, useOrderFieldConfig, useSaveOrderCustomFieldValues } from "./useOrderFieldConfig";
 import {
@@ -363,7 +365,9 @@ export default function AddNewOrderForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex w-full min-w-0 max-h-[80vh] flex-col">
-      <div className="flex-1 space-y-4 overflow-y-auto py-4 pr-2">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto py-4 pr-2">
+        {sortByFieldOrder<{ key: string; node: ReactNode }>([
+        { key: "client", node: (
         <div className="space-y-1.5">
           <Label htmlFor="client">{clientCfg?.label ?? t("orders.form.clientLabel")}</Label>
           <Controller
@@ -434,8 +438,9 @@ export default function AddNewOrderForm({
           ) : null}
           <p className="text-xs text-muted-foreground">{copy.draftHint}</p>
         </div>
+        ) },
 
-        {showVehicles && selectedClientId ? (
+        { key: "vehicle", node: showVehicles && selectedClientId ? (
           <OrderVehicleFields
             control={control}
             setValue={setValue}
@@ -446,8 +451,9 @@ export default function AddNewOrderForm({
             mileageMode="vehicle"
             fieldConfig={orderFieldMap}
           />
-        ) : null}
+        ) : null },
 
+        ...(["device", "carNumber", "vin"] as const).map((assetKey) => ({ key: assetKey, node: (
         <OrderAssetFields
           register={register}
           errors={errors}
@@ -456,8 +462,11 @@ export default function AddNewOrderForm({
           preserveHiddenValues
           hideVisibleFields={hideDuplicateVehicleAssetFields}
           fieldConfig={orderFieldMap}
+          onlyKey={assetKey}
         />
+        ) })),
 
+        ...ORDER_INDUSTRY_FIELD_KEYS.map((industryKey) => ({ key: industryKey, node: (
         <OrderIndustryFields
           register={register}
           setValue={setValue}
@@ -466,10 +475,14 @@ export default function AddNewOrderForm({
           clientAddress={selectedClient?.address}
           disabled={isSubmitting}
           fieldConfig={orderFieldMap}
+          onlyKey={industryKey}
         />
+        ) })),
 
+        ...orderFieldConfig.filter((field) => field.isCustom && field.visible).map((customField) => ({ key: customField.key, node: (
         <OrderCustomFields
           fields={orderFieldConfig}
+          onlyKey={customField.key}
           values={customValues}
           errors={customErrors}
           disabled={isSubmitting}
@@ -483,7 +496,9 @@ export default function AddNewOrderForm({
             });
           }}
         />
+        ) })),
 
+        { key: "services", node: (
         <OrderServiceLinesFields
           control={control as never}
           fields={serviceField}
@@ -502,8 +517,9 @@ export default function AddNewOrderForm({
           label={servicesCfg?.label ?? copy.serviceLabel}
           errors={errors.services}
         />
+        ) },
 
-        {materialsCfg?.visible !== false ? (
+        { key: "materials", node: materialsCfg?.visible !== false ? (
           <OrderMaterialLinesEditor
             estimate={isEstimate}
             control={control as never}
@@ -520,9 +536,9 @@ export default function AddNewOrderForm({
             isSubmitted={isSubmitted}
             errors={errors.materials}
           />
-        ) : null}
+        ) : null },
 
-        {descriptionCfg?.visible !== false ? (
+        { key: "description", node: descriptionCfg?.visible !== false ? (
           <div className="space-y-1.5" data-edit-field="description">
             <Label htmlFor="description">
               {descriptionCfg?.label ?? t("orders.form.descriptionLabel")}
@@ -535,10 +551,9 @@ export default function AddNewOrderForm({
               rows={3}
             />
           </div>
-        ) : null}
+        ) : null },
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {assignedCfg?.visible !== false ? (
+          { key: "assignedEmployee", node: assignedCfg?.visible !== false ? (
             <Controller
               name="assignedEmployeeId"
               control={control}
@@ -562,9 +577,9 @@ export default function AddNewOrderForm({
                 />
               )}
             />
-          ) : null}
+          ) : null },
 
-          {deadlineCfg?.visible !== false ? (
+          { key: "deadline", node: deadlineCfg?.visible !== false ? (
             <div className="space-y-1.5" data-edit-field="deadline">
               <Label htmlFor="deadline">
                 {deadlineCfg?.label ?? copy.deadlineLabel}
@@ -578,10 +593,9 @@ export default function AddNewOrderForm({
                 />
               </div>
             </div>
-          ) : null}
-        </div>
+          ) : null },
 
-        {teamCfg?.visible !== false ? (
+        { key: "team", node: teamCfg?.visible !== false ? (
           <Controller
             name="team"
             control={control}
@@ -596,7 +610,10 @@ export default function AddNewOrderForm({
               />
             )}
           />
-        ) : null}
+        ) : null },
+        ], orderFieldMap).map((block) => (
+          <Fragment key={block.key}>{block.node}</Fragment>
+        ))}
 
         <OrderTotalsSummary
           money={orderMoney}

@@ -162,3 +162,18 @@ export function orderAssetSecondaryLine(
   }
   return "";
 }
+
+/** Industry intake fields, each placeable on its own in order forms. */
+export const ORDER_INDUSTRY_FIELD_KEYS = [
+  "deviceSerial",
+  "deviceImei",
+  "deviceCondition",
+  "deviceCompleteness",
+  "devicePasscode",
+  "siteAddress",
+  "productDimensions",
+  "measurementAt",
+  "installationAt",
+] as const;
+
+export type OrderIndustryFieldKey = (typeof ORDER_INDUSTRY_FIELD_KEYS)[number];

@@ -168,6 +168,67 @@ export async function upsertSystemOrderFieldOverride(
   return toDefinition(data as Record<string, unknown>);
 }
 
+export type OrderFieldSortWrite = {
+  fieldKey: string;
+  /** Custom field definition id; null for a built-in field. */
+  customDefinitionId: string | null;
+  sortOrder: number;
+  /** Current merged values, used only when a built-in override row has to be created. */
+  isActive: boolean;
+  isRequired: boolean;
+  fieldType?: OrderFieldType;
+};
+
+/**
+ * Saves field positions. All rows are written in parallel: one UPDATE per field (built-ins matched by key),
+ * plus an INSERT only for a built-in that has no override row yet. Label overrides are never touched.
+ */
+export async function saveOrderFieldSortOrders(workspaceId: string | undefined, writes: OrderFieldSortWrite[]): Promise<void> {
+  const ws = requireWorkspaceId(workspaceId);
+  const updatedAt = new Date().toISOString();
+  const results = await Promise.all(
+    writes.map(async (write) => {
+      if (write.customDefinitionId) {
+        const { error } = await supabase
+          .from("custom_field_definitions")
+          .update({ sort_order: write.sortOrder, updated_at: updatedAt })
+          .eq("id", write.customDefinitionId)
+          .eq("workspace_id", ws)
+          .is("deleted_at", null);
+        return error;
+      }
+      const { data, error } = await supabase
+        .from("custom_field_definitions")
+        .update({ sort_order: write.sortOrder, updated_at: updatedAt })
+        .eq("workspace_id", ws)
+        .eq("entity", "order")
+        .eq("field_key", write.fieldKey)
+        .eq("is_system", true)
+        .is("deleted_at", null)
+        .select("id");
+      if (error) return error;
+      if ((data ?? []).length > 0) return null;
+      const inserted = await supabase.from("custom_field_definitions").insert({
+        workspace_id: ws,
+        entity: "order",
+        field_key: write.fieldKey,
+        label: "",
+        field_type: write.fieldType ?? "text",
+        options: [],
+        is_system: true,
+        is_required: write.isRequired,
+        is_active: write.isActive,
+        sort_order: write.sortOrder,
+        show_on_card: false,
+        read_only_after_create: false,
+      });
+      return inserted.error;
+    }),
+  );
+  const failed = results.find((error) => error != null);
+  if (failed) throw new Error(failed.message);
+}
+
 export type CreateCustomOrderFieldInput = {
   fieldKey: string;
   label: string;

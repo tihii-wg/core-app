@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { Fragment, memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Calendar } from "lucide-react";
 import type { Order } from "../../../../lib/types";
@@ -8,6 +8,7 @@ import { OrderInlineField } from "../../OrderInlineField";
 import { displayCustomFieldValue } from "../../../../services/apiCustomFields";
 import type { OrderFieldConfigItem } from "../../orderFieldConfig";
 import type { OrderEditField } from "../../orderEditFields";
+import { sortByFieldOrder } from "../../orderFieldLayout";
 
 export type OrderInfoFieldsProps = {
   order: Order;
@@ -49,6 +50,7 @@ function OrderInfoFieldsComponent({
   deadline,
   overdue,
   editingField,
+  orderFieldMap,
   orderFieldConfig,
   customFieldValues,
   fieldLabel,
@@ -65,7 +67,8 @@ function OrderInfoFieldsComponent({
 
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
-      {deadline || (showFieldEdit && fieldVisible("deadline")) ? (
+      {sortByFieldOrder<{ key: string; node: ReactNode }>([
+        { key: "deadline", node: deadline || (showFieldEdit && fieldVisible("deadline")) ? (
         <OrderInlineField
           label={fieldLabel("deadline", copy.deadlineDetail)}
           value={
@@ -85,88 +88,87 @@ function OrderInfoFieldsComponent({
           kind="date"
           {...inlineCommon("deadline")}
         />
-      ) : null}
-
-      {!showClientVehicles && showAssetField("device")
+      ) : null },
+        { key: "device", node: !showClientVehicles && showAssetField("device")
         ? renderTextField("device", fieldLabel("device", copy.deviceDetail), order.device)
-        : null}
-      {!showClientVehicles && showAssetField("carNumber")
+        : null },
+        { key: "carNumber", node: !showClientVehicles && showAssetField("carNumber")
         ? renderTextField("carNumber", fieldLabel("carNumber", copy.carNumberDetail), order.carNumber)
-        : null}
-      {!showClientVehicles && showAssetField("vin")
+        : null },
+        { key: "vin", node: !showClientVehicles && showAssetField("vin")
         ? renderTextField("vin", fieldLabel("vin", copy.vinDetail), order.vin, { mono: true })
-        : null}
-      {fieldVisible("deviceSerial", industryBlocks.deviceSerial)
+        : null },
+        { key: "deviceSerial", node: fieldVisible("deviceSerial", industryBlocks.deviceSerial)
         ? renderTextField(
             "deviceSerial",
             fieldLabel("deviceSerial", t("orders.industryFields.deviceSerial")),
             order.deviceSerial,
             { mono: true },
           )
-        : null}
-      {fieldVisible("deviceImei", industryBlocks.deviceImei)
+        : null },
+        { key: "deviceImei", node: fieldVisible("deviceImei", industryBlocks.deviceImei)
         ? renderTextField(
             "deviceImei",
             fieldLabel("deviceImei", t("orders.industryFields.deviceImei")),
             order.deviceImei,
             { mono: true },
           )
-        : null}
-      {fieldVisible("deviceCondition", industryBlocks.deviceCondition)
+        : null },
+        { key: "deviceCondition", node: fieldVisible("deviceCondition", industryBlocks.deviceCondition)
         ? renderTextField(
             "deviceCondition",
             fieldLabel("deviceCondition", t("orders.industryFields.deviceCondition")),
             order.deviceCondition,
             { kind: "textarea" },
           )
-        : null}
-      {fieldVisible("deviceCompleteness", industryBlocks.deviceCompleteness)
+        : null },
+        { key: "deviceCompleteness", node: fieldVisible("deviceCompleteness", industryBlocks.deviceCompleteness)
         ? renderTextField(
             "deviceCompleteness",
             fieldLabel("deviceCompleteness", t("orders.industryFields.deviceCompleteness")),
             order.deviceCompleteness,
             { kind: "textarea" },
           )
-        : null}
-      {fieldVisible("devicePasscode", industryBlocks.devicePasscode)
+        : null },
+        { key: "devicePasscode", node: fieldVisible("devicePasscode", industryBlocks.devicePasscode)
         ? renderTextField(
             "devicePasscode",
             fieldLabel("devicePasscode", t("orders.industryFields.devicePasscode")),
             order.devicePasscode,
             { mono: true, masked: true },
           )
-        : null}
-      {fieldVisible("siteAddress", industryBlocks.siteAddress)
+        : null },
+        { key: "siteAddress", node: fieldVisible("siteAddress", industryBlocks.siteAddress)
         ? renderTextField(
             "siteAddress",
             fieldLabel("siteAddress", t("orders.industryFields.siteAddress")),
             order.siteAddress,
           )
-        : null}
-      {fieldVisible("productDimensions", industryBlocks.productDimensions)
+        : null },
+        { key: "productDimensions", node: fieldVisible("productDimensions", industryBlocks.productDimensions)
         ? renderTextField(
             "productDimensions",
             fieldLabel("productDimensions", t("orders.industryFields.productDimensions")),
             order.productDimensions,
           )
-        : null}
-      {fieldVisible("measurementAt", industryBlocks.measurementAt)
+        : null },
+        { key: "measurementAt", node: fieldVisible("measurementAt", industryBlocks.measurementAt)
         ? renderDateTimeField(
             "measurementAt",
             fieldLabel("measurementAt", t("orders.industryFields.measurementAt")),
             order.measurementAt,
           )
-        : null}
-      {fieldVisible("installationAt", industryBlocks.installationAt)
+        : null },
+        { key: "installationAt", node: fieldVisible("installationAt", industryBlocks.installationAt)
         ? renderDateTimeField(
             "installationAt",
             fieldLabel("installationAt", t("orders.industryFields.installationAt")),
             order.installationAt,
           )
-        : null}
-      {orderFieldConfig
+        : null },
+        ...orderFieldConfig
         .filter((field) => field.isCustom && field.visible)
-        .map((field) => {
+        .map((field) => ({ key: field.key, node: (() => {
           const row = customFieldValues.find((value) => value.definitionId === field.definitionId);
           const text = displayCustomFieldValue(field.type ?? "text", row?.value, field.options);
           const editKey = customEditFieldKey(field.key as string);
@@ -184,7 +186,10 @@ function OrderInfoFieldsComponent({
               {...inlineCommon(editKey)}
             />
           );
-        })}
+        })() })),
+      ], orderFieldMap).map((item) => (
+        <Fragment key={item.key}>{item.node}</Fragment>
+      ))}
     </dl>
   );
 }

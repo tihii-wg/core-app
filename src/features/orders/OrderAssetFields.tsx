@@ -27,6 +27,8 @@ type OrderAssetFieldsProps<T extends AssetFields> = {
   hideVisibleFields?: boolean;
   /** Workspace order-field config (label / visible / required overrides). */
   fieldConfig?: Map<string, OrderFieldConfigItem>;
+  /** Render just this field — forms place each field by the workspace order. */
+  onlyKey?: "device" | "carNumber" | "vin";
 };
 
 export default function OrderAssetFields<T extends AssetFields>({
@@ -39,6 +41,7 @@ export default function OrderAssetFields<T extends AssetFields>({
   preserveHiddenValues = false,
   hideVisibleFields = false,
   fieldConfig,
+  onlyKey,
 }: OrderAssetFieldsProps<T>) {
   const deviceId = `${idPrefix}device`;
   const carNumberId = `${idPrefix}carNumber`;
@@ -142,5 +145,5 @@ export default function OrderAssetFields<T extends AssetFields>({
     ) : null,
   };
 
-  return <>{ordered.map((key) => nodes[key])}</>;
+  return <>{(onlyKey ? [onlyKey] : ordered).map((key) => nodes[key])}</>;
 }

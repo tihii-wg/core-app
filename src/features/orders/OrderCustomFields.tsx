@@ -60,6 +60,8 @@ type OrderCustomFieldsProps = {
   errors?: Record<string, string>;
   idPrefix?: string;
   disabled?: boolean;
+  /** Render just this custom field (no grid wrapper) — forms place each field by the workspace order. */
+  onlyKey?: string;
 };
 
 /** Renders visible custom order fields (text/textarea/number/date/datetime/select/checkbox). */
@@ -70,13 +72,14 @@ export function OrderCustomFields({
   errors = {},
   idPrefix = "",
   disabled = false,
+  onlyKey,
 }: OrderCustomFieldsProps) {
   const { t } = useTranslation();
-  const custom = fields.filter((field) => field.isCustom && field.visible);
+  const custom = fields.filter((field) => field.isCustom && field.visible && (!onlyKey || field.key === onlyKey));
   if (custom.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="order-custom-fields">
+    <div className={onlyKey ? "contents" : "grid grid-cols-1 gap-3 sm:grid-cols-2"} data-testid="order-custom-fields">
       {custom.map((field) => {
         const id = `${idPrefix}custom_${field.key}`;
         const value = values[field.key];
