@@ -61,7 +61,11 @@ const finance: Messages<typeof en> = {
   payFromBalance: {
     clientBalanceTitle: "Soldul clientului",
     clientBalanceValue: "{{name}}: {{amount}}",
-    clientBalanceAvailable: "Clientul are un sold (avans) de {{amount}} — puteți plăti din el alegând „Din soldul clientului”.",
+    clientBalanceAvailable: "Clientul are un sold (avans) de {{amount}}.",
+    useBalance: "Folosește soldul",
+    useBalanceHint: "Din sold se vor scădea {{amount}} — în casă nu intră bani, au fost primiți anterior ca avans.",
+    balanceDeducted: "din sold −{{amount}}",
+    cashDue: "De achitat",
     clientBalanceZero: "Soldul clientului: {{amount}}",
     fromBalanceOption: "Din soldul clientului (disponibil {{amount}})",
     fromBalanceHint: "Suma se scade din soldul clientului; în casă nu intră bani — au fost primiți anterior ca avans.",

@@ -182,32 +182,54 @@ export function usePayerBalance(orderId: string | null | undefined, invoiceId: s
     queryKey: payerBalanceQueryKey(workspaceId, order, invoice),
     queryFn: () => getPayerBalance(order, invoice),
     enabled: Boolean(workspaceId && (order || invoice)),
-    staleTime: 15_000,
+    // One cheap RPC per form open; the advance may have changed elsewhere (client card, another order).
+    staleTime: 0,
   });
 }
 
-/** Pay from the client's balance; refreshes payments, orders, the client and its balance history. */
-export function usePayFromClientBalance() {
+/**
+ * One payment, optionally split: `balance` part is taken from the client's advance (crm_pay_from_client_balance),
+ * `cash` part is an ordinary ledger payment. Both requests run in parallel (balance + cash never exceed the
+ * remaining, so neither can overpay) and the payment views are invalidated once.
+ */
+export type RecordPaymentWithBalanceInput = {
+  balance: PayFromBalanceInput | null;
+  cash: RecordPaymentInput | null;
+};
+
+export function useRecordPaymentWithBalance() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const toastId = "record-payment";
   return useMutation({
-    mutationFn: (input: PayFromBalanceInput) => {
+    mutationFn: async (input: RecordPaymentWithBalanceInput) => {
       guardWrite();
-      return payFromClientBalance(input);
+      const [fromBalance] = await Promise.all([
+        input.balance ? payFromClientBalance(input.balance) : Promise.resolve(null),
+        input.cash ? recordPayment(input.cash, workspaceId) : Promise.resolve(null),
+      ]);
+      return { balanceLeft: fromBalance ? fromBalance.balance : null };
     },
     onMutate: () => {
       toast.loading(i18n.t("finance.payments.toast.recording"), { id: toastId });
     },
-    onSuccess: () => {
-      invalidatePaymentViews(queryClient, workspaceId);
-      void queryClient.invalidateQueries({ queryKey: ["payer-balance", workspaceId] });
-      void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
-      void queryClient.invalidateQueries({ queryKey: ["client_extensions", "balance", workspaceId] });
+    onSuccess: (result, input) => {
+      if (input.balance) {
+        void queryClient.invalidateQueries({ queryKey: ["payer-balance", workspaceId] });
+        void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+        void queryClient.invalidateQueries({ queryKey: ["client_extensions", "balance", workspaceId] });
+      }
+      // The form replaces this with the «balance left» toast (formatted money) when the balance was used.
+      if (!input.balance) toast.success(i18n.t("finance.payments.toast.recorded"), { id: toastId });
+      void result;
     },
     onError: (error: Error) => {
       toast.error(error.message || i18n.t("finance.payments.errors.saveFailed"), { id: toastId });
+    },
+    // Even a half-failed split (one request saved) must refresh the ledger.
+    onSettled: () => {
+      invalidatePaymentViews(queryClient, workspaceId);
     },
   });
 }

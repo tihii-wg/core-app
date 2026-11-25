@@ -58,7 +58,11 @@ export default {
   payFromBalance: {
     clientBalanceTitle: "Client balance",
     clientBalanceValue: "{{name}}: {{amount}}",
-    clientBalanceAvailable: "The client has a balance (advance) of {{amount}} — you can pay from it by choosing “From client balance”.",
+    clientBalanceAvailable: "The client has a balance (advance) of {{amount}}.",
+    useBalance: "Use balance",
+    useBalanceHint: "{{amount}} will be taken from the balance — no money enters the cash desk, it was received earlier as an advance.",
+    balanceDeducted: "from balance −{{amount}}",
+    cashDue: "To pay",
     clientBalanceZero: "Client balance: {{amount}}",
     fromBalanceOption: "From client balance (available {{amount}})",
     fromBalanceHint: "The amount is taken from the client balance; no money enters the cash desk — it was received earlier as an advance.",

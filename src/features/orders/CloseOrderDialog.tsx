@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -20,6 +20,7 @@ import { orderPaymentBalance } from "../finance/paymentCalculations";
 import { OrderPaymentForm } from "../finance/PaymentFormDialog";
 import { allocatePaid, currentPaymentStage } from "../finance/paymentStages";
 import { paymentsQueryKey } from "../finance/usePayments";
+import { getPayments } from "../../services/apiPayments";
 import { useOrderPaymentStages } from "../finance/useOrderPaymentStages";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { isOrderFormallyClosed } from "./orderLifecycle";
@@ -45,6 +46,19 @@ function recordableBalance(balance: PaymentBalance): PaymentBalance {
   return balance.isLegacyUnreconciled
     ? { ...balance, remaining: balance.total, netPaid: 0, status: "unpaid" }
     : balance;
+}
+
+/**
+ * This order's ledger, always from the server. The unfiltered ledger key is usually not cached (lists load
+ * payments by order ids), so refetching it returned nothing and the form kept the pre-payment remaining.
+ */
+function fetchOrderPayments(queryClient: QueryClient, workspaceId: string | undefined, orderId: string) {
+  const filters = { orderIds: [orderId] };
+  return queryClient.fetchQuery({
+    queryKey: paymentsQueryKey(workspaceId, filters),
+    queryFn: () => getPayments(workspaceId, filters),
+    staleTime: 0,
+  });
 }
 
 /**
@@ -102,13 +116,14 @@ export function CloseOrderDialog({
       try {
         // Only the fresh order + payments gate the dialog; list/dashboard caches refresh in the
         // background (awaiting them made the dialog wait for every orders query on the page).
-        const [loaded] = await Promise.all([
+        const [loaded, freshPayments] = await Promise.all([
           getOrder(seedOrderId, workspaceId),
-          queryClient.refetchQueries({ queryKey: paymentsQueryKey(workspaceId), exact: true }),
+          fetchOrderPayments(queryClient, workspaceId, seedOrderId),
         ]);
         void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
         if (cancelled) return;
         setFreshOrder(loaded);
+        setPaymentsOverride(freshPayments);
         onOrderRefreshedRef.current?.(loaded);
       } catch (error) {
         if (cancelled) return;
@@ -195,13 +210,9 @@ export function CloseOrderDialog({
   async function handlePaymentRecorded(_amount: number) {
     if (!displayOrder || !freshOrder) return;
     const current = freshOrder;
-    const listKey = paymentsQueryKey(workspaceId);
-
     let fresh: LedgerPayment[];
     try {
-      await queryClient.refetchQueries({ queryKey: listKey, exact: true });
-      const cached = queryClient.getQueryData<LedgerPayment[]>(listKey);
-      fresh = Array.isArray(cached) ? cached : effectivePayments;
+      fresh = await fetchOrderPayments(queryClient, workspaceId, current.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       toast.error(message || t("common.somethingWentWrong"));

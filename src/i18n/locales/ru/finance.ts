@@ -61,7 +61,11 @@ const finance: Messages<typeof en> = {
   payFromBalance: {
     clientBalanceTitle: "Баланс клиента",
     clientBalanceValue: "{{name}}: {{amount}}",
-    clientBalanceAvailable: "У клиента есть баланс (аванс) {{amount}} — можно оплатить с баланса, выбрав способ «С баланса клиента».",
+    clientBalanceAvailable: "У клиента есть баланс (аванс) {{amount}}.",
+    useBalance: "Использовать баланс",
+    useBalanceHint: "С баланса спишется {{amount}} — в кассу эти деньги не поступают, они получены раньше как аванс.",
+    balanceDeducted: "с баланса −{{amount}}",
+    cashDue: "Доплатить",
     clientBalanceZero: "Баланс клиента: {{amount}}",
     fromBalanceOption: "С баланса клиента (доступно {{amount}})",
     fromBalanceHint: "Сумма спишется с баланса клиента, в кассу деньги не поступают — они были получены раньше как аванс.",

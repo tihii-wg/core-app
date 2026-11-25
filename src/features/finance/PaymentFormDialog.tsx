@@ -23,7 +23,7 @@ import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { roundMoney } from "./paymentCalculations";
 import { manualLedgerPaymentMethods, type LedgerPaymentMethod, type PaymentBalance } from "./paymentTypes";
 import { useFinanceAccounts } from "./useFinanceAccounts";
-import { useGetPayments, usePayerBalance, usePayFromClientBalance, useRecordPayment } from "./usePayments";
+import { useGetPayments, usePayerBalance, useRecordPaymentWithBalance } from "./usePayments";
 import { DEFAULT_VAT_RATE_PERCENT, vatIncludedAmount } from "./vat";
 
 const NO_ACCOUNT = "none";
@@ -398,12 +398,16 @@ export function OrderPaymentForm({
 }: OrderPaymentFormProps) {
   const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
-  const { mutate: record, isPending: recordPending } = useRecordPayment();
-  const { mutate: payFromBalance, isPending: balancePending } = usePayFromClientBalance();
-  const isPending = recordPending || balancePending;
+  const { mutate: recordPayment, isPending } = useRecordPaymentWithBalance();
   const { data: payer } = usePayerBalance(orderId ?? null, invoiceId ?? null);
   const clientBalance = payer ? roundMoney(payer.balance) : null;
   const remaining = balance.remaining;
+  /** «Использовать баланс»: the advance covers part (or all) of the remaining, the amount field is the rest. */
+  const [useBalance, setUseBalance] = useState(false);
+  const balanceUsable = clientBalance != null && clientBalance > 0.005 && remaining > 0.005;
+  const balancePartFor = (on: boolean) => (on && balanceUsable ? roundMoney(Math.min(clientBalance ?? 0, remaining)) : 0);
+  const balancePart = balancePartFor(useBalance);
+  const cashDue = roundMoney(Math.max(0, remaining - balancePart));
   const { data: financeAccounts = [] } = useFinanceAccounts();
   const accountOptions = financeAccounts.filter((account) => account.isActive && account.currencyCode === currency);
   const {
@@ -412,7 +416,6 @@ export function OrderPaymentForm({
     handleSubmit,
     watch,
     setValue,
-    getValues,
     formState: { errors },
   } = useForm<PaymentFormValues>({
     defaultValues: {
@@ -424,12 +427,18 @@ export function OrderPaymentForm({
     },
   });
   const enteredAmount = watch("amount");
-  const selectedMethod = watch("paymentMethod");
-  const fromBalance = selectedMethod === "client_balance";
+  const cashAmount = Number.isFinite(Number(enteredAmount)) && Number(enteredAmount) > 0 ? Number(enteredAmount) : 0;
+  const nothingToCollect = balancePart > 0 && cashDue <= 0.005;
   useEffect(() => {
-    const value = Number(enteredAmount);
-    onAmountChange?.(Number.isFinite(value) && value > 0 ? value : 0);
-  }, [enteredAmount, onAmountChange]);
+    // Min-paid status checks see the whole payment: balance part + money taken now.
+    onAmountChange?.(roundMoney(cashAmount + balancePart));
+  }, [cashAmount, balancePart, onAmountChange]);
+
+  function toggleUseBalance(next: boolean) {
+    setUseBalance(next);
+    const due = roundMoney(Math.max(0, remaining - balancePartFor(next)));
+    setValue("amount", due, { shouldValidate: true });
+  }
 
   async function afterRecorded(amount: number) {
     let skipDone = false;
@@ -443,48 +452,39 @@ export function OrderPaymentForm({
 
   function onSubmit(values: PaymentFormValues) {
     if (isPending) return;
-    if (values.paymentMethod === "client_balance") {
-      payFromBalance(
-        {
-          orderId: orderId ?? null,
-          invoiceId: invoiceId ?? null,
-          amount: values.amount,
-          paidAt: new Date(values.paidAt).toISOString(),
-          note: values.note,
-        },
-        {
-          onSuccess: (result) => {
-            toast.success(t("finance.payFromBalance.toastFromBalance", { amount: formatMoney(result.balance) }), {
-              id: "record-payment",
-            });
-            void afterRecorded(values.amount);
-          },
-        },
-      );
-      return;
-    }
-    record(
+    const paidAt = new Date(values.paidAt).toISOString();
+    const cash = Number.isFinite(values.amount) && values.amount > 0 ? roundMoney(values.amount) : 0;
+    const total = roundMoney(cash + balancePart);
+    if (total <= 0) return;
+    recordPayment(
       {
-        orderId: orderId ?? null,
-        invoiceId: invoiceId ?? null,
-        amount: values.amount,
-        currencyCode: currency,
-        paymentMethod: values.paymentMethod,
-        paidAt: new Date(values.paidAt).toISOString(),
-        note: values.note,
-        accountId: values.accountId && values.accountId !== NO_ACCOUNT ? values.accountId : null,
+        balance:
+          balancePart > 0
+            ? { orderId: orderId ?? null, invoiceId: invoiceId ?? null, amount: balancePart, paidAt, note: values.note }
+            : null,
+        cash:
+          cash > 0
+            ? {
+                orderId: orderId ?? null,
+                invoiceId: invoiceId ?? null,
+                amount: cash,
+                currencyCode: currency,
+                paymentMethod: values.paymentMethod,
+                paidAt,
+                note: values.note,
+                accountId: values.accountId && values.accountId !== NO_ACCOUNT ? values.accountId : null,
+              }
+            : null,
       },
       {
-        onSuccess: () => {
-          void (async () => {
-            let skipDone = false;
-            try {
-              const result = await onRecorded?.(values.amount);
-              if (result === false) skipDone = true;
-            } finally {
-              if (!skipDone) onDone();
-            }
-          })();
+        onSuccess: (result) => {
+          if (result.balanceLeft != null) {
+            toast.success(t("finance.payFromBalance.toastFromBalance", { amount: formatMoney(result.balanceLeft) }), {
+              id: "record-payment",
+            });
+          }
+          setUseBalance(false);
+          void afterRecorded(total);
         },
       },
     );
@@ -508,20 +508,47 @@ export function OrderPaymentForm({
             <p className="font-medium tabular-nums">{formatMoney(balance.netPaid)}</p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">{t("finance.payments.remaining")}</p>
-            <p className="font-medium tabular-nums">{formatMoney(remaining)}</p>
+            <p className="text-xs text-muted-foreground">
+              {balancePart > 0 ? t("finance.payFromBalance.cashDue") : t("finance.payments.remaining")}
+            </p>
+            <p className="font-medium tabular-nums" data-testid="payment-cash-due">
+              {formatMoney(balancePart > 0 ? cashDue : remaining)}
+            </p>
+            {balancePart > 0 ? (
+              <p className="text-xs text-emerald-700 tabular-nums dark:text-emerald-400">
+                {t("finance.payFromBalance.balanceDeducted", { amount: formatMoney(balancePart) })}
+              </p>
+            ) : null}
           </div>
         </div>
 
         {payer && clientBalance != null ? (
           clientBalance > 0 ? (
-            <p
-              className="rounded-md border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-sm text-foreground"
+            <div
+              className="space-y-2 rounded-md border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-sm text-foreground"
               role="status"
               data-testid="payment-client-balance"
             >
-              {t("finance.payFromBalance.clientBalanceAvailable", { amount: formatMoney(clientBalance) })}
-            </p>
+              <p>{t("finance.payFromBalance.clientBalanceAvailable", { amount: formatMoney(clientBalance) })}</p>
+              {remaining > 0.005 ? (
+                <label className="flex cursor-pointer items-center gap-2 font-medium">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={useBalance}
+                    onChange={(event) => toggleUseBalance(event.target.checked)}
+                    disabled={isPending}
+                    data-testid="payment-use-balance"
+                  />
+                  {t("finance.payFromBalance.useBalance")}
+                </label>
+              ) : null}
+              {balancePart > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("finance.payFromBalance.useBalanceHint", { amount: formatMoney(balancePart) })}
+                </p>
+              ) : null}
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground" data-testid="payment-client-balance">
               {t("finance.payFromBalance.clientBalanceZero", { amount: formatMoney(clientBalance) })}
@@ -535,33 +562,35 @@ export function OrderPaymentForm({
             <Input
               id="payment-amount"
               type="number"
-              min={0.01}
+              min={balancePart > 0 ? 0 : 0.01}
               step="0.01"
-              max={remaining > 0 ? remaining : undefined}
+              max={cashDue > 0 ? cashDue : undefined}
               placeholder="0.00"
               {...register("amount", {
                 valueAsNumber: true,
-                required: t("finance.payments.validation.amountRequired"),
+                required: balancePart > 0 ? false : t("finance.payments.validation.amountRequired"),
                 validate: (value) => {
-                  if (!Number.isFinite(value) || value <= 0) return t("finance.payments.validation.amountPositive");
-                  if (roundMoney(value - remaining) > 0.005) {
-                    return t("finance.payments.validation.amountExceedsRemaining", { remaining: formatMoney(remaining) });
+                  // With the balance in use the rest may be 0 (the advance covers everything).
+                  if (balancePart > 0) {
+                    if (Number.isFinite(value) && value < 0) return t("finance.payments.validation.amountPositive");
+                  } else if (!Number.isFinite(value) || value <= 0) {
+                    return t("finance.payments.validation.amountPositive");
                   }
-                  if (fromBalance && clientBalance != null && roundMoney(value - clientBalance) > 0.005) {
-                    return t("finance.payFromBalance.exceedsBalance", { amount: formatMoney(clientBalance) });
+                  if (Number.isFinite(value) && roundMoney(value - cashDue) > 0.005) {
+                    return t("finance.payments.validation.amountExceedsRemaining", { remaining: formatMoney(cashDue) });
                   }
                   return true;
                 },
               })}
               className={errors.amount ? "border-destructive" : ""}
-              disabled={isPending || remaining <= 0}
+              disabled={isPending || remaining <= 0 || nothingToCollect}
             />
             <FieldError message={errors.amount?.message} />
-            {Number.isFinite(enteredAmount) && enteredAmount > 0 ? (
+            {cashAmount > 0 ? (
               <p className="text-xs text-muted-foreground">
                 {t("finance.payments.vatIncluded", {
                   rate: DEFAULT_VAT_RATE_PERCENT,
-                  amount: formatMoney(vatIncludedAmount(enteredAmount)),
+                  amount: formatMoney(vatIncludedAmount(cashAmount)),
                 })}
               </p>
             ) : null}
@@ -586,14 +615,7 @@ export function OrderPaymentForm({
             name="paymentMethod"
             rules={{ required: true }}
             render={({ field }) => (
-              <Select value={field.value} onValueChange={(next) => {
-                  field.onChange(next);
-                  // From the balance: never more than the client has.
-                  const amount = Number(getValues("amount"));
-                  if (next === "client_balance" && clientBalance != null && (!Number.isFinite(amount) || amount > clientBalance)) {
-                    setValue("amount", roundMoney(Math.min(clientBalance, remaining)), { shouldValidate: true });
-                  }
-                }} disabled={isPending}>
+              <Select value={field.value} onValueChange={field.onChange} disabled={isPending || nothingToCollect}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -603,19 +625,13 @@ export function OrderPaymentForm({
                       {t(`finance.paymentMethods.full.${method}`)}
                     </SelectItem>
                   ))}
-                  {clientBalance != null && clientBalance > 0 ? (
-                    <SelectItem value="client_balance">
-                      {t("finance.payFromBalance.fromBalanceOption", { amount: formatMoney(clientBalance) })}
-                    </SelectItem>
-                  ) : null}
                 </SelectContent>
               </Select>
             )}
           />
-          {fromBalance ? <p className="text-xs text-muted-foreground">{t("finance.payFromBalance.fromBalanceHint")}</p> : null}
         </div>
 
-        {accountOptions.length > 0 && !fromBalance ? (
+        {accountOptions.length > 0 && !nothingToCollect ? (
           <div className="space-y-1.5">
             <Label>{t("finance.payments.fields.account")}</Label>
             <Controller
