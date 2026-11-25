@@ -60,8 +60,8 @@ export function normalizeCatalogWarrantyDefaults(input: {
   warrantyKm?: unknown;
 }): CatalogWarrantyDefaults {
   let type = normalizeCatalogWarrantyType(input.warrantyType);
-  let months = normalizeWarrantyMonths(input.warrantyMonths);
-  let km = normalizeWarrantyKm(input.warrantyKm);
+  const months = normalizeWarrantyMonths(input.warrantyMonths);
+  const km = normalizeWarrantyKm(input.warrantyKm);
 
   if (type == null) {
     type = inferCatalogWarrantyType(months, km);
