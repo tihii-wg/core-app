@@ -70,9 +70,15 @@ export function useArchiveVehicle(clientId: string) {
     },
     onMutate: () => toast.loading(i18n.t("vehicles.toast.archiving"), { id: "vehicle-mutate" }),
     onSuccess: (_data, vehicleId) => {
-      void queryClient.invalidateQueries({ queryKey: clientVehiclesQueryKey(workspaceId, clientId) });
-      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId, "id", vehicleId] });
-      void queryClient.invalidateQueries({ queryKey: ["orders", workspaceId] });
+      // Drop it from the card at once, then refresh every vehicle view (client lists, the vehicle,
+      // plate search, VIN owner checks, merge counters). Orders keep their own VIN / plate copy, so the
+      // whole orders cache is not refetched for this.
+      queryClient.setQueryData(clientVehiclesQueryKey(workspaceId, clientId), (previous: Vehicle[] | undefined) =>
+        previous ? previous.filter((vehicle) => vehicle.id !== vehicleId) : previous,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["vehicles", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["vehicle-vin-owner", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["vehicle-order-counts", workspaceId] });
       toast.success(i18n.t("vehicles.toast.archived"), { id: "vehicle-mutate" });
     },
     onError: (error: Error) => {

@@ -5564,19 +5564,20 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
   const id = orderId.trim();
   if (!id) throw new Error(orderPermissionMessage());
 
-  const invoiceLabels = await listOrderInvoiceLabels(targetWorkspaceId, id);
+  // Pre-checks and the Storage path snapshot (taken before the RPC removes metadata rows) in parallel:
+  // they were three sequential round trips.
+  const { getWarrantyDeleteBlocker } = await import("./apiWarranty");
+  const [invoiceLabels, warrantyBlock, prelistedPaths] = await Promise.all([
+    listOrderInvoiceLabels(targetWorkspaceId, id),
+    getWarrantyDeleteBlocker(targetWorkspaceId, id),
+    listOrderAttachmentStoragePaths(targetWorkspaceId, id),
+  ]);
   if (invoiceLabels.length > 0) {
     throw new Error(i18n.t("orders.errors.cannotDeleteWithInvoiceDocs", { docs: invoiceLabels.join(", ") }));
   }
-
-  const { getWarrantyDeleteBlocker } = await import("./apiWarranty");
-  const warrantyBlock = await getWarrantyDeleteBlocker(targetWorkspaceId, id);
   if (warrantyBlock) {
     throw mapOrderDeleteDbError({ message: warrantyBlock, code: "23514" });
   }
-
-  // Snapshot Storage paths before the RPC removes metadata rows.
-  const prelistedPaths = await listOrderAttachmentStoragePaths(targetWorkspaceId, id);
 
   const { data: rpcData, error: rpcError } = await supabase.rpc("delete_order_with_payments", {
     p_workspace_id: targetWorkspaceId,
@@ -5601,29 +5602,21 @@ export async function deleteOrder(orderId: string, workspaceId: string | undefin
     : [];
   const paths = [...new Set([...prelistedPaths, ...rpcPaths])];
 
-  const failedPaths = await removeOrderAttachmentStoragePaths(targetWorkspaceId, paths);
-  if (failedPaths.length > 0) {
-    throw new Error(
-      i18n.t("orders.errors.deleteStorageCleanupPending", {
-        count: failedPaths.length,
-        file: SAFE_CANCELLED_ORDER_DELETE_SQL,
-      }),
-    );
-  }
+  const failedPaths = paths.length > 0 ? await removeOrderAttachmentStoragePaths(targetWorkspaceId, paths) : [];
 
-  // Drive rows have null storage_path (skipped above); trash the order folder best-effort.
-  try {
-    const { trashOrderDriveFolder } = await import("./apiOrderAttachments");
-    await trashOrderDriveFolder(targetWorkspaceId, id);
-  } catch (error) {
-    console.warn("[deleteOrder] trashOrderDriveFolder", error);
-  }
+  // Drive rows have null storage_path (skipped above); trash the order folder best-effort in the
+  // background — awaiting it held the UI ~1.5 s after the order was already deleted.
+  void import("./apiOrderAttachments")
+    .then(({ trashOrderDriveFolder }) => trashOrderDriveFolder(targetWorkspaceId, id))
+    .catch((error) => console.warn("[deleteOrder] trashOrderDriveFolder", error));
 
+  // The order IS deleted at this point: report pending file cleanup in the result (the hook refreshes the
+  // views and warns) instead of throwing, which left every list showing a deleted order.
   return {
     id: payload?.order_id ?? id,
     paymentsDeleted: typeof payload?.payments_deleted === "number" ? payload.payments_deleted : 0,
     materialsReturned: Array.isArray(payload?.materials_returned) ? payload.materials_returned : [],
-    attachmentStoragePaths: paths,
-    storageCleanupComplete: true,
+    attachmentStoragePaths: failedPaths.length > 0 ? failedPaths : paths,
+    storageCleanupComplete: failedPaths.length === 0,
   };
 }

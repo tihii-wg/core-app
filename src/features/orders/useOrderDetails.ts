@@ -188,6 +188,8 @@ export function useOrderDetails() {
       onOrderUpdated: updateSelectedOrder,
       onStatusChange: handleStatusChange,
       isStatusUpdating,
+      // Every host closes the sheet of a deleted order (hosts may still pass their own onDeleted).
+      onDeleted: clearOrder,
     },
   };
 }
