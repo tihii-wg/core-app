@@ -61,6 +61,7 @@ import { SubscriptionStatusCard } from "./SubscriptionStatusCard";
 import { ImportDataSettings } from "./ImportDataSettings";
 import { StatusesSettings } from "./StatusesSettings";
 import { OrderFieldsSettings } from "./OrderFieldsSettings";
+import { FormFieldsSettings } from "./FormFieldsSettings";
 import { LocationsSettings } from "./LocationsSettings";
 import { RolesSettings } from "./RolesSettings";
 import { PrintTemplatesSettings } from "./PrintTemplatesSettings";
@@ -131,6 +132,10 @@ export function SettingsModule() {
           <TabsTrigger value="orderFields">
             <FormInput />
             {t("settings.tabs.orderFields")}
+          </TabsTrigger>
+          <TabsTrigger value="formFields">
+            <FormInput />
+            {t("settings.tabs.formFields")}
           </TabsTrigger>
           <TabsTrigger value="locations">
             <MapPin />
@@ -246,6 +251,10 @@ export function SettingsModule() {
 
         <TabsContent value="orderFields" className="mt-5 space-y-5">
           <OrderFieldsSettings />
+        </TabsContent>
+
+        <TabsContent value="formFields" className="mt-5 space-y-5">
+          <FormFieldsSettings />
         </TabsContent>
 
         <TabsContent value="locations" className="mt-5 space-y-5">

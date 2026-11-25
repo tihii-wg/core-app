@@ -8,6 +8,7 @@ export const settingsTabs = [
   "appearance",
   "statuses",
   "orderFields",
+  "formFields",
   "locations",
   "warehouses",
   "roles",

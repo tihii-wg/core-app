@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useFormFieldLayout } from "../formFields/useFormFields";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
@@ -141,11 +142,15 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
     setEditModalOpen(false);
   };
 
+  const layout = useFormFieldLayout("service");
+
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
-      <div className="space-y-4 py-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="serviceName">{t("services.form.serviceNameLabel")}</Label>
+      <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2">
+        {layout.arrange<{ key: string; node: ReactNode }>([
+        { key: "serviceName", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="serviceName">{layout.label("serviceName", t("services.form.serviceNameLabel"))}</Label>
           <Input
             id="serviceName"
             {...register("serviceName", {
@@ -155,10 +160,10 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
           />
           {errors.serviceName && <p className="text-xs text-destructive">{errors.serviceName.message}</p>}
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        ) },
+        { key: "category", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="edit-service-category">{t("services.form.categoryLabel")}</Label>
+            <Label htmlFor="edit-service-category">{layout.label("category", t("services.form.categoryLabel"))}</Label>
             <Controller
               name="category"
               control={control}
@@ -180,9 +185,10 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
             />
             {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
           </div>
-
+        ) },
+        { key: "status", node: (
           <div className="space-y-1.5">
-            <Label>{t("common.status")}</Label>
+            <Label>{layout.label("status", t("common.status"))}</Label>
             <Controller
               name="status"
               control={control}
@@ -199,10 +205,10 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
               )}
             />
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="price">{t("services.form.priceLabel", { currency })}</Label>
+        ) },
+        { key: "price", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="price">{layout.label("price", t("services.form.priceLabel", { currency }))}</Label>
           <Input
             id="price"
             type="number"
@@ -219,14 +225,16 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
           />
           {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
         </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="description">{t("services.form.descriptionLabel")}</Label>
+        ) },
+        { key: "description", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="description">{layout.label("description", t("services.form.descriptionLabel"))}</Label>
           <Textarea id="description" {...register("description")} placeholder={copy.descriptionPlaceholder} rows={3} />
         </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-service-default-technician">{t("orders.team.defaultPerformer")}</Label>
+        ) },
+        { key: "defaultTechnician", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="edit-service-default-technician">{layout.label("defaultTechnician", t("orders.team.defaultPerformer"))}</Label>
           <Controller
             name="defaultTechnicianId"
             control={control}
@@ -251,7 +259,9 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
             )}
           />
         </div>
-
+        ) },
+        { key: "warranty", node: (
+        <div className="sm:col-span-2">
         <CatalogWarrantyFields
           idPrefix="edit-service"
           value={warranty}
@@ -262,8 +272,13 @@ export default function UpdateServiceForm({ service, setEditModalOpen }: EditSer
           }}
           error={warrantyError}
         />
+        </div>
+        ) },
+        ]).map((block) => (
+          <Fragment key={block.key}>{block.node}</Fragment>
+        ))}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setEditModalOpen(false)}>
             {t("common.cancel")}
           </Button>

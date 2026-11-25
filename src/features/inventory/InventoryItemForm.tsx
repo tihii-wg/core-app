@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useFormFieldLayout } from "../formFields/useFormFields";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -105,6 +106,8 @@ export default function InventoryItemForm({
     setValue("sellingPrice", sellingPriceFromMarkup(purchasePrice, parsed), { shouldValidate: true });
   }
 
+  const layout = useFormFieldLayout("product");
+
   return (
     <form
       onSubmit={handleSubmit((data) => {
@@ -141,9 +144,11 @@ export default function InventoryItemForm({
         onSubmit(lockQuantity ? { ...withWarranty, quantity: isCreate ? 0 : defaultValues.quantity } : withWarranty);
       })}
     >
-      <div className="space-y-4 py-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="inventory-name">{t("inventory.form.nameLabel")}</Label>
+      <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-2">
+        {layout.arrange<{ key: string; node: ReactNode }>([
+        { key: "name", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="inventory-name">{layout.label("name", t("inventory.form.nameLabel"))}</Label>
           <Input
             id="inventory-name"
             {...register("name", {
@@ -155,26 +160,28 @@ export default function InventoryItemForm({
           />
           <FieldError message={errors.name?.message} />
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        ) },
+        { key: "sku", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-sku">{t("inventory.fields.sku")}</Label>
+            <Label htmlFor="inventory-sku">{layout.label("sku", t("inventory.fields.sku"))}</Label>
             <Input id="inventory-sku" {...register("sku")} placeholder={t("inventory.form.skuPlaceholder")} />
           </div>
+        ) },
+        { key: "category", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-category">{t("inventory.fields.category")}</Label>
+            <Label htmlFor="inventory-category">{layout.label("category", t("inventory.fields.category"))}</Label>
             <Input id="inventory-category" {...register("category")} placeholder={inventoryCopy.categoryPlaceholder} />
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="inventory-description">{t("inventory.fields.description")}</Label>
+        ) },
+        { key: "description", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="inventory-description">{layout.label("description", t("inventory.fields.description"))}</Label>
           <Textarea id="inventory-description" {...register("description")} rows={3} placeholder={t("inventory.form.descriptionPlaceholder")} />
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        ) },
+        { key: "quantity", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-quantity">{t("inventory.form.quantityLabel")}</Label>
+            <Label htmlFor="inventory-quantity">{layout.label("quantity", t("inventory.form.quantityLabel"))}</Label>
             <Input
               id="inventory-quantity"
               type="number"
@@ -197,8 +204,10 @@ export default function InventoryItemForm({
             ) : null}
             <FieldError message={errors.quantity?.message} />
           </div>
+        ) },
+        { key: "minQuantity", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-min-quantity">{t("inventory.form.minQuantityLabel")}</Label>
+            <Label htmlFor="inventory-min-quantity">{layout.label("minQuantity", t("inventory.form.minQuantityLabel"))}</Label>
             <Input
               id="inventory-min-quantity"
               type="number"
@@ -215,10 +224,10 @@ export default function InventoryItemForm({
             <FieldError message={errors.minQuantity?.message} />
             <p className="text-xs text-muted-foreground">{t("inventory.form.minQuantityHint")}</p>
           </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="inventory-unit">{t("inventory.form.unitLabel")}</Label>
+        ) },
+        { key: "unit", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="inventory-unit">{layout.label("unit", t("inventory.form.unitLabel"))}</Label>
           <Input
             id="inventory-unit"
             {...register("unit", {
@@ -230,9 +239,10 @@ export default function InventoryItemForm({
           />
           <FieldError message={errors.unit?.message} />
         </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="inventory-markup">{t("inventory.form.markupLabel")}</Label>
+        ) },
+        { key: "markup", node: (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label htmlFor="inventory-markup">{layout.label("markup", t("inventory.form.markupLabel"))}</Label>
           <Input
             id="inventory-markup"
             type="number"
@@ -261,10 +271,10 @@ export default function InventoryItemForm({
           <FieldError message={markupError} />
           <p className="text-xs text-muted-foreground">{t("inventory.form.markupHint")}</p>
         </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        ) },
+        { key: "purchasePrice", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-purchase-price">{t("inventory.fields.purchasePrice")}</Label>
+            <Label htmlFor="inventory-purchase-price">{layout.label("purchasePrice", t("inventory.fields.purchasePrice"))}</Label>
             <Controller
               name="purchasePrice"
               control={control}
@@ -290,8 +300,10 @@ export default function InventoryItemForm({
             />
             <FieldError message={errors.purchasePrice?.message} />
           </div>
+        ) },
+        { key: "sellingPrice", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-selling-price">{t("inventory.fields.sellingPrice")}</Label>
+            <Label htmlFor="inventory-selling-price">{layout.label("sellingPrice", t("inventory.fields.sellingPrice"))}</Label>
             <Controller
               name="sellingPrice"
               control={control}
@@ -313,24 +325,27 @@ export default function InventoryItemForm({
             />
             <FieldError message={errors.sellingPrice?.message} />
           </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        ) },
+        { key: "supplier", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-supplier">{t("inventory.fields.supplier")}</Label>
+            <Label htmlFor="inventory-supplier">{layout.label("supplier", t("inventory.fields.supplier"))}</Label>
             <Input id="inventory-supplier" {...register("supplier")} placeholder={t("inventory.form.supplierPlaceholder")} />
           </div>
+        ) },
+        { key: "location", node: (
           <div className="space-y-1.5">
-            <Label htmlFor="inventory-location">{t("inventory.fields.location")}</Label>
+            <Label htmlFor="inventory-location">{layout.label("location", t("inventory.fields.location"))}</Label>
             <Input id="inventory-location" {...register("location")} placeholder={inventoryCopy.locationPlaceholder} />
           </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="inventory-active">{t("inventory.active")}</Label>
+        ) },
+        { key: "isActive", node: (
+        <div className="flex items-center justify-between sm:col-span-2">
+          <Label htmlFor="inventory-active">{layout.label("isActive", t("inventory.active"))}</Label>
           <Controller name="isActive" control={control} render={({ field }) => <Switch id="inventory-active" checked={field.value} onCheckedChange={field.onChange} />} />
         </div>
-
+        ) },
+        { key: "warranty", node: (
+        <div className="sm:col-span-2">
         <CatalogWarrantyFields
           idPrefix="inventory-item"
           value={warranty}
@@ -341,8 +356,13 @@ export default function InventoryItemForm({
           }}
           error={warrantyError}
         />
+        </div>
+        ) },
+        ]).map((block) => (
+          <Fragment key={block.key}>{block.node}</Fragment>
+        ))}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             {t("common.cancel")}
           </Button>

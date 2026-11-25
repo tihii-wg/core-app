@@ -5,6 +5,7 @@ export const PERMISSION_KEYS = {
   settingsRoles: "settings.roles",
   settingsStatuses: "settings.statuses",
   settingsForms: "settings.forms",
+  settingsGeneral: "settings.general",
   reportsActivityLog: "reports.activity_log",
 } as const;
 
