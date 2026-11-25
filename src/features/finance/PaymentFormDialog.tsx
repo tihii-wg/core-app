@@ -416,6 +416,7 @@ export function OrderPaymentForm({
     handleSubmit,
     watch,
     setValue,
+    clearErrors,
     formState: { errors },
   } = useForm<PaymentFormValues>({
     defaultValues: {
@@ -437,7 +438,11 @@ export function OrderPaymentForm({
   function toggleUseBalance(next: boolean) {
     setUseBalance(next);
     const due = roundMoney(Math.max(0, remaining - balancePartFor(next)));
-    setValue("amount", due, { shouldValidate: true });
+    // No validation here: the rules still see the previous render (no balance part), so a 0 rest
+    // (the balance covers everything) was flagged «Сумма должна быть больше нуля». Submit validates
+    // with the current rules.
+    setValue("amount", due, { shouldValidate: false, shouldDirty: true });
+    clearErrors("amount");
   }
 
   async function afterRecorded(amount: number) {
