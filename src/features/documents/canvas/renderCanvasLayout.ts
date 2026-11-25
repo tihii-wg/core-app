@@ -136,11 +136,45 @@ function contentHeightMm(item: Placed, ctx: PrintContext, options: GrowthOptions
   return exact == null || exact <= item.hMm + 0.5 ? null : exact;
 }
 
+type GrowthEvent = { top: number; bottom: number; left: number; right: number; extra: number };
+type GrowthBand = { top: number; bottom: number; extra: number; events: GrowthEvent[] };
+
+function overlapsColumn(event: GrowthEvent, left: number, right: number): boolean {
+  return event.left < right - 0.01 && event.right > left + 0.01;
+}
+
 /**
- * Flow layout for print: tables / totals / text / variables take the height their data needs, and every block
- * below a changed element (overlapping it horizontally) moves by the same amount — down when it grew, up when a
- * table is shorter than its designed box. A background rectangle that encloses a growing element grows with it.
- * Elements repeated on every page (page number…) keep their place.
+ * How far content at original height `y` (in the column `left..right`) moves down. Growth is grouped into
+ * horizontal bands (rows of blocks whose original boxes overlap vertically); a band moves everything that starts
+ * below it by one amount — the biggest change in that row — across the whole page width, so rows stay aligned
+ * and two blocks growing side by side do not push the content twice. Inside a band (beside a taller block) only
+ * the blocks of the same column above count.
+ */
+function shiftAt(bands: GrowthBand[], y: number, left: number, right: number): number {
+  let shift = 0;
+  for (const band of bands) {
+    if (band.bottom <= y + 0.01) {
+      shift += band.extra;
+      continue;
+    }
+    if (band.top >= y - 0.01) break;
+    let partial: number | null = null;
+    for (const event of band.events) {
+      if (event.bottom <= y + 0.01 && overlapsColumn(event, left, right)) {
+        partial = partial == null ? event.extra : Math.max(partial, event.extra);
+      }
+    }
+    if (partial != null) shift += partial;
+    break;
+  }
+  return shift;
+}
+
+/**
+ * Flow layout for print: tables / totals / text / variables take the height their data needs. Blocks are grouped
+ * into rows; when a row gets taller (or a table shorter), every block below that row moves by the same amount
+ * over the whole page width, so the layout keeps its horizontal lines. A background rectangle that encloses a
+ * changed element stretches with it. Elements repeated on every page (page number…) keep their place.
  */
 export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintContext, options: GrowthOptions = {}): Placed[] {
   const placed: Placed[] = elements.map((element) => ({
@@ -151,44 +185,71 @@ export function applyTableGrowthShifts(elements: CanvasElement[], ctx: PrintCont
     hMm: element.hMm,
   }));
 
-  const growable = placed
-    .filter(
-      (item) =>
-        GROWABLE_TYPES.has(item.element.type) &&
-        !item.element.repeatOnEveryPage &&
-        (options.growText !== false || item.element.type === "table" || item.element.type === "totals"),
-    )
-    .sort((a, b) => a.yMm - b.yMm || a.xMm - b.xMm);
+  const growable = placed.filter(
+    (item) =>
+      GROWABLE_TYPES.has(item.element.type) &&
+      !item.element.repeatOnEveryPage &&
+      (options.growText !== false || item.element.type === "table" || item.element.type === "totals"),
+  );
 
+  // 1. Every change measured against the designed (original) boxes.
+  const events: GrowthEvent[] = [];
+  const newHeights = new Map<Placed, number>();
   for (const item of growable) {
     const target = contentHeightMm(item, ctx, options);
     if (target == null) continue;
     const extra = target - item.hMm;
     if (Math.abs(extra) < GROWTH_EPSILON_MM) continue;
-    const originalTop = item.yMm;
-    const originalBottom = item.yMm + item.hMm;
-    item.hMm = Math.max(0, target);
+    newHeights.set(item, Math.max(0, target));
+    events.push({ top: item.yMm, bottom: item.yMm + item.hMm, left: item.xMm, right: item.xMm + item.wMm, extra });
+  }
+  if (events.length === 0) return placed;
 
-    // Background boxes around the element (e.g. a tinted client block) follow its height.
-    const containers = placed.filter(
-      (other) =>
-        other !== item &&
-        other.element.type === "rect" &&
-        !other.element.repeatOnEveryPage &&
-        other.xMm <= item.xMm + 0.01 &&
-        other.xMm + other.wMm >= item.xMm + item.wMm - 0.01 &&
-        other.yMm <= originalTop + 0.01 &&
-        other.yMm + other.hMm >= originalBottom - 0.01,
-    );
-    for (const container of containers) container.hMm = Math.max(0, container.hMm + extra);
-
-    const spanLeft = Math.min(item.xMm, ...containers.map((c) => c.xMm));
-    const spanRight = Math.max(item.xMm + item.wMm, ...containers.map((c) => c.xMm + c.wMm));
-    for (const other of placed) {
-      if (other === item || containers.includes(other) || other.element.repeatOnEveryPage) continue;
-      const overlapsColumn = other.xMm < spanRight - 0.01 && other.xMm + other.wMm > spanLeft + 0.01;
-      if (overlapsColumn && other.yMm >= originalBottom - 0.01) other.yMm = Math.max(0, other.yMm + extra);
+  // 2. Rows: events whose original boxes overlap vertically form one band; the band moves by its biggest change.
+  events.sort((a, b) => a.top - b.top || a.bottom - b.bottom);
+  const bands: GrowthBand[] = [];
+  for (const event of events) {
+    const last = bands[bands.length - 1];
+    if (last && event.top < last.bottom - 0.01) {
+      last.bottom = Math.max(last.bottom, event.bottom);
+      last.extra = Math.max(last.extra, event.extra);
+      last.events.push(event);
+    } else {
+      bands.push({ top: event.top, bottom: event.bottom, extra: event.extra, events: [event] });
     }
+  }
+
+  // 3. Move / stretch.
+  for (const item of placed) {
+    if (item.element.repeatOnEveryPage) continue;
+    const left = item.xMm;
+    const right = item.xMm + item.wMm;
+    const top = item.yMm;
+    const bottom = item.yMm + item.hMm;
+    const newTop = Math.max(0, top + shiftAt(bands, top, left, right));
+    const grownHeight = newHeights.get(item);
+    if (grownHeight != null) {
+      item.yMm = newTop;
+      item.hMm = grownHeight;
+      continue;
+    }
+    // Background boxes around a changed element (e.g. a tinted client block) follow its height.
+    const isContainer =
+      item.element.type === "rect" &&
+      events.some(
+        (event) =>
+          left <= event.left + 0.01 &&
+          right >= event.right - 0.01 &&
+          top <= event.top + 0.01 &&
+          bottom >= event.bottom - 0.01,
+      );
+    if (isContainer) {
+      const newBottom = bottom + shiftAt(bands, bottom, left, right);
+      item.yMm = newTop;
+      item.hMm = Math.max(0, newBottom - newTop);
+      continue;
+    }
+    item.yMm = newTop;
   }
 
   return placed;

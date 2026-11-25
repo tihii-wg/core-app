@@ -99,6 +99,9 @@ type Props = {
   onOpenSimpleMode?: () => void;
 };
 
+/** Pointer travel (screen px) before a press turns into a move / resize. */
+const DRAG_START_PX = 4;
+
 function cloneLayout(layout: CanvasDocumentLayout): CanvasDocumentLayout {
   return structuredClone(layout);
 }
@@ -412,8 +415,15 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
 
   // Pointer move / resize
   const interactionRef = useRef<
-    | { mode: "move"; startX: number; startY: number; origins: Array<{ id: string; xMm: number; yMm: number }> }
-    | { mode: "resize"; handle: ResizeHandle; startX: number; startY: number; origin: CanvasElement }
+    | {
+        mode: "move";
+        startX: number;
+        startY: number;
+        origins: Array<{ id: string; xMm: number; yMm: number }>;
+        /** False until the pointer travelled DRAG_START_PX: a click only selects, it never snaps / moves. */
+        started: boolean;
+      }
+    | { mode: "resize"; handle: ResizeHandle; startX: number; startY: number; origin: CanvasElement; started: boolean }
     | null
   >(null);
   const dragStartLayoutRef = useRef<CanvasDocumentLayout | null>(null);
@@ -432,7 +442,7 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     const targets = selectedIds.includes(el.id) ? selectedIds : [el.id];
     const origins = layout.elements.filter((item) => targets.includes(item.id)).map((item) => ({ id: item.id, xMm: item.xMm, yMm: item.yMm }));
     dragStartLayoutRef.current = cloneLayout(layout);
-    interactionRef.current = { mode: "move", startX: event.clientX, startY: event.clientY, origins };
+    interactionRef.current = { mode: "move", startX: event.clientX, startY: event.clientY, origins, started: false };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
@@ -441,13 +451,26 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
     if (el.locked) return;
     setSelectedIds([el.id]);
     dragStartLayoutRef.current = cloneLayout(layout);
-    interactionRef.current = { mode: "resize", handle, startX: event.clientX, startY: event.clientY, origin: structuredClone(el) };
+    interactionRef.current = {
+      mode: "resize",
+      handle,
+      startX: event.clientX,
+      startY: event.clientY,
+      origin: structuredClone(el),
+      started: false,
+    };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
   function onPointerMove(event: React.PointerEvent) {
     const interaction = interactionRef.current;
     if (!interaction || !canEdit) return;
+    if (!interaction.started) {
+      // A click (or a hand tremor while clicking) must not move the block: snapping to the grid / neighbours
+      // made blocks jump on the first click, especially densely stacked variables.
+      if (Math.hypot(event.clientX - interaction.startX, event.clientY - interaction.startY) < DRAG_START_PX) return;
+      interaction.started = true;
+    }
     const dxMm = (event.clientX - interaction.startX) / (MM_TO_PX * scale);
     const dyMm = (event.clientY - interaction.startY) / (MM_TO_PX * scale);
 
@@ -458,13 +481,16 @@ export function CanvasDesigner({ template, canEdit, onClose, onDirtyChange, onOp
       const nextElements = layout.elements.map((el) => {
         const origin = interaction.origins.find((o) => o.id === el.id);
         if (!origin) return el;
-        const snapped = snapBox(
-          { xMm: origin.xMm + dxMm, yMm: origin.yMm + dyMm, wMm: el.wMm, hMm: el.hMm },
-          others,
-          layout.gridMm,
-          true,
-          content,
-        );
+        // Alt: free move (no snapping to the grid / other blocks) for fine placement among dense variables.
+        const snapped = event.altKey
+          ? { xMm: origin.xMm + dxMm, yMm: origin.yMm + dyMm, guides: [] as Guide[] }
+          : snapBox(
+              { xMm: origin.xMm + dxMm, yMm: origin.yMm + dyMm, wMm: el.wMm, hMm: el.hMm },
+              others,
+              layout.gridMm,
+              true,
+              content,
+            );
         guidesNext = snapped.guides;
         const clamped = clampBoxToContent(
           { xMm: snapped.xMm, yMm: snapped.yMm, wMm: el.wMm, hMm: el.hMm },
