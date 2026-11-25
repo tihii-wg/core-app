@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import { Search } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Input } from "../../ui/Input";
@@ -14,6 +15,7 @@ import { getOrderCountsByVehicle, mergeVehicles, vehicleDisplayLabel } from "../
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 import { filterClientVehiclesByQuery } from "./clientVehicleSearch";
+import { findVehicleDuplicateGroups } from "./vehicleDuplicates";
 import { clientVehiclesQueryKey } from "./useGetClientVehicles";
 import { vehicleQueryKey } from "./useGetVehicle";
 
@@ -40,6 +42,8 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
   const [search, setSearch] = useState(initialSearch);
   const [selected, setSelected] = useState<string[]>([]);
   const [mainId, setMainId] = useState<string>("");
+  /** «Найти дубликаты»: the list shows groups of likely duplicates instead of the search results. */
+  const [showDuplicates, setShowDuplicates] = useState(false);
 
   // Reset each time the dialog opens (state, not an effect: no extra render pass).
   const [prevOpen, setPrevOpen] = useState(open);
@@ -49,6 +53,7 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
       setSearch(initialSearch);
       setSelected([]);
       setMainId("");
+      setShowDuplicates(false);
     }
   }
 
@@ -62,6 +67,7 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
   const counts = countsQuery.data;
 
   const found = filterClientVehiclesByQuery(vehicles, search);
+  const duplicateGroups = useMemo(() => findVehicleDuplicateGroups(vehicles), [vehicles]);
   const selectedSet = new Set(selected);
   const selectedVehicles = vehicles.filter((vehicle) => selectedSet.has(vehicle.id));
   // Kept vehicle: the user's pick, else the one with most orders (then the oldest).
@@ -125,6 +131,56 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
 
   const busy = merge.isPending;
 
+  function renderRow(vehicle: Vehicle) {
+    const checked = selectedSet.has(vehicle.id);
+    const isMain = checked && main?.id === vehicle.id;
+    const orderCount = counts?.get(vehicle.id);
+    return (
+      <div
+        key={vehicle.id}
+        className={cn(
+          "flex items-start gap-3 rounded-lg border border-border p-3",
+          checked && "border-primary/50 bg-primary/5",
+        )}
+      >
+        <input
+          type="checkbox"
+          className="mt-1 size-4 shrink-0 accent-primary"
+          checked={checked}
+          disabled={busy}
+          aria-label={vehicleDisplayLabel(vehicle)}
+          onChange={(event) => toggle(vehicle.id, event.target.checked)}
+        />
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="text-sm font-medium text-foreground">{vehicleDisplayLabel(vehicle)}</p>
+          <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            {vehicle.vin ? `VIN ${vehicle.vin}` : t("vehicles.merge.noVin")}
+            {" · "}
+            {countsQuery.isLoading ? (
+              <Skeleton className="inline-block h-3 w-12 align-middle" />
+            ) : (
+              t("vehicles.merge.orders", { count: orderCount ?? 0 })
+            )}
+          </p>
+          {checked ? (
+            <label className="mt-1 flex items-center gap-2 text-xs text-foreground">
+              <input
+                type="radio"
+                name="merge-vehicles-main"
+                className="accent-primary"
+                checked={isMain}
+                disabled={busy}
+                onChange={() => setMainId(vehicle.id)}
+              />
+              {isMain ? t("vehicles.merge.mainSelected") : t("vehicles.merge.makeMain")}
+            </label>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-xl">
@@ -146,8 +202,19 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
             <Button
               type="button"
               size="sm"
+              variant={showDuplicates ? "default" : "outline"}
+              disabled={busy}
+              onClick={() => setShowDuplicates((current) => !current)}
+              data-testid="merge-vehicles-find-duplicates"
+            >
+              <Search className="size-3.5" />
+              {showDuplicates ? t("vehicles.merge.showAll") : t("vehicles.merge.findDuplicates")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
               variant="outline"
-              disabled={busy || found.length === 0}
+              disabled={busy || found.length === 0 || showDuplicates}
               onClick={() => setSelected((current) => [...new Set([...current, ...found.map((vehicle) => vehicle.id)])])}
             >
               {t("vehicles.merge.selectAllFound", { count: found.length })}
@@ -169,57 +236,46 @@ export function MergeVehiclesDialog({ open, onOpenChange, clientId, vehicles, in
         </div>
 
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" data-testid="merge-vehicles-list">
-          {found.length === 0 ? (
+          {showDuplicates ? (
+            duplicateGroups.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">{t("vehicles.merge.noDuplicates")}</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  {t("vehicles.merge.duplicatesFound", { count: duplicateGroups.length })}
+                </p>
+                {duplicateGroups.map((group) => (
+                  <div
+                    key={group.vehicles.map((vehicle) => vehicle.id).join(",")}
+                    className="space-y-2 rounded-lg border border-dashed border-border p-2.5"
+                    data-testid="merge-vehicles-duplicate-group"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-medium text-foreground">
+                        {t(`vehicles.merge.reason.${group.reason}`, { value: group.value })}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => {
+                          setSelected(group.vehicles.map((vehicle) => vehicle.id));
+                          setMainId("");
+                        }}
+                      >
+                        {t("vehicles.merge.selectGroup", { count: group.vehicles.length })}
+                      </Button>
+                    </div>
+                    {group.vehicles.map((vehicle) => renderRow(vehicle))}
+                  </div>
+                ))}
+              </>
+            )
+          ) : found.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">{t("vehicles.merge.nothingFound")}</p>
           ) : (
-            found.map((vehicle) => {
-              const checked = selectedSet.has(vehicle.id);
-              const isMain = checked && main?.id === vehicle.id;
-              const orderCount = counts?.get(vehicle.id);
-              return (
-                <div
-                  key={vehicle.id}
-                  className={cn(
-                    "flex items-start gap-3 rounded-lg border border-border p-3",
-                    checked && "border-primary/50 bg-primary/5",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-1 size-4 shrink-0 accent-primary"
-                    checked={checked}
-                    disabled={busy}
-                    aria-label={vehicleDisplayLabel(vehicle)}
-                    onChange={(event) => toggle(vehicle.id, event.target.checked)}
-                  />
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <p className="text-sm font-medium text-foreground">{vehicleDisplayLabel(vehicle)}</p>
-                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                      {vehicle.vin ? `VIN ${vehicle.vin}` : t("vehicles.merge.noVin")}
-                      {" · "}
-                      {countsQuery.isLoading ? (
-                        <Skeleton className="inline-block h-3 w-12 align-middle" />
-                      ) : (
-                        t("vehicles.merge.orders", { count: orderCount ?? 0 })
-                      )}
-                    </p>
-                    {checked ? (
-                      <label className="mt-1 flex items-center gap-2 text-xs text-foreground">
-                        <input
-                          type="radio"
-                          name="merge-vehicles-main"
-                          className="accent-primary"
-                          checked={isMain}
-                          disabled={busy}
-                          onChange={() => setMainId(vehicle.id)}
-                        />
-                        {isMain ? t("vehicles.merge.mainSelected") : t("vehicles.merge.makeMain")}
-                      </label>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
+            found.map((vehicle) => renderRow(vehicle))
           )}
         </div>
 

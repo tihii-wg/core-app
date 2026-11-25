@@ -114,6 +114,18 @@ export default {
     vinInvalid: "VIN-ul trebuie să conțină exact 17 caractere valide (A–Z și 0–9, fără I, O și Q)",
   },
   merge: {
+    findDuplicates: "Găsește duplicate",
+    showAll: "Arată toate",
+    noDuplicates: "Nu s-au găsit duplicate",
+    duplicatesFound_one: "S-a găsit {{count}} grup de posibile duplicate",
+    duplicatesFound_few: "S-au găsit {{count}} grupuri de posibile duplicate",
+    duplicatesFound_other: "S-au găsit {{count}} de grupuri de posibile duplicate",
+    selectGroup: "Selectează grupul ({{count}})",
+    reason: {
+      vin: "Același VIN: {{value}}",
+      plate: "Același număr: {{value}}",
+      model: "Asemănătoare: {{value}} (verificați înainte de unire)",
+    },
     button: "Unește",
     title: "Unește vehiculele duplicate",
     description: "Găsiți duplicatele după VIN, număr sau marcă, bifați-le și alegeți vehiculul păstrat. Comenzile, garanțiile și istoricul kilometrajului celorlalte trec la el.",

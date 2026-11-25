@@ -114,6 +114,17 @@ export default {
     vinInvalid: "VIN must contain exactly 17 valid characters (A–Z and 0–9, excluding I, O, and Q)",
   },
   merge: {
+    findDuplicates: "Find duplicates",
+    showAll: "Show all",
+    noDuplicates: "No duplicates found",
+    duplicatesFound_one: "{{count}} group of possible duplicates found",
+    duplicatesFound_other: "{{count}} groups of possible duplicates found",
+    selectGroup: "Select group ({{count}})",
+    reason: {
+      vin: "Same VIN: {{value}}",
+      plate: "Same licence plate: {{value}}",
+      model: "Similar: {{value}} (check before merging)",
+    },
     button: "Merge",
     title: "Merge duplicate vehicles",
     description: "Find duplicates by VIN, plate or make, tick them and choose the vehicle to keep. Orders, warranties and mileage history of the others move to it.",
