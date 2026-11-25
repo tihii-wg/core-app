@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Car, Pencil, Plus, Trash2 } from "lucide-react";
+import { Car, Merge, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Order, Vehicle } from "../../lib/types";
 import { Button } from "../../ui/Button";
 import {
@@ -21,6 +21,7 @@ import { useGetClientVehicles } from "./useGetClientVehicles";
 import { useArchiveVehicle, useCreateVehicle, useTransferVehicle, useUpdateVehicle } from "./useVehicleMutations";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { VehicleFormDialog } from "./VehicleFormDialog";
+import { MergeVehiclesDialog } from "./MergeVehiclesDialog";
 
 type ClientVehiclesSectionProps = {
   clientId: string;
@@ -61,6 +62,7 @@ export function ClientVehiclesSection({
   const [archiveTarget, setArchiveTarget] = useState<Vehicle | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [vehicleOpen, setVehicleOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   useEffect(() => {
     setSearchQuery("");
@@ -108,19 +110,35 @@ export function ClientVehiclesSection({
           {/* Total active vehicles for this client (not the search-filtered subset). */}
           {t("vehicles.sectionTitleWithCount", { count: allVehicles.length })}
         </h3>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          <Plus />
-          {t("vehicles.add")}
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {allVehicles.length > 1 && visibleVehicleIds == null ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => setMergeOpen(true)}>
+              <Merge />
+              {t("vehicles.merge.button")}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            <Plus />
+            {t("vehicles.add")}
+          </Button>
+        </div>
       </div>
+
+      <MergeVehiclesDialog
+        open={mergeOpen}
+        onOpenChange={setMergeOpen}
+        clientId={clientId}
+        vehicles={allVehicles}
+        initialSearch={searchQuery}
+      />
 
       {isLoading ? (
         <div className="space-y-2">

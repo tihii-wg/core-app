@@ -555,6 +555,54 @@ export async function transferVehicleToClient(
   return { vehicle: toVehicle(data as unknown as Record<string, unknown>), movedOrders: null };
 }
 
+/** Orders per vehicle (one query, in chunks for long lists). */
+export async function getOrderCountsByVehicle(workspaceId: string | undefined, vehicleIds: string[]): Promise<Map<string, number>> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const counts = new Map<string, number>();
+  const ids = [...new Set(vehicleIds.filter(Boolean))];
+  for (let index = 0; index < ids.length; index += 150) {
+    const chunk = ids.slice(index, index + 150);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("vehicle_id")
+      .eq("workspace_id", targetWorkspaceId)
+      .in("vehicle_id", chunk);
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as Array<{ vehicle_id: string | null }>) {
+      if (row.vehicle_id) counts.set(row.vehicle_id, (counts.get(row.vehicle_id) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+export type MergeVehiclesResult = { vehicle: Vehicle; merged: number; movedOrders: number };
+
+const MERGE_VEHICLES_RPC = "crm_merge_vehicles";
+
+/** Merges duplicate vehicles of one client into `targetVehicleId`; their orders, warranties and history move to it. */
+export async function mergeVehicles(
+  workspaceId: string | undefined,
+  targetVehicleId: string,
+  sourceVehicleIds: string[],
+): Promise<MergeVehiclesResult> {
+  requireWorkspaceId(workspaceId);
+  const { data, error } = await supabase.rpc(MERGE_VEHICLES_RPC, {
+    p_target_vehicle_id: targetVehicleId,
+    p_source_vehicle_ids: sourceVehicleIds,
+  });
+  if (error) {
+    if (isMissingRpcError(error, MERGE_VEHICLES_RPC)) throw new Error(i18n.t("vehicles.merge.errors.notInstalled"));
+    const message = error.message ?? "";
+    if (/merge_vehicles:forbidden|merge_vehicles:not_authenticated/.test(message)) throw new Error(i18n.t("vehicles.merge.errors.forbidden"));
+    if (/merge_vehicles:(source|target)_not_found/.test(message)) throw new Error(i18n.t("vehicles.merge.errors.notFound"));
+    if (/order_lifecycle:closed_order_immutable/.test(message)) throw new Error(i18n.t("vehicles.merge.errors.closedOrders"));
+    throw new Error(message || i18n.t("common.somethingWentWrong"));
+  }
+  const payload = (data ?? {}) as { vehicle?: Record<string, unknown>; merged?: number; moved_orders?: number };
+  if (!payload.vehicle) throw new Error(i18n.t("vehicles.errors.notFound"));
+  return { vehicle: toVehicle(payload.vehicle), merged: Number(payload.merged ?? 0), movedOrders: Number(payload.moved_orders ?? 0) };
+}
+
 export async function createVehicle(workspaceId: string | undefined, clientId: string, input: VehicleInput) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const targetClientId = clientId.trim();
