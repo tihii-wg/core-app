@@ -21,6 +21,18 @@ const clients: Messages<typeof en> = {
       "Clientul va fi arhivat (șters logic), nu șters definitiv. Comenzile, facturile, plățile și soldurile existente rămân în istoric. Clientul nu va mai apărea în liste sau la selectarea pentru comenzi noi.",
     confirm: "Arhivezi <strong>{{name}}</strong>?",
   },
+  problem: {
+    badge: "Client problematic",
+    badgeRemovable: "Client problematic",
+    mark: "Marchează ca problematic",
+    markHint: "Numele clientului va fi afișat cu roșu și un semn peste tot în aplicație",
+    unmark: "Elimină marcajul «problematic»",
+    marked: "Client marcat ca problematic",
+    unmarked: "Marcajul «problematic» a fost eliminat",
+    errors: {
+      sqlMissing: "Disponibil după aplicarea SQL 20261125224000_problem_clients.",
+    },
+  },
   merge: {
     button: "Unește",
     title: "Unește clienții",

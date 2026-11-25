@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { AlertTriangle, CircleCheck, Download, Mail, Printer, RotateCcw, Send, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -91,7 +92,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
             <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/50 p-4">
               <div className="min-w-0">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("invoices.detail.billTo")}</h3>
-                <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground">{invoice.clientName || "—"}</p>
+                <p className="mt-1 font-medium [overflow-wrap:anywhere] text-foreground"><ClientNameWithMark clientId={invoice.clientId}>{invoice.clientName || "—"}</ClientNameWithMark></p>
               </div>
               <div className="min-w-0 max-w-[55%] shrink-0 text-right [overflow-wrap:anywhere]">
                 <h3 className="text-xs font-medium text-muted-foreground">{t("common.total")}</h3>

@@ -1,4 +1,5 @@
 import { useFormFieldLayout } from "../formFields/useFormFields";
+import { ClientNameWithMark, ProblemClientToggle } from "./ClientNameWithMark";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClipboardList, EllipsisVertical, MapPin, Pencil, Phone, Plus, Trash2, Users, X } from "lucide-react";
@@ -361,7 +362,7 @@ export default function ClientDetailPanel({
         <SheetHeader className="shrink-0 pr-24">
           <SheetTitle>
             <span className="inline-flex min-w-0 flex-wrap items-center gap-2 [overflow-wrap:anywhere]">
-              {selectedClient?.name}
+              <ClientNameWithMark clientId={selectedClient?.id}>{selectedClient?.name}</ClientNameWithMark>
               {selectedClient && <ClientTypeBadge clientType={selectedClient.client_type} />}
             </span>
           </SheetTitle>
@@ -374,6 +375,9 @@ export default function ClientDetailPanel({
               <Phone className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden />
               {phone}
             </a>
+          ) : null}
+          {selectedClient && !isEditing ? (
+            <ProblemClientToggle clientId={selectedClient.id} disabled={!canMutateClients} />
           ) : null}
           {selectedClient && !isEditing && (
             <button

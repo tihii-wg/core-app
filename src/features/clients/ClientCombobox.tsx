@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type Ref } from "react";
+import { ClientNameWithMark } from "./ClientNameWithMark";
 import { Trans, useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Input } from "../../ui/Input";
@@ -174,7 +175,7 @@ export default function ClientCombobox({
                     onClick={() => selectVehicle(hit)}
                   >
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-foreground">{hit.client.name}</span>
+                      <span className="block truncate font-medium text-foreground"><ClientNameWithMark clientId={hit.client.id}>{hit.client.name}</ClientNameWithMark></span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {vehicleHitSecondary(hit, untitledVehicle)}
                       </span>
@@ -206,7 +207,7 @@ export default function ClientCombobox({
                   onClick={() => selectClient(client)}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-medium text-foreground">{client.name}</span>
+                    <span className="block truncate font-medium text-foreground"><ClientNameWithMark clientId={client.id}>{client.name}</ClientNameWithMark></span>
                     <span className="block truncate text-xs text-muted-foreground">{clientSecondaryLabel(client, emptyPhone)}</span>
                   </span>
                   <ClientTypeBadge clientType={client.client_type} />

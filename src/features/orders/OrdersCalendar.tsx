@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -342,7 +343,7 @@ function CalendarOrder({ event, overdue, formatMoney, showDetails, onOpen }: Cal
         <span className="truncate font-semibold tabular-nums text-primary">{order.orderNumber || "—"}</span>
         {showDetails && !isAppointment ? <span className="shrink-0 tabular-nums text-foreground">{formatMoney(order.totalPrice)}</span> : null}
       </span>
-      <span className="block truncate text-muted-foreground">{order.clientName || "—"}</span>
+      <span className="block truncate text-muted-foreground"><ClientNameWithMark clientId={order.clientId}>{order.clientName || "—"}</ClientNameWithMark></span>
       {showDetails && order.device ? <span className="block truncate text-muted-foreground">{order.device}</span> : null}
       {byCreation ? <span className="block text-[10px] uppercase tracking-wide text-subtle-foreground">{t("orders.calendar.createdMarker")}</span> : null}
     </button>

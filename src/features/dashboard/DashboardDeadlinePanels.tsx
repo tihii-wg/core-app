@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { AlertTriangle, CalendarClock } from "lucide-react";
 import type { Order } from "../../lib/types";
 import { OrderStatusBadge } from "../../ui/StatusBadge";
@@ -98,7 +99,7 @@ function DeadlineOrderList({
                   <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
                 </span>
                 <span className="mt-0.5 block truncate text-[13px] text-foreground" title={order.clientName}>
-                  {order.clientName}
+                  <ClientNameWithMark clientId={order.clientId}>{order.clientName}</ClientNameWithMark>
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                   <span className={cn("tabular-nums", emphasizeDeadline && "font-medium text-destructive")}>{order.deadline}</span>

@@ -1,4 +1,5 @@
 import { useMemo, useState, type DragEvent, type KeyboardEvent } from "react";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { isRowClickIgnored } from "../../ui/DataTable";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
 import { useTranslation } from "react-i18next";
@@ -360,7 +361,7 @@ function BoardCard({
         </OrderTotalBreakdownPopover>
       </div>
       <p className="mt-1 truncate text-sm font-medium text-foreground" title={order.clientName}>
-        {order.clientName || "—"}
+        <ClientNameWithMark clientId={order.clientId}>{order.clientName || "—"}</ClientNameWithMark>
       </p>
       {order.device ? (
         <p className="truncate text-xs text-muted-foreground" title={order.device}>

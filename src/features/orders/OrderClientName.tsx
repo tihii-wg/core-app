@@ -1,4 +1,5 @@
 import { cn } from "../../lib/utils";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 
 type OrderClientNameProps = {
   clientId?: string | null;
@@ -14,7 +15,7 @@ export function OrderClientName({ clientId, clientName, className, onOpenClient 
   if (!id) {
     return (
       <span className={className} title={clientName}>
-        {clientName}
+        <ClientNameWithMark clientId={clientId}>{clientName}</ClientNameWithMark>
       </span>
     );
   }
@@ -32,7 +33,7 @@ export function OrderClientName({ clientId, clientName, className, onOpenClient 
         onOpenClient(id);
       }}
     >
-      {clientName}
+      <ClientNameWithMark clientId={id}>{clientName}</ClientNameWithMark>
     </button>
   );
 }

@@ -1,4 +1,5 @@
 import { ChevronRight, Phone } from "lucide-react";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ClientType, MileageUnit, Order } from "../../lib/types";
@@ -135,7 +136,7 @@ export function OrderClientCard({
         {hasClient ? (
           <>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <p className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">{order.clientName}</p>
+              <p className="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]"><ClientNameWithMark clientId={order.clientId}>{order.clientName}</ClientNameWithMark></p>
               {clientType ? <ClientTypeBadge clientType={clientType} /> : null}
             </div>
             {phone ? (

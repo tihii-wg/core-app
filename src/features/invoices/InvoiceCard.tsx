@@ -1,4 +1,5 @@
 import type { Invoice, InvoiceStatus } from "../../lib/types";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { InvoiceStatusBadge } from "../../ui/StatusBadge";
 import { InvoiceActionsMenu } from "./InvoiceActionsMenu";
 import { InvoicePrintButton } from "./InvoicePrintButton";
@@ -27,7 +28,7 @@ export function InvoiceCard({ invoice, isUpdating = false, formatMoney, onView, 
         <div className="min-w-0 flex-1">
           <p className="break-all font-semibold text-primary tabular-nums">{invoice.invoiceNumber}</p>
           <p className="mt-0.5 truncate font-medium text-foreground" title={invoice.clientName}>
-            {invoice.clientName || "—"}
+            <ClientNameWithMark clientId={invoice.clientId}>{invoice.clientName || "—"}</ClientNameWithMark>
           </p>
           {invoice.orderNumber ? (
             <p className="mt-0.5 truncate text-xs text-muted-foreground tabular-nums">{invoice.orderNumber}</p>

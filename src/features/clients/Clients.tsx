@@ -1,4 +1,5 @@
 import { useFormFieldLayout } from "../formFields/useFormFields";
+import { ClientNameWithMark } from "./ClientNameWithMark";
 import { useEffect, useMemo, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useSearchParams } from "react-router-dom";
@@ -136,7 +137,7 @@ export function Clients() {
       header: fieldLabels.label("clientName", t("clients.table.name")),
       cell: (client) => (
         <span className="block max-w-[12rem] truncate font-medium text-foreground xl:max-w-[14rem] 2xl:max-w-[16rem]" title={client.name}>
-          {client.name}
+          <ClientNameWithMark clientId={client.id}>{client.name}</ClientNameWithMark>
         </span>
       ),
     },

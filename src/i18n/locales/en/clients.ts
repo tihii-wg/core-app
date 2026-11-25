@@ -17,6 +17,18 @@ export default {
       "The client will be archived (soft-deleted), not erased. Existing orders, invoices, payments, and balances stay in history. The client will no longer appear in lists or new-order pickers.",
     confirm: "Archive <strong>{{name}}</strong>?",
   },
+  problem: {
+    badge: "Problem client",
+    badgeRemovable: "Problem client",
+    mark: "Mark as problem client",
+    markHint: "The client's name will be shown in red with a mark everywhere in the app",
+    unmark: "Remove the problem mark",
+    marked: "Client marked as a problem client",
+    unmarked: "Problem mark removed",
+    errors: {
+      sqlMissing: "Available after applying SQL 20261125224000_problem_clients.",
+    },
+  },
   merge: {
     button: "Merge",
     title: "Merge clients",

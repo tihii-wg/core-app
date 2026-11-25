@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { Plus, AlertCircle, FileText, FileX2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -77,7 +78,7 @@ export function Invoices() {
         return (
           <div className="max-w-[11rem] min-w-0">
             <div className="truncate font-medium" title={invoice.clientName}>
-              {invoice.clientName || "—"}
+              <ClientNameWithMark clientId={invoice.clientId}>{invoice.clientName || "—"}</ClientNameWithMark>
             </div>
             <div className="truncate text-xs text-muted-foreground" title={phone}>
               {phone}

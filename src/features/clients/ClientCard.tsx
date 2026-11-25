@@ -1,4 +1,5 @@
 import { EllipsisVertical, Eye, Pencil, Phone, Trash2 } from "lucide-react";
+import { ClientNameWithMark } from "./ClientNameWithMark";
 import { useTranslation } from "react-i18next";
 import type { Client } from "../../lib/types";
 import { Button } from "../../ui/Button";
@@ -35,7 +36,7 @@ export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, o
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-foreground" title={client.name}>
-            {client.name}
+            <ClientNameWithMark clientId={client.id}>{client.name}</ClientNameWithMark>
           </p>
           <div className="mt-1">
             <ClientTypeBadge clientType={client.client_type} />
