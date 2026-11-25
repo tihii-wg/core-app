@@ -679,3 +679,54 @@ export async function deleteFullyVoidedPayment(paymentId: string, workspaceId: s
   }
   return { paymentId: original.id };
 }
+
+export type PayerBalance = { clientId: string; clientName: string | null; balance: number };
+
+const PAYER_BALANCE_RPC = "crm_payer_balance";
+const PAY_FROM_BALANCE_RPC = "crm_pay_from_client_balance";
+
+/** Who pays this order / invoice and their current balance (advance). Null without a client or the SQL. */
+export async function getPayerBalance(orderId: string | null, invoiceId: string | null): Promise<PayerBalance | null> {
+  if (!orderId && !invoiceId) return null;
+  const { data, error } = await supabase.rpc(PAYER_BALANCE_RPC, { p_order_id: orderId, p_invoice_id: invoiceId });
+  if (error) {
+    if (isMissingRpcError(error, PAYER_BALANCE_RPC)) return null;
+    throw new Error(error.message);
+  }
+  const row = (data ?? null) as { client_id?: string; client_name?: string | null; balance?: number | string } | null;
+  if (!row?.client_id) return null;
+  return { clientId: row.client_id, clientName: row.client_name ?? null, balance: Number(row.balance ?? 0) || 0 };
+}
+
+export type PayFromBalanceInput = {
+  orderId: string | null;
+  invoiceId: string | null;
+  amount: number;
+  paidAt: string;
+  note?: string;
+};
+
+/** Payment from the client's advance: payment + balance deduction in one transaction. Returns the new balance. */
+export async function payFromClientBalance(input: PayFromBalanceInput): Promise<{ payment: LedgerPayment; balance: number }> {
+  const amount = validatePositiveAmount(input.amount);
+  const { data, error } = await supabase.rpc(PAY_FROM_BALANCE_RPC, {
+    p_order_id: input.orderId,
+    p_invoice_id: input.invoiceId,
+    p_amount: amount,
+    p_paid_at: validatePaidAt(input.paidAt),
+    p_note: (input.note ?? "").trim() || null,
+  });
+  if (error) {
+    if (isMissingRpcError(error, PAY_FROM_BALANCE_RPC)) throw new Error(i18n.t("finance.payFromBalance.errors.notInstalled"));
+    const message = error.message ?? "";
+    const insufficient = /pay_from_balance:insufficient:([-\d.]+)/.exec(message);
+    if (insufficient) {
+      throw new Error(i18n.t("finance.payFromBalance.errors.insufficient", { amount: insufficient[1] }));
+    }
+    if (/pay_from_balance:no_client/.test(message)) throw new Error(i18n.t("finance.payFromBalance.errors.noClient"));
+    throw new Error(message || i18n.t("finance.payments.errors.saveFailed"));
+  }
+  const payload = (data ?? {}) as { payment?: Record<string, unknown>; balance?: number | string };
+  if (!payload.payment) throw new Error(i18n.t("finance.payments.errors.saveFailed"));
+  return { payment: toLedgerPayment(payload.payment), balance: Number(payload.balance ?? 0) || 0 };
+}

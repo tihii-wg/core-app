@@ -1,5 +1,5 @@
 import { useMemo, useState, type ElementType } from "react";
-import { TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, CreditCard, Banknote, Building, FileText, Plus, EllipsisVertical, Pencil, Trash2, Receipt, AlertTriangle } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, CreditCard, Banknote, Building, FileText, Plus, EllipsisVertical, Pencil, Trash2, Receipt, AlertTriangle, Wallet } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { PageHeader } from "../../pages/PageHeader";
 import { DashboardCard } from "../../ui/DashboardCard";
@@ -42,6 +42,7 @@ const ledgerMethodIcons: Record<LedgerPaymentMethod, ElementType> = {
   card: CreditCard,
   bank_transfer: Building,
   other: DollarSign,
+  client_balance: Wallet,
 };
 
 function percent(part: number, whole: number) {

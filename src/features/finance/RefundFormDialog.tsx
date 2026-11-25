@@ -9,7 +9,7 @@ import { Spinner } from "../../ui/Spinner";
 import { Textarea } from "../../ui/Textarea";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { refundableRemaining, roundMoney } from "./paymentCalculations";
-import { ledgerPaymentMethods, type LedgerPayment, type LedgerPaymentMethod } from "./paymentTypes";
+import { manualLedgerPaymentMethods, type LedgerPayment, type LedgerPaymentMethod } from "./paymentTypes";
 import { useRecordRefund } from "./usePayments";
 
 type RefundFormValues = {
@@ -162,7 +162,7 @@ function RefundForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ledgerPaymentMethods.map((method) => (
+                  {manualLedgerPaymentMethods.map((method) => (
                     <SelectItem key={method} value={method}>
                       {t(`finance.paymentMethods.full.${method}`)}
                     </SelectItem>

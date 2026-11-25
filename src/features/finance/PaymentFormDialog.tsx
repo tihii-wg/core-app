@@ -21,9 +21,9 @@ import {
 import { orderNetPaidForMinPaid } from "../orders/minPaidStatusGuard";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { roundMoney } from "./paymentCalculations";
-import { ledgerPaymentMethods, type LedgerPaymentMethod, type PaymentBalance } from "./paymentTypes";
+import { manualLedgerPaymentMethods, type LedgerPaymentMethod, type PaymentBalance } from "./paymentTypes";
 import { useFinanceAccounts } from "./useFinanceAccounts";
-import { useGetPayments, useRecordPayment } from "./usePayments";
+import { useGetPayments, usePayerBalance, usePayFromClientBalance, useRecordPayment } from "./usePayments";
 import { DEFAULT_VAT_RATE_PERCENT, vatIncludedAmount } from "./vat";
 
 const NO_ACCOUNT = "none";
@@ -398,7 +398,11 @@ export function OrderPaymentForm({
 }: OrderPaymentFormProps) {
   const { t } = useTranslation();
   const { currency, formatMoney } = useWorkspaceMoney();
-  const { mutate: record, isPending } = useRecordPayment();
+  const { mutate: record, isPending: recordPending } = useRecordPayment();
+  const { mutate: payFromBalance, isPending: balancePending } = usePayFromClientBalance();
+  const isPending = recordPending || balancePending;
+  const { data: payer } = usePayerBalance(orderId ?? null, invoiceId ?? null);
+  const clientBalance = payer ? roundMoney(payer.balance) : null;
   const remaining = balance.remaining;
   const { data: financeAccounts = [] } = useFinanceAccounts();
   const accountOptions = financeAccounts.filter((account) => account.isActive && account.currencyCode === currency);
@@ -407,6 +411,8 @@ export function OrderPaymentForm({
     register,
     handleSubmit,
     watch,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<PaymentFormValues>({
     defaultValues: {
@@ -418,13 +424,45 @@ export function OrderPaymentForm({
     },
   });
   const enteredAmount = watch("amount");
+  const selectedMethod = watch("paymentMethod");
+  const fromBalance = selectedMethod === "client_balance";
   useEffect(() => {
     const value = Number(enteredAmount);
     onAmountChange?.(Number.isFinite(value) && value > 0 ? value : 0);
   }, [enteredAmount, onAmountChange]);
 
+  async function afterRecorded(amount: number) {
+    let skipDone = false;
+    try {
+      const result = await onRecorded?.(amount);
+      if (result === false) skipDone = true;
+    } finally {
+      if (!skipDone) onDone();
+    }
+  }
+
   function onSubmit(values: PaymentFormValues) {
     if (isPending) return;
+    if (values.paymentMethod === "client_balance") {
+      payFromBalance(
+        {
+          orderId: orderId ?? null,
+          invoiceId: invoiceId ?? null,
+          amount: values.amount,
+          paidAt: new Date(values.paidAt).toISOString(),
+          note: values.note,
+        },
+        {
+          onSuccess: (result) => {
+            toast.success(t("finance.payFromBalance.toastFromBalance", { amount: formatMoney(result.balance) }), {
+              id: "record-payment",
+            });
+            void afterRecorded(values.amount);
+          },
+        },
+      );
+      return;
+    }
     record(
       {
         orderId: orderId ?? null,
@@ -475,6 +513,22 @@ export function OrderPaymentForm({
           </div>
         </div>
 
+        {payer && clientBalance != null ? (
+          clientBalance > 0 ? (
+            <p
+              className="rounded-md border border-emerald-600/30 bg-emerald-600/10 px-3 py-2 text-sm text-foreground"
+              role="status"
+              data-testid="payment-client-balance"
+            >
+              {t("finance.payFromBalance.clientBalanceAvailable", { amount: formatMoney(clientBalance) })}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground" data-testid="payment-client-balance">
+              {t("finance.payFromBalance.clientBalanceZero", { amount: formatMoney(clientBalance) })}
+            </p>
+          )
+        ) : null}
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="payment-amount">{t("finance.payments.fields.amount", { currency })}</Label>
@@ -492,6 +546,9 @@ export function OrderPaymentForm({
                   if (!Number.isFinite(value) || value <= 0) return t("finance.payments.validation.amountPositive");
                   if (roundMoney(value - remaining) > 0.005) {
                     return t("finance.payments.validation.amountExceedsRemaining", { remaining: formatMoney(remaining) });
+                  }
+                  if (fromBalance && clientBalance != null && roundMoney(value - clientBalance) > 0.005) {
+                    return t("finance.payFromBalance.exceedsBalance", { amount: formatMoney(clientBalance) });
                   }
                   return true;
                 },
@@ -529,23 +586,36 @@ export function OrderPaymentForm({
             name="paymentMethod"
             rules={{ required: true }}
             render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange} disabled={isPending}>
+              <Select value={field.value} onValueChange={(next) => {
+                  field.onChange(next);
+                  // From the balance: never more than the client has.
+                  const amount = Number(getValues("amount"));
+                  if (next === "client_balance" && clientBalance != null && (!Number.isFinite(amount) || amount > clientBalance)) {
+                    setValue("amount", roundMoney(Math.min(clientBalance, remaining)), { shouldValidate: true });
+                  }
+                }} disabled={isPending}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ledgerPaymentMethods.map((method) => (
+                  {manualLedgerPaymentMethods.map((method) => (
                     <SelectItem key={method} value={method}>
                       {t(`finance.paymentMethods.full.${method}`)}
                     </SelectItem>
                   ))}
+                  {clientBalance != null && clientBalance > 0 ? (
+                    <SelectItem value="client_balance">
+                      {t("finance.payFromBalance.fromBalanceOption", { amount: formatMoney(clientBalance) })}
+                    </SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
             )}
           />
+          {fromBalance ? <p className="text-xs text-muted-foreground">{t("finance.payFromBalance.fromBalanceHint")}</p> : null}
         </div>
 
-        {accountOptions.length > 0 ? (
+        {accountOptions.length > 0 && !fromBalance ? (
           <div className="space-y-1.5">
             <Label>{t("finance.payments.fields.account")}</Label>
             <Controller

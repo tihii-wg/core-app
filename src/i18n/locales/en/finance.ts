@@ -55,6 +55,21 @@ export default {
   invoiceDescription: "{{number}} · {{client}}",
   orderDescription: "Order {{number}}",
   paymentDescription: "{{label}}",
+  payFromBalance: {
+    clientBalanceTitle: "Client balance",
+    clientBalanceValue: "{{name}}: {{amount}}",
+    clientBalanceAvailable: "The client has a balance (advance) of {{amount}} — you can pay from it by choosing “From client balance”.",
+    clientBalanceZero: "Client balance: {{amount}}",
+    fromBalanceOption: "From client balance (available {{amount}})",
+    fromBalanceHint: "The amount is taken from the client balance; no money enters the cash desk — it was received earlier as an advance.",
+    exceedsBalance: "The client balance is only {{amount}}",
+    toastFromBalance: "Paid from the client balance. Balance left: {{amount}}",
+    errors: {
+      notInstalled: "Paying from the balance becomes available after applying SQL 20261125190000_pay_from_client_balance.",
+      insufficient: "Not enough on the client balance ({{amount}})",
+      noClient: "The order has no client — cannot pay from a balance.",
+    },
+  },
   paymentMethods: {
     short: {
       cash: "Cash",
@@ -62,6 +77,7 @@ export default {
       "bank-transfer": "Bank",
       bank_transfer: "Bank",
       other: "Other",
+      client_balance: "Balance",
     },
     full: {
       cash: "Cash",
@@ -69,6 +85,7 @@ export default {
       "bank-transfer": "Bank Transfer",
       bank_transfer: "Bank Transfer",
       other: "Other",
+      client_balance: "From client balance",
     },
   },
   profitOverview: {

@@ -9,6 +9,9 @@ import {
   recordPaymentVoid,
   recordRefund,
   type RecordVoidInput,
+  getPayerBalance,
+  payFromClientBalance,
+  type PayFromBalanceInput,
 } from "../../services/apiPayments";
 import type { PaymentListFilters, RecordPaymentInput, RecordRefundInput } from "./paymentTypes";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
@@ -162,6 +165,49 @@ export function useDeleteFullyVoidedPayment() {
     },
     onError: (error: Error) => {
       toast.error(error.message || i18n.t("finance.payments.void.errors.deleteFailed"), { id: toastId });
+    },
+  });
+}
+
+export function payerBalanceQueryKey(workspaceId: string | undefined, orderId: string | null, invoiceId: string | null) {
+  return ["payer-balance", workspaceId, orderId ?? "", invoiceId ?? ""] as const;
+}
+
+/** Payer of an order / invoice and their balance (advance), for the payment form. One RPC call. */
+export function usePayerBalance(orderId: string | null | undefined, invoiceId: string | null | undefined) {
+  const { workspaceId } = useActiveWorkspaceId();
+  const order = orderId?.trim() || null;
+  const invoice = invoiceId?.trim() || null;
+  return useQuery({
+    queryKey: payerBalanceQueryKey(workspaceId, order, invoice),
+    queryFn: () => getPayerBalance(order, invoice),
+    enabled: Boolean(workspaceId && (order || invoice)),
+    staleTime: 15_000,
+  });
+}
+
+/** Pay from the client's balance; refreshes payments, orders, the client and its balance history. */
+export function usePayFromClientBalance() {
+  const queryClient = useQueryClient();
+  const { workspaceId } = useActiveWorkspaceId();
+  const guardWrite = useGuardSubscriptionWrite();
+  const toastId = "record-payment";
+  return useMutation({
+    mutationFn: (input: PayFromBalanceInput) => {
+      guardWrite();
+      return payFromClientBalance(input);
+    },
+    onMutate: () => {
+      toast.loading(i18n.t("finance.payments.toast.recording"), { id: toastId });
+    },
+    onSuccess: () => {
+      invalidatePaymentViews(queryClient, workspaceId);
+      void queryClient.invalidateQueries({ queryKey: ["payer-balance", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+      void queryClient.invalidateQueries({ queryKey: ["client_extensions", "balance", workspaceId] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || i18n.t("finance.payments.errors.saveFailed"), { id: toastId });
     },
   });
 }

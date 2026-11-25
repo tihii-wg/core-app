@@ -479,6 +479,7 @@ export function legacyUnreconciledTotal(items: LegacyUnreconciled[]): number {
 /** Map ledger method to expense-style PaymentMethod for shared Finance icons/labels where possible. */
 export function ledgerMethodToExpenseMethod(method: LedgerPaymentMethod): PaymentMethod {
   if (method === "bank_transfer") return "bank-transfer";
+  if (method === "client_balance") return "other";
   return method;
 }
 

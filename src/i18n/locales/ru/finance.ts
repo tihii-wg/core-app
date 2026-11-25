@@ -58,6 +58,21 @@ const finance: Messages<typeof en> = {
   invoiceDescription: "{{number}} · {{client}}",
   orderDescription: "Заказ {{number}}",
   paymentDescription: "{{label}}",
+  payFromBalance: {
+    clientBalanceTitle: "Баланс клиента",
+    clientBalanceValue: "{{name}}: {{amount}}",
+    clientBalanceAvailable: "У клиента есть баланс (аванс) {{amount}} — можно оплатить с баланса, выбрав способ «С баланса клиента».",
+    clientBalanceZero: "Баланс клиента: {{amount}}",
+    fromBalanceOption: "С баланса клиента (доступно {{amount}})",
+    fromBalanceHint: "Сумма спишется с баланса клиента, в кассу деньги не поступают — они были получены раньше как аванс.",
+    exceedsBalance: "На балансе клиента только {{amount}}",
+    toastFromBalance: "Оплачено с баланса клиента. Остаток баланса: {{amount}}",
+    errors: {
+      notInstalled: "Оплата с баланса появится после применения SQL 20261125190000_pay_from_client_balance.",
+      insufficient: "На балансе клиента недостаточно средств ({{amount}})",
+      noClient: "У заказа нет клиента — оплатить с баланса нельзя.",
+    },
+  },
   paymentMethods: {
     short: {
       cash: "Наличные",
@@ -65,6 +80,7 @@ const finance: Messages<typeof en> = {
       "bank-transfer": "Банк",
       bank_transfer: "Банк",
       other: "Другое",
+      client_balance: "С баланса",
     },
     full: {
       cash: "Наличные",
@@ -72,6 +88,7 @@ const finance: Messages<typeof en> = {
       "bank-transfer": "Банковский перевод",
       bank_transfer: "Банковский перевод",
       other: "Другое",
+      client_balance: "С баланса клиента",
     },
   },
   profitOverview: {

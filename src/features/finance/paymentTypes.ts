@@ -4,8 +4,14 @@
  * `bank-transfer` (hyphen) in `PaymentMethod`.
  */
 
-export const ledgerPaymentMethods = ["cash", "card", "bank_transfer", "other"] as const;
+export const ledgerPaymentMethods = ["cash", "card", "bank_transfer", "other", "client_balance"] as const;
 export type LedgerPaymentMethod = (typeof ledgerPaymentMethods)[number];
+
+/**
+ * Methods a user picks for a money movement. `client_balance` is not one of them: a payment from the
+ * client's advance is written by crm_pay_from_client_balance (payment + balance deduction together).
+ */
+export const manualLedgerPaymentMethods = ["cash", "card", "bank_transfer", "other"] as const;
 
 export const paymentKinds = ["payment", "refund", "void"] as const;
 export type PaymentKind = (typeof paymentKinds)[number];

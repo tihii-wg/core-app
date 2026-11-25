@@ -58,6 +58,21 @@ const finance: Messages<typeof en> = {
   invoiceDescription: "{{number}} · {{client}}",
   orderDescription: "Comanda {{number}}",
   paymentDescription: "{{label}}",
+  payFromBalance: {
+    clientBalanceTitle: "Soldul clientului",
+    clientBalanceValue: "{{name}}: {{amount}}",
+    clientBalanceAvailable: "Clientul are un sold (avans) de {{amount}} — puteți plăti din el alegând „Din soldul clientului”.",
+    clientBalanceZero: "Soldul clientului: {{amount}}",
+    fromBalanceOption: "Din soldul clientului (disponibil {{amount}})",
+    fromBalanceHint: "Suma se scade din soldul clientului; în casă nu intră bani — au fost primiți anterior ca avans.",
+    exceedsBalance: "În soldul clientului sunt doar {{amount}}",
+    toastFromBalance: "Plătit din soldul clientului. Sold rămas: {{amount}}",
+    errors: {
+      notInstalled: "Plata din sold va fi disponibilă după aplicarea SQL 20261125190000_pay_from_client_balance.",
+      insufficient: "Sold insuficient ({{amount}})",
+      noClient: "Comanda nu are client — nu se poate plăti din sold.",
+    },
+  },
   paymentMethods: {
     short: {
       cash: "Numerar",
@@ -65,6 +80,7 @@ const finance: Messages<typeof en> = {
       "bank-transfer": "Bancă",
       bank_transfer: "Bancă",
       other: "Altele",
+      client_balance: "Din sold",
     },
     full: {
       cash: "Numerar",
@@ -72,6 +88,7 @@ const finance: Messages<typeof en> = {
       "bank-transfer": "Transfer bancar",
       bank_transfer: "Transfer bancar",
       other: "Altele",
+      client_balance: "Din soldul clientului",
     },
   },
   profitOverview: {
