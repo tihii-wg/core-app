@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useEffect, useMemo, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { Trans, useTranslation } from "react-i18next";
@@ -41,6 +42,7 @@ type StatusFilter = "all" | "active" | "inactive";
 
 export function Services() {
   const { t } = useTranslation();
+  const fieldLabels = useFormFieldLayout("service");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -111,7 +113,7 @@ export function Services() {
   const columns: Column<Service>[] = [
     {
       key: "name",
-      header: t("services.columns.service"),
+      header: fieldLabels.label("serviceName", t("services.columns.service")),
       cell: (service) => {
         const inactive = service.status === "inactive";
         return (
@@ -130,14 +132,14 @@ export function Services() {
     },
     {
       key: "category",
-      header: t("services.columns.category"),
+      header: fieldLabels.label("category", t("services.columns.category")),
       className: "hidden sm:table-cell",
       cell: (service) =>
         service.category ? <StatusBadge variant="default">{serviceCategoryLabel(service.category, workflow.slug)}</StatusBadge> : <span className="text-subtle-foreground">—</span>,
     },
     {
       key: "price",
-      header: t("services.columns.price"),
+      header: fieldLabels.label("price", t("services.columns.price")),
       className: "text-right w-[140px] whitespace-nowrap",
       cell: (service) => (
         <span className={cn("font-semibold tabular-nums", service.status === "inactive" ? "text-muted-foreground" : "text-foreground")}>

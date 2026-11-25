@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { EllipsisVertical, Eye, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { InventoryItem } from "../../lib/types";
@@ -28,6 +29,7 @@ type InventoryCardProps = {
  */
 export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: InventoryCardProps) {
   const { t } = useTranslation();
+  const fieldLabels = useFormFieldLayout("product");
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
   return (
@@ -80,7 +82,7 @@ export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: I
 
       {item.supplier ? (
         <p className="mt-1 truncate text-[13px] text-muted-foreground">
-          {t("inventory.fields.supplier")}:{" "}
+          {fieldLabels.label("supplier", t("inventory.fields.supplier"))}:{" "}
           <SupplierLink supplier={item.supplier} className="text-[13px]" />
         </p>
       ) : null}
@@ -91,7 +93,7 @@ export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: I
           {item.quantity} {item.unit}
         </span>
         <span className="ml-auto text-right">
-          <span className="mr-1.5 text-xs text-muted-foreground">{t("inventory.fields.purchasePrice")}</span>
+          <span className="mr-1.5 text-xs text-muted-foreground">{fieldLabels.label("purchasePrice", t("inventory.fields.purchasePrice"))}</span>
           <span className="font-semibold tabular-nums text-foreground">{formatMoney(item.purchasePrice)}</span>
         </span>
       </div>

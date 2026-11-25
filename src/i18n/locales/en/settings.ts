@@ -417,7 +417,7 @@ export default {
   },
   formFields: {
     title: "Client, service and product form fields",
-    description: "Rename fields to fit your business, hide the ones you don't need and change their order. A new name only changes the text in the form — calculations and checks keep working.",
+    description: "Rename fields to fit your business, hide the ones you don't need and change their order. A new name is shown in forms, tables and cards; calculations and checks keep working.",
     readOnlyHint: "Read only. Changes need settings.forms and settings.general permissions and an active subscription.",
     entities: {
       client: "Client",

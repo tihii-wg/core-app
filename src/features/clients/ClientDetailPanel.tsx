@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClipboardList, EllipsisVertical, MapPin, Pencil, Phone, Plus, Trash2, Users, X } from "lucide-react";
@@ -124,6 +125,7 @@ export default function ClientDetailPanel({
   onCreateEstimate,
 }: ClientDetailPanelProps) {
   const { t } = useTranslation();
+  const fieldLabels = useFormFieldLayout("client");
   const { workflow } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
   const showVehicles = industrySupportsClientVehicles(workflow);
@@ -434,13 +436,13 @@ export default function ClientDetailPanel({
                           ) : null}
                           {isOrganization && contactPerson ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted-foreground">{t("clients.detail.contact")}</span>
+                              <span className="text-sm text-muted-foreground">{fieldLabels.label("contactPerson", t("clients.detail.contact"))}</span>
                               <span className="text-foreground">{contactPerson}</span>
                             </div>
                           ) : null}
                           {isOrganization && taxId ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-sm text-muted-foreground">{t("clients.detail.taxId")}</span>
+                              <span className="text-sm text-muted-foreground">{fieldLabels.label("taxId", t("clients.detail.taxId"))}</span>
                               <span className="text-foreground">{taxId}</span>
                             </div>
                           ) : null}
@@ -469,7 +471,7 @@ export default function ClientDetailPanel({
 
                     {notes ? (
                       <div>
-                        <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{t("clients.detail.notes")}</h3>
+                        <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-subtle-foreground">{fieldLabels.label("notes", t("clients.detail.notes"))}</h3>
                         <p className="whitespace-pre-wrap text-sm [overflow-wrap:anywhere] text-foreground">{notes}</p>
                       </div>
                     ) : null}

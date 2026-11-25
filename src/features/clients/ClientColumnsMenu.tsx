@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { Columns3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
@@ -18,10 +19,11 @@ type ClientColumnsMenuProps = {
 
 export function ClientColumnsMenu({ visibleColumns, onVisibleColumnsChange }: ClientColumnsMenuProps) {
   const { t } = useTranslation();
+  const fieldLabels = useFormFieldLayout("client");
 
   const labels: Record<ClientToggleableColumn, string> = {
-    clientType: t("clients.table.clientType"),
-    contact: t("clients.table.contact"),
+    clientType: fieldLabels.label("clientType", t("clients.table.clientType")),
+    contact: fieldLabels.label("phone", t("clients.table.contact")),
     orders: t("clients.table.orders"),
     balance: t("clients.table.balance"),
     created: t("clients.table.added"),

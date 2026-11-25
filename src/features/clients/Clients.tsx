@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useEffect, useMemo, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useSearchParams } from "react-router-dom";
@@ -45,6 +46,7 @@ import { getClient } from "../../services/apiClients";
 
 export function Clients() {
   const { t } = useTranslation();
+  const fieldLabels = useFormFieldLayout("client");
   const isMobile = useIsMobile();
   const { workflow } = useIndustryWorkflow();
   const clientCopy = industryClientCopy(workflow);
@@ -131,7 +133,7 @@ export function Clients() {
   const allColumns: Column<Client>[] = [
     {
       key: "name",
-      header: t("clients.table.name"),
+      header: fieldLabels.label("clientName", t("clients.table.name")),
       cell: (client) => (
         <span className="block max-w-[12rem] truncate font-medium text-foreground xl:max-w-[14rem] 2xl:max-w-[16rem]" title={client.name}>
           {client.name}
@@ -140,13 +142,13 @@ export function Clients() {
     },
     {
       key: "clientType",
-      header: t("clients.table.clientType"),
+      header: fieldLabels.label("clientType", t("clients.table.clientType")),
       cell: (client) => <ClientTypeBadge clientType={client.client_type} />,
     },
 
     {
       key: "contact",
-      header: t("clients.table.contact"),
+      header: fieldLabels.label("phone", t("clients.table.contact")),
       cell: (client) => (
         <div className="max-w-[12rem] min-w-0 space-y-0.5 xl:max-w-[13rem] 2xl:max-w-[15rem]">
           {client.phone ? (

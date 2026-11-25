@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
@@ -41,6 +42,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export default function InventoryDetailPanel({ item, open, isLoading, isError, onOpenChange, onEdit, onDelete, onRetry }: InventoryDetailPanelProps) {
   const { t, i18n } = useTranslation();
+  const fieldLabels = useFormFieldLayout("product");
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
   const { workspaceId } = useActiveWorkspaceId();
@@ -113,24 +115,24 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
             </div>
 
             <div className="divide-y divide-border border-y border-border">
-              {item.sku?.trim() ? <DetailRow label={t("inventory.fields.sku")} value={item.sku} /> : null}
-              {item.category?.trim() ? <DetailRow label={t("inventory.fields.category")} value={item.category} /> : null}
-              {item.description?.trim() ? <DetailRow label={t("inventory.fields.description")} value={item.description} /> : null}
-              <DetailRow label={t("inventory.fields.quantity")} value={`${item.quantity} ${item.unit}`} />
-              <DetailRow label={t("inventory.fields.minQuantity")} value={String(item.minQuantity)} />
-              <DetailRow label={t("inventory.fields.unit")} value={item.unit || "—"} />
-              <DetailRow label={t("inventory.fields.purchasePrice")} value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
-              <DetailRow label={t("inventory.fields.sellingPrice")} value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
+              {item.sku?.trim() ? <DetailRow label={fieldLabels.label("sku", t("inventory.fields.sku"))} value={item.sku} /> : null}
+              {item.category?.trim() ? <DetailRow label={fieldLabels.label("category", t("inventory.fields.category"))} value={item.category} /> : null}
+              {item.description?.trim() ? <DetailRow label={fieldLabels.label("description", t("inventory.fields.description"))} value={item.description} /> : null}
+              <DetailRow label={fieldLabels.label("quantity", t("inventory.fields.quantity"))} value={`${item.quantity} ${item.unit}`} />
+              <DetailRow label={fieldLabels.label("minQuantity", t("inventory.fields.minQuantity"))} value={String(item.minQuantity)} />
+              <DetailRow label={fieldLabels.label("unit", t("inventory.fields.unit"))} value={item.unit || "—"} />
+              <DetailRow label={fieldLabels.label("purchasePrice", t("inventory.fields.purchasePrice"))} value={formatWorkspaceMoney(item.purchasePrice, workspace?.currency)} />
+              <DetailRow label={fieldLabels.label("sellingPrice", t("inventory.fields.sellingPrice"))} value={formatWorkspaceMoney(item.sellingPrice, workspace?.currency)} />
               {item.supplier?.trim() ? (
                 <div className="flex items-start justify-between gap-4 py-2.5">
-                  <span className="shrink-0 text-[13px] text-muted-foreground">{t("inventory.fields.supplier")}</span>
+                  <span className="shrink-0 text-[13px] text-muted-foreground">{fieldLabels.label("supplier", t("inventory.fields.supplier"))}</span>
                   <SupplierLink
                     supplier={item.supplier}
                     className="min-w-0 text-right text-[13px] font-medium [overflow-wrap:anywhere]"
                   />
                 </div>
               ) : null}
-              {item.location?.trim() ? <DetailRow label={t("inventory.fields.location")} value={item.location} /> : null}
+              {item.location?.trim() ? <DetailRow label={fieldLabels.label("location", t("inventory.fields.location"))} value={item.location} /> : null}
               <DetailRow label={t("inventory.fields.created")} value={formatWorkspaceDate(item.createdAt, workspace?.dateFormat, workspace?.timezone)} />
               <DetailRow label={t("inventory.fields.updated")} value={formatWorkspaceDate(item.updatedAt, workspace?.dateFormat, workspace?.timezone)} />
             </div>

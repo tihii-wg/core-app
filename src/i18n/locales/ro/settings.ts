@@ -421,7 +421,7 @@ const settings: Messages<typeof en> = {
   },
   formFields: {
     title: "Câmpurile formularelor de client, serviciu și produs",
-    description: "Redenumiți câmpurile pentru afacerea dvs., ascundeți-le pe cele inutile și schimbați ordinea. Numele nou schimbă doar textul din formular — calculele și verificările funcționează la fel.",
+    description: "Redenumiți câmpurile pentru afacerea dvs., ascundeți-le pe cele inutile și schimbați ordinea. Numele nou apare în formulare, tabele și fișe; calculele și verificările funcționează la fel.",
     readOnlyHint: "Doar vizualizare. Modificările necesită permisiunile settings.forms și settings.general și un abonament activ.",
     entities: {
       client: "Client",

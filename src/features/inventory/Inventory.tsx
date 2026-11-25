@@ -1,3 +1,4 @@
+import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useEffect, useMemo, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useTranslation } from "react-i18next";
@@ -57,6 +58,7 @@ const sortOptions: { value: string; labelKey: SortLabelKey; field: InventorySort
 
 export function Inventory() {
   const { t } = useTranslation();
+  const fieldLabels = useFormFieldLayout("product");
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
@@ -146,7 +148,7 @@ export function Inventory() {
   const columns: Column<InventoryItem>[] = [
     {
       key: "name",
-      header: t("inventory.fields.name"),
+      header: fieldLabels.label("name", t("inventory.fields.name")),
       cell: (item) => (
         <div className="flex max-w-[13rem] min-w-0 items-center gap-2 xl:max-w-[14rem] 2xl:max-w-[18rem]">
           <p className="truncate font-medium text-foreground" title={item.name}>{item.name}</p>
@@ -156,13 +158,13 @@ export function Inventory() {
     },
     {
       key: "sku",
-      header: t("inventory.fields.sku"),
+      header: fieldLabels.label("sku", t("inventory.fields.sku")),
       cell: (item) => <span className="font-mono text-xs text-muted-foreground">{item.sku || "—"}</span>,
       className: "hidden sm:table-cell whitespace-nowrap",
     },
     {
       key: "supplier",
-      header: t("inventory.fields.supplier"),
+      header: fieldLabels.label("supplier", t("inventory.fields.supplier")),
       cell: (item) => (
         <SupplierLink
           supplier={item.supplier}
@@ -174,13 +176,13 @@ export function Inventory() {
     },
     {
       key: "category",
-      header: t("inventory.fields.category"),
+      header: fieldLabels.label("category", t("inventory.fields.category")),
       cell: (item) => <span className="block max-w-[10rem] truncate text-muted-foreground" title={item.category}>{item.category || "—"}</span>,
       className: "hidden xl:table-cell",
     },
     {
       key: "quantity",
-      header: t("inventory.fields.quantity"),
+      header: fieldLabels.label("quantity", t("inventory.fields.quantity")),
       cell: (item) => (
         <span className={cn("tabular-nums", quantityClass(item))}>
           {item.quantity} {item.unit}
@@ -195,13 +197,13 @@ export function Inventory() {
     },
     {
       key: "unit",
-      header: t("inventory.fields.unit"),
+      header: fieldLabels.label("unit", t("inventory.fields.unit")),
       cell: (item) => <span className="text-muted-foreground">{item.unit}</span>,
       className: "hidden 2xl:table-cell",
     },
     {
       key: "purchasePrice",
-      header: t("inventory.fields.purchasePrice"),
+      header: fieldLabels.label("purchasePrice", t("inventory.fields.purchasePrice")),
       cell: (item) => (
         <span className="font-medium tabular-nums">{formatWorkspaceMoney(item.purchasePrice, workspace?.currency)}</span>
       ),
