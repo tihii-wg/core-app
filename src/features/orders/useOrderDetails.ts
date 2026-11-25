@@ -1,3 +1,4 @@
+import { useClosedOrderActionPermissions } from "./useClosedOrderPermissions";
 import { preserveOrderLineComments } from "./applyOrderLineMutationCache";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -47,7 +48,9 @@ export function useOrderDetails() {
   const requireTaxInvoiceNumber = workspace?.requireTaxInvoiceNumber === true;
   // UI gate only — API re-checks workspaces.owner_id. Role "owner" is the membership
   // mirror of ownership; admin/manager do not unlock Paid.
-  const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole());
+  // Owner, or a role with «Полный доступ (как у владельца)» (Paid lock on board / status changes).
+  const closedOrderPerms = useClosedOrderActionPermissions();
+  const isWorkspaceOwner = canManageWorkspace(useActiveWorkspaceRole()) || closedOrderPerms.actsAsOwnerForClosedOrders;
   const [detailPanelOpen, setDetailPanelOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 

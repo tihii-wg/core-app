@@ -151,7 +151,6 @@ function OrderActionsMenuFull({
   const isWorkspaceOwner = canManageWorkspace(workspaceRole);
   const isOwnerByOwnerId = useIsWorkspaceOwnerId();
   const { canWrite } = useWorkspaceSubscription();
-  const paidLocked = isOrderPaidLocked(order, isWorkspaceOwner);
   const paidBlocked = isPaidStatusOptionBlocked(order, requireTaxInvoiceNumber);
   const deleteOrder = useDeleteOrder();
   const printOrder = usePrintOrderDocument();
@@ -177,6 +176,8 @@ function OrderActionsMenuFull({
     grants: closedOrderPerms.grants,
   });
   const actsAsOwnerForClosed = closedOrderPerms.actsAsOwnerForClosedOrders;
+  // Paid lock: owner, or a role with «Полный доступ (как у владельца)».
+  const paidLocked = isOrderPaidLocked(order, isWorkspaceOwner || actsAsOwnerForClosed);
   // Same gate as PaymentHistorySection + closed-content lock (no recording on locked closed orders).
   const canRecordPayment =
     visibility.showPayments &&

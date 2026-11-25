@@ -3281,6 +3281,19 @@ export async function isWorkspaceOwnerIdOnServer(workspaceId: string) {
 }
 
 /**
+ * Owner for closed / cancelled orders and Paid lock: workspaces.owner_id OR a role with
+ * «Полный доступ (как у владельца)» (orders.closed_full_access) — decided by the DB helper
+ * crm_acts_as_owner_for_closed_orders, the same check the lifecycle RPCs use. Falls back to owner_id
+ * when that SQL is not applied.
+ */
+export async function actsAsOwnerForClosedOrdersOnServer(workspaceId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("crm_acts_as_owner_for_closed_orders", { p_workspace_id: workspaceId });
+  if (!error) return data === true;
+  if (isMissingRpcError(error, "crm_acts_as_owner_for_closed_orders")) return isWorkspaceOwnerIdOnServer(workspaceId);
+  throw new Error(error.message);
+}
+
+/**
  * True only when auth.uid() is workspaces.owner_id AND owner_can_manage_closed_orders.
  * Never trusts membership role or client-supplied flags.
  */
@@ -3309,7 +3322,7 @@ export async function assertClosedOrderMutableOnServer(orderId: string, workspac
   if (!(Boolean(closedAt) || status === "closed")) return;
 
   if (status === "cancelled") {
-    if (await isWorkspaceOwnerIdOnServer(workspaceId)) return;
+    if (await actsAsOwnerForClosedOrdersOnServer(workspaceId)) return;
     throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
 
@@ -3880,10 +3893,10 @@ export async function updateOrderStatus(
         : null;
   }
 
-  // Cancelled → open: owner_id only via reopen RPC (clears closed_at). Independent of manage-closed.
+  // Cancelled → open via the reopen RPC (clears closed_at): owner_id or «full access (as owner)» role.
+  // Independent of manage-closed.
   if (currentStatus === "cancelled") {
-    const gate = await getWorkspaceOwnerGate(targetWorkspaceId);
-    if (!gate.isOwner) {
+    if (!(await actsAsOwnerForClosedOrdersOnServer(targetWorkspaceId))) {
       throw new Error(i18n.t("orders.lifecycle.errors.orderAlreadyCancelled"));
     }
 
@@ -3949,8 +3962,8 @@ export async function updateOrderStatus(
       };
     }
     if (status !== "paid") {
-      const gate = await getWorkspaceOwnerGate(targetWorkspaceId);
-      ownerMayChangePaid = gate.isOwner;
+      // Paid lock: owner_id or a «full access (as owner)» role.
+      ownerMayChangePaid = await actsAsOwnerForClosedOrdersOnServer(targetWorkspaceId);
       if (!ownerMayChangePaid) {
         throw new Error(i18n.t("orders.errors.paidStatusLocked"));
       }
@@ -4251,7 +4264,7 @@ async function assertOrderRowContentEditable(workspaceId: string, existingOrder:
   const existingClosedAt = typeof row.closed_at === "string" ? row.closed_at : null;
   const isClosedRow = Boolean(existingClosedAt) || existingStatus === "closed";
   if (!isClosedRow) return;
-  if (existingStatus !== "cancelled" || !(await isWorkspaceOwnerIdOnServer(workspaceId))) {
+  if (existingStatus !== "cancelled" || !(await actsAsOwnerForClosedOrdersOnServer(workspaceId))) {
     throw new Error(i18n.t("orders.lifecycle.errors.closedOrderImmutable"));
   }
 }

@@ -96,7 +96,9 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
   const { mutateAsync: setEstimateStatusAsync, isPending: isSettingEstimateStatus } = useSetEstimateStatus();
 
   const taxInvoiceRequired = workspace?.requireTaxInvoiceNumber === true;
-  const paidStatusLocked = !estimate && order != null && isOrderPaidLocked(order, isWorkspaceOwner);
+  // Paid lock: owner, or a role with «Полный доступ (как у владельца)».
+  const paidStatusLocked =
+    !estimate && order != null && isOrderPaidLocked(order, isWorkspaceOwner || actsAsOwnerForClosed);
   const lifecycleStatusLocked =
     !estimate &&
     order != null &&
@@ -279,7 +281,7 @@ export function useOrderStatusChange(order: Order | null | undefined, opts: UseO
         }
       }
 
-      if (isOrderPaidLocked(order, isWorkspaceOwner)) {
+      if (isOrderPaidLocked(order, isWorkspaceOwner || actsAsOwnerForClosed)) {
         return { ok: false, reason: t("orders.errors.paidStatusLocked") };
       }
 
