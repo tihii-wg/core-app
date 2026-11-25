@@ -39,7 +39,7 @@ describe("InventoryItemCombobox", () => {
     await user.type(screen.getByPlaceholderText("Search parts and materials..."), "Synthetic oil");
 
     expect(screen.getByText("No matching inventory items")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "+ Create new material" }));
+    await user.click(screen.getByRole("button", { name: "Create new material" }));
     expect(onCreateRequest).toHaveBeenCalledWith("Synthetic oil");
   });
 
@@ -63,7 +63,7 @@ describe("InventoryItemCombobox", () => {
     await user.type(screen.getByPlaceholderText("Search parts and materials..."), "Brake");
 
     expect(screen.getByRole("button", { name: /Brake pads/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "+ Create new material" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create new material" })).not.toBeInTheDocument();
   });
 
   it("selects a matching item", async () => {
