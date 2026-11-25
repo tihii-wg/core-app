@@ -35,6 +35,8 @@ export default {
     mileageTitle: "Kilometraj",
     mileageHint: "Se salvează ca kilometraj curent al acestui vehicul. Istoricul comenzilor nu se modifică.",
     orderHistoryTitle: "Istoric comenzi",
+    orderHistoryTitleWithCount: "Istoricul comenzilor ({{count}})",
+    visitNumber: "Vizita nr. {{number}}",
     noOrders: "Nu există comenzi",
     noOrdersHint: "Comenzile asociate acestui vehicul vor apărea aici.",
     ordersLoadFailed: "Comenzile nu au putut fi încărcate",

@@ -157,7 +157,11 @@ export function VehicleDetailPanel({
                 </div>
 
                 <div className="border-t border-border pt-5">
-                  <h3 className="mb-3 text-xs font-medium text-muted-foreground">{t("vehicles.details.orderHistoryTitle")}</h3>
+                  <h3 className="mb-3 text-xs font-medium text-muted-foreground" data-testid="vehicle-order-history-title">
+                    {!ordersLoading && !ordersError && orders.length > 0
+                      ? t("vehicles.details.orderHistoryTitleWithCount", { count: orders.length })
+                      : t("vehicles.details.orderHistoryTitle")}
+                  </h3>
                   {ordersLoading ? (
                     <div className="space-y-2">
                       <Skeleton className="h-12 w-full" />
@@ -178,7 +182,9 @@ export function VehicleDetailPanel({
                     </div>
                   ) : (
                     <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-                      {orders.map((order) => {
+                      {orders.map((order, index) => {
+                        // Newest first; visit number counts from the oldest order (1 = first visit).
+                        const visitNumber = orders.length - index;
                         const secondary = [order.service?.trim(), order.description?.trim()].filter(Boolean).join(" · ");
                         const visitMileage =
                           order.vehicleMileageSnapshot != null
@@ -199,6 +205,12 @@ export function VehicleDetailPanel({
                             >
                               <span className="min-w-0 flex-1">
                                 <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                                  <span
+                                    className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground tabular-nums"
+                                    title={t("vehicles.details.visitNumber", { number: visitNumber })}
+                                  >
+                                    {visitNumber}
+                                  </span>
                                   <span className="text-sm font-medium text-primary tabular-nums">{order.orderNumber}</span>
                                   <OrderStatusBadge status={order.status} customStatus={order.customStatus} />
                                 </span>

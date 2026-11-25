@@ -35,6 +35,8 @@ export default {
     mileageTitle: "Пробег",
     mileageHint: "Сохраняется как текущий пробег этого транспорта. История заказов не меняется.",
     orderHistoryTitle: "История заказов",
+    orderHistoryTitleWithCount: "История заказов ({{count}})",
+    visitNumber: "Визит №{{number}}",
     noOrders: "Заказов пока нет",
     noOrdersHint: "Заказы, связанные с этим транспортом, появятся здесь.",
     ordersLoadFailed: "Не удалось загрузить заказы",

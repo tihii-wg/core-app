@@ -35,6 +35,8 @@ export default {
     mileageTitle: "Mileage",
     mileageHint: "Saves as this vehicle's current mileage. Linked order history is not changed.",
     orderHistoryTitle: "Order history",
+    orderHistoryTitleWithCount: "Order history ({{count}})",
+    visitNumber: "Visit #{{number}}",
     noOrders: "No orders yet",
     noOrdersHint: "Orders linked to this vehicle will show up here.",
     ordersLoadFailed: "Could not load orders",
