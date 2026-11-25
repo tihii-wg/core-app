@@ -8,23 +8,32 @@ function isMissingProblemColumn(error: { code?: string; message?: string } | nul
 
 export class ProblemClientsUnavailableError extends Error {}
 
+/** Batch size of one `id=in.(…)` request (URL length). */
+const CHUNK = 150;
+
 /**
- * Ids of the workspace's clients flagged as problem clients (SQL 20261125224000_problem_clients).
- * One small request; an empty set before the SQL is applied.
+ * Problem flags for the given clients only (SQL 20261125224000_problem_clients): the clients shown on
+ * the current page, not every client of the workspace. All false before the SQL is applied.
  */
-export async function getProblemClientIds(workspaceId: string): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from("clients")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("is_problem", true)
-    .is("deleted_at", null)
-    .limit(5000);
-  if (error) {
-    if (isMissingProblemColumn(error)) return new Set();
-    throw new Error(error.message);
+export async function getProblemFlags(workspaceId: string, clientIds: string[]): Promise<Map<string, boolean>> {
+  const ids = [...new Set(clientIds.filter(Boolean))];
+  const result = new Map<string, boolean>(ids.map((id) => [id, false]));
+  if (ids.length === 0) return result;
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += CHUNK) chunks.push(ids.slice(index, index + CHUNK));
+  const parts = await Promise.all(
+    chunks.map((chunk) =>
+      supabase.from("clients").select("id").eq("workspace_id", workspaceId).eq("is_problem", true).in("id", chunk),
+    ),
+  );
+  for (const { data, error } of parts) {
+    if (error) {
+      if (isMissingProblemColumn(error)) return result;
+      throw new Error(error.message);
+    }
+    for (const row of data ?? []) result.set(String((row as { id: unknown }).id), true);
   }
-  return new Set((data ?? []).map((row) => String((row as { id: unknown }).id)));
+  return result;
 }
 
 export async function setClientProblem(workspaceId: string, clientId: string, isProblem: boolean): Promise<void> {

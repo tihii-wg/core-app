@@ -1,34 +1,50 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
-import { getProblemClientIds, setClientProblem } from "../../services/apiProblemClients";
+import { getProblemFlags, setClientProblem } from "../../services/apiProblemClients";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 
-export function problemClientsQueryKey(workspaceId: string | undefined) {
-  return ["problem-clients", workspaceId] as const;
+export function problemClientQueryKey(workspaceId: string | undefined, clientId: string) {
+  return ["problem-client", workspaceId, clientId] as const;
 }
 
-const EMPTY = new Set<string>();
-
 /**
- * Flagged («problem») clients of the active workspace. Every name renderer shares this one cached query,
- * so marking names across lists costs one small request per workspace.
+ * Batches the flag lookups of every client name rendered in the same tick (one page of a list) into one
+ * request for exactly those clients; each flag is then cached per client.
  */
-export function useProblemClientIds() {
-  const { workspaceId } = useActiveWorkspaceId();
-  const { data } = useQuery({
-    queryKey: problemClientsQueryKey(workspaceId),
-    queryFn: () => getProblemClientIds(workspaceId!),
-    enabled: Boolean(workspaceId),
-    staleTime: 5 * 60_000,
+const pending = new Map<string, { ids: Set<string>; waiters: Array<{ id: string; resolve: (v: boolean) => void; reject: (e: unknown) => void }> }>();
+
+function loadProblemFlag(workspaceId: string, clientId: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    let batch = pending.get(workspaceId);
+    if (!batch) {
+      batch = { ids: new Set(), waiters: [] };
+      pending.set(workspaceId, batch);
+      setTimeout(() => {
+        const current = pending.get(workspaceId);
+        pending.delete(workspaceId);
+        if (!current) return;
+        getProblemFlags(workspaceId, [...current.ids]).then(
+          (flags) => current.waiters.forEach((w) => w.resolve(flags.get(w.id) === true)),
+          (error) => current.waiters.forEach((w) => w.reject(error)),
+        );
+      }, 0);
+    }
+    batch.ids.add(clientId);
+    batch.waiters.push({ id: clientId, resolve, reject });
   });
-  return data ?? EMPTY;
 }
 
 export function useIsProblemClient(clientId: string | null | undefined): boolean {
-  const ids = useProblemClientIds();
-  const id = clientId?.trim();
-  return Boolean(id && ids.has(id));
+  const { workspaceId } = useActiveWorkspaceId();
+  const id = clientId?.trim() ?? "";
+  const { data } = useQuery({
+    queryKey: problemClientQueryKey(workspaceId, id),
+    queryFn: () => loadProblemFlag(workspaceId!, id),
+    enabled: Boolean(workspaceId && id),
+    staleTime: 5 * 60_000,
+  });
+  return data === true;
 }
 
 export function useSetClientProblem() {
@@ -38,24 +54,18 @@ export function useSetClientProblem() {
     mutationFn: ({ clientId, isProblem }: { clientId: string; isProblem: boolean }) =>
       setClientProblem(workspaceId!, clientId, isProblem),
     onMutate: ({ clientId, isProblem }) => {
-      // Show the mark at once everywhere.
-      const key = problemClientsQueryKey(workspaceId);
-      const previous = queryClient.getQueryData<Set<string>>(key);
-      const next = new Set(previous ?? []);
-      if (isProblem) next.add(clientId);
-      else next.delete(clientId);
-      queryClient.setQueryData(key, next);
+      // Show / hide the mark at once everywhere this client is on screen.
+      const key = problemClientQueryKey(workspaceId, clientId);
+      const previous = queryClient.getQueryData<boolean>(key);
+      queryClient.setQueryData(key, isProblem);
       return { previous };
     },
-    onError: (error: Error, _vars, context) => {
-      queryClient.setQueryData(problemClientsQueryKey(workspaceId), context?.previous);
+    onError: (error: Error, { clientId }, context) => {
+      queryClient.setQueryData(problemClientQueryKey(workspaceId, clientId), context?.previous ?? false);
       toast.error(error.message || i18n.t("common.somethingWentWrong"));
     },
     onSuccess: (_data, { isProblem }) => {
       toast.success(i18n.t(isProblem ? "clients.problem.marked" : "clients.problem.unmarked"), { id: "client-problem" });
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: problemClientsQueryKey(workspaceId), exact: true });
     },
   });
 }

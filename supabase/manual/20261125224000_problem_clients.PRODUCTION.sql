@@ -5,9 +5,6 @@
 
 alter table public.clients add column if not exists is_problem boolean not null default false;
 
--- The app reads only the flagged clients of a workspace (small list) in one request.
-create index if not exists clients_problem_idx
-  on public.clients (workspace_id)
-  where is_problem and deleted_at is null;
+-- The app looks flags up only for the clients on the current page (by primary key, batched).
 
 -- Check: select id, name from public.clients where is_problem;
