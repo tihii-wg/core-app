@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Pencil } from "lucide-react";
 import { cn } from "../../../lib/utils";
@@ -21,6 +21,8 @@ export type OrderDetailHeaderProps = {
   materialsLabel: string;
   detailSrDescription: string;
   onStartEdit: () => void;
+  /** «⋮» order actions (print, status, close, cancel, invoice, link, delete…), left of the pencil. */
+  actionsMenu?: ReactNode;
 };
 
 /** Header — React.memo; only receives static order props (not editing-field targets). */
@@ -36,6 +38,7 @@ function OrderDetailHeaderComponent({
   materialsLabel,
   detailSrDescription,
   onStartEdit,
+  actionsMenu,
 }: OrderDetailHeaderProps) {
   const { t } = useTranslation();
   const visibility = estimateCardVisibility(selectedOrder);
@@ -45,8 +48,8 @@ function OrderDetailHeaderComponent({
     <SheetHeader
       className={cn(
         "shrink-0 space-y-2",
-        // Room for pencil + close; larger tap targets on phones (>= 44px).
-        "pr-14 sm:pr-24",
+        // Room for ⋮ + pencil + close; larger tap targets on phones (>= 44px).
+        actionsMenu ? "pr-[8.5rem] sm:pr-32" : "pr-14 sm:pr-24",
         "[&_[data-slot=sheet-close]]:size-11 sm:[&_[data-slot=sheet-close]]:size-8",
       )}
     >
@@ -98,6 +101,17 @@ function OrderDetailHeaderComponent({
           <Pencil className="size-4" />
         </button>
       )}
+      {!isEditing && actionsMenu ? (
+        <div
+          className={cn(
+            "absolute top-3 inline-flex sm:top-3.5",
+            canEditOrder && !closedContentLocked ? "right-[6.25rem] sm:right-[5.25rem]" : "right-14 sm:right-12",
+          )}
+          data-testid="order-detail-actions-menu"
+        >
+          {actionsMenu}
+        </div>
+      ) : null}
       <SheetDescription className="sr-only">{detailSrDescription}</SheetDescription>
     </SheetHeader>
   );

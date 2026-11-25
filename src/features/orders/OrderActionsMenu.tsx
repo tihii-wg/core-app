@@ -88,6 +88,8 @@ type OrderActionsMenuProps = {
   triggerClassName?: string;
   /** Open on mount (the lightweight trigger mounts the full menu on the first click). */
   defaultOpen?: boolean;
+  /** Inside the order card: no «Открыть детали» (the card is already open). */
+  hideViewDetails?: boolean;
 };
 
 /**
@@ -137,6 +139,7 @@ function OrderActionsMenuFull({
   onOrderUpdated,
   triggerClassName,
   defaultOpen = false,
+  hideViewDetails = false,
 }: OrderActionsMenuProps) {
   const { t } = useTranslation();
   const confirm = useConfirm();
@@ -282,10 +285,12 @@ function OrderActionsMenuFull({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-60" onClick={stop}>
-          <DropdownMenuItem onSelect={() => onView(order)}>
-            <Eye />
-            {t("orders.actions.viewDetails")}
-          </DropdownMenuItem>
+          {hideViewDetails ? null : (
+            <DropdownMenuItem onSelect={() => onView(order)}>
+              <Eye />
+              {t("orders.actions.viewDetails")}
+            </DropdownMenuItem>
+          )}
           {canWrite ? (
             <DropdownMenuItem onSelect={() => setTaskOpen(true)}>
               <ClipboardList />

@@ -329,6 +329,9 @@ export function useOrderDetailModel({
     onOrderUpdated,
     isStatusUpdating,
     onDeleted,
+    // For the header «⋮» actions menu (same menu as order rows).
+    invoiceNumber,
+    onLegacyStatusChange: onStatusChange,
     onOpenClient,
     confirm,
     sheetContentRef,

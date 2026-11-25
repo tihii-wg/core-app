@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../../ui/Sheet";
@@ -19,6 +20,8 @@ import { customEditFieldKey } from "../orderFieldRegistry";
 import { customInlineKind } from "./detailHelpers";
 import { useStableCallback, useStableHandlers } from "./useStableCallback";
 import { OrderInlineField } from "../OrderInlineField";
+import { OrderActionsMenu } from "../OrderActionsMenu";
+import { useCreateInvoice } from "../../invoices/useCreateInvoice";
 
 /** Presentational sheet for order detail — receives a precomputed view model from the panel shell. */
 export function OrderDetailSheet(p: Record<string, any>) {
@@ -57,6 +60,46 @@ export function OrderDetailSheet(p: Record<string, any>) {
     editFocusField, deleteOrderMutateAsync, editServiceLineId, setEditServiceLineId,
     editMaterialLineId, setEditMaterialLineId, mileageConfirmDialogProps, linkedVehicle,
   } = p;
+
+  // «⋮» in the header: the same actions menu as the order rows (print, status, close, cancel, invoice,
+  // task, public link, delete). It mounts its heavy part only on the first click.
+  const createInvoice = useCreateInvoice();
+  const menuHandlers = useStableHandlers({
+    view: () => undefined,
+    edit: () => onStartEdit(),
+    legacyStatus: (_order: unknown, status: unknown) => p.onLegacyStatusChange?.(status),
+    createInvoice: (order: { id: string }) => {
+      if (!createInvoice.isPending) createInvoice.mutate(order.id);
+    },
+    deleted: (orderId: string) => {
+      onDeleted?.(orderId);
+      setDetailPanelOpen(false);
+    },
+    orderUpdated: (order: Parameters<typeof onOrderUpdated>[0]) => onOrderUpdated(order),
+  });
+  const actionsMenu = useMemo(
+    () =>
+      selectedOrder ? (
+        <OrderActionsMenu
+          key={selectedOrder.id}
+          order={selectedOrder}
+          invoiceNumber={p.invoiceNumber}
+          linkedPaymentCount={linkedPaymentCount}
+          isCreatingInvoice={createInvoice.isPending}
+          isStatusUpdating={isStatusUpdating}
+          requireTaxInvoiceNumber={taxInvoiceRequired}
+          hideViewDetails
+          triggerClassName="size-11 text-muted-foreground sm:size-8"
+          onView={menuHandlers.view}
+          onEdit={menuHandlers.edit}
+          onStatusChange={menuHandlers.legacyStatus}
+          onCreateInvoice={menuHandlers.createInvoice}
+          onDeleted={menuHandlers.deleted}
+          onOrderUpdated={menuHandlers.orderUpdated}
+        />
+      ) : null,
+    [selectedOrder, p.invoiceNumber, linkedPaymentCount, createInvoice.isPending, isStatusUpdating, taxInvoiceRequired, menuHandlers],
+  );
 
   // Stable event handlers: memoized children (header, tabs, line tables/rows, footer) only re-render when
   // their data changes, not because a new arrow function was created on this render.
@@ -152,6 +195,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
             materialsLabel={t("orders.detail.materials")}
             detailSrDescription={copy.detailSrDescription}
             onStartEdit={onStartEdit}
+            actionsMenu={actionsMenu}
           />
         ) : (
           <SheetHeader
