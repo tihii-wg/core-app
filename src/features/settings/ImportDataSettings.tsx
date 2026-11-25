@@ -49,6 +49,7 @@ export function ImportDataSettings() {
   const [withBalances, setWithBalances] = useState(true);
   const [withPayments, setWithPayments] = useState(true);
   const [withStock, setWithStock] = useState(true);
+  const [stockForExisting, setStockForExisting] = useState(false);
   const [warehouseId, setWarehouseId] = useState<string>("");
   const [progress, setProgress] = useState<RoImportProgress | null>(null);
   const [running, setRunning] = useState(false);
@@ -109,6 +110,7 @@ export function ImportDataSettings() {
           withBalances,
           withPayments,
           stockWarehouseId: parsed.kind === "materials" && withStock ? effectiveWarehouseId || null : null,
+          stockForExisting: parsed.kind === "materials" && withStock && stockForExisting,
         },
         setProgress,
       );
@@ -300,6 +302,15 @@ export function ImportDataSettings() {
                         </Select>
                       </div>
                     ) : null}
+                    {withStock && activeWarehouses.length > 0 ? (
+                      <OptionSwitch
+                        label={t("settings.importData.options.stockExisting")}
+                        hint={t("settings.importData.options.stockExistingHint")}
+                        checked={stockForExisting}
+                        disabled={running}
+                        onChange={setStockForExisting}
+                      />
+                    ) : null}
                   </>
                 ) : null}
                 {parsed.kind === "orders" ? (
@@ -356,6 +367,9 @@ export function ImportDataSettings() {
                       {result.lines > 0 ? <li>{t("settings.importData.result.lines", { count: result.lines })}</li> : null}
                       {result.payments > 0 ? <li>{t("settings.importData.result.payments", { count: result.payments })}</li> : null}
                       {result.balances > 0 ? <li>{t("settings.importData.result.balances", { count: result.balances })}</li> : null}
+                      {result.stockSkipped > 0 ? (
+                        <li>{t("settings.importData.result.stockSkipped", { count: result.stockSkipped })}</li>
+                      ) : null}
                       {result.stockItems > 0 ? (
                         <li>{t("settings.importData.result.stockItems", { count: result.stockItems })}</li>
                       ) : null}

@@ -10,6 +10,11 @@ export type RoImportOptions = {
   withBalances?: boolean;
   /** Parts: post one goods receipt with the RO stock into this warehouse. */
   stockWarehouseId?: string | null;
+  /**
+   * Parts: also post the RO stock for parts that already exist in the app with zero quantity
+   * (needs 20261125150000_ro_import_stock_existing). Parts that already hold stock are never topped up.
+   */
+  stockForExisting?: boolean;
   /** Orders: record the paid amount as a payment. */
   withPayments?: boolean;
 };
@@ -27,6 +32,8 @@ export type RoImportResult = {
   payments: number;
   balances: number;
   stockItems: number;
+  /** Existing parts left alone because they already hold stock. */
+  stockSkipped: number;
 };
 
 /** Rows per call: one call = one transaction on the server; sized to stay well under request limits. */
@@ -58,7 +65,7 @@ function chunks<T>(rows: readonly T[], size: number): T[][] {
 }
 
 function emptyResult(): RoImportResult {
-  return { created: 0, linked: 0, skipped: 0, duplicates: 0, vehicles: 0, clients: 0, lines: 0, payments: 0, balances: 0, stockItems: 0 };
+  return { created: 0, linked: 0, skipped: 0, duplicates: 0, vehicles: 0, clients: 0, lines: 0, payments: 0, balances: 0, stockItems: 0, stockSkipped: 0 };
 }
 
 function addStats(total: RoImportResult, stats: Record<string, unknown> | null) {
@@ -73,6 +80,7 @@ function addStats(total: RoImportResult, stats: Record<string, unknown> | null) 
   total.lines += num("lines");
   total.payments += num("payments");
   total.balances += num("balances");
+  total.stockSkipped += num("stock_skipped");
 }
 
 /**
@@ -94,6 +102,7 @@ export async function runRoImport(
   const call = async (name: string, args: Record<string, unknown>) => {
     const { data, error } = await supabase.rpc(name, args);
     if (error) {
+      if ("p_stock_existing" in args && isMissingRpcError(error, name)) throw new Error(i18n.t("settings.importData.errors.stockExistingNotInstalled"));
       if (isMissingRpcError(error, name)) throw new RoImportNotInstalledError();
       throw mapImportError(error);
     }
@@ -110,7 +119,13 @@ export async function runRoImport(
     }
   } else if (parsed.kind === "services" || parsed.kind === "materials") {
     for (const part of chunks(parsed.rows as readonly unknown[], CHUNK.catalog)) {
-      const stats = await call(RPC.catalog, { p_workspace_id: ws, p_kind: parsed.kind, p_rows: part });
+      const stats = await call(RPC.catalog, {
+        p_workspace_id: ws,
+        p_kind: parsed.kind,
+        p_rows: part,
+        // Sent only when asked: older databases have the 3-argument function.
+        ...(parsed.kind === "materials" && options.stockWarehouseId && options.stockForExisting ? { p_stock_existing: true } : {}),
+      });
       addStats(result, stats);
       if (Array.isArray(stats?.stock)) {
         for (const item of stats.stock as Array<{ id: string; name: string; qty: number; cost: number }>) stock.push(item);
@@ -129,15 +144,22 @@ export async function runRoImport(
   // Opening stock goes through the normal warehouse flow (one posted goods receipt) so balances, batches and the
   // movement history stay consistent with everything else in the app.
   if (parsed.kind === "materials" && options.stockWarehouseId && stock.length > 0) {
+    // One line per item: the same part can come back from several rows (same name) — quantities add up.
+    const byId = new Map<string, { id: string; name: string; qty: number; cost: number }>();
+    for (const item of stock) {
+      const current = byId.get(item.id);
+      byId.set(item.id, current ? { ...current, qty: current.qty + item.qty } : { ...item });
+    }
+    const lines = [...byId.values()];
     await createAndPostGoodsReceipt(
       {
         warehouseId: options.stockWarehouseId,
         comment: i18n.t("settings.importData.stockReceiptComment"),
-        lines: stock.map((item) => ({ inventoryItemId: item.id, itemName: item.name, quantity: item.qty, unitCost: item.cost })),
+        lines: lines.map((item) => ({ inventoryItemId: item.id, itemName: item.name, quantity: item.qty, unitCost: item.cost })),
       },
       ws,
     );
-    result.stockItems = stock.length;
+    result.stockItems = lines.length;
   }
 
   return result;
