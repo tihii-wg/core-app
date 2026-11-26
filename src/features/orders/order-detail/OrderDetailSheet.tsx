@@ -107,7 +107,17 @@ export function OrderDetailSheet(p: Record<string, any>) {
     statusSelect: (value: string) => {
       void handleStatusSelect(value);
     },
-    selectTab: (tab: Parameters<typeof selectDetailTab>[0]) => void selectDetailTab(tab),
+    selectTab: (tab: Parameters<typeof selectDetailTab>[0]) => {
+      void selectDetailTab(tab);
+      // Phones (one scroll for the whole sheet): a new tab starts right under the pinned tab bar.
+      const sheet = sheetContentRef?.current as HTMLElement | null | undefined;
+      // The pinned bar reports its stuck position, so the target is measured from the content below it.
+      const bar = sheet?.querySelector<HTMLElement>('[data-testid="order-detail-tabs"]');
+      const content = sheet?.querySelector<HTMLElement>("[data-order-detail-layout]");
+      if (!sheet || !bar || !content || sheet.scrollHeight <= sheet.clientHeight) return;
+      const target = Math.max(0, content.offsetTop - bar.offsetHeight);
+      if (sheet.scrollTop > target) sheet.scrollTop = target;
+    },
     orderUpdated: (order: Parameters<typeof onOrderUpdated>[0]) => onOrderUpdated(order),
     openClient: (clientId: string) => onOpenClient?.(clientId),
     changeClientRequest: () => setChangeClientOpen(true),
@@ -160,7 +170,12 @@ export function OrderDetailSheet(p: Record<string, any>) {
     <Sheet open={detailPanelOpen} onOpenChange={handleOpenChange}>
       <SheetContent
         ref={sheetContentRef}
-        className="flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]"
+        className={cn(
+          "flex w-full flex-col gap-0 overflow-hidden sm:max-w-lg lg:max-w-[min(1100px,calc(100vw-2rem))]",
+          // Phones: the header, status and tabs scroll away with the content (tabs stay pinned on top, the footer
+          // at the bottom) instead of keeping a third of the screen for the content.
+          "max-sm:overflow-y-auto max-sm:overscroll-contain",
+        )}
         onEscapeKeyDown={(event) => {
           // Esc while a field / service line / change-client dialog is active must not close the sheet.
           if (
@@ -235,7 +250,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
 
         {selectedOrder ? (
           <div
-            className={cn("flex min-h-0 flex-1", isDesktopFeedLayout ? "flex-row" : "flex-col")}
+            className={cn("flex min-h-0 flex-1 max-sm:flex-none", isDesktopFeedLayout ? "flex-row" : "flex-col")}
             data-order-detail-layout={isDesktopFeedLayout ? "desktop" : "mobile"}
           >
             <div
@@ -243,7 +258,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
               data-testid="order-detail-main"
               aria-hidden={!showOrderColumn}
             >
-              <div className="min-h-0 flex-1 overflow-y-auto" data-testid="order-detail-scroll">
+              <div className="min-h-0 flex-1 overflow-y-auto max-sm:flex-none max-sm:overflow-visible" data-testid="order-detail-scroll">
               {isEditing ? (
                 <div className="space-y-5 px-5 py-5">
                   <EditOrderForm
@@ -267,7 +282,14 @@ export function OrderDetailSheet(p: Record<string, any>) {
                   />
                 </div>
               ) : (
-                <div className="space-y-5 px-5 py-5">
+                <div
+                  className={cn(
+                    "space-y-5 px-5 py-5",
+                    // Phones: a little more width for the content, and amounts in the line tables wrap between
+                    // words ("MDL" / "100,00") instead of inside the number ("100,0" / "0").
+                    "max-sm:px-3 max-sm:py-4 max-sm:[&_td_*]:[overflow-wrap:break-word] max-sm:[&_td]:[overflow-wrap:break-word]",
+                  )}
+                >
             {detailTab === "info" ? (
               <OrderInfoTab
                 order={selectedOrder}

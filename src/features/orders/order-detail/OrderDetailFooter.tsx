@@ -53,6 +53,8 @@ function OrderDetailFooterComponent({
                   data-testid="order-detail-footer"
                   className={cn(
                     "shrink-0 border-t border-border bg-background px-5 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]",
+                    // Phones: the whole sheet scrolls; the footer stays at the bottom of the screen.
+                    "max-sm:sticky max-sm:bottom-0 max-sm:z-10",
                     // Phones: two rows so labels are never truncated —
                     // row 1 «Сохранить и закрыть» full width, row 2 «Закрыть заказ» + ⋯.
                     isDesktopFeedLayout ? "flex flex-wrap items-center justify-end gap-2" : "grid grid-cols-[1fr_auto] gap-2",
@@ -144,7 +146,14 @@ function OrderDetailFooterComponent({
                   ) : (
                     <Button
                       type="button"
-                      className={cn("min-h-11", !isDesktopFeedLayout && "order-first col-span-2 w-full min-w-0")}
+                      className={cn(
+                        "min-h-11",
+                        // Same row as ⋮ (nothing else competes for the width) — one row less on a phone.
+                        !isDesktopFeedLayout && "order-first w-full min-w-0",
+                        !isDesktopFeedLayout &&
+                          (!(showCancelAction || showFooterDeleteAction) || (showOpenLifecycleActions && !isEditing)) &&
+                          "col-span-2",
+                      )}
                       onClick={onCloseWindow}
                     >
                       <span className="truncate">{t("orders.detail.closeWindow")}</span>
@@ -152,7 +161,7 @@ function OrderDetailFooterComponent({
                   )}
 
                   {!isDesktopFeedLayout && (showCancelAction || showFooterDeleteAction) ? (
-                    <div className="flex min-w-0 flex-col items-end gap-1">
+                    <div className="contents">
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -194,7 +203,7 @@ function OrderDetailFooterComponent({
                       </DropdownMenu>
                       {showCancelAction ? (
                         <p
-                          className="max-w-[11rem] text-right text-xs text-destructive [overflow-wrap:anywhere]"
+                          className="col-span-2 text-right text-xs text-destructive [overflow-wrap:anywhere]"
                           data-testid="order-detail-cancel-delete-hint"
                         >
                           {t("orders.lifecycle.cancelDeleteHint")}

@@ -1,10 +1,12 @@
 import { memo } from "react";
+import { cn } from "../../../lib/utils";
 import { useTranslation } from "react-i18next";
 import type { Order } from "../../../lib/types";
 import { Label } from "../../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../ui/Select";
 import { OrderStatusBadge } from "../../../ui/StatusBadge";
 import { isOrderCurrentlyClosed } from "../orderLifecycle";
+import { useReportFormatting } from "../../reports/reportFormatting";
 import type { OrderStatusChangeOption } from "../useOrderStatusChange";
 
 export type OrderDetailStatusBarProps = {
@@ -39,13 +41,21 @@ function OrderDetailStatusBarComponent({
   onStatusSelect,
 }: OrderDetailStatusBarProps) {
   const { t } = useTranslation();
+  const { formatDateTime } = useReportFormatting();
+  // closed_at is a timestamp ("2026-11-25T19:02:42.579729+00:00"): show it in the workspace date format / zone.
+  const closed = isOrderCurrentlyClosed(selectedOrder);
+  const formatClosedAt = (value: string) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : formatDateTime(date);
+  };
 
   return (
     <div
-      className="max-h-40 shrink-0 overflow-y-auto border-b border-border px-5 py-2"
+      className="max-h-40 shrink-0 overflow-y-auto border-b border-border px-5 py-2 max-sm:max-h-none max-sm:overflow-visible"
       data-testid="order-detail-status-bar"
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {/* A locked closed order: the header shows its status and the banner below says it is closed. */}
+      <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2", closed && lifecycleStatusLocked && "sr-only")}>
         <Label htmlFor="order-status" className="sr-only">
           {lifecycleStatusLocked || paidStatusLocked
             ? t("orders.actions.statusLocked")
@@ -54,11 +64,14 @@ function OrderDetailStatusBarComponent({
         {lifecycleStatusLocked ? (
           <div id="order-status" className="flex min-w-0 items-center gap-2">
             <OrderStatusBadge status={selectedOrder.status} customStatus={selectedOrder.customStatus} />
-            <span className="text-xs text-muted-foreground">
-              {selectedOrder.status === "cancelled"
-                ? t("orders.lifecycle.errors.orderAlreadyCancelled")
-                : t("orders.lifecycle.errors.closedOrderImmutable")}
-            </span>
+            {/* A closed order explains this once, in the banner below. */}
+            {isOrderCurrentlyClosed(selectedOrder) ? null : (
+              <span className="text-xs text-muted-foreground">
+                {selectedOrder.status === "cancelled"
+                  ? t("orders.lifecycle.errors.orderAlreadyCancelled")
+                  : t("orders.lifecycle.errors.closedOrderImmutable")}
+              </span>
+            )}
           </div>
         ) : (
           <Select
@@ -99,14 +112,16 @@ function OrderDetailStatusBarComponent({
           </Select>
         )}
       </div>
-      {isOrderCurrentlyClosed(selectedOrder) ? (
+      {closed ? (
         <div
-          className="mt-2 space-y-0.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm"
+          className={cn("space-y-0.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm", !lifecycleStatusLocked && "mt-2")}
           data-closed-order-banner
         >
-          <p className="font-medium text-foreground">{t("orders.lifecycle.closedBadge")}</p>
-          <p className="text-xs text-muted-foreground">
-            {t("orders.lifecycle.closedAt", { date: selectedOrder.closedAt })}
+          <p className="text-foreground">
+            <span className="font-medium">{t("orders.lifecycle.closedBadge")}</span>
+            {selectedOrder.closedAt ? (
+              <span className="text-xs text-muted-foreground"> · {formatClosedAt(selectedOrder.closedAt)}</span>
+            ) : null}
           </p>
           <p
             className="text-xs text-muted-foreground"
@@ -122,7 +137,7 @@ function OrderDetailStatusBarComponent({
           ) : null}
         </div>
       ) : null}
-      {paidStatusLocked ? (
+      {closed ? null : paidStatusLocked ? (
         <p className="mt-1.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
           {t("orders.actions.paidStatusImmutable")}
         </p>

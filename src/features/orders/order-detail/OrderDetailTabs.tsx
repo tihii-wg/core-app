@@ -11,7 +11,10 @@ export type OrderDetailTabsProps = {
 
 function OrderDetailTabsComponent({ detailTab, onSelectTab, isDesktopFeedLayout, tabs }: OrderDetailTabsProps) {
   return (
-    <div className="shrink-0 border-b border-border px-5 py-1.5" data-testid="order-detail-tabs">
+    <div
+      className="shrink-0 border-b border-border px-5 py-1.5 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-elevated"
+      data-testid="order-detail-tabs"
+    >
       {/* Mobile widths also expose the legacy test id so existing mobile-tab lookups keep working. */}
       <div data-testid={isDesktopFeedLayout ? undefined : "order-detail-mobile-tabs"}>
         <Tabs value={detailTab} onValueChange={(value) => isOrderDetailTab(value) && onSelectTab(value)}>
