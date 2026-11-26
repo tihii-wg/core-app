@@ -468,6 +468,8 @@ export interface InventoryItem {
   warrantyType?: CatalogWarrantyType | null;
   warrantyMonths?: number | null;
   warrantyKm?: number | null;
+  /** Storage path of the item photo (bucket inventory-photos); null / absent = no photo. */
+  photoPath?: string | null;
 }
 
 export type InventoryItemFormData = {

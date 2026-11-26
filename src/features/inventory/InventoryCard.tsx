@@ -14,9 +14,12 @@ import { cn } from "../../lib/utils";
 import { SupplierLink } from "../suppliers/SupplierLink";
 import { quantityClass } from "./inventoryDisplay";
 import { effectiveStockStatus } from "./stockStatus";
+import { InventoryPhotoThumb } from "./InventoryPhoto";
 
 type InventoryCardProps = {
   item: InventoryItem;
+  /** Signed URL of the list thumbnail (null while loading / without a photo). */
+  thumbUrl?: string | null;
   formatMoney: (value: number | null) => string;
   onView: (item: InventoryItem) => void;
   onEdit: (item: InventoryItem) => void;
@@ -27,7 +30,7 @@ type InventoryCardProps = {
  * Compact phone layout for one inventory item (below the md breakpoint).
  * The whole surface opens the item detail; the actions menu is independent.
  */
-export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: InventoryCardProps) {
+export function InventoryCard({ item, thumbUrl = null, formatMoney, onView, onEdit, onDelete }: InventoryCardProps) {
   const { t } = useTranslation();
   const fieldLabels = useFormFieldLayout("product");
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
@@ -38,6 +41,7 @@ export function InventoryCard({ item, formatMoney, onView, onEdit, onDelete }: I
       className="cursor-pointer rounded-lg border border-border bg-card p-3 shadow-xs transition-colors hover:bg-accent/40 active:bg-accent/60"
     >
       <div className="flex items-start gap-2">
+        <InventoryPhotoThumb photoPath={item.photoPath} thumbUrl={thumbUrl} name={item.name} className="size-12" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-foreground" title={item.name}>
             {item.name}

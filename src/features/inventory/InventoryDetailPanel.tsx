@@ -2,6 +2,8 @@ import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../../ui/Sheet";
+import { InventoryPhotoThumb } from "./InventoryPhoto";
+import { useInventoryThumbUrls } from "./useInventoryPhotos";
 import { Button } from "../../ui/Button";
 import { InventoryStatusBadge, StatusBadge } from "../../ui/StatusBadge";
 import { Spinner } from "../../ui/Spinner";
@@ -109,6 +111,7 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
 
         {item && !isLoading && (
           <div className="space-y-5 px-5 py-5">
+            {item.photoPath ? <DetailPhoto photoPath={item.photoPath} name={item.name} /> : null}
             <div className="flex flex-wrap items-center gap-2">
               <InventoryStatusBadge status={effectiveStockStatus(item)} />
               {item.isActive ? <StatusBadge variant="success">{t("inventory.active")}</StatusBadge> : <StatusBadge variant="muted">{t("inventory.inactive")}</StatusBadge>}
@@ -247,4 +250,10 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
       <QuickGoodsReceiptDialog open={receiveOpen} onOpenChange={setReceiveOpen} item={item} defaultQuantity={1} />
     </Sheet>
   );
+}
+
+/** Item photo in the detail panel (thumbnail-sized request; tap opens the full photo). */
+function DetailPhoto({ photoPath, name }: { photoPath: string; name: string }) {
+  const thumbUrl = useInventoryThumbUrls([photoPath])(photoPath);
+  return <InventoryPhotoThumb photoPath={photoPath} thumbUrl={thumbUrl} name={name} className="size-28" />;
 }

@@ -11,6 +11,7 @@ import {
 import i18n from "../i18n";
 import { isMissingRpcError, MissingRpcError } from "./missingRpc";
 import supabase from "./supabase";
+import { discardInventoryPhotoFiles } from "./apiInventoryPhotos";
 
 const PREVIEW_RPC = "crm_inventory_item_delete_preview";
 const PURGE_RPC = "crm_purge_inventory_item";
@@ -153,6 +154,7 @@ export function toInventoryItem(row: Record<string, unknown>): InventoryItem {
     warrantyType: warranty.warrantyType,
     warrantyMonths: warranty.warrantyMonths,
     warrantyKm: warranty.warrantyKm,
+    photoPath: typeof row.photo_path === "string" && row.photo_path.trim() ? row.photo_path : null,
   };
 }
 
@@ -552,10 +554,15 @@ export function __resetCatalogWarrantyColumnCacheForTests() {
 export async function deleteInventoryItem(inventoryItemId: string, workspaceId: string | undefined) {
   const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
 
-  const { data, error } = await supabase.from("inventory_items").delete().eq("id", inventoryItemId).eq("workspace_id", resolvedWorkspaceId).select("id");
+  const remove = (columns: string) =>
+    supabase.from("inventory_items").delete().eq("id", inventoryItemId).eq("workspace_id", resolvedWorkspaceId).select(columns);
+  let { data, error } = await remove("id, photo_path");
+  // Before the photo SQL is applied the column does not exist (nothing was deleted: the statement failed).
+  if (error && /photo_path/i.test(error.message ?? "")) ({ data, error } = await remove("id"));
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.deleteFailed"));
   if (!data?.length) throw new Error(i18n.t("inventory.errors.deleteNotFound"));
+  discardInventoryPhotoFiles((data[0] as { photo_path?: string | null }).photo_path);
 }
 
 function countValue(value: unknown) {

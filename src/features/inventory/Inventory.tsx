@@ -24,6 +24,8 @@ import { formatWorkspaceMoney } from "../../lib/workspaceFormat";
 import { useIsMobile } from "../../hooks/use-mobile";
 import { Skeleton } from "../../ui/Skeleton";
 import { InventoryCard } from "./InventoryCard";
+import { InventoryPhotoThumb } from "./InventoryPhoto";
+import { useInventoryThumbUrls } from "./useInventoryPhotos";
 import InventoryDetailPanel from "./InventoryDetailPanel";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { AddInventoryItemDialog } from "./AddInventoryItemDialog";
@@ -117,6 +119,9 @@ export function Inventory() {
     refetch,
   } = useInventoryPage({ search: debouncedSearch, filter: stockFilter, sort, supplier: supplierFilter, page, pageSize });
   const items = useMemo(() => inventoryPage?.rows ?? [], [inventoryPage]);
+  // Thumbnails of this page only: one signed-URL request for all of them.
+  const photoPaths = useMemo(() => items.map((item) => item.photoPath), [items]);
+  const thumbUrl = useInventoryThumbUrls(photoPaths);
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, stockFilter, supplierFilter, sortValue, pageSize]);
@@ -208,6 +213,12 @@ export function Inventory() {
         <span className="font-medium tabular-nums">{formatWorkspaceMoney(item.purchasePrice, workspace?.currency)}</span>
       ),
       className: "hidden sm:table-cell text-right whitespace-nowrap",
+    },
+    {
+      key: "photo",
+      header: t("inventory.photo.column"),
+      className: "w-[64px] text-center",
+      cell: (item) => <InventoryPhotoThumb photoPath={item.photoPath} thumbUrl={thumbUrl(item.photoPath)} name={item.name} />,
     },
     {
       key: "actions",
@@ -405,6 +416,7 @@ export function Inventory() {
               <InventoryCard
                 key={item.id}
                 item={item}
+                thumbUrl={thumbUrl(item.photoPath)}
                 formatMoney={(value) => formatWorkspaceMoney(value, workspace?.currency)}
                 onView={(selected) => setDetailId(selected.id)}
                 onEdit={(selected) => setEditId(selected.id)}

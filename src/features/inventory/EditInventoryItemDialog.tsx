@@ -4,6 +4,7 @@ import { EmptyState } from "../../ui/EmptyState";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import InventoryItemForm from "./InventoryItemForm";
+import { InventoryPhotoField } from "./InventoryPhoto";
 import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
 import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
@@ -58,6 +59,9 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
             action={{ label: t("common.retry"), onClick: () => editQuery.refetch() }}
           />
         )}
+        {editQuery.item && !markupLoading ? (
+          <InventoryPhotoField mode="existing" itemId={editQuery.item.id} photoPath={editQuery.item.photoPath} name={editQuery.item.name} />
+        ) : null}
         {editDefaults && editQuery.item && !markupLoading && (
           <InventoryItemForm
             key={editQuery.item.id}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
@@ -9,6 +10,8 @@ import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
 import InventoryItemForm from "./InventoryItemForm";
+import { InventoryPhotoField } from "./InventoryPhoto";
+import { useUploadInventoryPhoto } from "./useInventoryPhotos";
 import { DEFAULT_INVENTORY_MIN_QUANTITY } from "./inventoryDefaults";
 import { useCreateInventoryItem } from "./useCreateInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
@@ -53,6 +56,14 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
   const hasActiveWarehouse = warehouses.some((warehouse) => warehouse.isActive);
   // Create always starts at zero stock; receipt is a separate warehouse document.
   const formKey = open ? `create-${initialName}` : "closed";
+  // Picked before saving; uploaded right after the item is created (the item id is part of the storage path).
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [photoFor, setPhotoFor] = useState(formKey);
+  if (photoFor !== formKey) {
+    setPhotoFor(formKey);
+    setPendingPhoto(null);
+  }
+  const uploadPhoto = useUploadInventoryPhoto();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -77,6 +88,8 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
             }}
           />
         ) : (
+          <>
+          <InventoryPhotoField mode="pending" file={pendingPhoto} onFileChange={setPendingPhoto} />
           <InventoryItemForm
             key={formKey}
             defaultValues={{
@@ -96,12 +109,14 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
               if (!hasActiveWarehouse) return;
               createItem({ ...data, quantity: 0 }, {
                 onSuccess: (item) => {
+                  if (pendingPhoto) uploadPhoto.mutate({ itemId: item.id, file: pendingPhoto });
                   onCreated?.(item);
                   onOpenChange(false);
                 },
               });
             }}
           />
+          </>
         )}
       </DialogContent>
     </Dialog>
