@@ -240,9 +240,10 @@ export function StatusesSettings() {
 
         {data.length > 0 ? (
           <Tabs value={entity} onValueChange={(value) => setEntity(value as StatusEntity)}>
-            <TabsList className="flex h-auto flex-wrap gap-1">
+            {/* One row like the order card tabs (scrolls sideways on a phone) instead of a stretched second row. */}
+            <TabsList className="h-auto w-full flex-nowrap justify-start gap-1 overflow-x-auto">
               {entities.map((item) => (
-                <TabsTrigger key={item} value={item}>
+                <TabsTrigger key={item} value={item} className="shrink-0 flex-none">
                   {t(`settings.statuses.entities.${item}`)}
                   <span className="ml-1 text-muted-foreground">({byEntity.get(item)?.length ?? 0})</span>
                 </TabsTrigger>
@@ -263,7 +264,7 @@ export function StatusesSettings() {
                 {listStatuses.length > 0 ? (
                   <ul className="divide-y divide-border rounded-lg border border-border">
                     {listStatuses.map((status, index, list) => (
-                      <li key={status.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                      <li key={status.id} className="flex flex-col gap-2 px-4 py-3">
                         <div className="min-w-0 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <EntityStatusBadge name={status.name} color={status.color} />
