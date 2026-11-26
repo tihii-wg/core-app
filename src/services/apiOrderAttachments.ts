@@ -18,7 +18,7 @@ import supabase from "./supabase";
 const ATTACHMENT_SELECT =
   "id, workspace_id, order_id, uploaded_by, file_name, storage_path, storage_provider, drive_file_id, drive_folder_id, nas_path, mime_type, file_size, created_at";
 
-const REMOTE_FUNCTION = "order-attachment-remote";
+export const REMOTE_FUNCTION = "order-attachment-remote";
 
 /** order_attachments.is_public (SQL 20261125180000); off once the column turns out to be missing. */
 let attachmentVisibilitySupported = true;
@@ -248,13 +248,13 @@ export async function createOrderAttachmentSignedUrl(
   return data.signedUrl;
 }
 
-async function sessionAccessToken(): Promise<string> {
+export async function sessionAccessToken(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
   if (error || !data.session?.access_token) throw new Error(i18n.t("auth.errors.sessionExpired"));
   return data.session.access_token;
 }
 
-function functionsBaseUrl(): string {
+export function functionsBaseUrl(): string {
   const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
   if (!base) throw new Error(attachmentErrors.uploadFailed());
   return `${base}/functions/v1`;
@@ -277,7 +277,7 @@ export class DriveReconnectRequiredError extends RemoteReconnectRequiredError {
   }
 }
 
-function isRemoteFallbackWorthy(error: unknown): boolean {
+export function isRemoteFallbackWorthy(error: unknown): boolean {
   if (error instanceof RemoteReconnectRequiredError) return true;
   if (error instanceof TypeError) return true;
   if (!(error instanceof Error)) return false;
@@ -406,7 +406,7 @@ async function removeStorageObject(path: string) {
   if (error) throw new Error(errorMessage(error, attachmentErrors.cleanupFailed()));
 }
 
-async function workspaceRemoteMode(workspaceId: string): Promise<"google_drive" | "nas" | null> {
+export async function workspaceRemoteMode(workspaceId: string): Promise<"google_drive" | "nas" | null> {
   const { data, error } = await supabase.from("workspaces").select("attachment_storage").eq("id", workspaceId).maybeSingle();
   if (error) {
     if (/attachment_storage|PGRST204|42703|does not exist/i.test(error.message ?? "")) return null;

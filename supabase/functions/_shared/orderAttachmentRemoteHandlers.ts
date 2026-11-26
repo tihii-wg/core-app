@@ -11,6 +11,7 @@ import {
   type RemoteProvider,
 } from "./remoteAttachmentAdapters.ts";
 import { bearerToken, serviceClient, userClient } from "./supabase.ts";
+import { handleInventoryPhotoContent, handleInventoryPhotoDelete, handleInventoryPhotoUpload } from "./inventoryPhotoRemoteHandlers.ts";
 
 const ATTACHMENT_SELECT =
   "id, workspace_id, order_id, uploaded_by, file_name, storage_path, storage_provider, drive_file_id, drive_folder_id, nas_path, mime_type, file_size, created_at";
@@ -344,6 +345,16 @@ export async function routeRemoteAttachment(req: Request): Promise<Response> {
   const path = url.pathname.replace(/\/+$/, "");
 
   try {
+    // Inventory photos first: "/inventory-photo/upload" also ends with "/upload".
+    if (path.endsWith("/inventory-photo/upload") && req.method === "POST") {
+      return await handleInventoryPhotoUpload(req, appUrl);
+    }
+    if (path.endsWith("/inventory-photo/content") && req.method === "GET") {
+      return await handleInventoryPhotoContent(req, url, appUrl);
+    }
+    if (path.endsWith("/inventory-photo/delete") && req.method === "POST") {
+      return await handleInventoryPhotoDelete(req, appUrl);
+    }
     if (path.endsWith("/upload") && req.method === "POST") {
       return await handleRemoteUpload(req, appUrl);
     }

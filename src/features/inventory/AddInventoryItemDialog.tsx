@@ -109,7 +109,7 @@ export function AddInventoryItemDialog({ open, onOpenChange, initialName = "", o
               if (!hasActiveWarehouse) return;
               createItem({ ...data, quantity: 0 }, {
                 onSuccess: (item) => {
-                  if (pendingPhoto) uploadPhoto.mutate({ itemId: item.id, file: pendingPhoto });
+                  if (pendingPhoto) uploadPhoto.mutate({ itemId: item.id, file: pendingPhoto, itemName: item.name });
                   onCreated?.(item);
                   onOpenChange(false);
                 },

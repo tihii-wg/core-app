@@ -562,7 +562,7 @@ export async function deleteInventoryItem(inventoryItemId: string, workspaceId: 
 
   if (error) throw inventoryError(error, i18n.t("inventory.errors.deleteFailed"));
   if (!data?.length) throw new Error(i18n.t("inventory.errors.deleteNotFound"));
-  discardInventoryPhotoFiles((data[0] as { photo_path?: string | null }).photo_path);
+  discardInventoryPhotoFiles(resolvedWorkspaceId, (data[0] as { photo_path?: string | null }).photo_path);
 }
 
 function countValue(value: unknown) {

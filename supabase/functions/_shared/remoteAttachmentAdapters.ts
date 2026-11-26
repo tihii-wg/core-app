@@ -70,6 +70,10 @@ export type RemoteAttachmentAdapter = {
   download: (attachment: AttachmentRemoteRow, variant: "thumb" | "full") => Promise<DownloadResult>;
   remove: (attachment: AttachmentRemoteRow) => Promise<void>;
   trashOrderFolder: (orderId: string) => Promise<void>;
+  /** Folder (Drive) / directory (WebDAV) / prefix (S3) directly under the workspace root, created when missing. */
+  ensureNamedFolder: (label: string) => Promise<string>;
+  /** True when the stored file reference lies directly in `folderRef` (guards deletes to that folder). */
+  isInFolder: (ref: { drive_file_id?: string | null; nas_path?: string | null }, folderRef: string) => Promise<boolean>;
 };
 
 async function markDriveError(admin: Admin, workspaceId: string, message: string) {
@@ -220,6 +224,29 @@ export async function createDriveAdapter(admin: Admin, workspaceId: string): Pro
         console.error("[drive adapter] trash folder", err);
       }
       await admin.from("order_google_drive_folders").delete().eq("order_id", orderId).eq("workspace_id", workspaceId);
+    },
+
+    async ensureNamedFolder(label) {
+      try {
+        return await findOrCreateFolder(accessToken, label, rootFolderId);
+      } catch (err) {
+        if (isGoogleAuthError(err)) {
+          await markDriveError(admin, workspaceId, err instanceof Error ? err.message : "auth");
+          throw new Error("gdrive_reconnect_required");
+        }
+        throw err;
+      }
+    },
+
+    async isInFolder(ref, folderRef) {
+      if (!ref.drive_file_id) return false;
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(ref.drive_file_id)}?fields=parents&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      if (!res.ok) return false;
+      const meta = (await res.json()) as { parents?: string[] };
+      return Array.isArray(meta.parents) && meta.parents.includes(folderRef);
     },
   };
 }
@@ -388,6 +415,27 @@ export async function createNasAdapter(admin: Admin, workspaceId: string): Promi
         console.warn("[nas adapter] s3 prefix left in place after order delete", folder.folder_path);
       }
       await admin.from("order_nas_folders").delete().eq("order_id", orderId).eq("workspace_id", workspaceId);
+    },
+
+    async ensureNamedFolder(label) {
+      const safeLabel = sanitizeAttachmentFileName(label);
+      if (protocol === "webdav") {
+        if (credential.type !== "webdav") throw new Error("nas_not_connected");
+        const username = String(connection.username ?? "");
+        const folderPath = joinNasPath(root, safeLabel);
+        await wrapNas(() => webdavEnsureDir(base, folderPath, username, credential.password));
+        return folderPath;
+      }
+      return joinNasPath(root, safeLabel).replace(/^\//, "");
+    },
+
+    async isInFolder(ref, folderRef) {
+      if (!ref.nas_path) return false;
+      const path = ref.nas_path.replace(/^\/+/, "");
+      const folder = folderRef.replace(/^\/+|\/+$/g, "");
+      if (!path.startsWith(`${folder}/`)) return false;
+      const rest = path.slice(folder.length + 1);
+      return rest.length > 0 && !rest.includes("/") && !rest.includes("..");
     },
   };
 }

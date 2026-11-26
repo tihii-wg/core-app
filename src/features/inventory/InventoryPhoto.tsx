@@ -100,6 +100,7 @@ type PhotoFieldProps =
   | { mode: "existing"; itemId: string; photoPath: string | null | undefined; name: string }
   | { mode: "pending"; file: File | null; onFileChange: (file: File | null) => void };
 
+
 /**
  * Photo block of the item forms. Edit: the photo is uploaded / removed right away. Create: the picked file is
  * kept and uploaded after the item is saved (`mode: "pending"`). On a phone the picker offers the camera.
@@ -119,7 +120,7 @@ export function InventoryPhotoField(props: PhotoFieldProps) {
   const onPick = (file: File | undefined) => {
     if (!file) return;
     if (props.mode === "pending") props.onFileChange(file);
-    else upload.mutate({ itemId: props.itemId, file, previousPath: existingPath });
+    else upload.mutate({ itemId: props.itemId, file, previousPath: existingPath, itemName: props.name });
   };
 
   return (
