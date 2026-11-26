@@ -23,6 +23,18 @@ import { OrderInlineField } from "../OrderInlineField";
 import { OrderActionsMenu } from "../OrderActionsMenu";
 import { useCreateInvoice } from "../../invoices/useCreateInvoice";
 
+/**
+ * Phones (one scroll for the whole sheet): a new tab starts right under the pinned tab bar. The pinned bar reports
+ * its stuck position, so the target is measured from the content below it.
+ */
+function scrollSheetToTabContent(sheet: HTMLElement | null | undefined) {
+  const bar = sheet?.querySelector<HTMLElement>('[data-testid="order-detail-tabs"]');
+  const content = sheet?.querySelector<HTMLElement>("[data-order-detail-layout]");
+  if (!sheet || !bar || !content || sheet.scrollHeight <= sheet.clientHeight) return;
+  const target = Math.max(0, content.offsetTop - bar.offsetHeight);
+  if (sheet.scrollTop > target) sheet.scrollTo({ top: target });
+}
+
 /** Presentational sheet for order detail — receives a precomputed view model from the panel shell. */
 export function OrderDetailSheet(p: Record<string, any>) {
   const { t } = useTranslation();
@@ -109,14 +121,7 @@ export function OrderDetailSheet(p: Record<string, any>) {
     },
     selectTab: (tab: Parameters<typeof selectDetailTab>[0]) => {
       void selectDetailTab(tab);
-      // Phones (one scroll for the whole sheet): a new tab starts right under the pinned tab bar.
-      const sheet = sheetContentRef?.current as HTMLElement | null | undefined;
-      // The pinned bar reports its stuck position, so the target is measured from the content below it.
-      const bar = sheet?.querySelector<HTMLElement>('[data-testid="order-detail-tabs"]');
-      const content = sheet?.querySelector<HTMLElement>("[data-order-detail-layout]");
-      if (!sheet || !bar || !content || sheet.scrollHeight <= sheet.clientHeight) return;
-      const target = Math.max(0, content.offsetTop - bar.offsetHeight);
-      if (sheet.scrollTop > target) sheet.scrollTop = target;
+      scrollSheetToTabContent(sheetContentRef?.current);
     },
     orderUpdated: (order: Parameters<typeof onOrderUpdated>[0]) => onOrderUpdated(order),
     openClient: (clientId: string) => onOpenClient?.(clientId),
