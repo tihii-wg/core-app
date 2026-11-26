@@ -134,24 +134,58 @@ function buildOverrides(): string {
 
   const css: string[] = [];
   for (const rule of rules) {
-    const alpha = alphaFromSelector(rule.selectorText);
-    if (alpha == null || alpha >= 1) continue;
-    const declarations: string[] = [];
-    for (const prop of COLOR_PROPS) {
-      const raw = rule.style.getPropertyValue(prop);
-      if (!raw || raw.includes("color-mix")) continue;
-      const resolved = resolveValue(raw, rootStyle);
-      if (!resolved) continue;
-      const color = parseColor(resolved);
-      if (!color) continue;
-      const a = Math.round(color[3] * alpha * 1000) / 1000;
-      declarations.push(`${prop}: rgba(${color[0]}, ${color[1]}, ${color[2]}, ${a})`);
+    // The minifier merges rules with equal declarations: `.bg-primary,.bg-primary\/5{…}`. Every selector of the
+    // list gets its own alpha — a solid one (`.bg-primary`) must never get another selector's transparency.
+    for (const selector of splitSelectorList(rule.selectorText)) {
+      const alpha = alphaFromSelector(selector);
+      if (alpha == null || alpha >= 1) continue;
+      const declarations: string[] = [];
+      for (const prop of COLOR_PROPS) {
+        const raw = rule.style.getPropertyValue(prop);
+        if (!raw || raw.includes("color-mix")) continue;
+        const resolved = resolveValue(raw, rootStyle);
+        if (!resolved) continue;
+        const color = parseColor(resolved);
+        if (!color) continue;
+        const a = Math.round(color[3] * alpha * 1000) / 1000;
+        declarations.push(`${prop}: rgba(${color[0]}, ${color[1]}, ${color[2]}, ${a})`);
+      }
+      if (declarations.length === 0) continue;
+      const { open, close } = wrapperFor(rule);
+      css.push(`${open}${selector}{${declarations.join(";")}}${close}`);
     }
-    if (declarations.length === 0) continue;
-    const { open, close } = wrapperFor(rule);
-    css.push(`${open}${rule.selectorText}{${declarations.join(";")}}${close}`);
   }
-  return css.join("\n");
+  if (css.length === 0) return "";
+  // Inside the utilities layer (declared earlier, so this block comes last in it): the overrides replace the
+  // solid fallbacks at equal specificity but never beat later variants such as `hover:bg-muted` the way
+  // unlayered rules would.
+  return supportsCascadeLayers() ? `@layer utilities{\n${css.join("\n")}\n}` : css.join("\n");
+}
+
+function supportsCascadeLayers() {
+  return typeof CSSLayerBlockRule !== "undefined";
+}
+
+/** Top-level commas of a selector list (not inside (), [] or escaped). */
+export function splitSelectorList(selectorText: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < selectorText.length; index++) {
+    const char = selectorText[index];
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "(" || char === "[") depth += 1;
+    else if ((char === ")" || char === "]") && depth > 0) depth -= 1;
+    else if (char === "," && depth === 0) {
+      parts.push(selectorText.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(selectorText.slice(start).trim());
+  return parts.filter(Boolean);
 }
 
 function apply() {

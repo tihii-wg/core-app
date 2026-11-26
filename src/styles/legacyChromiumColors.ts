@@ -135,7 +135,9 @@ export function appendLegacyColorMixFallbacks(css: string): string {
 
   if (rules.length === 0) return css;
 
-  return `${css}\n@supports not (color: color-mix(in lab, red, red)){\n${rules.join("")}\n}\n`;
+  // Inside the utilities layer, after Tailwind's own rules: the rgba values replace the solid fallbacks at equal
+  // specificity, while later variants (`hover:bg-muted` on a `bg-muted/40` element) still win as in modern browsers.
+  return `${css}\n@supports not (color: color-mix(in lab, red, red)){\n@layer utilities{\n${rules.join("")}\n}\n}\n`;
 }
 
 /** Replace Tailwind v4 oklch palette custom properties with hex equivalents. */
