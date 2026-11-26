@@ -1,7 +1,11 @@
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useGetInvoices } from "../invoices/useGetInvoices";
-import { useGetOrders } from "../orders/useGetOrders";
+import { getOrderBalanceHeaders } from "../../services/apiOrders";
+import { getLedgerBalanceRows, PaymentsUnavailableError } from "../../services/apiPayments";
+import { useActiveWorkspaceId } from "../profiles/useGetProfile";
+import { useRealtimeHotQueryOptions } from "../realtime/useRealtimeHotQueryOptions";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { useGetExpenses } from "./useExpenses";
 import { useGetPayments } from "./usePayments";
@@ -14,8 +18,10 @@ import {
   outstandingInvoiceBalances,
   outstandingOrderBalances,
 } from "./paymentCalculations";
-import type { LedgerPaymentMethod, PaymentListFilters } from "./paymentTypes";
+import type { LedgerPayment, LedgerPaymentMethod, PaymentListFilters } from "./paymentTypes";
 import type { ReportPeriod } from "../reports/reportStats";
+
+const EMPTY_ORDERS: Awaited<ReturnType<typeof getOrderBalanceHeaders>> = [];
 
 export type FinanceUiFilters = {
   link?: PaymentListFilters["link"];
@@ -32,13 +38,48 @@ export type FinanceUiFilters = {
 export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end">, filters: FinanceUiFilters = {}) {
   const { t } = useTranslation();
   const { currency } = useWorkspaceMoney();
+  const { workspaceId } = useActiveWorkspaceId();
+  const hot = useRealtimeHotQueryOptions();
+  const dates = useMemo(() => ({ from: period.start, to: period.end }), [period.start, period.end]);
+  // Table + period totals: only the ledger rows / expenses dated in the selected period.
   const {
-    payments,
-    isLoading: paymentsLoading,
-    error: paymentsError,
-    isUnavailable: paymentsUnavailable,
-    refetch: refetchPayments,
-  } = useGetPayments();
+    payments: periodPayments,
+    isLoading: periodPaymentsLoading,
+    error: periodPaymentsError,
+    isUnavailable: periodPaymentsUnavailable,
+    refetch: refetchPeriodPayments,
+  } = useGetPayments({ paidFrom: dates.from, paidTo: dates.to });
+  // Outstanding / legacy totals are a workspace snapshot (not period-bound): balance-only columns of the ledger and
+  // the orders, read in the same parallel wave instead of the full rows.
+  const balanceLedgerQuery = useQuery({
+    queryKey: ["payments", workspaceId, "balance-rows"],
+    queryFn: () => getLedgerBalanceRows(workspaceId),
+    enabled: Boolean(workspaceId),
+    staleTime: 30_000,
+    ...hot,
+    retry: (failureCount, error) => !(error instanceof PaymentsUnavailableError) && failureCount < 3,
+  });
+  const ordersQuery = useQuery({
+    queryKey: ["orders", workspaceId, "balance-headers"],
+    queryFn: () => getOrderBalanceHeaders(workspaceId),
+    enabled: Boolean(workspaceId),
+    ...hot,
+  });
+  const orders = ordersQuery.data ?? EMPTY_ORDERS;
+  const balanceUnavailable = balanceLedgerQuery.error instanceof PaymentsUnavailableError;
+  const paymentsUnavailable = periodPaymentsUnavailable || balanceUnavailable;
+  const paymentsError = periodPaymentsError ?? balanceLedgerQuery.error;
+  const paymentsLoading = periodPaymentsLoading || balanceLedgerQuery.isLoading;
+  const ordersLoading = ordersQuery.isLoading;
+  const ordersError = ordersQuery.error;
+  /** Every ledger row (balance columns), with the full rows of the period on top — refund / void checks need the
+   *  related rows even when they fall outside the period. */
+  const payments = useMemo(() => {
+    const byId = new Map<string, LedgerPayment>();
+    for (const row of balanceLedgerQuery.data ?? []) byId.set(row.id, row);
+    for (const row of periodPayments) byId.set(row.id, row);
+    return [...byId.values()];
+  }, [balanceLedgerQuery.data, periodPayments]);
   const {
     invoices,
     isLoading: invoicesLoading,
@@ -47,26 +88,20 @@ export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end
     refetch: refetchInvoices,
   } = useGetInvoices();
   const {
-    orders,
-    isLoading: ordersLoading,
-    error: ordersError,
-    refetch: refetchOrders,
-  } = useGetOrders("", { lines: false });
-  const {
     expenses,
     isLoading: expensesLoading,
     error: expensesError,
     isUnavailable: expensesUnavailable,
     refetch: refetchExpenses,
-  } = useGetExpenses();
+  } = useGetExpenses(dates);
 
   const filteredPayments = useMemo(() => {
-    let rows = payments;
+    let rows = periodPayments;
     if (filters.link === "invoice") rows = rows.filter((row) => Boolean(row.invoiceId));
     if (filters.link === "no-invoice") rows = rows.filter((row) => !row.invoiceId);
     if (filters.paymentMethod) rows = rows.filter((row) => row.paymentMethod === filters.paymentMethod);
     return rows;
-  }, [payments, filters.link, filters.paymentMethod]);
+  }, [periodPayments, filters.link, filters.paymentMethod]);
 
   const transactions = useMemo(
     () =>
@@ -113,7 +148,7 @@ export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end
   return {
     transactions,
     inPeriod,
-    /** Full workspace payment list (for refundable balance / refund dialog). */
+    /** Every workspace ledger row (balance columns; full rows for the period) — refundable balance / refund dialog. */
     payments,
     stats,
     legacyItems,
@@ -127,9 +162,10 @@ export function useFinanceTransactions(period: Pick<ReportPeriod, "start" | "end
     invoicesUnavailable,
     expensesUnavailable,
     refetch: () => {
-      void refetchPayments();
+      void refetchPeriodPayments();
+      void balanceLedgerQuery.refetch();
       void refetchInvoices();
-      void refetchOrders();
+      void ordersQuery.refetch();
       void refetchExpenses();
     },
   };

@@ -3,12 +3,14 @@ import { formatWorkspaceDate, workspacePreferenceDefaults } from "../../lib/work
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGetWorkspace } from "../workspaces/useGetWorkspace";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import type { ReportRange } from "./reportStats";
+import { reportRangeYear, type ReportRange } from "./reportStats";
 
 export const reportRanges: ReportRange[] = ["last7", "last30", "last90", "thisYear"];
 
 export function rangeLabel(range: ReportRange) {
-  return i18n.t(`reports.ranges.${range}`);
+  const year = reportRangeYear(range);
+  if (year != null) return i18n.t("reports.ranges.year", { year });
+  return i18n.t(`reports.ranges.${range as "last7" | "last30" | "last90" | "thisYear"}`);
 }
 
 function formatTime(date: Date, timeZone: string) {

@@ -12,6 +12,8 @@ const reports: Messages<typeof en> = {
     last30: "Ultimele 30 de zile",
     last90: "Ultimele 90 de zile",
     thisYear: "Anul acesta",
+    byYear: "Pe ani",
+    year: "Anul {{year}}",
   },
   asOf: "La data de {{date}}",
   workspaceFallback: "Spațiu de lucru",

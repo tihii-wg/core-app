@@ -16,7 +16,8 @@ import { canManageExpenses } from "../workspaces/workspaceRoles";
 import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { SubscriptionReadOnlyNotice } from "../workspaces/SubscriptionReadOnlyNotice";
 import { withSubscriptionWriteAccess } from "../workspaces/workspaceSubscription";
-import { rangeLabel, reportRanges, useReportFormatting } from "../reports/reportFormatting";
+import { rangeLabel, useReportFormatting } from "../reports/reportFormatting";
+import { ReportRangeSelect } from "../reports/ReportRangeSelect";
 import { reportPeriod, type ReportRange } from "../reports/reportStats";
 import { useFinanceTransactions, type FinanceUiFilters } from "./useFinanceTransactions";
 import { ExpenseFormDialog } from "./ExpenseFormDialog";
@@ -247,18 +248,7 @@ export function Finance() {
         description={description}
         actions={
           <>
-            <Select value={range} onValueChange={(value) => setRange(value as ReportRange)}>
-              <SelectTrigger className="w-40" aria-label={t("finance.rangeLabel")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {reportRanges.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {rangeLabel(value)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ReportRangeSelect value={range} onChange={setRange} ariaLabel={t("finance.rangeLabel")} />
             <Select value={linkFilter} onValueChange={(value) => setLinkFilter(value as typeof linkFilter)}>
               <SelectTrigger className="w-44" aria-label={t("finance.linkFilterLabel")}>
                 <SelectValue />

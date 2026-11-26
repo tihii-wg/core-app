@@ -4,7 +4,7 @@ import { orderCollectedAmount, orderPaymentBalance } from "../finance/paymentCal
 import type { LedgerPayment } from "../finance/paymentTypes";
 import { industryOrderStatusLabel, industryWorkflow, ORDER_STATUSES } from "../industries/industryWorkflow";
 import { employeeNameByAssigneeId, orderAssignedToEmployee } from "../orders/orderAssignee";
-import { ordersIn, percentChange, periodTotals, revenueSeries, serviceDistribution, type ReportPeriod, type ReportRange } from "./reportStats";
+import { ordersIn, percentChange, periodTotals, reportRangeYear, revenueSeries, serviceDistribution, type ReportPeriod, type ReportRange } from "./reportStats";
 
 export type QuickReportType = "sales" | "inventory" | "employees" | "financial";
 
@@ -64,6 +64,7 @@ export function isQuickReportType(value: string | undefined): value is QuickRepo
 const reportRanges: ReportRange[] = ["last7", "last30", "last90", "thisYear"];
 
 export function toReportRange(value: string | null): ReportRange {
+  if (reportRangeYear(value) != null) return value as ReportRange;
   return reportRanges.includes(value as ReportRange) ? (value as ReportRange) : "last30";
 }
 

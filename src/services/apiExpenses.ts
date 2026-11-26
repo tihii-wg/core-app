@@ -50,15 +50,12 @@ function toRow(input: ExpenseFormData) {
   };
 }
 
-/** Expenses of the workspace, newest first. */
-export async function getExpenses(workspaceId: string | undefined) {
+/** Expenses of the workspace, newest first; with `period` only those dated in [from, to] (YYYY-MM-DD, inclusive). */
+export async function getExpenses(workspaceId: string | undefined, period?: { from: string; to: string }) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
-  const { data, error } = await supabase
-    .from("expenses")
-    .select(expenseColumns)
-    .eq("workspace_id", targetWorkspaceId)
-    .order("expense_date", { ascending: false })
-    .order("created_at", { ascending: false });
+  let query = supabase.from("expenses").select(expenseColumns).eq("workspace_id", targetWorkspaceId);
+  if (period) query = query.gte("expense_date", period.from).lte("expense_date", period.to);
+  const { data, error } = await query.order("expense_date", { ascending: false }).order("created_at", { ascending: false });
 
   if (error) throw toExpenseError(error);
   return ((data ?? []) as Record<string, unknown>[]).map(toExpense);

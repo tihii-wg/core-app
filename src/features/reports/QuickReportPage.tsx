@@ -3,20 +3,18 @@ import { Link, Navigate, useHref, useLocation, useParams, useSearchParams } from
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import i18n from "../../i18n";
-import { ArrowLeft, Calendar, Download, Printer, Share2 } from "lucide-react";
+import { ArrowLeft, Download, Printer, Share2 } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { localDateKey, clientCreatedAt } from "../../pages/dashboardStats";
-import { useGetOrders } from "../orders/useGetOrders";
-import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import { useGetPayments } from "../finance/usePayments";
+import { useReportData } from "./useReportData";
+import { ReportRangeSelect } from "./ReportRangeSelect";
 import { reportPeriod } from "./reportStats";
 import { employeeReport, financialReport, inventoryReport, isQuickReportType, quickReportDescription, quickReportTitle, quickReports, reportCsv, salesReport, toReportRange, type QuickReportModel, type QuickReportType } from "./quickReports";
 import { ReportDocument } from "./ReportDocument";
-import { downloadCsv, rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
+import { downloadCsv, useReportFormatting } from "./reportFormatting";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 
 const inventorySort = { field: "name", ascending: true } as const;
@@ -53,15 +51,17 @@ export function QuickReportPage() {
 
   const { workspaceId, workspaceName, formatMoney, formatDate, formatDateTime } = useReportFormatting();
   const { industrySlug } = useIndustryWorkflow();
-  const ordersQuery = useGetOrders("", { enabled: definition.needs.orders });
-  const clientsQuery = useGetClients("", "all", { enabled: definition.needs.clients });
-  const employeesQuery = useGetEmployees();
-  const inventoryQuery = useGetInventoryItems("", "all", inventorySort, { enabled: definition.needs.inventory });
-  const needsPayments = definition.needs.orders;
-  const paymentsQuery = useGetPayments();
-
   const today = localDateKey(generatedAt);
   const period = reportPeriod(range, generatedAt);
+  const needsPayments = definition.needs.orders;
+  // Only the selected period is read, and only the data this report type uses.
+  const { ordersQuery, clientsQuery, paymentsQuery, orders, clients, payments } = useReportData(period, {
+    orders: definition.needs.orders,
+    clients: definition.needs.clients,
+    payments: needsPayments,
+  });
+  const employeesQuery = useGetEmployees();
+  const inventoryQuery = useGetInventoryItems("", "all", inventorySort, { enabled: definition.needs.inventory });
   const periodLabel = definition.usesPeriod ? `${formatDate(period.start)} – ${formatDate(period.end)}` : t("reports.asOf", { date: formatDate(today) });
   const generatedLabel = formatDateTime(generatedAt);
 
@@ -74,14 +74,13 @@ export function QuickReportPage() {
   ].filter((query) => query !== false);
   const isLoading = !workspaceId || needed.some((query) => query.isLoading);
   const isError = needed.some((query) => ("isError" in query ? query.isError : Boolean(query.error)));
-  const payments = paymentsQuery.payments ?? [];
 
   let model: QuickReportModel | null = null;
   if (!isLoading && !isError) {
-    if (type === "sales") model = salesReport(ordersQuery.orders, (clientsQuery.clients ?? []).map(clientCreatedAt), period, industrySlug, payments);
+    if (type === "sales") model = salesReport(orders, clients.map(clientCreatedAt), period, industrySlug, payments);
     else if (type === "inventory") model = inventoryReport(inventoryQuery.items);
-    else if (type === "employees") model = employeeReport(ordersQuery.orders, employeesQuery.employees ?? [], period, today, industrySlug, payments);
-    else model = financialReport(ordersQuery.orders, inventoryQuery.items, period, industrySlug, payments);
+    else if (type === "employees") model = employeeReport(orders, employeesQuery.employees ?? [], period, today, industrySlug, payments);
+    else model = financialReport(orders, inventoryQuery.items, period, industrySlug, payments);
   }
 
   const documentTitle = `${title} – ${workspaceName} – ${periodLabel}`;
@@ -112,26 +111,15 @@ export function QuickReportPage() {
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           {definition.usesPeriod && (
-            <Select
+            <ReportRangeSelect
               value={range}
-              onValueChange={(value) => {
+              ariaLabel={t("reports.quickPage.periodLabel")}
+              onChange={(value) => {
                 const next = new URLSearchParams(searchParams);
                 next.set("range", value);
                 setSearchParams(next, { replace: true });
               }}
-            >
-              <SelectTrigger className="w-44" aria-label={t("reports.quickPage.periodLabel")}>
-                <Calendar aria-hidden="true" className="size-4" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {reportRanges.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {rangeLabel(value)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           )}
           <Button type="button" variant="outline" onClick={() => shareLink(documentTitle, `${window.location.origin}${reportHref}`)}>
             <Share2 />

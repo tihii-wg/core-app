@@ -12,6 +12,8 @@ const reports: Messages<typeof en> = {
     last30: "Последние 30 дней",
     last90: "Последние 90 дней",
     thisYear: "Этот год",
+    byYear: "По годам",
+    year: "{{year}} год",
   },
   asOf: "На {{date}}",
   workspaceFallback: "Рабочее пространство",

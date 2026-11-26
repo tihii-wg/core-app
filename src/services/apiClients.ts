@@ -270,6 +270,33 @@ export async function createClient({
   return ((data ?? []) as Record<string, unknown>[]).map(toClient);
 }
 
+/**
+ * Clients created in [from, to] (YYYY-MM-DD, UTC date of `created_at`) — the "new clients" of a report window,
+ * instead of the whole client list.
+ */
+export async function getClientsCreatedBetween(workspaceId: string | undefined, window: { from: string; to: string }) {
+  if (!workspaceId) throw new Error(i18n.t("common.errors.noActiveWorkspace"));
+  const until = new Date(`${window.to}T00:00:00.000Z`);
+  until.setUTCDate(until.getUTCDate() + 1);
+  const untilKey = until.toISOString().slice(0, 10);
+  const pageQuery = (withDeletedAt: boolean) => (from: number, to: number) => {
+    let query = supabase
+      .from("clients")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .gte("created_at", window.from)
+      .lt("created_at", untilKey);
+    if (withDeletedAt) query = query.is("deleted_at", null);
+    return query.order("id", { ascending: true }).range(from, to);
+  };
+  let { data, error } = await selectAllRows(pageQuery(true));
+  if (error && (error.code === "42703" || error.code === "PGRST204") && error.message?.includes("deleted_at")) {
+    ({ data, error } = await selectAllRows(pageQuery(false)));
+  }
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map(toClient);
+}
+
 export async function getClients(
   search: string,
   workspaceId: string | undefined,

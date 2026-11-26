@@ -9,6 +9,8 @@ export default {
     last30: "Last 30 days",
     last90: "Last 90 days",
     thisYear: "This Year",
+    byYear: "By year",
+    year: "Year {{year}}",
   },
   asOf: "As of {{date}}",
   workspaceFallback: "Workspace",

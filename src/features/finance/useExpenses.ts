@@ -7,11 +7,12 @@ import type { ExpenseFormData } from "../../lib/types";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useGuardSubscriptionWrite } from "../workspaces/useWorkspaceSubscription";
 
-export function useGetExpenses() {
+/** With `period` only the expenses dated in it (Finance page); without — all of them. */
+export function useGetExpenses(period?: { from: string; to: string }) {
   const { workspaceId } = useActiveWorkspaceId();
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["expenses", workspaceId],
-    queryFn: () => getExpenses(workspaceId),
+    queryKey: period ? ["expenses", workspaceId, "period", period.from, period.to] : ["expenses", workspaceId],
+    queryFn: () => getExpenses(workspaceId, period),
     enabled: Boolean(workspaceId),
     retry: (failureCount, queryError) => !(queryError instanceof ExpensesUnavailableError) && failureCount < 3,
   });

@@ -6,11 +6,9 @@ import { Button } from "../../ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { Skeleton } from "../../ui/Skeleton";
 import { localDateKey } from "../../pages/dashboardStats";
-import { useGetOrders } from "../orders/useGetOrders";
-import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import { useGetPayments } from "../finance/usePayments";
+import { useReportData } from "./useReportData";
 import { reportPeriod, type ReportRange } from "./reportStats";
 import { reportCsv, type ReportSection } from "./quickReports";
 import { comprehensiveReport, comprehensiveReportDescription, comprehensiveReportTitle, exportNeeds, exportPreview, exportSectionDescription, exportSectionKeys, exportSectionLabel, usesPeriod, type ExportSectionKey } from "./comprehensiveReport";
@@ -93,15 +91,14 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
 
   const { workspaceId, workspaceName, formatMoney, formatDate, formatDateTime } = useReportFormatting();
   const { industrySlug } = useIndustryWorkflow();
-  const ordersQuery = useGetOrders();
-  const clientsQuery = useGetClients("");
+  const period = reportPeriod(range, new Date());
+  // Only the selected period is read (the same cache as the Reports page behind the dialog).
+  const { ordersQuery, clientsQuery, paymentsQuery } = useReportData(period);
   const employeesQuery = useGetEmployees();
   const inventoryQuery = useGetInventoryItems("", "all", inventorySort);
-  const paymentsQuery = useGetPayments();
 
   const allSelected = selected.length === exportSectionKeys.length;
   const ordered = exportSectionKeys.filter((key) => selected.includes(key));
-  const period = reportPeriod(range, new Date());
   const periodLabel = usesPeriod(ordered) || ordered.length === 0 ? `${formatDate(period.start)} – ${formatDate(period.end)}` : t("reports.asOf", { date: formatDate(period.end) });
   const previewLoading =
     !workspaceId ||
@@ -111,11 +108,11 @@ function ExportReportForm({ range, open, onClose, onPrint }: ExportReportFormPro
     inventoryQuery.isLoading ||
     paymentsQuery.isLoading;
   const exportData = {
-    orders: ordersQuery.orders,
-    clients: clientsQuery.clients ?? [],
+    orders: ordersQuery.data ?? [],
+    clients: clientsQuery.data ?? [],
     employees: employeesQuery.employees ?? [],
     items: inventoryQuery.items,
-    payments: paymentsQuery.payments ?? [],
+    payments: paymentsQuery.data ?? [],
   };
   const preview = previewLoading ? null : exportPreview(exportData, period, formatMoney);
 

@@ -14,7 +14,26 @@ import type { LedgerPayment } from "../finance/paymentTypes";
 import { orderAssignedToEmployee } from "../orders/orderAssignee";
 import { isOpenOrder, isOrderOverdue } from "../orders/orderVisibility";
 
-export type ReportRange = "last7" | "last30" | "last90" | "thisYear";
+export type ReportYearRange = `year-${number}`;
+export type ReportRange = "last7" | "last30" | "last90" | "thisYear" | ReportYearRange;
+
+/** `year-2025` → 2025; any other range → null. */
+export function reportRangeYear(range: string | null | undefined): number | null {
+  const match = /^year-(\d{4})$/.exec(range ?? "");
+  return match ? Number(match[1]) : null;
+}
+
+export function yearReportRange(year: number): ReportYearRange {
+  return `year-${year}`;
+}
+
+/**
+ * Date window a report over `period` reads from the database: the previous (comparison) period through the end of
+ * the current one. Everything a report computes is inside it, so nothing older is downloaded.
+ */
+export function reportDataWindow(period: Pick<ReportPeriod, "start" | "end" | "previousStart">) {
+  return { from: period.previousStart, to: period.end, activityFrom: period.start };
+}
 export type ReportGranularity = "day" | "week" | "month";
 
 export type ReportPeriod = {
@@ -93,6 +112,19 @@ function sumTotals(orders: Order[]) {
 export function reportPeriod(range: ReportRange, now: Date): ReportPeriod {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+  const year = reportRangeYear(range);
+  if (year != null) {
+    // A whole calendar year (the current one up to today), compared with the same span of the year before.
+    const lastDay = year === today.getFullYear() ? today : new Date(year, 11, 31);
+    return {
+      start: localDateKey(new Date(year, 0, 1)),
+      end: localDateKey(lastDay),
+      previousStart: localDateKey(new Date(year - 1, 0, 1)),
+      previousEnd: localDateKey(new Date(year - 1, lastDay.getMonth(), lastDay.getDate())),
+      granularity: "month",
+    };
+  }
+
   if (range === "thisYear") {
     const year = today.getFullYear();
     return {
@@ -104,7 +136,7 @@ export function reportPeriod(range: ReportRange, now: Date): ReportPeriod {
     };
   }
 
-  const days = rangeDays[range];
+  const days = rangeDays[range as keyof typeof rangeDays];
   const start = addDays(today, -(days - 1));
   return {
     start: localDateKey(start),

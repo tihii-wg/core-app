@@ -2489,7 +2489,20 @@ export type GetOrdersOptions = {
    * finished order without closed_at) — not the whole order history.
    */
   recentClosedDays?: number;
+  /**
+   * Reports: only the orders a report over [from, to] (YYYY-MM-DD, UTC date of the timestamp — same as
+   * `Order.createdAt`) can use — created in the window, changed in [activityFrom, to] (the "completed in period"
+   * signal), or open right now (open / overdue snapshot) — instead of the whole order history.
+   */
+  reportWindow?: { from: string; to: string; activityFrom: string };
 };
+
+/** YYYY-MM-DD + 1 day (UTC calendar arithmetic) — exclusive upper bound for a date-key window. */
+export function nextDateKey(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
 
 const FINISHED_ORDER_STATUSES = "(completed,paid,cancelled,closed)";
 
@@ -2522,6 +2535,13 @@ export async function getOrders(
     if (recentSince) {
       query = query.or(
         `and(status.not.in.${FINISHED_ORDER_STATUSES},closed_at.is.null),closed_at.gte.${recentSince},and(closed_at.is.null,updated_at.gte.${recentSince})`,
+      );
+    }
+    if (options.reportWindow) {
+      const { from, to, activityFrom } = options.reportWindow;
+      const until = nextDateKey(to);
+      query = query.or(
+        `and(created_at.gte.${from},created_at.lt.${until}),and(updated_at.gte.${activityFrom},updated_at.lt.${until}),status.not.in.${FINISHED_ORDER_STATUSES}`,
       );
     }
     return query.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
@@ -2559,6 +2579,40 @@ export async function getOrders(
   }
 
   return hydrateOrderRows(resolvedWorkspaceId, (data ?? []) as Record<string, unknown>[], { lines: options.lines !== false });
+}
+
+/**
+ * Order headers for workspace balances (Finance "outstanding" / legacy-paid totals): only id, number, total, paid
+ * flag and status — no client join, no lines — instead of the full order rows.
+ */
+export async function getOrderBalanceHeaders(
+  workspaceId: string | undefined,
+): Promise<Pick<Order, "id" | "orderNumber" | "totalPrice" | "isPaid" | "status">[]> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  refreshOrderEstimatesSupport();
+  const byKind = isOrderEstimatesSupported();
+  const { data, error } = await selectAllRows<Record<string, unknown>>((from, to) => {
+    let query = supabase.from("orders").select("id, number, total_price, is_paid, status").eq("workspace_id", resolvedWorkspaceId);
+    if (byKind) query = query.or("kind.eq.order,kind.is.null");
+    return query.order("id", { ascending: true }).range(from, to);
+  });
+  if (error) {
+    if (byKind && isMissingOrderEstimatesColumn(error)) {
+      markOrderEstimatesUnsupported();
+      return getOrderBalanceHeaders(workspaceId);
+    }
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((row) => {
+    const statusRaw = typeof row.status === "string" ? row.status : "new";
+    return {
+      id: String(row.id),
+      orderNumber: typeof row.number === "string" ? row.number : "",
+      totalPrice: Number(row.total_price ?? 0),
+      isPaid: Boolean(row.is_paid),
+      status: orderStatuses.has(statusRaw as OrderStatus) ? (statusRaw as OrderStatus) : "new",
+    };
+  });
 }
 
 /**

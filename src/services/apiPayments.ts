@@ -294,6 +294,59 @@ async function getPaymentRows(
   return (data ?? []) as Record<string, unknown>[];
 }
 
+/**
+ * Ledger rows a report over [from, to] (YYYY-MM-DD) needs, in one parallel wave instead of the whole ledger:
+ * rows paid in the window (cash by paid_at) and every row of the orders created in the window (collected /
+ * outstanding per order, even when paid after the window). De-duplicated, newest paid first.
+ */
+export async function getReportPayments(workspaceId: string | undefined, window: { from: string; to: string }) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const until = nextDayKey(window.to);
+  const byOrder = selectAllRows((from, to) =>
+    supabase
+      .from("payments")
+      .select(`${paymentColumns}, orders!inner(created_at)`)
+      .eq("workspace_id", targetWorkspaceId)
+      .gte("orders.created_at", window.from)
+      .lt("orders.created_at", until)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  const [paid, linked] = await Promise.all([getPaymentRows(targetWorkspaceId, { paidFrom: window.from, paidTo: window.to }, null), byOrder]);
+  if (linked.error) throw mapPaymentDbError(linked.error as Parameters<typeof mapPaymentDbError>[0]);
+  const rows = new Map<string, Record<string, unknown>>();
+  for (const row of [...paid, ...((linked.data ?? []) as Record<string, unknown>[])]) rows.set(String(row.id), row);
+  return [...rows.values()]
+    .sort((a, b) => String(b.paid_at ?? "").localeCompare(String(a.paid_at ?? "")) ||
+      String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) ||
+      String(b.id ?? "").localeCompare(String(a.id ?? "")))
+    .map(toLedgerPayment);
+}
+
+function nextDayKey(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Balance-only ledger (no method / note / author): what outstanding and legacy-unreconciled totals need for the
+ * whole workspace — a fraction of the full ledger payload.
+ */
+export async function getLedgerBalanceRows(workspaceId: string | undefined) {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const { data, error } = await selectAllRows((from, to) =>
+    supabase
+      .from("payments")
+      .select("id, order_id, invoice_id, related_payment_id, kind, amount, currency_code, paid_at")
+      .eq("workspace_id", targetWorkspaceId)
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
+  if (error) throw mapPaymentDbError(error as Parameters<typeof mapPaymentDbError>[0]);
+  return ((data ?? []) as Record<string, unknown>[]).map(toLedgerPayment);
+}
+
 export async function getPaymentById(paymentId: string, workspaceId: string | undefined) {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);
   const { data, error } = await supabase

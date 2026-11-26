@@ -1,10 +1,9 @@
 import { useCallback, useState, type ElementType, type ReactElement, type ReactNode } from "react";
 import toast from "react-hot-toast";
-import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, Wallet, Package, Calendar, Download, FileText, PieChart, Activity, ArrowUpRight } from "lucide-react";
+import { BarChart3, TrendingUp, TrendingDown, Users, ShoppingCart, Wallet, Package, Download, FileText, PieChart, Activity, ArrowUpRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/Card";
 import { Button } from "../../ui/Button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/Tabs";
 import { PageHeader } from "../../pages/PageHeader";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Legend, AreaChart, Area } from "recharts";
@@ -13,11 +12,10 @@ import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
 import { Skeleton } from "../../ui/Skeleton";
 import { statCardClassName, statIconVariants, statValueSizeClass } from "../../ui/statCardStyles";
 import { cn } from "../../lib/utils";
-import { useGetOrders } from "../orders/useGetOrders";
-import { useGetClients } from "../clients/useGetClients";
 import useGetEmployees from "../employees/useGetEmployees";
 import { useGetInventoryItems } from "../inventory/useGetInventoryItems";
-import { useGetPayments } from "../finance/usePayments";
+import { useReportData } from "./useReportData";
+import { ReportRangeSelect } from "./ReportRangeSelect";
 import { clientCreatedAt, localDateKey } from "../../pages/dashboardStats";
 import { useActiveWorkspaceId } from "../profiles/useGetProfile";
 import { useNavigate, useParams } from "react-router-dom";
@@ -39,7 +37,7 @@ import { useMyPermissions } from "../roles/useMyPermissions";
 import { ActivityLogPanel } from "./ActivityLogPanel";
 import { ExportReportDialog } from "./ExportReportDialog";
 import { ReportPrintRoot, type ReportPrintJob } from "./ReportPrintRoot";
-import { downloadCsv, rangeLabel, reportRanges, useReportFormatting } from "./reportFormatting";
+import { downloadCsv, useReportFormatting } from "./reportFormatting";
 import { ordersSummaryCsv } from "./csvExport";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { chartAxisProps, chartColors, chartGridProps, chartLegendProps, chartTooltipProps } from "./chartTheme";
@@ -102,20 +100,22 @@ export function ReportsModule() {
   // Queries stay disabled (and report isLoading: false) until the active workspace is known.
   const { workspaceId } = useActiveWorkspaceId();
   const waitingForWorkspace = !workspaceId;
-  const { orders, isLoading: ordersQueryLoading, error: ordersError } = useGetOrders();
-  const { clients = [], isLoading: clientsQueryLoading, error: clientsError } = useGetClients("");
+  const now = new Date();
+  const today = localDateKey(now);
+  const period = reportPeriod(dateRange, now);
+  // Only the selected period (and the comparison period before it) is read — not the whole history.
+  const { orders, clients, payments, ordersQuery, clientsQuery, paymentsQuery, paymentsUnavailable } = useReportData(period);
+  const { isLoading: ordersQueryLoading, error: ordersError } = ordersQuery;
+  const { isLoading: clientsQueryLoading, error: clientsError } = clientsQuery;
+  const { isLoading: paymentsQueryLoading, error: paymentsError } = paymentsQuery;
   const { employees = [], isLoading: employeesQueryLoading, error: employeesError } = useGetEmployees();
   const { items: inventoryItems, isLoading: inventoryQueryLoading, isError: inventoryError } = useGetInventoryItems("", "all", inventorySort);
-  const { payments, isLoading: paymentsQueryLoading, error: paymentsError, isUnavailable: paymentsUnavailable } = useGetPayments();
   const ordersLoading = waitingForWorkspace || ordersQueryLoading;
   const clientsLoading = waitingForWorkspace || clientsQueryLoading;
   const employeesLoading = waitingForWorkspace || employeesQueryLoading;
   const inventoryLoading = waitingForWorkspace || inventoryQueryLoading;
   const paymentsLoading = waitingForWorkspace || paymentsQueryLoading;
 
-  const now = new Date();
-  const today = localDateKey(now);
-  const period = reportPeriod(dateRange, now);
   const summary = summaryStatsWithLedger(
     orders,
     clients.map((client) => clientCreatedAt(client)),
@@ -206,19 +206,7 @@ export function ReportsModule() {
         description={t("reports.page.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={dateRange} onValueChange={(value) => setDateRange(value as ReportRange)}>
-              <SelectTrigger className="w-44">
-                <Calendar aria-hidden="true" className="size-4" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {reportRanges.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {rangeLabel(value)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ReportRangeSelect value={dateRange} onChange={setDateRange} />
             <Button variant="outline" disabled={ordersLoading || Boolean(ordersError)} onClick={exportOrdersSummary}>
               <FileText />
               {t("reports.ordersSummary.button")}
