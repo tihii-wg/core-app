@@ -1,3 +1,4 @@
+import { isWorkspaceWriteBlocked, WorkspaceReadOnlyError } from "./features/workspaces/readOnlyMode";
 import {
   markLocalOrderWrite,
   noteLocalMutationSettled,
@@ -6,7 +7,7 @@ import {
 } from "./features/realtime/localWrites";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
 
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AppProvider } from "./lib/appContext";
@@ -137,14 +138,22 @@ const queryClient = new QueryClient({
     // Any app write that names an order marks it as "changed by this tab": realtime echoes of it are skipped
     // (the mutation refreshes what it changed itself). Marked at start and again on success, because the
     // echo arrives after the commit.
-    onMutate: (variables) => {
+    onMutate: (variables, mutation) => {
       noteLocalMutationStart();
+      // Read-only workspace (trial / subscription over): refuse every write here, before the request.
+      if (isWorkspaceWriteBlocked() && mutation.options.meta?.allowWhenReadOnly !== true) {
+        throw new WorkspaceReadOnlyError();
+      }
       markLocalOrderWrite(orderIdFromMutationVariables(variables));
     },
     onSuccess: (_data, variables) => markLocalOrderWrite(orderIdFromMutationVariables(variables)),
     onSettled: () => noteLocalMutationSettled(),
-    onError: (error) => {
+    onError: (error, _variables, _context, mutation) => {
       if (isInvalidSessionError(error)) void supabase.auth.signOut();
+      // Mutations without their own error toast still tell the user why nothing happened.
+      if (error instanceof WorkspaceReadOnlyError && !mutation.options.onError) {
+        toast.error(error.message, { id: "workspace-read-only" });
+      }
     },
   }),
 });

@@ -1,3 +1,4 @@
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useState, useMemo } from "react";
 import { ClientNameWithMark } from "../clients/ClientNameWithMark";
 import { Plus, AlertCircle, FileText, FileX2 } from "lucide-react";
@@ -213,16 +214,21 @@ export function Invoices() {
 
   const isFiltered = searchQuery !== "" || statusFilter !== "all";
 
+  // Read-only workspace (subscription over): no new invoices.
+  const { canWrite } = useWorkspaceSubscription();
+
   return (
     <div className="space-y-5">
       <PageHeader
         title={t("invoices.title")}
         description={isUnavailable ? t("invoices.notSetUp") : t("invoices.totalCount", { count: invoices.length })}
         actions={
-          <Button onClick={() => setCreateModalOpen(true)} disabled={isUnavailable || isLoading}>
-            <Plus />
-            {t("invoices.createInvoice")}
-          </Button>
+          canWrite ? (
+            <Button onClick={() => setCreateModalOpen(true)} disabled={isUnavailable || isLoading}>
+              <Plus />
+              {t("invoices.createInvoice")}
+            </Button>
+          ) : null
         }
       />
 
@@ -290,7 +296,7 @@ export function Invoices() {
             ) : isFiltered ? (
               <EmptyState title={t("invoices.empty.filteredTitle")} description={t("invoices.empty.filteredDescription")} />
             ) : (
-              <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={{ label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) }} />
+              <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={canWrite ? { label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) } : undefined} />
             )}
           </div>
         ) : (
@@ -325,7 +331,7 @@ export function Invoices() {
             ) : isFiltered ? (
               <EmptyState title={t("invoices.empty.filteredTitle")} description={t("invoices.empty.filteredDescription")} />
             ) : (
-              <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={{ label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) }} />
+              <EmptyState icon={FileText} title={t("invoices.empty.title")} description={t("invoices.empty.description")} action={canWrite ? { label: t("invoices.createInvoice"), onClick: () => setCreateModalOpen(true) } : undefined} />
             )
           }
         />

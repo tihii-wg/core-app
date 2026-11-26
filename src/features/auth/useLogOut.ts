@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -10,6 +11,7 @@ export function useLogOut() {
   const navigate = useNavigate();
 
   const { mutateAsync: logOut, isPending: isLoading } = useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: logOutApi,
     onSuccess: () => {
       finishSignOut(queryClient, navigate);

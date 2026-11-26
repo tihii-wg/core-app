@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { setWorkspaceIndustry, type ListedWorkspaceMembership } from "../../services/apiWorkspaces";
 import { rememberWorkspaceIndustry } from "./businessSetup";
@@ -6,6 +7,7 @@ export function useSetWorkspaceIndustry() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: ({ workspaceId, industryId }: { workspaceId: string; industryId: string }) => setWorkspaceIndustry(workspaceId, industryId),
     onSuccess(workspace) {
       if (!workspace?.industryId) return;

@@ -379,7 +379,7 @@ export default function ClientDetailPanel({
           {selectedClient && !isEditing ? (
             <ProblemClientToggle clientId={selectedClient.id} disabled={!canMutateClients} />
           ) : null}
-          {selectedClient && !isEditing && (
+          {selectedClient && !isEditing && canMutateClients && (
             <button
               type="button"
               onClick={() => setIsEditing(true)}

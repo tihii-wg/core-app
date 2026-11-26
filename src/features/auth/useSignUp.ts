@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { signUp } from "../../services/apiAuth";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -8,6 +9,7 @@ export function useSignUp() {
   const queryClient = useQueryClient();
   const language = languageFromPath(useLocation().pathname);
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: signUp,
     onSuccess: (result) => {
       if (result.needsEmailConfirmation) return;

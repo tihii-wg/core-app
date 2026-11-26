@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import type { User } from "@supabase/supabase-js";
 import { ensureSignupBootstrap, login as logInApi } from "../../services/apiAuth";
@@ -44,6 +45,7 @@ export function useLogin() {
   }
 
   const { mutateAsync: login, isPending: isLoading } = useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: ({ email, password }: LogInData) => logInApi({ email, password }),
     onSuccess: (result) => {
       if (result.mfaRequired) return;

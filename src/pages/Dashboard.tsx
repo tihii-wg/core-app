@@ -1,3 +1,4 @@
+import { useWorkspaceSubscription } from "../features/workspaces/useWorkspaceSubscription";
 import { ClipboardList, Package, Pencil, UserPlus, ArrowLeft, ArrowRight, FileText, RefreshCw, Activity } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -318,7 +319,9 @@ export default function Dashboard() {
     },
   ];
 
-  const quickActions = [
+  // Read-only workspace (subscription over): no quick «create» actions.
+  const { canWrite: dashboardCanWrite } = useWorkspaceSubscription();
+  const quickActions = !dashboardCanWrite ? [] : [
     { key: "order", label: t("dashboard.quickActions.createOrder"), icon: ClipboardList, onClick: () => setOpenDialog("order") },
     { key: "client", label: shell.addClient, icon: UserPlus, onClick: () => setOpenDialog("client") },
     { key: "inventory", label: shell.addInventory, icon: Package, onClick: () => setOpenDialog("inventory") },
@@ -434,7 +437,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <DashboardQuickActions actions={quickActions} />
+      {quickActions.length > 0 ? <DashboardQuickActions actions={quickActions} /> : null}
 
       <CreateOrderDialog
         {...dialogProps("order")}

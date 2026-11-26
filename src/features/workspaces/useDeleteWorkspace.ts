@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "./readOnlyMode";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { deleteWorkspace as deleteWorkspaceApi } from "../../services/apiWorkspaces";
 import { useParams } from "react-router-dom";
@@ -15,6 +16,7 @@ export function useDeleteWorkspace() {
 
   const queryClient = useQueryClient();
   const { mutate: deleteWorkspace, isPending } = useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: deleteWorkspaceApi,
     onSuccess: ({ nextWorkspaceId }) => {
       clearWorkspaceQueries(queryClient);

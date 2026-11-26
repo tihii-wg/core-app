@@ -16,7 +16,8 @@ type ClientCardProps = {
   ordersCount: number;
   formatMoney: (value: number) => string;
   onView: (client: Client) => void;
-  onEdit: (client: Client) => void;
+  /** Omitted in a read-only workspace. */
+  onEdit?: (client: Client) => void;
   onDelete?: (client: Client) => void;
 };
 
@@ -60,10 +61,12 @@ export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, o
               <Eye />
               {t("clients.actions.viewDetails")}
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onEdit(client)}>
-              <Pencil />
-              {t("common.edit")}
-            </DropdownMenuItem>
+            {onEdit ? (
+              <DropdownMenuItem onSelect={() => onEdit(client)}>
+                <Pencil />
+                {t("common.edit")}
+              </DropdownMenuItem>
+            ) : null}
             {onDelete ? (
               <DropdownMenuItem variant="destructive" onSelect={() => onDelete(client)}>
                 <Trash2 />

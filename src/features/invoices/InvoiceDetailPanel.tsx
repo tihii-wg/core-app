@@ -185,6 +185,8 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
               canRecord={canRecordPayments}
             />
 
+            {/* Read-only workspace (subscription over): no status changes; print / PDF stay. */}
+            {canWrite ? (
             <div className="flex flex-wrap gap-2 border-t border-border pt-5">
               {!erroneous && invoice.status === "draft" && (
                 <Button variant="outline" size="sm" disabled={isUpdating} onClick={() => onStatusChange(invoice, "sent")}>
@@ -217,6 +219,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
                 </Button>
               )}
             </div>
+            ) : null}
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" disabled={documentData.isLoading} onClick={startPrint}>
@@ -230,7 +233,7 @@ export function InvoiceDetailPanel({ invoiceId, onClose, isUpdating, onStatusCha
               <Button
                 variant="outline"
                 size="sm"
-                disabled={documentData.isLoading || erroneous}
+                disabled={documentData.isLoading || erroneous || !canWrite}
                 onClick={() => setEmailOpen(true)}
               >
                 <Mail />

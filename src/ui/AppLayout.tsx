@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect } from "react";
+import { useSyncWorkspaceReadOnlyMode } from "../features/workspaces/useSyncWorkspaceReadOnlyMode";
 import { Outlet, useLocation, useNavigate, useParams, Navigate } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppTopbar } from "./AppTopbar";
@@ -17,6 +18,7 @@ import { SubscriptionTrialBanner } from "../features/workspaces/SubscriptionTria
 import { OpenOrderRequestListener } from "../features/orders/OpenOrderRequestListener";
 
 export function AppLayout() {
+  useSyncWorkspaceReadOnlyMode();
   const { workspaceId, locale = "en" } = useParams();
   const location = useLocation();
   const navigate = useNavigate();

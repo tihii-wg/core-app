@@ -19,6 +19,7 @@ import { highlightMatch } from "../clients/clientSearch";
 import { formatVehicleMileage } from "./vehicleMileage";
 import { filterClientVehiclesByQuery } from "./clientVehicleSearch";
 import { useGetClientVehicles } from "./useGetClientVehicles";
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useArchiveVehicle, useCreateVehicle, useTransferVehicle, useUpdateVehicle } from "./useVehicleMutations";
 import { VehicleDetailPanel } from "./VehicleDetailPanel";
 import { VehicleFormDialog } from "./VehicleFormDialog";
@@ -56,6 +57,8 @@ export function ClientVehiclesSection({
   const transferVehicle = useTransferVehicle(clientId);
   const updateVehicle = useUpdateVehicle(clientId);
   const archiveVehicle = useArchiveVehicle(clientId);
+  // Read-only workspace (subscription over): list only, no add / edit / merge / archive.
+  const { canWrite } = useWorkspaceSubscription();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -121,24 +124,26 @@ export function ClientVehiclesSection({
           {t("vehicles.sectionTitleWithCount", { count: allVehicles.length })}
         </h3>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {allVehicles.length > 1 && visibleVehicleIds == null ? (
+          {canWrite && allVehicles.length > 1 && visibleVehicleIds == null ? (
             <Button type="button" size="sm" variant="outline" onClick={() => setMergeOpen(true)}>
               <Merge />
               {t("vehicles.merge.button")}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus />
-            {t("vehicles.add")}
-          </Button>
+          {canWrite ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus />
+              {t("vehicles.add")}
+            </Button>
+          ) : null}
         </div>
       </div>
       </div>
@@ -163,18 +168,20 @@ export function ClientVehiclesSection({
           <Car className="mx-auto mb-2 size-6 text-muted-foreground" aria-hidden />
           <p className="text-sm font-medium text-foreground">{t("vehicles.emptyTitle")}</p>
           <p className="mt-1 text-sm text-muted-foreground">{t("vehicles.emptyDescription")}</p>
-          <Button
-            type="button"
-            size="sm"
-            className="mt-3"
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="size-4" />
-            {t("vehicles.add")}
-          </Button>
+          {canWrite ? (
+            <Button
+              type="button"
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus className="size-4" />
+              {t("vehicles.add")}
+            </Button>
+          ) : null}
         </div>
       ) : vehicles.length === 0 ? (
         <div className="rounded-md border border-dashed border-border px-4 py-6 text-center">
@@ -257,6 +264,8 @@ export function ClientVehiclesSection({
                     {t("vehicles.createOrder")}
                   </Button>
                 ) : null}
+                {canWrite ? (
+                <>
                 <Button
                   type="button"
                   size="icon-sm"
@@ -278,6 +287,8 @@ export function ClientVehiclesSection({
                 >
                   <Trash2 className="size-4" />
                 </Button>
+                </>
+                ) : null}
               </div>
             </li>
           ))}

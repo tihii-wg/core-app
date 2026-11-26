@@ -229,12 +229,16 @@ export default function InventoryDetailPanel({ item, open, isLoading, isError, o
                   {t("inventory.ops.quickReceipt.receive")}
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" onClick={onEdit}>
-                {t("common.edit")}
-              </Button>
-              <Button type="button" variant="destructive" onClick={onDelete}>
-                {t("common.delete")}
-              </Button>
+              {canWrite ? (
+                <>
+                  <Button type="button" variant="outline" onClick={onEdit}>
+                    {t("common.edit")}
+                  </Button>
+                  <Button type="button" variant="destructive" onClick={onDelete}>
+                    {t("common.delete")}
+                  </Button>
+                </>
+              ) : null}
             </div>
           </div>
         )}

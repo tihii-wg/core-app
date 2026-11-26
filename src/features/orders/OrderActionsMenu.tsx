@@ -299,6 +299,9 @@ function OrderActionsMenuFull({
             </DropdownMenuItem>
           ) : null}
 
+          {/* Read-only workspace (subscription over): no status changes. */}
+          {canWrite ? (
+          <>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>
             {statusLockedForMenu || paidLocked
@@ -392,6 +395,8 @@ function OrderActionsMenuFull({
               {t("orders.taxInvoice.paidRequiresNumber")}
             </p>
           ) : null}
+          </>
+          ) : null}
 
           {showOpenLifecycleActions ? (
             <>
@@ -423,13 +428,13 @@ function OrderActionsMenuFull({
 
           <DropdownMenuSeparator />
 
-          {canMutateContent ? (
+          {canMutateContent && canWrite ? (
             <DropdownMenuItem onSelect={() => onEdit(order)}>
               <Pencil />
               {t("common.edit")}
             </DropdownMenuItem>
           ) : null}
-          {visibility.showInvoice ? (
+          {visibility.showInvoice && (canWrite || invoiceNumber) ? (
             invoiceNumber ? (
               <DropdownMenuItem disabled>
                 <FileCheck2 />

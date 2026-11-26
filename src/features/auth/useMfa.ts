@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { disableTotp, enrollTotp, getMfaAssurance, getMfaStatus, verifyTotp } from "../../services/apiMfa";
@@ -38,6 +39,7 @@ function useRefreshMfa() {
 
 export function useEnrollMfa() {
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: enrollTotp,
   });
 }
@@ -46,6 +48,7 @@ export function useVerifyMfa() {
   const refresh = useRefreshMfa();
 
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: ({ factorId, code }: { factorId: string; code: string }) => verifyTotp(factorId, code),
     onSuccess() {
       refresh();
@@ -58,6 +61,7 @@ export function useDisableMfa() {
   const refresh = useRefreshMfa();
 
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: (factorId: string) => disableTotp(factorId),
     onSuccess() {
       refresh();

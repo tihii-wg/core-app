@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "./readOnlyMode";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
@@ -10,6 +11,7 @@ export function useCreateWorkspace() {
   const navigate = useNavigate();
   const { locale = "en" } = useParams();
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: createWorkspace,
     onSuccess: async (data) => {
       const workspaceId = data?.[0]?.id ? String(data[0].id) : null;

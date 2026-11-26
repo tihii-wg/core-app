@@ -1,3 +1,4 @@
+import { useWorkspaceSubscription } from "../workspaces/useWorkspaceSubscription";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Trash2, Undo2 } from "lucide-react";
 import { useConfirm } from "../../ui/ConfirmProvider";
@@ -47,6 +48,8 @@ type ClientExtrasSectionProps = {
 export function ClientExtrasSection({ clientId, onBalanceChanged }: ClientExtrasSectionProps) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<ExtrasTab | "">("");
+  // Read-only workspace (subscription over): lists stay visible, every input / button inside is inactive.
+  const { canWrite } = useWorkspaceSubscription();
 
   return (
     <div>
@@ -67,16 +70,24 @@ export function ClientExtrasSection({ clientId, onBalanceChanged }: ClientExtras
           </TabsTrigger>
         </TabsList>
         <TabsContent value="phones">
-          <PhonesTab clientId={clientId} />
+          <fieldset disabled={!canWrite} className="m-0 min-w-0 border-0 p-0">
+            <PhonesTab clientId={clientId} />
+          </fieldset>
         </TabsContent>
         <TabsContent value="addresses">
-          <AddressesTab clientId={clientId} />
+          <fieldset disabled={!canWrite} className="m-0 min-w-0 border-0 p-0">
+            <AddressesTab clientId={clientId} />
+          </fieldset>
         </TabsContent>
         <TabsContent value="balance">
-          <BalanceTab clientId={clientId} onBalanceChanged={onBalanceChanged} />
+          <fieldset disabled={!canWrite} className="m-0 min-w-0 border-0 p-0">
+            <BalanceTab clientId={clientId} onBalanceChanged={onBalanceChanged} />
+          </fieldset>
         </TabsContent>
         <TabsContent value="discounts">
-          <DiscountsTab clientId={clientId} />
+          <fieldset disabled={!canWrite} className="m-0 min-w-0 border-0 p-0">
+            <DiscountsTab clientId={clientId} />
+          </fieldset>
         </TabsContent>
       </Tabs>
     </div>

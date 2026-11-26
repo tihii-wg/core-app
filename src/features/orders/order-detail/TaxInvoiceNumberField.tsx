@@ -8,6 +8,7 @@ import { Input } from "../../../ui/Input";
 import { Label } from "../../../ui/Label";
 import { hasTaxInvoiceNumber } from "../taxInvoice";
 import { useUpdateOrderTaxInvoiceNumber } from "../useGetOrders";
+import { useWorkspaceSubscription } from "../../workspaces/useWorkspaceSubscription";
 
 export function TaxInvoiceNumberField({
   order,
@@ -20,6 +21,8 @@ export function TaxInvoiceNumberField({
 }) {
   const { t } = useTranslation();
   const { mutateAsync: saveTaxInvoiceNumber, isPending } = useUpdateOrderTaxInvoiceNumber();
+  // Read-only workspace (subscription over): view only.
+  const { canWrite } = useWorkspaceSubscription();
   const savedValue = order.taxInvoiceNumber ?? "";
   const [value, setValue] = useState(savedValue);
 
@@ -55,11 +58,11 @@ export function TaxInvoiceNumberField({
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder={t("orders.taxInvoice.placeholder")}
-          disabled={isPending}
+          disabled={isPending || !canWrite}
           className="min-w-0 flex-1"
           aria-invalid={missingRequired || undefined}
         />
-        <Button type="button" variant="outline" onClick={handleSave} disabled={!dirty || isPending} className="shrink-0">
+        <Button type="button" variant="outline" onClick={handleSave} disabled={!dirty || isPending || !canWrite} className="shrink-0">
           <Save />
           {isPending ? t("common.saving") : t("common.save")}
         </Button>

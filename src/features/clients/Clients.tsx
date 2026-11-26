@@ -309,7 +309,7 @@ export function Clients() {
                 ordersCount={orderCountByClientId.get(client.id) ?? 0}
                 formatMoney={formatMoney}
                 onView={handleRowClick}
-                onEdit={setEditingClient}
+                onEdit={canMutateClients ? setEditingClient : undefined}
                 onDelete={canMutateClients ? setDeletingClient : undefined}
               />
             ))}

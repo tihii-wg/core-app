@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useMutation } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { changePassword } from "../../services/apiPassword";
@@ -10,6 +11,7 @@ type ChangePasswordInput = {
 
 export function useChangePassword() {
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: (input: ChangePasswordInput) => changePassword(input),
     onSuccess() {
       toast.success(i18n.t("auth.password.changed"));

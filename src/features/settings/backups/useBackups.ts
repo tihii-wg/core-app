@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../../workspaces/readOnlyMode";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
@@ -111,6 +112,7 @@ export function useRunBackup() {
   const queryClient = useQueryClient();
   const { workspaceId } = useActiveWorkspaceId();
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: async (opts: { download: boolean }) => {
       const runId = await requestBackupRun(workspaceId);
       const result = await invokeWorkspaceBackup({ workspaceId, runId, download: opts.download });

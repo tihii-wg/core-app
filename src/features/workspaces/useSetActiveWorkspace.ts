@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "./readOnlyMode";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { setActiveWorkspace as setActiveWorkspaceApi } from "../../services/apiWorkspaces";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -13,6 +14,7 @@ export function useSetActiveWorkspace() {
   const queryClient = useQueryClient();
 
   const { mutateAsync: updateWorkspace, isPending } = useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: (id: string) => setActiveWorkspaceApi(id),
     onSuccess(data) {
       clearWorkspaceQueries(queryClient);

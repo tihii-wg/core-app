@@ -1,3 +1,4 @@
+import { ALLOW_WHEN_READ_ONLY } from "../workspaces/readOnlyMode";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import i18n from "../../i18n";
@@ -39,6 +40,7 @@ export function useSaveNotificationSubscriptions() {
   const queryClient = useQueryClient();
   const key = ["notification-subscriptions", workspaceId];
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: (changes: NotificationSubscription[]) => saveNotificationSubscriptions(workspaceId, changes),
     onMutate: async (changes) => {
       await queryClient.cancelQueries({ queryKey: key });
@@ -60,6 +62,7 @@ export function useSaveNotificationSubscriptions() {
 
 export function useConnectTelegram() {
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: createTelegramConnectUrl,
     onError: (error) => toast.error(error instanceof Error ? error.message : i18n.t("common.somethingWentWrong")),
   });
@@ -68,6 +71,7 @@ export function useConnectTelegram() {
 export function useUnlinkTelegram() {
   const queryClient = useQueryClient();
   return useMutation({
+    meta: ALLOW_WHEN_READ_ONLY,
     mutationFn: unlinkTelegram,
     onSuccess: () => {
       queryClient.setQueryData(telegramLinkKey, null);
