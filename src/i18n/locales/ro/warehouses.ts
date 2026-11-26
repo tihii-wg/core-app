@@ -26,6 +26,14 @@ const warehouses: Messages<typeof en> = {
     history: "Istoric mișcări",
   },
   stock: {
+    filtered: {
+      products: "Poziții în stoc: {{count}}",
+      low: "Stoc redus: {{count}}",
+      out: "Lipsă din stoc: {{count}}",
+    },
+    clearFilter: "Lista completă",
+    filteredEmpty: "Nu există poziții în acest grup.",
+    showAll: "Arată toate ({{count}})",
     title: "Stoc în acest depozit",
     titleAll: "Stoc pe toate depozitele",
     empty: "Nu există încă rânduri de stoc pentru această selecție.",

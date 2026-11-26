@@ -26,6 +26,14 @@ const warehouses: Messages<typeof en> = {
     history: "История движений",
   },
   stock: {
+    filtered: {
+      products: "Позиции с остатком: {{count}}",
+      low: "Мало на складе: {{count}}",
+      out: "Нет в наличии: {{count}}",
+    },
+    clearFilter: "Весь список",
+    filteredEmpty: "В этой группе позиций нет.",
+    showAll: "Показать все ({{count}})",
     title: "Остатки на этом складе",
     titleAll: "Остатки по всем складам",
     empty: "По выбранному складу остатков пока нет.",

@@ -23,6 +23,14 @@ export default {
     history: "Movement history",
   },
   stock: {
+    filtered: {
+      products: "Items in stock: {{count}}",
+      low: "Low stock: {{count}}",
+      out: "Out of stock: {{count}}",
+    },
+    clearFilter: "Full list",
+    filteredEmpty: "No items in this group.",
+    showAll: "Show all ({{count}})",
     title: "Stock in this warehouse",
     titleAll: "Stock across warehouses",
     empty: "No stock rows for this selection yet.",

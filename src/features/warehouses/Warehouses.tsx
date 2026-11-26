@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeftRight, ClipboardList, PackageMinus, PackagePlus, Settings2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ClipboardList, PackageMinus, PackagePlus, Settings2, X } from "lucide-react";
+import { cn } from "../../lib/utils";
 import { languageFromPath } from "../../i18n/languages";
 import { PageHeader } from "../../pages/PageHeader";
 import { Button } from "../../ui/Button";
@@ -26,6 +27,14 @@ import { useGetWarehouseStock } from "./useGetWarehouseStock";
 import { useGetWarehouses } from "./useGetWarehouses";
 
 const ALL = "all";
+const PREVIEW_ROWS = 40;
+
+/** Summary card filter of the stock table: in stock / low / out of stock (null = the plain list). */
+type StockFilter = "products" | "low" | "out" | null;
+
+function isLowRow(row: { quantity: number; minQuantity: number | null }) {
+  return row.minQuantity != null && row.quantity > 0 && row.quantity <= row.minQuantity;
+}
 
 type StockRow = {
   inventoryItemId: string;
@@ -105,9 +114,29 @@ export function Warehouses() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [itemById, selectedId, stock]);
 
-  const lowCount = stockRows.filter((row) => row.minQuantity != null && row.quantity > 0 && row.quantity <= row.minQuantity).length;
+  const lowCount = stockRows.filter(isLowRow).length;
   const outCount = stockRows.filter((row) => row.quantity <= 0).length;
   const productCount = stockRows.filter((row) => row.quantity > 0).length;
+
+  const [stockFilter, setStockFilter] = useState<StockFilter>(null);
+  const [showAllRows, setShowAllRows] = useState(false);
+  const stockTableRef = useRef<HTMLDivElement | null>(null);
+  const filteredRows = useMemo(() => {
+    if (stockFilter === "products") return stockRows.filter((row) => row.quantity > 0);
+    if (stockFilter === "low") return stockRows.filter(isLowRow);
+    if (stockFilter === "out") return stockRows.filter((row) => row.quantity <= 0);
+    return stockRows;
+  }, [stockFilter, stockRows]);
+  // A chosen card shows its whole list; the plain list keeps the short preview until "Show all".
+  const visibleRows = stockFilter || showAllRows ? filteredRows : filteredRows.slice(0, PREVIEW_ROWS);
+
+  function toggleStockFilter(next: Exclude<StockFilter, null>) {
+    const turningOn = stockFilter !== next;
+    setStockFilter(turningOn ? next : null);
+    if (turningOn) {
+      window.requestAnimationFrame(() => stockTableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }
 
   const selectedName =
     selectedId === ALL
@@ -218,9 +247,29 @@ export function Warehouses() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label={t("warehouses.summary.warehouses")} value={String(activeWarehouses.length)} loading={isLoading} />
-        <SummaryCard label={t("warehouses.summary.products")} value={String(productCount)} loading={stockLoading} />
-        <SummaryCard label={t("warehouses.summary.lowStock")} value={String(lowCount)} loading={stockLoading} tone="warning" />
-        <SummaryCard label={t("warehouses.summary.outOfStock")} value={String(outCount)} loading={stockLoading} tone="danger" />
+        <SummaryCard
+          label={t("warehouses.summary.products")}
+          value={String(productCount)}
+          loading={stockLoading}
+          active={stockFilter === "products"}
+          onToggle={() => toggleStockFilter("products")}
+        />
+        <SummaryCard
+          label={t("warehouses.summary.lowStock")}
+          value={String(lowCount)}
+          loading={stockLoading}
+          tone="warning"
+          active={stockFilter === "low"}
+          onToggle={() => toggleStockFilter("low")}
+        />
+        <SummaryCard
+          label={t("warehouses.summary.outOfStock")}
+          value={String(outCount)}
+          loading={stockLoading}
+          tone="danger"
+          active={stockFilter === "out"}
+          onToggle={() => toggleStockFilter("out")}
+        />
       </div>
 
       {!isLoading && activeWarehouses.length === 0 ? (
@@ -237,10 +286,24 @@ export function Warehouses() {
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{selectedId === ALL ? t("warehouses.stock.titleAll") : t("warehouses.stock.title")}</CardTitle>
-          <CardDescription>{selectedName}</CardDescription>
+      <Card ref={stockTableRef} className="scroll-mt-20">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1.5">
+            <CardTitle>
+              {stockFilter
+                ? t(`warehouses.stock.filtered.${stockFilter}`, { count: filteredRows.length })
+                : selectedId === ALL
+                  ? t("warehouses.stock.titleAll")
+                  : t("warehouses.stock.title")}
+            </CardTitle>
+            <CardDescription>{selectedName}</CardDescription>
+          </div>
+          {stockFilter ? (
+            <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setStockFilter(null)}>
+              <X />
+              {t("warehouses.stock.clearFilter")}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent>
           {stockLoading ? (
@@ -249,8 +312,10 @@ export function Warehouses() {
                 <Skeleton key={index} className="h-10 w-full" />
               ))}
             </div>
-          ) : stockRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("warehouses.stock.empty")}</p>
+          ) : filteredRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {stockFilter ? t("warehouses.stock.filteredEmpty") : t("warehouses.stock.empty")}
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[20rem] text-left text-sm">
@@ -262,7 +327,7 @@ export function Warehouses() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {stockRows.slice(0, 40).map((row) => {
+                  {visibleRows.map((row) => {
                     const low = row.minQuantity != null && row.quantity <= row.minQuantity;
                     return (
                       <tr key={row.inventoryItemId}>
@@ -281,6 +346,11 @@ export function Warehouses() {
                   })}
                 </tbody>
               </table>
+              {visibleRows.length < filteredRows.length ? (
+                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full" onClick={() => setShowAllRows(true)}>
+                  {t("warehouses.stock.showAll", { count: filteredRows.length })}
+                </Button>
+              ) : null}
             </div>
           )}
         </CardContent>
@@ -317,16 +387,26 @@ function SummaryCard({
   value,
   loading,
   tone,
+  active = false,
+  onToggle,
 }: {
   label: string;
   value: string;
   loading?: boolean;
   tone?: "warning" | "danger";
+  /** This card's list is shown in the stock table (pressed). */
+  active?: boolean;
+  /** Clickable card: shows its list in the table; a second click returns the plain list. */
+  onToggle?: () => void;
 }) {
-  return (
-    <Card>
-      <CardContent className="space-y-1 py-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
+  const content = (
+    <CardContent className="space-y-1 py-4">
+        <p className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>{label}</span>
+          {onToggle ? (
+            <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 transition-transform", active && "rotate-180")} />
+          ) : null}
+        </p>
         {loading ? (
           <Skeleton className="h-7 w-16" />
         ) : (
@@ -342,7 +422,25 @@ function SummaryCard({
             {value}
           </p>
         )}
-      </CardContent>
+    </CardContent>
+  );
+  if (!onToggle) return <Card>{content}</Card>;
+  return (
+    <Card
+      className={cn(
+        "cursor-pointer transition-colors hover:bg-muted/40",
+        active && "ring-2 ring-primary/40 bg-muted/40",
+      )}
+    >
+      <button
+        type="button"
+        aria-pressed={active}
+        disabled={loading}
+        onClick={onToggle}
+        className="w-full rounded-[inherit] text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35"
+      >
+        {content}
+      </button>
     </Card>
   );
 }
