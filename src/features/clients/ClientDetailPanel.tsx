@@ -875,6 +875,10 @@ export default function ClientDetailPanel({
             open={settlementOpen}
             onOpenChange={setSettlementOpen}
             clientName={selectedClient.name}
+            clientPhone={selectedClient.phone}
+            clientEmail={selectedClient.email}
+            payments={payments}
+            paymentsLoading={paymentsLoading}
             clientBalance={selectedClient.balance}
             orders={clientOrders}
             ordersLoading={ordersLoading}

@@ -1,18 +1,29 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
+import { Mail, Printer } from "lucide-react";
+import { Button } from "../../ui/Button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { PaymentStatusBadge } from "../../ui/StatusBadge";
 import { Skeleton } from "../../ui/Skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
 import type { ClientOrderSummary } from "./clientOrders";
 import { useGetPayments } from "../finance/usePayments";
+import type { LedgerPayment } from "../finance/paymentTypes";
 import { computeClientSettlement, settlementBalanceTone } from "./clientSettlement";
 import { SettlementOrderCard } from "./SettlementOrderCard";
+import { ClientSettlementEmailDialog } from "./ClientSettlementEmailDialog";
+import { useClientStatement } from "./useClientStatement";
 
 type ClientSettlementDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clientName: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  /** Ledger rows already loaded by the client card — reused instead of a second ledger read. */
+  payments?: LedgerPayment[];
+  paymentsLoading?: boolean;
   /** Stored clients.balance (positive = client debt, negative = credit). */
   clientBalance: number;
   orders: ClientOrderSummary[];
@@ -32,6 +43,10 @@ export default function ClientSettlementDialog({
   open,
   onOpenChange,
   clientName,
+  clientPhone = "",
+  clientEmail = "",
+  payments: providedPayments,
+  paymentsLoading: providedPaymentsLoading = false,
   clientBalance,
   orders,
   ordersLoading = false,
@@ -42,13 +57,32 @@ export default function ClientSettlementDialog({
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   // Paid amounts come from the payments ledger (not the legacy orders.is_paid flag).
-  const { payments, isLoading: paymentsLoading } = useGetPayments();
+  const ownLedger = useGetPayments({}, { enabled: open && providedPayments === undefined });
+  const payments = providedPayments ?? ownLedger.payments;
+  const paymentsLoading = providedPayments ? providedPaymentsLoading : ownLedger.isLoading;
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const settlement = useMemo(
     () => computeClientSettlement(orders, clientBalance, payments),
     [orders, clientBalance, payments],
   );
+  const statementClient = useMemo(() => ({ name: clientName, phone: clientPhone, email: clientEmail }), [clientName, clientPhone, clientEmail]);
+  const statement = useClientStatement({ client: statementClient, settlement, formatMoney, companyEnabled: emailOpen });
   const tone = settlementBalanceTone(settlement.finalBalance);
   const signedFinalBalance = settlement.finalBalance > 0 ? `+${formatMoney(settlement.finalBalance)}` : formatMoney(settlement.finalBalance);
+
+  async function handlePrint() {
+    setPrinting(true);
+    try {
+      await statement.print();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPrinting(false);
+    }
+  }
+
+  const actionsReady = !ordersLoading && !paymentsLoading && !ordersError;
 
   function handleOpenOrder(orderId: string) {
     onOpenOrder?.(orderId);
@@ -206,7 +240,29 @@ export default function ClientSettlementDialog({
             </div>
           </>
         )}
+        <DialogFooter className="min-w-0 flex-none flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" className="min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={!actionsReady} onClick={() => setEmailOpen(true)}>
+            <Mail />
+            {t("clients.settlement.email")}
+          </Button>
+          <Button type="button" className="min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={!actionsReady || printing} onClick={handlePrint}>
+            <Printer />
+            {t("clients.settlement.print")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
+      {emailOpen ? (
+        <ClientSettlementEmailDialog
+        open
+        onOpenChange={setEmailOpen}
+        defaultRecipient={clientEmail}
+        companyName={statement.company?.name ?? ""}
+        text={statement.text}
+        loading={statement.companyLoading}
+        error={statement.companyError}
+        onPrint={handlePrint}
+        />
+      ) : null}
     </Dialog>
   );
 }

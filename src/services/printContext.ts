@@ -89,6 +89,24 @@ async function workspacePrintBase(resolved: string) {
 }
 
 /**
+ * Company header for standalone documents (client statement): the same sources as the print templates —
+ * default legal entity first, then the workspace settings — read in one parallel wave.
+ */
+export async function getPrintCompany(workspaceId: string | undefined) {
+  const base = await workspacePrintBase(requireWorkspaceId(workspaceId));
+  const { workspace, legalEntity } = base;
+  const text = (value: string | null | undefined) => (value ?? "").trim();
+  return {
+    name: text(legalEntity?.legalName) || text(workspace?.name),
+    address: text(legalEntity?.address) || text(workspace?.companyAddress),
+    taxId: text(legalEntity?.taxNumber) || text(workspace?.taxVatNumber) || text(workspace?.registrationNumber),
+    phone: text(base.companyPhone),
+    email: text(legalEntity?.billingEmail) || text(workspace?.billingEmail),
+    logoUrl: base.logoUrl,
+  };
+}
+
+/**
  * Loads everything needed to resolve print-template variables for one order.
  * Soft-fails missing optional tables (vehicles, legal entities, warranty, payments, logo).
  */
