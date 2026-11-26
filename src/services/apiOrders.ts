@@ -1,3 +1,4 @@
+import { localizeCustomStatus } from "../lib/statusNameLocalization";
 import type {
   CreateOrderInput,
   MileageUnit,
@@ -1862,7 +1863,7 @@ export function toOrder(
     (legacyAssignedTo ? employees.find((item) => item.profile_id != null && String(item.profile_id) === legacyAssignedTo) : undefined);
   const status = orderStatuses.has(row.status as OrderStatus) ? (row.status as OrderStatus) : "new";
   const customStatusId = typeof row.custom_status_id === "string" ? row.custom_status_id : null;
-  const customStatus = customStatusId ? customStatuses.get(customStatusId) ?? null : null;
+  const customStatus = customStatusId ? localizeCustomStatus(customStatuses.get(customStatusId) ?? null) : null;
   const isPaid = Boolean(row.is_paid);
   const paymentStatus: PaymentStatus = isPaid ? "paid" : "unpaid";
   const client = clientFromRow(row.clients);
@@ -1926,7 +1927,7 @@ export function toOrder(
     estimateStatusId: typeof row.estimate_status_id === "string" ? row.estimate_status_id : null,
     estimateStatus:
       typeof row.estimate_status_id === "string" && row.estimate_status_id
-        ? customStatuses.get(row.estimate_status_id) ?? null
+        ? localizeCustomStatus(customStatuses.get(row.estimate_status_id) ?? null)
         : null,
     estimateAcceptedAt:
       typeof row.estimate_accepted_at === "string" && row.estimate_accepted_at.trim()

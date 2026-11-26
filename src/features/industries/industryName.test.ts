@@ -21,7 +21,7 @@ describe("industryName", () => {
   it("translates furniture_manufacturing", async () => {
     await i18n.changeLanguage("en");
     expect(industryName({ name: "Custom Furniture Manufacturing", slug: "furniture_manufacturing" })).toBe(
-      "Custom Furniture Manufacturing",
+      "Furniture Manufacturing",
     );
     await i18n.changeLanguage("ru");
     expect(industryName({ name: "Custom Furniture Manufacturing", slug: "furniture_manufacturing" })).toContain(

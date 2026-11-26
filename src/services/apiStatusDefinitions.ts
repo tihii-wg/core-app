@@ -1,4 +1,5 @@
 import i18n from "../i18n";
+import { localizeStatusName } from "../lib/statusNameLocalization";
 import {
   allocateStatusCode,
   fallbackCodeFromStatusId,
@@ -108,7 +109,8 @@ export function toStatusDefinition(row: Record<string, unknown>): StatusDefiniti
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     entity: row.entity as StatusEntity,
-    name: typeof row.name === "string" ? row.name : "",
+    // Built-in seed names ("New", "Waiting for Parts"…) in the interface language; typed names unchanged.
+    name: typeof row.name === "string" ? localizeStatusName(row.name) : "",
     color: typeof row.color === "string" ? row.color : null,
     statusGroup: typeof row.status_group === "string" ? row.status_group : "new",
     systemStatus: typeof row.system_status === "string" ? row.system_status : null,

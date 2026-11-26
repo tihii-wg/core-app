@@ -1,3 +1,4 @@
+import i18n from "./i18n";
 import { isWorkspaceWriteBlocked, WorkspaceReadOnlyError } from "./features/workspaces/readOnlyMode";
 import {
   markLocalOrderWrite,
@@ -156,6 +157,15 @@ const queryClient = new QueryClient({
       }
     },
   }),
+});
+
+// Built-in status names (and other labels mapped when data is read) follow the interface language: after a
+// language switch, cached data is read again so it is mapped in the new language.
+let queriesLanguage = i18n.language;
+i18n.on("languageChanged", (language: string) => {
+  if (language === queriesLanguage) return;
+  queriesLanguage = language;
+  void queryClient.invalidateQueries();
 });
 
 export default function App() {
