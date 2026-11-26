@@ -7,7 +7,7 @@ import type { AddOrderMaterialPrefill } from "../AddOrderMaterialDialog";
 import type { ServiceLineInlineEditTarget } from "../OrderServiceLineInlineCells";
 import type { MaterialLineInlineEditTarget } from "../OrderMaterialLineInlineCells";
 import { useGetWarehouses } from "../../warehouses/useGetWarehouses";
-import { useGetWarehouseStock } from "../../warehouses/useGetWarehouseStock";
+import { useWarehouseStockForItems } from "../../warehouses/useGetWarehouseStock";
 import { fieldConfigMap, useOrderCustomFieldValues, useOrderFieldConfig } from "../useOrderFieldConfig";
 import { useGetVehicle } from "../../vehicles/useGetVehicle";
 import type { OrderEditField } from "../orderEditFields";
@@ -97,7 +97,12 @@ export function useOrderDetailModel({
   const closeInlineEditorRef = useRef<(() => void) | null>(null);
 
   const { data: warehouses = [] } = useGetWarehouses();
-  const { data: warehouseStock = [] } = useGetWarehouseStock();
+  // Stock of this order's materials only (limits of the material rows), not the whole workspace stock.
+  const orderMaterialItemIds = useMemo(
+    () => (selectedOrder?.materials ?? []).map((line) => line.inventoryItemId ?? null),
+    [selectedOrder?.materials],
+  );
+  const { data: warehouseStock } = useWarehouseStockForItems(orderMaterialItemIds, Boolean(selectedOrder));
   const [editingOrderId, setEditingOrderId] = useState(selectedOrder?.id);
   const isDesktopFeedLayout = useMediaQuery("(min-width: 1024px)");
   // Session-backed tab: survives order switches and sheet reopen; first open in a session starts on info.

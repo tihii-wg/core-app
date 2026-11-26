@@ -81,3 +81,30 @@ export async function getWarehouseStock(
 
   return rows.map((row) => toWarehouseStock(row, itemNames));
 }
+
+/**
+ * Stock rows of the given items only (one order's materials, one page of search results) — not the whole
+ * workspace stock. No name lookup: the callers already have the items.
+ */
+export async function getWarehouseStockForItems(workspaceId: string | undefined, inventoryItemIds: readonly string[]) {
+  const resolved = requireWorkspaceId(workspaceId);
+  const ids = [...new Set(inventoryItemIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return [] as WarehouseStockRecord[];
+  const chunks: string[][] = [];
+  for (let index = 0; index < ids.length; index += 150) chunks.push(ids.slice(index, index + 150));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      supabase.from("warehouse_stock").select(stockColumns).eq("workspace_id", resolved).in("inventory_item_id", chunk),
+    ),
+  );
+  const rows: Record<string, unknown>[] = [];
+  for (const { data, error } of results) {
+    if (error) {
+      if (isMissingTableError(error, "warehouse_stock")) return [] as WarehouseStockRecord[];
+      throw new Error(error.message);
+    }
+    rows.push(...((data ?? []) as Record<string, unknown>[]));
+  }
+  return rows.map((row) => toWarehouseStock(row, new Map()));
+}
+

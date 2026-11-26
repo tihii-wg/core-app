@@ -2583,6 +2583,38 @@ export async function getOrders(
 }
 
 /**
+ * A catalog item was renamed: the material lines of OPEN orders / estimates that use it take the new name (closed and
+ * cancelled orders keep the name they were closed with). Two light requests; only lines with another name are
+ * touched (each change is written to that order's history by the line trigger). Returns the affected order ids.
+ */
+export async function syncOrderMaterialNames(workspaceId: string | undefined, inventoryItemId: string, name: string): Promise<string[]> {
+  const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
+  const nextName = name.trim();
+  if (!inventoryItemId || !nextName) return [];
+  const { data, error } = await supabase
+    .from("order_materials")
+    .select("id, order_id, orders!inner(id)")
+    .eq("inventory_item_id", inventoryItemId)
+    .neq("item_name", nextName)
+    .eq("orders.workspace_id", resolvedWorkspaceId)
+    .is("orders.closed_at", null)
+    .not("orders.status", "in", FINISHED_LIFECYCLE_STATUSES)
+    .limit(1000);
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as { id: string; order_id: string }[];
+  if (rows.length === 0) return [];
+  const { error: updateError } = await supabase
+    .from("order_materials")
+    .update({ item_name: nextName })
+    .in("id", rows.map((row) => row.id));
+  if (updateError) throw new Error(updateError.message);
+  return [...new Set(rows.map((row) => row.order_id))];
+}
+
+/** Closed / cancelled: their lines keep the names they were finished with. */
+const FINISHED_LIFECYCLE_STATUSES = "(closed,cancelled)";
+
+/**
  * Order headers for workspace balances (Finance "outstanding" / legacy-paid totals): only id, number, total, paid
  * flag and status — no client join, no lines — instead of the full order rows.
  */

@@ -13,7 +13,7 @@ import { remainingToIssue, remainingToReturn } from "../inventory/warehouseMater
 import { useInventoryItemsByIds } from "../inventory/useGetInventoryItems";
 import { issueOrderMaterialsFromWarehouse, returnOrderMaterialsToWarehouse } from "../../services/apiWarehouse";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
-import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { useWarehouseStockForItems } from "../warehouses/useGetWarehouseStock";
 import { defaultIssueWarehouseId, issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
 import { issueRequestsExceedingStock } from "./catalogMaterialStockLimit";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -36,13 +36,15 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  /** Lines taking part: all of them for an issue; for a return the user ticks what actually comes back. */
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [warehouseId, setWarehouseId] = useState("");
   const submitLock = useRef(false);
   const { workspaceId } = useActiveWorkspaceId();
   const guardWrite = useGuardSubscriptionWrite();
   const queryClient = useQueryClient();
   const { data: warehouseRows } = useGetWarehouses();
-  const { data: warehouseStock, isSuccess: warehouseStockLoaded } = useGetWarehouseStock();
+
   const warehouses = useMemo(() => issuableWarehouses(warehouseRows), [warehouseRows]);
 
   const materials = order.materials ?? [];
@@ -50,6 +52,11 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   const stockMaterials = useMemo(() => materials.filter((line) => isCatalogOrderMaterial(line)), [materials]);
   const issueable = useMemo(() => stockMaterials.filter((line) => remainingToIssue(line) > 0), [stockMaterials]);
   const returnable = useMemo(() => stockMaterials.filter((line) => remainingToReturn(line) > 0), [stockMaterials]);
+  // Warehouse stock of this order's parts, only while the issue dialog is open (a return does not need it).
+  const { data: warehouseStock, isSuccess: warehouseStockLoaded } = useWarehouseStockForItems(
+    stockMaterials.map((line) => line.inventoryItemId ?? null),
+    mode === "issue",
+  );
   // Stock of this order's parts only (was the whole catalog), and only while the dialog is open.
   const { items: inventoryItems } = useInventoryItemsByIds(
     stockMaterials.map((line) => line.inventoryItemId?.trim() ?? ""),
@@ -59,13 +66,17 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
   function openDialog(next: Mode) {
     const lines = next === "issue" ? issueable : returnable;
     const initial: Record<string, string> = {};
+    const picked: Record<string, boolean> = {};
     for (const line of lines) {
       const itemId = line.inventoryItemId?.trim();
       if (!itemId) continue;
       const max = next === "issue" ? remainingToIssue(line) : remainingToReturn(line);
       initial[itemId] = String(max);
+      // A single returnable line is obviously the one to return; with several, nothing is ticked up front.
+      picked[itemId] = next === "issue" || lines.length === 1;
     }
     setQuantities(initial);
+    setSelected(picked);
     setReason("");
     setWarehouseId(defaultIssueWarehouseId(warehouseRows));
     setMode(next);
@@ -83,6 +94,7 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
     for (const line of source) {
       const itemId = line.inventoryItemId?.trim();
       if (!itemId) continue;
+      if (!selected[itemId]) continue;
       const raw = quantities[itemId] ?? "";
       if (String(raw).trim() === "") continue;
       const parsed = parseQuantity(raw);
@@ -101,7 +113,11 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
       lines.push({ inventoryItemId: itemId, quantity: qty });
     }
     if (lines.length === 0) {
-      toast.error(t("orders.warehouse.noQuantitySelected"));
+      toast.error(
+        source.some((line) => selected[line.inventoryItemId?.trim() ?? ""])
+          ? t("orders.warehouse.noQuantitySelected")
+          : t("orders.warehouse.noItemSelected"),
+      );
       return;
     }
 
@@ -226,6 +242,28 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
                 {mode === "issue" ? t("orders.warehouse.warehouseHint") : t("orders.warehouse.returnWarehouseHint")}
               </p>
             </div>
+            {(() => {
+              const lines = mode === "issue" ? issueable : returnable;
+              if (lines.length < 2) return null;
+              const ids = lines.map((line) => line.inventoryItemId?.trim() ?? "").filter(Boolean);
+              const allPicked = ids.every((id) => selected[id]);
+              return (
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {t("orders.warehouse.selectedCount", { count: ids.filter((id) => selected[id]).length, total: ids.length })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setSelected(Object.fromEntries(ids.map((id) => [id, !allPicked])))}
+                  >
+                    {allPicked ? t("orders.warehouse.selectNone") : t("orders.warehouse.selectAll")}
+                  </Button>
+                </div>
+              );
+            })()}
             {(mode === "issue" ? issueable : returnable).map((line) => {
               const itemId = line.inventoryItemId?.trim();
               if (!itemId) return null;
@@ -234,6 +272,8 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
                   key={itemId}
                   line={{ ...line, inventoryItemId: itemId }}
                   mode={mode!}
+                  selected={Boolean(selected[itemId])}
+                  onSelectedChange={(next) => setSelected((prev) => ({ ...prev, [itemId]: next }))}
                   value={quantities[itemId] ?? ""}
                   stock={inventoryItems.find((item) => item.id === itemId)?.quantity}
                   warehouseStock={mode === "issue" && warehouseId && warehouseStockLoaded ? warehouseStockOf(warehouseStock, warehouseId, itemId) : undefined}
@@ -277,6 +317,8 @@ export default function OrderWarehouseActions({ order, canManage, onOrderUpdated
 function WarehouseLineEditor({
   line,
   mode,
+  selected,
+  onSelectedChange,
   value,
   stock,
   warehouseStock,
@@ -286,6 +328,8 @@ function WarehouseLineEditor({
 }: {
   line: OrderMaterial;
   mode: Mode;
+  selected: boolean;
+  onSelectedChange: (selected: boolean) => void;
   value: string;
   stock?: number;
   warehouseStock?: number;
@@ -300,10 +344,18 @@ function WarehouseLineEditor({
   const locale = i18n.language;
   const parsed = parseQuantity(value);
   const typedQty = typeof parsed === "number" ? parsed : null;
-  const overStock = mode === "issue" && warehouseStock != null && typedQty != null && typedQty > max + 1e-9;
+  const overStock = selected && mode === "issue" && warehouseStock != null && typedQty != null && typedQty > max + 1e-9;
 
   return (
-    <div className="space-y-2 rounded-md border border-border p-3">
+    <div className={`space-y-2 rounded-md border p-3 ${selected ? "border-primary/50" : "border-border opacity-70"}`}>
+      <label className="flex min-w-0 cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          className="mt-1 size-4 shrink-0 accent-[var(--primary)]"
+          checked={selected}
+          disabled={disabled}
+          onChange={(event) => onSelectedChange(event.target.checked)}
+        />
       <div className="min-w-0">
         <p className="font-medium [overflow-wrap:anywhere]">{line.itemName}</p>
         <p className="text-[13px] text-muted-foreground tabular-nums">
@@ -327,7 +379,8 @@ function WarehouseLineEditor({
           </p>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      </label>
+      <div className="flex flex-wrap items-center gap-2 pl-6.5">
         <Label htmlFor={`warehouse-qty-${line.inventoryItemId}`} className="shrink-0 text-xs text-muted-foreground">
           {mode === "issue" ? t("orders.warehouse.issueQty") : t("orders.warehouse.returnQty")}
         </Label>
@@ -335,7 +388,7 @@ function WarehouseLineEditor({
           id={`warehouse-qty-${line.inventoryItemId}`}
           type="text"
           inputMode="decimal"
-          disabled={disabled}
+          disabled={disabled || !selected}
           className={`h-8 min-w-[4.5rem] w-24 max-w-[40vw] tabular-nums ${overStock ? "border-destructive" : ""}`}
           value={value}
           onChange={(event) => onChange(event.target.value)}

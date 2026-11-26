@@ -28,7 +28,7 @@ import { usesWorksAndMaterialsTabLabel } from "./orderDetailTabs";
 import { useAppendOrderLines } from "./useAppendOrderLines";
 import { catalogItemToOrderMaterial } from "../inventory/orderMaterialLine";
 import { useGetWarehouses } from "../warehouses/useGetWarehouses";
-import { useGetWarehouseStock } from "../warehouses/useGetWarehouseStock";
+import { useWarehouseStockForItems } from "../warehouses/useGetWarehouseStock";
 import { isEstimateOrder } from "./orderEstimates";
 import { issuableWarehouses, warehouseStockOf } from "./issueWarehouse";
 import { useOrderMaterialFreeformSupport } from "./useOrderMaterialFreeformSupport";
@@ -94,7 +94,7 @@ export default function OrderAddLinesSearch({
   const { supported: freeformSupported } = useOrderMaterialFreeformSupport();
   const { mutateAsync: appendLines } = useAppendOrderLines();
   const { data: warehouseRows = [] } = useGetWarehouses();
-  const { data: warehouseStock = [] } = useGetWarehouseStock();
+
   // Picks are queued and saved one after another, so several services / items can be added in a row
   // without waiting (and without responses overwriting each other out of order).
   const addQueueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -139,6 +139,12 @@ export default function OrderAddLinesSearch({
     { enabled: allowMaterials && open },
   );
   const activeItems = useMemo(() => (allowMaterials ? itemSearch.items : []), [allowMaterials, itemSearch.items]);
+  // Stock of the parts in the results (and the one being added) only, not the whole workspace stock.
+  const stockItemIds = useMemo(
+    () => [...activeItems.map((item) => item.id), qtyPrompt?.id ?? null],
+    [activeItems, qtyPrompt?.id],
+  );
+  const { data: warehouseStock } = useWarehouseStockForItems(stockItemIds, allowMaterials);
 
   const matchedServices = useMemo(
     () => filterServicesForAddLinesSearch(activeServices, query),

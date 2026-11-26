@@ -243,6 +243,16 @@ export function OrderDetailDialogs(props: OrderDetailDialogsProps) {
         inventoryItemId={catalogInventoryId}
         onCloseService={onCloseService}
         onCloseInventory={onCloseInventory}
+        onInventoryUpdated={(item) => {
+          // Same rule as the database sync: an open order shows the new name at once; a finished one keeps its own.
+          if (!selectedOrder || selectedOrder.closedAt || selectedOrder.status === "closed" || selectedOrder.status === "cancelled") return;
+          const materials = selectedOrder.materials ?? [];
+          if (!materials.some((line) => line.inventoryItemId === item.id && line.itemName !== item.name)) return;
+          onOrderUpdated({
+            ...selectedOrder,
+            materials: materials.map((line) => (line.inventoryItemId === item.id ? { ...line, itemName: item.name } : line)),
+          });
+        }}
       />
 
       {selectedOrder && editServiceLine ? (

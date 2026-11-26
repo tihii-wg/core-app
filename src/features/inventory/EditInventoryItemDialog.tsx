@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import type { InventoryItem } from "../../lib/types";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/Dialog";
 import { EmptyState } from "../../ui/EmptyState";
 import { industryInventoryCopy } from "../industries/industryWorkflow";
@@ -9,7 +10,16 @@ import { useGetInventoryItem } from "./useGetInventoryItem";
 import { useInventoryMarkupEditor } from "./useInventoryMarkupEditor";
 import { useUpdateInventoryItem } from "./useUpdateInventoryItem";
 
-export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | null; onClose: () => void }) {
+export function EditInventoryItemDialog({
+  itemId,
+  onClose,
+  onSaved,
+}: {
+  itemId: string | null;
+  onClose: () => void;
+  /** After a successful save (e.g. the order card renames its material lines at once). */
+  onSaved?: (item: InventoryItem) => void;
+}) {
   const { t } = useTranslation();
   const { workflow } = useIndustryWorkflow();
   const inventoryCopy = industryInventoryCopy(workflow);
@@ -81,7 +91,10 @@ export function EditInventoryItemDialog({ itemId, onClose }: { itemId: string | 
                   quantity: editQuery.item.quantity,
                 },
                 {
-                  onSuccess: onClose,
+                  onSuccess: (item) => {
+                    onSaved?.(item);
+                    onClose();
+                  },
                 },
               );
             }}

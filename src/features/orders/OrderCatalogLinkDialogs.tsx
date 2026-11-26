@@ -14,13 +14,15 @@ type Props = {
   inventoryItemId: string | null;
   onCloseService: () => void;
   onCloseInventory: () => void;
+  /** The opened catalog item was saved (the order card updates its material lines). */
+  onInventoryUpdated?: (item: InventoryItem) => void;
 };
 
 /**
  * Catalog windows opened from an order card: a service line opens the same edit form as
  * Services → edit; a catalog material opens the inventory item card (stock per warehouse).
  */
-export function OrderCatalogLinkDialogs({ serviceId, inventoryItemId, onCloseService, onCloseInventory }: Props) {
+export function OrderCatalogLinkDialogs({ serviceId, inventoryItemId, onCloseService, onCloseInventory, onInventoryUpdated }: Props) {
   const { t } = useTranslation();
   // Only the linked service (by id), not the catalog.
   const { services } = useServicesByIds(serviceId ? [serviceId] : []);
@@ -70,7 +72,7 @@ export function OrderCatalogLinkDialogs({ serviceId, inventoryItemId, onCloseSer
           onCloseInventory();
         }}
       />
-      {editInventoryId ? <EditInventoryItemDialog itemId={editInventoryId} onClose={() => setEditInventoryId(null)} /> : null}
+      {editInventoryId ? <EditInventoryItemDialog itemId={editInventoryId} onClose={() => setEditInventoryId(null)} onSaved={onInventoryUpdated} /> : null}
       <DeleteInventoryItemDialog item={inventoryToDelete} onClose={() => setInventoryToDelete(null)} />
     </>
   );
