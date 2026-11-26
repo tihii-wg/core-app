@@ -479,10 +479,9 @@ export async function setDefaultStatusDefinition(statusId: string, workspaceId: 
     .maybeSingle();
   if (loadError) throw new Error(loadError.message);
   if (!target) throw new Error(i18n.t("settings.statuses.errors.notFound"));
+  // Every entity has one starting status (new leads / tasks / invoices / transfers get it too).
   const targetEntity = (target as { entity?: string }).entity;
-  if (targetEntity !== "order" && targetEntity !== "estimate") {
-    throw new Error(i18n.t("settings.statuses.errors.orderOnly"));
-  }
+  if (!targetEntity) throw new Error(i18n.t("settings.statuses.errors.notFound"));
   if ((target as { is_active?: boolean }).is_active === false) {
     throw new Error(i18n.t("settings.statuses.errors.inactiveDefault"));
   }
@@ -513,32 +512,58 @@ export async function setDefaultStatusDefinition(statusId: string, workspaceId: 
   return toStatusDefinition(data as unknown as Record<string, unknown>);
 }
 
-/** Reorders statuses by writing sequential sort_order values. */
+/** Reorders statuses by writing sequential sort_order values (one parallel wave, not one request after another). */
 export async function reorderStatusDefinitions(orderedIds: string[], workspaceId: string | undefined) {
   const resolved = requireWorkspaceId(workspaceId);
   const ids = orderedIds.map((id) => id.trim()).filter(Boolean);
-  for (let index = 0; index < ids.length; index += 1) {
-    const { error } = await supabase
-      .from("status_definitions")
-      .update({ sort_order: index + 1, updated_at: new Date().toISOString() })
-      .eq("id", ids[index])
-      .eq("workspace_id", resolved)
-      .is("deleted_at", null);
+  const updatedAt = new Date().toISOString();
+  const results = await Promise.all(
+    ids.map((id, index) =>
+      supabase
+        .from("status_definitions")
+        .update({ sort_order: index + 1, updated_at: updatedAt })
+        .eq("id", id)
+        .eq("workspace_id", resolved)
+        .is("deleted_at", null),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw new Error(failed.error.message);
+}
+
+/** Rows that point at a status of each entity (a status in use cannot be deleted, only archived / replaced). */
+const STATUS_USAGE: Record<StatusEntity, { table: string; column: string }[]> = {
+  order: [{ table: "orders", column: "custom_status_id" }],
+  estimate: [
+    { table: "orders", column: "custom_status_id" },
+    { table: "estimates", column: "status_id" },
+  ],
+  lead: [{ table: "leads", column: "status_id" }],
+  task: [{ table: "tasks", column: "status_id" }],
+  invoice: [{ table: "invoices", column: "status_id" }],
+  transfer: [{ table: "stock_transfers", column: "status_id" }],
+};
+
+async function assertStatusUnused(workspaceId: string, statusId: string, entity: StatusEntity) {
+  const checks = await Promise.all(
+    (STATUS_USAGE[entity] ?? STATUS_USAGE.order).map(({ table, column }) =>
+      supabase.from(table).select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).eq(column, statusId),
+    ),
+  );
+  for (const { count, error } of checks) {
+    // A table / column an older database does not have yet cannot reference the status.
+    if (error && /PGRST20[45]|42P01|42703|does not exist|schema cache/i.test(`${error.code ?? ""} ${error.message ?? ""}`)) continue;
     if (error) throw new Error(error.message);
+    if ((count ?? 0) > 0) {
+      // Orders can move to another status (Replace…); elsewhere a status in use is archived instead.
+      throw new Error(entity === "order" ? i18n.t("settings.statuses.errors.inUse") : i18n.t("settings.statuses.errors.inUseArchive"));
+    }
   }
 }
 
 /** Soft-deletes an unused status. Fails if orders still reference it. */
 export async function deleteStatusDefinition(statusId: string, workspaceId: string | undefined) {
   const resolved = requireWorkspaceId(workspaceId);
-
-  const { count, error: countError } = await supabase
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", resolved)
-    .eq("custom_status_id", statusId);
-  if (countError) throw new Error(countError.message);
-  if ((count ?? 0) > 0) throw new Error(i18n.t("settings.statuses.errors.inUse"));
 
   const { data: row, error: loadError } = await supabase
     .from("status_definitions")
@@ -563,6 +588,7 @@ export async function deleteStatusDefinition(statusId: string, workspaceId: stri
   ) {
     throw new Error(i18n.t("settings.statuses.errors.cannotDeleteProtected"));
   }
+  await assertStatusUnused(resolved, statusId, (entity ?? "order") as StatusEntity);
   if (entity === "estimate" && action === "accept") {
     await assertNotLastActiveAccept(resolved, statusId);
   }

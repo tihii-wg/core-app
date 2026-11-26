@@ -54,6 +54,15 @@ import {
 
 const entities: StatusEntity[] = ["order", "estimate", "lead", "invoice", "transfer", "task"];
 
+/** Leads, invoices, transfers and tasks: the group is edited with the name (tasks use it for their state buttons). */
+function hasEditableGroup(entity: StatusEntity) {
+  return entity === "lead" || entity === "invoice" || entity === "transfer" || entity === "task";
+}
+
+function groupHintKey(entity: StatusEntity) {
+  return entity === "task" ? "settings.statuses.form.taskGroupHint" : "settings.statuses.form.groupHint";
+}
+
 function semanticLabelKey(action: StatusSemanticAction) {
   if (action === "close") return "settings.statuses.semantic.close";
   if (action === "cancel") return "settings.statuses.semantic.cancel";
@@ -97,6 +106,7 @@ export function StatusesSettings() {
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("#2563eb");
   const [editMinPaid, setEditMinPaid] = useState("");
+  const [editGroup, setEditGroup] = useState<StatusGroup>("new");
   const [replaceFrom, setReplaceFrom] = useState<StatusDefinition | null>(null);
   const [replaceToId, setReplaceToId] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<StatusDefinition | null>(null);
@@ -139,9 +149,9 @@ export function StatusesSettings() {
         name: form.name,
         color: form.color,
         statusGroup: form.statusGroup,
-        systemStatus: form.systemStatus || null,
+        systemStatus: entity === "order" ? form.systemStatus || null : null,
         sortOrder: Number(form.sortOrder) || 0,
-        minPaidPercent: minPaid.value,
+        minPaidPercent: entity === "order" ? minPaid.value : null,
       },
       {
         onSuccess: (created) => {
@@ -167,6 +177,8 @@ export function StatusesSettings() {
         id: editing.id,
         name: editName,
         color: editColor,
+        // Orders / estimates keep their group (board columns, lifecycle); other entities edit it here.
+        ...(hasEditableGroup(editing.entity) && editGroup !== editing.statusGroup ? { statusGroup: editGroup } : {}),
         // Only touch min_paid_percent when it changed, so unrelated edits work before the migration.
         ...(minPaid.value !== (editing.minPaidPercent ?? null) ? { minPaidPercent: minPaid.value } : {}),
       },
@@ -261,7 +273,9 @@ export function StatusesSettings() {
                               </span>
                             ) : null}
                             {status.isDefault ? (
-                              <span className="text-xs text-muted-foreground">{t("settings.statuses.default")}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {item === "order" ? t("settings.statuses.default") : t("settings.statuses.defaultGeneric")}
+                              </span>
                             ) : null}
                             {!status.isActive ? (
                               <span className="text-xs text-muted-foreground">{t("settings.statuses.inactive")}</span>
@@ -286,7 +300,7 @@ export function StatusesSettings() {
                             </p>
                           ) : null}
                         </div>
-                        {canEdit && (item === "order" || item === "estimate") ? (
+                        {canEdit ? (
                           <div className="flex flex-wrap gap-1">
                             <Button
                               type="button"
@@ -317,6 +331,7 @@ export function StatusesSettings() {
                                 setEditName(status.name);
                                 setEditColor(status.color || "#2563eb");
                                 setEditMinPaid(minPaidPercentToInput(status.minPaidPercent));
+                                setEditGroup(status.statusGroup as StatusGroup);
                               }}
                             >
                               {t("common.edit")}
@@ -353,7 +368,7 @@ export function StatusesSettings() {
                                   {t("settings.statuses.assignCancel")}
                                 </Button>
                               </>
-                            ) : (
+                            ) : item === "estimate" ? (
                               <>
                                 <Button
                                   type="button"
@@ -386,7 +401,7 @@ export function StatusesSettings() {
                                   {t("settings.statuses.assignReject")}
                                 </Button>
                               </>
-                            )}
+                            ) : null}
                             {item === "order" ? (
                               <Button type="button" size="sm" variant="outline" onClick={() => setReplaceFrom(status)}>
                                 {t("settings.statuses.replace")}
@@ -447,8 +462,12 @@ export function StatusesSettings() {
 
         {canEdit ? (
           <form onSubmit={onSubmit} className="grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-2">
-            <p className="text-sm font-medium text-foreground sm:col-span-2">{t("settings.statuses.form.title")}</p>
-            <p className="text-xs text-muted-foreground sm:col-span-2">{t("settings.statuses.form.normalOnlyHint")}</p>
+            <p className="text-sm font-medium text-foreground sm:col-span-2">
+              {t("settings.statuses.form.titleFor", { entity: t(`settings.statuses.entities.${entity}`) })}
+            </p>
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              {entity === "order" ? t("settings.statuses.form.normalOnlyHint") : t(groupHintKey(entity))}
+            </p>
             <div className="space-y-1.5">
               <Label htmlFor="status-name">{t("settings.statuses.form.name")}</Label>
               <Input
@@ -483,6 +502,7 @@ export function StatusesSettings() {
                 ))}
               </select>
             </div>
+            {entity === "order" ? (
             <div className="space-y-1.5">
               <Label htmlFor="status-system">{t("settings.statuses.form.systemStatus")}</Label>
               <select
@@ -500,6 +520,7 @@ export function StatusesSettings() {
               </select>
               <p className="text-xs text-muted-foreground">{t("settings.statuses.form.systemStatusHint")}</p>
             </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="status-sort">{t("settings.statuses.form.sortOrder")}</Label>
               <Input
@@ -509,6 +530,7 @@ export function StatusesSettings() {
                 onChange={(event) => setForm({ ...form, sortOrder: event.target.value })}
               />
             </div>
+            {entity === "order" ? (
             <div className="space-y-1.5">
               <Label htmlFor="status-min-paid">{t("settings.statuses.minPaidPercent")}</Label>
               <Input
@@ -523,6 +545,7 @@ export function StatusesSettings() {
               />
               <p className="text-xs text-muted-foreground">{t("settings.statuses.minPaidPercentHint")}</p>
             </div>
+            ) : null}
             <div className="sm:col-span-2">
               <Button type="submit" disabled={createStatus.isPending || !form.name.trim()}>
                 <Plus />
@@ -553,6 +576,24 @@ export function StatusesSettings() {
                   onChange={(event) => setEditColor(event.target.value)}
                 />
               </div>
+              {editing && hasEditableGroup(editing.entity) ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-status-group">{t("settings.statuses.group")}</Label>
+                  <select
+                    id="edit-status-group"
+                    className={`${controlClassName} h-9 px-3 text-sm`}
+                    value={editGroup}
+                    onChange={(event) => setEditGroup(event.target.value as StatusGroup)}
+                  >
+                    {STATUS_GROUPS.map((group) => (
+                      <option key={group} value={group}>
+                        {t(`settings.statuses.groups.${group}`)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">{t(groupHintKey(editing.entity))}</p>
+                </div>
+              ) : null}
               {editing?.entity === "order" ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-status-min-paid">{t("settings.statuses.minPaidPercent")}</Label>
