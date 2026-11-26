@@ -1,3 +1,4 @@
+-- SUPERSEDED by 20261126090000_owner_subscriptions.PRODUCTION.sql (apply that one instead).
 -- =============================================================================
 -- Subscription belongs to the OWNER's account, not to each workspace.
 -- Script: 20261125223000_subscription_per_owner.PRODUCTION.sql
