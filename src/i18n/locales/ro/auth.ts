@@ -82,6 +82,7 @@ const auth: Messages<typeof en> = {
     },
   },
   resetPassword: {
+    mfaRequired: "Pentru acest cont este activată autentificarea în doi pași. Introduceți codul din aplicația de autentificare, apoi setați parola nouă.",
     tagline: "Alegeți o parolă nouă",
     instructions: "Introduceți o parolă nouă pentru contul dvs.",
     checking: "Se verifică linkul de recuperare...",

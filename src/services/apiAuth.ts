@@ -326,6 +326,9 @@ export async function updateRecoveredPassword(password: string) {
   const { error } = await supabase.auth.updateUser({ password });
   if (error) {
     console.warn("[password recovery] updateUser failed:", error.message);
+    // Two-factor accounts: Supabase wants an aal2 session ("AAL2 session is required…") — that is the code, not a
+    // lost session.
+    if (/aal2|insufficient_aal|mfa/i.test(error.message)) throw new Error(i18n.t("auth.resetPassword.mfaRequired"));
     // Revoked / missing recovery session: say what to do instead of a generic "session expired".
     if (/session|jwt|not authenticated/i.test(error.message)) throw new Error(i18n.t("auth.resetPassword.errors.sessionLost"));
     throw new Error(passwordChangeMessage(error.message));

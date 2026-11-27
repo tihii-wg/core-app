@@ -78,6 +78,7 @@ export default {
     },
   },
   resetPassword: {
+    mfaRequired: "Two-factor sign-in is on for this account. Enter the code from your authenticator app, then set the new password.",
     tagline: "Choose a new password",
     instructions: "Enter a new password for your account.",
     checking: "Verifying recovery link...",

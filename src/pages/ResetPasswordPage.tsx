@@ -7,6 +7,7 @@ import { Label } from "../ui/Label";
 import { Input } from "../ui/Input";
 import { Spinner } from "../ui/Spinner";
 import { LogoMark } from "../ui/Logo";
+import { LoginMfaStep } from "../features/auth/LoginMfaStep";
 import { languageFromPath } from "../i18n/languages";
 import { endPasswordRecoverySession, updateRecoveredPassword } from "../services/apiAuth";
 import { passwordChangeMessage, passwordMinimum, passwordRecoverySessionMessage } from "../services/authMessages";
@@ -38,6 +39,9 @@ export function ResetPasswordPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  /** Accounts with two-factor sign-in: Supabase changes the password only after the code (an aal2 session). */
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaVerified, setMfaVerified] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +135,32 @@ export function ResetPasswordPage() {
       subscription.unsubscribe();
     };
   }, [t]);
+
+  // Recovery confirmed: end the user's sessions on other devices (this browser's tabs share this recovery session)
+  // and find out whether the two-factor code is needed before the password can be changed.
+  useEffect(() => {
+    if (gate !== "ready") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await supabase.auth.signOut({ scope: "others" });
+      } catch {
+        // Best effort: the global sign-out after the change ends them anyway.
+      }
+      try {
+        const { data: level } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (cancelled || !(level?.currentLevel === "aal1" && level?.nextLevel === "aal2")) return;
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const factorId = factors?.totp?.[0]?.id ?? null;
+        if (!cancelled && factorId) setMfaFactorId(factorId);
+      } catch {
+        // No MFA information: the password form is shown; a missing code is reported by the save itself.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gate]);
 
   function leaveRecoveryToLogin() {
     clearPasswordRecoveryFlag();
@@ -276,6 +306,12 @@ export function ResetPasswordPage() {
             <p className="text-sm text-muted-foreground">{t("auth.resetPassword.tagline")}</p>
           </div>
 
+          {mfaFactorId && !mfaVerified ? (
+            <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+              <p className="mb-4 text-sm text-muted-foreground">{t("auth.resetPassword.mfaRequired")}</p>
+              <LoginMfaStep factorId={mfaFactorId} onVerified={() => setMfaVerified(true)} onBack={leaveRecoveryToLogin} />
+            </div>
+          ) : (
           <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
             <p className="text-sm text-muted-foreground mb-4">{t("auth.resetPassword.instructions")}</p>
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -345,6 +381,7 @@ export function ResetPasswordPage() {
               </Button>
             </form>
           </div>
+          )}
         </div>
       </div>
     </div>
