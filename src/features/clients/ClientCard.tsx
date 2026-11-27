@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { EllipsisVertical, Eye, Pencil, Phone, Trash2 } from "lucide-react";
 import { ClientNameWithMark } from "./ClientNameWithMark";
 import { useTranslation } from "react-i18next";
@@ -25,7 +26,8 @@ type ClientCardProps = {
  * Compact phone layout for one client (below the md breakpoint). The whole
  * surface opens the client detail panel; the actions menu is independent.
  */
-export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, onDelete }: ClientCardProps) {
+/** Memoized: opening a dialog on the Clients page must not re-render every card. */
+export const ClientCard = memo(function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, onDelete }: ClientCardProps) {
   const { t } = useTranslation();
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
 
@@ -99,4 +101,4 @@ export function ClientCard({ client, ordersCount, formatMoney, onView, onEdit, o
       </div>
     </article>
   );
-}
+});

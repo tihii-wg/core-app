@@ -1,6 +1,7 @@
+import { useStableCallback } from "../../lib/useStableCallback";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { Order } from "../../lib/types";
+import type { Order, OrderStatus } from "../../lib/types";
 import { DataTable, type Column } from "../../ui/DataTable";
 import { Skeleton } from "../../ui/Skeleton";
 import { useIsMobile } from "../../hooks/use-mobile";
@@ -168,6 +169,16 @@ export function OrdersListView({
   function openClient(clientId: string) {
     onOpenClient?.(clientId);
   }
+
+  // Stable handlers for the memoized order cards: a page re-render (e.g. opening "Create order")
+  // must not re-render all cards; the handlers still call the latest closures.
+  const cardOpenOrder = useStableCallback((order: Order) => orderDetails.openOrder(order));
+  const cardOpenClient = useStableCallback((clientId: string) => onOpenClient?.(clientId));
+  const cardEdit = useStableCallback((order: Order) => setEditingOrder(order));
+  const cardStatusChange = useStableCallback((order: Order, status: OrderStatus) => orderDetails.changeStatus(order, status));
+  const cardCreateInvoice = useStableCallback((order: Order) => handleCreateInvoice(order));
+  const cardOrderUpdated = useStableCallback((order: Order) => orderDetails.syncOrder(order));
+  const cardDeleted = useStableCallback((orderId: string) => handleDeleted(orderId));
 
   const { fields: orderFieldConfig } = useOrderFieldConfig();
   const orderIds = useMemo(() => orders.map((order) => order.id), [orders]);
@@ -367,13 +378,13 @@ export function OrdersListView({
                   warrantyIndicator={warrantyByOrderId.get(order.id)}
                   attachmentCount={attachmentCountByOrderId.get(order.id)}
                   formatMoney={formatMoney}
-                  onView={orderDetails.openOrder}
-                  onOpenClient={onOpenClient}
-                  onEdit={setEditingOrder}
-                  onStatusChange={orderDetails.changeStatus}
-                  onCreateInvoice={handleCreateInvoice}
-                  onOrderUpdated={orderDetails.syncOrder}
-                  onDeleted={handleDeleted}
+                  onView={cardOpenOrder}
+                  onOpenClient={onOpenClient ? cardOpenClient : undefined}
+                  onEdit={cardEdit}
+                  onStatusChange={cardStatusChange}
+                  onCreateInvoice={cardCreateInvoice}
+                  onOrderUpdated={cardOrderUpdated}
+                  onDeleted={cardDeleted}
                 />
                 {cardExtra?.(order)}
               </div>

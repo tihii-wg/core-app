@@ -1,5 +1,6 @@
+import { DialogLauncher, type DialogLauncherHandle } from "../../ui/DialogLauncher";
 import { useFormFieldLayout } from "../formFields/useFormFields";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { Trans, useTranslation } from "react-i18next";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -46,7 +47,9 @@ export function Services() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  // Dialog state lives in the launcher: opening it must not re-render the services table.
+  const createLauncher = useRef<DialogLauncherHandle>(null);
+  const openCreate = () => createLauncher.current?.open();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [serviceToDelete, setServiceToDelete] = useState<Service | null>(null);
@@ -211,7 +214,7 @@ export function Services() {
         description={isPending ? t("services.loading") : t("services.activeCount", { count: activeCount })}
         actions={
           canManage ? (
-            <Button onClick={() => setCreateModalOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus />
               {t("services.addService")}
             </Button>
@@ -268,7 +271,7 @@ export function Services() {
               }
             />
           ) : (
-            <NoServices onAddService={canManage ? () => setCreateModalOpen(true) : undefined} />
+            <NoServices onAddService={canManage ? openCreate : undefined} />
           )
         }
         keyExtractor={(service) => service.id}
@@ -295,7 +298,9 @@ export function Services() {
         />
       ) : null}
 
-      <CreateServiceDialog open={createModalOpen} onOpenChange={setCreateModalOpen} />
+      <DialogLauncher ref={createLauncher}>
+        {({ open, setOpen }) => <CreateServiceDialog open={open} onOpenChange={setOpen} />}
+      </DialogLauncher>
 
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-lg">

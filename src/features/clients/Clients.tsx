@@ -1,6 +1,8 @@
+import { DialogLauncher, type DialogLauncherHandle } from "../../ui/DialogLauncher";
 import { useFormFieldLayout } from "../formFields/useFormFields";
+import { useStableCallback } from "../../lib/useStableCallback";
 import { ClientNameWithMark } from "./ClientNameWithMark";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -81,8 +83,10 @@ export function Clients() {
   const { formatMoney } = useWorkspaceMoney();
   const orderDetails = useOrderDetails();
 
-  const [addClientOpen, setAddClientOpen] = useState(false);
-  const [mergeOpen, setMergeOpen] = useState(false);
+  // Dialog state lives in the launchers: opening a dialog must not re-render the whole client list.
+  const addClientLauncher = useRef<DialogLauncherHandle>(null);
+  const mergeLauncher = useRef<DialogLauncherHandle>(null);
+  const openAddClient = () => addClientLauncher.current?.open();
   const [orderForClient, setOrderForClient] = useState<Client | null>(null);
   const [orderForVehicleId, setOrderForVehicleId] = useState<string | null>(null);
   const [createKind, setCreateKind] = useState<"order" | "estimate">("order");
@@ -224,10 +228,11 @@ export function Clients() {
     return visibleColumns.has(column.key as ClientToggleableColumn);
   });
 
-  const handleRowClick = (client: Client) => {
+  // Stable identity: memoized client cards don't re-render when a dialog opens.
+  const handleRowClick = useStableCallback((client: Client) => {
     setSelectedClient(client);
     setDetailPanelOpen(true);
-  };
+  });
 
   return (
     <div className="space-y-5">
@@ -237,11 +242,11 @@ export function Clients() {
         actions={
           canMutateClients ? (
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => setMergeOpen(true)}>
+              <Button type="button" variant="outline" onClick={() => mergeLauncher.current?.open()}>
                 <Merge />
                 {t("clients.merge.button")}
               </Button>
-              <Button onClick={() => setAddClientOpen(true)}>
+              <Button onClick={openAddClient}>
                 <Plus />
                 {clientCopy.addClient}
               </Button>
@@ -297,7 +302,7 @@ export function Clients() {
             ) : searchQuery || clientType !== "all" ? (
               <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
             ) : (
-              <NoClients onAddClient={() => setAddClientOpen(true)} />
+              <NoClients onAddClient={openAddClient} />
             )}
           </div>
         ) : (
@@ -328,7 +333,7 @@ export function Clients() {
             ) : searchQuery || clientType !== "all" ? (
               <NoSearchResults query={searchQuery || (clientType === "organization" ? t("clients.filters.organizations") : t("clients.filters.individuals"))} />
             ) : (
-              <NoClients onAddClient={() => setAddClientOpen(true)} />
+              <NoClients onAddClient={openAddClient} />
             )
           }
         />
@@ -353,7 +358,9 @@ export function Clients() {
         />
       ) : null}
 
-      <AddClientDialog open={addClientOpen} onOpenChange={setAddClientOpen} />
+      <DialogLauncher ref={addClientLauncher}>
+        {({ open, setOpen }) => <AddClientDialog open={open} onOpenChange={setOpen} />}
+      </DialogLauncher>
 
       <CreateOrderDialog
         open={Boolean(orderForClient)}
@@ -440,16 +447,20 @@ export function Clients() {
         }}
       />
 
-      <MergeClientsDialog
-        open={mergeOpen}
-        onClose={() => setMergeOpen(false)}
-        clients={clients}
-        orderCountByClientId={orderCountByClientId}
-        onMerged={(client) => {
-          setSelectedClient(client);
-          setDetailPanelOpen(true);
-        }}
-      />
+      <DialogLauncher ref={mergeLauncher}>
+        {({ open, setOpen }) => (
+          <MergeClientsDialog
+            open={open}
+            onClose={() => setOpen(false)}
+            clients={clients}
+            orderCountByClientId={orderCountByClientId}
+            onMerged={(client) => {
+              setSelectedClient(client);
+              setDetailPanelOpen(true);
+            }}
+          />
+        )}
+      </DialogLauncher>
 
       <OrderDetailPanel
         {...orderDetails.panelProps}

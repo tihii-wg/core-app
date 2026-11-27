@@ -1,3 +1,4 @@
+import { DialogLauncher, type DialogLauncherHandle } from "../../ui/DialogLauncher";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useTranslation } from "react-i18next";
@@ -74,7 +75,6 @@ export function Orders() {
       ? typeParam
       : "all";
   const isEstimatesView = typeFilter === "estimate";
-  const [createKind, setCreateKind] = useState<OrderKind>("order");
   const { workflow, copy } = useIndustryWorkflow();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -153,7 +153,10 @@ export function Orders() {
   const debouncedSearch = useDebounce(searchQuery, 400);
 
   // Modals
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  // "Create order / estimate" dialog state lives in the launcher: opening it must not re-render the
+  // whole orders list. The client-card path (orderForClient) still drives the same dialog from here.
+  const createLauncher = useRef<DialogLauncherHandle<OrderKind>>(null);
+  const openCreate = (kind: OrderKind = "order") => createLauncher.current?.open(kind);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   const handleVisibleColumnsChange = (columns: Set<OrderToggleableColumn>) => {
@@ -340,13 +343,10 @@ export function Orders() {
     <EmptyState
       title={t("orders.estimates.emptyTitle")}
       description={t("orders.estimates.emptyDescription")}
-      action={canCreateOrders ? { label: t("orders.estimates.createEstimate"), onClick: () => {
-              setCreateKind("estimate");
-              setCreateModalOpen(true);
-            } } : undefined}
+      action={canCreateOrders ? { label: t("orders.estimates.createEstimate"), onClick: () => openCreate("estimate") } : undefined}
     />
   ) : (
-    <NoOrders onCreateOrder={canCreateOrders ? () => setCreateModalOpen(true) : undefined} />
+    <NoOrders onCreateOrder={canCreateOrders ? () => openCreate("order") : undefined} />
   );
 
   function setTypeFilter(next: OrderListKind) {
@@ -434,20 +434,14 @@ export function Orders() {
               {estimatesEnabled ? (
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setCreateKind("estimate");
-                    setCreateModalOpen(true);
-                  }}
+                  onClick={() => openCreate("estimate")}
                 >
                   <Plus />
                   {t("orders.estimates.createEstimate")}
                 </Button>
               ) : null}
               <Button
-                onClick={() => {
-                  setCreateKind("order");
-                  setCreateModalOpen(true);
-                }}
+                onClick={() => openCreate("order")}
               >
                 <Plus />
                 {t("orders.createOrder")}
@@ -617,26 +611,29 @@ export function Orders() {
         </div>
       ) : null}
 
-      <CreateOrderDialog
-        open={createModalOpen || Boolean(orderForClient)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreateModalOpen(false);
-            setOrderForClient(null);
-            setOrderForVehicleId(null);
-            setCreateFromClientKind("order");
-            setCreateKind("order");
-          }
-        }}
-        searchQuery={orderForClient ? "" : searchQuery}
-        initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
-        initialVehicleId={orderForVehicleId}
-        kind={orderForClient ? createFromClientKind : createKind}
-        // Started from the client card (client or one of its vehicles) → close that card once the order exists.
-        onCreated={() => {
-          if (orderForClient) clientDetails.setDetailPanelOpen(false);
-        }}
-      />
+      <DialogLauncher ref={createLauncher}>
+        {({ open, setOpen, payload }) => (
+          <CreateOrderDialog
+            open={open || Boolean(orderForClient)}
+            onOpenChange={(next) => {
+              if (!next) {
+                setOpen(false);
+                setOrderForClient(null);
+                setOrderForVehicleId(null);
+                setCreateFromClientKind("order");
+              }
+            }}
+            searchQuery={orderForClient ? "" : searchQuery}
+            initialClient={orderForClient ? { id: orderForClient.id, name: orderForClient.name } : null}
+            initialVehicleId={orderForVehicleId}
+            kind={orderForClient ? createFromClientKind : (payload ?? "order")}
+            // Started from the client card (client or one of its vehicles) → close that card once the order exists.
+            onCreated={() => {
+              if (orderForClient) clientDetails.setDetailPanelOpen(false);
+            }}
+          />
+        )}
+      </DialogLauncher>
 
       <ClientDetailsHost
         selectedClient={clientDetails.selectedClient}

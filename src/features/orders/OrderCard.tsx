@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { isRowClickIgnored } from "../../ui/DataTable";
 import { OrderTotalBreakdownPopover } from "./OrderTotalBreakdownPopover";
@@ -46,7 +47,7 @@ type OrderCardProps = {
  * the table). The whole surface opens the order; the actions menu stays an
  * independent control and never triggers the card click.
  */
-export function OrderCard({
+export const OrderCard = memo(function OrderCard({
   order,
   invoiceNumber,
   linkedPaymentCount = 0,
@@ -155,4 +156,4 @@ export function OrderCard({
       <span className="sr-only">{t("orders.actions.viewDetails")}</span>
     </article>
   );
-}
+});

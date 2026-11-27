@@ -1,5 +1,7 @@
+import { DialogLauncher, type DialogLauncherHandle } from "../../ui/DialogLauncher";
 import { useFormFieldLayout } from "../formFields/useFormFields";
-import { useEffect, useMemo, useState } from "react";
+import { useStableCallback } from "../../lib/useStableCallback";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useListTopAnchor } from "../../hooks/useListTopAnchor";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -73,7 +75,9 @@ export function Inventory() {
   const [stockFilter, setStockFilter] = useState<InventoryListFilter>("active");
   const [supplierFilter, setSupplierFilter] = useState("all");
   const [sortValue, setSortValue] = useState(DEFAULT_SORT_VALUE);
-  const [createOpen, setCreateOpen] = useState(false);
+  // Dialog state lives in the launcher: opening it must not re-render the whole parts list.
+  const createLauncher = useRef<DialogLauncherHandle>(null);
+  const openCreate = () => createLauncher.current?.open();
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
@@ -149,6 +153,11 @@ export function Inventory() {
     { value: "inactive", label: t("inventory.inactive") },
     { value: "all", label: t("inventory.filters.allIncludingInactive") },
   ];
+
+  // Stable handlers: memoized inventory cards don't re-render when a dialog opens.
+  const formatCardMoney = useStableCallback((value: number | null) => formatWorkspaceMoney(value, workspace?.currency));
+  const viewCardItem = useStableCallback((selected: InventoryItem) => setDetailId(selected.id));
+  const editCardItem = useStableCallback((selected: InventoryItem) => setEditId(selected.id));
 
   const columns: Column<InventoryItem>[] = [
     {
@@ -265,7 +274,7 @@ export function Inventory() {
         }
         actions={
           canMutateInventory ? (
-            <Button onClick={() => setCreateOpen(true)} disabled={!canCreateMaterial}>
+            <Button onClick={openCreate} disabled={!canCreateMaterial}>
               <Plus />
               {inventoryCopy.addItem}
             </Button>
@@ -407,7 +416,7 @@ export function Inventory() {
                 }
               />
             ) : (
-              <NoInventory onAddItem={canCreateMaterial ? () => setCreateOpen(true) : undefined} />
+              <NoInventory onAddItem={canCreateMaterial ? openCreate : undefined} />
             )}
           </div>
         ) : (
@@ -417,9 +426,9 @@ export function Inventory() {
                 key={item.id}
                 item={item}
                 thumbUrl={thumbUrl(item.photoPath)}
-                formatMoney={(value) => formatWorkspaceMoney(value, workspace?.currency)}
-                onView={(selected) => setDetailId(selected.id)}
-                onEdit={(selected) => setEditId(selected.id)}
+                formatMoney={formatCardMoney}
+                onView={viewCardItem}
+                onEdit={editCardItem}
                 onDelete={setItemToDelete}
               />
             ))}
@@ -445,7 +454,7 @@ export function Inventory() {
                 }
               />
             ) : (
-              <NoInventory onAddItem={canCreateMaterial ? () => setCreateOpen(true) : undefined} />
+              <NoInventory onAddItem={canCreateMaterial ? openCreate : undefined} />
             )
           }
         />
@@ -470,15 +479,19 @@ export function Inventory() {
         />
       ) : null}
 
-      <AddInventoryItemDialog
-        open={createOpen && canCreateMaterial}
-        onOpenChange={(next) => {
-          if (!next || canCreateMaterial) setCreateOpen(next);
-        }}
-        onCreated={(item) => {
-          if (canReceiveStock) setReceiveItem(item);
-        }}
-      />
+      <DialogLauncher ref={createLauncher}>
+        {({ open, setOpen }) => (
+          <AddInventoryItemDialog
+            open={open && canCreateMaterial}
+            onOpenChange={(next) => {
+              if (!next || canCreateMaterial) setOpen(next);
+            }}
+            onCreated={(item) => {
+              if (canReceiveStock) setReceiveItem(item);
+            }}
+          />
+        )}
+      </DialogLauncher>
 
       <QuickGoodsReceiptDialog
         open={Boolean(receiveItem)}

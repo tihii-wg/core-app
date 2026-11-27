@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useFormFieldLayout } from "../formFields/useFormFields";
 import { EllipsisVertical, Eye, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -30,7 +31,7 @@ type InventoryCardProps = {
  * Compact phone layout for one inventory item (below the md breakpoint).
  * The whole surface opens the item detail; the actions menu is independent.
  */
-export function InventoryCard({ item, thumbUrl = null, formatMoney, onView, onEdit, onDelete }: InventoryCardProps) {
+export const InventoryCard = memo(function InventoryCard({ item, thumbUrl = null, formatMoney, onView, onEdit, onDelete }: InventoryCardProps) {
   const { t } = useTranslation();
   const fieldLabels = useFormFieldLayout("product");
   const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
@@ -103,4 +104,4 @@ export function InventoryCard({ item, thumbUrl = null, formatMoney, onView, onEd
       </div>
     </article>
   );
-}
+});

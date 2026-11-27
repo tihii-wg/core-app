@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
+import { useStableCallback } from "../../lib/useStableCallback";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../ui/Button";
@@ -156,6 +157,9 @@ export function MergeClientsDialog({
       current.includes(client.id) ? current.filter((id) => id !== client.id) : [...current, client.id],
     );
   }
+
+  // Stable for the memoized rows: only rows whose data changed re-render (80 rows on every update before).
+  const toggleClientStable = useStableCallback((client: Client) => toggleClient(client));
 
   const [selectingAll, setSelectingAll] = useState(false);
   const totalFound = listQuery.data?.total ?? listed.length;
@@ -323,38 +327,16 @@ export function MergeClientsDialog({
                 <p className="text-sm text-muted-foreground">{t("clients.merge.noMatches")}</p>
               ) : (
                 <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-                  {visible.map((client) => {
-                    const checked = selectedIds.includes(client.id);
-                    const orders = orderCountByClientId.get(client.id) ?? 0;
-                    const vehicles = vehicleCounts.get(client.id);
-                    return (
-                      <li key={client.id}>
-                        <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-muted/60">
-                          <input
-                            type="checkbox"
-                            className="mt-1 size-4 shrink-0"
-                            checked={checked}
-                            onChange={() => toggleClient(client)}
-                          />
-                          <span className="min-w-0 flex-1 space-y-0.5">
-                            <span className="flex min-w-0 flex-wrap items-center gap-2">
-                              <span className="font-medium text-foreground [overflow-wrap:anywhere]">{client.name}</span>
-                              <ClientTypeBadge clientType={client.client_type} />
-                            </span>
-                            <span className="block text-xs text-muted-foreground tabular-nums">
-                              {[client.phone, client.email].filter(Boolean).join(" · ") || "—"}
-                            </span>
-                            <span className="block text-xs text-muted-foreground">
-                              {t("clients.merge.rowMeta", {
-                                orders,
-                                vehicles: vehicles ?? "…",
-                              })}
-                            </span>
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
+                  {visible.map((client) => (
+                    <MergeClientRow
+                      key={client.id}
+                      client={client}
+                      checked={selectedIds.includes(client.id)}
+                      orders={orderCountByClientId.get(client.id) ?? 0}
+                      vehicles={vehicleCounts.get(client.id)}
+                      onToggle={toggleClientStable}
+                    />
+                  ))}
                 </ul>
               )}
               {listed.length > PAGE_SIZE ? (
@@ -478,3 +460,47 @@ export function MergeClientsDialog({
     </Dialog>
   );
 }
+
+/** One client of the merge picker; memoized so ticking one row does not re-render the whole list. */
+const MergeClientRow = memo(function MergeClientRow({
+  client,
+  checked,
+  orders,
+  vehicles,
+  onToggle,
+}: {
+  client: Client;
+  checked: boolean;
+  orders: number;
+  vehicles: number | undefined;
+  onToggle: (client: Client) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+                      <li>
+                        <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-muted/60">
+                          <input
+                            type="checkbox"
+                            className="mt-1 size-4 shrink-0"
+                            checked={checked}
+                            onChange={() => onToggle(client)}
+                          />
+                          <span className="min-w-0 flex-1 space-y-0.5">
+                            <span className="flex min-w-0 flex-wrap items-center gap-2">
+                              <span className="font-medium text-foreground [overflow-wrap:anywhere]">{client.name}</span>
+                              <ClientTypeBadge clientType={client.client_type} />
+                            </span>
+                            <span className="block text-xs text-muted-foreground tabular-nums">
+                              {[client.phone, client.email].filter(Boolean).join(" · ") || "—"}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {t("clients.merge.rowMeta", {
+                                orders,
+                                vehicles: vehicles ?? "…",
+                              })}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+  );
+});
