@@ -82,11 +82,12 @@ export function AppSidebar() {
 
   const currentNavItem = location.pathname.split("/")[3];
 
-  const { setCurrentModule, sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
+  const { sidebarCollapsed, setSidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useApp();
 
   const handleNavClick = (module: AppModule) => {
-    setCurrentModule(module);
-    setMobileSidebarOpen(false);
+    // No setCurrentModule here: that state is never read, but setting it re-rendered every useApp()
+    // consumer in an extra commit before the page switch.
+    if (mobileSidebarOpen) setMobileSidebarOpen(false);
     navigate(`/${languageFromPath(location.pathname)}/${currentWorkspaceId}/${module}`);
   };
 

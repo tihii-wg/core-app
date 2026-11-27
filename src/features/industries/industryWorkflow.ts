@@ -90,7 +90,7 @@ export function serviceCategoryLabel(category: string | null | undefined, indust
 }
 
 /** Service UI copy that follows the active industry pack. */
-export function industryServiceCopy(workflow: IndustryWorkflow) {
+function buildIndustryServiceCopy(workflow: IndustryWorkflow) {
   const text = (key: string, legacyFallback: string) => {
     const packKey = `services.byIndustry.${workflow.copyPack}.${key}`;
     return i18n.t(packKey as "services.form.descriptionPlaceholder", {
@@ -114,7 +114,7 @@ export function defaultServiceCategory(workflow: IndustryWorkflow): serviceCateg
  * Client UI copy for the active industry pack.
  * Schema fields stay the same; only labels/placeholders/terminology adapt.
  */
-export function industryClientCopy(workflow: IndustryWorkflow) {
+function buildIndustryClientCopy(workflow: IndustryWorkflow) {
   const text = (key: string, legacyFallback: string) => {
     const packKey = `clients.byIndustry.${workflow.copyPack}.${key}`;
     return i18n.t(packKey as "clients.form.addressLabel", {
@@ -162,7 +162,7 @@ export function industryClientTotalCount(workflow: IndustryWorkflow, count: numb
  * Inventory UI copy for the active industry pack.
  * Category remains free-text in the DB; only labels/placeholders adapt (parts / supplies / inventory).
  */
-export function industryInventoryCopy(workflow: IndustryWorkflow) {
+function buildIndustryInventoryCopy(workflow: IndustryWorkflow) {
   const profile = industryProfile(workflow.slug);
   const pack = workflow.copyPack;
   const text = (key: string, legacyFallback: string) => {
@@ -250,7 +250,7 @@ export function industryModuleLabel(
   });
 }
 
-export function industryShellCopy(workflow: IndustryWorkflow) {
+function buildIndustryShellCopy(workflow: IndustryWorkflow) {
   const clients = industryClientCopy(workflow);
   const inventory = industryInventoryCopy(workflow);
   const orders = industryOrderCopy(workflow);
@@ -297,7 +297,7 @@ function defaultCopyPath(key: string) {
 }
 
 /** Translated order-form / detail copy for the active industry pack. */
-export function industryOrderCopy(workflow: IndustryWorkflow) {
+function buildIndustryOrderCopy(workflow: IndustryWorkflow) {
   const text = (key: string, legacyFallback: string) => {
     const packKey = copyPath(workflow.copyPack, key);
     const fallbackKey = defaultCopyPath(key);
@@ -379,4 +379,41 @@ export function shouldShowOrderAssetValue(
 /** Field names that are currently hidden — clear their validation when the industry changes. */
 export function hiddenOrderAssetFields(workflow: IndustryWorkflow): OrderAssetFieldName[] {
   return (Object.keys(workflow.orderFields) as OrderAssetFieldName[]).filter((name) => !workflow.orderFields[name].visible);
+}
+
+/**
+ * Industry copy is a pure function of the industry pack and the UI language, but building it runs
+ * dozens of i18n lookups (~0.5 ms for the shell copy). It is read by many components on every render
+ * (each order status badge, each sidebar item…), so each result is built once per pack + language.
+ * The returned objects are shared: treat them as read-only.
+ */
+const copyCache = new Map<string, unknown>();
+
+function cachedCopy<T>(kind: string, workflow: IndustryWorkflow, build: (workflow: IndustryWorkflow) => T): T {
+  const key = `${kind}|${workflow.slug}|${workflow.copyPack}|${i18n.language}`;
+  const hit = copyCache.get(key);
+  if (hit !== undefined) return hit as T;
+  const value = build(workflow);
+  copyCache.set(key, value);
+  return value;
+}
+
+// New translations (language switch / added resources) must not serve stale copy.
+i18n.on("languageChanged", () => copyCache.clear());
+i18n.store?.on?.("added", () => copyCache.clear());
+
+export function industryServiceCopy(workflow: IndustryWorkflow) {
+  return cachedCopy("service", workflow, buildIndustryServiceCopy);
+}
+export function industryClientCopy(workflow: IndustryWorkflow) {
+  return cachedCopy("client", workflow, buildIndustryClientCopy);
+}
+export function industryInventoryCopy(workflow: IndustryWorkflow) {
+  return cachedCopy("inventory", workflow, buildIndustryInventoryCopy);
+}
+export function industryShellCopy(workflow: IndustryWorkflow) {
+  return cachedCopy("shell", workflow, buildIndustryShellCopy);
+}
+export function industryOrderCopy(workflow: IndustryWorkflow) {
+  return cachedCopy("order", workflow, buildIndustryOrderCopy);
 }
