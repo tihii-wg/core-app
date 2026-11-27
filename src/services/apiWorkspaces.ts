@@ -36,6 +36,8 @@ type MembershipResult = {
 type ListedWorkspace = {
   id: string;
   name: string;
+  /** Interface language of the workspace (selected with the membership preferences). */
+  language?: string | null;
   avatar_path?: string | null;
   owner_id?: string | null;
   industry_id?: string | null;

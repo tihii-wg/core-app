@@ -143,6 +143,10 @@ const queryClient = new QueryClient({
       // List/catalog data stays fresh for 30s; avoid refetch storms on every remount/focus.
       // Open-order and payments queries can opt back into focus refetch via per-query options.
       staleTime: 30_000,
+      // Keep data of pages you left for 30 min (default is 5): coming back to Orders / Clients / Parts
+      // after a while — or after another browser tab — shows the cached list at once and refreshes it
+      // in the background instead of starting from an empty page.
+      gcTime: 30 * 60_000,
       refetchOnWindowFocus: false,
     },
   },
@@ -174,6 +178,24 @@ const queryClient = new QueryClient({
     },
   }),
 });
+
+// Workspace settings and reference lists change rarely and every edit in this tab invalidates them;
+// without this, each page switch after 30 s re-requested a dozen of them along with the page data.
+const SLOW_CHANGING_QUERY_ROOTS = [
+  "status_definitions",
+  "form-fields",
+  "order-field-config",
+  "workspace-vat-rate",
+  "workspace-markup",
+  "workspace-avatar",
+  "warehouses",
+  "categories",
+  "employees",
+  "google-calendar-status",
+] as const;
+for (const root of SLOW_CHANGING_QUERY_ROOTS) {
+  queryClient.setQueryDefaults([root], { staleTime: 5 * 60_000 });
+}
 
 // Built-in status names (and other labels mapped when data is read) follow the interface language: after a
 // language switch, cached data is read again so it is mapped in the new language.

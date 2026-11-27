@@ -56,10 +56,12 @@ export default function UserMenu() {
   }
 
   return (
-    <DropdownMenu>
+    // Non-modal: a modal menu locks body scroll and aria-hides the whole page, which forces a
+    // full-page reflow on open/close (slow on big lists and old PCs). A small menu doesn't need it.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" title={t("nav.userMenu.account")} className="flex h-9 items-center gap-1.5 px-1.5">
-          <span className="flex size-7 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#1557c9] text-[11px] font-semibold text-white ring-2 ring-background">
+          <span className="flex size-7 items-center justify-center rounded-full bg-primary bg-gradient-to-br from-primary to-[#1557c9] text-[11px] font-semibold text-white ring-2 ring-background">
             {profileInitials(userName)}
           </span>
           <ChevronDown className="hidden size-3.5 text-subtle-foreground sm:block" />

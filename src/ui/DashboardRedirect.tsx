@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppBootSpinner } from "./AppBootSpinner";
 import { useGetProfile } from "../features/profiles/useGetProfile";
-import { listedWorkspaceIds, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
+import { listedWorkspaceIds, listedWorkspaceLanguage, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
 import { WaitingForInviteScreen } from "../features/auth/WaitingForInviteScreen";
 
@@ -45,8 +45,11 @@ export default function Dashboardredirect() {
     if (!ready) return;
     if (memberWorkspaceIds.length === 0) return;
 
+    // Go straight to the workspace's language: landing on /en/… first and switching to /ru/… afterwards
+    // re-reads every cached query (localized names) right after they were loaded.
+    const localeFor = (id: string) => listedWorkspaceLanguage(workspaces, id) ?? locale;
     if (activeWorkspaceId && memberWorkspaceIds.includes(activeWorkspaceId)) {
-      navigate(`/${locale}/${activeWorkspaceId}/dashboard`, { replace: true });
+      navigate(`/${localeFor(activeWorkspaceId)}/${activeWorkspaceId}/dashboard`, { replace: true });
       return;
     }
 
@@ -56,10 +59,10 @@ export default function Dashboardredirect() {
     repairAttempted.current = true;
     void updateWorkspace(fallback)
       .then(() => {
-        navigate(`/${locale}/${fallback}/dashboard`, { replace: true });
+        navigate(`/${localeFor(fallback)}/${fallback}/dashboard`, { replace: true });
       })
       .catch(() => undefined);
-  }, [ready, activeWorkspaceId, memberWorkspaceIds, locale, navigate, updateWorkspace]);
+  }, [ready, activeWorkspaceId, memberWorkspaceIds, workspaces, locale, navigate, updateWorkspace]);
 
   const error = profileError ?? workspacesError;
   if (error) return <p className="p-6 text-sm text-destructive">{error.message}</p>;

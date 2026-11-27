@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getUserWorkspaces, type ListedWorkspaceMembership } from "../../services/apiWorkspaces";
+import { getUserWorkspaces, normalizeWorkspaceLanguage, type ListedWorkspaceMembership } from "../../services/apiWorkspaces";
 
 export function useGetWorkspaces() {
   const {
@@ -12,6 +12,16 @@ export function useGetWorkspaces() {
     queryFn: getUserWorkspaces,
   });
   return { workspaces, isLoading, error, refetch };
+}
+
+/** The workspace's interface language from the membership list, or null when it is not there. */
+export function listedWorkspaceLanguage(memberships: ListedWorkspaceMembership[] | undefined, workspaceId: string) {
+  for (const item of memberships ?? []) {
+    const entries = Array.isArray(item.workspaces) ? item.workspaces : item.workspaces ? [item.workspaces] : [];
+    const match = entries.find((entry) => entry.id === workspaceId);
+    if (match) return match.language ? normalizeWorkspaceLanguage(match.language) : null;
+  }
+  return null;
 }
 
 export function listedWorkspaceIds(memberships: ListedWorkspaceMembership[] | undefined) {
