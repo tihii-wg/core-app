@@ -55,7 +55,9 @@ function DialogContent({
           "bg-elevated text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 z-50 grid w-full max-w-[calc(100%-2rem)] min-w-0 gap-5 rounded-xl border p-6 shadow-lg duration-150 sm:max-w-lg",
           nested
             ? "absolute inset-0 m-auto h-fit"
-            : "fixed inset-0 m-auto h-fit",
+            : // Never taller than the screen: a long form (e.g. editing a service on a phone) scrolls
+              // inside the dialog, so its Save / Cancel buttons are always reachable.
+              "fixed inset-0 m-auto h-fit max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
           className
         )}
         {...props}
