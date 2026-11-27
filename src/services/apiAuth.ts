@@ -315,7 +315,8 @@ export async function updateRecoveredPassword(password: string) {
   } = await supabase.auth.getSession();
 
   if (sessionError || !session?.user?.id) {
-    throw new Error(i18n.t("auth.resetPassword.errors.noSession"));
+    // The recovery session disappeared (signed out in another tab, or expired): a new link is needed.
+    throw new Error(i18n.t("auth.resetPassword.errors.sessionLost"));
   }
 
   if (!isConfirmedRecoveryForUser(session.user.id)) {
@@ -323,7 +324,12 @@ export async function updateRecoveredPassword(password: string) {
   }
 
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) throw new Error(passwordChangeMessage(error.message));
+  if (error) {
+    console.warn("[password recovery] updateUser failed:", error.message);
+    // Revoked / missing recovery session: say what to do instead of a generic "session expired".
+    if (/session|jwt|not authenticated/i.test(error.message)) throw new Error(i18n.t("auth.resetPassword.errors.sessionLost"));
+    throw new Error(passwordChangeMessage(error.message));
+  }
 }
 
 /**

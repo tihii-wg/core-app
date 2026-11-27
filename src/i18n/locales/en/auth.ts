@@ -96,6 +96,7 @@ export default {
     missingTitle: "Recovery session required",
     requestAnother: "Request a new recovery email",
     errors: {
+      sessionLost: "The password reset session has ended (for example, you signed out in another tab or the link is too old). Request a new link and open it in this same browser.",
       linkExpired: "This password recovery link has expired. Request a new email to continue.",
       linkInvalid: "This password recovery link is invalid or incomplete. Request a new email to continue.",
       noSession: "Open the link from your recovery email to set a new password, or request a new email.",

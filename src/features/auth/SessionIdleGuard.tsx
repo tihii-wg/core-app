@@ -10,6 +10,7 @@ import {
 import { useUser } from "./useUser";
 import { finishSignOut } from "./session";
 import { SessionIdleWarningDialog } from "./SessionIdleWarningDialog";
+import { isPasswordRecoveryActive } from "./passwordRecovery";
 import {
   SESSION_IDLE_ACTIVITY_THROTTLE_MS,
   SESSION_IDLE_CHECK_INTERVAL_MS,
@@ -113,6 +114,11 @@ export function SessionIdleGuard() {
 
   const performIdleLogout = useCallback(async () => {
     if (!userId || loggingOutRef.current) return;
+    // A password reset is in progress in another tab with this same session: signing out here would end it.
+    if (isPasswordRecoveryActive()) {
+      markActivity("local");
+      return;
+    }
     loggingOutRef.current = true;
     setWarningOpen(false);
     try {
@@ -131,7 +137,7 @@ export function SessionIdleGuard() {
       // still clear local UI
     }
     finishSignOut(queryClient, navigate);
-  }, [navigate, queryClient, userId]);
+  }, [markActivity, navigate, queryClient, userId]);
 
   const evaluate = useCallback(() => {
     if (!userId || timeoutMinutes == null || loggingOutRef.current) {

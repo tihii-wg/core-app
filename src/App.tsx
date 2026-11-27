@@ -1,4 +1,5 @@
 import i18n from "./i18n";
+import { isPasswordRecoveryActive } from "./features/auth/passwordRecovery";
 import { isWorkspaceWriteBlocked, WorkspaceReadOnlyError } from "./features/workspaces/readOnlyMode";
 import {
   markLocalOrderWrite,
@@ -121,6 +122,15 @@ export function AppRoutes() {
   );
 }
 
+/**
+ * A request failed with an invalid / expired token: end the session on THIS device only. A global sign-out would also
+ * revoke the user's other devices and a password-recovery session opened in another tab; skipped while a reset runs.
+ */
+function signOutInvalidSession() {
+  if (isPasswordRecoveryActive()) return;
+  void supabase.auth.signOut({ scope: "local" });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -132,7 +142,7 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error) => {
-      if (isInvalidSessionError(error)) void supabase.auth.signOut();
+      if (isInvalidSessionError(error)) signOutInvalidSession();
     },
   }),
   mutationCache: new MutationCache({
@@ -150,7 +160,7 @@ const queryClient = new QueryClient({
     onSuccess: (_data, variables) => markLocalOrderWrite(orderIdFromMutationVariables(variables)),
     onSettled: () => noteLocalMutationSettled(),
     onError: (error, _variables, _context, mutation) => {
-      if (isInvalidSessionError(error)) void supabase.auth.signOut();
+      if (isInvalidSessionError(error)) signOutInvalidSession();
       // Mutations without their own error toast still tell the user why nothing happened.
       if (error instanceof WorkspaceReadOnlyError && !mutation.options.onError) {
         toast.error(error.message, { id: "workspace-read-only" });

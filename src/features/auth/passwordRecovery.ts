@@ -49,6 +49,11 @@ export function confirmPasswordRecovery(userId: string) {
   } catch {
     // Private mode — live PASSWORD_RECOVERY + memory still authorize until reload.
   }
+  try {
+    localStorage.setItem(PASSWORD_RECOVERY_ACTIVE_KEY, String(Date.now()));
+  } catch {
+    // ignore
+  }
 }
 
 export function clearPasswordRecoveryFlag() {
@@ -57,6 +62,28 @@ export function clearPasswordRecoveryFlag() {
     sessionStorage.removeItem(PASSWORD_RECOVERY_FLAG_KEY);
   } catch {
     // ignore
+  }
+  try {
+    localStorage.removeItem(PASSWORD_RECOVERY_ACTIVE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Shared by every tab of this browser (the recovery session itself is shared through localStorage): while a password
+ * is being reset, other tabs must not sign this session out — an idle timeout counted from before the reset, or an
+ * automatic sign-out after a failed request, would end the recovery and the new password could not be saved.
+ */
+const PASSWORD_RECOVERY_ACTIVE_KEY = "coreapp-password-recovery-active";
+const PASSWORD_RECOVERY_ACTIVE_MS = 30 * 60_000;
+
+export function isPasswordRecoveryActive(): boolean {
+  try {
+    const at = Number(localStorage.getItem(PASSWORD_RECOVERY_ACTIVE_KEY));
+    return Number.isFinite(at) && at > 0 && Date.now() - at < PASSWORD_RECOVERY_ACTIVE_MS;
+  } catch {
+    return false;
   }
 }
 

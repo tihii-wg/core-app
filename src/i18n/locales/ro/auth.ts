@@ -100,6 +100,7 @@ const auth: Messages<typeof en> = {
     missingTitle: "Este necesară sesiunea de recuperare",
     requestAnother: "Solicitați un email nou de recuperare",
     errors: {
+      sessionLost: "Sesiunea de resetare a parolei s-a încheiat (de exemplu, ați ieșit în altă filă sau linkul este vechi). Solicitați un link nou și deschideți-l în același browser.",
       linkExpired: "Acest link de recuperare a parolei a expirat. Solicitați un email nou pentru a continua.",
       linkInvalid: "Acest link de recuperare este invalid sau incomplet. Solicitați un email nou pentru a continua.",
       noSession: "Deschideți linkul din emailul de recuperare pentru a seta o parolă nouă sau solicitați un email nou.",
