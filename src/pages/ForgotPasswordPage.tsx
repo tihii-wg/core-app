@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowLeft, CheckCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/Button";
@@ -20,10 +20,13 @@ export function ForgotPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
+  // Synchronous lock: a double tap / Enter + click can fire twice before `isLoading` re-renders, and every
+  // request is one more recovery e-mail.
+  const sendingRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading) return;
+    if (isLoading || sendingRef.current) return;
     setError("");
 
     const trimmed = email.trim();
@@ -36,6 +39,7 @@ export function ForgotPasswordPage() {
       return;
     }
 
+    sendingRef.current = true;
     setIsLoading(true);
     try {
       await requestPasswordReset(trimmed, language);
@@ -43,6 +47,7 @@ export function ForgotPasswordPage() {
     } catch (err) {
       const message = err instanceof Error && err.message ? err.message : t("auth.forgotPassword.errors.sendFailed");
       setError(message);
+      sendingRef.current = false;
     } finally {
       setIsLoading(false);
     }
