@@ -48,6 +48,7 @@ import { AuthSession } from "./features/auth/AuthSession";
 import { AppUpdateWatcher } from "./app/AppUpdateWatcher";
 import { isInvalidSessionError } from "./services/apiAuth";
 import supabase from "./services/supabase";
+import { AppBootSpinner } from "./ui/AppBootSpinner";
 import { useUrlLanguage } from "./i18n/useUrlLanguage";
 import { urlIndicatesPasswordRecovery } from "./features/auth/passwordRecovery";
 
@@ -59,7 +60,12 @@ function RootEntryRedirect() {
   if (urlIndicatesPasswordRecovery(location.search, location.hash, location.pathname)) {
     return <Navigate to={`/${DEFAULT_LOCALE}/reset-password${location.search}${location.hash}`} replace />;
   }
-  return <Navigate to={`/${DEFAULT_LOCALE}/login`} replace />;
+  return (
+    <>
+      <AppBootSpinner />
+      <Navigate to={`/${DEFAULT_LOCALE}/login`} replace />
+    </>
+  );
 }
 
 export function AppRoutes() {

@@ -1,9 +1,8 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { Spinner } from "./Spinner";
+import { AppBootSpinner } from "./AppBootSpinner";
 import { useUser } from "../features/auth/useUser";
 import { useSessionMfa } from "../features/auth/useMfa";
 import { languageFromPath } from "../i18n/languages";
-import FullPage from "./FullPage";
 import { isConfirmedRecoveryForUser, urlIndicatesPasswordRecovery } from "../features/auth/passwordRecovery";
 
 export function PublicRoute() {
@@ -13,11 +12,7 @@ export function PublicRoute() {
   const { needsMfa, isLoading: mfaLoading } = useSessionMfa(isAuthenticated);
 
   if (!isReady || isLoadingSession || (isAuthenticated && mfaLoading))
-    return (
-      <FullPage>
-        <Spinner />
-      </FullPage>
-    );
+    return <AppBootSpinner />;
 
   // Recovery must reach the reset page, not the dashboard/login bounce.
   if (isAuthenticated && isConfirmedRecoveryForUser(user?.id)) {
@@ -28,7 +23,13 @@ export function PublicRoute() {
   }
 
   if (isAuthenticated && !needsMfa) {
-    return <Navigate to={`/${language}/dashboard`} replace />;
+    // Keep the boot spinner up while the redirect commits (no blank frame between steps).
+    return (
+      <>
+        <AppBootSpinner />
+        <Navigate to={`/${language}/dashboard`} replace />
+      </>
+    );
   }
 
   return <Outlet />;

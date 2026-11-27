@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Spinner } from "./Spinner";
+import { AppBootSpinner } from "./AppBootSpinner";
 import { useGetProfile } from "../features/profiles/useGetProfile";
 import { listedWorkspaceIds, useGetWorkspaces } from "../features/workspaces/useGetWorkspaces";
 import { useSetActiveWorkspace } from "../features/workspaces/useSetActiveWorkspace";
@@ -65,9 +65,5 @@ export default function Dashboardredirect() {
   if (error) return <p className="p-6 text-sm text-destructive">{error.message}</p>;
   if (noWorkspaces) return <WaitingForInviteScreen email={profile?.email} />;
 
-  return (
-    <div className="flex min-h-dvh items-center justify-center bg-background">
-      <Spinner />
-    </div>
-  );
+  return <AppBootSpinner />;
 }
