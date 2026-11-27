@@ -46,13 +46,16 @@ function DialogContent({
   return (
     <DialogPortal data-slot="dialog-portal" container={container ?? undefined}>
       <DialogOverlay className={nested ? "absolute" : undefined} />
+      {/* Centred with inset-0 + margin:auto, not translate(-50%,-50%): a translate by half of an odd width /
+          height lands on half a pixel, and older Chrome (Windows 7) then draws all text in the dialog — and
+          scrollable lists in it, such as the client picker — blurry. */}
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
           "bg-elevated text-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-[0.98] data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-1 z-50 grid w-full max-w-[calc(100%-2rem)] min-w-0 gap-5 rounded-xl border p-6 shadow-lg duration-150 sm:max-w-lg",
           nested
-            ? "absolute top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]"
-            : "fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%]",
+            ? "absolute inset-0 m-auto h-fit"
+            : "fixed inset-0 m-auto h-fit",
           className
         )}
         {...props}
