@@ -218,6 +218,12 @@ const orders: Messages<typeof en> = {
   print: {
     action: "Печать",
     mobilePrint: "Печать / PDF",
+    savePdf: "PDF",
+    saveImage: "Фото",
+    printOnly: "Печать",
+    fileName: "Документ",
+    saveFailed: "Не удалось сохранить файл. Попробуйте «Печать» → «Сохранить как PDF».",
+    tapToSave: "Сохранить ✓",
     withTemplate: "Печать: {{name}}",
     unavailable: "Печать недоступна: не найден шаблон печати с содержимым.",
   },

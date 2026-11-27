@@ -1,4 +1,5 @@
 import i18n from "../i18n";
+import { documentImages, documentPdf, saveFiles } from "../lib/documentSnapshot";
 import { applyCommonStyleToLayout } from "../features/documents/applyCommonStyle";
 import { createCanvasLayoutFromTemplate, createLayoutFromTemplate } from "../features/documents/createFromTemplate";
 import { defaultTemplateName } from "../features/documents/defaultLayouts";
@@ -197,7 +198,7 @@ function openMobilePrintPreview(html: string) {
 
   const bar = document.createElement("div");
   bar.style.cssText =
-    "display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:10px 12px;" +
+    "display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;padding:10px 12px;" +
     "padding-top:max(10px,env(safe-area-inset-top));background:#fff;border-bottom:1px solid #e5e7eb;";
 
   const button = (label: string, primary: boolean) => {
@@ -205,13 +206,21 @@ function openMobilePrintPreview(html: string) {
     el.type = "button";
     el.textContent = label;
     el.style.cssText =
-      "min-height:44px;padding:0 16px;border-radius:8px;font:600 15px system-ui,-apple-system,sans-serif;" +
+      "min-height:44px;padding:0 12px;border-radius:8px;font:600 15px system-ui,-apple-system,sans-serif;" +
       (primary ? "background:#2563eb;color:#fff;border:0;" : "background:#fff;color:#111;border:1px solid #d1d5db;");
     return el;
   };
   const closeButton = button(i18n.t("common.close"), false);
-  const printButton = button(i18n.t("orders.print.mobilePrint"), true);
-  bar.append(closeButton, printButton);
+  // Save as a file / to the gallery: the print dialog cannot do that on many phones.
+  const pdfButton = button(i18n.t("orders.print.savePdf"), false);
+  const imageButton = button(i18n.t("orders.print.saveImage"), false);
+  const printButton = button(i18n.t("orders.print.printOnly"), true);
+  closeButton.style.marginRight = "auto";
+  // The overlay sits above app toasts, so save errors are shown inside the bar.
+  const notice = document.createElement("div");
+  notice.setAttribute("role", "alert");
+  notice.style.cssText = "display:none;flex-basis:100%;order:10;color:#b42318;font:500 13px system-ui,-apple-system,sans-serif;";
+  bar.append(closeButton, pdfButton, imageButton, printButton, notice);
 
   // The sheet is laid out at A4 width (~800 px) and scaled down to the phone width, so the whole page
   // is visible like a PDF preview (the iframe ignores the document's own viewport).
@@ -241,6 +250,55 @@ function openMobilePrintPreview(html: string) {
     root.remove();
   };
   closeButton.addEventListener("click", close);
+
+  const fileBase = () =>
+    (frame.contentDocument?.title || i18n.t("orders.print.fileName"))
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "document";
+  // Prepared files are kept so a second tap can share them without re-rendering.
+  const prepared: Partial<Record<"pdf" | "image", File[]>> = {};
+  const prepare = async (kind: "pdf" | "image") => {
+    const base = fileBase();
+    return kind === "pdf"
+      ? [new File([await documentPdf(frame)], `${base}.pdf`, { type: "application/pdf" })]
+      : (await documentImages(frame)).map(
+          (blob, index, all) =>
+            new File([blob], all.length > 1 ? `${base}-${index + 1}.jpg` : `${base}.jpg`, { type: "image/jpeg" }),
+        );
+  };
+  const runSave = async (kind: "pdf" | "image", trigger: HTMLButtonElement, label: string) => {
+    if (trigger.disabled) return;
+    notice.style.display = "none";
+    try {
+      let files = prepared[kind];
+      if (!files) {
+        trigger.disabled = true;
+        trigger.textContent = "…";
+        files = await prepare(kind);
+        prepared[kind] = files;
+      }
+      const result = await saveFiles(files, fileBase());
+      if (result === "blocked") {
+        // The render took too long for the original tap: ask for one more tap.
+        trigger.textContent = i18n.t("orders.print.tapToSave");
+        return;
+      }
+      trigger.textContent = label;
+    } catch (error) {
+      console.warn("[print] save failed", error);
+      trigger.textContent = label;
+      notice.textContent = i18n.t("orders.print.saveFailed");
+      notice.style.display = "block";
+    } finally {
+      trigger.disabled = false;
+    }
+  };
+  const pdfLabel = pdfButton.textContent ?? "";
+  const imageLabel = imageButton.textContent ?? "";
+  pdfButton.addEventListener("click", () => void runSave("pdf", pdfButton, pdfLabel));
+  imageButton.addEventListener("click", () => void runSave("image", imageButton, imageLabel));
   printButton.addEventListener("click", () => {
     const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
     const win = window.open(url, "_blank");

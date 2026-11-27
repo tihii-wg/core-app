@@ -215,6 +215,12 @@ const orders: Messages<typeof en> = {
   print: {
     action: "Tipărește",
     mobilePrint: "Tipărire / PDF",
+    savePdf: "PDF",
+    saveImage: "Imagine",
+    printOnly: "Tipărire",
+    fileName: "Document",
+    saveFailed: "Fișierul nu a putut fi salvat. Încercați „Tipărire” → „Salvare ca PDF”.",
+    tapToSave: "Salvează ✓",
     withTemplate: "Tipărește: {{name}}",
     unavailable: "Tipărirea nu este disponibilă: nu există un șablon de tipărire cu conținut.",
   },

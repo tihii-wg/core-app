@@ -209,6 +209,12 @@ export default {
   print: {
     action: "Print",
     mobilePrint: "Print / PDF",
+    savePdf: "PDF",
+    saveImage: "Image",
+    printOnly: "Print",
+    fileName: "Document",
+    saveFailed: "Could not save the file. Try “Print” → “Save as PDF”.",
+    tapToSave: "Save ✓",
     withTemplate: "Print: {{name}}",
     unavailable: "Printing is unavailable: no print template with content found.",
   },
