@@ -1,3 +1,7 @@
+import { Skeleton } from "../../ui/Skeleton";
+import { useIsMobile } from "../../hooks/use-mobile";
+import { useStableCallback } from "../../lib/useStableCallback";
+import { ServiceCard } from "./ServiceCard";
 import { DialogLauncher, type DialogLauncherHandle } from "../../ui/DialogLauncher";
 import { useFormFieldLayout } from "../formFields/useFormFields";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -108,10 +112,15 @@ export function Services() {
   const activeCount = servicesPage?.activeTotal ?? 0;
   const filteredEmpty = statusFilter !== "all";
 
+  const isMobile = useIsMobile();
   const openEdit = (service: Service) => {
     setSelectedService(service);
     setEditModalOpen(true);
   };
+
+  // Stable handlers for the memoized phone cards.
+  const editCard = useStableCallback((service: Service) => openEdit(service));
+  const deleteCard = useStableCallback((service: Service) => setServiceToDelete(service));
 
   const columns: Column<Service>[] = [
     {
@@ -207,6 +216,21 @@ export function Services() {
     });
   }
 
+  const servicesEmptyState = (
+    error ? (
+      <ErrorState title={t("services.loadError")} description={error.message} onRetry={() => refetch()} />
+    ) : filteredEmpty || searchQuery || categoryFilter !== "all" ? (
+      <NoSearchResults
+        query={
+          searchQuery ||
+          (categoryFilter !== "all" ? serviceCategoryLabel(categoryFilter, workflow.slug) : t("services.filters.activeFiltersFallback"))
+        }
+      />
+    ) : (
+      <NoServices onAddService={canManage ? openCreate : undefined} />
+    )
+  );
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -256,28 +280,45 @@ export function Services() {
       />
 
       <div ref={listTop.ref}>
+      {isMobile ? (
+        // Phone: cards like the clients / orders lists instead of a cramped table.
+        isLoading ? (
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        ) : visibleServices.length === 0 ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">{servicesEmptyState}</div>
+        ) : (
+          <div className="space-y-2">
+            {visibleServices.map((service) => (
+              <ServiceCard
+                key={service.id}
+                service={service}
+                categoryLabel={service.category ? serviceCategoryLabel(service.category, workflow.slug) : ""}
+                formatMoney={formatMoney}
+                onEdit={canManage ? editCard : undefined}
+                onDelete={canManage ? deleteCard : undefined}
+              />
+            ))}
+          </div>
+        )
+      ) : (
       <DataTable
         columns={columns}
         isLoading={isLoading}
         data={visibleServices}
-        emptyState={
-          error ? (
-            <ErrorState title={t("services.loadError")} description={error.message} onRetry={() => refetch()} />
-          ) : filteredEmpty || searchQuery || categoryFilter !== "all" ? (
-            <NoSearchResults
-              query={
-                searchQuery ||
-                (categoryFilter !== "all" ? serviceCategoryLabel(categoryFilter, workflow.slug) : t("services.filters.activeFiltersFallback"))
-              }
-            />
-          ) : (
-            <NoServices onAddService={canManage ? openCreate : undefined} />
-          )
-        }
+        emptyState={servicesEmptyState}
         keyExtractor={(service) => service.id}
         onRowClick={canManage ? openEdit : undefined}
         rowClassName={(service) => (service.status === "inactive" ? "bg-muted/20" : undefined)}
       />
+      )}
 
       </div>
 

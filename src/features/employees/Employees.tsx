@@ -1,3 +1,6 @@
+import { useIsMobile } from "../../hooks/use-mobile";
+import { useStableCallback } from "../../lib/useStableCallback";
+import { EmployeeCard } from "./EmployeeCard";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pencil, Plus, UserRoundX } from "lucide-react";
@@ -202,15 +205,27 @@ export function Employees() {
     return visibleColumns.has(column.key as EmployeeToggleableColumn);
   });
 
-  const handleRowClick = (emp: Employee) => {
+  const isMobile = useIsMobile();
+  // Stable for the memoized phone cards.
+  const handleRowClick = useStableCallback((emp: Employee) => {
     setSelectedEmployee(emp);
     setDetailPanelOpen(true);
-  };
+  });
 
   function handleEmployeeUpdated(employee: Employee) {
     setSelectedEmployee((current) => (current?.id === employee.id ? { ...current, ...employee } : current));
     setEditingEmployee(null);
   }
+
+  const employeesEmptyState = (
+    error ? (
+      <ErrorState title={t("employees.loadError")} description={error.message} onRetry={() => refetch()} />
+    ) : hasActiveFilters ? (
+      <NoSearchResults query={searchQuery || t("employees.filters.activeFiltersFallback")} />
+    ) : (
+      <NoEmployees onAddClient={() => setCreateModalOpen(true)} />
+    )
+  );
 
   return (
     <div className="space-y-5">
@@ -267,7 +282,9 @@ export function Employees() {
             setStatusFilter("all");
           }}
         />
-        <EmployeeColumnsMenu visibleColumns={visibleColumns} onVisibleColumnsChange={handleVisibleColumnsChange} />
+        {isMobile ? null : (
+          <EmployeeColumnsMenu visibleColumns={visibleColumns} onVisibleColumnsChange={handleVisibleColumnsChange} />
+        )}
       </div>
 
       {showUnassignedSummary ? (
@@ -305,23 +322,45 @@ export function Employees() {
         <p className="text-sm text-destructive">{t("employees.workload.loadError")}</p>
       ) : null}
 
+      {isMobile ? (
+        // Phone: cards like the clients / orders lists instead of a cramped table.
+        isLoading ? (
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="space-y-2 rounded-lg border border-border bg-card p-3 shadow-xs">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-4 w-3/5" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            ))}
+          </div>
+        ) : visibleEmployees.length === 0 ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card shadow-xs">{employeesEmptyState}</div>
+        ) : (
+          <div className="space-y-2">
+            {visibleEmployees.map((employee: Employee) => (
+              <EmployeeCard
+                key={employee.id}
+                employee={employee}
+                roleLabel={roleLabels[employee.role]}
+                workload={ordersLoading ? null : ordersError ? undefined : (workload.byEmployeeId.get(employee.id) ?? emptyWorkload)}
+                onView={handleRowClick}
+                onEdit={canMutateEmployees ? setEditingEmployee : undefined}
+              />
+            ))}
+          </div>
+        )
+      ) : (
       <DataTable
         columns={columns}
         isLoading={isLoading}
         data={visibleEmployees}
-        emptyState={
-          error ? (
-            <ErrorState title={t("employees.loadError")} description={error.message} onRetry={() => refetch()} />
-          ) : hasActiveFilters ? (
-            <NoSearchResults query={searchQuery || t("employees.filters.activeFiltersFallback")} />
-          ) : (
-            <NoEmployees onAddClient={() => setCreateModalOpen(true)} />
-          )
-        }
+        emptyState={employeesEmptyState}
         keyExtractor={(emp) => emp.id}
         onRowClick={handleRowClick}
         rowClassName={(emp) => (emp.status === "inactive" ? "bg-muted/20" : undefined)}
       />
+      )}
 
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
         <DialogContent className="max-w-lg">
