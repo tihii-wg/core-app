@@ -68,7 +68,7 @@ const employees: Messages<typeof en> = {
     nameRequired: "Numele este obligatoriu",
     phoneLabel: "Telefon *",
     phoneRequired: "Telefonul este obligatoriu",
-    phoneInvalid: "Telefonul trebuie să fie în formatul +37300000000",
+    phoneInvalid: "Telefon în format internațional: + și codul țării, de ex. +37369123456 sau +40721234567",
     roleLabel: "Rol *",
     roleRequired: "Rolul este obligatoriu",
     rolePlaceholder: "Selectează rolul",

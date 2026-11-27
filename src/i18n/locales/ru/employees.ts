@@ -69,7 +69,7 @@ const employees: Messages<typeof en> = {
     nameRequired: "Укажите имя",
     phoneLabel: "Телефон *",
     phoneRequired: "Укажите телефон",
-    phoneInvalid: "Телефон должен быть в формате +37300000000",
+    phoneInvalid: "Телефон в международном формате: + и код страны, например +37369123456 или +40721234567",
     roleLabel: "Роль *",
     roleRequired: "Укажите роль",
     rolePlaceholder: "Выберите роль",

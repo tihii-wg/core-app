@@ -1,4 +1,5 @@
 import { Button } from "../../ui/Button";
+import { INTERNATIONAL_PHONE_PATTERN, normalizePhoneInput } from "../../lib/phoneFormat";
 import { Input } from "../../ui/Input";
 import { Label } from "../../ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/Select";
@@ -89,12 +90,13 @@ export default function AddNewEmployeesForm({ setCreateModalOpen }: CreateMadalP
           <Label htmlFor="phone">{t("employees.form.phoneLabel")}</Label>
           <Input
             id="phone"
-            placeholder="+1 (555) 000-0000"
+            placeholder="+37369123456"
             disabled={isSubmitting}
             {...register("phone", {
               required: t("employees.form.phoneRequired"),
+              setValueAs: normalizePhoneInput,
               pattern: {
-                value: /^\+373\d{8}$/,
+                value: INTERNATIONAL_PHONE_PATTERN,
                 message: t("employees.form.phoneInvalid"),
               },
             })}

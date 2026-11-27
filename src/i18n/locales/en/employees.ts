@@ -64,7 +64,7 @@ export default {
     nameRequired: "Name is Reqiured",
     phoneLabel: "Phone *",
     phoneRequired: "Phone is required",
-    phoneInvalid: "Phone must be in firmat +37300000000",
+    phoneInvalid: "Phone in international format: + and country code, e.g. +37369123456 or +40721234567",
     roleLabel: "Role *",
     roleRequired: "Role is required",
     rolePlaceholder: "Select role",

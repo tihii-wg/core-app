@@ -1,4 +1,5 @@
 import { Controller, useForm } from "react-hook-form";
+import { INTERNATIONAL_PHONE_PATTERN, normalizePhoneInput } from "../../lib/phoneFormat";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
@@ -73,12 +74,13 @@ export default function EditEmployeeForm({ employee, onCancel, onUpdated }: Edit
           <Label htmlFor="edit-employee-phone">{t("employees.form.phoneLabel")}</Label>
           <Input
             id="edit-employee-phone"
-            placeholder="+1 (555) 000-0000"
+            placeholder="+37369123456"
             disabled={busy}
             {...register("phone", {
               required: t("employees.form.phoneRequired"),
+              setValueAs: normalizePhoneInput,
               pattern: {
-                value: /^\+373\d{8}$/,
+                value: INTERNATIONAL_PHONE_PATTERN,
                 message: t("employees.form.phoneInvalid"),
               },
             })}
