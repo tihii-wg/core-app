@@ -187,8 +187,12 @@ export function useOrdersPage(params: OrdersListParams, { enabled = true }: { en
   useEffect(() => {
     if (!workspaceId || !enabled || loadedPage == null || loadedPage >= loadedPageCount) return;
     const nextKey = { ...listKey, page: loadedPage + 1 };
+    const nextQueryKey = ["orders", workspaceId, "page", nextKey];
+    // Already cached (even if stale): "Next" shows it at once and refreshes it then. Re-loading the
+    // whole next page on every visit doubled the Orders page traffic (2 × lines/materials/team…).
+    if (queryClient.getQueryData(nextQueryKey) !== undefined) return;
     void queryClient.prefetchQuery({
-      queryKey: ["orders", workspaceId, "page", nextKey],
+      queryKey: nextQueryKey,
       queryFn: () => loadPage(nextKey),
       staleTime: 30_000,
     });

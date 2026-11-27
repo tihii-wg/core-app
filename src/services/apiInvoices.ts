@@ -213,6 +213,45 @@ export async function getInvoices(workspaceId: string | undefined) {
   return rows.map((row) => toInvoice(row, memberNames));
 }
 
+/**
+ * Invoice number per order, for the given orders only (the orders list shows the number of the
+ * orders on screen — it must not download every invoice of the workspace for that).
+ * Same pick as the full list: the oldest invoice of an order wins.
+ */
+export async function getInvoiceNumbersForOrders(
+  workspaceId: string | undefined,
+  orderIds: readonly string[],
+): Promise<Map<string, string>> {
+  const targetWorkspaceId = requireWorkspaceId(workspaceId);
+  const ids = [...new Set(orderIds.filter(Boolean))];
+  const numbers = new Map<string, string>();
+  if (ids.length === 0) return numbers;
+  const chunks: string[][] = [];
+  for (let start = 0; start < ids.length; start += 100) chunks.push(ids.slice(start, start + 100));
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      Promise.resolve(
+        supabase
+          .from("invoices")
+          .select("order_id, number, created_at")
+          .eq("workspace_id", targetWorkspaceId)
+          .in("order_id", chunk)
+          .order("created_at", { ascending: true }),
+      ),
+    ),
+  );
+  for (const { data, error } of results) {
+    if (error) throw toInvoiceError(error);
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      const orderId = text(row.order_id);
+      const number = text(row.number);
+      if (!orderId || !number || number.startsWith(pendingNumberPrefix) || numbers.has(orderId)) continue;
+      numbers.set(orderId, number);
+    }
+  }
+  return numbers;
+}
+
 /** One invoice of the workspace with the lines it copied from its order. */
 export async function getInvoice(invoiceId: string, workspaceId: string | undefined): Promise<InvoiceDocument> {
   const targetWorkspaceId = requireWorkspaceId(workspaceId);

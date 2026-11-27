@@ -32,7 +32,7 @@ import OrderDetailPanel from "./OrderDetailPanel";
 import useGetEmployees from "../employees/useGetEmployees";
 import { assignableTechnicians } from "./assignableTechnicians";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { useGetInvoices } from "../invoices/useGetInvoices";
+import { useInvoiceNumbersByOrder } from "../invoices/useGetInvoices";
 import { OrderColumnsMenu } from "./OrderColumnsMenu";
 import { OrdersBoard } from "./OrdersBoard";
 import { OrdersCalendar } from "./OrdersCalendar";
@@ -186,8 +186,9 @@ export function Orders() {
   const usesDefinitionFilter = hasConfigurableOrderStatuses(orderStatusDefinitions);
   const selectedFilterOption = statusFilter === "all" ? null : unifiedFilterOptions.find((option) => option.id === statusFilter) ?? null;
 
-  const { invoices } = useGetInvoices();
-  const invoiceNumberByOrder = useMemo(() => new Map(invoices.flatMap((invoice) => (invoice.orderId ? [[invoice.orderId, invoice.invoiceNumber] as const] : []))), [invoices]);
+  // Invoice number of the open order only (not every invoice of the workspace).
+  const selectedOrderId = orderDetails.panelProps.selectedOrder?.id ?? null;
+  const { invoiceNumberByOrder } = useInvoiceNumbersByOrder(selectedOrderId ? [selectedOrderId] : []);
 
   const hasActiveFilters =
     Boolean(debouncedSearch) ||

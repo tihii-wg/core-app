@@ -8,7 +8,7 @@ import { industryUsesMileageWarranty } from "../industries/industryCapabilities"
 import { industryProfile } from "../industries/industryProfile";
 import { useIndustryWorkflow } from "../industries/useIndustryWorkflow";
 import { useWorkspaceMoney } from "../workspaces/useWorkspaceMoney";
-import { useGetInvoices } from "../invoices/useGetInvoices";
+import { useInvoiceNumbersByOrder } from "../invoices/useGetInvoices";
 import { useCreateInvoice } from "../invoices/useCreateInvoice";
 import { useGetPayments } from "../finance/usePayments";
 import { orderPaymentBalance } from "../finance/paymentCalculations";
@@ -113,7 +113,7 @@ export function OrdersListView({
   const orderFieldBlocks = profile?.orderFieldBlocks ?? industryProfile(industrySlug).orderFieldBlocks;
   const { formatMoney } = useWorkspaceMoney();
   const today = localDateKey(new Date());
-  const { invoices, isUnavailable: invoicesUnavailable } = useGetInvoices();
+  const { invoiceNumberByOrder, isUnavailable: invoicesUnavailable } = useInvoiceNumbersByOrder(orders.map((order) => order.id));
   // Payments of the orders on this page only (not the whole workspace ledger).
   const { payments } = useGetPayments({ orderIds: orders.map((order) => order.id) });
   const createInvoice = useCreateInvoice();
@@ -134,10 +134,6 @@ export function OrdersListView({
   const editingControlled = onEdit != null;
   const setEditingOrder = onEdit ?? setInternalEditing;
 
-  const invoiceNumberByOrder = useMemo(
-    () => new Map(invoices.flatMap((invoice) => (invoice.orderId ? [[invoice.orderId, invoice.invoiceNumber] as const] : []))),
-    [invoices],
-  );
 
   const paymentStatusByOrder = useMemo(() => {
     const map = new Map<string, ReturnType<typeof orderPaymentBalance>["status"]>();
