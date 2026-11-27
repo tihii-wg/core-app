@@ -161,9 +161,13 @@ function TabsList({
 
 function TabsTrigger({
   className,
+  onMouseDown,
+  onClick,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   const ref = React.useRef<HTMLButtonElement>(null)
+  /** True while we replay the press for Radix after a real click. */
+  const activatingRef = React.useRef(false)
 
   React.useEffect(() => {
     const node = ref.current
@@ -189,6 +193,27 @@ function TabsTrigger({
         className,
       )}
       {...props}
+      // Radix switches a tab on mouse *down*. In a scrollable tab strip that made "press and drag to
+      // scroll" jump to the tab under the cursor. The press is held back and the tab switches on
+      // click instead: a quick press-and-release opens it, a drag only scrolls (TabsList swallows the
+      // click that ends a drag). Keyboard selection is unchanged.
+      onMouseDown={(event) => {
+        onMouseDown?.(event)
+        if (activatingRef.current || event.defaultPrevented) return
+        if (event.button === 0 && !event.ctrlKey) event.preventDefault()
+      }}
+      onClick={(event) => {
+        onClick?.(event)
+        if (event.defaultPrevented || props.disabled) return
+        const node = event.currentTarget
+        activatingRef.current = true
+        try {
+          node.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
+        } finally {
+          activatingRef.current = false
+        }
+        node.focus({ preventScroll: true })
+      }}
     />
   )
 }
