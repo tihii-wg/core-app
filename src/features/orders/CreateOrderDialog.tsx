@@ -35,7 +35,7 @@ export function CreateOrderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         // Fits the screen (phones included); the form scrolls inside, so «Создать» is always reachable.
-        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100vw-2rem)] flex-col overflow-hidden overscroll-none sm:max-w-lg"
         // Do not autofocus the client field — that would open the clients dropdown on mount.
         onOpenAutoFocus={(event) => event.preventDefault()}
       >

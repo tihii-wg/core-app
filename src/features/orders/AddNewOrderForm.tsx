@@ -368,7 +368,9 @@ export default function AddNewOrderForm({
     // `max-h-[80vh]` was taller than a phone's visible area (vh ignores the browser bars) → buttons
     // ended below the screen with nothing to scroll.
     <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4 pr-2">
+      {/* Vertical scrolling only: overflow-y:auto alone makes the box scroll sideways too, so any wider child
+          (a dropdown, a long line) let the whole form slide left / right under the finger on a phone. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-contain py-4 pr-2">
         {sortByFieldOrder<{ key: string; node: ReactNode }>([
         { key: "client", node: (
         <div className="space-y-1.5">
